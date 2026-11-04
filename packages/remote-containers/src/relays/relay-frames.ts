@@ -5,10 +5,10 @@
  * doesn't know.
  */
 
-/** The frame types: a stream opens with its kind, carries data, or closes. */
-type FrameType = 'open' | 'data' | 'close';
+/** The frame types: a stream opens with its kind, carries data, or closes; `ready` says every socket listens. */
+type FrameType = 'open' | 'data' | 'close' | 'ready';
 
-/** One frame. `payload` is the kind's name for `open`, the bytes for `data`, and empty for `close`. */
+/** One frame. `payload` is the kind's name for `open`, the bytes for `data`, and empty for `close` and `ready`; `ready` is on stream 0. */
 export interface Frame {
   type: FrameType;
   stream: number;
@@ -20,6 +20,7 @@ const TYPE_BYTES: Readonly<Record<FrameType, number>> = {
   open: 1,
   data: 2,
   close: 3,
+  ready: 4,
 };
 
 /** The header's length: the type byte, the stream number and the payload length. */
@@ -28,7 +29,7 @@ const HEADER_BYTES = 9;
 /** The largest payload a frame may carry, 64 KiB. */
 export const MAX_PAYLOAD_BYTES = 64 * 1024;
 
-/** Why the reader stopped: a payload over the cap, a type it doesn't know, or an open or close that carries the wrong payload. */
+/** Why the reader stopped: a payload over the cap, a type it doesn't know, or a frame whose payload or stream its type doesn't allow. */
 export type FrameFault = 'oversized' | 'unknownType' | 'malformed';
 
 /** The bytes of one frame. */
@@ -71,9 +72,13 @@ export class FrameReader {
       const view = new DataView(joined.buffer, offset, HEADER_BYTES);
       const type = typeOf(view.getUint8(0));
       const length = view.getUint32(5);
-      this.fault = type === undefined ? 'unknownType' : faultOf(type, length);
-      if (this.fault !== undefined || type === undefined) {
-        return {frames, fault: this.fault ?? 'unknownType'};
+      if (type === undefined) {
+        this.fault = 'unknownType';
+        return {frames, fault: this.fault};
+      }
+      this.fault = faultOf(type, length, view.getUint32(1));
+      if (this.fault !== undefined) {
+        return {frames, fault: this.fault};
       }
       if (joined.length - offset < HEADER_BYTES + length) {
         break;
@@ -92,12 +97,17 @@ export class FrameReader {
 }
 
 /** The fault of a header of a known type, or undefined for one the reader takes. */
-function faultOf(type: FrameType, length: number): FrameFault | undefined {
+function faultOf(
+  type: FrameType,
+  length: number,
+  stream: number,
+): FrameFault | undefined {
   if (length > MAX_PAYLOAD_BYTES) {
     return 'oversized';
   }
-  if ((type === 'open' && length === 0) || (type === 'close' && length > 0)) {
+  const empty = type === 'close' || type === 'ready';
+  if ((type === 'open' && length === 0) || (empty && length > 0)) {
     return 'malformed';
   }
-  return undefined;
+  return (type === 'ready') === (stream === 0) ? undefined : 'malformed';
 }

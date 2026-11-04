@@ -103,30 +103,6 @@
       "card": "#2163",
       "slice": "authoring release 2",
       "decision": "contributed, consumed by #2164/#2167 (the first callers); the consuming card removes this entry"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/relays/relay-frames.ts",
-      "card": "#2086",
-      "slice": "containers release 1",
-      "decision": "brief-personalization §2 (2026-11-03): part 1 of the relay host; part 2 wires it into the connect's phase E after #2085"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/relays/relay-host-script.ts",
-      "card": "#2086",
-      "slice": "containers release 1",
-      "decision": "brief-personalization §2 (2026-11-03): part 1 of the relay host; part 2 wires it into the connect's phase E after #2085"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/relays/relay-session.ts",
-      "card": "#2086",
-      "slice": "containers release 1",
-      "decision": "brief-personalization §2 (2026-11-03): part 1 of the relay host; part 2 wires it into the connect's phase E after #2085"
     }
   ]
 }

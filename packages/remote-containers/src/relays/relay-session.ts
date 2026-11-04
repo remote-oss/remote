@@ -30,10 +30,14 @@ export interface HostEnd {
 
 /** What the session needs of its surroundings. */
 export interface RelaySessionPorts {
-  /** The kinds this connection set up; a stream of any other kind ends the relay host. */
-  kinds: ReadonlySet<string>;
-  /** Connects the host end of a stream of `kind`; rejects when it can't. */
-  connect(kind: string, cancellation: AbortSignal): Promise<HostEnd>;
+  /**
+   * How a stream's host end connects, for each kind this connection set up; it rejects when it can't. A stream of any
+   * other kind ends the relay host.
+   */
+  connectors: ReadonlyMap<
+    string,
+    (cancellation: AbortSignal) => Promise<HostEnd>
+  >;
   /** Writes to the relay host's standard input. */
   send(bytes: Uint8Array): void;
   /** Stops and restarts reading the relay host's standard output. */
@@ -41,6 +45,8 @@ export interface RelaySessionPorts {
   resumeInput(): void;
   /** Ends the relay host's process. */
   endHost(): void;
+  /** Every socket of the relay host listens: told once, at its first `ready` frame. */
+  ready(): void;
   /** Calls `callback` after `milliseconds`; the result stops the wait. */
   setTimer(milliseconds: number, callback: () => void): () => void;
   logLine(line: string): void;
@@ -68,6 +74,7 @@ export function relaySession(ports: RelaySessionPorts): RelaySession {
   const streams = new Map<number, OpenStream>();
   const paused = new Set<string>();
   let finished = false;
+  let readyTold = false;
 
   /** Whether the relay host has ended, as a handled frame may have decided. */
   function stopped(): boolean {
@@ -105,9 +112,6 @@ export function relaySession(ports: RelaySessionPorts): RelaySession {
   }
 
   function finish(reason: string): void {
-    if (finished) {
-      return;
-    }
     finished = true;
     ports.logLine(`the relay host ended: ${reason}`);
     for (const stream of [...streams.keys()]) {
@@ -163,7 +167,8 @@ export function relaySession(ports: RelaySessionPorts): RelaySession {
   }
 
   function opened(stream: number, kind: string): void {
-    if (!ports.kinds.has(kind)) {
+    const connect = ports.connectors.get(kind);
+    if (connect === undefined) {
       finish(`a stream of a kind this connection has no relay for`);
       return;
     }
@@ -193,7 +198,7 @@ export function relaySession(ports: RelaySessionPorts): RelaySession {
       }
     }
     const stopTimer = ports.setTimer(HOST_CONNECT_MILLISECONDS, unreachable);
-    ports.connect(kind, open.connecting.signal).then(
+    connect(open.connecting.signal).then(
       hostEnd => {
         stopTimer();
         if (streams.get(stream) !== open) {
@@ -210,6 +215,13 @@ export function relaySession(ports: RelaySessionPorts): RelaySession {
   }
 
   function handle(frame: Frame): void {
+    if (frame.type === 'ready') {
+      if (!readyTold) {
+        readyTold = true;
+        ports.ready();
+      }
+      return;
+    }
     if (frame.type === 'open') {
       opened(frame.stream, new TextDecoder().decode(frame.payload));
       return;

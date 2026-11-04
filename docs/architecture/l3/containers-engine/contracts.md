@@ -26,6 +26,38 @@ process's stdin and stdout. The relay script (shipped as text, written into the 
 the server, owned by the remote user, mode 0644) connects to `127.0.0.1:<port>` and pipes both ways; it exits when either
 side ends. `{kind: 'socket'}` is refused in release 1.
 
+**The relay host (C16; brief-personalization §2, #2086):** `startRelayHost(dependencies, request)` in
+`relays/relay-host.ts`, called in the connect's phase E (§2 step 5) with the connect's kinds. With no kind it runs
+nothing and gives no variables. Otherwise it writes `relay-host.js` into the server's data folder through this channel
+(as the relay script is, mode 0644, under a name that follows its text) and runs `docker exec -i --user <remote user>
+<containerId> <node> <relay-host.js> <kind>=<socket path> …`, one socket per kind at `/tmp/remote-oss-<kind>-<random>.sock`,
+each created mode 0600. The connect waits for its `ready` frame, at most 10 s (R-79); one that ends, isn't ready in time
+or is cancelled first fails the start, which C10 logs, and the connect goes on with no relays. Its process lives as long
+as the window's connection, and a connect that fails after phase E ends it.
+
+- **Frames** (ours, R-27), on the exec's standard streams both ways: a type byte, a stream number (32-bit,
+  big-endian), a payload length (32-bit, big-endian), then the payload.
+
+  | Type | Byte | Stream | Payload |
+  |---|---|---|---|
+  | `open` | 1 | the new stream, from 1 | the kind's name, not empty |
+  | `data` | 2 | an open stream | the bytes, at most 64 KiB |
+  | `close` | 3 | an open stream | empty |
+  | `ready` | 4 | 0 | empty; sent once, when every socket listens |
+
+  Only the relay host opens streams: each connection accepted on a socket is a new number and an `open` of its socket's
+  kind. Either side may send `data` and `close`.
+- **The extension's checks** (the frames are untrusted): a payload over 64 KiB, an unknown type, a payload or stream
+  its type doesn't allow, an `open` of a kind this connection didn't set up, or an `open` of a stream number in use ends
+  the relay host, every stream closed, with one log line. An `open` beyond 64 open streams is closed at once, with one
+  log line. Backpressure holds both ways: a host end that wants no more pauses the exec's output until it drains.
+- **Host ends:** a stream's host end connects when its `open` arrives, bounded at 10 s, after which the stream closes;
+  the bytes before it connects wait, with the exec's output paused. Payloads are never logged; the log names kinds and
+  paths only (R-26).
+- **Kinds:** each personalization card adds its own, with its variable. The harness's `echo` (its host end writes back
+  what it reads, variable `REMOTE_OSS_RELAY_ECHO_SOCK`) exists only while `REMOTE_OSS_ACCEPTANCE=1` and
+  `REMOTE_OSS_ACCEPTANCE_RELAY_ECHO=1`.
+
 ## 2. C10 container connector (a lib-authority `Connector`)
 
 `containerConnectorOf(dependencies): Connector` for the `dev-container` family only.
