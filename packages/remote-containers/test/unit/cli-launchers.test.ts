@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {execFileSync} from 'node:child_process';
+import {execFileSync, spawnSync} from 'node:child_process';
 import {
   chmodSync,
   mkdirSync,
@@ -75,6 +75,20 @@ describe('the launchers of cli-bin (card containers-211)', () => {
         output(path.join(links, name)),
       ),
       [expected(), expected(), expected()],
+    );
+  });
+
+  it('F-1201 AC-29: a link that points at itself ends the search after a bounded number of hops instead of looping', () => {
+    const loop = path.join(root, 'loop');
+    symlinkSync('loop', loop);
+    const result = spawnSync(launcher, ['open'], {encoding: 'utf8'});
+    const looped = spawnSync(loop, ['open'], {
+      encoding: 'utf8',
+      timeout: 20_000,
+    });
+    deepStrictEqual(
+      [result.status, looped.signal, looped.status !== 0],
+      [0, null, true],
     );
   });
 

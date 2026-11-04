@@ -4,7 +4,7 @@
  */
 
 import {randomUUID} from 'node:crypto';
-import {mkdir, readFile, rename, writeFile} from 'node:fs/promises';
+import {chmod, mkdir, readFile, rename, writeFile} from 'node:fs/promises';
 import type {CliBinFs} from './cli-bin.ts';
 
 /** The folder's mode: the user alone reads and writes it. */
@@ -21,6 +21,8 @@ export const nodeCliBinFs: CliBinFs = {
   },
   makeFolder: async folder => {
     await mkdir(folder, {recursive: true, mode: FOLDER_MODE});
+    // A folder made earlier, or under a different umask, is closed to the others as well.
+    await chmod(folder, FOLDER_MODE);
   },
   writeText: (file, text, mode) => writeFile(file, text, {mode}),
   rename,

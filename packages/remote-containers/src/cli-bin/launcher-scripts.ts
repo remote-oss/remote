@@ -22,7 +22,9 @@ const LAUNCHER_PROGRAM = 'dist/cli-launcher.js';
  */
 export const POSIX_LAUNCHER = `#!/usr/bin/env sh
 self="$0"
-while [ -h "$self" ]; do
+hops=0
+while [ -h "$self" ] && [ "$hops" -lt 40 ]; do
+  hops=$((hops + 1))
   folder="$(cd "$(dirname "$self")" && pwd -P)"
   target="$(readlink "$self")"
   case "$target" in
@@ -40,8 +42,8 @@ export const WINDOWS_LAUNCHER = `@echo off\r
 setlocal\r
 set /p EDITOR_PATH=<"%~dp0${EDITOR_PATH_FILE}"\r
 set /p EXTENSION_PATH=<"%~dp0${EXTENSION_PATH_FILE}"\r
-set ${EDITOR_PROGRAM_VARIABLE}=%EDITOR_PATH%\r
-set ELECTRON_RUN_AS_NODE=1\r
+set "${EDITOR_PROGRAM_VARIABLE}=%EDITOR_PATH%"\r
+set "ELECTRON_RUN_AS_NODE=1"\r
 "%EDITOR_PATH%" "%EXTENSION_PATH%\\dist\\cli-launcher.js" %*\r
 exit /b %ERRORLEVEL%\r
 `;

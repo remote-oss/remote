@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -188,6 +189,17 @@ describe('the cli-bin folder (card containers-211)', () => {
 });
 
 describe('the cli-bin folder on a disk (card containers-211)', () => {
+  it('F-1201 BR-15: a folder that was open to the others is closed to them when it is refreshed', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'cli-bin-'));
+    try {
+      mkdirSync(path.join(root, 'cli-bin'), {mode: 0o755});
+      await refreshCliBin(root, FACTS, nodeCliBinFs);
+      deepStrictEqual(statSync(path.join(root, 'cli-bin')).mode & 0o777, 0o700);
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
+  });
+
   it('F-1201 AC-29, AC-30: a refresh on a real folder writes the launchers executable and the folder for the user only, and a second leaves every file as it was', async () => {
     const root = mkdtempSync(path.join(tmpdir(), 'cli-bin-'));
     try {
