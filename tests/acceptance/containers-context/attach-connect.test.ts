@@ -43,7 +43,7 @@ describe('Attached connect (card containers-163, #2030)', function () {
     await setUserSetting('dev.containers.dockerPath', undefined);
   });
 
-  it('F-0601 AC-6, AC-9, AC-15, BR-13, F-0417 AC-14 (c163-connect): a picked container opens a window that connects as an attached container, its attach file’s blocking and background commands run in it, and closing the window leaves the container running', async () => {
+  it('F-0601 AC-6, AC-9, AC-15, F-0417 AC-14 (c163-connect): a picked container opens a window that connects as an attached container, its attach file’s blocking and background commands run in it, and closing the window leaves the container running', async () => {
     await started(NAME, 'connect');
     mkdirSync(path.dirname(attachFile()), {recursive: true});
     writeFileSync(
