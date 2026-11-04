@@ -9,7 +9,7 @@ import {operationOf} from '../../src/engine/ssh-questions.ts';
 function outcomeOf(
   changes: Partial<ReturnType<typeof operationOf>['outcome']>,
 ) {
-  return {...operationOf('view').outcome, ...changes};
+  return {...operationOf('view', 'ssh://host').outcome, ...changes};
 }
 
 describe('the welcome of a listing that failed on an SSH endpoint (card containers-172, §4)', () => {

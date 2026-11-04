@@ -6,6 +6,8 @@ import {
   type QuestionRouter,
 } from '../../src/engine/ssh-questions.ts';
 
+const ENDPOINT = 'ssh://first';
+const OTHER_ENDPOINT = 'ssh://second';
 const PASSWORD = "pwuser@host's password: ";
 const HOST_KEY =
   "The authenticity of host 'h (1.2.3.4)' can't be established.\nAre you sure you want to continue connecting (yes/no/[fingerprint])? ";
@@ -47,13 +49,13 @@ function settled(): Promise<void> {
 describe('the questions of an SSH Docker endpoint (card containers-172, §2)', () => {
   it('F-0205 AC-25, BR-14: an answer given once is given again at once with no box, for any mode, and the operation says it was replayed', async () => {
     const {router, boxes} = sceneOf();
-    const first = router.ask(operationOf('command'), PASSWORD);
+    const first = router.ask(operationOf('command', ENDPOINT), PASSWORD);
     await settled();
     boxes[0]?.close('secret');
     await first;
     const results = [];
-    const operations = (['command', 'view', 'automatic'] as const).map(
-      operationOf,
+    const operations = (['command', 'view', 'automatic'] as const).map(mode =>
+      operationOf(mode, ENDPOINT),
     );
     for (const operation of operations) {
       results.push(await router.ask(operation, PASSWORD));
@@ -70,17 +72,20 @@ describe('the questions of an SSH Docker endpoint (card containers-172, §2)', (
 
   it('F-0205 BR-14: an empty answer is an answer, and a wrong one is remembered as given', async () => {
     const {router, boxes} = sceneOf();
-    const empty = router.ask(operationOf('view'), 'Enter passphrase: ');
+    const empty = router.ask(
+      operationOf('view', ENDPOINT),
+      'Enter passphrase: ',
+    );
     await settled();
     boxes[0]?.close('');
-    const wrong = router.ask(operationOf('view'), PASSWORD);
+    const wrong = router.ask(operationOf('view', ENDPOINT), PASSWORD);
     await settled();
     boxes[1]?.close('wrong');
     deepStrictEqual(
       [
         await empty,
         await wrong,
-        await router.ask(operationOf('view'), PASSWORD),
+        await router.ask(operationOf('view', ENDPOINT), PASSWORD),
         boxes.length,
       ],
       [
@@ -94,11 +99,11 @@ describe('the questions of an SSH Docker endpoint (card containers-172, §2)', (
 
   it('F-0205 AC-26, BR-14: a box closed without Enter is a decline, refused at once afterwards with no new box, and the first asker is refused too', async () => {
     const {router, boxes} = sceneOf();
-    const first = operationOf('view');
+    const first = operationOf('view', ENDPOINT);
     const asked = router.ask(first, PASSWORD);
     await settled();
     boxes[0]?.close(undefined);
-    const second = operationOf('view');
+    const second = operationOf('view', ENDPOINT);
     deepStrictEqual(
       [
         await asked,
@@ -129,7 +134,7 @@ describe('the questions of an SSH Docker endpoint (card containers-172, §2)', (
 
   it('F-0205 BR-4: two questions of one text share one box and get the one answer, and two texts get two boxes', async () => {
     const {router, boxes} = sceneOf();
-    const operation = operationOf('command');
+    const operation = operationOf('command', ENDPOINT);
     const one = router.ask(operation, PASSWORD);
     const two = router.ask(operation, PASSWORD);
     const other = router.ask(operation, 'Enter passphrase for key: ');
@@ -150,7 +155,7 @@ describe('the questions of an SSH Docker endpoint (card containers-172, §2)', (
 
   it('F-0205 BR-20, 7.E8: an automatic operation with no remembered answer is refused at once with no box, and marked', async () => {
     const {router, boxes} = sceneOf();
-    const operation = operationOf('automatic');
+    const operation = operationOf('automatic', ENDPOINT);
     deepStrictEqual(
       [
         await router.ask(operation, PASSWORD),
@@ -164,8 +169,8 @@ describe('the questions of an SSH Docker endpoint (card containers-172, §2)', (
 
   it('F-0205 BR-20: an automatic operation joins a box that a command opened, and takes its answer', async () => {
     const {router, boxes} = sceneOf();
-    const opened = router.ask(operationOf('command'), PASSWORD);
-    const joined = router.ask(operationOf('automatic'), PASSWORD);
+    const opened = router.ask(operationOf('command', ENDPOINT), PASSWORD);
+    const joined = router.ask(operationOf('automatic', ENDPOINT), PASSWORD);
     await settled();
     boxes[0]?.close('typed');
     deepStrictEqual(
@@ -176,9 +181,9 @@ describe('the questions of an SSH Docker endpoint (card containers-172, §2)', (
 
   it('F-0205 AC-3, AC-22, AC-53: a password box is masked, a host-key box is plain text, and a question with no text shows the empty prompt, masked', async () => {
     const {router, boxes} = sceneOf();
-    void router.ask(operationOf('command'), PASSWORD);
-    void router.ask(operationOf('command'), HOST_KEY);
-    void router.ask(operationOf('command'), '');
+    void router.ask(operationOf('command', ENDPOINT), PASSWORD);
+    void router.ask(operationOf('command', ENDPOINT), HOST_KEY);
+    void router.ask(operationOf('command', ENDPOINT), '');
     await settled();
     deepStrictEqual(
       boxes.map(box => [box.prompt, box.masked]),
@@ -192,8 +197,8 @@ describe('the questions of an SSH Docker endpoint (card containers-172, §2)', (
 
   it('F-0205 AC-54, BR-4: an unfocused window points at a box once, however many questions join it, and the pointer ends when the box closes; a focused one never does', async () => {
     const unfocused = sceneOf(false);
-    void unfocused.router.ask(operationOf('command'), PASSWORD);
-    void unfocused.router.ask(operationOf('command'), PASSWORD);
+    void unfocused.router.ask(operationOf('command', ENDPOINT), PASSWORD);
+    void unfocused.router.ask(operationOf('command', ENDPOINT), PASSWORD);
     await settled();
     let ended = false;
     void unfocused.pointers[0]?.then(() => {
@@ -204,7 +209,7 @@ describe('the questions of an SSH Docker endpoint (card containers-172, §2)', (
     unfocused.boxes[0]?.close('x');
     await settled();
     const focused = sceneOf(true);
-    void focused.router.ask(operationOf('command'), PASSWORD);
+    void focused.router.ask(operationOf('command', ENDPOINT), PASSWORD);
     await settled();
     deepStrictEqual(
       [unfocused.pointers.length, beforeClose, ended, focused.pointers.length],
@@ -214,13 +219,17 @@ describe('the questions of an SSH Docker endpoint (card containers-172, §2)', (
 
   it('F-0205 BR-15: a question that is dropped leaves its box open, and an answer typed later is still remembered', async () => {
     const {router, boxes} = sceneOf();
-    void router.ask(operationOf('command'), PASSWORD);
+    void router.ask(operationOf('command', ENDPOINT), PASSWORD);
     await settled();
     const openWhileDropped = router.openBoxes();
     boxes[0]?.close('late');
     await settled();
     deepStrictEqual(
-      [openWhileDropped, router.openBoxes(), router.remembers(PASSWORD)],
+      [
+        openWhileDropped,
+        router.openBoxes(),
+        router.remembers(ENDPOINT, PASSWORD),
+      ],
       [1, 0, {kind: 'answer', text: 'late'}],
     );
   });
@@ -229,12 +238,12 @@ describe('the questions of an SSH Docker endpoint (card containers-172, §2)', (
     const {router, boxes} = sceneOf();
     const heard: number[] = [];
     const stop = router.onBoxes(open => heard.push(open));
-    void router.ask(operationOf('command'), PASSWORD);
+    void router.ask(operationOf('command', ENDPOINT), PASSWORD);
     await settled();
     boxes[0]?.close('a');
     await settled();
     stop();
-    void router.ask(operationOf('command'), HOST_KEY);
+    void router.ask(operationOf('command', ENDPOINT), HOST_KEY);
     await settled();
     deepStrictEqual(heard, [1, 0]);
   });
@@ -242,8 +251,52 @@ describe('the questions of an SSH Docker endpoint (card containers-172, §2)', (
   it('F-0205 BR-20: the three modes are the three the card names', () => {
     const modes: QuestionMode[] = ['command', 'view', 'automatic'];
     deepStrictEqual(
-      modes.map(mode => operationOf(mode).mode),
+      modes.map(mode => operationOf(mode, ENDPOINT).mode),
       ['command', 'view', 'automatic'],
     );
+  });
+
+  it('F-0205 BR-14: an answer typed for one endpoint is not replayed to another endpoint that asks the same text, which opens its own box', async () => {
+    const {router, boxes} = sceneOf();
+    const first = router.ask(operationOf('command', ENDPOINT), PASSWORD);
+    await settled();
+    boxes[0]?.close('secret');
+    await first;
+    const second = router.ask(operationOf('command', OTHER_ENDPOINT), PASSWORD);
+    await settled();
+    const opened = boxes.length;
+    boxes[1]?.close('other');
+    deepStrictEqual(
+      [
+        opened,
+        await second,
+        router.remembers(ENDPOINT, PASSWORD),
+        router.remembers(OTHER_ENDPOINT, PASSWORD),
+      ],
+      [
+        2,
+        {kind: 'answer', text: 'other'},
+        {kind: 'answer', text: 'secret'},
+        {kind: 'answer', text: 'other'},
+      ],
+    );
+  });
+
+  it('F-0205 BR-14: a box open for one endpoint is not joined by another endpoint asking the same text, and an automatic one of the other endpoint is refused', async () => {
+    const {router, boxes} = sceneOf();
+    void router.ask(operationOf('command', ENDPOINT), PASSWORD);
+    const other = router.ask(operationOf('command', OTHER_ENDPOINT), PASSWORD);
+    const automatic = await router.ask(
+      operationOf('automatic', 'ssh://third'),
+      PASSWORD,
+    );
+    await settled();
+    deepStrictEqual(
+      [boxes.length, router.openBoxes(), automatic],
+      [2, 2, {kind: 'refused', reason: 'noAnswer'}],
+    );
+    boxes[0]?.close(undefined);
+    boxes[1]?.close(undefined);
+    await other;
   });
 });
