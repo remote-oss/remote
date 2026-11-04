@@ -168,6 +168,12 @@ describe('a Docker Compose dev container in the Dev Containers view (card contai
       async () => (await serviceContainerOf(project, 'app')) === '',
       60_000,
     );
+    console.log(
+      'MEASURE c146 ps after removal',
+      (await docker('ps', '-a', '--format', '{{.Names}}|{{.Status}}', '--filter', `label=com.docker.compose.project=${project}`)).replace(/\n/g, ' ; '),
+      'inspect db',
+      (await docker('inspect', '--format', '{{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} finished={{.State.FinishedAt}}', `${project}-db-1`).catch(() => 'no db')),
+    );
     const afterRemoval = [
       await runningServicesOf(project),
       await serviceContainerOf(project, 'app'),
