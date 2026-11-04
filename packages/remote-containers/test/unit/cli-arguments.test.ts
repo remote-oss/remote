@@ -256,6 +256,19 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
     );
   });
 
+  it('F-0206 BR-13: read-configuration asks for the merged configuration with no container id when told to, and a container id alone can be read unmerged', () => {
+    const asked = readConfigurationArguments(TARGET, undefined, true);
+    const unmerged = readConfigurationArguments(TARGET, 'abc', false);
+    deepStrictEqual(
+      [
+        asked.at(-1),
+        unmerged.includes('--include-merged-configuration'),
+        unmerged.slice(-2),
+      ],
+      ['--include-merged-configuration', false, ['--container-id', 'abc']],
+    );
+  });
+
   it('F-0411 3.2: the worktree flag is in all three subcommands when the setting is on, and in none when it is off', () => {
     function flagsIn(mountGitWorktreeCommonDir: boolean): string[][] {
       const target = {...TARGET, mountGitWorktreeCommonDir};

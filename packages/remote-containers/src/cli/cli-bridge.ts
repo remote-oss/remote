@@ -87,6 +87,7 @@ export interface CliBridge {
     onEvent: (event: CliEvent) => void,
     cancellation: AbortSignal,
     onStdin?: StdinOf,
+    includeMerged?: boolean,
   ): Promise<ConfigurationResult | CliFailure>;
   /** Sets up the running container `target` names; no override file is made and no folder is read. */
   setUp(
@@ -360,10 +361,18 @@ export function cliBridgeOf(
         cancellation,
         onStdin,
       ),
-    readConfiguration: (target, containerId, onEvent, cancellation, onStdin) =>
+    readConfiguration: (
+      target,
+      containerId,
+      onEvent,
+      cancellation,
+      onStdin,
+      includeMerged,
+    ) =>
       drive(
         target,
-        prepared => readConfigurationArguments(prepared, containerId),
+        prepared =>
+          readConfigurationArguments(prepared, containerId, includeMerged),
         (result, status, lastError) =>
           readConfigurationResult(result, lastError),
         onEvent,
