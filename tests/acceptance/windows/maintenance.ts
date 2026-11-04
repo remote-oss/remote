@@ -33,6 +33,7 @@ import {
   variable,
   waitFor,
   writeUserSetting,
+  windowEvents,
   windowNames,
   windowState,
 } from './harness.ts';
@@ -163,6 +164,15 @@ export function resolvedAgainSince(
   );
 }
 
+/** How many of `lines` each window has. */
+function countsByWindow(lines: readonly RecordLine[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const line of lines) {
+    counts[line.window] = (counts[line.window] ?? 0) + 1;
+  }
+  return counts;
+}
+
 /**
  * Waits `milliseconds` for core's reconnection of `window` to host `host` after its server went. When none comes it
  * fails with what the window and the record showed, since a hosted run uploads neither.
@@ -188,6 +198,12 @@ export async function waitForReconnection(
         lines: linesSince(mark, window)
           .slice(-12)
           .map(line => [line.surface, line.question, line.answer]),
+        // Where the record's lines went, if not to this window: a count of them by window.
+        sinceMark: countsByWindow(recordLines().slice(mark)),
+        events: windowEvents(window)
+          .slice(-6)
+          .map(entry => entry.event),
+        connection: connectionLog().slice(-8),
       })}`,
       {cause: error},
     );

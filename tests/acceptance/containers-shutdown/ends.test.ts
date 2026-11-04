@@ -68,7 +68,8 @@ describe('what ends a window decides when its container stops (card containers-6
       try {
         const outcome = await closedAndWatched(
           {window: window2, folder, containerId},
-          label === 'exits' ? 22 : 28,
+          // The wait is long for the signal-ignoring command so that a stop that comes late shows when it came.
+          label === 'exits' ? 22 : 40,
         );
         results.push([label, stoppedWithin(outcome, exitCode, window)]);
         outcomes.push(`${label}: ${JSON.stringify(outcome)}`);

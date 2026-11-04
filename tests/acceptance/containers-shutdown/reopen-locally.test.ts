@@ -93,6 +93,21 @@ async function shownBy(name: string): Promise<{
   };
 }
 
+/**
+ * What window `name` shows once its remote indicator has settled: a window that has connected or reloaded a moment ago can still
+ * read "Opening Remote...", later on a slower machine, and is compared only after.
+ */
+async function settledShownBy(
+  name: string,
+): Promise<Awaited<ReturnType<typeof shownBy>>> {
+  await waitFor(
+    `window ${name}'s indicator to settle`,
+    async () => !(await shownBy(name)).indicator.startsWith('Opening Remote'),
+    120_000,
+  );
+  return shownBy(name);
+}
+
 /** The windows open now. */
 function openWindows(): string[] {
   return windowNames().filter(isOpen).sort();
@@ -312,14 +327,7 @@ describe('Reopen Folder Locally from a dev container window (card coverage-103, 
       await reloadingCommand(connected.window, REOPEN_LOCALLY);
       const firstWindow = await shownBy(connected.window);
       const windowsMid = openWindows();
-      // The second window can still be reloading after the first one's reopen, later on a slower machine: it is compared once its indicator has settled.
-      await waitFor(
-        'the second window’s indicator to settle',
-        async () =>
-          !(await shownBy(second)).indicator.startsWith('Opening Remote'),
-        120_000,
-      );
-      const secondBefore = await shownBy(second);
+      const secondBefore = await settledShownBy(second);
       void inWindow(second, REOPEN_LOCALLY).catch(() => undefined);
       await new Promise(resolve => setTimeout(resolve, 30_000));
       deepStrictEqual(
@@ -438,7 +446,7 @@ describe('Reopen Folder Locally from a dev container window (card coverage-103, 
   it('F-0406 AC-32 (c103-not-possible): in a window on the local Docker host the SSH, WSL and Tunnel commands show their information notice with no button and change nothing', async () => {
     const connected = await connectedWindow('c103-impossible');
     try {
-      const before = await shownBy(connected.window);
+      const before = await settledShownBy(connected.window);
       const seen: unknown[] = [];
       for (const [command, text] of [
         [REOPEN_IN_SSH, "'Reopen in SSH' not possible in current context."],
