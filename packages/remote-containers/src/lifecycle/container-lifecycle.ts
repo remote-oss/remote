@@ -68,6 +68,8 @@ export interface ContainerRequest {
   cacheVolume: boolean;
   /** The consistency of the workspace mount (`dev.containers.workspaceMountConsistency`), as written. */
   workspaceMountConsistency: string;
+  /** `dev.containers.gpuAvailability`, as written. */
+  gpuAvailability: string;
   /** Whether the Git worktree's common dir is mounted (`dev.containers.experimentalMountGitWorktreeCommonDir`). */
   mountGitWorktreeCommonDir: boolean;
   /** The Feature settings: the default Features and the lockfile. */
@@ -876,6 +878,7 @@ export function containerLifecycleOf(dependencies: {
         removeExistingContainer: rebuilding && !composeRebuild,
         buildNoCache: request.rebuild?.buildNoCache ?? false,
         workspaceMountConsistency: request.workspaceMountConsistency,
+        gpuAvailability: request.gpuAvailability,
       },
       relayEvent,
       cancellation,

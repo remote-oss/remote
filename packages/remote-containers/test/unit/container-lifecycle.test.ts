@@ -55,6 +55,7 @@ const REQUEST: ContainerRequest = {
   logLevel: 'info',
   cacheVolume: true,
   workspaceMountConsistency: 'cached',
+  gpuAvailability: 'detect',
   mountGitWorktreeCommonDir: false,
   features: {defaultFeatures: {}, lockfile: true},
   mounts: [],
@@ -497,6 +498,7 @@ describe('containerLifecycleOf', () => {
               removeExistingContainer: false,
               buildNoCache: false,
               workspaceMountConsistency: 'cached',
+              gpuAvailability: 'detect',
             },
           },
         ],
@@ -755,6 +757,7 @@ describe('containerLifecycleOf', () => {
             removeExistingContainer: true,
             buildNoCache: false,
             workspaceMountConsistency: 'cached',
+            gpuAvailability: 'detect',
           },
         ],
         true,
@@ -782,6 +785,7 @@ describe('containerLifecycleOf', () => {
             removeExistingContainer: true,
             buildNoCache: true,
             workspaceMountConsistency: 'cached',
+            gpuAvailability: 'detect',
           },
         ],
         'info: rebuilding: the dev container CLI removes no container first',
@@ -1329,6 +1333,19 @@ describe('containerLifecycleOf', () => {
     deepStrictEqual(
       result.bridge.ups.map(up => up.options.workspaceMountConsistency),
       ['fast'],
+    );
+  });
+
+  it('F-0206 BR-5, BR-16: the GPU availability reaches the CLI as written', async () => {
+    const result = await prepared(
+      scriptedEngine(EMPTY_LISTING),
+      fakeBridge(),
+      new AbortController().signal,
+      {...REQUEST, gpuAvailability: 'none'},
+    );
+    deepStrictEqual(
+      result.bridge.ups.map(up => up.options.gpuAvailability),
+      ['none'],
     );
   });
 
@@ -2497,6 +2514,7 @@ describe('containerLifecycleOf', () => {
           removeExistingContainer: false,
           buildNoCache: true,
           workspaceMountConsistency: 'cached',
+          gpuAvailability: 'detect',
         },
         2,
       ],

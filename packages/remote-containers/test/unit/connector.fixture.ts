@@ -190,6 +190,8 @@ export interface Scene {
   /** The user's values of the workspace mount's consistency, of its deprecated twin and of the worktree setting. */
   workspaceMountConsistency: unknown;
   legacyWorkspaceMountConsistency: unknown;
+  /** The value of `dev.containers.gpuAvailability`. */
+  gpuAvailability: unknown;
   mountGitWorktreeCommonDir: unknown;
   /** The user's values of the setting for the extensions of a new container, and of its deprecated twin. */
   defaultFeatures: unknown;
@@ -405,6 +407,7 @@ export function sceneOf(
     cacheVolumeInspect: undefined,
     workspaceMountConsistency: undefined,
     legacyWorkspaceMountConsistency: undefined,
+    gpuAvailability: undefined,
     mountGitWorktreeCommonDir: undefined,
     defaultFeatures: undefined,
     lockfile: undefined,
@@ -685,6 +688,7 @@ export function sceneOf(
         ),
       workspaceMountConsistency: scene.workspaceMountConsistency,
       legacyWorkspaceMountConsistency: scene.legacyWorkspaceMountConsistency,
+      gpuAvailability: scene.gpuAvailability,
       mountGitWorktreeCommonDir: scene.mountGitWorktreeCommonDir,
       defaultExtensions: scene.defaultExtensions,
       deprecatedDefaultExtensions: scene.deprecatedDefaultExtensions,

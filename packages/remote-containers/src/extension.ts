@@ -2435,6 +2435,7 @@ export async function activate(
           legacyWorkspaceMountConsistency: configuration.inspect(
             settings.workspaceMountConsistency.legacyId,
           )?.globalValue,
+          gpuAvailability: configuration.get(settings.gpuAvailability.id),
           mountGitWorktreeCommonDir: configuration.inspect(
             settings.experimentalMountGitWorktreeCommonDir.id,
           )?.globalValue,

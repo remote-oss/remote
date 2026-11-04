@@ -240,6 +240,13 @@ const ENGLISH = {
     "Use 'dev.containers.workspaceMountConsistency' instead.",
   'setting.WorkspaceMountConsistency.markdownDeprecationMessage':
     'Use `#dev.containers.workspaceMountConsistency#` instead.',
+  'setting.GpuAvailability.description':
+    'Availability of GPUs when a dev container requires any.',
+  'setting.GpuAvailability.all':
+    'All GPUs are available. This expects the host to have a GPU.',
+  'setting.GpuAvailability.detect':
+    'Availability should be detected automatically.',
+  'setting.GpuAvailability.none': 'No GPUs are available.',
   'setting.MountGitWorktreeCommonDir.description':
     'Mount the Git worktree common dir for Git operations to work in the container. This requires the worktree to be created with relative paths (`git worktree add --relative-paths`).',
   'setting.DefaultFeatures.description':
@@ -793,6 +800,47 @@ describe('the manifest', () => {
     deepStrictEqual(
       Object.keys(MOUNT_SETTINGS).map(key => properties[key]),
       Object.values(MOUNT_SETTINGS),
+    );
+  });
+
+  it('F-0206 3.2: the GPU availability setting is contributed with machine scope, the three values and the default detect, and its English texts are the spec’s', () => {
+    const properties = (
+      MANIFEST.contributes as {
+        configuration: {properties: Record<string, unknown>};
+      }
+    ).configuration.properties;
+    deepStrictEqual(
+      [
+        properties['dev.containers.gpuAvailability'],
+        (
+          [
+            'setting.GpuAvailability.description',
+            'setting.GpuAvailability.all',
+            'setting.GpuAvailability.detect',
+            'setting.GpuAvailability.none',
+          ] as const
+        ).map(key => ENGLISH[key]),
+      ],
+      [
+        {
+          type: 'string',
+          default: 'detect',
+          scope: 'machine',
+          enum: ['all', 'detect', 'none'],
+          enumDescriptions: [
+            '%setting.GpuAvailability.all%',
+            '%setting.GpuAvailability.detect%',
+            '%setting.GpuAvailability.none%',
+          ],
+          description: '%setting.GpuAvailability.description%',
+        },
+        [
+          'Availability of GPUs when a dev container requires any.',
+          'All GPUs are available. This expects the host to have a GPU.',
+          'Availability should be detected automatically.',
+          'No GPUs are available.',
+        ],
+      ],
     );
   });
 

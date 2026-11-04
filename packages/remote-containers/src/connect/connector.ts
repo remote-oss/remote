@@ -148,6 +148,7 @@ import {
   mountGitWorktreeCommonDirOf,
   workspaceMountConsistencyOf,
 } from './mount-settings.ts';
+import {gpuAvailabilityOf} from './gpu-availability.ts';
 import {featureSettingsOf} from './feature-settings.ts';
 import {
   type ContainerState,
@@ -309,6 +310,21 @@ interface AttachedConnectDependencies extends PickGate {
   configFileOf: (container: ListedContainer) => Promise<string | undefined>;
 }
 
+/** The settings the CLI's `up` takes: the workspace mount's consistency and the GPU availability, as the settings have them. */
+function engineSettingsOf(settings: {
+  workspaceMountConsistency: unknown;
+  legacyWorkspaceMountConsistency: unknown;
+  gpuAvailability: unknown;
+}): {workspaceMountConsistency: string; gpuAvailability: string} {
+  return {
+    workspaceMountConsistency: workspaceMountConsistencyOf(
+      settings.workspaceMountConsistency,
+      settings.legacyWorkspaceMountConsistency,
+    ),
+    gpuAvailability: gpuAvailabilityOf(settings.gpuAvailability),
+  };
+}
+
 /** What a connect to a Kubernetes pod needs beyond a folder's. */
 interface PodConnectDependencies extends PickGate {
   /** `kubectl` as an engine with the login shell's environment. */
@@ -354,6 +370,8 @@ export interface ContainerConnectorDependencies {
     workspaceMountConsistency: unknown;
     /** The user's value of the deprecated `remote.containers.workspaceMountConsistency`, `undefined` when unset. */
     legacyWorkspaceMountConsistency: unknown;
+    /** The value of `dev.containers.gpuAvailability`, `undefined` when unset. */
+    gpuAvailability: unknown;
     /** The user's value of `dev.containers.experimentalMountGitWorktreeCommonDir`, `undefined` when unset. */
     mountGitWorktreeCommonDir: unknown;
     /** The user's value of `dev.containers.defaultFeatures`, `undefined` when unset. */
@@ -1373,10 +1391,7 @@ export function containerConnectorOf(
         logLevel: 'info',
         cacheVolume: settings.cacheVolume(),
         windowsClient: dependencies.clientPlatform === 'win32',
-        workspaceMountConsistency: workspaceMountConsistencyOf(
-          settings.workspaceMountConsistency,
-          settings.legacyWorkspaceMountConsistency,
-        ),
+        ...engineSettingsOf(settings),
         mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
           settings.mountGitWorktreeCommonDir,
         ),
@@ -1750,10 +1765,7 @@ export function containerConnectorOf(
       dockerPath: 'docker',
       logLevel: 'info',
       cacheVolume: settings.cacheVolume(),
-      workspaceMountConsistency: workspaceMountConsistencyOf(
-        settings.workspaceMountConsistency,
-        settings.legacyWorkspaceMountConsistency,
-      ),
+      ...engineSettingsOf(settings),
       mountGitWorktreeCommonDir: false,
       features: featureSettingsOf(
         settings.defaultFeatures,
@@ -1827,10 +1839,7 @@ export function containerConnectorOf(
         // An explored volume always has the server's volume at /vscode, whatever `dev.containers.cacheVolume` says.
         cacheVolume: true,
         windowsClient: dependencies.clientPlatform === 'win32',
-        workspaceMountConsistency: workspaceMountConsistencyOf(
-          settings.workspaceMountConsistency,
-          settings.legacyWorkspaceMountConsistency,
-        ),
+        ...engineSettingsOf(settings),
         mountGitWorktreeCommonDir: false,
         features: featureSettingsOf(
           settings.defaultFeatures,
