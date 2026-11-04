@@ -43,6 +43,12 @@ const TRUST = 'Yes, I trust the authors';
 /** The terminal request that comes again after the refusal. */
 const CANCEL = 'Cancel';
 
+/** The buttons of core's two trust dialogs: the modal request for trust, and the startup question. */
+const TRUST_DIALOGS = [
+  ['Manage', 'Cancel', 'Trust Folder & Continue'],
+  ["No, I don't trust the authors", 'Yes, I trust the authors'],
+] as const;
+
 /** The key of the run that the agent holds. */
 function keyFile(): string {
   return path.join(variable('HARNESS_RUN_FOLDER'), 'id_second');
@@ -119,9 +125,10 @@ describe('the agent link of a window on an untrusted folder (card coverage-99)',
     const asked: string[][] = [];
     async function cancelWhileAsked(opening: Promise<unknown>): Promise<void> {
       const state = {open: true};
-      void opening.finally(() => {
+      function closeLoop(): void {
         state.open = false;
-      });
+      }
+      void opening.then(closeLoop, closeLoop);
       while (state.open) {
         const shown = await dialogOf(window).catch(() => undefined);
         if (shown !== undefined) {
@@ -143,7 +150,14 @@ describe('the agent link of a window on an untrusted folder (card coverage-99)',
       ]);
       deepStrictEqual(
         {
-          asked: asked.length > 0,
+          // At least one dialog came, and each had the buttons of one of core's two trust dialogs.
+          asked:
+            asked.length > 0 &&
+            asked.every(buttons =>
+              TRUST_DIALOGS.some(
+                known => JSON.stringify(known) === JSON.stringify(buttons),
+              ),
+            ),
           socketIsLink: links.length === 1 && links[0]?.endsWith(` ${socket}`),
           listsKey: (await listedKeys(window)).includes(
             await fingerprintOf(keyFile()),
