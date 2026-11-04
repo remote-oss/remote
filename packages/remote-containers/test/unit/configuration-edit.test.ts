@@ -247,6 +247,44 @@ describe('the document-edit seam (card containers-206, brief-authoring-edits §2
     );
   });
 
+  it('F-0809 (c206-guard-first): the guard runs before the document is opened or read, so a refused file is never opened', async () => {
+    const outside = await resultsOf('diskOrSaveIfClean', {
+      disk: OBJECT,
+      realPaths: {[FILE.fsPath]: '/home/other/secret.json'},
+    });
+    const linked = await resultsOf(
+      'diskOrSaveIfClean',
+      {disk: OBJECT, linkSchemes: true},
+      APPEND,
+      uriOf(FILE.fsPath, 'vscode-remote'),
+    );
+    deepStrictEqual(
+      [outside, linked].map(each => [
+        each.result,
+        each.log.filter(line => /^(open|read)/.test(line)),
+      ]),
+      [
+        [{kind: 'refused', reason: 'outsideWorkspace'}, []],
+        [{kind: 'refused', reason: 'symbolicLink'}, []],
+      ],
+    );
+  });
+
+  it('F-0809 (c206-guard-folders): a workspace folder of another scheme is skipped, and its real path is not asked for', async () => {
+    const result = await resultsOf('diskOrSaveIfClean', {
+      disk: OBJECT,
+      folders: [uriOf('/work/proj', 'vscode-remote'), uriOf('/work/proj')],
+      logRealPaths: true,
+    });
+    deepStrictEqual(
+      [result.result, result.log.filter(line => line.startsWith('realPath'))],
+      [
+        {kind: 'saved', durable: true},
+        [`realPath file:${FILE.fsPath}`, 'realPath file:/work/proj'],
+      ],
+    );
+  });
+
   it('F-0809 (c206-guard-scheme): a file of another scheme is refused when it is a symbolic link, and edited when it is not', async () => {
     const remote = uriOf(
       '/work/proj/.devcontainer/devcontainer.json',

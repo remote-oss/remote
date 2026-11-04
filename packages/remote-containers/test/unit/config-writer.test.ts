@@ -97,6 +97,8 @@ describe('the attach file writer (card containers-206, brief-attach §5)', () =>
       'x%2fy',
       'x%2Fy',
       'a\0b',
+      'a:b',
+      'web:stream',
     ];
     const outcomes: unknown[] = [];
     const logs: string[] = [];

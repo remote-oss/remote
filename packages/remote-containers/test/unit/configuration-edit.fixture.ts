@@ -21,6 +21,8 @@ export interface FakeEditor {
   /** Whether a file of a scheme other than `file` is a symbolic link. */
   linkSchemes?: boolean;
   renameFails?: boolean;
+  /** Whether a real path asked for is logged. */
+  logRealPaths?: boolean;
 }
 
 /** Editor ports over `editor`, with the calls they get, as lines, in `log`. */
@@ -82,8 +84,12 @@ export function fakePortsOf(editor: FakeEditor = {}): {
         return Promise.resolve();
       },
     },
-    realPath: uri =>
-      Promise.resolve(editor.realPaths?.[uri.fsPath] ?? uri.fsPath),
+    realPath: uri => {
+      if (editor.logRealPaths === true) {
+        log.push(`realPath ${uri.scheme}:${uri.fsPath}`);
+      }
+      return Promise.resolve(editor.realPaths?.[uri.fsPath] ?? uri.fsPath);
+    },
     workspaceFolders: () => editor.folders ?? [uriOf('/work/proj')],
     fileUri: fsPath => uriOf(fsPath),
     sibling: (uri, name) =>

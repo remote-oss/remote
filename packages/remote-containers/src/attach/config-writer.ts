@@ -45,6 +45,7 @@ function nameIsSafe(
     !['', '.', '..'].includes(stem) &&
     !/[/\\]/.test(stem) &&
     !stem.includes('\0') &&
+    !('name' in target && target.name.includes(':')) &&
     !/%2f/i.test(raw) &&
     relative === path.basename(file)
   );

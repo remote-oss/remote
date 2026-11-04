@@ -52,7 +52,7 @@ export interface ConfigurationEditPorts {
   fileUri(fsPath: string): ConfigUri;
   /** The URI of a file named `name` in the folder of `uri`. */
   sibling(uri: ConfigUri, name: string): ConfigUri;
-  /** A name part that no other file of the folder has. */
+  /** A name part that no other file of the folder has: the adapter gives `randomUUID()`. */
   unique(): string;
 }
 
@@ -116,7 +116,11 @@ async function diskTextOf(
   return ports.fs.readFile(file);
 }
 
-/** Writes `text` over `file` under a temporary name in its own folder, then renames it into place. */
+/**
+ * Writes `text` over `file` under a temporary name in its own folder, then renames it into place. It has no guard on the
+ * place by design: it is for files in folders the extension owns (the attach files), never for a workspace file, and
+ * the adapter's rename must overwrite.
+ */
 async function replaceFile(
   file: ConfigUri,
   text: string,
@@ -144,7 +148,10 @@ async function placeRefusal(
   }
   const real = await ports.realPath(file);
   for (const folder of ports.workspaceFolders()) {
-    if (isBelow(await ports.realPath(folder), real)) {
+    if (
+      folder.scheme === 'file' &&
+      isBelow(await ports.realPath(folder), real)
+    ) {
       return undefined;
     }
   }
@@ -157,13 +164,13 @@ async function savedEdit(
   change: TextChange,
   ports: ConfigurationEditPorts,
 ): Promise<EditResult> {
-  const document =
-    openDocumentOf(file, ports) ?? (await ports.openTextDocument(file));
-  const current = document.getText();
   const refusal = await placeRefusal(file, ports);
   if (refusal !== undefined) {
     return {kind: 'refused', reason: refusal};
   }
+  const document =
+    openDocumentOf(file, ports) ?? (await ports.openTextDocument(file));
+  const current = document.getText();
   if (parseTree(current, [])?.type !== 'object') {
     return {kind: 'refused', reason: 'notAnObject'};
   }
