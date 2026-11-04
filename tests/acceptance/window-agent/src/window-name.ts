@@ -42,7 +42,7 @@ export function agentFileName(name: string, kind: AgentFileKind): string {
     return plain;
   }
   let prefix = '';
-  for (const character of [...name].slice(0, KEPT_PREFIX)) {
+  for (const character of Array.from(name).slice(0, KEPT_PREFIX)) {
     if (Buffer.byteLength(prefix + character) > KEPT_PREFIX) {
       break;
     }
