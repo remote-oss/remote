@@ -72,7 +72,16 @@ fi
 podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}'
 podman info --format '{{.Host.OCIRuntime.Path}}'
 # debug (hosted only): does rootless `podman exec -i` pass stdin EOF, and what does a container see of the network
-podman run -d --name dbg docker.io/library/alpine:3.20 sleep 600 || true
-printf hi | timeout 20 podman exec -i dbg cat; echo "exec-i rc=$?"
-podman exec dbg sh -c 'cat /etc/hosts; ip route' || true
-podman rm -f dbg || true
+set +e
+podman run -d --name dbg docker.io/library/alpine:3.20 sleep 600
+podman --version; conmon --version; crun --version | head -1
+echo "--- plain"; printf hi | timeout 20 podman exec -i dbg cat; echo "plain rc=$?"
+echo "--- file stdin"; printf hi >/tmp/hi; timeout 20 podman exec -i dbg cat </tmp/hi; echo "file rc=$?"
+echo "--- wc -c"; printf hi | timeout 20 podman exec -i dbg wc -c; echo "wc rc=$?"
+echo "--- head -c 2"; printf hi | timeout 20 podman exec -i dbg head -c 2; echo "head rc=$?"
+echo "--- sh -c cat"; printf hi | timeout 20 podman exec -i dbg sh -c 'cat'; echo "shcat rc=$?"
+echo "--- run -i"; printf hi | timeout 20 podman run -i --rm docker.io/library/alpine:3.20 cat; echo "run-i rc=$?"
+echo "--- exec --interactive --tty=false"; printf hi | timeout 20 podman exec --interactive --tty=false dbg cat; echo "tty rc=$?"
+echo "--- network"; podman exec dbg sh -c 'cat /etc/hosts; ip route'
+podman rm -f dbg
+set -e
