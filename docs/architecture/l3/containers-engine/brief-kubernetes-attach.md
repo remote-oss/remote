@@ -47,7 +47,7 @@ spec). Most of C12 is reused:
     listing. That's BR-15's preferred route under decision F-0604 E6: "a progress indication with Cancel".
   - **A second invocation while one is pending** reuses that picker, so there are never two windows (BR-18, required
     and preferred).
-- **Ruling `(ruling-NNNN-kubectl-bound)`, R-79 against the room decision "F-0604 kubectl hang":**
+- **Ruling `(ruling-2110-kubectl-bound)`, R-79 against the room decision "F-0604 kubectl hang":**
   - **What we do instead:** that decision applies no timeout beyond `kubectl`'s own. We bound every wait of ours, so:
     - the listing ends at **180 s** as the pod-listing failure, S173 (7.E1);
     - the attach step keeps C10's existing connect bounds.
