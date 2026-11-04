@@ -104,3 +104,9 @@ export function k8sTargetOf(payload: string): K8sTarget | K8sMalformed {
     ? target
     : {malformed: 'invalid', member: invalid};
 }
+
+/** Whether the payload has the shape of a pod target, though a member may fail the name rules: it is no other family's. */
+export function podShaped(payload: string): boolean {
+  const target = k8sTargetOf(payload);
+  return !('malformed' in target) || target.malformed === 'invalid';
+}

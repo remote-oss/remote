@@ -83,14 +83,6 @@
     {
       "package": "remote-containers",
       "kind": "module",
-      "key": "src/attach/k8s-label.ts",
-      "card": "#2117",
-      "slice": "part A",
-      "decision": "part A of the Kubernetes attach: the label is reached by the pod window's registration in part B"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
       "key": "src/attach/config-writer.ts",
       "card": "#2163",
       "slice": "authoring release 2",
