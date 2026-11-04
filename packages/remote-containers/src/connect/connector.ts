@@ -36,6 +36,7 @@ import {type AttachedTarget, attachedTargetOf} from '../attach/payload.ts';
 import type {ListedContainer} from '../explorer/listed-containers.ts';
 import {k8sExecCommands, k8sDialer} from '../attach/k8s-exec.ts';
 import {type K8sTarget, k8sTargetOf} from '../attach/k8s-payload.ts';
+import {k8sPickKeyOf} from '../attach/k8s-pick-record.ts';
 import {inspectedPod} from '../attach/k8s-state.ts';
 import {
   type DevContainerVolume,
@@ -289,12 +290,8 @@ export interface VolumeConnectDependencies {
   ): Promise<'written' | 'left'>;
 }
 
-/** What a connect to an attached container needs beyond a folder's. */
-interface AttachedConnectDependencies {
-  /** The ids recorded at successful attaches. */
-  record: IdRecord;
-  /** The attach configuration file that applies to the container; none when there is none. */
-  configFileOf: (container: ListedContainer) => Promise<string | undefined>;
+/** The user's picks and the attach warning: a target that was not picked is connected only after the warning is confirmed. */
+interface PickGate {
   /** The targets the user picked: the attach command records one before it opens its window. */
   picks: {
     includes: (key: string) => boolean;
@@ -304,8 +301,16 @@ interface AttachedConnectDependencies {
   confirm: () => Promise<boolean>;
 }
 
+/** What a connect to an attached container needs beyond a folder's. */
+interface AttachedConnectDependencies extends PickGate {
+  /** The ids recorded at successful attaches. */
+  record: IdRecord;
+  /** The attach configuration file that applies to the container; none when there is none. */
+  configFileOf: (container: ListedContainer) => Promise<string | undefined>;
+}
+
 /** What a connect to a Kubernetes pod needs beyond a folder's. */
-interface PodConnectDependencies {
+interface PodConnectDependencies extends PickGate {
   /** `kubectl` as an engine with the login shell's environment. */
   kubectl: EngineHost;
 }
@@ -2120,13 +2125,8 @@ export function containerConnectorOf(
     failedContainer = undefined;
     attemptIdentity = undefined;
     attachedFound = undefined;
-    const pickKey = attachPickKeyOf(target);
-    if (!attached.picks.includes(pickKey)) {
-      if (!(await attached.confirm())) {
-        logger.info('the attach warning was not confirmed');
-        return attachWarningRefused();
-      }
-      await attached.picks.record(pickKey);
+    if (!(await pickConfirmed(attached, attachPickKeyOf(target)))) {
+      return attachWarningRefused();
     }
     const prepared = await pinnedEngineChecked(target, input, cancellation);
     if ('kind' in prepared) {
@@ -2169,6 +2169,22 @@ export function containerConnectorOf(
     return attachFailed();
   }
 
+  /**
+   * Whether the target named `key` may be connected: the user picked it, or confirmed the attach warning for it now,
+   * which records it. Nothing runs in the target before the answer.
+   */
+  async function pickConfirmed(gate: PickGate, key: string): Promise<boolean> {
+    if (gate.picks.includes(key)) {
+      return true;
+    }
+    if (!(await gate.confirm())) {
+      logger.info('the attach warning was not confirmed');
+      return false;
+    }
+    await gate.picks.record(key);
+    return true;
+  }
+
   /** The user the pod's container runs as: its name, else its numeric id; none when it cannot be told. */
   async function podUserOf(
     channel: HostChannel,
@@ -2202,6 +2218,9 @@ export function containerConnectorOf(
     const cancellation = controller.signal;
     failedContainer = undefined;
     attemptIdentity = undefined;
+    if (!(await pickConfirmed(pods, k8sPickKeyOf(target)))) {
+      return attachWarningRefused();
+    }
     const settings = dependencies.settings();
     phases.tell({name: 'initializing'});
     const channel = execChannelOver(pods.kubectl, k8sExecCommands(target));
