@@ -12,9 +12,12 @@
 # A version change here is the only way the pin moves.
 set -euo pipefail
 
-PODMAN_VERSION=6.1.4
-PODMAN_SHA256_AMD64=9dd51073fac5a1742f88cf3caff5554615cb4d67ba554d25e8807be635547af5
+PODMAN_VERSION=5.8.8
+PODMAN_SHA256_AMD64=e0e12f9de61bdb054d19a77df0e84ddd51cadfee13688e0fb607d61b6833e8cd
 PODMAN_SHA256_ARM64=816bc5b97dc62396838d825aaccd9d3eb841167a2d31968efc1e6a3e6a0a463b
+CONMON_VERSION=2.2.1
+CONMON_SHA256_AMD64=1d97294c14c43d477e0a0826e9cd0f2a2af373ddfafe6f10252e8a3c43f32be6
+CONMON_SHA256_ARM64=c2fa62b3555eb0a729d853df23c5784d970f46050f2fb5f9931ded1bf455d216
 
 # the major release of the podman on the PATH, or nothing when there is none
 podman_major() {
@@ -24,8 +27,8 @@ podman_major() {
 major=$(podman_major)
 if [ -z "$major" ] || [ "$major" -lt 5 ]; then
   case "$(uname -m)" in
-    x86_64) arch=amd64 sha256=$PODMAN_SHA256_AMD64 ;;
-    aarch64 | arm64) arch=arm64 sha256=$PODMAN_SHA256_ARM64 ;;
+    x86_64) arch=amd64 sha256=$PODMAN_SHA256_AMD64 conmon_sha256=$CONMON_SHA256_AMD64 ;;
+    aarch64 | arm64) arch=arm64 sha256=$PODMAN_SHA256_ARM64 conmon_sha256=$CONMON_SHA256_ARM64 ;;
     *)
       echo "install-podman: no pinned Podman for $(uname -m)" >&2
       exit 1
@@ -47,6 +50,15 @@ if [ -z "$major" ] || [ "$major" -lt 5 ]; then
   sudo mkdir -p /etc/containers/containers.conf.d
   printf '[engine.runtimes]\ncrun = ["/usr/local/bin/crun"]\n' |
     sudo tee /etc/containers/containers.conf.d/10-crun.conf >/dev/null
+  # the conmon that comes with that build (2.1.10) never passes the end of its input to a process started by
+  # `podman exec -i`, so the command waits for ever: conmon 2.2.1, its own static build, is named instead
+  conmon="$work/conmon"
+  curl -fsSL -o "$conmon" \
+    "https://github.com/containers/conmon/releases/download/v$CONMON_VERSION/conmon.$arch"
+  echo "$conmon_sha256  $conmon" | sha256sum -c - >/dev/null
+  sudo install -D -m 0755 "$conmon" /usr/local/libexec/podman/conmon-$CONMON_VERSION
+  printf '[engine]\nconmon_path = ["/usr/local/libexec/podman/conmon-%s"]\n' "$CONMON_VERSION" |
+    sudo tee /etc/containers/containers.conf.d/11-conmon.conf >/dev/null
   major=$(podman_major)
   [ "${major:-0}" -ge 5 ] || {
     echo "install-podman: the podman on the PATH is still $(podman --version 2>&1)" >&2
