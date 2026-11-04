@@ -65,8 +65,8 @@ function twoDigits(value: number): string {
 /** A file's start in local time as the pick shows it: `yyyy-MM-dd HH:mm:ss`. */
 export function localStartOf(start: string): string {
   const time = timeOfStart(start);
-  const day = `${String(time.getFullYear())}-${twoDigits(time.getMonth() + 1)}-${twoDigits(time.getDate())}`;
-  return `${day} ${twoDigits(time.getHours())}:${twoDigits(time.getMinutes())}:${twoDigits(time.getSeconds())}`;
+  const date = `${String(time.getFullYear())}-${twoDigits(time.getMonth() + 1)}-${twoDigits(time.getDate())}`;
+  return `${date} ${twoDigits(time.getHours())}:${twoDigits(time.getMinutes())}:${twoDigits(time.getSeconds())}`;
 }
 
 /**

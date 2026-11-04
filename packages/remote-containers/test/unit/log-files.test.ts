@@ -77,7 +77,9 @@ describe('the log files of the extension (card containers-186, F-0104)', () => {
 
   it('F-0104 AC-21: the local start is the UTC start moved to the local zone, as yyyy-MM-dd HH:mm:ss', () => {
     const time = new Date('2026-11-03T22:05:09.000Z');
-    const pad = (value: number): string => String(value).padStart(2, '0');
+    function pad(value: number): string {
+      return String(value).padStart(2, '0');
+    }
     deepStrictEqual(
       localStartOf('2026-11-03T22-05-09.000Z'),
       `${String(time.getFullYear())}-${pad(time.getMonth() + 1)}-${pad(time.getDate())} ${pad(time.getHours())}:${pad(time.getMinutes())}:${pad(time.getSeconds())}`,
