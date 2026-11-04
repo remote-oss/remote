@@ -416,7 +416,14 @@ jobs:
     concurrency:
       group: ${{ github.event_name == 'schedule' && 'acceptance-vscodium-main' || (github.event_name == 'push' && format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}-${{ matrix.launches }}
       cancel-in-progress: false
-    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    # GitHub's runners and the organisation's pool share the parts: with the repository variable CI_POOL_RUNS_ON set (a
+    # pool label; the part also asks for X64 and ephemeral, a fresh machine per job), a part with no containers launch
+    # runs on the pool, and the containers parts stay on GitHub's runners, whose speed their 180 minutes need. Unset,
+    # every part runs on ubuntu-24.04.
+    runs-on: >-
+      ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' ||
+      (vars.CI_POOL_RUNS_ON && !contains(matrix.launches, 'containers') &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON))) || 'ubuntu-24.04' }}
     # the whole VSCodium suite outgrew 60 minutes on 2026-10-20 (the first scheduled backstop, 39387179525, was cancelled
     # at 60), so it runs in parts. The containers launch alone took 44 minutes then and 83 to 110 by 2026-11-01
     # (41252320561, 41264381137, 41279176317); its two parts take about an hour each, so the limit is 120 again
