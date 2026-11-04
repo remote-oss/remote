@@ -371,11 +371,13 @@ jobs:
   acceptance-vscodium:
     name: acceptance (vscodium, ${{ matrix.launches }})
     needs: post-merge-select
-    # a merge to main runs the parts post-merge-select gives, none when its change reaches no launch
+    # a merge to main runs the parts post-merge-select gives, none when its change reaches no launch. The repository
+    # variable CI_POST_MERGE_VSCODIUM set to `off` skips them, so the self-hosted runners go to the pull requests' own
+    # launches while they are short (2026-11-04); unset, the parts run. A release tag and a dispatch run whatever it says.
     if: >-
       !cancelled() && (inputs.vscodium || github.event.schedule == '17 */6 * * *' ||
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.CI_POST_MERGE_VSCODIUM != 'off' &&
       needs.post-merge-select.result == 'success' && needs.post-merge-select.outputs.parts != '[]'))
     # Every launch of the suite (`all`) runs as six parts on six runners at once: the ssh launches in two, ssh-core and
     # windows (about 40 and 30 minutes) and the rest of the group (about an hour), since the group outgrew the job's 120
