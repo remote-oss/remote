@@ -274,7 +274,22 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
       `${folder}:/mnt`,
     ];
     try {
-      await made(base, ['sleep', '600'], {extra: mounts});
+      const container = await made(base, ['sleep', '600'], {extra: mounts});
+      const lastUserLine = new Map([
+        ['/data', `This is the last container using '${volume}'.`],
+        ['/mnt', `This is the last container using '${folder}'.`],
+      ]);
+      const mountOrder = (
+        await docker(
+          'inspect',
+          '-f',
+          '{{range .Mounts}}{{.Destination}}{{"\\n"}}{{end}}',
+          container,
+        )
+      )
+        .split('\n')
+        .map(destination => lastUserLine.get(destination))
+        .filter(line => line !== undefined);
       await viewed(base);
       await chosen(base, 'Remove Container');
       await waitForDialog('local', 30_000);
@@ -290,12 +305,8 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
       deepStrictEqual(
         [alone, shared],
         [
-          [
-            REMOVE_DETAIL,
-            `This is the last container using '${volume}'.`,
-            `This is the last container using '${folder}'.`,
-          ],
-          [REMOVE_DETAIL, `This is the last container using '${folder}'.`],
+          [REMOVE_DETAIL, ...mountOrder],
+          [REMOVE_DETAIL, lastUserLine.get('/mnt')],
         ],
       );
     } finally {
