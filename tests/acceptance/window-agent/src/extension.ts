@@ -747,6 +747,31 @@ export function activate(context: vscode.ExtensionContext): void {
         });
       },
     ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.replaceInBuffer',
+      (oldText: string, newText: string) => {
+        const editor = vscode.window.activeTextEditor;
+        if (editor === undefined) {
+          throw new Error('the window has no active editor');
+        }
+        const text = editor.document.getText();
+        const index = text.indexOf(oldText);
+        if (index < 0) {
+          throw new Error(
+            `the active editor holds no ${JSON.stringify(oldText)}`,
+          );
+        }
+        editor.edit(edit => {
+          edit.replace(
+            new vscode.Range(
+              editor.document.positionAt(index),
+              editor.document.positionAt(index + oldText.length),
+            ),
+            newText,
+          );
+        });
+      },
+    ),
     vscode.commands.registerCommand('acceptance.agent.activeEditorText', () => {
       report(agentFolder, name, {
         event: 'editorText',

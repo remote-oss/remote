@@ -1,7 +1,8 @@
 /**
  * @fileoverview The Problems panel's view of the Feature ids: one collection of diagnostics for every dev container
- * configuration of the window's folders, read from disk with no editor open and no trust needed, and kept current by
- * the file watcher and by the changes of the open editors.
+ * configuration of the window, in every location form and scheme the window opens, read from the open editor first
+ * and from the file system otherwise, and kept current by the file watcher, the changes of the open editors and the
+ * documents the window opens.
  */
 
 import {featureProblems} from './feature-diagnostics.ts';
@@ -15,9 +16,10 @@ interface Position {
   character: number;
 }
 
-/** One diagnostic as the editor is given it: an Error over a range, with a code that links to a page. */
+/** One diagnostic as the editor is given it: a range and severity, with a code that links to a page. */
 export interface FeatureDiagnostic {
   range: {start: Position; end: Position};
+  severity: 'error' | 'warning';
   message: string;
   code: {value: string; target: string};
 }
@@ -27,20 +29,27 @@ export interface Registration {
   dispose(): void;
 }
 
-/** The parts of the editor the provider uses, over absolute paths. */
+/**
+ * The parts of the editor the provider uses, over the string form of each file's URI: `file:///…` for a file of the
+ * window's file system, and the document's own URI for a file of another scheme.
+ */
 export interface DiagnosticsHost {
   /** The folders of the window. */
   folders(): readonly string[];
   onFoldersChanged(listener: () => void): Registration;
-  /** The configuration files under the folder: `.devcontainer.json`, and `devcontainer.json` under `.devcontainer`. */
+  /** The configuration files under the folder: a `devcontainer.json` or `.devcontainer.json` in any of its folders. */
   findConfigurations(folder: string): Promise<readonly string[]>;
-  /** The file's text from disk; none when it cannot be read or does not exist. */
+  /** The file's text from its file system; none when it cannot be read or does not exist. */
   readFromDisk(file: string): Promise<string | undefined>;
   /** The text of the open document of the file; none when it is not open. */
   openText(file: string): string | undefined;
-  /** Calls `listener` with a configuration file of the folder that is created, changed or deleted. */
+  /** The URIs of the window's open documents. */
+  openDocuments(): readonly string[];
+  /** Calls `listener` with the file that is created, changed or deleted under the folder. */
   watch(folder: string, listener: (file: string) => void): Registration;
-  /** Calls `listener` with the file of each document whose text changes. */
+  /** Calls `listener` with the URI of each document that opens. */
+  onDidOpenTextDocument(listener: (file: string) => void): Registration;
+  /** Calls `listener` with the URI of each document whose text changes. */
   onTextChanged(listener: (file: string) => void): Registration;
   setDiagnostics(file: string, diagnostics: readonly FeatureDiagnostic[]): void;
   deleteDiagnostics(file: string): void;
@@ -53,6 +62,12 @@ const TARGETS = {
     'https://containers.dev/implementors/features/#referencing-a-feature',
   'legacy-feature': 'https://containers.dev/features',
 } as const;
+
+/** The names a dev container configuration file may wear. */
+const CONFIGURATION_NAMES = new Set([
+  'devcontainer.json',
+  '.devcontainer.json',
+]);
 
 /** The place of an offset in the text. */
 function positionAt(text: string, offset: number): Position {
@@ -71,20 +86,25 @@ export function diagnosticsOf(
       start: positionAt(text, problem.range.start),
       end: positionAt(text, problem.range.end),
     },
+    severity: problem.severity,
     message: translate(problem.message),
     code: {value: problem.code, target: TARGETS[problem.code]},
   }));
 }
 
-/** Whether the file is a configuration of the folder, by the places `findConfigurations` looks in. */
-function isConfigurationOf(folder: string, file: string): boolean {
-  const prefix = `${folder}/`;
-  return (
-    file.startsWith(prefix) &&
-    /^(\.devcontainer\.json|\.devcontainer\/(.+\/)?devcontainer\.json)$/.test(
-      file.slice(prefix.length),
-    )
-  );
+/** The name of the file at the end of the path of a document's URI. */
+function nameOf(uri: string): string {
+  const path = uri.replace(/[#?].*$/, '');
+  const tail = path.includes('://')
+    ? path.slice(path.indexOf('://') + 3)
+    : path.slice(path.indexOf(':') + 1);
+  const slash = tail.lastIndexOf('/');
+  return slash < 0 ? tail : tail.slice(slash + 1);
+}
+
+/** Whether the file is a configuration, by its name alone: any place in any scheme is a location form. */
+function isConfigurationFile(file: string): boolean {
+  return CONFIGURATION_NAMES.has(nameOf(file));
 }
 
 /** Starts the diagnostics over `host`; the result ends them and clears the collection. */
@@ -122,6 +142,13 @@ export function featureDiagnosticsProviderOf(
         await refresh(file);
       }
     }
+    for (const file of host.openDocuments()) {
+      if (!isConfigurationFile(file)) {
+        continue;
+      }
+      found.add(file);
+      void refresh(file);
+    }
     for (const file of [...known]) {
       if (!found.has(file)) {
         known.delete(file);
@@ -133,8 +160,13 @@ export function featureDiagnosticsProviderOf(
   const folders = host.onFoldersChanged(() => {
     void scan();
   });
+  const opens = host.onDidOpenTextDocument(file => {
+    if (isConfigurationFile(file)) {
+      void refresh(file);
+    }
+  });
   const edits = host.onTextChanged(file => {
-    if (host.folders().some(folder => isConfigurationOf(folder, file))) {
+    if (isConfigurationFile(file)) {
       void refresh(file);
     }
   });
@@ -142,6 +174,7 @@ export function featureDiagnosticsProviderOf(
   return {
     dispose: () => {
       folders.dispose();
+      opens.dispose();
       edits.dispose();
       for (const watcher of watchers.splice(0)) {
         watcher.dispose();

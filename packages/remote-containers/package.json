@@ -763,6 +763,21 @@
         "qualifiedName": "%continueEditSession.qualifiedName%",
         "when": "git.state == initialized && gitOpenRepositoryCount != 0 && remoteName =~ /(codespaces*.*|tunnel)/ && false && !remote-containers:standingDown"
       }
+    ],
+    "languages": [
+      {
+        "id": "jsonc",
+        "filenames": [
+          "devcontainer-feature.json",
+          ".devcontainer-internal.json"
+        ]
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": "devcontainer-feature.json",
+        "url": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainerFeature.schema.json"
+      }
     ]
   },
   "dependencies": {

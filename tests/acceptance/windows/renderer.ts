@@ -403,7 +403,7 @@ async function evaluateAt<Value>(
 }
 
 /** Evaluates `expression` in window `name`'s page and returns its value; a thrown error fails with its text. */
-async function evaluate<Value>(
+export async function evaluate<Value>(
   name: string,
   expression: string,
 ): Promise<Value> {
@@ -1777,6 +1777,8 @@ export interface Problem {
   code: string;
   /** The link the code carries, or an empty string. */
   target: string;
+  /** The text of the source cell, or an empty string when the problem names no source. */
+  source: string;
   /** `error`, `warning` or `info`. */
   severity: string;
   line: number;
@@ -1810,6 +1812,7 @@ export async function problemsOf(name: string): Promise<Problem[]> {
           message: row.querySelector('.marker-message')?.textContent ?? '',
           code: row.querySelector('.marker-code')?.textContent ?? '',
           target: row.querySelector('a.monaco-link')?.getAttribute('href') ?? '',
+          source: (row.querySelector('.marker-source')?.textContent ?? '').trim(),
           severity: row.querySelector('.marker-icon')?.classList.contains('error')
             ? 'error'
             : row.querySelector('.marker-icon')?.classList.contains('warning')

@@ -17,6 +17,7 @@ class FakeHost implements DiagnosticsHost {
   collection = new Map<string, readonly FeatureDiagnostic[]>();
   watching: string[] = [];
   watchers = new Map<string, Array<(file: string) => void>>();
+  openListeners: Array<(file: string) => void> = [];
   textListeners: Array<(file: string) => void> = [];
   folderListeners: Array<() => void> = [];
   disposed = 0;
@@ -31,7 +32,10 @@ class FakeHost implements DiagnosticsHost {
   }
   findConfigurations(folder: string): Promise<readonly string[]> {
     return Promise.resolve(
-      [...this.disk.keys()].filter(file => file.startsWith(`${folder}/`)),
+      [...this.disk.keys()].filter(
+        file =>
+          file.startsWith(`${folder}/`) && file.endsWith('devcontainer.json'),
+      ),
     );
   }
   readFromDisk(file: string): Promise<string | undefined> {
@@ -39,6 +43,9 @@ class FakeHost implements DiagnosticsHost {
   }
   openText(file: string): string | undefined {
     return this.open.get(file);
+  }
+  openDocuments(): readonly string[] {
+    return [...this.open.keys()];
   }
   watch(folder: string, listener: (file: string) => void) {
     this.watching.push(folder);
@@ -48,6 +55,10 @@ class FakeHost implements DiagnosticsHost {
         this.stopped += 1;
       },
     };
+  }
+  onDidOpenTextDocument(listener: (file: string) => void) {
+    this.openListeners.push(listener);
+    return {dispose: () => undefined};
   }
   onTextChanged(listener: (file: string) => void) {
     this.textListeners.push(listener);
@@ -102,7 +113,7 @@ describe('the Problems panel’s Feature ids (card containers-95)', () => {
     ]);
   });
 
-  it('F-0414 3.3: a diagnostic holds the key’s range, the message and the code with the page it links to', () => {
+  it('F-0414 3.3: a diagnostic holds the key’s range, the error severity, the message and the code with the page it links to', () => {
     deepStrictEqual(
       diagnosticsOf(BAD_TEXT, template => template),
       [
@@ -111,6 +122,7 @@ describe('the Problems panel’s Feature ids (card containers-95)', () => {
             start: {line: 2, character: 4},
             end: {line: 2, character: 18},
           },
+          severity: 'error',
           message:
             'Absolute file paths are not allowed. Local file path must be indicated relative to the devcontainer.json.',
           code: {
@@ -204,5 +216,93 @@ describe('the Problems panel’s Feature ids (card containers-95)', () => {
     await settled();
     provider.dispose();
     deepStrictEqual([host.stopped, host.disposed], [1, 1]);
+  });
+
+  describe('the reach over every location form and scheme (F-0810 AC-25, AC-42)', () => {
+    /** The open documents of every form and scheme, and what each URI earns. */
+    const OPENS: ReadonlyArray<readonly [string, string?]> = [
+      ['file:///w/devcontainer.json', BAD_TEXT],
+      ['file:///w/.devcontainer/devcontainer.json', BAD_TEXT],
+      ['file:///w/.devcontainer.json', BAD_TEXT],
+      ['ssh-remote+host:/home/user/project/devcontainer.json', BAD_TEXT],
+      ['dev-container+abc123:/workspaces/p/.devcontainer.json', BAD_TEXT],
+      ['memfs:/devcontainer.json', BAD_TEXT],
+      ['memfs:devcontainer.json', BAD_TEXT],
+      ['file:///w/devcontainer.json?probe=1#anchor', BAD_TEXT],
+      ['/w/.devcontainer.json', BAD_TEXT],
+      ['memfs:/notes.json', BAD_TEXT],
+      ['untitled:Untitled-1', BAD_TEXT],
+      ['memfs:/work/devcontainer.json.bak', BAD_TEXT],
+    ];
+
+    it('F-0810 AC-25, AC-42 (c208-provider-schemes): an opened configuration is diagnosed in every location form and scheme, and the documents that are not configurations are left alone', async () => {
+      const host = new FakeHost();
+      for (const [file, text] of OPENS) {
+        if (text !== undefined) {
+          host.open.set(file, text);
+        }
+      }
+      featureDiagnosticsProviderOf(host, template => template);
+      await settled();
+      for (const listener of host.openListeners) {
+        for (const [file, text] of OPENS) {
+          if (text !== undefined) {
+            listener(file);
+          }
+        }
+      }
+      await settled();
+      const expected: Array<[string, number]> = [
+        ['/w/.devcontainer.json', 1],
+        ['dev-container+abc123:/workspaces/p/.devcontainer.json', 1],
+        ['file:///w/.devcontainer/devcontainer.json', 1],
+        ['file:///w/.devcontainer.json', 1],
+        ['file:///w/devcontainer.json', 1],
+        ['file:///w/devcontainer.json?probe=1#anchor', 1],
+        ['memfs:/devcontainer.json', 1],
+        ['memfs:devcontainer.json', 1],
+        ['ssh-remote+host:/home/user/project/devcontainer.json', 1],
+      ];
+      deepStrictEqual(
+        messages(host)
+          .map(([file, held]) => [file, held.length])
+          .sort((left, right) =>
+            String(left[0]).localeCompare(String(right[0])),
+          ),
+        [...expected].sort((left, right) => left[0].localeCompare(right[0])),
+      );
+    });
+
+    it('F-0810 AC-25, AC-42 (c208-provider-open-scan): the open documents of the start are found by the scan, and a rescan does not drop them', async () => {
+      const host = new FakeHost();
+      host.open.set('memfs:/devcontainer.json', BAD_TEXT);
+      featureDiagnosticsProviderOf(host, template => template);
+      await settled();
+      host.folderList = ['/w'];
+      for (const listener of host.folderListeners) {
+        listener();
+      }
+      await settled();
+      deepStrictEqual(
+        messages(host).map(([file, held]) => [file, held.length]),
+        [['memfs:/devcontainer.json', 1]],
+      );
+    });
+
+    it('F-0810 AC-43 (c208-provider-edit): a change of the text of an open configuration refreshes it from its buffer, whatever its scheme', async () => {
+      const host = new FakeHost();
+      host.open.set('memfs:/devcontainer.json', GOOD_TEXT);
+      featureDiagnosticsProviderOf(host, template => template);
+      await settled();
+      host.open.set('memfs:/devcontainer.json', BAD_TEXT);
+      for (const listener of host.textListeners) {
+        listener('memfs:/devcontainer.json');
+      }
+      await settled();
+      deepStrictEqual(
+        messages(host).map(([file, held]) => [file, held.length]),
+        [['memfs:/devcontainer.json', 1]],
+      );
+    });
   });
 });

@@ -509,33 +509,42 @@ function statusProgressPortOf(): StatusProgressPort {
   };
 }
 
-/** The places of a window's folders where dev container configurations are: the dotfile and the `.devcontainer` folder. */
-const CONFIGURATION_PATTERN =
-  '{.devcontainer.json,.devcontainer/**/devcontainer.json}';
+/** Where a dev container configuration is in a window's folders: a `devcontainer.json` or `.devcontainer.json`, in any of their folders. */
+const CONFIGURATION_PATTERN = '**/{devcontainer.json,.devcontainer.json}';
 
-/** The editor behind the diagnostics of the Feature ids. */
+/** The editor behind the diagnostics of the Feature ids, over the string form of each file's URI. */
 function featureDiagnosticsHost(): DiagnosticsHost {
   const collection = vscode.languages.createDiagnosticCollection(
     'dev-containers-features',
   );
   return {
     folders: () =>
-      (vscode.workspace.workspaceFolders ?? []).map(each => each.uri.fsPath),
+      (vscode.workspace.workspaceFolders ?? []).map(each =>
+        each.uri.toString(),
+      ),
     onFoldersChanged: listener =>
       vscode.workspace.onDidChangeWorkspaceFolders(() => {
         listener();
       }),
-    findConfigurations: async folder =>
-      (
-        await vscode.workspace.findFiles(
-          new vscode.RelativePattern(folder, CONFIGURATION_PATTERN),
-          null,
-        )
-      ).map(each => each.fsPath),
+    findConfigurations: async folder => {
+      try {
+        return (
+          await vscode.workspace.findFiles(
+            new vscode.RelativePattern(
+              vscode.Uri.parse(folder),
+              CONFIGURATION_PATTERN,
+            ),
+            null,
+          )
+        ).map(each => each.toString());
+      } catch {
+        return [];
+      }
+    },
     readFromDisk: async file => {
       try {
         return new TextDecoder().decode(
-          await vscode.workspace.fs.readFile(vscode.Uri.file(file)),
+          await vscode.workspace.fs.readFile(vscode.Uri.parse(file)),
         );
       } catch {
         return undefined;
@@ -543,21 +552,26 @@ function featureDiagnosticsHost(): DiagnosticsHost {
     },
     openText: file =>
       vscode.workspace.textDocuments
-        .find(each => each.uri.fsPath === file)
+        .find(each => each.uri.toString() === file)
         ?.getText(),
+    openDocuments: () =>
+      vscode.workspace.textDocuments.map(each => each.uri.toString()),
     watch: (folder, listener) => {
       const watcher = vscode.workspace.createFileSystemWatcher(
-        new vscode.RelativePattern(folder, CONFIGURATION_PATTERN),
+        new vscode.RelativePattern(
+          vscode.Uri.parse(folder),
+          CONFIGURATION_PATTERN,
+        ),
       );
       const subscriptions = [
         watcher.onDidCreate(each => {
-          listener(each.fsPath);
+          listener(each.toString());
         }),
         watcher.onDidChange(each => {
-          listener(each.fsPath);
+          listener(each.toString());
         }),
         watcher.onDidDelete(each => {
-          listener(each.fsPath);
+          listener(each.toString());
         }),
       ];
       return {
@@ -569,13 +583,17 @@ function featureDiagnosticsHost(): DiagnosticsHost {
         },
       };
     },
+    onDidOpenTextDocument: listener =>
+      vscode.workspace.onDidOpenTextDocument(document => {
+        listener(document.uri.toString());
+      }),
     onTextChanged: listener =>
       vscode.workspace.onDidChangeTextDocument(event => {
-        listener(event.document.uri.fsPath);
+        listener(event.document.uri.toString());
       }),
     setDiagnostics: (file, diagnostics) => {
       collection.set(
-        vscode.Uri.file(file),
+        vscode.Uri.parse(file),
         diagnostics.map(each => {
           const shown = new vscode.Diagnostic(
             new vscode.Range(
@@ -585,7 +603,9 @@ function featureDiagnosticsHost(): DiagnosticsHost {
               each.range.end.character,
             ),
             each.message,
-            vscode.DiagnosticSeverity.Error,
+            each.severity === 'error'
+              ? vscode.DiagnosticSeverity.Error
+              : vscode.DiagnosticSeverity.Warning,
           );
           shown.code = {
             value: each.code.value,
@@ -596,7 +616,7 @@ function featureDiagnosticsHost(): DiagnosticsHost {
       );
     },
     deleteDiagnostics: file => {
-      collection.delete(vscode.Uri.file(file));
+      collection.delete(vscode.Uri.parse(file));
     },
     dispose: () => {
       collection.dispose();

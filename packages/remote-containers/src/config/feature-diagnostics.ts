@@ -1,7 +1,8 @@
 /**
  * @fileoverview The check of the `features` keys of a dev container configuration: each key that is malformed, by the
- * rule that tells a local path, a URL, a bare word and a registry id apart, becomes one problem over the whole property.
- * It looks at the text alone: nothing is fetched and nothing is resolved.
+ * rule that tells a local path, a URL, a bare word and a registry id apart, becomes one problem over the whole
+ * property, and an entry in the discontinued `devcontainers-contrib` namespace becomes a warning. It looks at the text
+ * alone: nothing is fetched and nothing is resolved.
  */
 
 import {findNodeAtLocation, type Node, parseTree} from 'jsonc-parser';
@@ -16,14 +17,17 @@ const FEATURE_PROBLEM_TEMPLATES = {
   registryId: 'OCI Feature id contains invalid characters',
   legacy:
     'Legacy feature not supported. Please check https://containers.dev/features for replacements.',
+  deprecated:
+    'Replace the reference to the discontinued `devcontainers-contrib` with `devcontainers-extra`',
 } as const;
 
-/** One problem of a key: its text, where in the file it is, and the code the hover links. */
+/** One problem of a key: its text, where in the file it is, its severity, and the code the hover links. */
 export interface FeatureProblem {
   key: string;
   /** The offsets of the whole property, key and value. */
   range: {start: number; end: number};
   message: string;
+  severity: 'error' | 'warning';
   code: 'referencing-a-feature' | 'legacy-feature';
 }
 
@@ -36,6 +40,12 @@ const RELEASE_LAST = /^[A-Za-z0-9_-]+(@[A-Za-z0-9._-]+)?$/;
 
 /** The legacy features, which only a bare word can name. */
 const LEGACY = new Set(['fish', 'homebrew']);
+
+/** The namespace an entry sits in: the first segment, or the one after the registry's, by the dot that marks one. */
+function namespaceOf(parts: readonly string[]): string {
+  const [first = '', second = ''] = parts;
+  return first.includes('.') ? second : first;
+}
 
 /** The message of a key that starts as a path or a URL, or none. */
 function locationMessage(key: string): string | undefined {
@@ -97,6 +107,9 @@ function messageOf(key: string): string | undefined {
     return LEGACY.has(key) ? FEATURE_PROBLEM_TEMPLATES.legacy : undefined;
   }
   const parts = key.split('/') as [string, ...string[]];
+  if (namespaceOf(parts) === 'devcontainers-contrib') {
+    return FEATURE_PROBLEM_TEMPLATES.deprecated;
+  }
   return parts[0].includes('.')
     ? registryMessage(parts)
     : releaseMessage(key, parts);
@@ -120,6 +133,10 @@ export function featureProblems(text: string): FeatureProblem[] {
         key: keyNode.value as string,
         range: {start: keyNode.offset, end: last.offset + last.length},
         message,
+        severity:
+          message === FEATURE_PROBLEM_TEMPLATES.deprecated
+            ? 'warning'
+            : 'error',
         code:
           message === FEATURE_PROBLEM_TEMPLATES.legacy
             ? 'legacy-feature'

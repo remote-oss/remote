@@ -9,6 +9,8 @@ const S195 = 'GitHub release feature id contains invalid characters';
 const S246 = 'OCI Feature id contains invalid characters';
 const S220 =
   'Legacy feature not supported. Please check https://containers.dev/features for replacements.';
+const S294 =
+  'Replace the reference to the discontinued `devcontainers-contrib` with `devcontainers-extra`';
 
 /** The text of a configuration whose `features` hold `key` with the value `{}`. */
 function textOf(key: string): string {
@@ -131,5 +133,82 @@ describe('the problems of the Feature ids (card containers-95)', () => {
       featureProblems(text).map(problem => [problem.key, problem.range]),
       [['/x', {start: 14, end: 18}]],
     );
+  });
+
+  describe('the discontinued namespace (F-0810 AC-12)', () => {
+    /** The keys whose namespace is `devcontainers-contrib`, by their form. */
+    const CONTRIBUT: ReadonlyArray<readonly [string, string]> = [
+      ['devcontainers-contrib/features/bash-command:1', S294],
+      ['devcontainers-contrib/foo', S294],
+      ['devcontainers-contrib/foo@1.0.0', S294],
+      ['ghcr.io/devcontainers-contrib/features/curl-apt-get:1.0.0', S294],
+      ['ghcr.io/devcontainers-contrib/features/curl-apt-get', S294],
+      ['ghcr.io/devcontainers-contrib', S294],
+    ];
+    for (const [key, message] of CONTRIBUT) {
+      it(`F-0810 AC-12 (c208-s294-keys): ${JSON.stringify(key)} earns "${message.slice(0, 30)}"`, () => {
+        deepStrictEqual(messageOf(key), message);
+      });
+    }
+
+    /** The keys that are not in the namespace: the extra namespace, the other positions and the bare word. */
+    const NOT_CONTRIBUT = [
+      'devcontainers-extra/features/node',
+      'ghcr.io/devcontainers-extra/features/node:1',
+      'ghcr.io/devcontainers-contrib-extra/a/b',
+      'foo/devcontainers-contrib/bar',
+      'devcontainers-contribfoo/a/b',
+      'devcontainers-contrib',
+    ];
+    for (const key of NOT_CONTRIBUT) {
+      it(`F-0810 AC-12 (c208-s294-clean): ${JSON.stringify(key)} earns nothing`, () => {
+        deepStrictEqual(messageOf(key), undefined);
+      });
+    }
+
+    it('F-0810 AC-12 (c208-s294-severity): the namespace warning is a warning with the code referencing-a-feature, beside the errors', () => {
+      deepStrictEqual(
+        ['devcontainers-contrib/foo', 'fish', '/x'].map(key => {
+          const problem = featureProblems(textOf(key))[0];
+          return problem === undefined
+            ? undefined
+            : [problem.severity, problem.code];
+        }),
+        [
+          ['warning', 'referencing-a-feature'],
+          ['error', 'legacy-feature'],
+          ['error', 'referencing-a-feature'],
+        ],
+      );
+    });
+
+    it('F-0810 AC-12 (c208-s294-range): the warning spans the whole entry, from the key’s opening quote to the end of its value', () => {
+      const text =
+        '{\n  "features": {\n    "ghcr.io/devcontainers-contrib/features/curl-apt-get:1.0.0": {}\n  }\n}';
+      deepStrictEqual(
+        featureProblems(text).map(problem => [
+          problem.key,
+          problem.severity,
+          text.slice(problem.range.start, problem.range.end),
+        ]),
+        [
+          [
+            'ghcr.io/devcontainers-contrib/features/curl-apt-get:1.0.0',
+            'warning',
+            '"ghcr.io/devcontainers-contrib/features/curl-apt-get:1.0.0": {}',
+          ],
+        ],
+      );
+    });
+
+    it('F-0810 AC-12 (c208-s294-nested): a features object that is not the top-level one earns nothing', () => {
+      deepStrictEqual(
+        [
+          '{"customizations": {"features": {"devcontainers-contrib/x": {}}}}',
+          '{"features": {"a/b/c": {"features": {"devcontainers-contrib/x": {}}}}}',
+        ].map(text => featureProblems(text)),
+        [[], []],
+      );
+    });
   });
 });

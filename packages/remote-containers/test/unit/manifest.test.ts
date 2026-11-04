@@ -821,7 +821,7 @@ describe('the manifest', () => {
     ]);
   });
 
-  it('containers-01, containers-30: the manifest has no browser entry or icon, and contributes the commands, their menus, the view with its welcome texts, the settings and the two edit-session entries', () => {
+  it('containers-01, containers-30: the manifest has no browser entry or icon, and contributes the commands, their menus, the view with its welcome texts, the settings, the two edit-session entries and the two authoring associations', () => {
     deepStrictEqual(
       [
         'browser' in MANIFEST,
@@ -838,6 +838,35 @@ describe('the manifest', () => {
           'viewsWelcome',
           'configuration',
           'continueEditSession',
+          'languages',
+          'jsonValidation',
+        ],
+      ],
+    );
+  });
+
+  it('F-0810 AC-1, AC-2 (c208-manifest): the two feature-file names get the jsonc language, and devcontainer-feature.json alone the specification project’s schema', () => {
+    const contributes = MANIFEST.contributes as {
+      languages?: unknown;
+      jsonValidation?: unknown;
+    };
+    deepStrictEqual(
+      [contributes.languages, contributes.jsonValidation],
+      [
+        [
+          {
+            id: 'jsonc',
+            filenames: [
+              'devcontainer-feature.json',
+              '.devcontainer-internal.json',
+            ],
+          },
+        ],
+        [
+          {
+            fileMatch: 'devcontainer-feature.json',
+            url: 'https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainerFeature.schema.json',
+          },
         ],
       ],
     );
