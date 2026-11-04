@@ -15,6 +15,9 @@ set -euo pipefail
 PODMAN_VERSION=5.8.8
 PODMAN_SHA256_AMD64=e0e12f9de61bdb054d19a77df0e84ddd51cadfee13688e0fb607d61b6833e8cd
 PODMAN_SHA256_ARM64=816bc5b97dc62396838d825aaccd9d3eb841167a2d31968efc1e6a3e6a0a463b
+CONMON_VERSION=2.2.1
+CONMON_SHA256_AMD64=1d97294c14c43d477e0a0826e9cd0f2a2af373ddfafe6f10252e8a3c43f32be6
+CONMON_SHA256_ARM64=c2fa62b3555eb0a729d853df23c5784d970f46050f2fb5f9931ded1bf455d216
 
 # the major release of the podman on the PATH, or nothing when there is none
 podman_major() {
@@ -24,8 +27,8 @@ podman_major() {
 major=$(podman_major)
 if [ -z "$major" ] || [ "$major" -lt 5 ]; then
   case "$(uname -m)" in
-    x86_64) arch=amd64 sha256=$PODMAN_SHA256_AMD64 ;;
-    aarch64 | arm64) arch=arm64 sha256=$PODMAN_SHA256_ARM64 ;;
+    x86_64) arch=amd64 sha256=$PODMAN_SHA256_AMD64 conmon_sha256=$CONMON_SHA256_AMD64 ;;
+    aarch64 | arm64) arch=arm64 sha256=$PODMAN_SHA256_ARM64 conmon_sha256=$CONMON_SHA256_ARM64 ;;
     *)
       echo "install-podman: no pinned Podman for $(uname -m)" >&2
       exit 1
@@ -41,6 +44,21 @@ if [ -z "$major" ] || [ "$major" -lt 5 ]; then
   rm -f "$work/podman-linux-$arch/usr/local/bin/runc"
   sudo cp -r "$work/podman-linux-$arch/usr" "$work/podman-linux-$arch/etc" /
   hash -r
+  # podman looks for crun in /usr/bin first, where the machine's older crun refuses the OCI version of this Podman's
+  # container specification ("unknown version specified"): the crun that came with it, which this script has just put
+  # in /usr/local/bin, is named instead
+  sudo mkdir -p /etc/containers/containers.conf.d
+  printf '[engine.runtimes]\ncrun = ["/usr/local/bin/crun"]\n' |
+    sudo tee /etc/containers/containers.conf.d/10-crun.conf >/dev/null
+  # the conmon that comes with that build (2.1.10) never passes the end of its input to a process started by
+  # `podman exec -i`, so the command waits for ever: conmon 2.2.1, its own static build, is named instead
+  conmon="$work/conmon"
+  curl -fsSL -o "$conmon" \
+    "https://github.com/containers/conmon/releases/download/v$CONMON_VERSION/conmon.$arch"
+  echo "$conmon_sha256  $conmon" | sha256sum -c - >/dev/null
+  sudo install -D -m 0755 "$conmon" /usr/local/libexec/podman/conmon-$CONMON_VERSION
+  printf '[engine]\nconmon_path = ["/usr/local/libexec/podman/conmon-%s"]\n' "$CONMON_VERSION" |
+    sudo tee /etc/containers/containers.conf.d/11-conmon.conf >/dev/null
   major=$(podman_major)
   [ "${major:-0}" -ge 5 ] || {
     echo "install-podman: the podman on the PATH is still $(podman --version 2>&1)" >&2
@@ -64,3 +82,19 @@ if ! out=$(podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDrive
   rm -rf "/tmp/storage-run-$(id -u)/containers" "/tmp/storage-run-$(id -u)/libpod/tmp"
 fi
 podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}'
+podman info --format '{{.Host.OCIRuntime.Path}}'
+# debug (hosted only): does rootless `podman exec -i` pass stdin EOF, and what does a container see of the network
+set +e
+podman run -d --name dbg docker.io/library/alpine:3.20 sleep 600
+podman --version; conmon --version; crun --version | head -1
+echo "--- plain"; printf hi | timeout 20 podman exec -i dbg cat; echo "plain rc=$?"
+echo "--- file stdin"; printf hi >/tmp/hi; timeout 20 podman exec -i dbg cat </tmp/hi; echo "file rc=$?"
+echo "--- wc -c"; printf hi | timeout 20 podman exec -i dbg wc -c; echo "wc rc=$?"
+echo "--- head -c 2"; printf hi | timeout 20 podman exec -i dbg head -c 2; echo "head rc=$?"
+echo "--- sh -c cat"; printf hi | timeout 20 podman exec -i dbg sh -c 'cat'; echo "shcat rc=$?"
+echo "--- run -i"; printf hi | timeout 20 podman run -i --rm docker.io/library/alpine:3.20 cat; echo "run-i rc=$?"
+echo "--- exec --interactive --tty=false"; printf hi | timeout 20 podman exec --interactive --tty=false dbg cat; echo "tty rc=$?"
+echo "--- network"; podman exec dbg sh -c 'cat /etc/hosts; ip route'
+podman rm -f dbg
+set -e
+exit 1 # debug (hosted only): end the job here, so that the probe's lines can be read
