@@ -1,7 +1,9 @@
 /**
  * @fileoverview The SSH group in a window connected through Remote - SSH (card coverage-102, #1809, part 2): the
  * hosts it lists and the files its two buttons offer, open and write are the local machine's, and nothing is written
- * on the SSH host.
+ * on the SSH host. The file runs before folders.test.ts (the names run alphabetically): after it, the view lists the
+ * folders of 122 visits and reading its rows scrolls for minutes. Its window is named outside the `c102-` prefix of the
+ * rows that count their own history.
  */
 
 import {deepStrictEqual} from 'node:assert';
@@ -49,6 +51,7 @@ async function within<Result>(
   }).then(() => {
     throw new Error(`${step} took more than ${String(STEP_MILLISECONDS)} ms`);
   });
+  process.stderr.write(`ssh-window, ${step}: started\n`);
   const started = Date.now();
   try {
     return await Promise.race([work, late]);
@@ -83,7 +86,7 @@ describe('the SSH group in a window connected through Remote - SSH (card coverag
   });
 
   it('F-5102 AC-20 (ssh-window): in an SSH window the hosts listed are exactly the local machine’s and none of the SSH account’s own, the picker offers the local file and opening it shows the local file, a completed New Remote writes the local file, and nothing is written on the SSH host', async () => {
-    const window = 'c102-g1';
+    const window = 'g102-first';
     const config = variable('HARNESS_SSH_CONFIG');
     const remoteFile = '/home/harness/.ssh/config';
     const before = await onSshHost(
@@ -107,16 +110,22 @@ describe('the SSH group in a window connected through Remote - SSH (card coverag
         `showing the Remote view in window ${window}`,
         inWindow(window, 'workbench.view.remote'),
       );
-      const local = await waitFor(
-        'the local window to list hosts',
-        async () => (await hostLabels('local')).length > 0,
-        30_000,
-      ).then(() => hostLabels('local'));
-      const listed = await waitFor(
-        `window ${window} to list hosts`,
-        async () => (await hostLabels(window)).length > 0,
-        30_000,
-      ).then(() => hostLabels(window));
+      const local = await within(
+        'the local window listing hosts',
+        waitFor(
+          'the local window to list hosts',
+          async () => (await hostLabels('local')).length > 0,
+          30_000,
+        ).then(() => hostLabels('local')),
+      );
+      const listed = await within(
+        `window ${window} listing hosts`,
+        waitFor(
+          `window ${window} to list hosts`,
+          async () => (await hostLabels(window)).length > 0,
+          30_000,
+        ).then(() => hostLabels(window)),
+      );
       await within(
         'the gear of the SSH group',
         rowAction(window, VIEW, GROUP, GEAR),
@@ -126,13 +135,16 @@ describe('the SSH group in a window connected through Remote - SSH (card coverag
         'choosing the local file',
         chooseQuickPickRow(window, config),
       );
-      await waitFor(
-        `window ${window} to open the local file`,
-        async () =>
-          (await editorTabs(window)).some(
-            entry => entry.label === path.basename(config),
-          ),
-        30_000,
+      await within(
+        `window ${window} opening the local file`,
+        waitFor(
+          `window ${window} to open the local file`,
+          async () =>
+            (await editorTabs(window)).some(
+              entry => entry.label === path.basename(config),
+            ),
+          30_000,
+        ),
       );
       const opened = await within(
         'reading the open file',
@@ -156,10 +168,13 @@ describe('the SSH group in a window connected through Remote - SSH (card coverag
         'choosing the file to write',
         chooseQuickPickRow(window, config),
       );
-      await waitFor(
-        `window ${window} to list ${ADDED}`,
-        async () => (await hostLabels(window)).includes(ADDED),
-        20_000,
+      await within(
+        `window ${window} listing ${ADDED}`,
+        waitFor(
+          `window ${window} to list ${ADDED}`,
+          async () => (await hostLabels(window)).includes(ADDED),
+          20_000,
+        ),
       );
       deepStrictEqual(
         [
@@ -180,17 +195,17 @@ describe('the SSH group in a window connected through Remote - SSH (card coverag
         [local, false, config, true, true, '', []],
       );
     } finally {
-      await within(`closing window ${window}`, closeIfOpen(window));
-      await within(
-        `closing window ${window} again`,
-        closeWindow(window).catch(() => undefined),
-      );
       await onSshHost(
         'restoring the SSH account’s config',
         'harness',
         before === ''
           ? `rm -f ${remoteFile}`
           : `printf '%s' '${before.replaceAll("'", "'\\''")}' > ${remoteFile}`,
+      );
+      await within(`closing window ${window}`, closeIfOpen(window));
+      await within(
+        `closing window ${window} again`,
+        closeWindow(window).catch(() => undefined),
       );
     }
   });
