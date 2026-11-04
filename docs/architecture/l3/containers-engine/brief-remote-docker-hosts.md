@@ -68,6 +68,8 @@ The design is the **SSH questions** that `ssh` asks through the Docker CLI, and 
 - **F-1101 AC-23** and the remote-engine rows of F-0205 run against the lab's SSH Docker host. That's a fixture for
   proteus: the harness's SSH host container with a Docker engine reachable as `ssh://` (the plan's "Docker on the SSH
   host").
+  - **It depends on the move to GitHub-hosted runners** (2026-11-04): its acceptance rows run in a hosted job's own
+    Docker once proteus's workflow exists (`brief-kubernetes-attach.md` §7).
 - **BR-17** (the view follows a change of the configuration) is C2's engine-change event, already built.
 
 ## 5. The cut and the cards

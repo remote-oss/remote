@@ -119,7 +119,7 @@ SSH host fixture of #2098). It holds:
 
 ## 7. Amendments carried by this PR (the hosted-runner move, 2026-11-04)
 
-Two merged briefs assume lab fixtures. The open-PR freeze keeps them in this PR:
+Two merged briefs assume lab fixtures. Their pointers are added in this PR, and the notes are here:
 1. **`brief-remote-docker-hosts.md` §4:** the SSH Docker host (#2098, privileged, its own engine) runs in a GitHub-hosted
    job once proteus's workflow exists. Its acceptance rows depend on that move.
 2. **`brief-remote-ssh-engines.md` §6:** the SSH host with Docker and a CLI build runs the same way. F-1302's CI rows
