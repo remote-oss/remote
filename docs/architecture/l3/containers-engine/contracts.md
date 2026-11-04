@@ -42,13 +42,29 @@ side ends. `{kind: 'socket'}` is refused in release 1.
    or a project name Compose would not accept, ends the step as a setup failure (F-0410's generic dialog). The CLI is run
    with `COMPOSE_PROJECT_NAME` in its environment and `--user-data-folder <global storage>/data`. Its `up` also gets
    `BUILDX_BAKE_ENTITLEMENTS_FS=0`, unless the editor's environment sets that variable (brief-compose §3.3, #1915).
-4. lib-server: probe, plan, transfer and start over C11 with the remote-containers policy row (§5), the licence gate
-   (R-68) and `installTree` from V9 when the `vscode` volume is mounted.
-5. The host listener: choose the local port with lib-forwarding's port search, preferring the server's container
+   `up` runs with `--skip-post-create` (brief-personalization §1, #2085): it runs no lifecycle command in the container
+   (`onCreateCommand` and `updateContentCommand` included); `initializeCommand` still runs on the host.
+4. lib-server: probe, plan and transfer over C11 with the remote-containers policy row (§5), the licence gate (R-68) and
+   `installTree` from V9 when the `vscode` volume is mounted, under "Installing server" (S209). The server does not
+   start yet.
+5. Phase E (brief-personalization §3): the relay host (§2), the relays and their variables, and the early
+   personalization. The step is empty until those cards land, and the relay variables are an empty set until then.
+6. The blocking hooks, under "Starting server" (S334): C7 runs `run-user-commands --container-id <id>
+   --skip-non-blocking-commands` with `--remote-env NAME=value` per relay variable. C8 classifies its outcome as it did
+   `up`'s (F-0410's dialogs, S420), with the container found, and the lifecycle presenter (S085's terminal) takes its
+   JSON log stream.
+7. lib-server starts the server. The extension host's environment is `extensionHostEnvironmentOf(probed, relays,
+   remoteEnv)`: the probed environment, then the relay variables, then `remoteEnv`, each later layer winning.
+8. The host listener: choose the local port with lib-forwarding's port search, preferring the server's container
    port (F-0502 BR-3); `openRelayTunnel` with C11's exec dialer and the target `{kind: 'port', port: <container
    port>}`. The log names both ports.
-6. Return `Connected{address: {host: '127.0.0.1', port}, connectionToken, extensionHostEnv: {}, environmentTunnels: [],
-   trusted}`. `trusted` is `false` for a folder, and `true` for a clone in a volume (F-0106 BR-13's forced trust,
+9. The background, not awaited by the connect: run 1 is `run-user-commands … --stop-for-personalization`; phase P
+   (brief-personalization §4, empty until its cards land) and run 2, `run-user-commands` with no stop, run only when
+   run 1 succeeded: a failed `postCreateCommand` isn't marked, so run 2 would run it again. The CLI's markers skip what
+   already ran. Both take the relay variables as `--remote-env`. Their
+   outcome is logged, as the single background run's was; the lifecycle presenter takes their JSON log streams.
+10. Return `Connected{address: {host: '127.0.0.1', port}, connectionToken, extensionHostEnv, environmentTunnels: [],
+   trusted}`, where `extensionHostEnv` is step 7's environment. `trusted` is `false` for a folder, and `true` for a clone in a volume (F-0106 BR-13's forced trust,
    brief-volumes §3.8); the family registers with `allowsTrust: true`, so lib-authority passes it on. No tunnel factory
    and no tunnel features are given to core (brief ruling 1).
 

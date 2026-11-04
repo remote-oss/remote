@@ -123,6 +123,11 @@ export interface ServerRequest {
   onPhase(phase: 'installing' | 'startingServer'): void;
   /** The share of the server archive downloaded so far, from 0 to 100. */
   onDownloadPercent(percent: number): void;
+  /**
+   * Runs once the server's files are in place and before it starts: the early personalization and the blocking
+   * lifecycle commands. A failure it gives ends the steps with it.
+   */
+  beforeStart?: () => Promise<Failed | undefined>;
   cancellation: AbortSignal;
 }
 
@@ -658,6 +663,10 @@ export async function runServerSteps(
       ? {installs: [...request.defaultExtensions], pending: []}
       : await planExtensions(cachePorts, {...cacheRequest, cancellation});
   const defaultExtensions = extensionPlan.installs;
+  const beforeStart = await request.beforeStart?.();
+  if (beforeStart !== undefined) {
+    return failedWith(beforeStart);
+  }
   const started = await startOrReuse(
     channel,
     parametersOf(dependencies, request, installTree, ''),

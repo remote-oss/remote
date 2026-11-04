@@ -158,6 +158,8 @@ import {
   staticForwards,
 } from '../ports/static-forwards.ts';
 
+/** The relay variables the lifecycle commands and the extension host get; the relays add theirs. */
+const RELAY_ENVIRONMENT: Readonly<Record<string, string>> = {};
 /** The CLI's levels for an info, a warning and an error event. */
 const CLI_INFO_LEVEL = 3;
 const CLI_WARNING_LEVEL = 4;
@@ -1330,6 +1332,23 @@ export function containerConnectorOf(
     explored?: boolean;
   }
 
+  /**
+   * The steps between the server's files and its start: the early personalization (none yet) and the blocking lifecycle
+   * commands, under "Starting server". A failure of the commands is the connect's, as `up`'s was.
+   */
+  async function blockingHooks(
+    cancellation: AbortSignal,
+  ): Promise<Failed | undefined> {
+    phases.tell({name: 'startingServer'});
+    const blocking = await lifecycle?.runBlocking(
+      RELAY_ENVIRONMENT,
+      cancellation,
+    );
+    return blocking === undefined || blocking.kind === 'done'
+      ? undefined
+      : failureOf(blocking, []);
+  }
+
   /** Reads the merged configuration, installs and starts the server, relays its port, and holds the connection. */
   async function connectPrepared(
     context: PreparedContext,
@@ -1378,6 +1397,7 @@ export function containerConnectorOf(
       prepared.containerId,
       prepared.remoteUser,
     );
+    let startingServerTold = false;
     const server = await dependencies.runServer(
       {
         channel,
@@ -1388,8 +1408,15 @@ export function containerConnectorOf(
         devPort: devPortOf(merged),
         machineSettings: portAttributeSettings(merged),
         created: prepared.created,
+        beforeStart: async () => {
+          startingServerTold = true;
+          return blockingHooks(cancellation);
+        },
         onPhase: phase => {
-          phases.tell({name: phase});
+          // The blocking commands run under "Starting server" already; the server's own start doesn't say it again.
+          if (phase !== 'startingServer' || !startingServerTold) {
+            phases.tell({name: phase});
+          }
         },
         onDownloadPercent: percent => {
           phases.tell({name: 'serverDownloadPercent', percent});
@@ -1472,6 +1499,7 @@ export function containerConnectorOf(
       connectionToken: server.connectionToken,
       extensionHostEnv: extensionHostEnvironmentOf(
         probed,
+        RELAY_ENVIRONMENT,
         remoteEnvironment.entries,
       ),
       environmentTunnels: tunnels,
@@ -1518,6 +1546,7 @@ export function containerConnectorOf(
         lost.tell();
       }
     });
+    lifecycle?.startBackground(RELAY_ENVIRONMENT, () => Promise.resolve());
     return connected;
   }
 

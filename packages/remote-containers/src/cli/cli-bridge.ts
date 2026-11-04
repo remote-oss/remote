@@ -11,6 +11,7 @@ import {
   outdatedArguments,
   readConfigurationArguments,
   runUserCommandsArguments,
+  type RunUserCommandsOptions,
   type TemplateRequest,
   templateMetadataArguments,
   upArguments,
@@ -67,6 +68,7 @@ export interface CliBridge {
     onEvent: (event: CliEvent) => void,
     cancellation: AbortSignal,
     onStdin?: StdinOf,
+    options?: RunUserCommandsOptions,
   ): Promise<RunUserCommandsResult>;
   readConfiguration(
     target: CliTarget,
@@ -317,10 +319,17 @@ export function cliBridgeOf(
         cancellation,
         onStdin,
       ),
-    runUserCommands: (target, containerId, onEvent, cancellation, onStdin) =>
+    runUserCommands: (
+      target,
+      containerId,
+      onEvent,
+      cancellation,
+      onStdin,
+      options,
+    ) =>
       drive(
         target,
-        prepared => runUserCommandsArguments(prepared, containerId),
+        prepared => runUserCommandsArguments(prepared, containerId, options),
         readRunUserCommandsResult,
         onEvent,
         cancellation,
