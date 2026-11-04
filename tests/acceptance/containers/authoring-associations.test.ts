@@ -270,16 +270,33 @@ describe('the associations and the discontinued namespace of the authoring aids 
     }
     const count = (await problemsOf(window)).length;
     const status = await languageStatusOf(window);
-    deepStrictEqual(
-      [
-        status.item,
-        status.entries.includes(SCHEMA_VALIDATED),
-        hover.includes(ID_DESCRIPTION),
-        count,
-      ],
-      ['JSON with Comments', true, true, 0],
-      `the hover ${JSON.stringify(hover)} at ${JSON.stringify(window)}`,
-    );
+    try {
+      deepStrictEqual(
+        [
+          status.item,
+          status.entries.includes(SCHEMA_VALIDATED),
+          hover.includes(ID_DESCRIPTION),
+          count,
+        ],
+        ['JSON with Comments', true, true, 0],
+        `the hover ${JSON.stringify(hover)} at ${JSON.stringify(window)}`,
+      );
+    } catch (caught) {
+      // Name what the window holds when the hover stops short: its open hovers, the cursor the agent
+      // reports, and a second probe that rests the cursor on the word without its quotes.
+      const hovers = await evaluate<string>(
+        window,
+        `(() => JSON.stringify([...document.querySelectorAll('.monaco-hover:not(.hidden)')].map(
+          each => [each.className, (each.textContent ?? '').slice(0, 120)],
+        )))()`,
+      );
+      const plain = await editorHoverOf(window, 'id');
+      throw new Error(
+        `${String(caught)}; hovers ${hovers}; the hover on the word ${JSON.stringify(plain)}; ` +
+          `the window: ${(await windowState(window)).activeTab?.uri ?? 'no tab'}`,
+        {cause: caught},
+      );
+    }
   });
 
   it('F-0810 AC-12 (c208-s294): a devcontainers-contrib entry earns the warning over its whole entry, with its code link, no source and no quick fix, in a trusted window', async () => {
