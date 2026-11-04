@@ -1,19 +1,21 @@
 import {deepStrictEqual} from 'node:assert';
-import {execFile} from 'node:child_process';
-import {promisify} from 'node:util';
 import {
   closeWindow,
-  runLabelArguments,
   startInWindow,
   variable,
   waitFor,
   windowNames,
 } from '../windows/harness.ts';
+import {
+  docker,
+  listingOnly,
+  pickedContainer,
+  removeGroup,
+  started,
+} from '../windows/attach-support.ts';
 import {setUserSetting} from '../windows/folder-windows.ts';
-import {dockerWrapper} from '../windows/dev-containers-view.ts';
 import {
   answerDialog,
-  chooseQuickPickRow,
   dialogOf,
   pressEscape,
   quickPickOf,
@@ -24,64 +26,12 @@ import {
   waitForQuickPick,
 } from '../windows/renderer.ts';
 
-const execFileAsync = promisify(execFile);
-
 /** The command, and the setting that names the Docker program. */
 const COMMAND = 'remote-containers.attachToRunningContainer';
 const DOCKER_PATH = 'dev.containers.dockerPath';
 
 /** The placeholder of the picker. */
 const PLACEHOLDER = 'Select the container to attach VS Code';
-
-/** The label every container of these rows carries, so that a listing sees these alone. */
-const GROUP = 'remote-oss.c162';
-
-/** A program for the Docker setting that lists the running containers of the group `group` and nothing else. */
-function listingOnly(name: string, group: string): string {
-  return dockerWrapper(
-    name,
-    `if [ "$1" = ps ]; then shift; exec docker ps --filter label=${GROUP}=${group} "$@"; fi`,
-  );
-}
-
-/** Runs `docker` with `parameters`. */
-async function docker(...parameters: string[]): Promise<string> {
-  const {stdout} = await execFileAsync('docker', parameters);
-  return stdout.trim();
-}
-
-/** Starts a container `name` of the group, doing nothing; gives its full id. */
-async function started(
-  name: string,
-  group: string,
-  image = variable('HARNESS_DEVCONTAINER_IMAGE'),
-): Promise<string> {
-  return docker(
-    'run',
-    '-d',
-    '--name',
-    name,
-    ...runLabelArguments(),
-    '--label',
-    `${GROUP}=${group}`,
-    image,
-    'sleep',
-    'infinity',
-  ).then(started => docker('inspect', '-f', '{{.Id}}', started));
-}
-
-/** Removes the containers of the group. */
-async function removeGroup(group: string): Promise<void> {
-  const found = await docker(
-    'ps',
-    '-aq',
-    '--filter',
-    `label=${GROUP}=${group}`,
-  );
-  if (found !== '') {
-    await docker('rm', '-f', ...found.split('\n'));
-  }
-}
 
 describe('Attach to Running Container (card containers-162)', function () {
   this.timeout(600_000);
@@ -232,18 +182,7 @@ describe('Attach to Running Container (card containers-162)', function () {
     await setUserSetting(DOCKER_PATH, listingOnly('c162-pick', 'pick'));
     const before = windowNames();
     try {
-      await startInWindow('local', COMMAND);
-      await waitForDialog('local', 60_000).then(
-        () => answerDialog('local', 'Got It'),
-        () => undefined,
-      );
-      await waitForQuickPick('local', 60_000);
-      await waitFor(
-        'the picker to fill',
-        async () => (await quickPickRows('local')).length === 1,
-        30_000,
-      );
-      await chooseQuickPickRow('local', '/c162-pick');
+      await pickedContainer('/c162-pick');
       await waitFor(
         'a new window',
         () => Promise.resolve(windowNames().length > before.length),
