@@ -475,6 +475,47 @@ describe('the second check', () => {
     );
   });
 
+  it('F-0202 AC-39: a daemon that is down starts Docker Desktop, and the repeated query passes with no dialog', async () => {
+    const answers: Record<string, Answer> = {
+      version: finished(
+        1,
+        '',
+        'failed to connect to the docker API at npipe:////./pipe/docker_engine',
+      ),
+    };
+    const scene = sceneOf(answers);
+    const started: string[] = [];
+    scene.dependencies.desktop = {
+      data: {
+        application: 'C:/Docker.exe',
+        start: {program: 'Docker.exe', args: []},
+        listing: {program: 'tasklist', args: [], processName: 'Docker.exe'},
+        recheckIntervalMilliseconds: 1,
+        rechecks: {
+          running: {kind: 'count', limit: 2},
+          started: {kind: 'count', limit: 2},
+        },
+      },
+      installed: () => Promise.resolve(true),
+      running: () => Promise.resolve(false),
+      start: () => {
+        started.push('start');
+        answers['version'] = finished(0);
+        return Promise.resolve();
+      },
+      wait: () => Promise.resolve(),
+      now: () => 0,
+    };
+    deepStrictEqual(
+      [
+        await secondCheck(scene.dependencies, undefined, NEVER_ABORTED),
+        started,
+        scene.dialogs,
+      ],
+      [{kind: 'passed'}, ['start'], []],
+    );
+  });
+
   it('F-0201 BR-1: a relative value with no base fails with S339 and runs nothing', async () => {
     const scene = sceneOf({}, {values: ['tools/dk']});
     deepStrictEqual(

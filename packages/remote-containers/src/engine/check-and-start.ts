@@ -14,10 +14,8 @@ import {
 /** What one run of the check came to. */
 export type CheckResult = {ok: true} | {ok: false; errorText: string};
 
-/** What the step needs of its surroundings. */
-export interface CheckAndStartPorts {
-  /** Runs the check once. */
-  check(cancellation: AbortSignal): Promise<CheckResult>;
+/** What the step needs of its host to start Docker Desktop and wait for it. */
+export interface DesktopPorts {
   /** The host's start data; none for a host that cannot start Docker Desktop. */
   data: DesktopData | undefined;
   /** Whether Docker Desktop is installed at its standard location. */
@@ -30,6 +28,12 @@ export interface CheckAndStartPorts {
   wait(milliseconds: number, cancellation: AbortSignal): Promise<void>;
   /** The time now, in milliseconds. */
   now(): number;
+}
+
+/** What the step needs of its surroundings. */
+export interface CheckAndStartPorts extends DesktopPorts {
+  /** Runs the check once. */
+  check(cancellation: AbortSignal): Promise<CheckResult>;
 }
 
 /** How the step ended: the check passed, its last failure stands, or the step was cancelled. */
