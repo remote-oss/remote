@@ -180,19 +180,30 @@ describe('the output of the dev container CLI (card containers-04)', () => {
     );
   });
 
-  it('C3: run-user-commands succeeds with done, and any other result is malformed', () => {
+  it('C3: run-user-commands succeeds with done, skipNonBlocking and stopForPersonalization, and any other result is malformed', () => {
     deepStrictEqual(
       [
         readRunUserCommandsResult(
           resultOf('run-user-commands-success.jsonl'),
           0,
         ),
-        readRunUserCommandsResult(
-          '{"outcome":"success","result":"skipNonBlocking"}',
-          0,
+        ...['skipNonBlocking', 'stopForPersonalization', 'prebuild', 'x'].map(
+          result =>
+            readRunUserCommandsResult(
+              `{"outcome":"success","result":"${result}"}`,
+              0,
+            ),
         ),
+        readRunUserCommandsResult('{"outcome":"success","result":1}', 0),
       ],
-      [{kind: 'done'}, {kind: 'malformedResult', field: 'result'}],
+      [
+        {kind: 'done'},
+        {kind: 'done'},
+        {kind: 'done'},
+        {kind: 'malformedResult', field: 'result'},
+        {kind: 'malformedResult', field: 'result'},
+        {kind: 'malformedResult', field: 'result'},
+      ],
     );
   });
 
