@@ -7,6 +7,7 @@ import {
   connectionLog,
   editorProduct,
   inWindow,
+  startInWindow,
   onHost,
   openWindow,
   runShellTask,
@@ -121,7 +122,9 @@ describe('the extension in the core flows of an SSH window (card connect-125)', 
       );
       await new Promise(resolve => setTimeout(resolve, 3000));
       // 5.4: a node program is debugged to its end.
-      await inWindow(folder, 'workbench.action.debug.start');
+      // The start returns once the session is up, which on a slow host takes longer than a command may; the program's
+      // output below is what the row waits for.
+      await startInWindow(folder, 'workbench.action.debug.start');
       await waitFor(
         'the program to print in the Debug Console',
         async () => (await pageText(folder)).includes(`c125-ran-on-${host}`),

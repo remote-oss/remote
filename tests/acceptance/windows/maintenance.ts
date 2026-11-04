@@ -12,9 +12,11 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import {pressEscape} from './renderer.ts';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
   appendScript,
+  closeContained,
   closeWindow,
   connectedWithin,
   connectionLog,
@@ -239,7 +241,8 @@ export async function openLocalWindow(
 export async function closeAllButLocal(): Promise<void> {
   for (const name of windowNames()) {
     if (name !== 'local' && isOpen(name)) {
-      await closeWindow(name);
+      // A window that will not close must not fail the hook, and with it every row after: it is closed by force.
+      await closeContained(name, pressEscape);
     }
   }
   await noHelperWithin(60_000);

@@ -1252,6 +1252,15 @@ function processIsGone(processId: number): boolean {
   }
 }
 
+/** The process and process group of the harness itself, which no kill may reach (tooling-67). */
+function harnessProcess(): {processId: number; group: number} {
+  return {
+    processId: process.pid,
+    group: processStatOf(process.pid, readFileSync('/proc/self/stat', 'utf8'))
+      .group,
+  };
+}
+
 /**
  * Kills window `name`'s processes at once (SIGKILL): its process group, its main process, or its whole
  * tree. The main process is the editor process the run started: the run is this test's own parent, so the
@@ -1266,11 +1275,7 @@ export async function killWindow(
 ): Promise<void> {
   const processId = windowProcessId(name);
   const tree = processTreeOf('/proc');
-  const own = {
-    processId: process.pid,
-    group: processStatOf(process.pid, readFileSync('/proc/self/stat', 'utf8'))
-      .group,
-  };
+  const own = harnessProcess();
   function refuse(
     target:
       | {kind: 'group'; group: number}
@@ -1340,6 +1345,67 @@ export async function closeWindow(
   } finally {
     withdrawUnaccepted(name, commandId);
   }
+}
+
+/** How `closeContained` ended: the first close worked, a dismissed dialog and a second close did, or the host was ended. */
+export type ContainedClose = 'closed' | 'dismissed' | 'killed';
+
+/**
+ * Closes window `name` so that one that will not close cannot fail the rows after it. A close that times out is tried
+ * again after `dismiss` (Escape on a dialog the window shows); a second timeout ends the window's extension host, which
+ * is recorded as its deactivation, and a line on stderr names the window and why. Nothing here throws for a window that
+ * stays open; a window that is not open is left alone.
+ */
+export async function closeContained(
+  name: string,
+  dismiss: (window: string) => Promise<void>,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<ContainedClose> {
+  try {
+    await closeWindow(name, milliseconds);
+    return 'closed';
+  } catch (first) {
+    process.stderr.write(
+      `closing window ${name} failed (${String(first)}); dismissing its dialog and closing it again\n`,
+    );
+  }
+  await dismiss(name).catch(() => undefined);
+  try {
+    await closeWindow(name, milliseconds);
+    return 'dismissed';
+  } catch (second) {
+    process.stderr.write(
+      `closing window ${name} failed again (${String(second)}); ending its extension host\n`,
+    );
+  }
+  const host = liveProcessIdOf(name);
+  if (host !== undefined) {
+    // The same refusal as killWindow's: a host that is the harness itself or an ancestor of it is never killed.
+    const refused = refusedTargets(processTreeOf('/proc'), harnessProcess(), {
+      kind: 'processes',
+      processIds: [host],
+    });
+    if (refused.length > 0) {
+      throw new Error(`closeContained(${name}) refused: ${refused.join('; ')}`);
+    }
+    try {
+      process.kill(host, 'SIGKILL');
+    } catch {
+      // The host ended between the look and the signal, which is what is wanted.
+    }
+    await waitUntil(
+      () => `the extension host ${String(host)} of window ${name} to end`,
+      () => processIsGone(host),
+      WAIT_MILLISECONDS,
+    ).catch(() => undefined);
+  }
+  if (isOpen(name)) {
+    appendFileSync(
+      agentFile(name, 'events'),
+      `${JSON.stringify({event: 'deactivated', time: Date.now()})}\n`,
+    );
+  }
+  return 'killed';
 }
 
 /**
