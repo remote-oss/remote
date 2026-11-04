@@ -37,7 +37,7 @@ describe('the definition Explore a Volume opens a volume in (card containers-155
   it('F-0705 BR-4: the definition is written once, in the folder of its version, and an edit of it stays', async () => {
     const files = new Map<string, string>();
     const ports = {
-      temporaryFolder: '/tmp/u',
+      storageFolder: '/storage/u',
       join: (...parts: string[]) => parts.join('/'),
       exists: (file: string) => Promise.resolve(files.has(file)),
       write: (file: string, text: string) => {
@@ -51,9 +51,9 @@ describe('the definition Explore a Volume opens a volume in (card containers-155
     deepStrictEqual(
       [first.folder, first.configFile, second.configFile, [...files.values()]],
       [
-        '/tmp/u/inspect-volume/1',
-        '/tmp/u/inspect-volume/1/.devcontainer/devcontainer.json',
-        '/tmp/u/inspect-volume/1/.devcontainer/devcontainer.json',
+        '/storage/u/inspect-volume/1',
+        '/storage/u/inspect-volume/1/.devcontainer/devcontainer.json',
+        '/storage/u/inspect-volume/1/.devcontainer/devcontainer.json',
         ['{"edited": true}'],
       ],
     );

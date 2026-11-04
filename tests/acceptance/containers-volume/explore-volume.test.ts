@@ -94,6 +94,9 @@ describe('Explore a Volume in a Dev Container (card containers-155)', function (
         mounts: inspected.Mounts.filter(
           mount => mount.Destination === '/volume',
         ).map(mount => [mount.Type, mount.Name]),
+        cache: inspected.Mounts.filter(
+          mount => mount.Destination === '/vscode',
+        ).map(mount => [mount.Type, mount.Name]),
         socket: inspected.Mounts.some(mount =>
           mount.Destination.includes('docker.sock'),
         ),
@@ -104,6 +107,7 @@ describe('Explore a Volume in a Dev Container (card containers-155)', function (
       },
       {
         mounts: [['volume', first]],
+        cache: [['volume', 'vscode']],
         socket: false,
         remoteUser: 'root',
         trusted: false,
@@ -126,5 +130,36 @@ describe('Explore a Volume in a Dev Container (card containers-155)', function (
       60_000,
     );
     deepStrictEqual(await stateOf(container ?? ''), 'exited');
+  });
+
+  it('F-0705 AC-8b (c155-vscode): exploring the vscode volume itself mounts it at /volume and at /vscode', async () => {
+    await docker('volume', 'create', 'vscode');
+    try {
+      await explored('vscode');
+      const [container] = await explorersOf('vscode');
+      const mounts = JSON.parse(
+        await docker(
+          'inspect',
+          container ?? '',
+          '--format',
+          '{{json .Mounts}}',
+        ),
+      ) as Array<{Type: string; Name?: string; Destination: string}>;
+      deepStrictEqual(
+        mounts
+          .filter(mount => ['/volume', '/vscode'].includes(mount.Destination))
+          .map(mount => [mount.Destination, mount.Type, mount.Name])
+          .sort(),
+        [
+          ['/volume', 'volume', 'vscode'],
+          ['/vscode', 'volume', 'vscode'],
+        ],
+      );
+    } finally {
+      await closeWindow(WINDOW).catch(() => undefined);
+      for (const id of await explorersOf('vscode')) {
+        await docker('rm', '-f', id).catch(() => undefined);
+      }
+    }
   });
 });

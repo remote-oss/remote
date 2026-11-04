@@ -218,6 +218,26 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
     );
   });
 
+  it('F-0705 AC-8b (card containers-155): an explored volume asks for the vscode volume whatever dev.containers.cacheVolume says', async () => {
+    const scene = volumeScene();
+    scene.cacheVolumeInspect = {globalValue: false};
+    await scene.connector.connect(
+      inputOf(
+        volumePayloadOf({
+          kind: 'volume',
+          repositoryPath: '',
+          volumeName: 'vscode',
+          folder: 'volume',
+          inspectVolume: true,
+        }),
+      ),
+    );
+    deepStrictEqual(
+      scene.prepared.map(request => request.cacheVolume),
+      [true],
+    );
+  });
+
   it('F-0705 BR-2 (card containers-155): an explored volume with a name Docker refuses is refused before the definition is touched', async () => {
     const scene = volumeScene();
     const refused = await scene.connector.connect(

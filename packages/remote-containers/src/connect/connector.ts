@@ -1613,7 +1613,8 @@ export function containerConnectorOf(
         idLabels,
         dockerPath: dockerFile,
         logLevel: 'info',
-        cacheVolume: settings.cacheVolume(),
+        // An explored volume always has the server's volume at /vscode, whatever `dev.containers.cacheVolume` says.
+        cacheVolume: true,
         windowsClient: dependencies.clientPlatform === 'win32',
         workspaceMountConsistency: workspaceMountConsistencyOf(
           settings.workspaceMountConsistency,

@@ -2130,7 +2130,7 @@ export async function activate(
         },
         exploreDefinition: () =>
           ensureExploreDefinition({
-            temporaryFolder: os.tmpdir(),
+            storageFolder: context.globalStorageUri.fsPath,
             join: (...parts) => path.join(...parts),
             exists: file =>
               stat(file).then(

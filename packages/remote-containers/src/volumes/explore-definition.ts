@@ -49,8 +49,8 @@ export function exploreIdLabels(
 
 /** What the host gives the definition: the folder it lives in, written once. */
 export interface ExploreDefinitionPorts {
-  /** The folder of the user's temporary files. */
-  temporaryFolder: string;
+  /** The extension's own storage for the user: a folder only this user can write, not a shared temporary one. */
+  storageFolder: string;
   join(...parts: string[]): string;
   exists(file: string): Promise<boolean>;
   /** Writes `text` to `file`, making its folders. */
@@ -75,7 +75,7 @@ export async function ensureExploreDefinition(
   ports: ExploreDefinitionPorts,
 ): Promise<ExploreDefinition> {
   const folder = ports.join(
-    ports.temporaryFolder,
+    ports.storageFolder,
     'inspect-volume',
     EXPLORE_DEFINITION_VERSION,
   );
