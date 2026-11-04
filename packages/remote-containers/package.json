@@ -80,6 +80,10 @@
         "category": "Dev Containers"
       },
       {
+        "command": "remote-containers.addExtensionToConfig",
+        "title": "%commands.addExtensionToConfig.title%"
+      },
+      {
         "command": "remote-containers.rebuildContainer",
         "title": "%commands.Rebuildcontainer.title%",
         "category": "Dev Containers",
@@ -278,6 +282,10 @@
         {
           "command": "remote-containers.configureContainerFeatures",
           "when": "remoteName =~ /^(dev-container|wsl|ssh-remote|tunnel)?$/ && !virtualWorkspace && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.addExtensionToConfig",
+          "when": "false"
         },
         {
           "command": "remote-containers.rebuildContainer",
@@ -575,6 +583,13 @@
           "command": "remote-containers.attachToRunningContainer",
           "group": "remote_30_dev-container_2_actions@2",
           "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
+        }
+      ],
+      "extension/context": [
+        {
+          "command": "remote-containers.addExtensionToConfig",
+          "group": "1_devcontainer@1",
+          "when": "!isBuiltinExtension && !remote-containers:standingDown"
         }
       ]
     },

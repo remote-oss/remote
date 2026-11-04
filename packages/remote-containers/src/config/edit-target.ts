@@ -44,6 +44,12 @@ function policyOf(candidate: Candidate, facts: WindowEditFacts): EditPolicy {
 }
 
 /** The configuration an edit changes, in the order the editor's edits follow. */
+export function editTargetOf(
+  facts: WindowEditFacts & {attached: AttachConfigFiles},
+): {kind: 'attach'; files: AttachConfigFiles};
+export function editTargetOf(
+  facts: Omit<WindowEditFacts, 'attached'>,
+): Exclude<EditTarget, {kind: 'attach'}>;
 export function editTargetOf(facts: WindowEditFacts): EditTarget {
   if (facts.attached !== undefined) {
     return {kind: 'attach', files: facts.attached};

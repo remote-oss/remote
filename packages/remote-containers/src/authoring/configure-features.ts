@@ -125,10 +125,115 @@ export function rootPathOf(folder: WindowFolder): string {
 }
 
 /** A configuration found, and where its text is read from. */
-interface Found {
+export interface Found {
   candidate: Candidate;
   files: AuthoringFiles;
   root: WindowFolder | undefined;
+}
+
+/** The configurations of every root on a disk, in the order the picker lists them. */
+export async function foundInWindow(
+  ports: Pick<
+    ConfigureFeaturesPorts,
+    'window' | 'filesOf' | 'hostFiles' | 'compare' | 'stored' | 'mirrored'
+  >,
+): Promise<Found[]> {
+  const roots = ports.window.folders().filter(onDisk);
+  const perRoot = await Promise.all(
+    roots.map(async root => {
+      const files = ports.filesOf(root);
+      const folder = rootPathOf(root);
+      const candidates = await discoverConfigurations(
+        folder,
+        {list: target => files.list(target)},
+        ports.compare,
+      );
+      const onHost =
+        root.scheme === 'file' && ports.window.remoteName() === undefined;
+      const stored = onHost ? await ports.stored?.(folder) : undefined;
+      // A multi-root window looks nowhere outside its folders (BR-12).
+      const mirrored =
+        onHost && externalSourcesApply(ports.window.folders().length)
+          ? ((await ports.mirrored?.(folder)) ?? [])
+          : [];
+      return {
+        candidates,
+        external: stored === undefined ? mirrored : [stored, ...mirrored],
+        files,
+        root,
+      };
+    }),
+  );
+  const own = perRoot.flatMap(each =>
+    each.candidates.map(candidate => ({
+      candidate,
+      files: each.files,
+      root: each.root,
+    })),
+  );
+  const outside = perRoot.flatMap(each =>
+    each.external.map(candidate => ({
+      candidate,
+      files: ports.hostFiles,
+      root: undefined,
+    })),
+  );
+  if (outside.length === 0) {
+    return own;
+  }
+  const all = [...own, ...outside];
+  const order = joinedCandidates(
+    own.map(each => each.candidate),
+    outside.map(each => each.candidate),
+  );
+  return order.flatMap(candidate =>
+    all.filter(each => each.candidate === candidate),
+  );
+}
+
+/** Which of the configurations the user means; none when the user ended the pick. */
+export async function chosenAmong(
+  found: readonly Found[],
+  ports: Pick<ConfigureFeaturesPorts, 'surfaces' | 'translate' | 'logger'>,
+): Promise<Found | undefined> {
+  const {surfaces, translate, logger} = ports;
+  function text(template: string): string {
+    return filled(translate, template, []);
+  }
+  const [only] = found;
+  if (found.length === 1) {
+    return only;
+  }
+  const rows = await Promise.all(
+    found.map(async each => {
+      const bytes = await each.files
+        .read(each.candidate.file)
+        .catch(() => undefined);
+      const parsed =
+        bytes === undefined
+          ? undefined
+          : parseConfiguration(decodeConfiguration(bytes));
+      return {
+        label: labelOf(each.candidate.place, parsed, translate),
+        description: each.candidate.relative,
+      };
+    }),
+  );
+  const answer = await surfaces.pick(
+    rows,
+    text(FEATURES_TEMPLATES.S303),
+    text(FEATURES_TEMPLATES.S257),
+  );
+  if (answer.kind === 'dismissed') {
+    logger.info(`${TITLE} ended: no configuration was chosen`);
+    return undefined;
+  }
+  const chosen = found[answer.index];
+  if (answer.kind === 'openFile' && chosen !== undefined) {
+    await surfaces.openPreview(chosen.candidate.file, chosen.root);
+    return undefined;
+  }
+  return chosen;
 }
 
 /** The handler of the command over `ports`. A call made while another runs returns at once. */
@@ -142,103 +247,8 @@ export function configureFeaturesOf(
     return filled(translate, template, values);
   }
 
-  /** The configurations of every root on a disk, in the order the picker lists them. */
-  async function foundInWindow(): Promise<Found[]> {
-    const roots = ports.window.folders().filter(onDisk);
-    const perRoot = await Promise.all(
-      roots.map(async root => {
-        const files = ports.filesOf(root);
-        const folder = rootPathOf(root);
-        const candidates = await discoverConfigurations(
-          folder,
-          {list: target => files.list(target)},
-          ports.compare,
-        );
-        const onHost =
-          root.scheme === 'file' && ports.window.remoteName() === undefined;
-        const stored = onHost ? await ports.stored?.(folder) : undefined;
-        // A multi-root window looks nowhere outside its folders (BR-12).
-        const mirrored =
-          onHost && externalSourcesApply(ports.window.folders().length)
-            ? ((await ports.mirrored?.(folder)) ?? [])
-            : [];
-        return {
-          candidates,
-          external: stored === undefined ? mirrored : [stored, ...mirrored],
-          files,
-          root,
-        };
-      }),
-    );
-    const own = perRoot.flatMap(each =>
-      each.candidates.map(candidate => ({
-        candidate,
-        files: each.files,
-        root: each.root,
-      })),
-    );
-    const outside = perRoot.flatMap(each =>
-      each.external.map(candidate => ({
-        candidate,
-        files: ports.hostFiles,
-        root: undefined,
-      })),
-    );
-    if (outside.length === 0) {
-      return own;
-    }
-    const all = [...own, ...outside];
-    const order = joinedCandidates(
-      own.map(each => each.candidate),
-      outside.map(each => each.candidate),
-    );
-    return order.flatMap(candidate =>
-      all.filter(each => each.candidate === candidate),
-    );
-  }
-
-  /** Which of the configurations the user means; none when the user ended the pick. */
-  async function chosenAmong(
-    found: readonly Found[],
-  ): Promise<Found | undefined> {
-    const [only] = found;
-    if (found.length === 1) {
-      return only;
-    }
-    const rows = await Promise.all(
-      found.map(async each => {
-        const bytes = await each.files
-          .read(each.candidate.file)
-          .catch(() => undefined);
-        const parsed =
-          bytes === undefined
-            ? undefined
-            : parseConfiguration(decodeConfiguration(bytes));
-        return {
-          label: labelOf(each.candidate.place, parsed, translate),
-          description: each.candidate.relative,
-        };
-      }),
-    );
-    const answer = await surfaces.pick(
-      rows,
-      text(FEATURES_TEMPLATES.S303),
-      text(FEATURES_TEMPLATES.S257),
-    );
-    if (answer.kind === 'dismissed') {
-      logger.info(`${TITLE} ended: no configuration was chosen`);
-      return undefined;
-    }
-    const chosen = found[answer.index];
-    if (answer.kind === 'openFile' && chosen !== undefined) {
-      await surfaces.openPreview(chosen.candidate.file, chosen.root);
-      return undefined;
-    }
-    return chosen;
-  }
-
   async function attempt(): Promise<FeaturesOutcome> {
-    const found = await foundInWindow();
+    const found = await foundInWindow(ports);
     if (found.length === 0) {
       logger.info(`${TITLE} found no configuration file`);
       const addFiles = text(FEATURES_TEMPLATES.S025);
@@ -251,7 +261,7 @@ export function configureFeaturesOf(
       await ports.addFiles();
       return {kind: 'adding'};
     }
-    const chosen = await chosenAmong(found);
+    const chosen = await chosenAmong(found, ports);
     if (chosen === undefined) {
       return {kind: 'cancelled'};
     }

@@ -1103,12 +1103,44 @@ describe('the manifest', () => {
       }
     ).menus;
     return Object.fromEntries(
-      Object.entries(menus).map(([name, entries]) => [
-        name,
-        entries.filter(entry => commands.includes(entry.command)),
-      ]),
+      Object.entries(menus)
+        .filter(([name]) => name !== 'extension/context')
+        .map(([name, entries]) => [
+          name,
+          entries.filter(entry => commands.includes(entry.command)),
+        ]),
     );
   }
+
+  it('F-0809 AC-1, AC-2, AC-3, AC-34 (c207-manifest): Add to devcontainer.json is in the Extensions view menu of rows that are not built in, in a group of its own between Copy and Settings, and is hidden from the palette', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: Array<Record<string, unknown>>;
+      menus: Record<string, Array<Record<string, unknown>>>;
+    };
+    const command = 'remote-containers.addExtensionToConfig';
+    deepStrictEqual(
+      [
+        contributes.commands.find(entry => entry.command === command),
+        readJson('package.nls.json')['commands.addExtensionToConfig.title'],
+        contributes.menus.commandPalette?.find(
+          entry => entry.command === command,
+        ),
+        contributes.menus['extension/context'],
+      ],
+      [
+        {command, title: '%commands.addExtensionToConfig.title%'},
+        'Add to devcontainer.json',
+        {command, when: 'false'},
+        [
+          {
+            command,
+            group: '1_devcontainer@1',
+            when: '!isBuiltinExtension && !remote-containers:standingDown',
+          },
+        ],
+      ],
+    );
+  });
 
   it('F-0401 AC-5: the palette and the remote indicator list the command with the local clause of the reference, which has no workspace-trust term, so Restricted Mode lists it (PRE-7, AC-21)', () => {
     deepStrictEqual(menusOf(['remote-containers.reopenInContainer']), {
