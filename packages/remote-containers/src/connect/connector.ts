@@ -1190,6 +1190,8 @@ export function containerConnectorOf(
       return trustDeclined();
     }
     const connectionId = registerWithShutdown(folder, tools);
+    // Taken before the check, so that a check that fails drops the intent and a Retry reconnects without a rebuild.
+    const rebuild = await takenRebuild(input);
     phases.tell({name: 'initializing'});
     const checked = await secondCheck(
       {
@@ -1227,7 +1229,6 @@ export function containerConnectorOf(
       bridge,
       dependencies.lifecyclePresenter,
     );
-    const rebuild = await takenRebuild(input);
     const prepared = await lifecycle.prepare(
       {
         folder: folder.hostPath,
@@ -1705,6 +1706,8 @@ export function containerConnectorOf(
       dependencies.engineFor(executable.file),
       () => environment,
     );
+    // Taken before the check, so that a check that fails drops the intent and a Retry reconnects without a rebuild.
+    const rebuild = await takenRebuild(input);
     phases.tell({name: 'initializing'});
     const checked = await secondCheck(
       {
@@ -1720,7 +1723,6 @@ export function containerConnectorOf(
     }
     const cliEnvironment = {...dependencies.editorEnvironment, ...environment};
     const dockerFile = executable.file;
-    const rebuild = await takenRebuild(input);
     if (target.inspectVolume) {
       return connectExplored(
         {volumes, payload, target, settings, engine, dockerFile},
