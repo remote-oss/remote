@@ -37,7 +37,7 @@ function hostOf(
 ): EngineHost {
   return {
     // eslint-disable-next-line id-length -- the port's method is named run
-    run: (argv, _input, options) => {
+    run: (argv, input, options) => {
       calls.push({argv: [...argv], environment: options.environment});
       return answer(argv, options);
     },
@@ -45,7 +45,7 @@ function hostOf(
   };
 }
 
-function ran(
+function exits(
   stdout: string,
   status = 0,
   stderr = '',
@@ -90,8 +90,8 @@ function sceneOf(
   const kubectlCalls: Call[] = [];
   const shellCalls: Call[] = [];
   const host = kubectlHostOf({
-    kubectl: hostOf(kubectlCalls, options.kubectl ?? (() => ran(POD_LIST))),
-    shell: hostOf(shellCalls, options.shell ?? (() => ran(PROBE_OUTPUT))),
+    kubectl: hostOf(kubectlCalls, options.kubectl ?? (() => exits(POD_LIST))),
+    shell: hostOf(shellCalls, options.shell ?? (() => exits(PROBE_OUTPUT))),
     platform: options.platform ?? 'linux',
     environment: options.environment ?? {PATH: '/editor/bin', Path: undefined},
     ...(options.bounds === undefined ? {} : {bounds: options.bounds}),
@@ -109,7 +109,7 @@ describe('the kubectl host (card containers-190, #2116)', () => {
     deepStrictEqual(
       {
         first:
-          first.kind === 'listed' ? first.pods.map(pod => pod.name) : first,
+          first.kind === 'listed' ? first.pods.map(each => each.name) : first,
         argv: scene.kubectlCalls.map(call => call.argv),
         path: scene.kubectlCalls[0]?.environment?.PATH,
         probes: scene.shellCalls.length,
@@ -129,7 +129,7 @@ describe('the kubectl host (card containers-190, #2116)', () => {
   });
 
   it('F-0604 AC-6 (c190-probe-fallback): a login shell that fails leaves the editor’s own environment, and native Windows is not probed', async () => {
-    const failing = sceneOf({shell: () => ran('', 1, 'no shell')});
+    const failing = sceneOf({shell: () => exits('', 1, 'no shell')});
     const windows = sceneOf({platform: 'win32'});
     await failing.host.listPods(undefined, NEVER);
     await windows.host.listPods(undefined, NEVER);
@@ -145,7 +145,7 @@ describe('the kubectl host (card containers-190, #2116)', () => {
 
   it('F-0604 AC-6 (c190-probe-bound): a login shell that never answers is cut at its bound, and the editor’s environment is used', async () => {
     const scene = sceneOf({
-      shell: (_argv, options) => hangingUntilAborted(options),
+      shell: (argv, options) => hangingUntilAborted(options),
       bounds: {listing: 1000, probe: 20},
     });
     await scene.host.listPods(undefined, NEVER);
@@ -169,7 +169,7 @@ describe('the kubectl host (card containers-190, #2116)', () => {
 
   it('F-0604 AC-4 (c190-unreachable): a kubectl that fails names its command line and what it printed', async () => {
     const scene = sceneOf({
-      kubectl: () => ran('', 1, 'Unable to connect to the server\n'),
+      kubectl: () => exits('', 1, 'Unable to connect to the server\n'),
     });
     deepStrictEqual(await scene.host.listPods(undefined, NEVER), {
       kind: 'failed',
@@ -179,7 +179,7 @@ describe('the kubectl host (card containers-190, #2116)', () => {
   });
 
   it('F-0604 AC-4 (c190-unreadable): an answer that is no pod list fails the listing', async () => {
-    const scene = sceneOf({kubectl: () => ran('<html>')});
+    const scene = sceneOf({kubectl: () => exits('<html>')});
     deepStrictEqual(await scene.host.listPods(undefined, NEVER), {
       kind: 'failed',
       detail:
@@ -225,15 +225,16 @@ describe('the kubectl host (card containers-190, #2116)', () => {
   });
 
   it('F-0604 AC-24 (c190-missing-windows-path): the sentence names a PATH written in the platform’s case, and an empty one when there is none', async () => {
-    const missing = (
+    function missing(
       environment: Readonly<Record<string, string | undefined>>,
-    ) =>
-      sceneOf({
+    ) {
+      return sceneOf({
         platform: 'win32',
         environment,
         kubectl: () =>
           Promise.resolve({kind: 'failed', detail: 'spawn kubectl ENOENT'}),
       }).host.listPods(undefined, NEVER);
+    }
     deepStrictEqual(
       [
         await missing({Path: 'C:\\Windows'}),
@@ -253,7 +254,7 @@ describe('the kubectl host (card containers-190, #2116)', () => {
 
   it('F-0604 AC-29 (c190-bound, ruling-2110-kubectl-bound): a kubectl that never answers ends the listing at the bound as the listing’s failure, which is 180 s', async () => {
     const scene = sceneOf({
-      kubectl: (_argv, options) => hangingUntilAborted(options),
+      kubectl: (argv, options) => hangingUntilAborted(options),
       bounds: {listing: 20, probe: 1000},
     });
     deepStrictEqual(
@@ -271,7 +272,7 @@ describe('the kubectl host (card containers-190, #2116)', () => {
 
   it('F-0604 AC-19, AC-29 (c190-cancel): a listing the user cancels ends as cancelled, not as a failure', async () => {
     const scene = sceneOf({
-      kubectl: (_argv, options) => hangingUntilAborted(options),
+      kubectl: (argv, options) => hangingUntilAborted(options),
     });
     const user = new AbortController();
     const listing = scene.host.listPods(undefined, user.signal);
@@ -282,7 +283,7 @@ describe('the kubectl host (card containers-190, #2116)', () => {
 
   it('F-0604 AC-19 (c190-cancelled-before): a listing asked for after the user cancelled ends as cancelled, and so does a context', async () => {
     const scene = sceneOf({
-      kubectl: (_argv, options) => hangingUntilAborted(options),
+      kubectl: (argv, options) => hangingUntilAborted(options),
     });
     const user = new AbortController();
     user.abort();
@@ -302,7 +303,7 @@ describe('the kubectl host (card containers-190, #2116)', () => {
   });
 
   it('F-0604 AC-17 (c190-context-empty): a kubectl that prints no context fails the pick', async () => {
-    const scene = sceneOf({kubectl: () => ran('\n')});
+    const scene = sceneOf({kubectl: () => exits('\n')});
     deepStrictEqual(await scene.host.currentContext(NEVER), {
       kind: 'failed',
       detail:
@@ -311,9 +312,9 @@ describe('the kubectl host (card containers-190, #2116)', () => {
   });
 
   it('F-0604 AC-17 (c190-context): the current context is what kubectl prints, and a kubectl without one is a failure', async () => {
-    const named = sceneOf({kubectl: () => ran('kind-lab\n')});
+    const named = sceneOf({kubectl: () => exits('kind-lab\n')});
     const unset = sceneOf({
-      kubectl: () => ran('', 1, 'error: current-context is not set\n'),
+      kubectl: () => exits('', 1, 'error: current-context is not set\n'),
     });
     const missing = sceneOf({
       kubectl: () =>

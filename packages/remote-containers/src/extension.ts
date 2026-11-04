@@ -1825,8 +1825,8 @@ export async function activate(
         translate,
         logger: served.logger,
       });
-      const attachWarning = (): Promise<boolean> =>
-        attachWarningAccepted({
+      function attachWarning(): Promise<boolean> {
+        return attachWarningAccepted({
           global: context.globalState,
           show: (message, detail, buttons) =>
             vscode.window.showWarningMessage(
@@ -1838,6 +1838,7 @@ export async function activate(
             vscode.env.openExternal(vscode.Uri.parse(address)),
           translate,
         });
+      }
       const kubectl = kubectlHostOf({
         kubectl: nodeEngineHost('kubectl'),
         shell: nodeEngineHost('/bin/sh'),
@@ -1866,7 +1867,7 @@ export async function activate(
         },
         attach: selection => {
           served.logger.info(
-            `Kubernetes container picked: ${selection.container.name} in ${selection.pod} (${selection.namespace}, ${selection.context})`,
+            `Kubernetes container picked: ${selection.container.name} in ${selection.podName} (${selection.namespace}, ${selection.context})`,
           );
           return Promise.resolve();
         },

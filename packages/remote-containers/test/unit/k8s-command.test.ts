@@ -14,7 +14,7 @@ import type {
   PodRequest,
 } from '../../src/engine/kubectl-host.ts';
 
-const WEB: K8sPod = {
+const WEB_POD: K8sPod = {
   name: 'web',
   namespace: 'shop',
   containers: [{name: 'app', image: 'nginx:1'}],
@@ -85,9 +85,11 @@ function sceneOf(
     currentContext: () =>
       Promise.resolve(options.context ?? {kind: 'context', name: 'kind-lab'}),
     openPicker: <Value>(placeholder: string) => {
-      let settle: (value: Value | undefined) => void = () => undefined;
+      const gate: {settle: (value: Value | undefined) => void} = {
+        settle: () => undefined,
+      };
       const chosen = new Promise<Value | undefined>(resolve => {
-        settle = resolve;
+        gate.settle = resolve;
       });
       const record: PickerRecord = {
         placeholder,
@@ -95,7 +97,7 @@ function sceneOf(
         closed: false,
         reveals: 0,
         settle: index => {
-          settle(
+          gate.settle(
             index === undefined
               ? undefined
               : (record.items?.[index]?.value as Value),
@@ -113,7 +115,7 @@ function sceneOf(
         },
         close: () => {
           record.closed = true;
-          settle(undefined);
+          gate.settle(undefined);
         },
       };
     },
@@ -164,7 +166,7 @@ describe('Attach to Running Kubernetes Container (card containers-190, #2116)', 
   });
 
   it('F-0604 AC-6, AC-7 (c190-one-container): the pod picker opens busy with its placeholder, fills with label and namespace, and a pod with one container is attached at once', async () => {
-    const scene = sceneOf({listing: {kind: 'listed', pods: [WEB, MULTI]}});
+    const scene = sceneOf({listing: {kind: 'listed', pods: [WEB_POD, MULTI]}});
     const done = k8sAttachCommandsOf(scene.ports).fromPalette();
     await settle();
     const picker = scene.pickers[0];
@@ -189,7 +191,7 @@ describe('Attach to Running Kubernetes Container (card containers-190, #2116)', 
           {
             context: 'kind-lab',
             namespace: 'shop',
-            pod: 'web',
+            podName: 'web',
             container: {name: 'app', image: 'nginx:1'},
           },
         ],
@@ -225,10 +227,10 @@ describe('Attach to Running Kubernetes Container (card containers-190, #2116)', 
   });
 
   it('F-0604 AC-19 (c190-escape): dismissing the pod picker or the container picker ends the command with nothing attached', async () => {
-    const pod = sceneOf({listing: {kind: 'listed', pods: [MULTI]}});
-    const first = k8sAttachCommandsOf(pod.ports).fromPalette();
+    const podPicker = sceneOf({listing: {kind: 'listed', pods: [MULTI]}});
+    const first = k8sAttachCommandsOf(podPicker.ports).fromPalette();
     await settle();
-    pod.pickers[0]?.settle(undefined);
+    podPicker.pickers[0]?.settle(undefined);
     await first;
     const container = sceneOf({listing: {kind: 'listed', pods: [MULTI]}});
     const second = k8sAttachCommandsOf(container.ports).fromPalette();
@@ -238,7 +240,12 @@ describe('Attach to Running Kubernetes Container (card containers-190, #2116)', 
     container.pickers[1]?.settle(undefined);
     await second;
     deepStrictEqual(
-      [pod.selections, container.selections, pod.events, container.events],
+      [
+        podPicker.selections,
+        container.selections,
+        podPicker.events,
+        container.events,
+      ],
       [[], [], ['warning'], ['warning']],
     );
   });
@@ -303,7 +310,7 @@ describe('Attach to Running Kubernetes Container (card containers-190, #2116)', 
     await settle();
     const second = commands.fromPalette();
     await settle();
-    scene.answerListing({kind: 'listed', pods: [WEB]});
+    scene.answerListing({kind: 'listed', pods: [WEB_POD]});
     await settle();
     scene.pickers[0]?.settle(0);
     await Promise.all([first, second]);
@@ -320,18 +327,20 @@ describe('Attach to Running Kubernetes Container (card containers-190, #2116)', 
   });
 
   it('F-0604 AC-30 (c190-second-during-warning): a second invocation while the warning is still showing waits for the same run and shows no second warning', async () => {
-    let accept: (answer: boolean) => void = () => undefined;
+    const gate: {accept: (answer: boolean) => void} = {
+      accept: () => undefined,
+    };
     const scene = sceneOf({
       warningGate: new Promise<boolean>(resolve => {
-        accept = resolve;
+        gate.accept = resolve;
       }),
-      listing: {kind: 'listed', pods: [WEB]},
+      listing: {kind: 'listed', pods: [WEB_POD]},
     });
     const commands = k8sAttachCommandsOf(scene.ports);
     const first = commands.fromPalette();
     const second = commands.fromPalette();
     await settle();
-    accept(true);
+    gate.accept(true);
     await settle();
     scene.pickers[0]?.settle(0);
     await Promise.all([first, second]);
@@ -354,7 +363,7 @@ describe('Attach to Running Kubernetes Container (card containers-190, #2116)', 
   });
 
   it('F-0604 AC-17 (c190-viewlet): a row that names a pod skips the pod picker, lists that pod alone and attaches its only container', async () => {
-    const scene = sceneOf({listing: {kind: 'listed', pods: [WEB]}});
+    const scene = sceneOf({listing: {kind: 'listed', pods: [WEB_POD]}});
     await k8sAttachCommandsOf(scene.ports).fromViewlet({
       name: 'web',
       namespace: 'shop',
@@ -363,7 +372,7 @@ describe('Attach to Running Kubernetes Container (card containers-190, #2116)', 
       [
         scene.listed,
         scene.pickers.length,
-        scene.selections.map(each => each.pod),
+        scene.selections.map(each => each.podName),
       ],
       [[{name: 'web', namespace: 'shop'}], 0, ['web']],
     );
@@ -385,8 +394,8 @@ describe('Attach to Running Kubernetes Container (card containers-190, #2116)', 
   });
 
   it('F-0604 AC-22 (c190-viewlet-fallback): without a usable row the palette’s two pickers are used, and an invalid name never reaches kubectl', async () => {
-    const none = sceneOf({listing: {kind: 'listed', pods: [WEB]}});
-    const invalid = sceneOf({listing: {kind: 'listed', pods: [WEB]}});
+    const none = sceneOf({listing: {kind: 'listed', pods: [WEB_POD]}});
+    const invalid = sceneOf({listing: {kind: 'listed', pods: [WEB_POD]}});
     const first = k8sAttachCommandsOf(none.ports).fromViewlet(undefined);
     await settle();
     none.pickers[0]?.settle(0);
@@ -407,7 +416,7 @@ describe('Attach to Running Kubernetes Container (card containers-190, #2116)', 
     const failed = sceneOf({listing: {kind: 'failed', detail: 'gone'}});
     await k8sAttachCommandsOf(failed.ports).fromViewlet({name: 'web'});
     const noContext = sceneOf({
-      listing: {kind: 'listed', pods: [WEB]},
+      listing: {kind: 'listed', pods: [WEB_POD]},
       context: {kind: 'failed', detail: 'no context'},
     });
     await k8sAttachCommandsOf(noContext.ports).fromViewlet({name: 'web'});

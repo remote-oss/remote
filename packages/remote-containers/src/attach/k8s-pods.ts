@@ -1,11 +1,11 @@
 /**
  * @fileoverview The pods of a `kubectl get -o json` answer: each with its namespace and its regular containers in the
- * order of the pod's spec, and the pods ordered by name.
+ * order the pod lists them, and the pods ordered by name.
  */
 
 import {LABEL_COLLATOR} from '../explorer/targets-model.ts';
 
-/** A container of a pod, with the image reference its spec names. */
+/** A container of a pod, with the image reference it names. */
 export interface K8sContainer {
   name: string;
   image: string;
@@ -15,7 +15,7 @@ export interface K8sContainer {
 export interface K8sPod {
   name: string;
   namespace: string;
-  /** The `spec.containers` entries, never the init containers, in spec order. */
+  /** The regular containers, never the init containers, in the order the pod lists them. */
   containers: readonly K8sContainer[];
 }
 
@@ -83,7 +83,7 @@ export function podsOf(text: string): K8sPod[] | undefined {
   }
   return found
     .map(podOf)
-    .filter((pod): pod is K8sPod => pod !== undefined)
+    .filter((found): found is K8sPod => found !== undefined)
     .sort((left, right) => LABEL_COLLATOR.compare(left.name, right.name));
 }
 

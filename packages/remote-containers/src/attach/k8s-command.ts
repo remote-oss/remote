@@ -29,7 +29,7 @@ const K8S_TEMPLATES = {
 export interface K8sSelection {
   context: string;
   namespace: string;
-  pod: string;
+  podName: string;
   container: K8sContainer;
 }
 
@@ -102,14 +102,14 @@ export function k8sAttachCommandsOf(ports: K8sAttachPorts): {
     ports.revealLog();
   }
 
-  /** The container of `pod` the user means: the only one, or the pick of one. */
+  /** The container of `listedPod` the user means: the only one, or the pick of one. */
   async function containerOf(
-    pod: K8sPod,
+    listedPod: K8sPod,
     placeholder: string,
   ): Promise<K8sContainer | undefined> {
-    const [only, ...others] = pod.containers;
+    const [only, ...others] = listedPod.containers;
     if (only === undefined) {
-      logger.warn(`the pod ${pod.name} lists no container`);
+      logger.warn(`the pod ${listedPod.name} lists no container`);
       return undefined;
     }
     if (others.length === 0) {
@@ -117,7 +117,7 @@ export function k8sAttachCommandsOf(ports: K8sAttachPorts): {
     }
     const picker = ports.openPicker<K8sContainer>(placeholder);
     picker.fill(
-      pod.containers.map(container => ({
+      listedPod.containers.map(container => ({
         label: container.name,
         description: container.image,
         value: container,
@@ -128,11 +128,11 @@ export function k8sAttachCommandsOf(ports: K8sAttachPorts): {
 
   /** Hands on the pod's container the user picks, with the context of that moment. */
   async function selected(
-    pod: K8sPod,
+    listedPod: K8sPod,
     placeholder: string,
     cancellation: AbortSignal,
   ): Promise<void> {
-    const container = await containerOf(pod, placeholder);
+    const container = await containerOf(listedPod, placeholder);
     if (container === undefined) {
       return;
     }
@@ -143,8 +143,8 @@ export function k8sAttachCommandsOf(ports: K8sAttachPorts): {
     }
     await ports.attach({
       context: context.name,
-      namespace: pod.namespace,
-      pod: pod.name,
+      namespace: listedPod.namespace,
+      podName: listedPod.name,
       container,
     });
   }
@@ -156,8 +156,8 @@ export function k8sAttachCommandsOf(ports: K8sAttachPorts): {
       picker.reveal();
     };
     const listing = new AbortController();
-    void picker.chosen.then(pod => {
-      if (pod === undefined) {
+    void picker.chosen.then(picked => {
+      if (picked === undefined) {
         listing.abort();
       }
     });
@@ -183,15 +183,15 @@ export function k8sAttachCommandsOf(ports: K8sAttachPorts): {
       return;
     }
     picker.fill(
-      listed.pods.map(pod => ({
-        label: pod.name,
-        description: pod.namespace,
-        value: pod,
+      listed.pods.map(each => ({
+        label: each.name,
+        description: each.namespace,
+        value: each,
       })),
     );
-    const pod = await picker.chosen;
-    if (pod !== undefined) {
-      await selected(pod, translate(K8S_TEMPLATES.S312), listing.signal);
+    const picked = await picker.chosen;
+    if (picked !== undefined) {
+      await selected(picked, translate(K8S_TEMPLATES.S312), listing.signal);
     }
   }
 
@@ -203,9 +203,9 @@ export function k8sAttachCommandsOf(ports: K8sAttachPorts): {
       await listingFailed(listed.detail);
       return;
     }
-    const pod = listed.kind === 'listed' ? listed.pods[0] : undefined;
-    if (pod !== undefined) {
-      await selected(pod, translate(K8S_TEMPLATES.S064), listing.signal);
+    const first = listed.kind === 'listed' ? listed.pods[0] : undefined;
+    if (first !== undefined) {
+      await selected(first, translate(K8S_TEMPLATES.S064), listing.signal);
     }
   }
 

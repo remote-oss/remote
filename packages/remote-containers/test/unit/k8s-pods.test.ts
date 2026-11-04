@@ -34,7 +34,7 @@ describe('the pods of a kubectl answer (card containers-190, #2116)', () => {
       ),
     );
     deepStrictEqual(
-      pods?.map(pod => [pod.name, pod.namespace]),
+      pods?.map(each => [each.name, each.namespace]),
       [
         ['api', 'shop'],
         ['db', 'shop'],
@@ -75,7 +75,7 @@ describe('the pods of a kubectl answer (card containers-190, #2116)', () => {
       status: {phase: 'Succeeded'},
     };
     deepStrictEqual(
-      podsOf(listOf(pending, done))?.map(pod => pod.name),
+      podsOf(listOf(pending, done))?.map(each => each.name),
       ['finished', 'waiting'],
     );
   });
@@ -84,7 +84,7 @@ describe('the pods of a kubectl answer (card containers-190, #2116)', () => {
     deepStrictEqual(
       [
         podsOf(JSON.stringify(podJson('solo', 'ns', [['app', 'img']])))?.map(
-          pod => pod.name,
+          each => each.name,
         ),
         podsOf(
           listOf(
@@ -94,7 +94,7 @@ describe('the pods of a kubectl answer (card containers-190, #2116)', () => {
             {metadata: 'x'},
             podJson('kept', 'ns', []),
           ),
-        )?.map(pod => pod.name),
+        )?.map(each => each.name),
       ],
       [['solo'], ['kept']],
     );
@@ -114,7 +114,7 @@ describe('the pods of a kubectl answer (card containers-190, #2116)', () => {
           {metadata: {name: 'a'}, spec: {containers: [{name: 'c'}, 3]}},
           {metadata: {name: 'b'}, spec: 'x'},
         ),
-      )?.map(pod => [pod.name, pod.namespace, pod.containers]),
+      )?.map(each => [each.name, each.namespace, each.containers]),
       [
         ['a', '', [{name: 'c', image: ''}]],
         ['b', '', []],

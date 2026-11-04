@@ -120,7 +120,7 @@ function pathOf(
   return name === undefined ? '' : (environment[name] ?? '');
 }
 
-/** The detail of a program that could not start: Node's message, or the reference's sentence on native Windows. */
+/** The detail of a program that could not start: Node's message, or the sentence the Kubernetes explorer shows for a missing program on native Windows. */
 function startFailureOf(
   detail: string,
   ports: KubectlPorts,
@@ -144,12 +144,12 @@ function definedEntries(
 
 /** The kubectl host of one window: its environment is probed once, and its listings are bounded. */
 export function kubectlHostOf(ports: KubectlPorts): {
-  listPods(
+  listPods: (
     request: PodRequest | undefined,
     cancellation: AbortSignal,
-  ): Promise<PodListing>;
+  ) => Promise<PodListing>;
   /** The kubeconfig's current context, or why `kubectl` doesn't give one. */
-  currentContext(cancellation: AbortSignal): Promise<ContextAnswer>;
+  currentContext: (cancellation: AbortSignal) => Promise<ContextAnswer>;
 } {
   const bounds = ports.bounds ?? {
     listing: KUBECTL_BOUND_MILLISECONDS,
@@ -235,11 +235,11 @@ export function kubectlHostOf(ports: KubectlPorts): {
     cancellation: AbortSignal,
   ): Promise<PodListing> {
     const argv = listArguments(request);
-    const run = await runKubectl(argv, cancellation);
-    if (run.kind !== 'printed') {
-      return run;
+    const outcome = await runKubectl(argv, cancellation);
+    if (outcome.kind !== 'printed') {
+      return outcome;
     }
-    const pods = podsOf(run.stdout);
+    const pods = podsOf(outcome.stdout);
     return pods === undefined
       ? {
           kind: 'failed',
@@ -252,14 +252,14 @@ export function kubectlHostOf(ports: KubectlPorts): {
     cancellation: AbortSignal,
   ): Promise<ContextAnswer> {
     const argv = ['config', 'current-context'];
-    const run = await runKubectl(argv, cancellation);
-    if (run.kind === 'cancelled') {
+    const outcome = await runKubectl(argv, cancellation);
+    if (outcome.kind === 'cancelled') {
       return {kind: 'failed', detail: failureOf(argv, 'Cancelled.')};
     }
-    if (run.kind === 'failed') {
-      return run;
+    if (outcome.kind === 'failed') {
+      return outcome;
     }
-    const name = run.stdout.trim();
+    const name = outcome.stdout.trim();
     return name === ''
       ? {kind: 'failed', detail: failureOf(argv, 'No current context.')}
       : {kind: 'context', name};
