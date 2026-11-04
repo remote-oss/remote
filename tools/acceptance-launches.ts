@@ -1236,6 +1236,13 @@ export function launchesOf(root: string): Launch[] {
       label: 'containers-volume',
       suite: 'containers-volume',
     },
+    // The editor starts with two variables of its own, one set and one empty, which a configuration's references read.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-config',
+      suite: 'containers-config',
+      environment: {C112_SET: 'from-host', C112_EMPTY: ''},
+    },
     {
       ...CONTAINERS_LAUNCH,
       label: 'containers-explorer',

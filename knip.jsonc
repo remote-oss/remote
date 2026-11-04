@@ -85,6 +85,7 @@
         "containers-env-ctx/*.test.ts",
         "containers-index/*.test.ts",
         "containers-volume/*.test.ts",
+        "containers-config/*.test.ts",
         "containers-explorer/*.test.ts",
         "containers-ports/*.test.ts",
         "containers-features/*.test.ts",

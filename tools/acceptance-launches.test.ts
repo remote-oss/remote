@@ -160,6 +160,7 @@ function labelsFromExplorer(): string[] {
     'containers-trust',
     'containers-nodocker',
     'containers-volume',
+    'containers-config',
     'containers-explorer',
     'containers-ports',
     'containers-features',
@@ -473,6 +474,12 @@ describe('the launches of the VSCodium run', () => {
           undefined,
         ],
         [
+          'containers-config',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
+        [
           'containers-explorer',
           ['remote-oss.remote-containers', 'remote-oss.remote-explorer'],
           true,
@@ -643,6 +650,13 @@ describe('the launches of the VSCodium run', () => {
         [
           'containers-volume',
           'containers-volume',
+          shared,
+          undefined,
+          undefined,
+        ],
+        [
+          'containers-config',
+          'containers-config',
           shared,
           undefined,
           undefined,
@@ -819,6 +833,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-trust',
         'containers-nodocker',
         'containers-volume',
+        'containers-config',
         'containers-explorer',
         'containers-ports',
         'containers-features',
@@ -1891,7 +1906,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-72, containers-70, containers-80, tooling-92: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, containers-features also trusts the run’s download host certificate, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context and containers-trust give the Docker configuration of their own, containers-nodocker also a PATH with no docker, and no other containers launch sets an environment', () => {
+  it('containers-72, containers-70, containers-80, tooling-92: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, containers-features also trusts the run’s download host certificate, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context and containers-trust give the Docker configuration of their own, containers-config sets a host variable and an empty one for the references of coverage-112, containers-nodocker also a PATH with no docker, and no other containers launch sets an environment', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -1911,6 +1926,7 @@ describe('the platform cases (card coverage-12)', () => {
             PATH: '<run>/nodocker-bin',
           },
         ],
+        ['containers-config', {C112_SET: 'from-host', C112_EMPTY: ''}],
         ['containers-ports', {PATH: '<run>/xdg-bin:<path>'}],
         [
           'containers-features',
