@@ -21,6 +21,7 @@ export const FAILURE_TEMPLATES = {
   S104: "Current user does not have permission to run 'docker'. Try adding the user to the 'docker' group.",
   S144: 'Docker returned an error. Make sure the Docker daemon is running and select an option how to proceed.',
   S158: 'Edit {0} Locally',
+  S159: 'Edit devcontainer.json in Recovery Container',
   S163: 'Empty feature id',
   S176: 'Failed to checkout the repository {0}.',
   S193: 'Git clone failed. {0}',

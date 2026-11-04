@@ -24,6 +24,8 @@ export interface DevContainerVolume extends PinnedEngine {
   cloneInfo?: {urlToClone: string; ref?: string};
   /** Whether the window explores the volume instead of opening a dev container in it. */
   inspectVolume: boolean;
+  /** Whether the window is the recovery container of the volume, which edits the configuration and never clones or builds. */
+  recovery?: true;
 }
 
 /** The payload of a volume target: its JSON text, members in a fixed order, as lowercase hex. */
@@ -34,6 +36,7 @@ export function volumePayloadOf(target: DevContainerVolume): string {
     folder: target.folder,
     ...(target.cloneInfo === undefined ? {} : {cloneInfo: target.cloneInfo}),
     inspectVolume: target.inspectVolume,
+    ...(target.recovery === true ? {recovery: true} : {}),
     ...pinnedSettingsOf(target),
   });
   return Buffer.from(text, 'utf8').toString('hex');
@@ -81,7 +84,8 @@ export function volumeTargetOf(
     typeof record.folder !== 'string' ||
     typeof record.inspectVolume !== 'boolean' ||
     cloneInfo === false ||
-    engine === false
+    engine === false ||
+    !(record.recovery === undefined || record.recovery === true)
   ) {
     return undefined;
   }
@@ -92,6 +96,7 @@ export function volumeTargetOf(
     folder: record.folder,
     ...(cloneInfo === undefined ? {} : {cloneInfo}),
     inspectVolume: record.inspectVolume,
+    ...(record.recovery === true ? {recovery: true as const} : {}),
     ...engine,
   };
 }

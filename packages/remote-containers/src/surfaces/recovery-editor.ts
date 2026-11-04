@@ -38,6 +38,7 @@ export function recoveryPortsOf<Address>(
     | 'fileExists'
     | 'storePausedRetry'
     | 'rebuildContainer'
+    | 'openRecoveryContainer'
     | 'logger'
   >,
 ): Omit<RecoveryPorts, 'disconnected'> {

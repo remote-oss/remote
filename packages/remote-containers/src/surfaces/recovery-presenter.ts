@@ -71,6 +71,8 @@ export interface RecoveryPorts {
   /** Reopens the folder on this machine, in this window. */
   openLocally(folder: string): PromiseLike<unknown>;
   reloadWindow(): PromiseLike<unknown>;
+  /** Reloads this window into the recovery container of the volume it is a clone in. */
+  openRecoveryContainer(): PromiseLike<unknown>;
   /** Closes the remote connection, leaving an empty local window, as core's own command does. */
   closeRemote(): PromiseLike<unknown>;
   openRecent(): PromiseLike<unknown>;
@@ -155,6 +157,8 @@ export function recoveryPresenterOf(
       await editLocally(item.folder);
     } else if (item?.action === 'openRecent') {
       await ports.openRecent();
+    } else if (item?.action === 'recovery') {
+      await ports.openRecoveryContainer();
     } else if (item?.action === 'openRepository') {
       ports.logger.info('Open Repository opens nothing further');
     } else if (item?.action === 'openDocumentation') {
@@ -209,6 +213,8 @@ export function recoveryPresenterOf(
         await editLocally(button.folder);
       } else if (button?.action === 'closeRemote') {
         await ports.closeRemote();
+      } else if (button?.action === 'recovery') {
+        await ports.openRecoveryContainer();
       } else if (button?.action === 'learnMore') {
         await ports.openExternal(button.address ?? CONTAINERS_REQUIREMENTS);
         ports.disconnected();

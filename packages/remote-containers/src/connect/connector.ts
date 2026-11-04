@@ -41,6 +41,7 @@ import {
   exploredVolumeNameValid,
   exploreIdLabels,
 } from '../volumes/explore-definition.ts';
+import {resolveRecovery} from '../volumes/recovery-resolve.ts';
 import {
   resolveVolume,
   type VolumeContainerRequest,
@@ -255,6 +256,12 @@ export interface VolumeConnectDependencies {
    * a local one.
    */
   consent(): Promise<boolean>;
+  /** Whether the user asked for the recovery of `volumeName`, in a failing clone of it. */
+  recoveryPicked(volumeName: string): boolean;
+  /** The file the synthetic configuration of the recovery container of `volumeName` lies in. */
+  recoveryConfigFile(volumeName: string): string;
+  /** Writes `text` to `file`, replacing it and making its folder. */
+  writeRecoveryFile(file: string, text: string): Promise<void>;
   /** Shows that only the latest commits of `repository` were cloned. */
   showShallow(repository: string): void;
   /**
@@ -1750,7 +1757,7 @@ export function containerConnectorOf(
     const cliEnvironment = {...dependencies.editorEnvironment, ...environment};
     const dockerFile = executable.file;
     const rebuild = await takenRebuild(input);
-    if (target.inspectVolume) {
+    if (target.inspectVolume && target.recovery !== true) {
       return connectExplored(
         {volumes, payload, target, settings, engine, dockerFile},
         {environment, cliEnvironment, rebuild, cancellation},
@@ -1762,6 +1769,7 @@ export function containerConnectorOf(
       request: VolumeContainerRequest,
       configText: string,
     ): {bridge: CliBridge; target: CliTarget} {
+      const recovery = target.recovery === true;
       return {
         bridge: volumes.hostBridge(
           configText,
@@ -1770,10 +1778,12 @@ export function containerConnectorOf(
         ),
         target: {
           workspaceFolder: standIn.folder,
-          configFile: join(
-            standIn.folder,
-            request.configFile.slice(request.folder.length + 1),
-          ),
+          configFile: recovery
+            ? request.configFile
+            : join(
+                standIn.folder,
+                request.configFile.slice(request.folder.length + 1),
+              ),
           dockerPath: dockerFile,
           idLabels: request.idLabels,
           mountWorkspaceGitRoot: true,
@@ -1787,29 +1797,18 @@ export function containerConnectorOf(
         },
       };
     }
-    const resolution = await resolveVolume(
-      {
+    /** Prepares the dev container: `up` runs in the bootstrap container, or on the host when there is none. */
+    function prepareContainer(
+      bootstrap: string | undefined,
+      request: VolumeContainerRequest,
+      configText: string,
+    ): Promise<ContainerOutcome> {
+      const pass = hostPassOf(request, configText);
+      lifecycle = dependencies.lifecycleFor(
         engine,
-        options: {cancellation},
-        logger,
-        settings: () => volumes.bootstrapSettings(),
-        buildContext: () => volumes.buildContext(),
-        typed: typedPayload => volumes.typed(typedPayload),
-        clearTyped: typedPayload => volumes.clearTyped(typedPayload),
-        addConfiguration: (bootstrap, folder) =>
-          volumes.addConfiguration(bootstrap, folder, {
-            host: engine,
-            dockerPath: dockerFile,
-          }),
-        onCloning: () => {
-          logger.info('Cloning Repository');
-          phases.tell({name: 'cloningRepository'});
-        },
-        prepare: (bootstrap, request, configText) => {
-          const pass = hostPassOf(request, configText);
-          lifecycle = dependencies.lifecycleFor(
-            engine,
-            volumes.bootstrapBridge(
+        bootstrap === undefined
+          ? pass.bridge
+          : volumes.bootstrapBridge(
               bootstrap,
               request.workspace,
               cliEnvironment,
@@ -1818,27 +1817,64 @@ export function containerConnectorOf(
                 dockerPath: dockerFile,
               },
             ),
-            dependencies.lifecyclePresenter,
-            {
-              // eslint-disable-next-line id-length -- the stage's bridge is named cli, as the lifecycle's own
-              cli: pass.bridge,
-              targetOf: upTarget => ({...upTarget, ...pass.target}),
-              ended: () => {
-                void standIn.dispose();
-              },
-            },
-          );
-          return lifecycle.prepare(
-            volumeRequestOf(request, settings, rebuild),
-            logStep,
-            logCliEvent,
-            cancellation,
-          );
+        dependencies.lifecyclePresenter,
+        {
+          // eslint-disable-next-line id-length -- the stage's bridge is named cli, as the lifecycle's own
+          cli: pass.bridge,
+          targetOf: upTarget => ({...upTarget, ...pass.target}),
+          ended: () => {
+            void standIn.dispose();
+          },
         },
-      },
-      payload,
-      target,
-    );
+      );
+      return lifecycle.prepare(
+        volumeRequestOf(request, settings, rebuild),
+        logStep,
+        logCliEvent,
+        cancellation,
+      );
+    }
+    const stepPorts = {
+      engine,
+      options: {cancellation},
+      logger,
+      settings: () => volumes.bootstrapSettings(),
+      buildContext: () => volumes.buildContext(),
+    };
+    const resolution =
+      target.recovery === true
+        ? await resolveRecovery(
+            {
+              ...stepPorts,
+              picked: volumeName => volumes.recoveryPicked(volumeName),
+              configFileOf: volumeName =>
+                volumes.recoveryConfigFile(volumeName),
+              standInFolder: standIn.folder,
+              writeFile: (file, text) => volumes.writeRecoveryFile(file, text),
+              prepare: (request, configText) =>
+                prepareContainer(undefined, request, configText),
+            },
+            target,
+          )
+        : await resolveVolume(
+            {
+              ...stepPorts,
+              typed: typedPayload => volumes.typed(typedPayload),
+              clearTyped: typedPayload => volumes.clearTyped(typedPayload),
+              addConfiguration: (bootstrap, folder) =>
+                volumes.addConfiguration(bootstrap, folder, {
+                  host: engine,
+                  dockerPath: dockerFile,
+                }),
+              onCloning: () => {
+                logger.info('Cloning Repository');
+                phases.tell({name: 'cloningRepository'});
+              },
+              prepare: prepareContainer,
+            },
+            payload,
+            target,
+          );
     if (resolution.kind !== 'prepared') {
       await standIn.dispose();
       return resolution.kind === 'failed'
@@ -1867,11 +1903,13 @@ export function containerConnectorOf(
       },
       cancellation,
     );
-    void engine.run(
-      bootstrapRemoveArguments(resolution.bootstrap),
-      {kind: 'none'},
-      {cancellation: new AbortController().signal},
-    );
+    if (resolution.bootstrap !== undefined) {
+      void engine.run(
+        bootstrapRemoveArguments(resolution.bootstrap),
+        {kind: 'none'},
+        {cancellation: new AbortController().signal},
+      );
+    }
     if ('connectionToken' in connected && resolution.shallow) {
       volumes.showShallow(target.repositoryPath);
     }

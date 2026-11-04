@@ -18,6 +18,7 @@ export function inertRecoveryPorts(
     openRecent: () => Promise.resolve(),
     storePausedRetry: () => Promise.resolve(),
     rebuildContainer: () => Promise.resolve(),
+    openRecoveryContainer: () => Promise.resolve(),
     openExternal: () => Promise.resolve(),
     openSetting: () => Promise.resolve(),
     later: () => undefined,

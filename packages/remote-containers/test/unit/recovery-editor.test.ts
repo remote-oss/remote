@@ -45,6 +45,7 @@ function editor(answer?: string) {
     fileExists: () => Promise.resolve(true),
     storePausedRetry: () => Promise.resolve(),
     rebuildContainer: () => Promise.resolve(),
+    openRecoveryContainer: () => Promise.resolve(),
     logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
   });
   return {ports, calls};

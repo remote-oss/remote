@@ -142,6 +142,10 @@ function presenting(script: Script = {}) {
         calls.push('rebuildContainer');
         return Promise.resolve();
       },
+      openRecoveryContainer: () => {
+        calls.push('openRecoveryContainer');
+        return Promise.resolve();
+      },
       openExternal: address => {
         calls.push(`openExternal ${address}`);
         return Promise.resolve();
@@ -699,7 +703,7 @@ describe('the failure presenter C8 (card containers-11)', () => {
         [scene.calls, scene.outcome],
         [
           [
-            'showError |Git clone failed. fatal: no|Retry,Close Remote,More Actions... (close)',
+            'showError |Git clone failed. fatal: no|Retry,Close Remote,Edit devcontainer.json in Recovery Container,More Actions... (close)',
             'closeRemote',
           ],
           'handled',
@@ -723,11 +727,47 @@ describe('the failure presenter C8 (card containers-11)', () => {
         [
           [
             'later',
-            'pick Pick an action to help resolve the problem.|Reload Window,Open Repository,Open Recent...,Open Documentation',
+            'pick Pick an action to help resolve the problem.|Reload Window,Edit devcontainer.json in Recovery Container,Open Repository,Open Recent...,Open Documentation',
           ],
           'Open Repository opens nothing further',
         ],
       );
+    });
+
+    it('F-0410 AC-14, AC-16: the four-button dialog offers the recovery container, and choosing it opens that container and keeps the window connected to nothing else', async () => {
+      const scene = await present(cloneFailed('fatal: no'), {
+        target: undefined,
+        volume: true,
+        errors: ['Edit devcontainer.json in Recovery Container'],
+      });
+      deepStrictEqual(
+        [scene.calls.slice(1), scene.outcome],
+        [['openRecoveryContainer'], 'handled'],
+      );
+    });
+
+    it('F-0410 AC-16c: More Actions... has five items, six with Rebuild Container after Reload Window when a container exists, and the recovery item opens the recovery container', async () => {
+      const found = await present(cloneFailed('fatal: no'), {
+        target: undefined,
+        volume: true,
+        failed: {containerId: 'c1', paused: false},
+        errors: ['More Actions...'],
+        picks: ['Edit devcontainer.json in Recovery Container'],
+      });
+      await found.flush();
+      deepStrictEqual(found.calls.slice(1), [
+        'later',
+        'pick Pick an action to help resolve the problem.|Reload Window,Rebuild Container,Edit devcontainer.json in Recovery Container,Open Repository,Open Recent...,Open Documentation',
+        'openRecoveryContainer',
+      ]);
+    });
+
+    it('F-0410 AC-14: a window that is no clone in a volume is not offered the recovery container', async () => {
+      const scene = await present(cloneFailed('fatal: no'), {
+        volume: false,
+        errors: ['Retry'],
+      });
+      deepStrictEqual(scene.calls[0]?.includes('Recovery Container'), false);
     });
   });
 });

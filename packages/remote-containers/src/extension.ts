@@ -9,6 +9,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  rename,
   rm,
   stat,
   writeFile,
@@ -129,6 +130,7 @@ import {
   cloneFromLink,
   cloneInUniqueVolume,
   type CloneTrustPorts,
+  volumeWindowUriOf,
 } from './volumes/clone-command.ts';
 import {
   clearTypedSource,
@@ -153,6 +155,11 @@ import {runHostProgram} from './volumes/host-program.ts';
 import {precheck} from './volumes/precheck.ts';
 import {sourceRowsOf} from './volumes/source-pick.ts';
 import {githubOfferOf, pickGithubRepository} from './volumes/github-source.ts';
+import {recordRecoveryPick, recoveryPicked} from './volumes/recovery-record.ts';
+import {
+  recoveryConfigFileOf,
+  recoveryTargetOf,
+} from './volumes/recovery-container.ts';
 import {volumeTargetOf} from './volumes/volume-payload.ts';
 import {
   type AttachPicker,
@@ -2241,6 +2248,20 @@ export async function activate(
           }
           return added;
         },
+        recoveryPicked: volumeName =>
+          recoveryPicked(context.globalState, volumeName),
+        recoveryConfigFile: volumeName =>
+          recoveryConfigFileOf(
+            context.globalStorageUri.fsPath,
+            manifest.version,
+            volumeName,
+          ),
+        writeRecoveryFile: async (file, text) => {
+          await mkdir(path.dirname(file), {recursive: true});
+          const written = `${file}.${randomUUID()}.tmp`;
+          await writeFile(written, text, {flag: 'wx'});
+          await rename(written, file);
+        },
         showShallow: repository => {
           void vscode.window.showWarningMessage(
             ownText('historyNotFetched', [repository], translate),
@@ -2497,6 +2518,26 @@ export async function activate(
             storePausedRetry(context.globalState, containerId, Date.now()),
           rebuildContainer: () =>
             vscode.commands.executeCommand(commands.rebuildContainer.id),
+          openRecoveryContainer: async () => {
+            const authority = vscode.env.remoteAuthority ?? '';
+            const volume = authority.startsWith('dev-container+')
+              ? volumeTargetOf(authority.slice('dev-container+'.length))
+              : undefined;
+            const recovery =
+              volume === undefined
+                ? undefined
+                : recoveryTargetOf(volume, 'typed');
+            if (recovery === undefined) {
+              logger.info('the window is no clone in a volume to recover');
+              return;
+            }
+            await recordRecoveryPick(context.globalState, recovery.volumeName);
+            await vscode.commands.executeCommand(
+              'vscode.openFolder',
+              vscode.Uri.parse(volumeWindowUriOf(recovery)),
+              {forceReuseWindow: true},
+            );
+          },
           logger,
         }),
         translate,

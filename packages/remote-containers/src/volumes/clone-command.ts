@@ -93,7 +93,7 @@ function uniqueVolumeTargetOf(
 }
 
 /** The URI of a volume target's window: its folder under `/workspaces`. */
-function volumeWindowUriOf(target: DevContainerVolume): string {
+export function volumeWindowUriOf(target: DevContainerVolume): string {
   return `${AUTHORITY_PREFIX}${volumePayloadOf(target)}/workspaces/${encodeURIComponent(target.folder)}`;
 }
 

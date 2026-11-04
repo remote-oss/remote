@@ -257,5 +257,6 @@
   "Select pod": "Select pod",
   "Select container": "Select container",
   "Choose Container": "Choose Container",
-  "Inspect Volume": "Inspect Volume"
+  "Inspect Volume": "Inspect Volume",
+  "Edit devcontainer.json in Recovery Container": "Edit devcontainer.json in Recovery Container"
 }
