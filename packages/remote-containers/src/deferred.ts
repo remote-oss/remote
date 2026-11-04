@@ -7,9 +7,10 @@ export function deferred<Value>(): {
   promise: Promise<Value>;
   resolve: (value: Value) => void;
 } {
-  const gate: {resolve: (value: Value) => void} = {resolve: () => undefined};
+  const gates: Array<(value: Value) => void> = [];
   const promise = new Promise<Value>(resolve => {
-    gate.resolve = resolve;
+    gates.push(resolve);
   });
-  return {promise, resolve: value => gate.resolve(value)};
+  const [resolve] = gates as [(value: Value) => void];
+  return {promise, resolve};
 }
