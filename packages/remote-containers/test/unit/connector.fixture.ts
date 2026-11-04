@@ -219,6 +219,8 @@ export interface Scene {
   volumeCalls: string[];
   /** Whether the volume dependencies say the payload's source was typed. */
   typedSource: boolean;
+  /** The volumes whose recovery the user asked for. */
+  recoveryPicks: string[];
   /** Whether the profile gives the clone's trust confirmation. */
   consentGiven: boolean;
   /** The background stages the lifecycles were made with, in order. */
@@ -297,6 +299,7 @@ function volumeDependenciesOf(
       );
       return bridge;
     },
+    recoveryPicked: volumeName => scene.recoveryPicks.includes(volumeName),
     recoveryConfigFile: volumeName =>
       `/tmp/recovery/${volumeName}/.devcontainer.json`,
     writeRecoveryFile: (file, text) => {
@@ -411,6 +414,7 @@ export function sceneOf(
     bootstrapAnswer: () => undefined,
     volumeCalls: [],
     typedSource: true,
+    recoveryPicks: [],
     consentGiven: true,
     backgroundStages: [],
     ...overrides,

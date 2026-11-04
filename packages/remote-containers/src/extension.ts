@@ -155,6 +155,7 @@ import {runHostProgram} from './volumes/host-program.ts';
 import {precheck} from './volumes/precheck.ts';
 import {sourceRowsOf} from './volumes/source-pick.ts';
 import {githubOfferOf, pickGithubRepository} from './volumes/github-source.ts';
+import {recordRecoveryPick, recoveryPicked} from './volumes/recovery-record.ts';
 import {
   recoveryConfigFileOf,
   recoveryTargetOf,
@@ -2247,6 +2248,8 @@ export async function activate(
           }
           return added;
         },
+        recoveryPicked: volumeName =>
+          recoveryPicked(context.globalState, volumeName),
         recoveryConfigFile: volumeName =>
           recoveryConfigFileOf(
             context.globalStorageUri.fsPath,
@@ -2528,6 +2531,7 @@ export async function activate(
               logger.info('the window is no clone in a volume to recover');
               return;
             }
+            await recordRecoveryPick(context.globalState, recovery.volumeName);
             await vscode.commands.executeCommand(
               'vscode.openFolder',
               vscode.Uri.parse(volumeWindowUriOf(recovery)),

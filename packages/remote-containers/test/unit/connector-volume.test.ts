@@ -144,7 +144,7 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
     );
   });
 
-  it('F-0303 AC-14: a recovery window runs up on the host from the synthetic file, with no bootstrap and no clone, and opens trusted', async () => {
+  it('F-0303 AC-14: a recovery window runs up on the host from the synthetic file, with no bootstrap and no clone, and follows core’s trust', async () => {
     const recovery = volumePayloadOf({
       kind: 'volume',
       repositoryPath: 'https://github.com/o/r',
@@ -159,6 +159,7 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
       }
       return argv[0] === 'volume' ? exited(0) : undefined;
     });
+    scene.recoveryPicks.push('r-volume');
     const connected = await scene.connector.connect(inputOf(recovery));
     await new Promise(setImmediate);
     deepStrictEqual(
@@ -179,7 +180,7 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
         removed: linesOf(scene).some(line => line.startsWith('rm ')),
       },
       {
-        trusted: true,
+        trusted: false,
         prepared: [
           [
             '/tmp/stand-in',
@@ -194,6 +195,53 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
         bridges: [],
         removed: false,
       },
+    );
+  });
+
+  it('F-0410 AC-14 (ruling-2162-recovery-gate): a recovery payload for a volume the user never asked to recover is refused, with no up, no container and no engine call', async () => {
+    const crafted = volumePayloadOf({
+      kind: 'volume',
+      repositoryPath: 'https://github.com/o/r',
+      volumeName: 'someone-elses-volume',
+      folder: 'r',
+      inspectVolume: true,
+      recovery: true,
+    });
+    const scene = volumeScene();
+    const result = await scene.connector.connect(inputOf(crafted));
+    deepStrictEqual(
+      {
+        connected: 'connectionToken' in result,
+        prepared: scene.prepared.length,
+        writes: scene.volumeCalls.filter(call =>
+          call.startsWith('writeRecoveryFile'),
+        ),
+        volumeOrImageCalls: linesOf(scene).filter(line =>
+          /^(volume|build|pull|run|create)/.test(line),
+        ),
+      },
+      {connected: false, prepared: 0, writes: [], volumeOrImageCalls: []},
+    );
+  });
+
+  it('F-0410 AC-16b (ruling-2162-recovery-gate): a picked recovery reconnects on a reload, and its payload is the same', async () => {
+    const recovery = volumePayloadOf({
+      kind: 'volume',
+      repositoryPath: 'https://github.com/o/r',
+      volumeName: 'r-volume',
+      folder: 'r',
+      inspectVolume: true,
+      recovery: true,
+    });
+    const scene = volumeScene(argv =>
+      ['build', 'volume'].includes(String(argv[0])) ? exited(0) : undefined,
+    );
+    scene.recoveryPicks.push('r-volume');
+    const first = await scene.connector.connect(inputOf(recovery));
+    const second = await scene.connector.connect(inputOf(recovery));
+    deepStrictEqual(
+      [first, second].map(result => 'connectionToken' in result),
+      [true, true],
     );
   });
 

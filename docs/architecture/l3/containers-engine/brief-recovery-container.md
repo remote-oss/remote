@@ -57,6 +57,10 @@ ADR-0010. F-0410's setup-failure dialog itself is built (C8, release 1).
 ## 3. The window (C6, C10, lib-authority's labels)
 
 - **The payload** is brief-volumes §2.4's volume payload with one member of ours, `"recovery": true`.
+  - **A recorded pick** (`ruling-2162-recovery-gate`): when the user picks S159 in a failing Clone in Volume window, the
+    handler adds the volume's name to a `globalState` set of ours before it opens the recovery window. The recovery
+    resolve refuses a volume that isn't in the set: a log line and F-0410's generic failure, with no `up` and no
+    container. A reload of a picked recovery still works.
   - The member name is internal, not a setting, command or context key, so R-27's namespace rule doesn't apply.
   - A reload keeps it, and BR-10 holds: the window re-attaches to or restarts the same container, and never clones or
     builds.
@@ -67,7 +71,8 @@ ADR-0010. F-0410's setup-failure dialog itself is built (C8, release 1).
   - the repository's `.devcontainer/devcontainer.json` (or the root file) from the volume, as a preview;
   - and, in a second, unfocused group, the attempt's log, which the log terminal of release 1 already writes (6.1
     step 3).
-- **Trust:** a volume window, so C5's forced trust (F-0106 BR-13).
+- **Trust:** a recovery window follows core's workspace trust (athena on #2162, `ruling-2162-recovery-gate`): it isn't
+  forced trusted, because a window's payload can come from a link.
 - **The S372 notification:**
   - "Reopen in Container" (primary) | "Don't Show Again". It doesn't hide by itself;
   - the "Don't Show Again" flag is a `globalState` key of ours holding the set of volumes it was chosen for. It survives

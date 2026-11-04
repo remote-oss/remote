@@ -45,6 +45,7 @@ async function sceneOf(
     outcome?: ContainerOutcome;
     image?: string;
     pull?: boolean;
+    picked?: boolean;
   } = {},
 ): Promise<SceneRecord> {
   const sink = new MemorySink();
@@ -65,6 +66,7 @@ async function sceneOf(
       }),
       buildContext: () =>
         Promise.resolve({folder: '/ctx', dispose: () => Promise.resolve()}),
+      picked: () => options.picked ?? true,
       configFileOf: volumeName =>
         `/tmp/recovery/${volumeName}/.devcontainer.json`,
       standInFolder: '/tmp/stand-in',
@@ -169,6 +171,20 @@ describe('the resolve of a recovery container (card containers-160, #2017)', () 
         ['failed', 0, 0],
         ['failed', 0, 0],
       ],
+    );
+  });
+
+  it('F-0410 AC-14 (ruling-2162-recovery-gate): a volume whose recovery was not asked for is refused before any engine call, file or up', async () => {
+    const scene = await sceneOf({picked: false});
+    deepStrictEqual(
+      [
+        scene.resolution.kind,
+        scene.calls,
+        scene.files,
+        scene.requests,
+        scene.logLines.some(line => line.includes('was never asked for')),
+      ],
+      ['failed', [], [], [], true],
     );
   });
 

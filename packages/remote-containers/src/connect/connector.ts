@@ -254,6 +254,8 @@ export interface VolumeConnectDependencies {
    * a local one.
    */
   consent(): Promise<boolean>;
+  /** Whether the user asked for the recovery of `volumeName`, in a failing clone of it. */
+  recoveryPicked(volumeName: string): boolean;
   /** The file the synthetic configuration of the recovery container of `volumeName` lies in. */
   recoveryConfigFile(volumeName: string): string;
   /** Writes `text` to `file`, replacing it and making its folder. */
@@ -1815,6 +1817,7 @@ export function containerConnectorOf(
         ? await resolveRecovery(
             {
               ...stepPorts,
+              picked: volumeName => volumes.recoveryPicked(volumeName),
               configFileOf: volumeName =>
                 volumes.recoveryConfigFile(volumeName),
               standInFolder: standIn.folder,
@@ -1867,7 +1870,7 @@ export function containerConnectorOf(
         connectionId,
         hostPath: '',
         configFile: resolution.request.configFile,
-        trusted: !target.inspectVolume || target.recovery === true,
+        trusted: !target.inspectVolume,
       },
       cancellation,
     );

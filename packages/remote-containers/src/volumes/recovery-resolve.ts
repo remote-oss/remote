@@ -32,6 +32,8 @@ export interface RecoveryResolvePorts extends EngineStepPorts {
   buildContext(): Promise<BuildContext>;
   /** The file the synthetic configuration of `volumeName` is written to. */
   configFileOf(volumeName: string): string;
+  /** Whether the user asked for the recovery of `volumeName`, in a failing clone of it. */
+  picked(volumeName: string): boolean;
   /** The neutral folder on the host that the CLI is given as its workspace folder. */
   standInFolder: string;
   /** Writes `text` to `file`, replacing it and making its folder. */
@@ -55,6 +57,12 @@ export async function resolveRecovery(
     !plainFolder(target.folder)
   ) {
     ports.logger.info('the recovery container has no volume or folder');
+    return {kind: 'failed', failure: containerSetupFailed()};
+  }
+  if (!ports.picked(volumeName)) {
+    ports.logger.info(
+      `the recovery of the volume ${volumeName} was never asked for`,
+    );
     return {kind: 'failed', failure: containerSetupFailed()};
   }
   const inspected = await stepOf(ports, volumeInspectArguments(volumeName));
