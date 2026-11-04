@@ -18,13 +18,13 @@ describe('the files of the machine the extension runs on (card coverage-118)', (
   it('coverage-118: a path is a folder, a file or missing, and exists agrees with the kind', async () => {
     await inFolder(async folder => {
       const files = hostFiles();
-      const dir = path.join(folder, 'dir');
-      await files.makeFolder(dir);
+      const subdir = path.join(folder, 'dir');
+      await files.makeFolder(subdir);
       const file = path.join(folder, 'a.txt');
       await files.write(file, new Uint8Array([1, 2, 3]));
       deepStrictEqual(
         [
-          await files.kindOf(dir),
+          await files.kindOf(subdir),
           await files.kindOf(file),
           await files.kindOf(path.join(folder, 'none')),
           await files.exists(file),
@@ -48,18 +48,18 @@ describe('the files of the machine the extension runs on (card coverage-118)', (
   it('coverage-118: a listing gives each entry with its kind, a broken link is other, and an unlistable folder gives none', async () => {
     await inFolder(async folder => {
       const files = hostFiles();
-      const dir = path.join(folder, 'sub');
-      await files.makeFolder(path.join(dir, 'inner'));
-      await files.write(path.join(dir, 'one.txt'), new Uint8Array([1]));
-      symlinkSync(path.join(folder, 'nowhere'), path.join(dir, 'broken'));
+      const subdir = path.join(folder, 'sub');
+      await files.makeFolder(path.join(subdir, 'inner'));
+      await files.write(path.join(subdir, 'one.txt'), new Uint8Array([1]));
+      symlinkSync(path.join(folder, 'nowhere'), path.join(subdir, 'broken'));
       const locked = path.join(folder, 'locked');
       await files.makeFolder(locked);
       await files.write(path.join(locked, 'hidden.txt'), new Uint8Array([2]));
       chmodSync(locked, 0o111);
       try {
-        const listed = (await files.list(dir))
+        const listed = (await files.list(subdir))
           .map(each => [each.name, each.kind] as const)
-          .sort((a, b) => (a[0] < b[0] ? -1 : 1));
+          .sort((left, right) => (left[0] < right[0] ? -1 : 1));
         deepStrictEqual(
           [listed, await files.list(locked)],
           [

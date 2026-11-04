@@ -79,7 +79,7 @@ export function hostFiles(): AuthoringFiles {
       }
       return access(nearest, fileConstants.W_OK).then(
         () => undefined,
-        (caught: Error) => caught.message,
+        (caught: unknown) => (caught as Error).message,
       );
     },
   };
