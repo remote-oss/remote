@@ -470,6 +470,10 @@ interface ChannelTarget {
   created: boolean;
   /** The extensions the server installs when it starts. */
   defaultExtensions: readonly string[];
+  /** Whether the preview platform is told in the log whether or not this connect created the target. */
+  previewNoteAlways?: boolean;
+  /** Whether the extensions apply only when the remote user has no server data in the target yet. */
+  extensionsOncePerUser?: boolean;
   /** The merged configuration that the probe, `remoteEnv`, the dev port and the ports read; none for a target with none. */
   merged: Record<string, unknown> | undefined;
   settings: ReturnType<ContainerConnectorDependencies['settings']>;
@@ -1607,6 +1611,10 @@ export function containerConnectorOf(
         remoteUser: tail.remoteUser,
         volumeMounted: tail.volumeMounted,
         defaultExtensions: tail.defaultExtensions,
+        ...(tail.previewNoteAlways === true ? {previewNoteAlways: true} : {}),
+        ...(tail.extensionsOncePerUser === true
+          ? {extensionsOncePerUser: true}
+          : {}),
         devPort: devPortOf(merged),
         machineSettings: portAttributeSettings(merged),
         created: tail.created,
@@ -2106,8 +2114,40 @@ export function containerConnectorOf(
   }
 
   /**
-   * Connects an attached container: the warning, the engine checks, then C12's container step. The server and the
-   * connection that follow a container that is ready are not made here yet, so a ready container ends as a failure.
+   * The user an attached window works as: the merged `remoteUser`, else the container's own user. A user the container
+   * does not have, or one that cannot be told, is none.
+   */
+  async function attachedUserOf(
+    engine: EngineHost,
+    containerId: string,
+    merged: Record<string, unknown>,
+    cancellation: AbortSignal,
+  ): Promise<string | undefined> {
+    const written = merged.remoteUser;
+    let user = typeof written === 'string' && written !== '' ? written : '';
+    if (user === '') {
+      const asked = await engine.run(
+        ['exec', containerId, 'sh', '-c', 'id -un 2>/dev/null || id -u'],
+        {kind: 'none'},
+        {cancellation},
+      );
+      user =
+        asked.kind === 'ran' && asked.status === 0 ? asked.stdout.trim() : '';
+    }
+    if (user === '') {
+      return undefined;
+    }
+    const exists = await engine.run(
+      ['exec', '--user', 'root', containerId, 'id', '-u', '--', user],
+      {kind: 'none'},
+      {cancellation},
+    );
+    return exists.kind === 'ran' && exists.status === 0 ? user : undefined;
+  }
+
+  /**
+   * Connects an attached container: the pick gate, the engine checks, C12's container step, and then the connection
+   * every target ends in, as the container's own user and trusted; the id the container has is recorded once it holds.
    */
   async function connectAttached(
     attached: AttachedConnectDependencies,
@@ -2163,10 +2203,65 @@ export function containerConnectorOf(
     if (step.kind === 'failed') {
       return step.failure;
     }
-    logger.info(
-      `container ${shortId(step.container.id)} is set up; the server is not connected here yet`,
+    const {container, mergedConfiguration: merged} = step;
+    const remoteUser = await attachedUserOf(
+      engine,
+      container.id,
+      merged,
+      cancellation,
     );
-    return attachFailed();
+    if (remoteUser === undefined) {
+      logger.info(`the remote user of ${container.name} was not found`);
+      return isAborted(cancellation) ? cancelled() : attachFailed();
+    }
+    const settings = dependencies.settings();
+    const connected = await connectChannel(
+      {
+        payload,
+        channel: execChannelOf(engine, container.id, remoteUser),
+        rootChannel: execChannelOf(engine, container.id, 'root'),
+        remoteUser,
+        volumeMounted: false,
+        created: false,
+        defaultExtensions: newContainerExtensions(merged, settings),
+        previewNoteAlways: true,
+        extensionsOncePerUser: true,
+        merged,
+        settings,
+        trusted: true,
+        pinned: target,
+        name: undefined,
+        explored: false,
+        beforeStart: () => Promise.resolve(undefined),
+        openRelay: (server, onConnectionClosed) =>
+          dependencies.openRelay({
+            engine,
+            containerId: container.id,
+            remoteUser,
+            nodePath: server.nodePath,
+            relayPath: server.relayPath,
+            containerPort: server.port,
+            onConnectionClosed,
+          }),
+        inspect: signal => inspectedState(engine, container.id, signal),
+        tunnels: () => Promise.resolve([]),
+        target: {
+          hostPath: '',
+          remoteWorkspaceFolder: '',
+          containerId: container.id,
+          engine,
+          configFile: step.configFile ?? '',
+          created: false,
+          serviceDockerfile: undefined,
+        },
+        afterConnect: () => undefined,
+      },
+      cancellation,
+    );
+    if ('connectionToken' in connected) {
+      await attached.record.write(payload, container.id);
+    }
+    return connected;
   }
 
   /** The user the pod's container runs as: its name, else its numeric id; none when it cannot be told. */

@@ -8,7 +8,10 @@ import type {Logger} from 'lib-log';
 import {attachDialogOf, attachPickOf} from './attach-dialog.ts';
 import type {Translate} from './engine-dialogs.ts';
 import {chosenButton, type ErrorButton, pickedItem} from './choose.ts';
-import {CONTAINERS_DOCUMENTATION} from './recovery-presenter.ts';
+import {
+  CONTAINERS_DOCUMENTATION,
+  CONTAINERS_REQUIREMENTS,
+} from './recovery-presenter.ts';
 
 /** What the presenter shows and does. */
 export interface AttachRecoveryPorts {
@@ -63,6 +66,9 @@ export function attachRecoveryPresenterOf(
       await ports.reloadWindow();
     } else if (item?.action === 'openRecent') {
       await ports.openRecent();
+    } else if (item?.action === 'learnMore') {
+      await ports.openExternal(CONTAINERS_REQUIREMENTS);
+      await showQuickPick(failed);
     } else if (item?.action === 'openDocumentation') {
       await ports.openExternal(CONTAINERS_DOCUMENTATION);
       await showQuickPick(failed);
@@ -74,7 +80,7 @@ export function attachRecoveryPresenterOf(
       const dialog = attachDialogOf(failed, translate);
       const button = await chosenButton(
         ports,
-        '',
+        dialog.message,
         dialog.detail,
         dialog.buttons,
       );
@@ -89,6 +95,10 @@ export function attachRecoveryPresenterOf(
         await ports.closeRemote();
       } else if (button?.action === 'chooseContainer') {
         await ports.chooseContainer();
+      } else if (button?.action === 'learnMore') {
+        await ports.openExternal(CONTAINERS_REQUIREMENTS);
+        ports.disconnected();
+        ports.later(() => void showQuickPick(failed));
       } else {
         // More Actions..., and Escape, which the editor gives back as the choice of the close affordance.
         ports.disconnected();

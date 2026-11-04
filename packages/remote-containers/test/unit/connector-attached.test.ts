@@ -19,6 +19,12 @@ function attachedScene(state: string | undefined, alpine = 1): Scene {
         ? {kind: 'ran', status: 1, stdout: '', stderr: 'No such container'}
         : exits(0, inspectedJson('web', CONTAINER_ID, state));
     }
+    if (argv[0] === 'exec' && argv.includes('sh')) {
+      return exits(0, 'node\n');
+    }
+    if (argv[0] === 'exec' && argv.includes('id')) {
+      return exits(0, '1000\n');
+    }
     if (argv[0] === 'exec') {
       return exits(alpine);
     }
@@ -28,22 +34,98 @@ function attachedScene(state: string | undefined, alpine = 1): Scene {
 }
 
 describe('the connector of an attached container (card containers-163, #2030)', () => {
-  it('F-0601 AC-1 (c163-connector-ready): a running container is found, set up and left found for the recovery picks; the connect itself comes later', async () => {
+  it('F-0601 AC-1, AC-12 (c163-connector-ready): a running container is found, set up and connected, trusted, with its id recorded and found again for the recovery picks', async () => {
     const scene = attachedScene('running');
     const result = await scene.connector.connect(inputOf(PAYLOAD));
     deepStrictEqual(
       {
+        trusted: 'trusted' in result && result.trusted,
         connected: 'connectionToken' in result,
-        failure: 'kind' in result ? result.kind : undefined,
         setUps: scene.setUps,
         found: scene.connector.attachedContainer()?.name,
+        recorded: scene.attachedIds,
+        servers: scene.serverRequests.length,
       },
       {
-        connected: false,
-        failure: 'attachFailed',
+        trusted: true,
+        connected: true,
         setUps: [CONTAINER_ID],
         found: 'web',
+        recorded: {[PAYLOAD]: CONTAINER_ID},
+        servers: 1,
       },
+    );
+  });
+
+  it('F-0601 AC-12, F-0602 BR-4 (c163-connector-server): the server is installed for the merged remote user with no volume, the extensions once for each user and the preview line always; the container keeps no label, mount or volume', async () => {
+    const scene = attachedScene('running');
+    scene.setUpResult = {
+      kind: 'setUp',
+      mergedConfiguration: {
+        remoteUser: 'node',
+        customizations: {vscode: [{extensions: ['a.b']}]},
+      },
+    };
+    const exec = scene.bootstrapAnswer;
+    scene.bootstrapAnswer = argv => exec(argv);
+    await scene.connector.connect(inputOf(PAYLOAD));
+    const [request] = scene.serverRequests;
+    deepStrictEqual(
+      {
+        user: request?.remoteUser,
+        volume: request?.volumeMounted,
+        created: request?.created,
+        extensions: request?.defaultExtensions,
+        once: request?.extensionsOncePerUser,
+        preview: request?.previewNoteAlways,
+        engineCalls: scene.engineCalls
+          .map(call => call.argv[0])
+          .filter(each =>
+            ['run', 'create', 'commit', 'volume'].includes(String(each)),
+          ),
+      },
+      {
+        user: 'node',
+        volume: false,
+        created: false,
+        extensions: ['a.b'],
+        once: true,
+        preview: true,
+        engineCalls: [],
+      },
+    );
+  });
+
+  it('F-0601 AC-12, F-0602 7.E5 (c163-connector-user): without a merged remote user the container’s own user is the one, and a user the container does not have ends in the set-up failure with nothing installed', async () => {
+    const own = attachedScene('running');
+    const answer = own.bootstrapAnswer;
+    own.bootstrapAnswer = argv =>
+      argv[0] === 'exec' && argv.includes('sh')
+        ? exits(0, 'app\n')
+        : answer(argv);
+    await own.connector.connect(inputOf(PAYLOAD));
+    const missing = attachedScene('running');
+    missing.setUpResult = {
+      kind: 'setUp',
+      mergedConfiguration: {remoteUser: 'ghost'},
+    };
+    const known = missing.bootstrapAnswer;
+    missing.bootstrapAnswer = argv =>
+      argv.includes('id') ? exits(1) : known(argv);
+    const result = await missing.connector.connect(inputOf(PAYLOAD));
+    const silent = attachedScene('running');
+    const quiet = silent.bootstrapAnswer;
+    silent.bootstrapAnswer = argv =>
+      argv[0] === 'exec' && argv.includes('sh') ? exits(1) : quiet(argv);
+    const unknown = await silent.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [
+        own.serverRequests[0]?.remoteUser,
+        'kind' in result ? result.kind : undefined,
+        missing.serverRequests.length,
+        'kind' in unknown ? unknown.kind : undefined,
+      ],
+      ['app', 'attachFailed', 0, 'attachFailed'],
     );
   });
 
@@ -144,6 +226,23 @@ describe('the connector of an attached container (card containers-163, #2030)', 
         questions: 1,
         setUps: 2,
       },
+    );
+  });
+
+  it('F-0601 AC-1 (c163-connector-cancel-user): a connect cancelled while the remote user is looked for ends as cancelled, and installs nothing', async () => {
+    const scene = attachedScene('running');
+    const answer = scene.bootstrapAnswer;
+    scene.bootstrapAnswer = argv => {
+      if (argv[0] === 'exec' && argv.includes('sh')) {
+        scene.connector.cancel();
+        return exits(1);
+      }
+      return answer(argv);
+    };
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      ['kind' in result ? result.kind : undefined, scene.serverRequests.length],
+      ['cancelled', 0],
     );
   });
 });
