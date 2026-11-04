@@ -347,7 +347,7 @@ jobs:
       ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || (vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON))) ||
       'ubuntu-24.04' }}
-    timeout-minutes: 10
+    timeout-minutes: 20 # 10 cut the job on the pool with its variants still passing (2026-11-04)
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
