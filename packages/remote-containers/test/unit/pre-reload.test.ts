@@ -554,6 +554,16 @@ describe('the checks an open command runs before its reload (card coverage-117)'
     disallowedFeatures: [{featureIdPrefix: FEATURE}],
   });
 
+  /** A port value the scene does not check: it resolves to nothing. */
+  function noOperation(): Promise<undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  /** A translate port the scene does not check: the template itself. */
+  function identity(template: string): string {
+    return template;
+  }
+
   /** The command's scene: its pending refusal warning, its timers, and the checks' cancel. */
   interface CommandScene {
     warn: Pending<'learnMore' | 'cancel'>;
@@ -565,7 +575,7 @@ describe('the checks an open command runs before its reload (card coverage-117)'
   /** The command over its scene, whose chosen configuration asks for `FEATURE`. */
   function commandOf(): {
     scene: CommandScene;
-    run: () => Promise<BeforeReload>;
+    start: () => Promise<BeforeReload>;
   } {
     const sink = new MemorySink();
     const warn = pendingOf<'learnMore' | 'cancel'>();
@@ -577,8 +587,8 @@ describe('the checks an open command runs before its reload (card coverage-117)'
       cancels,
       lines: () => sink.lines.map(line => `${line.level}: ${line.message}`),
     };
-    const run = () =>
-      commandBeforeReload(
+    function start() {
+      return commandBeforeReload(
         {
           settings: {
             mountGitWorktreeCommonDir: () => false,
@@ -586,8 +596,8 @@ describe('the checks an open command runs before its reload (card coverage-117)'
             lockfile: () => undefined,
           },
           dialogs: {
-            showError: () => Promise.resolve(undefined),
-            openExternal: () => Promise.resolve(undefined),
+            showError: noOperation,
+            openExternal: noOperation,
             revealLog: () => undefined,
           },
           config: {
@@ -601,8 +611,7 @@ describe('the checks an open command runs before its reload (card coverage-117)'
                       : []
                   ).map(name => ({
                     name,
-                    kind: (name.endsWith('.json') ? 'file' : 'folder') as
-                      'file' | 'folder',
+                    kind: name.endsWith('.json') ? 'file' : 'folder',
                   })),
                 ),
               read: () => Promise.resolve(Buffer.from('{"image":"i"}')),
@@ -611,15 +620,15 @@ describe('the checks an open command runs before its reload (card coverage-117)'
             surfaces: {
               pick: () => Promise.resolve({kind: 'picked', index: 0}),
               dialogs: {
-                showError: () => Promise.resolve(undefined),
+                showError: noOperation,
                 revealLog: () => undefined,
               },
-              showWarning: () => Promise.resolve(undefined),
+              showWarning: noOperation,
               openPreview: () => Promise.resolve(),
             },
-            useTemplate: () => Promise.resolve(),
+            useTemplate: noOperation,
             compare: (left, right) => left.localeCompare(right, 'en'),
-            translate: template => template,
+            translate: identity,
           },
           bridge: {
             readConfiguration: () =>
@@ -636,11 +645,11 @@ describe('the checks an open command runs before its reload (card coverage-117)'
               cancels.push(cancel);
               void until;
             },
-            setTimer: (_milliseconds, callback) => {
+            setTimer: (milliseconds, callback) => {
               timers.push(callback);
               return () => undefined;
             },
-            translate: template => template,
+            translate: identity,
           },
           clock: () => 0,
           problematic: {
@@ -651,11 +660,11 @@ describe('the checks an open command runs before its reload (card coverage-117)'
               keep: () => undefined,
               now: () => 0,
               setTimer: () => () => undefined,
-              translate: template => template,
+              translate: identity,
               logger: createLogger(sink, {minimumLevel: () => 'info'}),
             },
             warn: () => warn.promise,
-            openExternal: () => Promise.resolve(undefined),
+            openExternal: noOperation,
           },
           logger: createLogger(sink, {minimumLevel: () => 'info'}),
         },
@@ -663,16 +672,17 @@ describe('the checks an open command runs before its reload (card coverage-117)'
         FOLDER,
         '/usr/bin/docker',
       );
-    return {scene, run};
+    }
+    return {scene, start};
   }
 
   it('coverage-117: a refusal warning that fails while the checks are not cancelled rethrows', async () => {
-    const {scene, run} = commandOf();
+    const {scene, start} = commandOf();
     scene.warn.reject(new Error('the dialog died'));
     scene.warn.promise.catch(() => undefined);
-    const running = run();
+    const running = start();
     const caught: unknown[] = [];
-    running.catch(reason => caught.push(reason));
+    running.catch((reason: unknown) => caught.push(reason));
     await settled();
     deepStrictEqual(
       caught.length === 1 && caught[0] instanceof Error && caught[0].message,
@@ -681,8 +691,8 @@ describe('the checks an open command runs before its reload (card coverage-117)'
   });
 
   it('coverage-117: a cancel while the refusal is asked gives a cancelled choice', async () => {
-    const {scene, run} = commandOf();
-    const running = run();
+    const {scene, start} = commandOf();
+    const running = start();
     await settled();
     scene.timers[0]?.();
     scene.cancels[0]?.();
@@ -690,12 +700,14 @@ describe('the checks an open command runs before its reload (card coverage-117)'
     scene.warn.promise.catch(() => undefined);
     const outcome = await running;
     deepStrictEqual(
-      [outcome.choice, outcome.cancellation.aborted],
-      [{kind: 'cancelled'}, true],
-    );
-    deepStrictEqual(
-      scene.lines().filter(line => line.includes('cancelled')),
-      ['info: the command was cancelled while reading the configuration'],
+      [
+        [outcome.choice, outcome.cancellation.aborted],
+        scene.lines().filter(line => line.includes('cancelled')),
+      ],
+      [
+        [{kind: 'cancelled'}, true],
+        ['info: the command was cancelled while reading the configuration'],
+      ],
     );
   });
 });

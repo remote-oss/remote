@@ -64,7 +64,7 @@ function sceneOf(options: {
         throw new Error('read-only storage');
       }
       if (options.keepFailsWith !== undefined) {
-        // eslint-disable-next-line @typescript-eslint/prefer-throw-error -- a storage can reject with anything
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- a storage can reject with anything
         throw options.keepFailsWith;
       }
       scene.keeps.push([text, keptAt]);

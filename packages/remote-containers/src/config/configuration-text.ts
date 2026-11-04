@@ -27,10 +27,12 @@ function startsWith(bytes: Uint8Array, mark: readonly number[]): boolean {
 
 /** The bytes of a big endian UTF-16 text as little endian: each pair of bytes swapped. */
 function swapped(bytes: Uint8Array): Uint8Array {
+  const source = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
   const result = new Uint8Array(bytes.length - (bytes.length % 2));
+  const target = new DataView(result.buffer);
   for (let index = 0; index < result.length; index += 2) {
-    result[index] = bytes[index + 1] as number;
-    result[index + 1] = bytes[index] as number;
+    target.setUint8(index, source.getUint8(index + 1));
+    target.setUint8(index + 1, source.getUint8(index));
   }
   return result;
 }

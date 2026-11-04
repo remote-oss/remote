@@ -90,7 +90,7 @@ export function composeResolverOf(
       return {kind: 'none'};
     }
     const configFolder = path.dirname(request.configFile);
-    // The isComposeConfiguration above guarantees the compose file names.
+    // eslint-disable-next-line @typescript-eslint/non-nullable-type-assertion-style -- the isComposeConfiguration above leaves only configurations that name their compose files
     const composeFiles = composeFileNamesOf(
       configuration.dockerComposeFile,
     ) as string[];

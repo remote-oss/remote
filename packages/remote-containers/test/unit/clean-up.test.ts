@@ -26,6 +26,7 @@ interface Scenario {
 /** A volume scan that fails with `value` as its reason, which is no error. */
 function failsWith(value: string): Promise<CleanUpRow[]> {
   return new Promise((resolve, reject) => {
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the row pins the no-error side
     reject(value);
   });
 }

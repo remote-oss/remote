@@ -129,8 +129,8 @@ export function lifecyclePresenterOf(
           return;
         }
         for (const character of data) {
-          // A character a string's iteration gives is never empty, so its first code point is.
-          const code = character.codePointAt(0) as number;
+          // Every key the run classifies is below the surrogate range, so the character's first code unit decides as its code point would.
+          const code = character.charCodeAt(0);
           if (own.inSequence) {
             // The rest of a key sequence, to its final byte.
             if (code >= 0x40 && code <= 0x7e) {

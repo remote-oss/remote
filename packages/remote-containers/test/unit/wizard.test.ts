@@ -764,7 +764,7 @@ describe('the wizard (card containers-80)', () => {
     const {picker, result} = await started(scene);
     picker.accept('Alpine');
     await result;
-    return {scene, input};
+    return {scene, input, result};
   }
 
   it('F-0803 AC-11, BR-5: OK on Select Features with a Feature that declares options asks Keep Defaults or Configure Options, and Keep Defaults writes the Feature as {}', async () => {
@@ -810,18 +810,13 @@ describe('the wizard (card containers-80)', () => {
   });
 
   it('coverage-117: an Escape in a Feature’s options walk ends the wizard cancelled, writing nothing', async () => {
-    const scene = sceneOf();
-    const input = scriptedInput([
+    const {scene, input, result} = await ranOverLab([
       picker => {
         picker.acceptChecked(['Lab Options']);
       },
       pick('Configure Options'),
       pressEscape,
     ]);
-    scene.ports.options = input.ports;
-    scene.ports.catalogue.download = () => Promise.resolve(labCatalogue());
-    const {picker, result} = await started(scene);
-    picker.accept('Alpine');
     deepStrictEqual(
       [await result, scene.written, input.pickers.map(each => each.title)],
       [

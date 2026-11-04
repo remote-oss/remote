@@ -44,6 +44,7 @@ export function featureFailureOf(
 ): FeatureFailure | undefined {
   const quoted = candidates.filter(key => message.includes(`'${key}'`));
   if (quoted.length === 1) {
+    // eslint-disable-next-line @typescript-eslint/non-nullable-type-assertion-style -- the check above leaves one key
     return failureOfKey(quoted[0] as string);
   }
   if (quoted.length === 0 && message.startsWith(TARBALL_FAILED)) {
