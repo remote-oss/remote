@@ -4,9 +4,13 @@
 # costly jobs (real server, the whole VSCodium suite, host variants) stay opt-in on a manual dispatch, and always run on
 # the tag of a release (`<package>-v<semver>`). A pull request runs the VSCodium launches its change selects, up to six
 # (acceptance-pr). Every push to main runs the VSCodium launches the merged change can reach (the post-merge run), and
-# the schedule runs all of them: the backstops for main's launches. The
-# VSCodium and genuine jobs run on the self-hosted runners, and every other job on GitHub's standard runners, which use
-# no Actions minutes in a public repository.
+# the schedule runs all of them: the backstops for main's launches.
+# Where the jobs run: with the repository variable CI_POOL_RUNS_ON set (the label of the organisation's pool), every
+# x86_64 Linux job runs on the pool, asking for [label, X64, ephemeral], a fresh machine per job; the containers
+# launches (whose 180 minutes need GitHub's faster machines), the genuine job, ci-gate and an ARM64 dispatch stay on
+# GitHub's runners, which use no Actions minutes in a public repository. Unset, every job runs on GitHub's runners. A
+# job takes the pool only for its own repository's runs: each pool runs-on holds the same-repository guard, so no step
+# of a fork's pull request reaches the pool, and no pool job reads a secret (tools/check-ci-gate.ts asserts both).
 # A draft pull request runs nothing: its pushes would hold the runners while merge-ready heads wait. Marking it ready for
 # review starts its run (`ready_for_review`), and that run, at the head, is the one green-at-head looks for.
 name: ci
@@ -93,8 +97,10 @@ jobs:
   # brings to the base it would merge into. Dispatches and tags skip this job and run everything.
   changes:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
-    # a git diff only, so a GitHub runner (allowed by the user, 2026-10-20) and no wait for a self-hosted one
-    runs-on: ubuntu-24.04
+    # a git diff only; on the pool or GitHub's runners as the header says
+    runs-on: >-
+      ${{ vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON)) || 'ubuntu-24.04' }}
     timeout-minutes: 5
     outputs:
       docs-only: ${{ steps.diff.outputs.docs-only }}
@@ -120,8 +126,10 @@ jobs:
   # succession collapse into a run of the latest main, which holds each of them.
   post-merge-select:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    # a git diff and the launch table only, so a GitHub runner, as the changes job
-    runs-on: ubuntu-24.04
+    # a git diff and the launch table only, as the changes job
+    runs-on: >-
+      ${{ vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON)) || 'ubuntu-24.04' }}
     timeout-minutes: 10
     outputs:
       parts: ${{ steps.select.outputs.parts }}
@@ -153,12 +161,12 @@ jobs:
     if: >-
       !inputs.launches-only && ((github.event_name != 'pull_request' && github.event_name != 'schedule') ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft))
-    # No Docker and no display, so any Linux x86_64 machine with git, curl, tar and gzip. The repository variable
-    # CI_CHECKS_RUNS_ON names a runner label for this job alone, and the job also asks for X64 and ephemeral: only a
-    # runner that is a fresh machine for every job carries ephemeral, so nothing of one job's run is left for the next.
-    # Unset, the job runs on GitHub's ubuntu-24.04. Node, pnpm and shellcheck come from the steps below, nothing from the
+    # No Docker and no display, so any Linux x86_64 machine with git, curl, tar and gzip. On the pool as the header says;
+    # the older CI_CHECKS_RUNS_ON, for this job alone, still counts while CI_POOL_RUNS_ON is unset. Node, pnpm and shellcheck come from the steps below, nothing from the
     # machine. A fork's pull request never runs the job (the `if:` above), wherever it would run.
-    runs-on: ${{ vars.CI_CHECKS_RUNS_ON && fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_CHECKS_RUNS_ON)) || 'ubuntu-24.04' }}
+    runs-on: >-
+      ${{ (vars.CI_POOL_RUNS_ON || vars.CI_CHECKS_RUNS_ON) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON || vars.CI_CHECKS_RUNS_ON)) || 'ubuntu-24.04' }}
     timeout-minutes: 20 # 5 to 7.6 min on a free runner; 10 was cut twice under load (2026-10-14)
     steps:
       - uses: actions/checkout@v7
@@ -203,7 +211,9 @@ jobs:
     if: >-
       !inputs.launches-only && ((github.event_name != 'pull_request' && github.event_name != 'schedule') ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft))
-    runs-on: ubuntu-24.04
+    runs-on: >-
+      ${{ vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON)) || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -233,8 +243,10 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4] # coverage.ts --shard: each unit in one shard, the four at once (2026-10-20)
-    # the unit tests under coverage need no Docker and no display either: a GitHub runner, as checks
-    runs-on: ubuntu-24.04
+    # the unit tests under coverage need no Docker and no display either
+    runs-on: >-
+      ${{ vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON)) || 'ubuntu-24.04' }}
     timeout-minutes: 10 # the slowest shard took 6 minutes with each unit's tests in parallel (2026-10-31, #1383)
     steps:
       - uses: actions/checkout@v7
@@ -250,11 +262,10 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }} # coverage runs the unit tests; see the unit job
 
-  # Slice 1, server lifecycle, host variants and real server run on GitHub's ubuntu-24.04, a fresh machine per job
-  # (ubuntu-24.04-arm when a dispatch's runner-arch is ARM64), where all four pass; the VSCodium launches and the genuine
-  # job stay on the self-hosted runners for now. Slice 1 and server lifecycle are the two of a pull request.
-  # The editor under test against the SSH host container of tests/acceptance, one job per slice. The runner's Docker
-  # and OpenSSH client are preinstalled, and xvfb or a display of its own.
+  # Slice 1, server lifecycle, host variants and real server run on the pool or ubuntu-24.04 as the header says, a fresh
+  # machine per job (ubuntu-24.04-arm when a dispatch's runner-arch is ARM64). Slice 1 and server lifecycle are the two
+  # of a pull request. The editor under test against the SSH host container of tests/acceptance, one job per slice. The
+  # machine's Docker and OpenSSH client are preinstalled, and xvfb.
   acceptance-slice-1:
     name: acceptance (slice 1)
     needs: changes
@@ -263,7 +274,10 @@ jobs:
       !(github.event_name == 'push' && github.ref_type == 'branch') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
-    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    runs-on: >-
+      ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || (vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON))) ||
+      'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -305,7 +319,10 @@ jobs:
       !(github.event_name == 'push' && github.ref_type == 'branch') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
-    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    runs-on: >-
+      ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || (vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON))) ||
+      'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -326,7 +343,10 @@ jobs:
   acceptance-host-variants:
     name: acceptance (host variants)
     if: inputs.variants || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    runs-on: >-
+      ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || (vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON))) ||
+      'ubuntu-24.04' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -350,7 +370,10 @@ jobs:
   acceptance-real-server:
     name: acceptance (real server)
     if: inputs.real-server || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    runs-on: >-
+      ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || (vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON))) ||
+      'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -422,7 +445,7 @@ jobs:
     # every part runs on ubuntu-24.04.
     runs-on: >-
       ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' ||
-      (vars.CI_POOL_RUNS_ON && !contains(matrix.launches, 'containers') &&
+      (vars.CI_POOL_RUNS_ON && !contains(matrix.launches, 'containers') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON))) || 'ubuntu-24.04' }}
     # the whole VSCodium suite outgrew 60 minutes on 2026-10-20 (the first scheduled backstop, 39387179525, was cancelled
     # at 60), so it runs in parts. The containers launch alone took 44 minutes then and 83 to 110 by 2026-11-01
