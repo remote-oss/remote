@@ -1171,14 +1171,12 @@ export function launchesOf(root: string): Launch[] {
       },
       environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
     },
-    // The containers suite runs in two parts of about an hour each, on two runners: the files from the start of the
-    // alphabet to rebuild-virtual, and the rest (the backstop's times of 2026-11-01).
-    ...[CONTAINERS_A_FILES, CONTAINERS_B_FILES].map((files, index): Launch => ({
+    // This throwaway branch (never merged): the containers launch runs only the rows of card containers-208.
+    {
       ...CONTAINERS_LAUNCH,
-      label: `containers-${index === 0 ? 'a' : 'b'}`,
+      label: 'containers',
       suite: 'containers',
-      files,
-      partOf: 'containers',
+      files: ['authoring-associations.test.ts'],
       registry: true,
       templates: true,
       // A recording xdg-open first on the editor's PATH, so that a row can tell whether a link was opened.
@@ -1186,7 +1184,7 @@ export function launchesOf(root: string): Launch[] {
       // The other Dev Containers, installed and disabled: the package works beside it and warns of nothing.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],
-    })),
+    },
     {
       ...CONTAINERS_LAUNCH,
       label: 'containers-standdown',
@@ -1203,6 +1201,7 @@ export function launchesOf(root: string): Launch[] {
       ...CONTAINERS_LAUNCH,
       label: 'containers-trust',
       suite: 'containers-trust',
+      files: ['authoring-associations.test.ts'],
       workspaceTrust: true,
       // A Docker configuration of its own, so that a row can change it, and what watches it, without touching the machine's.
       environment: {DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`},
