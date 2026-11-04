@@ -1140,13 +1140,14 @@ describe('acceptance', () => {
     );
   });
 
-  it('coverage-84: Host x11-untrusted forwards X11 without the trusted request', () => {
+  it('coverage-84: Host x11-untrusted forwards X11 and refuses the trusted request in so many words, since Debian’s OpenSSH makes ForwardX11 alone trusted', () => {
     strictEqual(
       accountBlock('x11-untrusted'),
       [
         ...sharedLines('x11-untrusted', 'harness'),
         ...KEY_ALIAS_LINES,
         '  ForwardX11 yes',
+        '  ForwardX11Trusted no',
       ].join('\n'),
     );
   });
@@ -1166,6 +1167,7 @@ describe('acceptance', () => {
           ...sharedLines('x11-noauth', 'harness'),
           ...KEY_ALIAS_LINES,
           '  ForwardX11 yes',
+          '  ForwardX11Trusted no',
           '  XAuthLocation /nonexistent/xauth',
         ].join('\n'),
       ].join('\n---\n'),
