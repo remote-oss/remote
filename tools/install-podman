@@ -90,6 +90,10 @@ podman --version; conmon --version; crun --version | head -1
 echo "--- conmon in use"; podman info --format '{{.Host.Conmon.Path}} {{.Host.Conmon.Version}}'; ls -l /usr/local/libexec/podman/ /usr/local/lib/podman/ 2>&1 | head -20; cat /etc/containers/containers.conf.d/*.conf
 echo "--- debug wc"; printf hi | timeout 20 podman --log-level=debug exec -i dbg wc -c 2>&1 | tail -40; echo "debug rc=$?"
 echo "--- processes"; ps -eo pid,ppid,stat,args | grep -E "conmon|podman|wc" | grep -v grep | head -20
+echo "--- fields"; podman info --format '{{.Host.Conmon.Path}} {{.Host.Conmon.Version}} | {{.Host.OCIRuntime.Name}} {{.Host.OCIRuntime.Version}} | {{.Host.CgroupManager}} | {{.Store.RunRoot}}'
+echo "xdg=$XDG_RUNTIME_DIR"; loginctl show-user "$(id -u)" 2>&1 | grep -E 'Linger|State'
+echo "--- cgroupfs exec"; printf hi | timeout 20 podman --cgroup-manager=cgroupfs exec -i dbg wc -c; echo "cgroupfs rc=$?"
+echo "--- userdata at the hang"; (printf hi | timeout 15 podman exec -i dbg wc -c) & sleep 8; ls -la "$(podman info --format '{{.Store.RunRoot}}')"/*/userdata/ 2>&1 | head -30; wait
 echo "--- plain"; printf hi | timeout 20 podman exec -i dbg cat; echo "plain rc=$?"
 echo "--- file stdin"; printf hi >/tmp/hi; timeout 20 podman exec -i dbg cat </tmp/hi; echo "file rc=$?"
 echo "--- wc -c"; printf hi | timeout 20 podman exec -i dbg wc -c; echo "wc rc=$?"
