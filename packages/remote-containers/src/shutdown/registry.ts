@@ -72,6 +72,8 @@ interface Connection {
   compose: ComposeMembership | undefined;
   containerId: string | undefined;
   action: 'stop' | 'none' | undefined;
+  /** Whether the connection's end stops the container, unless it is in use. */
+  owning: boolean;
   live: boolean;
 }
 
@@ -312,7 +314,7 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
       return;
     }
     connection.live = false;
-    if (connection.action === 'none') {
+    if (!connection.owning || connection.action === 'none') {
       return;
     }
     const {containerId, compose} = connection;
@@ -341,6 +343,7 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
         compose: undefined,
         containerId: undefined,
         action: undefined,
+        owning: request.owning !== false,
         live: true,
       });
       return {accepted: true};

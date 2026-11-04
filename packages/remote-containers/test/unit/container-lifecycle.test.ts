@@ -55,6 +55,7 @@ const REQUEST: ContainerRequest = {
   logLevel: 'info',
   cacheVolume: true,
   workspaceMountConsistency: 'cached',
+  gpuAvailability: 'detect',
   mountGitWorktreeCommonDir: false,
   features: {defaultFeatures: {}, lockfile: true},
   mounts: [],
@@ -239,6 +240,7 @@ function fakeBridge(): FakeBridge {
       return Promise.resolve(bridge.configuration);
     },
     setUp: () => Promise.reject(new Error('never set up')),
+    runAttachedUserCommands: () => Promise.reject(new Error('never attached')),
     applyTemplate: () => Promise.reject(new Error('never applied')),
     outdated: () => Promise.reject(new Error('never read')),
     templateMetadata: () => Promise.reject(new Error('never read')),
@@ -497,6 +499,7 @@ describe('containerLifecycleOf', () => {
               removeExistingContainer: false,
               buildNoCache: false,
               workspaceMountConsistency: 'cached',
+              gpuAvailability: 'detect',
             },
           },
         ],
@@ -755,6 +758,7 @@ describe('containerLifecycleOf', () => {
             removeExistingContainer: true,
             buildNoCache: false,
             workspaceMountConsistency: 'cached',
+            gpuAvailability: 'detect',
           },
         ],
         true,
@@ -782,6 +786,7 @@ describe('containerLifecycleOf', () => {
             removeExistingContainer: true,
             buildNoCache: true,
             workspaceMountConsistency: 'cached',
+            gpuAvailability: 'detect',
           },
         ],
         'info: rebuilding: the dev container CLI removes no container first',
@@ -1329,6 +1334,19 @@ describe('containerLifecycleOf', () => {
     deepStrictEqual(
       result.bridge.ups.map(up => up.options.workspaceMountConsistency),
       ['fast'],
+    );
+  });
+
+  it('F-0206 BR-5, BR-16: the GPU availability reaches the CLI as written', async () => {
+    const result = await prepared(
+      scriptedEngine(EMPTY_LISTING),
+      fakeBridge(),
+      new AbortController().signal,
+      {...REQUEST, gpuAvailability: 'none'},
+    );
+    deepStrictEqual(
+      result.bridge.ups.map(up => up.options.gpuAvailability),
+      ['none'],
     );
   });
 
@@ -2497,6 +2515,7 @@ describe('containerLifecycleOf', () => {
           removeExistingContainer: false,
           buildNoCache: true,
           workspaceMountConsistency: 'cached',
+          gpuAvailability: 'detect',
         },
         2,
       ],
@@ -2842,6 +2861,31 @@ describe('the container of a clone in a volume (card containers-151)', () => {
           [NEW, '/stand-in'],
         ],
         ['ended'],
+      ],
+    );
+  });
+
+  it('F-0602 AC-11 (c163-adopt): a container adopted from outside is the ready one: the blocking run goes to it with the target adopted', async () => {
+    const bridge = fakeBridge();
+    const {lifecycle} = lifecycleOver(bridge);
+    const target: CliTarget = {
+      workspaceFolder: '',
+      configFile: '',
+      dockerPath: 'docker',
+      idLabels: [],
+      mountWorkspaceGitRoot: false,
+      mountGitWorktreeCommonDir: false,
+      features: {defaultFeatures: {}, lockfile: false},
+      mounts: [],
+      logLevel: 'info',
+    };
+    lifecycle.adopt('adopted', target, () => undefined);
+    const done = await lifecycle.runBlocking({}, new AbortController().signal);
+    deepStrictEqual(
+      [done, bridge.runs.map(run => [run.containerId, run.target])],
+      [
+        {kind: 'done'},
+        [['adopted', {...target, terminalSize: {rows: 30, columns: 100}}]],
       ],
     );
   });

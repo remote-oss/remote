@@ -45,6 +45,8 @@ export interface UpOptions {
   buildNoCache: boolean;
   /** The consistency of the workspace mount, as the setting has it; the CLI refuses a value it doesn't know. */
   workspaceMountConsistency: string;
+  /** `dev.containers.gpuAvailability` as the setting has it; the CLI refuses a value it doesn't know. */
+  gpuAvailability: string;
 }
 
 /** The size of the terminal a run's lifecycle commands show in, as arguments; none when the size is not known. */
@@ -113,6 +115,8 @@ export function upArguments(target: CliTarget, options: UpOptions): string[] {
     ...additionalFeatures(target),
     ...(target.features.lockfile ? [] : ['--no-lockfile']),
     '--skip-post-create',
+    '--gpu-availability',
+    options.gpuAvailability,
     '--workspace-mount-consistency',
     options.workspaceMountConsistency,
     ...(options.removeExistingContainer ? ['--remove-existing-container'] : []),
@@ -155,16 +159,9 @@ function dotfilesArguments(dotfiles: DotfilesOptions | undefined): string[] {
   ];
 }
 
-/** Runs lifecycle commands in the container: the blocking ones, or the rest in the background, as `options` say. */
-export function runUserCommandsArguments(
-  target: CliTarget,
-  containerId: string,
-  options: RunUserCommandsOptions = {},
-): string[] {
+/** The stages of a `run-user-commands`, the variables it hands the commands and the dotfiles. */
+function stageArguments(options: RunUserCommandsOptions): string[] {
   return [
-    ...commonArguments('run-user-commands', target),
-    '--container-id',
-    containerId,
     ...(options.skipNonBlocking === true
       ? ['--skip-non-blocking-commands']
       : []),
@@ -178,20 +175,36 @@ export function runUserCommandsArguments(
   ];
 }
 
+/** Runs lifecycle commands in the container: the blocking ones, or the rest in the background, as `options` say. */
+export function runUserCommandsArguments(
+  target: CliTarget,
+  containerId: string,
+  options: RunUserCommandsOptions = {},
+): string[] {
+  return [
+    ...commonArguments('run-user-commands', target),
+    '--container-id',
+    containerId,
+    ...stageArguments(options),
+  ];
+}
+
 /**
- * Reads the configuration. With a container id it is merged with the container's metadata; without one the merge would
- * read the image's metadata and pull the image, which the read before a reload must not do.
+ * Reads the configuration. With a container id it is merged with the container's metadata. `includeMerged` asks for the
+ * merged configuration, which the CLI builds from the Features and the image's label, read from the registry when the
+ * image is not local and never pulled (measured on 0.89.0); a read before trust asks for no merge, since that fetches what
+ * the configuration names.
  */
 export function readConfigurationArguments(
   target: CliTarget,
   containerId?: string,
+  includeMerged = containerId !== undefined,
 ): string[] {
   return [
     ...commonArguments('read-configuration', target),
     ...additionalFeatures(target),
-    ...(containerId === undefined
-      ? []
-      : ['--container-id', containerId, '--include-merged-configuration']),
+    ...(containerId === undefined ? [] : ['--container-id', containerId]),
+    ...(includeMerged ? ['--include-merged-configuration'] : []),
   ];
 }
 
@@ -309,5 +322,20 @@ export function setUpArguments(target: AttachedCliTarget): string[] {
     ...attachedCommonArguments(target),
     '--skip-non-blocking-commands',
     '--include-merged-configuration',
+  ];
+}
+
+/**
+ * Runs lifecycle commands in an attached container: no folder is named, the container is found by its id, and the
+ * run's stages are chosen as for a dev container's.
+ */
+export function attachedUserCommandsArguments(
+  target: AttachedCliTarget,
+  options: RunUserCommandsOptions = {},
+): string[] {
+  return [
+    'run-user-commands',
+    ...attachedCommonArguments(target),
+    ...stageArguments(options),
   ];
 }

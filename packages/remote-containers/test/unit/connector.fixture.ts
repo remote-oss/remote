@@ -190,6 +190,8 @@ export interface Scene {
   /** The user's values of the workspace mount's consistency, of its deprecated twin and of the worktree setting. */
   workspaceMountConsistency: unknown;
   legacyWorkspaceMountConsistency: unknown;
+  /** The value of `dev.containers.gpuAvailability`. */
+  gpuAvailability: unknown;
   mountGitWorktreeCommonDir: unknown;
   /** The user's values of the setting for the extensions of a new container, and of its deprecated twin. */
   defaultFeatures: unknown;
@@ -405,6 +407,7 @@ export function sceneOf(
     cacheVolumeInspect: undefined,
     workspaceMountConsistency: undefined,
     legacyWorkspaceMountConsistency: undefined,
+    gpuAvailability: undefined,
     mountGitWorktreeCommonDir: undefined,
     defaultFeatures: undefined,
     lockfile: undefined,
@@ -563,6 +566,10 @@ export function sceneOf(
       scene.setUps.push(target.containerId);
       return Promise.resolve(scene.setUpResult);
     },
+    runAttachedUserCommands: () =>
+      Promise.reject(
+        new Error('the connector fixture runs through the lifecycle'),
+      ),
     applyTemplate: () =>
       Promise.reject(new Error('the connector never applies a template')),
     outdated: () =>
@@ -582,6 +589,9 @@ export function sceneOf(
       return typeof scene.outcome === 'function'
         ? scene.outcome()
         : scene.outcome;
+    },
+    adopt: containerId => {
+      scene.lifecycleRuns.push(`adopt ${containerId}`);
     },
     runBlocking: remoteEnvironment => {
       scene.lifecycleRuns.push(`blocking ${JSON.stringify(remoteEnvironment)}`);
@@ -685,6 +695,7 @@ export function sceneOf(
         ),
       workspaceMountConsistency: scene.workspaceMountConsistency,
       legacyWorkspaceMountConsistency: scene.legacyWorkspaceMountConsistency,
+      gpuAvailability: scene.gpuAvailability,
       mountGitWorktreeCommonDir: scene.mountGitWorktreeCommonDir,
       defaultExtensions: scene.defaultExtensions,
       deprecatedDefaultExtensions: scene.deprecatedDefaultExtensions,

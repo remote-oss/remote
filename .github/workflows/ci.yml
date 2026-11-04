@@ -153,8 +153,12 @@ jobs:
     if: >-
       !inputs.launches-only && ((github.event_name != 'pull_request' && github.event_name != 'schedule') ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft))
-    # no Docker and no display: a GitHub runner (the user, 2026-10-20), so the self-hosted ones are left to acceptance
-    runs-on: ubuntu-24.04
+    # No Docker and no display, so any Linux x86_64 machine with git, curl, tar and gzip. The repository variable
+    # CI_CHECKS_RUNS_ON names a runner label for this job alone, and the job also asks for X64 and ephemeral: only a
+    # runner that is a fresh machine for every job carries ephemeral, so nothing of one job's run is left for the next.
+    # Unset, the job runs on GitHub's ubuntu-24.04. Node, pnpm and shellcheck come from the steps below, nothing from the
+    # machine. A fork's pull request never runs the job (the `if:` above), wherever it would run.
+    runs-on: ${{ vars.CI_CHECKS_RUNS_ON && fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_CHECKS_RUNS_ON)) || 'ubuntu-24.04' }}
     timeout-minutes: 20 # 5 to 7.6 min on a free runner; 10 was cut twice under load (2026-10-14)
     steps:
       - uses: actions/checkout@v7
@@ -179,7 +183,9 @@ jobs:
       # eslint's heap is 6 GiB (package.json); the runner's cgroup cap must stay above it (8 GiB since #692)
       - run: echo "runner memory.max $(cat /sys/fs/cgroup/memory.max)"
       - run: pnpm lint
-      - run: pnpm lint:shell # shellcheck is preinstalled on the runner
+      # the pinned shellcheck, first on the PATH, rather than the one an image may carry
+      - run: tools/install-shellcheck && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: pnpm lint:shell
       # seconds each after the install above; as jobs of their own they waited minutes for a runner (2026-10-20)
       - run: pnpm dupes
       - run: pnpm dead

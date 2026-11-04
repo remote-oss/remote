@@ -274,7 +274,22 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
       `${folder}:/mnt`,
     ];
     try {
-      await made(base, ['sleep', '600'], {extra: mounts});
+      const container = await made(base, ['sleep', '600'], {extra: mounts});
+      const lastUserLine = new Map([
+        ['/data', `This is the last container using '${volume}'.`],
+        ['/mnt', `This is the last container using '${folder}'.`],
+      ]);
+      const mountOrder = (
+        await docker(
+          'inspect',
+          '-f',
+          '{{range .Mounts}}{{.Destination}}{{"\\n"}}{{end}}',
+          container,
+        )
+      )
+        .split('\n')
+        .map(destination => lastUserLine.get(destination))
+        .filter(line => line !== undefined);
       await viewed(base);
       await chosen(base, 'Remove Container');
       await waitForDialog('local', 30_000);
@@ -290,12 +305,8 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
       deepStrictEqual(
         [alone, shared],
         [
-          [
-            REMOVE_DETAIL,
-            `This is the last container using '${volume}'.`,
-            `This is the last container using '${folder}'.`,
-          ],
-          [REMOVE_DETAIL, `This is the last container using '${folder}'.`],
+          [REMOVE_DETAIL, ...mountOrder],
+          [REMOVE_DETAIL, lastUserLine.get('/mnt')],
         ],
       );
     } finally {
@@ -397,10 +408,19 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
       count: number,
     ): Promise<unknown> {
       const toasts = await notified('local', count);
+      const state = await stateOf(container);
+      // The row follows the container's state by an event of the engine, which can come after the error.
+      await waitFor(
+        `the icon of the row ${label} to follow the state ${state}`,
+        async () =>
+          (await iconOf('local', label)) ===
+          (state === 'running' ? 'vm-running' : 'vm'),
+        20_000,
+      );
       return {
         messages: toasts.map(toast => toast.message),
         buttons: toasts.map(toast => toast.buttons),
-        state: await stateOf(container),
+        state,
         icon: await iconOf('local', label),
       };
     }

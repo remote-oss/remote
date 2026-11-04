@@ -8,6 +8,10 @@ import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {CliFailure, ConfigurationResult} from '../../src/cli/cli-lines.ts';
 import type {PickerAnswer} from '../../src/config/choose-configuration.ts';
+import type {
+  DaemonFigures,
+  HostRequirements,
+} from '../../src/engine/host-requirements.ts';
 import type {ReopenPorts} from '../../src/open/reopen-ports.ts';
 import type {WorkspaceRead} from '../../src/open/workspace-folders.ts';
 import type {TrustOutcome} from '../../src/trust/trust-gate.ts';
@@ -31,6 +35,20 @@ export const CONFIGURATION: ConfigurationResult = {
 /** The pieces a row steers, and what the fakes recorded. */
 export interface Setup {
   calls: string[];
+  /** What the daemon has; none when `docker info` can't be read. Roomy unless a row narrows it. */
+  daemon: DaemonFigures | undefined;
+  /** What the label of the folder's existing container records; none when there is none. */
+  containerRequired: HostRequirements | undefined;
+  /** The text of the configuration file, as the step reads it. */
+  configText: string | undefined;
+  /** Whether the user accepts the dialog of host requirements. */
+  requirementsAccepted: boolean;
+  /** The dialogs of host requirements shown: message, detail and the accepting button. */
+  requirementDialogs: Array<[string, string, string]>;
+  /** Whether each read of the configuration asked for the merged one. */
+  mergedReads: Array<boolean | undefined>;
+  /** The queries of the host requirements check, in order. */
+  requirementQueries: string[];
   commands: Array<{command: string; parameters: unknown[]}>;
   lines: string[];
   read: ConfigurationResult | CliFailure;
@@ -117,6 +135,13 @@ export function setup(): Setup {
     mountGitWorktreeCommonDir: undefined,
     waitOnCheck: Promise.resolve(),
     waitOnRead: Promise.resolve(),
+    daemon: {cpus: 4096, memory: 1024 ** 5, nvidia: false},
+    containerRequired: undefined,
+    configText: undefined,
+    requirementsAccepted: true,
+    requirementDialogs: [],
+    requirementQueries: [],
+    mergedReads: [],
     cancels: [],
     wizard: {kind: 'cancelled'},
     wizardLeaves: [],
@@ -141,6 +166,23 @@ export const WRITTEN_IN_FOLDER: WizardOutcome = {
 export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
   const sink = new MemorySink();
   const ports: ReopenPorts = {
+    requirements: {
+      daemonFigures: () => {
+        state.requirementQueries.push('daemonFigures');
+        return Promise.resolve(state.daemon);
+      },
+      containerRequirements: () => {
+        state.requirementQueries.push('containerRequirements');
+        return Promise.resolve(state.containerRequired);
+      },
+      readText: () => Promise.resolve(state.configText),
+      confirm: (message, detail, acceptLabel) => {
+        state.requirementDialogs.push([message, detail, acceptLabel]);
+        return Promise.resolve(state.requirementsAccepted);
+      },
+      translate: template => template,
+      logger: createLogger(sink, {minimumLevel: () => 'info'}),
+    },
     clock: () => 1000,
     authoring: {
       execute: folder => {
@@ -283,7 +325,15 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
       translate: template => template,
     },
     bridge: {
-      readConfiguration: async target => {
+      readConfiguration: async (
+        target,
+        containerId,
+        onEvent,
+        cancellation,
+        onStdin,
+        includeMerged,
+      ) => {
+        state.mergedReads.push(includeMerged);
         state.targets.push(target);
         state.calls.push(`readConfiguration ${target.workspaceFolder}`);
         const hold = state.waitOnRead;

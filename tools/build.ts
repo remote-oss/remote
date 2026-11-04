@@ -164,6 +164,7 @@ export async function buildPackages(
         platform: 'node',
         format: 'cjs',
         target: NODE_TARGET,
+        mainFields: MAIN_FIELDS,
         sourcemap: true,
         logLevel: 'warning',
       });

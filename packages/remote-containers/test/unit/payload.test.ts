@@ -178,6 +178,24 @@ describe('the dev-container payload', () => {
     });
   });
 
+  it('F-1201 BR-17, contracts §3: a payload without localDocker reads as a local engine, the form devcontainer open --config writes, and a localDocker that is no boolean stays malformed', () => {
+    const configFile = {$mid: 1, path: CONFIG_PATH, scheme: 'file'};
+    deepStrictEqual(
+      [
+        devContainerTargetOf(
+          hexOf(JSON.stringify({hostPath: '/p', configFile})),
+        ),
+        devContainerTargetOf(
+          hexOf(JSON.stringify({hostPath: '/p', localDocker: 7, configFile})),
+        ),
+      ],
+      [
+        {kind: 'folder', hostPath: '/p', localDocker: false, configFile},
+        {malformed: 'shape'},
+      ],
+    );
+  });
+
   it('contracts §3: each member of the wrong shape makes the payload malformed', () => {
     const file = {path: CONFIG_PATH, scheme: 'file'};
     const base = {hostPath: '/p', localDocker: false, configFile: file};
@@ -185,7 +203,6 @@ describe('the dev-container payload', () => {
       {},
       {...base, hostPath: ''},
       {...base, hostPath: 5},
-      {hostPath: '/p', configFile: file},
       {...base, localDocker: 'no'},
       {...base, settings: []},
       {...base, settings: {context: ''}},

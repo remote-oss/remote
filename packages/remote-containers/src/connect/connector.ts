@@ -22,7 +22,8 @@ import {
   devContainerTargetOf,
   folderTargetOf,
 } from '../authority/payload.ts';
-import type {CliTarget} from '../cli/cli-arguments.ts';
+import type {AttachedCliTarget, CliTarget} from '../cli/cli-arguments.ts';
+import {attachedReadyTarget, attachedRunsBridge} from './attached-bridge.ts';
 import type {VolumeWorkspace} from '../cli/override-pre-pass.ts';
 import {
   bootstrapRemoveArguments,
@@ -148,6 +149,7 @@ import {
   mountGitWorktreeCommonDirOf,
   workspaceMountConsistencyOf,
 } from './mount-settings.ts';
+import {gpuAvailabilityOf} from './gpu-availability.ts';
 import {featureSettingsOf} from './feature-settings.ts';
 import {
   type ContainerState,
@@ -309,6 +311,21 @@ interface AttachedConnectDependencies extends PickGate {
   configFileOf: (container: ListedContainer) => Promise<string | undefined>;
 }
 
+/** The settings the CLI's `up` takes: the workspace mount's consistency and the GPU availability, as the settings have them. */
+function engineSettingsOf(settings: {
+  workspaceMountConsistency: unknown;
+  legacyWorkspaceMountConsistency: unknown;
+  gpuAvailability: unknown;
+}): {workspaceMountConsistency: string; gpuAvailability: string} {
+  return {
+    workspaceMountConsistency: workspaceMountConsistencyOf(
+      settings.workspaceMountConsistency,
+      settings.legacyWorkspaceMountConsistency,
+    ),
+    gpuAvailability: gpuAvailabilityOf(settings.gpuAvailability),
+  };
+}
+
 /** What a connect to a Kubernetes pod needs beyond a folder's. */
 interface PodConnectDependencies extends PickGate {
   /** `kubectl` as an engine with the login shell's environment. */
@@ -354,6 +371,8 @@ export interface ContainerConnectorDependencies {
     workspaceMountConsistency: unknown;
     /** The user's value of the deprecated `remote.containers.workspaceMountConsistency`, `undefined` when unset. */
     legacyWorkspaceMountConsistency: unknown;
+    /** The value of `dev.containers.gpuAvailability`, `undefined` when unset. */
+    gpuAvailability: unknown;
     /** The user's value of `dev.containers.experimentalMountGitWorktreeCommonDir`, `undefined` when unset. */
     mountGitWorktreeCommonDir: unknown;
     /** The user's value of `dev.containers.defaultFeatures`, `undefined` when unset. */
@@ -1036,6 +1055,7 @@ export function containerConnectorOf(
   function registerConnection(
     identity: ContainerIdentity,
     engine: EngineCoordinates,
+    owning = true,
   ): string {
     if (shutdownConnection !== undefined) {
       return shutdownConnection;
@@ -1047,6 +1067,7 @@ export function containerConnectorOf(
       connectionId,
       identity,
       engine,
+      ...(owning ? {} : {owning: false as const}),
     });
     return connectionId;
   }
@@ -1373,10 +1394,7 @@ export function containerConnectorOf(
         logLevel: 'info',
         cacheVolume: settings.cacheVolume(),
         windowsClient: dependencies.clientPlatform === 'win32',
-        workspaceMountConsistency: workspaceMountConsistencyOf(
-          settings.workspaceMountConsistency,
-          settings.legacyWorkspaceMountConsistency,
-        ),
+        ...engineSettingsOf(settings),
         mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
           settings.mountGitWorktreeCommonDir,
         ),
@@ -1750,10 +1768,7 @@ export function containerConnectorOf(
       dockerPath: 'docker',
       logLevel: 'info',
       cacheVolume: settings.cacheVolume(),
-      workspaceMountConsistency: workspaceMountConsistencyOf(
-        settings.workspaceMountConsistency,
-        settings.legacyWorkspaceMountConsistency,
-      ),
+      ...engineSettingsOf(settings),
       mountGitWorktreeCommonDir: false,
       features: featureSettingsOf(
         settings.defaultFeatures,
@@ -1827,10 +1842,7 @@ export function containerConnectorOf(
         // An explored volume always has the server's volume at /vscode, whatever `dev.containers.cacheVolume` says.
         cacheVolume: true,
         windowsClient: dependencies.clientPlatform === 'win32',
-        workspaceMountConsistency: workspaceMountConsistencyOf(
-          settings.workspaceMountConsistency,
-          settings.legacyWorkspaceMountConsistency,
-        ),
+        ...engineSettingsOf(settings),
         mountGitWorktreeCommonDir: false,
         features: featureSettingsOf(
           settings.defaultFeatures,
@@ -2204,6 +2216,34 @@ export function containerConnectorOf(
       return step.failure;
     }
     const {container, mergedConfiguration: merged} = step;
+    const connectionId = registerConnection(
+      {containerName: container.name},
+      {dockerPath: dockerFile, environment},
+      false,
+    );
+    void dependencies.shutdown.send({
+      type: 'container',
+      connectionId,
+      containerId: container.id,
+      action: 'none',
+    });
+    const runsOn: AttachedCliTarget = {
+      containerId: container.id,
+      ...(step.configFile === undefined ? {} : {configFile: step.configFile}),
+      dockerPath: dockerFile,
+      logLevel: 'info',
+      environment,
+    };
+    const runsBridge = attachedRunsBridge(
+      dependencies.cliFor({...dependencies.editorEnvironment, ...environment}),
+      runsOn,
+    );
+    lifecycle = dependencies.lifecycleFor(
+      engine,
+      runsBridge,
+      dependencies.lifecyclePresenter,
+    );
+    lifecycle.adopt(container.id, attachedReadyTarget(runsOn), logCliEvent);
     const remoteUser = await attachedUserOf(
       engine,
       container.id,
@@ -2232,7 +2272,7 @@ export function containerConnectorOf(
         pinned: target,
         name: undefined,
         explored: false,
-        beforeStart: () => Promise.resolve(undefined),
+        beforeStart: () => blockingHooks(cancellation),
         openRelay: (server, onConnectionClosed) =>
           dependencies.openRelay({
             engine,
@@ -2254,7 +2294,11 @@ export function containerConnectorOf(
           created: false,
           serviceDockerfile: undefined,
         },
-        afterConnect: () => undefined,
+        afterConnect: () => {
+          lifecycle?.startBackground(RELAY_ENVIRONMENT, () =>
+            Promise.resolve(),
+          );
+        },
       },
       cancellation,
     );
@@ -2420,13 +2464,17 @@ export function containerConnectorOf(
           attachedTarget !== undefined &&
           !('malformed' in attachedTarget)
         ) {
-          return await connectAttached(
+          const result = await connectAttached(
             dependencies.attached,
             target.payload,
             attachedTarget,
             controller,
             input,
           );
+          if (!('connectionToken' in result)) {
+            await leaveShutdown();
+          }
+          return result;
         }
         if (dependencies.pods !== undefined) {
           const podTarget = k8sTargetOf(target.payload);

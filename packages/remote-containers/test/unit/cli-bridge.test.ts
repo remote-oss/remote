@@ -29,6 +29,7 @@ const UP_OPTIONS = {
   removeExistingContainer: false,
   buildNoCache: false,
   workspaceMountConsistency: 'cached',
+  gpuAvailability: 'detect',
 };
 
 const UP_LINE =
@@ -1084,6 +1085,27 @@ describe('the CLI bridge: templates (card containers-76)', () => {
         ['set-up', '--container-id', 'c1'],
         {DOCKER_CONTEXT: 'remote'},
         false,
+      ],
+    );
+  });
+
+  it('F-0602 AC-11 (c163-bridge-attached-run): the attached run-user-commands runs with the stages asked, reads its result, and makes no override file', async () => {
+    const {bridge, calls, written} = setup(
+      ending('{"outcome":"success","result":"done"}'),
+    );
+    const result = await bridge.runAttachedUserCommands(
+      {containerId: 'c1', dockerPath: 'docker', logLevel: 'info'},
+      {skipNonBlocking: true},
+      () => undefined,
+      NEVER,
+    );
+    deepStrictEqual(
+      [result, calls[0]?.slice(0, 3), calls[0]?.at(-1), written],
+      [
+        {kind: 'done'},
+        ['run-user-commands', '--container-id', 'c1'],
+        '--skip-non-blocking-commands',
+        [],
       ],
     );
   });
