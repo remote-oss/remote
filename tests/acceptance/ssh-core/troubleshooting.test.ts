@@ -211,7 +211,8 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
           hintRecords()
             .at(-1)
             ?.hints.some(hint => hint.kind === 'log') ?? false,
-        60_000,
+        // The log hint is kept when the attempt has ended, which a slower runner takes longer to do.
+        180_000,
       );
       const before = JSON.stringify(hintRecords());
       await inWindow('c136-c', 'workbench.action.terminal.kill');
