@@ -404,34 +404,7 @@ const CONTAINERS_A_FILES: readonly string[] = [
 ];
 
 /** The second part of the containers suite's test files: the rest, from recent-entry on. */
-const CONTAINERS_B_FILES: readonly string[] = [
-  'recent-entry.test.ts',
-  'reconnect-give-up.test.ts',
-  'reconnect.test.ts',
-  'recovery.test.ts',
-  'relaunch.test.ts',
-  'remote-environment.test.ts',
-  'reopen-command.test.ts',
-  'reopen-notification.test.ts',
-  'repository-configurations.test.ts',
-  'resolve-reload.test.ts',
-  'reuse-more.test.ts',
-  'reuse-sweep.test.ts',
-  'reuse.test.ts',
-  'server-install.test.ts',
-  'server-rows.test.ts',
-  'setup-failure-actions.test.ts',
-  'setup-failure-state.test.ts',
-  'switch-container.test.ts',
-  'targets-menus.test.ts',
-  'template-catalogue.test.ts',
-  'transport-token.test.ts',
-  'ubuntu-base.test.ts',
-  'user-env.test.ts',
-  'users.test.ts',
-  'workspace-mount.test.ts',
-  'workspace-window.test.ts',
-];
+const CONTAINERS_B_FILES: readonly string[] = ['recovery.test.ts', 'server-rows.test.ts'];
 
 /** The form of a launch's label and of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
