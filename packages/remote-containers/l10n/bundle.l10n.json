@@ -250,5 +250,7 @@
   "Could not analyze the URL.": "Could not analyze the URL.",
   "Failed to handle the URI '{0}' expected a 'url' query parameter.": "Failed to handle the URI '{0}' expected a 'url' query parameter.",
   "Failed to parse scheme of URI": "Failed to parse scheme of URI",
-  "Invalid URI": "Invalid URI"
+  "Invalid URI": "Invalid URI",
+  "Select the volume to inspect with Visual Studio Code": "Select the volume to inspect with Visual Studio Code",
+  "created at {0}": "created at {0}"
 }
