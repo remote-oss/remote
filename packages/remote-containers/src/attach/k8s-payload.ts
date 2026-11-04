@@ -19,11 +19,10 @@ export interface K8sTarget {
   image: string;
 }
 
-/** A payload that is not a target, and the step that refused it; `member` names the one that failed the name rules. */
-export interface K8sMalformed {
-  malformed: 'hex' | 'json' | 'shape' | 'invalid';
-  member?: keyof K8sTarget;
-}
+/** A payload that is not a target, and the step that refused it; a member that fails the name rules is named. */
+export type K8sMalformed =
+  | {malformed: 'hex' | 'json' | 'shape'}
+  | {malformed: 'invalid'; member: keyof K8sTarget};
 
 /** The members in the order the payload writes them. */
 const MEMBERS: ReadonlyArray<keyof K8sTarget> = [
@@ -92,14 +91,14 @@ export function k8sTargetOf(payload: string): K8sTarget | K8sMalformed {
   if (!values.every(value => typeof value === 'string')) {
     return {malformed: 'shape'};
   }
-  const [context, podname, namespace, name, image] = values as string[];
-  const target: K8sTarget = {
-    context: context ?? '',
-    podname: podname ?? '',
-    namespace: namespace ?? '',
-    name: name ?? '',
-    image: image ?? '',
-  };
+  const [context, podname, namespace, name, image] = values as [
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
+  const target: K8sTarget = {context, podname, namespace, name, image};
   const invalid = invalidMemberOf(target);
   return invalid === undefined
     ? target

@@ -2144,11 +2144,8 @@ export function containerConnectorOf(
           }
           return result;
         }
-        const pod =
-          dependencies.pods === undefined
-            ? undefined
-            : k8sTargetOf(target.payload);
-        if (dependencies.pods !== undefined && pod !== undefined) {
+        if (dependencies.pods !== undefined) {
+          const pod = k8sTargetOf(target.payload);
           if (!('malformed' in pod)) {
             return await connectPod(
               dependencies.pods,
@@ -2158,9 +2155,7 @@ export function containerConnectorOf(
             );
           }
           if (pod.malformed === 'invalid') {
-            logger.info(
-              `the pod's ${pod.member ?? 'name'} is not a valid name`,
-            );
+            logger.info(`the pod's ${pod.member} is not a valid name`);
             return malformedAuthority();
           }
         }

@@ -1,6 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
 import {k8sPayloadOf, type K8sTarget} from '../../src/attach/k8s-payload.ts';
-import {inputOf, sceneOf} from './connector.fixture.ts';
+import {
+  inputOf,
+  PAYLOAD as FOLDER_PAYLOAD,
+  sceneOf,
+} from './connector.fixture.ts';
 import {fakeEngine, type ProcessScript} from './fake-engine.ts';
 
 const TARGET: K8sTarget = {
@@ -126,6 +130,22 @@ describe('the connect of a Kubernetes pod window (card containers-191, §4)', ()
     );
   });
 
+  it('F-0604 BR-5: a connect cancelled while the pod’s user is being told ends as cancelled, with no server step', async () => {
+    const kubectl = fakeEngine(() => new Promise<void>(() => undefined));
+    const scene = sceneOf({}, {pods: kubectl});
+    const connecting = scene.connector.connect(inputOf(PAYLOAD));
+    await new Promise(resolve => setImmediate(resolve));
+    scene.connector.cancel();
+    const result = await connecting;
+    deepStrictEqual(
+      [
+        'connectionToken' in result ? 'connected' : result.kind,
+        scene.serverRequests.length,
+      ],
+      ['cancelled', 0],
+    );
+  });
+
   it('F-0604 AC-35: a member that fails its name rule is refused before any kubectl call', async () => {
     const kubectl = podEngine('webuser');
     const scene = sceneOf({}, {pods: kubectl});
@@ -138,6 +158,16 @@ describe('the connect of a Kubernetes pod window (card containers-191, §4)', ()
         kubectl.runs.length,
       ],
       ['malformedAuthority', 0, 0],
+    );
+  });
+
+  it('F-0604 BR-1: with the pods dependency a payload that is no pod’s is read as the dev container’s it is', async () => {
+    const kubectl = podEngine('webuser');
+    const scene = sceneOf({}, {pods: kubectl});
+    const result = await scene.connector.connect(inputOf(FOLDER_PAYLOAD));
+    deepStrictEqual(
+      ['connectionToken' in result, kubectl.processes.length],
+      [true, 0],
     );
   });
 
