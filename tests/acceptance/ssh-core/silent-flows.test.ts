@@ -28,6 +28,18 @@ import {
 /** The prefixes of the commands that the extension registers. */
 const COMMAND_PREFIXES = ['remote-ssh.', 'remote-internal.', 'opensshremotes.'];
 
+/**
+ * The commands of each prefix, asked one after the other: the window reports each answer as an event, and asked together
+ * the answers are taken for one another's, as the slower hosted runner shows.
+ */
+async function commandsOfPrefixes(window: string): Promise<string[]> {
+  const commands: string[] = [];
+  for (const prefix of COMMAND_PREFIXES) {
+    commands.push(...(await commandsOf(window, prefix)));
+  }
+  return commands;
+}
+
 /** What the extension has shown or written in window `window`, as the criterion lists it. */
 interface Footprint {
   toasts: string[];
@@ -65,11 +77,7 @@ async function footprintOf(window: string): Promise<Footprint> {
     storage: readdirSync(
       path.join(variable('HARNESS_USER_DATA'), 'User', 'globalStorage'),
     ).sort(),
-    commands: (
-      await Promise.all(
-        COMMAND_PREFIXES.map(prefix => commandsOf(window, prefix)),
-      )
-    ).flat(),
+    commands: await commandsOfPrefixes(window),
     settings: await settingTitles(window),
     palette,
   };
