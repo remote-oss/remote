@@ -21,6 +21,8 @@ import {
   windowNames,
   writeUserSetting,
 } from './harness.ts';
+import {REGISTRY_LABEL} from '../../../tools/acceptance-registry.ts';
+import {RUN_LABEL} from '../../../tools/acceptance-run.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -158,22 +160,37 @@ function realDocker(
   return execFileAsync('docker', dockerArguments);
 }
 
+/** The ids of the containers, running or not, that carry all of `labels`. */
+async function idsLabelled(
+  docker: DockerRunner,
+  labels: readonly string[],
+): Promise<string[]> {
+  const {stdout} = await docker([
+    'ps',
+    '--all',
+    '--quiet',
+    ...labels.flatMap(label => ['--filter', `label=${label}`]),
+  ]);
+  return stdout.split('\n').filter(line => line !== '');
+}
+
 /**
  * Removes every container carrying the run's label, and no other: a developer's own containers on the same daemon are
- * left, so the rows that read the daemon's containers fail there instead of removing them.
+ * left, so the rows that read the daemon's containers fail there instead of removing them. The run's registry stays: it
+ * is the run's infrastructure and not a row's container, and the rows that push to it never start it again.
  */
 export async function removeRunContainers(
   runId = variable('HARNESS_RUN_ID'),
   docker: DockerRunner = realDocker,
 ): Promise<void> {
-  const {stdout} = await docker([
-    'ps',
-    '--all',
-    '--quiet',
-    '--filter',
-    `label=remote-oss.acceptance.run=${runId}`,
+  const runLabel = `${RUN_LABEL}=${runId}`;
+  const registries = await idsLabelled(docker, [
+    runLabel,
+    `${REGISTRY_LABEL}=1`,
   ]);
-  const containerIds = stdout.split('\n').filter(line => line !== '');
+  const containerIds = (await idsLabelled(docker, [runLabel])).filter(
+    containerId => !registries.includes(containerId),
+  );
   if (containerIds.length > 0) {
     await docker(['rm', '-f', ...containerIds]);
   }
