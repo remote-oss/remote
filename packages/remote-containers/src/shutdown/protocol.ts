@@ -11,8 +11,9 @@ export interface EngineCoordinates {
 }
 
 /**
- * What identifies a dev container before its id is known: the folder and configuration it is for, or, for a clone in a
- * volume, the volume and the folder in it.
+ * What identifies a dev container before its id is known: the folder and configuration it is for; for a clone in a
+ * volume, the volume and the folder in it; or, for an explored volume, the volume and the shared definition's
+ * configuration.
  */
 export type ContainerIdentity =
   | {
@@ -20,39 +21,54 @@ export type ContainerIdentity =
       /** The configuration file's path on the host. */
       configFile: string;
     }
-  | {volumeName: string; folder: string};
+  | {volumeName: string; folder: string}
+  | {volumeName: string; configFile: string};
+
+/** What names an identity, so that two identities of the same container name it alike. */
+function identityKey(identity: ContainerIdentity): string {
+  if ('hostPath' in identity) {
+    return JSON.stringify(['folder', identity.hostPath, identity.configFile]);
+  }
+  return 'folder' in identity
+    ? JSON.stringify(['clone', identity.volumeName, identity.folder])
+    : JSON.stringify(['explored', identity.volumeName, identity.configFile]);
+}
 
 /** Whether two identities name the same dev container. */
 export function sameIdentity(
   left: ContainerIdentity,
   right: ContainerIdentity,
 ): boolean {
-  if ('hostPath' in left) {
-    return (
-      'hostPath' in right &&
-      left.hostPath === right.hostPath &&
-      left.configFile === right.configFile
-    );
+  return identityKey(left) === identityKey(right);
+}
+
+/** What the log calls the container of an identity. */
+export function identityLabel(identity: ContainerIdentity): string {
+  if ('hostPath' in identity) {
+    return identity.hostPath;
   }
-  return (
-    'volumeName' in right &&
-    left.volumeName === right.volumeName &&
-    left.folder === right.folder
-  );
+  return `the ${'folder' in identity ? 'volume' : 'explored volume'} ${identity.volumeName}`;
 }
 
 /** The `docker ps` filters that find the dev container of an identity by its labels. */
 export function identityFilters(identity: ContainerIdentity): string[] {
-  const labels =
-    'hostPath' in identity
-      ? [
-          `devcontainer.local_folder=${identity.hostPath}`,
-          `devcontainer.config_file=${identity.configFile}`,
-        ]
-      : [
-          `vsch.local.repository.volume=${identity.volumeName}`,
-          `vsch.local.repository.folder=${identity.folder}`,
-        ];
+  let labels: string[];
+  if ('hostPath' in identity) {
+    labels = [
+      `devcontainer.local_folder=${identity.hostPath}`,
+      `devcontainer.config_file=${identity.configFile}`,
+    ];
+  } else if ('folder' in identity) {
+    labels = [
+      `vsch.local.repository.volume=${identity.volumeName}`,
+      `vsch.local.repository.folder=${identity.folder}`,
+    ];
+  } else {
+    labels = [
+      `vsch.local.volume=${identity.volumeName}`,
+      `devcontainer.config_file=${identity.configFile}`,
+    ];
+  }
   return labels.flatMap(label => ['--filter', `label=${label}`]);
 }
 
@@ -135,9 +151,13 @@ function identityOf(value: unknown): ContainerIdentity | undefined {
   }
   const volumeName = textOf(value, 'volumeName');
   const folder = textOf(value, 'folder');
-  return volumeName !== undefined && folder !== undefined
-    ? {volumeName, folder}
-    : undefined;
+  if (volumeName === undefined) {
+    return undefined;
+  }
+  if (folder !== undefined) {
+    return {volumeName, folder};
+  }
+  return configFile === undefined ? undefined : {volumeName, configFile};
 }
 
 /** The register request of `record`, or its problem. */
@@ -157,7 +177,7 @@ function readRegister(
     return {
       kind: 'malformed',
       problem:
-        'register needs the identity with a hostPath and a configFile, or a volumeName and a folder',
+        'register needs the identity with a hostPath and a configFile, a volumeName and a folder, or a volumeName and a configFile',
     };
   }
   if (dockerPath === undefined || environment === undefined) {

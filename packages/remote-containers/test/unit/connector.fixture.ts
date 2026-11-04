@@ -307,6 +307,14 @@ function volumeDependenciesOf(
         },
       });
     },
+    exploreDefinition: () => {
+      scene.volumeCalls.push('exploreDefinition');
+      return Promise.resolve({
+        folder: '/t/inspect-volume/1',
+        configFile: '/t/inspect-volume/1/.devcontainer/devcontainer.json',
+        text: '{}',
+      });
+    },
     showShallow: repository => {
       scene.volumeCalls.push(`showShallow ${repository}`);
     },

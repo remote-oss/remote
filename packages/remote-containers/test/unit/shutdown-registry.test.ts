@@ -305,6 +305,48 @@ describe('the shutdown registry (card containers-68)', () => {
     );
   });
 
+  it('F-0705 BR-7 (card containers-155): an explored volume is looked up by its volume and the shared configuration, held by a connection of the same volume only, and never taken for another volume’s', async () => {
+    const explored = {volumeName: 'data', configFile: '/t/devcontainer.json'};
+    const other = {volumeName: 'more', configFile: '/t/devcontainer.json'};
+    function running(): DockerResult {
+      return {status: 0, stdout: 'c0ffee'};
+    }
+    const found = scene(argv =>
+      argv[0] === 'ps'
+        ? {status: 0, stdout: 'c0ffee\n'}
+        : {status: 0, stdout: ''},
+    );
+    connect(found.registry, 1, 'a', explored);
+    found.registry.leasesChanged([]);
+    await found.advance(CHECK_MILLISECONDS);
+    const same = scene(running);
+    connect(same.registry, 1, 'a', explored);
+    connect(same.registry, 2, 'b', explored);
+    same.registry.leasesChanged([2]);
+    await same.advance(CHECK_MILLISECONDS);
+    const different = scene(running);
+    connect(different.registry, 1, 'a', explored);
+    connect(different.registry, 2, 'b', other);
+    different.registry.leasesChanged([2]);
+    await different.advance(CHECK_MILLISECONDS);
+    const never = scene();
+    connect(never.registry, 1, 'a', explored);
+    never.registry.leasesChanged([]);
+    await never.advance(20 * CHECK_MILLISECONDS);
+    deepStrictEqual(
+      [found.runs, same.logs, different.runs.at(-1), never.logs],
+      [
+        [
+          '10s ps -q --filter label=vsch.local.volume=data --filter label=devcontainer.config_file=/t/devcontainer.json',
+          '10s stop c0ffee',
+        ],
+        ['container c0ffee is in use and stays running'],
+        '10s stop c0ffee',
+        ['no running container for the explored volume data; the lookup ends'],
+      ],
+    );
+  });
+
   it('F-0417 BR-8: a leave ends the connection once, and the close of its lease afterwards changes nothing more', async () => {
     const {registry, advance, runs} = scene();
     connect(registry, 1, 'a', IDENTITY, STOP);

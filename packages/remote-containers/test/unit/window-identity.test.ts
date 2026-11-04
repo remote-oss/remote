@@ -46,4 +46,20 @@ describe('the suffix of a dev container window (card containers-08)', () => {
       'Conteneur: P',
     );
   });
+
+  it('F-0705 AC-7 (card containers-155): a window that explores a volume says Inspect Volume, in the user’s language, whatever the configuration’s name or the context', () => {
+    deepStrictEqual(
+      [
+        workspaceSuffixOf(
+          {name: 'Inspect Volume', context: 'ctx', explored: true},
+          template => template,
+        ),
+        workspaceSuffixOf(
+          {name: undefined, context: undefined, explored: true},
+          template => template.replace('Inspect', 'Examiner'),
+        ),
+      ],
+      ['Inspect Volume', 'Examiner Volume'],
+    );
+  });
 });
