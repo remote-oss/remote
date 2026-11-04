@@ -93,15 +93,15 @@ describe('the commands of the view out of their context, in other windows (card 
         [
           'ssh',
           async () => {
-            await openWindow(HOST, 'c5002-kinds-ssh');
-            await connectedTo('c5002-kinds-ssh', HOST);
+            await openWindow(HOST, 'k5002-kinds-ssh');
+            await connectedTo('k5002-kinds-ssh', HOST);
             await statusItemText(
-              'c5002-kinds-ssh',
+              'k5002-kinds-ssh',
               'status.host',
               `SSH: ${HOST}`,
               180_000,
             );
-            return 'c5002-kinds-ssh';
+            return 'k5002-kinds-ssh';
           },
         ],
         ['virtual', () => openMemoryWindow()],
