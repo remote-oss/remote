@@ -3,12 +3,7 @@
  * read for every command, so a setting changed since the last one applies without a reload.
  */
 
-import {
-  distroToShare,
-  isWindowsMountShape,
-  mountToWindows,
-  shareToDistro,
-} from 'lib-wsl';
+import {distroToShare, mountToWindows, shareToDistro} from 'lib-wsl';
 
 /** What the window is. */
 export interface EngineWindow {
@@ -66,14 +61,10 @@ export function engineHostOf(
     };
   }
   if (window.remoteName === 'wsl' && window.distro !== undefined) {
-    return isWindowsMountShape(folder)
-      ? {kind: 'local', folder: mountToWindows(folder) ?? folder}
-      : {
-          kind: 'distro',
-          distro: window.distro,
-          folder,
-          chosenBy: 'window',
-        };
+    const windows = mountToWindows(folder);
+    return windows === undefined
+      ? {kind: 'distro', distro: window.distro, folder, chosenBy: 'window'}
+      : {kind: 'local', folder: windows};
   }
   if (window.remoteName === undefined && settings.executeInWSL) {
     return {
