@@ -29,6 +29,13 @@ import {type ComposeRoute, composeRouteOf} from './compose-route.ts';
 import {type Executable, executableOf} from './executable.ts';
 import type {EngineHost} from './engine-host.ts';
 import {type BoxCounter, pausableTimer} from './pausable-timer.ts';
+import {
+  type DaemonFigures,
+  daemonFiguresOf,
+  type HostRequirements,
+  requirementsOfLabel,
+} from './host-requirements.ts';
+import {idLabels} from '../lifecycle/labels.ts';
 import {dashHostOf, sshHostOf} from './ssh-endpoint.ts';
 import {apiCheckSkipped} from './version-reply.ts';
 
@@ -293,6 +300,93 @@ export async function secondCheck(
   return latest;
 }
 
+/** The result of one query, or none when docker was not found. */
+async function resultOf(
+  dependencies: PreflightDependencies,
+  base: string | undefined,
+  argv: readonly string[],
+  cancellation: AbortSignal,
+): Promise<QueryResult | undefined> {
+  const executable = executableOf(dependencies.dockerPath(), base);
+  return executable.kind === 'spawn'
+    ? query(dependencies, executable, argv, cancellation)
+    : undefined;
+}
+
+/** What a query printed, or none when docker was not found, did not finish in time, or exited with a status other than 0. */
+async function printed(
+  dependencies: PreflightDependencies,
+  base: string | undefined,
+  argv: readonly string[],
+  cancellation: AbortSignal,
+): Promise<string | undefined> {
+  const result = await resultOf(dependencies, base, argv, cancellation);
+  return result?.kind === 'ran' && succeeded(result)
+    ? result.stdout
+    : undefined;
+}
+
+/** What the daemon has, from `docker info`; none when it can't be read. */
+export async function daemonFigures(
+  dependencies: PreflightDependencies,
+  base: string | undefined,
+  cancellation: AbortSignal,
+): Promise<DaemonFigures | undefined> {
+  const text = await printed(
+    dependencies,
+    base,
+    ['info', '--format', '{{json .}}'],
+    cancellation,
+  );
+  return text === undefined ? undefined : daemonFiguresOf(text);
+}
+
+/**
+ * What the label of the container made for the folder and the configuration records of the daemon's requirements; none
+ * when there is no such container or the label can't be read.
+ */
+export async function containerRequirements(
+  dependencies: PreflightDependencies,
+  base: string | undefined,
+  identity: {folder: string; configFile: string},
+  cancellation: AbortSignal,
+): Promise<HostRequirements | undefined> {
+  const listed = await printed(
+    dependencies,
+    base,
+    [
+      'ps',
+      '-a',
+      '-q',
+      ...idLabels(identity.folder, identity.configFile).flatMap(label => [
+        '--filter',
+        `label=${label}`,
+      ]),
+    ],
+    cancellation,
+  );
+  const [containerId] = (listed ?? '')
+    .split('\n')
+    .filter(line => line.trim() !== '');
+  if (containerId === undefined) {
+    return undefined;
+  }
+  const label = await printed(
+    dependencies,
+    base,
+    [
+      'inspect',
+      '--format',
+      '{{index .Config.Labels "devcontainer.metadata"}}',
+      containerId.trim(),
+    ],
+    cancellation,
+  );
+  return label === undefined || label.trim() === ''
+    ? undefined
+    : requirementsOfLabel(label);
+}
+
 /** What `docker context show` says: the current context, that the engine has no contexts, or nothing usable. */
 export type ContextState =
   {kind: 'context'; name: string} | {kind: 'noContexts'} | {kind: 'unreadable'};
@@ -349,13 +443,9 @@ export async function contextEndpoint(
   name: string,
   cancellation: AbortSignal,
 ): Promise<string | undefined> {
-  const executable = executableOf(dependencies.dockerPath(), base);
-  if (executable.kind !== 'spawn') {
-    return undefined;
-  }
-  const result = await query(
+  const result = await resultOf(
     dependencies,
-    executable,
+    base,
     [
       'context',
       'inspect',
@@ -365,6 +455,9 @@ export async function contextEndpoint(
     ],
     cancellation,
   );
+  if (result === undefined) {
+    return undefined;
+  }
   if (!succeeded(result) || result.kind !== 'ran') {
     dependencies.logger.debug(
       `the Docker context's endpoint could not be read: ${exitText(result)}`,

@@ -30,6 +30,7 @@ export interface OpenFolderPorts extends Pick<
   | 'clock'
   | 'bridge'
   | 'problematic'
+  | 'requirements'
   | 'opener'
   | 'authoring'
   | 'shutdown'
@@ -103,7 +104,16 @@ export function openFolderInContainer(
     const {choice, progress} = await chooseOrAuthor(
       ports,
       () => Promise.resolve('proceed'),
-      {title: TITLE, folder, dockerPath: dockerFile},
+      {
+        title: TITLE,
+        folder,
+        dockerPath: dockerFile,
+        hostRequirements: {
+          stage: 'file',
+          ports: ports.requirements,
+          base: undefined,
+        },
+      },
     );
     try {
       if (choice.kind !== 'chosen') {
