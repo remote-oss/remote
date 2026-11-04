@@ -55,14 +55,21 @@ The specs differ from the CLI's own behaviour in seven known places (dossier §4
 
    Each deviation goes through the first mechanism that reaches it, and C3's card records which (amended 2026-10-14
    on #764, measured on CLI 0.89.0):
-   - deviations 1 and 7 are the pre-pass, the only ones that need it (7 removes the top-level `image` from the
-     override; no flag of the CLI reaches it);
-   - deviation 2 needs no mechanism, because the CLI already makes `${containerEnv}` empty in `initializeCommand`;
-   - deviation 3 is the spawn environment, and for a clone in a volume the pre-pass: it resolves every
-     `${localEnv:…}` and `${env:…}` from the editor's environment on the host, because the container CLI host
-     passes none (F-0701 BR-14; an unset variable gets its default, as F-0701 Q5 prefers). The same pre-pass sets
-     `workspaceMount` to the volume at `/workspaces` and `workspaceFolder` to `/workspaces/<folder>`. The
-     configuration's own values are ignored, with a log line (F-0701 section 10);
+   - deviation 1 is the spawn environment (amended 2026-11-04, brief-configuration-and-menus §2, F-0304 AC-14): a
+     variable referenced in `${localEnv:…}` or `${env:…}` with a default, whose value is empty, is left out of the
+     CLI's environment, so the CLI's own lookup gives the default. The configuration's text, and so the image's
+     metadata label, stays as written;
+   - deviations 2 and 7 are the pre-pass, the only ones that need it:
+     - 2 writes `''`, or the written default, for every `${containerEnv:…}` in `initializeCommand` (amended
+       2026-11-04: the CLI leaves the reference in the text, which `dash` rejects; F-0304 AC-27);
+     - 7 removes the top-level `image` from the override; no flag of the CLI reaches it;
+   - deviation 3 is the spawn environment. For a clone in a volume, the container CLI host passes no editor
+     environment, so the variables the configuration references in `${localEnv:…}` and `${env:…}` pass by name, with
+     deviation 1's rule. A referenced variable that's unset, or empty with a default, on the host is unset in the
+     CLI's environment inside too (F-0701 BR-14; an unset variable gets its default, as F-0701 Q5 prefers; amended
+     2026-11-04, the pre-pass no longer resolves them in the text). That host's pre-pass sets `workspaceMount` to the
+     volume at `/workspaces` and `workspaceFolder` to `/workspaces/<folder>`. The configuration's own values are
+     ignored, with a log line (F-0701 section 10);
    - deviation 4 is post-processing;
    - deviation 5 is a flag;
    - deviation 6 waits for attach, which isn't in release 1.
