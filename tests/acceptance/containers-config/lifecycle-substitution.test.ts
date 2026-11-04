@@ -3,7 +3,7 @@ import {closeWindow} from '../windows/harness.ts';
 import {connectedWindow, removeContainers} from '../windows/folder-windows.ts';
 import {statusItemText} from '../windows/renderer.ts';
 import {docker} from '../windows/dev-containers-view.ts';
-import {textOfFile} from './support.ts';
+import {noWindowLeft, textOfFile} from './support.ts';
 
 /** The shortest time the indicator is given to follow a connect, in milliseconds. */
 const INDICATOR_MILLISECONDS = 30_000;
@@ -15,6 +15,8 @@ function probe(file: string, text: string): string {
 
 describe('Container references in remoteEnv and in lifecycle commands (card coverage-112)', function () {
   this.timeout(900_000);
+
+  beforeEach(noWindowLeft);
 
   it('F-0304 AC-2, AC-25, AC-28, AC-45, AC-52, AC-67 (c112-container): containerEnv references give the container’s values, the default of an unset variable and an empty string for an empty one, in remoteEnv, in each of the five lifecycle commands and in the name', async () => {
     const label = 'c112-container';

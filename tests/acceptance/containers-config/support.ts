@@ -1,6 +1,12 @@
 import {mkdirSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {runLabelArguments, variable, waitFor} from '../windows/harness.ts';
+import {
+  isOpen,
+  runLabelArguments,
+  variable,
+  waitFor,
+  windowNames,
+} from '../windows/harness.ts';
 import {docker} from '../windows/dev-containers-view.ts';
 
 /** How long a file written by a lifecycle command is waited for in the container, in milliseconds. */
@@ -44,4 +50,12 @@ export async function imageWithLabel(
   const imageTag = `${label}:${variable('HARNESS_RUN_ID')}`;
   await docker('build', '--tag', imageTag, ...runLabelArguments(), context);
   return imageTag;
+}
+
+/** Fails naming the windows an earlier row left open, so that a leak costs one row and not a wait in each row after it. */
+export function noWindowLeft(): void {
+  const left = windowNames().filter(each => each !== 'local' && isOpen(each));
+  if (left.length > 0) {
+    throw new Error(`windows left open by an earlier row: ${left.join(', ')}`);
+  }
 }

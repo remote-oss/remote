@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  closeContained,
   closeWindow,
   devContainerFolder,
   devContainersOf,
@@ -14,10 +15,11 @@ import {
 } from '../windows/folder-windows.ts';
 import {
   notifications,
+  pressEscape,
   statusBarText,
   waitForDialog,
 } from '../windows/renderer.ts';
-import {imageWithLabel, textOfFile} from './support.ts';
+import {imageWithLabel, noWindowLeft, textOfFile} from './support.ts';
 
 /** The dialog of a setup that fails, as F-0410 words it. */
 const FAILED_SETUP = {
@@ -43,6 +45,8 @@ async function failedOn(
 
 describe('The image label that cannot be used, and the one that is odd (card coverage-112)', function () {
   this.timeout(1_200_000);
+
+  beforeEach(noWindowLeft);
 
   it('F-0306 AC-30 (c112-bad-mount): a label whose only mount is a {type, src, dst} object ends in the generic setup dialog and leaves no container', async () => {
     const mount = JSON.parse(
@@ -80,7 +84,7 @@ describe('The image label that cannot be used, and the one that is odd (card cov
         [FAILED_SETUP, ['created']],
       );
     } finally {
-      await closeWindow(name).catch(() => undefined);
+      await closeContained(name, pressEscape);
       await removeContainers(folder);
       await docker('rmi', '--force', image).catch(() => undefined);
     }
@@ -106,7 +110,7 @@ describe('The image label that cannot be used, and the one that is odd (card cov
         [FAILED_SETUP, ['running'], 'Opening Remote...'],
       );
     } finally {
-      await closeWindow(name).catch(() => undefined);
+      await closeContained(name, pressEscape);
       await removeContainers(folder);
       await docker('rmi', '--force', image).catch(() => undefined);
     }

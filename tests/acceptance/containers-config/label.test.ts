@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {closeWindow, variable} from '../windows/harness.ts';
 import {docker} from '../windows/dev-containers-view.ts';
+import {noWindowLeft} from './support.ts';
 import {connectedWindow, removeContainers} from '../windows/folder-windows.ts';
 import {notifications} from '../windows/renderer.ts';
 
@@ -18,6 +19,8 @@ async function metadataOf(containerId: string): Promise<unknown[]> {
 
 describe('The configuration in the container’s metadata label (card coverage-112)', function () {
   this.timeout(900_000);
+
+  beforeEach(noWindowLeft);
 
   it('F-0305 AC-1, AC-2, AC-7, AC-14, AC-16 (c112-label): the last entry of the label holds the customizations in resolved form, with the legacy extensions after the customizations’ and the legacy settings folded under the customizations’; the legacy devPort loses to the customizations’; no secret becomes a variable or a notification', async () => {
     const label = 'c112-label';
