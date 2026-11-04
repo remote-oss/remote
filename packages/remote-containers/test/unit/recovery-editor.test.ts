@@ -129,6 +129,14 @@ describe('the editor adapters of the failure presenter (card containers-11)', ()
     ]);
   });
 
+  it('F-0410 AC-15: Close Remote runs the core command that ends the remote window, with no parameters', async () => {
+    const {ports, calls} = editor();
+    await ports.closeRemote();
+    deepStrictEqual(calls, [
+      ['executeCommand', 'workbench.action.remote.close'],
+    ]);
+  });
+
   it('F-0410 AC-5: later runs the task after the call stack has unwound', async () => {
     const {ports} = editor();
     const order: string[] = [];
