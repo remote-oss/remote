@@ -69,9 +69,12 @@ permissions:
 # One run per ref (a branch, or a pull request's refs/pull/<n>/merge) and kind: a new dispatch or push cancels the
 # ref's older run of the same kind, so the runners do not spend their time on superseded heads. The kind (the
 # real-server, vscodium and variants inputs) is part of the key, so a plain and an opt-in dispatch on one branch
-# run side by side. The tag of a release is its own group and is never cancelled.
+# run side by side. The tag of a release is its own group and is never cancelled. A push has a group of its own per
+# commit (2026-11-04): with one group for main, a run whose VSCodium parts waited for a self-hosted runner held it, and
+# the newer merges' runs were replaced while pending, so their checks, unit and coverage never ran. The VSCodium parts
+# keep their own groups per part, so main's parts still don't pile up.
 concurrency:
-  group: ci-${{ github.event_name }}-${{ github.ref }}-${{ inputs.real-server && 'real-server' || 'plain' }}-${{ inputs.vscodium && 'vscodium' || 'vscode' }}-${{ inputs.variants && 'variants' || 'one-host' }}-${{ inputs.genuine && 'genuine' || 'no-genuine' }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}${{ github.event_name == 'push' && format('-{0}', github.sha) || '' }}-${{ inputs.real-server && 'real-server' || 'plain' }}-${{ inputs.vscodium && 'vscodium' || 'vscode' }}-${{ inputs.variants && 'variants' || 'one-host' }}-${{ inputs.genuine && 'genuine' || 'no-genuine' }}
   cancel-in-progress: ${{ github.event_name != 'push' && github.event_name != 'schedule' }}
 
 jobs:
