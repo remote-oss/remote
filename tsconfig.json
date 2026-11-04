@@ -170,6 +170,9 @@
       "path": "tests/acceptance/explorer-trust"
     },
     {
+      "path": "tests/acceptance/explorer-trust-pickers"
+    },
+    {
       "path": "tests/acceptance/explorer-home"
     },
     {

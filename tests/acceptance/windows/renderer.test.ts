@@ -2,6 +2,10 @@ import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import {
   pageAmong,
   pageTitleByName,
+  nextListKey,
+  walkToPosition,
+  type FocusedRow,
+  type ListKey,
   pageTitleFor,
   pagesForState,
   pagesOfRemoteness,
@@ -408,5 +412,99 @@ describe('pagesForState', () => {
       ),
       ['p1', 'p3'],
     );
+  });
+});
+
+describe('nextListKey', () => {
+  it('tooling-122: the last row is reached by End, the first by Home from below the first, and a long distance by a page key', () => {
+    deepStrictEqual(
+      [
+        nextListKey(0, 2000, 2000, 20),
+        nextListKey(1500, 1, 2000, 20),
+        nextListKey(1, 1000, 2000, 20),
+        nextListKey(1500, 1000, 2000, 20),
+      ],
+      ['End', 'Home', 'PageDown', 'PageUp'],
+    );
+  });
+
+  it('tooling-122: the last few rows are reached by single steps, and from the group above the first row the first is one step down', () => {
+    deepStrictEqual(
+      [
+        nextListKey(985, 1000, 2000, 20),
+        nextListKey(1010, 1000, 2000, 20),
+        nextListKey(0, 1, 2000, 20),
+      ],
+      ['ArrowDown', 'ArrowUp', 'ArrowDown'],
+    );
+  });
+});
+
+describe('walkToPosition', () => {
+  function portsOf(next: (key: ListKey | undefined) => FocusedRow): {
+    presses: ListKey[];
+    ports: Parameters<typeof walkToPosition>[0];
+  } {
+    const presses: ListKey[] = [];
+    let last: ListKey | undefined;
+    return {
+      presses,
+      ports: {
+        read: () => Promise.resolve(next(last)),
+        press: key => {
+          last = key;
+          presses.push(key);
+          return Promise.resolve();
+        },
+        pause: () => Promise.resolve(),
+      },
+    };
+  }
+
+  it('tooling-122: a page whose focus never moves fails within the bound set on entering the set, not by running on', async () => {
+    const stuck = portsOf(() => ({
+      label: 'mt-5',
+      position: 5,
+      size: 2000,
+      level: 2,
+      rendered: 20,
+    }));
+    let message = '';
+    await walkToPosition(stuck.ports, 1000, 2).catch((caught: unknown) => {
+      message = String(caught);
+    });
+    deepStrictEqual(
+      [
+        stuck.presses.length <= Math.ceil(2000 / 20) + 20 + 1,
+        message.includes('did not reach position 1000'),
+        message.includes('"mt-5" at 5 of 2000'),
+      ],
+      [true, true, true],
+    );
+  });
+
+  it('tooling-122: a list that moves one row per key arrives, through the group row above the set', async () => {
+    let focused = 0;
+    const moving = portsOf(key => {
+      if (key === 'ArrowDown') {
+        focused += 1;
+      }
+      return focused === 0
+        ? {label: '', position: 0, size: 0, level: null, rendered: 20}
+        : focused === 1
+          ? {label: 'SSH', position: 1, size: 1, level: 1, rendered: 20}
+          : {
+              label: `mt-${String(focused - 1)}`,
+              position: focused - 1,
+              size: 2000,
+              level: 2,
+              rendered: 20,
+            };
+    });
+    deepStrictEqual(await walkToPosition(moving.ports, 2, 2), {
+      label: 'mt-2',
+      position: 2,
+      size: 2000,
+    });
   });
 });
