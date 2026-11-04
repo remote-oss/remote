@@ -238,6 +238,7 @@ const SYNTAX_BANS = [
   },
 ];
 
+/** The flat config array, as `pnpm lint` reads it; the quick config re-imports it. */
 export const config = defineConfig(
   {
     ignores: [

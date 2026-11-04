@@ -21,6 +21,8 @@
         "tools/package-extensions.ts!",
         "tools/package-run.ts!",
         ".vscode-test.mjs!",
+        // The quick lint's config, which the eslint CLI reads through --config.
+        "eslint.quick.config.ts!",
       ],
       "project": ["tools/**/*.ts!", "*.config.ts!"],
     },
@@ -133,6 +135,8 @@
   // @vscode/test-cli reads the default export of its configuration file.
   "ignoreIssues": {
     ".vscode-test.mjs": ["exports"],
+    // The eslint CLI reads the quick config's default export.
+    "eslint.quick.config.ts": ["exports"],
     "tests/acceptance/vscode-test.mjs": ["exports"],
     // The editor calls an extension's activate().
     "packages/*/src/extension.ts": ["exports"],

@@ -19,7 +19,7 @@ function lintQuick(files: string[]): Promise<{exit: number; output: string}> {
     });
     let output = '';
     for (const stream of [child.stdout, child.stderr]) {
-      stream?.on('data', (chunk: Buffer) => {
+      stream.on('data', (chunk: Buffer) => {
         output += chunk.toString();
       });
     }
