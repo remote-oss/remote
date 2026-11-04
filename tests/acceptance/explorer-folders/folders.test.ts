@@ -537,6 +537,13 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
     );
     try {
       await connectedTo(remote, HOST_B);
+      // The connection of the SSH window writes to the log for a while after it is connected, and longer on a slow runner.
+      let lines = -1;
+      for (let attempt = 0; attempt < 20 && lines !== connectionLog().length;) {
+        lines = connectionLog().length;
+        attempt += 1;
+        await new Promise(resolve => setTimeout(resolve, 3_000));
+      }
       const before = stateOf();
       const historyBefore = await historyOf();
       const toasts: unknown[] = [];
