@@ -90,9 +90,11 @@ export function composeResolverOf(
       return {kind: 'none'};
     }
     const configFolder = path.dirname(request.configFile);
-    const files = (
-      composeFileNamesOf(configuration.dockerComposeFile) ?? []
-    ).map(name => path.resolve(configFolder, name));
+    // The isComposeConfiguration above guarantees the compose file names.
+    const composeFiles = composeFileNamesOf(
+      configuration.dockerComposeFile,
+    ) as string[];
+    const files = composeFiles.map(name => path.resolve(configFolder, name));
     const service = configuration.service as string;
     const route = await ports.route(
       request.workspaceFolder,

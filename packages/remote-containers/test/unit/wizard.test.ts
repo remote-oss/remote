@@ -809,6 +809,33 @@ describe('the wizard (card containers-80)', () => {
     );
   });
 
+  it('coverage-117: an Escape in a Feature’s options walk ends the wizard cancelled, writing nothing', async () => {
+    const scene = sceneOf();
+    const input = scriptedInput([
+      picker => {
+        picker.acceptChecked(['Lab Options']);
+      },
+      pick('Configure Options'),
+      pressEscape,
+    ]);
+    scene.ports.options = input.ports;
+    scene.ports.catalogue.download = () => Promise.resolve(labCatalogue());
+    const {picker, result} = await started(scene);
+    picker.accept('Alpine');
+    deepStrictEqual(
+      [await result, scene.written, input.pickers.map(each => each.title)],
+      [
+        {kind: 'cancelled'},
+        [],
+        [
+          'Select Features',
+          'Keep Feature defaults or configure options?',
+          "Select boolean options for 'Lab Options'",
+        ],
+      ],
+    );
+  });
+
   it('F-0803 BR-8: a Feature the catalogue does not list keeps its entry and asks nothing', async () => {
     const scene = sceneOf();
     const input = scriptedInput([]);

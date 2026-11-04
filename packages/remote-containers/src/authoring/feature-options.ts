@@ -113,14 +113,15 @@ async function walked(
           feature.name,
         ]),
         finishButton: true,
-        items: booleans.map(([name, option]) => ({
-          key: name,
-          label: name,
-          ...(descriptionOf(option) === undefined
-            ? {}
-            : {description: descriptionOf(option) ?? ''}),
-          checked: isTrue(option.default),
-        })),
+        items: booleans.map(([name, option]) => {
+          const description = descriptionOf(option);
+          return {
+            key: name,
+            label: name,
+            ...(description === undefined ? {} : {description}),
+            checked: isTrue(option.default),
+          };
+        }),
       },
       quick,
       cancellation,

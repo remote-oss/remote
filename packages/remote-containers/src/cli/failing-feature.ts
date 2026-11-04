@@ -44,7 +44,7 @@ export function featureFailureOf(
 ): FeatureFailure | undefined {
   const quoted = candidates.filter(key => message.includes(`'${key}'`));
   if (quoted.length === 1) {
-    return failureOfKey(quoted[0] ?? '');
+    return failureOfKey(quoted[0] as string);
   }
   if (quoted.length === 0 && message.startsWith(TARBALL_FAILED)) {
     return candidates.filter(isReleaseKey).length === 1

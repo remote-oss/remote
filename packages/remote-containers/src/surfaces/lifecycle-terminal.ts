@@ -129,10 +129,8 @@ export function lifecyclePresenterOf(
           return;
         }
         for (const character of data) {
-          const code = character.codePointAt(0);
-          if (code === undefined) {
-            continue;
-          }
+          // A character a string's iteration gives is never empty, so its first code point is.
+          const code = character.codePointAt(0) as number;
           if (own.inSequence) {
             // The rest of a key sequence, to its final byte.
             if (code >= 0x40 && code <= 0x7e) {

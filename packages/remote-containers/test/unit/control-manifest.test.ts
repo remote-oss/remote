@@ -33,6 +33,8 @@ function sceneOf(options: {
   hang?: boolean;
   kept?: {text: string; keptAt: number};
   keepFails?: boolean;
+  /** What the kept copy throws, instead of an Error. */
+  keepFailsWith?: unknown;
   now?: number;
   environment?: Record<string, string | undefined>;
 }) {
@@ -60,6 +62,10 @@ function sceneOf(options: {
     keep: (text, keptAt) => {
       if (options.keepFails === true) {
         throw new Error('read-only storage');
+      }
+      if (options.keepFailsWith !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/prefer-throw-error -- a storage can reject with anything
+        throw options.keepFailsWith;
       }
       scene.keeps.push([text, keptAt]);
     },
@@ -302,6 +308,18 @@ describe('the control manifest (card containers-94)', () => {
         scene.sink.lines.map(line => line.message),
       ],
       [2, ['the control manifest could not be kept: read-only storage']],
+    );
+  });
+
+  it('coverage-117: a keep that fails with no Error is logged by its text', async () => {
+    const {scene, ports} = sceneOf({keepFailsWith: 'no room left'});
+    const manifest = await controlManifestOf(ports, NEVER);
+    deepStrictEqual(
+      [
+        manifest.disallowedFeatures.length,
+        scene.sink.lines.map(line => line.message),
+      ],
+      [2, ['the control manifest could not be kept: no room left']],
     );
   });
 });

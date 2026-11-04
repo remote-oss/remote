@@ -29,8 +29,8 @@ function startsWith(bytes: Uint8Array, mark: readonly number[]): boolean {
 function swapped(bytes: Uint8Array): Uint8Array {
   const result = new Uint8Array(bytes.length - (bytes.length % 2));
   for (let index = 0; index < result.length; index += 2) {
-    result[index] = bytes[index + 1] ?? 0;
-    result[index + 1] = bytes[index] ?? 0;
+    result[index] = bytes[index + 1] as number;
+    result[index + 1] = bytes[index] as number;
   }
   return result;
 }

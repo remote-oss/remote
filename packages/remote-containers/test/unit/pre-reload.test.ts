@@ -7,7 +7,12 @@ import type {
   EngineDialogPort,
   FirstCheckResult,
 } from '../../src/engine/preflight.ts';
-import {beforeReload, type PreReloadPorts} from '../../src/open/pre-reload.ts';
+import {
+  beforeReload,
+  type BeforeReload,
+  commandBeforeReload,
+  type PreReloadPorts,
+} from '../../src/open/pre-reload.ts';
 import {type Pending, pendingOf, settled, unhandledDuring} from './pending.ts';
 
 const FOLDER = '/w/p';
@@ -540,5 +545,157 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
     scene.read.catch(() => undefined);
     const outcome = await cancelledRun(scene);
     deepStrictEqual(outcome.choice.kind, 'cancelled');
+  });
+});
+
+describe('the checks an open command runs before its reload (card coverage-117)', () => {
+  const FEATURE = 'ghcr.io/owner/features/bad';
+  const MANIFEST = JSON.stringify({
+    disallowedFeatures: [{featureIdPrefix: FEATURE}],
+  });
+
+  /** The command's scene: its pending refusal warning, its timers, and the checks' cancel. */
+  interface CommandScene {
+    warn: Pending<'learnMore' | 'cancel'>;
+    timers: Array<() => void>;
+    cancels: Array<() => void>;
+    lines: () => string[];
+  }
+
+  /** The command over its scene, whose chosen configuration asks for `FEATURE`. */
+  function commandOf(): {
+    scene: CommandScene;
+    run: () => Promise<BeforeReload>;
+  } {
+    const sink = new MemorySink();
+    const warn = pendingOf<'learnMore' | 'cancel'>();
+    const timers: Array<() => void> = [];
+    const cancels: Array<() => void> = [];
+    const scene: CommandScene = {
+      warn,
+      timers,
+      cancels,
+      lines: () => sink.lines.map(line => `${line.level}: ${line.message}`),
+    };
+    const run = () =>
+      commandBeforeReload(
+        {
+          settings: {
+            mountGitWorktreeCommonDir: () => false,
+            defaultFeatures: () => undefined,
+            lockfile: () => undefined,
+          },
+          dialogs: {
+            showError: () => Promise.resolve(undefined),
+            openExternal: () => Promise.resolve(undefined),
+            revealLog: () => undefined,
+          },
+          config: {
+            files: {
+              list: folder =>
+                Promise.resolve(
+                  (folder === FOLDER
+                    ? ['.devcontainer']
+                    : folder === `${FOLDER}/.devcontainer`
+                      ? ['devcontainer.json']
+                      : []
+                  ).map(name => ({
+                    name,
+                    kind: (name.endsWith('.json') ? 'file' : 'folder') as
+                      'file' | 'folder',
+                  })),
+                ),
+              read: () => Promise.resolve(Buffer.from('{"image":"i"}')),
+              exists: () => Promise.resolve(true),
+            },
+            surfaces: {
+              pick: () => Promise.resolve({kind: 'picked', index: 0}),
+              dialogs: {
+                showError: () => Promise.resolve(undefined),
+                revealLog: () => undefined,
+              },
+              showWarning: () => Promise.resolve(undefined),
+              openPreview: () => Promise.resolve(),
+            },
+            useTemplate: () => Promise.resolve(),
+            compare: (left, right) => left.localeCompare(right, 'en'),
+            translate: template => template,
+          },
+          bridge: {
+            readConfiguration: () =>
+              Promise.resolve({
+                kind: 'configuration',
+                configuration: {image: 'i', features: {[FEATURE]: {}}},
+                workspaceFolder: '/workspaces/p',
+                workspaceMount: undefined,
+                mergedConfiguration: undefined,
+              }),
+          },
+          progress: {
+            showProgress: (title, until, cancel) => {
+              cancels.push(cancel);
+              void until;
+            },
+            setTimer: (_milliseconds, callback) => {
+              timers.push(callback);
+              return () => undefined;
+            },
+            translate: template => template,
+          },
+          clock: () => 0,
+          problematic: {
+            manifest: {
+              environment: {},
+              download: () => Promise.resolve(MANIFEST),
+              kept: () => undefined,
+              keep: () => undefined,
+              now: () => 0,
+              setTimer: () => () => undefined,
+              translate: template => template,
+              logger: createLogger(sink, {minimumLevel: () => 'info'}),
+            },
+            warn: () => warn.promise,
+            openExternal: () => Promise.resolve(undefined),
+          },
+          logger: createLogger(sink, {minimumLevel: () => 'info'}),
+        },
+        () => Promise.resolve('proceed'),
+        FOLDER,
+        '/usr/bin/docker',
+      );
+    return {scene, run};
+  }
+
+  it('coverage-117: a refusal warning that fails while the checks are not cancelled rethrows', async () => {
+    const {scene, run} = commandOf();
+    scene.warn.reject(new Error('the dialog died'));
+    scene.warn.promise.catch(() => undefined);
+    const running = run();
+    const caught: unknown[] = [];
+    running.catch(reason => caught.push(reason));
+    await settled();
+    deepStrictEqual(
+      caught.length === 1 && caught[0] instanceof Error && caught[0].message,
+      'the dialog died',
+    );
+  });
+
+  it('coverage-117: a cancel while the refusal is asked gives a cancelled choice', async () => {
+    const {scene, run} = commandOf();
+    const running = run();
+    await settled();
+    scene.timers[0]?.();
+    scene.cancels[0]?.();
+    scene.warn.reject(new Error('the dialog died'));
+    scene.warn.promise.catch(() => undefined);
+    const outcome = await running;
+    deepStrictEqual(
+      [outcome.choice, outcome.cancellation.aborted],
+      [{kind: 'cancelled'}, true],
+    );
+    deepStrictEqual(
+      scene.lines().filter(line => line.includes('cancelled')),
+      ['info: the command was cancelled while reading the configuration'],
+    );
   });
 });
