@@ -1,7 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {closeWindow, inWindow, variable, waitFor} from '../windows/harness.ts';
+import {closeWindow, inWindow, variable} from '../windows/harness.ts';
 import {
   connectedWindow,
   openFolderWindow,
@@ -126,13 +126,23 @@ async function editorHoverOf(name: string, needle: string): Promise<string> {
   return hover;
 }
 
-/** Waits until the language status menu of window `name` holds the item `entry`. */
+/** Waits until the language status menu of window `name` holds the item `entry`, naming the state when it does not. */
 async function settledStatusOf(name: string, entry: string): Promise<void> {
-  await waitFor(
-    `the language status of window ${name} reading ${JSON.stringify(entry)}`,
-    async () => (await languageStatusOf(name)).menu.includes(entry),
-    90_000,
-  );
+  let state: {item: string; menu: string[]};
+  const began = Date.now();
+  for (;;) {
+    state = await languageStatusOf(name);
+    if (state.menu.includes(entry)) {
+      return;
+    }
+    if (Date.now() - began > 90_000) {
+      throw new Error(
+        `window ${name}'s language status ${JSON.stringify(state.item)} has menu ` +
+          `${JSON.stringify(state.menu)}, without ${JSON.stringify(entry)}`,
+      );
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
 }
 
 /** The language item of window `name`'s status bar with the items of the menu clicking it shows, read and closed. */
@@ -149,17 +159,19 @@ async function languageStatusOf(
     })()`,
   );
   let menu: string[] = [];
-  await waitFor(
-    `the language status menu of window ${name}`,
-    async () => {
-      menu = await evaluate<string[]>(
-        name,
-        `[...document.querySelectorAll('.context-view [role="menuitem"]')].map(each => (each.textContent ?? '').trim()).filter(text => text !== '')`,
-      );
-      return menu.length > 0;
-    },
-    15_000,
-  );
+  const began = Date.now();
+  while (menu.length === 0 && Date.now() - began < 15_000) {
+    menu = await evaluate<string[]>(
+      name,
+      `[...document.querySelectorAll('.context-view [role="menuitem"]')].map(each => (each.textContent ?? '').trim()).filter(text => text !== '')`,
+    );
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  if (menu.length === 0) {
+    throw new Error(
+      `window ${name} shows no language status menu for the item ${JSON.stringify(item)}`,
+    );
+  }
   await pressEscape(name);
   return {item, menu};
 }
@@ -173,6 +185,35 @@ describe('the associations and the discontinued namespace of the authoring aids 
     }
   });
 
+  /** The base name of `file` and the same name without its last extension: the two forms the tab's label can take. */
+  function tabLabels(file: string): string[] {
+    const base = path.basename(file);
+    const stripped = base.replace(/\.[^.]*$/, '');
+    return stripped === base ? [base] : [base, stripped];
+  }
+
+  /** The problems of window `name` once it holds `count` of them, naming what the window holds when it stops short. */
+  async function problemsSettled(
+    name: string,
+    count: number,
+    budget = 60_000,
+  ): Promise<Problem[]> {
+    let problems: Problem[];
+    const began = Date.now();
+    do {
+      problems = await problemsOf(name);
+      if (problems.length === count) {
+        return problems;
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } while (Date.now() - began < budget);
+    throw new Error(
+      `window ${name} holds ${String(problems.length)} problems, not ${String(count)}: ` +
+        `problems ${JSON.stringify(problems.map(each => [each.file, each.message, each.severity]))}, ` +
+        `tabs ${JSON.stringify((await editorTabs(name)).map(each => each.label))}`,
+    );
+  }
+
   /** Opens `folder`, opens `file` in it, and gives the window and its problems once there are `count` of them. */
   async function problemsWithFile(
     folder: string,
@@ -182,22 +223,21 @@ describe('the associations and the discontinued namespace of the authoring aids 
     const window = await openFolderWindow(folder);
     opened.push(window);
     await inWindow(window, 'acceptance.agent.openFile', file);
-    await waitFor(
-      `the file ${file} in an editor of window ${window}`,
-      async () =>
-        (await editorTabs(window)).some(entry => file.endsWith(entry.label)),
-      30_000,
-    );
-    let problems: Problem[] = [];
-    await waitFor(
-      `${String(count)} problems in window ${window}`,
-      async () => {
-        problems = await problemsOf(window);
-        return problems.length === count;
-      },
-      60_000,
-    );
-    return [window, problems];
+    const labels = tabLabels(file);
+    const began = Date.now();
+    for (;;) {
+      const tabs = (await editorTabs(window)).map(each => each.label);
+      if (tabs.some(each => labels.includes(each))) {
+        return [window, await problemsSettled(window, count)];
+      }
+      if (Date.now() - began > 30_000) {
+        throw new Error(
+          `window ${window} shows no tab of ${JSON.stringify(file)}: ` +
+            `tabs ${JSON.stringify(tabs)}`,
+        );
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
   }
 
   it('F-0810 AC-1 (c208-ac1): a devcontainer-feature.json with a comment opens as JSON with Comments, with no diagnostic', async () => {
@@ -364,15 +404,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
       'acceptance.agent.openUri',
       'memfs:/devcontainer.json',
     );
-    let problems: Problem[] = [];
-    await waitFor(
-      `a problem in window ${window}`,
-      async () => {
-        problems = await problemsOf(window);
-        return problems.length === 1;
-      },
-      60_000,
-    );
+    const problems = await problemsSettled(window, 1);
     deepStrictEqual(
       problems.map(each => [each.file, each.message, each.severity]),
       [['devcontainer.json', S294, 'warning']],
@@ -392,15 +424,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
       `printf '%s' '${text}' > /workspaces/c208-ac42dc/devcontainer.json`,
     );
     await inWindow(name, 'acceptance.agent.openFile', 'devcontainer.json');
-    let problems: Problem[] = [];
-    await waitFor(
-      `a problem in window ${name}`,
-      async () => {
-        problems = await problemsOf(name);
-        return problems.length === 1;
-      },
-      60_000,
-    );
+    const problems = await problemsSettled(name, 1);
     deepStrictEqual(
       [
         problems.map(each => [each.file, each.message, each.severity]),
@@ -433,15 +457,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
       'devcontainers-contrib',
       'devcontainers-extra',
     );
-    let problems: Problem[] = [];
-    await waitFor(
-      'no problem in the window',
-      async () => {
-        problems = await problemsOf(window);
-        return problems.length === 0;
-      },
-      30_000,
-    );
+    const problems = await problemsSettled(window, 0, 30_000);
     deepStrictEqual(
       [
         problems.length,

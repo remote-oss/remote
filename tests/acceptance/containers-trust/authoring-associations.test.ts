@@ -7,10 +7,10 @@ import {
   isTrusted,
   trustSettled,
   variable,
-  waitFor,
 } from '../windows/harness.ts';
 import {openFolderWindow, setUserSetting} from '../windows/folder-windows.ts';
 import {
+  editorTabs,
   problemsOf,
   type Problem,
   statusBarText,
@@ -53,13 +53,23 @@ function folderWithFile(name: string, file: string, text: string): string {
   return folder;
 }
 
-/** Waits until the language status menu of window `name` holds the item `entry`. */
+/** Waits until the language status menu of window `name` holds the item `entry`, naming the state when it does not. */
 async function settledStatusOf(name: string, entry: string): Promise<void> {
-  await waitFor(
-    `the language status of window ${name} reading ${JSON.stringify(entry)}`,
-    async () => (await languageStatusOf(name)).menu.includes(entry),
-    90_000,
-  );
+  let state: {item: string; menu: string[]};
+  const began = Date.now();
+  for (;;) {
+    state = await languageStatusOf(name);
+    if (state.menu.includes(entry)) {
+      return;
+    }
+    if (Date.now() - began > 90_000) {
+      throw new Error(
+        `window ${name}'s language status ${JSON.stringify(state.item)} has menu ` +
+          `${JSON.stringify(state.menu)}, without ${JSON.stringify(entry)}`,
+      );
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
 }
 
 /** The language item of window `name`'s status bar with the items of the menu clicking it shows, read and closed. */
@@ -76,17 +86,19 @@ async function languageStatusOf(
     })()`,
   );
   let menu: string[] = [];
-  await waitFor(
-    `the language status menu of window ${name}`,
-    async () => {
-      menu = await evaluate<string[]>(
-        name,
-        `[...document.querySelectorAll('.context-view [role="menuitem"]')].map(each => (each.textContent ?? '').trim()).filter(text => text !== '')`,
-      );
-      return menu.length > 0;
-    },
-    15_000,
-  );
+  const began = Date.now();
+  while (menu.length === 0 && Date.now() - began < 15_000) {
+    menu = await evaluate<string[]>(
+      name,
+      `[...document.querySelectorAll('.context-view [role="menuitem"]')].map(each => (each.textContent ?? '').trim()).filter(text => text !== '')`,
+    );
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  if (menu.length === 0) {
+    throw new Error(
+      `window ${name} shows no language status menu for the item ${JSON.stringify(item)}`,
+    );
+  }
   await pressEscape(name);
   return {item, menu};
 }
@@ -101,6 +113,28 @@ describe('the authoring aids in Restricted Mode (card containers-208)', function
     }
   });
 
+  /** The problems of window `name` once it holds `count` of them, naming what the window holds when it stops short. */
+  async function problemsSettled(
+    name: string,
+    count: number,
+    budget = 60_000,
+  ): Promise<Problem[]> {
+    let problems: Problem[];
+    const began = Date.now();
+    do {
+      problems = await problemsOf(name);
+      if (problems.length === count) {
+        return problems;
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } while (Date.now() - began < budget);
+    throw new Error(
+      `window ${name} holds ${String(problems.length)} problems, not ${String(count)}: ` +
+        `problems ${JSON.stringify(problems.map(each => [each.file, each.message, each.severity]))}, ` +
+        `tabs ${JSON.stringify((await editorTabs(name)).map(each => each.label))}`,
+    );
+  }
+
   /** Opens `file` of `folder` in a new window and gives the window and its problems once there are `count` of them. */
   async function problemsWithFile(
     folder: string,
@@ -109,16 +143,7 @@ describe('the authoring aids in Restricted Mode (card containers-208)', function
   ): Promise<Problem[]> {
     window = await openFolderWindow(folder);
     await inWindow(window, 'acceptance.agent.openFile', file);
-    let problems: Problem[] = [];
-    await waitFor(
-      `${String(count)} problems in window ${window}`,
-      async () => {
-        problems = await problemsOf(window);
-        return problems.length === count;
-      },
-      60_000,
-    );
-    return problems;
+    return problemsSettled(window, count);
   }
 
   it('F-0810 AC-3 (c208-ac3): a devcontainer-feature.json in an untrusted workspace earns exactly the schema-download warning, with no property diagnostic', async () => {
@@ -213,15 +238,7 @@ describe('the authoring aids in Restricted Mode (card containers-208)', function
     await problemsWithFile(folder, 'devcontainer-feature.json', 1);
     await setUserSetting('security.workspace.trust.untrustedFiles', ['**']);
     const settled = await trustSettled(window, true);
-    let remaining: Problem[] = [];
-    await waitFor(
-      `no schema problem in window ${window}`,
-      async () => {
-        remaining = await problemsOf(window);
-        return remaining.length === 0;
-      },
-      90_000,
-    );
+    const remaining = await problemsSettled(window, 0, 90_000);
     await setUserSetting('security.workspace.trust.untrustedFiles', undefined);
     deepStrictEqual(
       [settled, remaining.length, await isTrusted(window)],
