@@ -1,14 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
-import {mkdirSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {
-  closeWindow,
-  runLabelArguments,
-  runScopedName,
-  variable,
-} from '../windows/harness.ts';
+import {closeWindow, runScopedName} from '../windows/harness.ts';
 import {docker} from '../windows/dev-containers-view.ts';
-import {textOfFile} from './support.ts';
+import {imageWithLabel, textOfFile} from './support.ts';
 import {connectedWindow, removeContainers} from '../windows/folder-windows.ts';
 
 /** The parts of `docker inspect` that the rows read. */
@@ -30,26 +24,6 @@ async function inspected(container: string): Promise<Inspected> {
     throw new Error(`docker inspect gave nothing for ${container}`);
   }
   return first;
-}
-
-/** Builds an image from the run's with the metadata `entries` as its label and gives its tag. */
-async function imageWithLabel(
-  label: string,
-  entries: readonly unknown[],
-): Promise<string> {
-  const context = path.join(variable('HARNESS_RUN_FOLDER'), label);
-  mkdirSync(context, {recursive: true});
-  writeFileSync(
-    path.join(context, 'Dockerfile'),
-    [
-      `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}`,
-      `LABEL devcontainer.metadata='${JSON.stringify(entries)}'`,
-      '',
-    ].join('\n'),
-  );
-  const imageTag = `${label}:${variable('HARNESS_RUN_ID')}`;
-  await docker('build', '--tag', imageTag, ...runLabelArguments(), context);
-  return imageTag;
 }
 
 describe('The image’s metadata label merged into the container (card coverage-112)', function () {
