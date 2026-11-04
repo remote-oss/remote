@@ -50,6 +50,17 @@ files), `brief-logs-and-configuration-file.md` (F-0812's `openDevContainerFile`)
        through the editor. It's never a temporary file and a rename: a rename would replace a symlinked
        `devcontainer.json`, and it would bypass a `vscode-remote` or virtual file system provider.
    - **The result** says when the edit is durable, so a caller's notification can follow it (F-1103 AC-15, AC-25).
+   - **`(ruling-2148-write-guard)`:** before `diskOrSaveIfClean` edits a file it will save (no tab, or a clean tab), two
+     checks run. Either failing refuses the write: nothing is edited or saved, S277 isn't shown, and an error
+     notification of ours names the file and the reason. A row covers each.
+     - **The real path is inside the workspace folders.** For `file:`, that's the resolved real path of the file
+       against the folders' real paths. On another scheme, a symbolic link (`FileType.SymbolicLink`) is refused,
+       because its target can't be checked. A link that stays inside the workspace keeps working.
+     - **The text parses as a JSONC object.**
+
+     A save follows links, and F-1103 saves with no review step. A repository could make `devcontainer.json` a link to
+     a file outside it, so labelling a port could rewrite that file. That needs a Deviations entry: the reference
+     writes through the link.
 3. **The target resolver** (pure over the window's facts, F-0809 BR-7): it gives the file and its policy, checked
    in BR-7's order:
    1. **An attached container:** the applicable attach file.
@@ -218,4 +229,5 @@ files), `brief-logs-and-configuration-file.md` (F-0812's `openDevContainerFile`)
 - `reading-2148-picker-order`;
 - `reading-2148-short-ids`;
 - `reading-2148-ports-rewrite`;
-- `ruling-2148-lookup-trust`.
+- `ruling-2148-lookup-trust`;
+- `ruling-2148-write-guard`.
