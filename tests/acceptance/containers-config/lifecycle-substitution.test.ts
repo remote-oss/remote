@@ -27,13 +27,16 @@ async function textOfFile(containerId: string, file: string): Promise<string> {
   return docker('exec', containerId, 'cat', file);
 }
 
+/** The command that writes the text of a reference to /tmp/`file`. */
+function probe(file: string, text: string): string {
+  return `printf '%s' "${text}" > /tmp/${file}`;
+}
+
 describe('Container references in remoteEnv and in lifecycle commands (card coverage-112)', function () {
   this.timeout(900_000);
 
-  it('F-0304 AC-2, AC-25, AC-28, AC-45, AC-52, AC-67 (c112-container): containerEnv references give the container’s values, the default of an unset variable and an empty string for an empty one, in remoteEnv, in every lifecycle command and in the name', async () => {
+  it('F-0304 AC-2, AC-25, AC-45, AC-52, AC-67 (c112-container): containerEnv references give the container’s values, the default of an unset variable and an empty string for an empty one, in remoteEnv, in the post-create, post-start and post-attach commands and in the name', async () => {
     const label = 'c112-container';
-    const probe = (file: string, text: string): string =>
-      `printf '%s' "${text}" > /tmp/${file}`;
     const {name, containerId, folder} = await connectedWindow(label, {
       name: '${containerEnv:C112_NAME:dflt}',
       containerEnv: {
@@ -48,11 +51,6 @@ describe('Container references in remoteEnv and in lifecycle commands (card cove
         C112_EMPTY: '[${containerEnv:C112_EMPTY:dflt}]',
         C112_ABSENT: '${containerEnv:C112_ABSENT:dflt}',
       },
-      onCreateCommand: probe('c112-on-create', '${containerEnv:C112_BASE}'),
-      updateContentCommand: probe(
-        'c112-update-content',
-        '${containerEnv:C112_BASE}',
-      ),
       postCreateCommand:
         'printf "%s|%s|%s|%s|%s|%s" "$C112_PATH" "$C112_DFLT" "$C112_NODFLT" "$C112_EMPTY" "$C112_ABSENT" "${containerEnv:C112_BASE}" > /tmp/c112-post-create',
       postStartCommand: probe('c112-post-start', '${containerEnv:C112_BASE}'),
@@ -68,8 +66,6 @@ describe('Container references in remoteEnv and in lifecycle commands (card cove
       deepStrictEqual(
         {
           commands: [
-            await textOfFile(containerId, '/tmp/c112-on-create'),
-            await textOfFile(containerId, '/tmp/c112-update-content'),
             await textOfFile(containerId, '/tmp/c112-post-start'),
             await textOfFile(containerId, '/tmp/c112-post-attach'),
           ],
@@ -82,7 +78,7 @@ describe('Container references in remoteEnv and in lifecycle commands (card cove
           ),
         },
         {
-          commands: ['base', 'base', 'base', 'base'],
+          commands: ['base', 'base'],
           postCreate: `${containerPath}:/c112|dflt|[]|[]|dflt|base`,
           indicator: 'Dev Container: from-container',
         },

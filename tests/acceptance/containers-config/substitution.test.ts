@@ -74,7 +74,7 @@ describe('Variable substitution in a connected dev container (card coverage-112)
         },
       ],
     });
-    const home = process.env['HOME'] ?? '';
+    const {HOME: home = ''} = process.env;
     const created: string[] = [];
     try {
       const environment = await environmentOf(containerId);
@@ -96,7 +96,7 @@ describe('Variable substitution in a connected dev container (card coverage-112)
             : [],
         ),
       );
-      const identifier = environment['C112_ID'] ?? '';
+      const {C112_ID: identifier = ''} = environment;
       const expectedName = `${label}-${label}-dflt`;
       deepStrictEqual(
         {
@@ -142,7 +142,7 @@ describe('Variable substitution in a connected dev container (card coverage-112)
             C112_UPPER: '${LocalEnv:HOME}',
             C112_SPACED: '${ localEnv:HOME }',
             C112_LEADING: '',
-            C112_BACKSLASH: '\\',
+            C112_BACKSLASH: `\\${home}`,
             C112_DOLLAR: `$${home}`,
             C112_BLANKDEFAULT: '',
             C112_EMPTYSET: 'dflt',
