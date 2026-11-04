@@ -54,7 +54,7 @@ function standInDocker(): {
   writeFileSync(
     program,
     `#!/bin/sh
-state=${STATE}
+state='${STATE}'
 if [ "$1" = version ]; then
   if [ -f "$state/delay" ]; then sleep "$(cat "$state/delay")"; fi
   if [ -f "$state/down" ] || { [ -f "$state/down-resolve" ] && [ $# -eq 1 ]; }; then
@@ -103,6 +103,14 @@ describe('Docker availability rows (card containers-200, part B)', function () {
   this.timeout(600_000);
 
   let docker: ReturnType<typeof standInDocker>;
+  const opened: Array<{name: string; folder: string}> = [];
+
+  /** Opens a window on the folder, which the cleanup closes together with the folder's containers. */
+  async function windowOn(folder: string): Promise<string> {
+    const name = await openFolderWindow(folder);
+    opened.push({name, folder});
+    return name;
+  }
 
   beforeEach(async () => {
     docker = standInDocker();
@@ -111,6 +119,10 @@ describe('Docker availability rows (card containers-200, part B)', function () {
   });
 
   afterEach(async () => {
+    for (const {name, folder} of opened.splice(0)) {
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder);
+    }
     await setUserSetting('dev.containers.dockerPath', undefined);
     await setUserSetting(
       'dev.containers.optimisticallyLaunchDocker',
@@ -122,7 +134,7 @@ describe('Docker availability rows (card containers-200, part B)', function () {
   it('F-0202 AC-7 (c200-setting): the setting is contributed as a boolean that is true by default, and setting it to false changes nothing about a failing check', async () => {
     docker.steer({down: ''});
     const folder = devContainerFolder('c200-setting', {name: 'C200 Setting'});
-    const name = await openFolderWindow(folder);
+    const name = await windowOn(folder);
     const before = await settingDefaultIn(
       name,
       'dev.containers.optimisticallyLaunchDocker',
@@ -152,7 +164,7 @@ describe('Docker availability rows (card containers-200, part B)', function () {
     docker.steer({delay: '4'});
     const folder = devContainerFolder('c200-slow', {name: 'C200 Slow'});
     try {
-      const name = await openFolderWindow(folder);
+      const name = await windowOn(folder);
       const opening = reopenInContainer(name);
       await toastShown(name, STARTING);
       const facts = {
@@ -187,7 +199,7 @@ describe('Docker availability rows (card containers-200, part B)', function () {
   it('F-0202 AC-32 (c200-cancel): Cancel on Starting Docker abandons the open although the check would have passed: no reload, no container, no other notification or dialog', async () => {
     docker.steer({delay: '10'});
     const folder = devContainerFolder('c200-cancel', {name: 'C200 Cancel'});
-    const name = await openFolderWindow(folder);
+    const name = await windowOn(folder);
     // The notice that the folder holds a configuration is the editor's own and stays until it is dismissed.
     await new Promise(resolve => setTimeout(resolve, 3000));
     await inWindow(name, 'notifications.clearAll');
@@ -217,9 +229,9 @@ describe('Docker availability rows (card containers-200, part B)', function () {
   });
 
   it('F-0202 AC-33 (c200-fast-fail): a check that fails within the two seconds shows its dialog and no Starting Docker or Reading notification', async () => {
-    docker.steer({delay: '1', down: ''});
+    docker.steer({delay: '0.5', down: ''});
     const folder = devContainerFolder('c200-fast', {name: 'C200 Fast'});
-    const name = await openFolderWindow(folder);
+    const name = await windowOn(folder);
     const sampler = sampling(name);
     const running = inWindow(name, 'remote-containers.reopenInContainer');
     running.catch(() => undefined);
@@ -242,7 +254,7 @@ describe('Docker availability rows (card containers-200, part B)', function () {
   it('F-0202 AC-45 (c200-second-trigger): a second invocation during a running check runs its own check, so two failures show two dialogs', async () => {
     docker.steer({delay: '3', down: ''});
     const folder = devContainerFolder('c200-second', {name: 'C200 Second'});
-    const name = await openFolderWindow(folder);
+    const name = await windowOn(folder);
     const first = inWindow(name, 'remote-containers.reopenInContainer');
     const second = inWindow(name, 'remote-containers.reopenInContainer');
     first.catch(() => undefined);
@@ -265,12 +277,12 @@ describe('Docker availability rows (card containers-200, part B)', function () {
   it('F-0202 AC-39 (c200-retry): a rebuild whose resolve-time check fails has dropped its intent, so Retry reconnects to the same container', async () => {
     const folder = devContainerFolder('c200-retry', {name: 'C200 Retry'});
     try {
-      const first = await openFolderWindow(folder);
+      const first = await windowOn(folder);
       await reopenInContainer(first);
       const created = await devContainersOf(folder);
       await closeWindow(first);
       docker.steer({'down-resolve': ''});
-      const name = await openFolderWindow(folder);
+      const name = await windowOn(folder);
       const rebuilding = inWindow(
         name,
         'remote-containers.rebuildAndReopenInContainer',
