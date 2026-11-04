@@ -312,19 +312,29 @@ function lifecycleOver(
   calls: string[];
   presenter: LifecyclePresenter;
   lifecycle: ReturnType<typeof containerLifecycleOf>;
+  sink: MemorySink;
 } {
   const {calls, presenter} = recordingPresenter();
+  const sink = new MemorySink();
   return {
     calls,
     presenter,
+    sink,
     lifecycle: containerLifecycleOf({
       engine: scriptedEngine(EMPTY_LISTING),
       cli: bridge,
-      logger: createLogger(undefined, {minimumLevel: () => 'info'}),
+      logger: createLogger(sink, {minimumLevel: () => 'info'}),
       presenter,
       clock,
     }),
   };
+}
+
+/** The messages `sink` holds at warn that say lifecycle commands were skipped. */
+function skipWarningsOf(sink: MemorySink): string[] {
+  return sink.lines
+    .filter(line => line.level === 'warn' && line.message.includes('skipped'))
+    .map(line => line.message);
 }
 
 /** A lifecycle over `bridge` after one `prepare` whose background run waits for `settleFirst`. */
@@ -2581,9 +2591,9 @@ describe('containerLifecycleOf', () => {
     });
   });
 
-  it('brief-personalization §1 step 4: the blocking run takes the blocking stop and the relay variables, on the ready container', async () => {
+  it('brief-personalization §1 step 4: the blocking run takes the blocking stop and the relay variables, on the ready container; with none ready it is skipped at warn', async () => {
     const bridge = fakeBridge();
-    const {lifecycle} = lifecycleOver(bridge);
+    const {lifecycle, sink} = lifecycleOver(bridge);
     const before = await lifecycle.runBlocking(
       {},
       new AbortController().signal,
@@ -2603,6 +2613,7 @@ describe('containerLifecycleOf', () => {
         before.kind,
         done,
         bridge.runs.map(run => [run.containerId, run.options]),
+        skipWarningsOf(sink),
       ],
       [
         'done',
@@ -2616,6 +2627,7 @@ describe('containerLifecycleOf', () => {
             },
           ],
         ],
+        ['the blocking lifecycle commands were skipped: no container is ready'],
       ],
     );
   });
@@ -2662,10 +2674,10 @@ describe('containerLifecycleOf', () => {
     );
   });
 
-  it('brief-personalization §1 steps 6 to 8: the background stops for the personalization, then runs the rest; a failed first run skips both; nothing starts with no ready container', async () => {
+  it('brief-personalization §1 steps 6 to 8: the background stops for the personalization, then runs the rest; a failed first run skips both; nothing starts with no ready container, at warn', async () => {
     const order: string[] = [];
     const bridge = fakeBridge();
-    const {lifecycle} = lifecycleOver(bridge);
+    const {lifecycle, sink} = lifecycleOver(bridge);
     lifecycle.startBackground({}, () => {
       order.push('never');
       return Promise.resolve();
@@ -2698,7 +2710,12 @@ describe('containerLifecycleOf', () => {
     await settle();
     await settle();
     deepStrictEqual(
-      [order, bridge.runs.map(run => run.options), failing.runs.length],
+      [
+        order,
+        bridge.runs.map(run => run.options),
+        failing.runs.length,
+        skipWarningsOf(sink),
+      ],
       [
         ['personalize after 1'],
         [
@@ -2706,6 +2723,9 @@ describe('containerLifecycleOf', () => {
           {remoteEnvironment: {DISPLAY: ':1'}},
         ],
         1,
+        [
+          'the background lifecycle commands were skipped: no container is ready',
+        ],
       ],
     );
   });

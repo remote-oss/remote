@@ -1332,7 +1332,6 @@ export function containerConnectorOf(
     explored?: boolean;
   }
 
-  /** Reads the merged configuration, installs and starts the server, relays its port, and holds the connection. */
   /**
    * The steps between the server's files and its start: the early personalization (none yet) and the blocking lifecycle
    * commands, under "Starting server". A failure of the commands is the connect's, as `up`'s was.
@@ -1340,17 +1339,17 @@ export function containerConnectorOf(
   async function blockingHooks(
     cancellation: AbortSignal,
   ): Promise<Failed | undefined> {
-    if (lifecycle === undefined) {
-      return undefined;
-    }
     phases.tell({name: 'startingServer'});
-    const blocking = await lifecycle.runBlocking(
+    const blocking = await lifecycle?.runBlocking(
       RELAY_ENVIRONMENT,
       cancellation,
     );
-    return blocking.kind === 'done' ? undefined : failureOf(blocking, []);
+    return blocking === undefined || blocking.kind === 'done'
+      ? undefined
+      : failureOf(blocking, []);
   }
 
+  /** Reads the merged configuration, installs and starts the server, relays its port, and holds the connection. */
   async function connectPrepared(
     context: PreparedContext,
     cancellation: AbortSignal,

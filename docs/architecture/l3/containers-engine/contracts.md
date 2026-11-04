@@ -59,11 +59,12 @@ side ends. `{kind: 'socket'}` is refused in release 1.
    port (F-0502 BR-3); `openRelayTunnel` with C11's exec dialer and the target `{kind: 'port', port: <container
    port>}`. The log names both ports.
 9. The background, not awaited by the connect: run 1 is `run-user-commands … --stop-for-personalization`; phase P
-   (brief-personalization §4, empty until its cards land) runs only when run 1 succeeded; run 2 is `run-user-commands`
-   with no stop, and the CLI's markers skip what already ran. Both take the relay variables as `--remote-env`. Their
+   (brief-personalization §4, empty until its cards land) and run 2, `run-user-commands` with no stop, run only when
+   run 1 succeeded: a failed `postCreateCommand` isn't marked, so run 2 would run it again. The CLI's markers skip what
+   already ran. Both take the relay variables as `--remote-env`. Their
    outcome is logged, as the single background run's was; the lifecycle presenter takes their JSON log streams.
-10. Return `Connected{address: {host: '127.0.0.1', port}, connectionToken, extensionHostEnv: {}, environmentTunnels: [],
-   trusted}`. `trusted` is `false` for a folder, and `true` for a clone in a volume (F-0106 BR-13's forced trust,
+10. Return `Connected{address: {host: '127.0.0.1', port}, connectionToken, extensionHostEnv, environmentTunnels: [],
+   trusted}`, where `extensionHostEnv` is step 7's environment. `trusted` is `false` for a folder, and `true` for a clone in a volume (F-0106 BR-13's forced trust,
    brief-volumes §3.8); the family registers with `allowsTrust: true`, so lib-authority passes it on. No tunnel factory
    and no tunnel features are given to core (brief ruling 1).
 

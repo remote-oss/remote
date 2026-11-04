@@ -290,7 +290,6 @@ const POST_CREATE_CHANNEL = 'postCreate';
 /** The hook that runs on the host before the container exists; its failure has no terminal to end. */
 const INITIALIZE_COMMAND = 'initializeCommand';
 
-/** The lifecycle over an engine and the CLI. */
 /** A container `prepare` made ready: the target `up` ran with, and where the events of its runs go. */
 interface ReadyContainer {
   target: CliTarget;
@@ -298,6 +297,7 @@ interface ReadyContainer {
   onCliEvent: (event: CliEvent) => void;
 }
 
+/** The lifecycle over an engine and the CLI. */
 export function containerLifecycleOf(dependencies: {
   engine: EngineHost;
   cli: CliBridge;
@@ -439,6 +439,9 @@ export function containerLifecycleOf(dependencies: {
     cancellation: AbortSignal,
   ): Promise<{kind: 'done'} | Exclude<ContainerOutcome, {kind: 'ready'}>> {
     if (ready === undefined) {
+      logger.warn(
+        'the blocking lifecycle commands were skipped: no container is ready',
+      );
       return {kind: 'done'};
     }
     const result = await runCommands(
@@ -461,6 +464,9 @@ export function containerLifecycleOf(dependencies: {
   ): void {
     const on = ready;
     if (on === undefined) {
+      logger.warn(
+        'the background lifecycle commands were skipped: no container is ready',
+      );
       return;
     }
     background?.abort();
