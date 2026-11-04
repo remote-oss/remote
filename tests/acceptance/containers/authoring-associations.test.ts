@@ -1,7 +1,13 @@
 import {deepStrictEqual} from 'node:assert';
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {closeWindow, inWindow, variable} from '../windows/harness.ts';
+import {
+  closeWindow,
+  inWindow,
+  isTrusted,
+  variable,
+  windowState,
+} from '../windows/harness.ts';
 import {
   connectedWindow,
   openFolderWindow,
@@ -9,6 +15,7 @@ import {
   writeMemoryFile,
 } from '../windows/folder-windows.ts';
 import {
+  clickAt,
   editorTabs,
   problemsOf,
   type Problem,
@@ -59,16 +66,16 @@ function folderWithFile(name: string, file: string, text: string): string {
   return folder;
 }
 
-/** The text of the hover a mouse resting on `needle` in window `name`'s active editor shows, empty when none. */
+/** The text of the hover window `name`'s active editor shows at the token `needle`, empty when it shows none. */
 async function editorHoverOf(name: string, needle: string): Promise<string> {
-  await evaluate<boolean>(
+  const point = await evaluate<{x: number; y: number} | null>(
     name,
     `(() => {
       const line = [...document.querySelectorAll('.view-lines .view-line')].find(
         entry => (entry.textContent ?? '').includes(${JSON.stringify(needle)}),
       );
       if (line === undefined) {
-        return;
+        return null;
       }
       const text = line.textContent ?? '';
       const index = text.indexOf(${JSON.stringify(needle)});
@@ -93,36 +100,37 @@ async function editorHoverOf(name: string, needle: string): Promise<string> {
         count += length;
       }
       if (startNode === null || endNode === null) {
-        return;
+        return null;
       }
       const range = document.createRange();
       range.setStart(startNode, startOffset);
       range.setEnd(endNode, endOffset);
       const rect = range.getBoundingClientRect();
-      const point = {
+      return {
         x: rect.left + rect.width / 2,
         y: rect.top + rect.height / 2,
       };
-      const target =
-        document.elementFromPoint(point.x, point.y) ?? line;
-      for (const type of ['mouseover', 'mousemove']) {
-        target.dispatchEvent(
-          new MouseEvent(type, {bubbles: true, clientX: point.x, clientY: point.y}),
-        );
-      }
-      return true;
     })()`,
   );
+  if (point === null) {
+    throw new Error(
+      `window ${name}'s active editor shows no line holding ${JSON.stringify(needle)}`,
+    );
+  }
+  // The cursor rests on the token, and the command's hover at the cursor is read and closed.
+  await clickAt(name, point);
+  await inWindow(name, 'editor.action.showHover');
   let hover = '';
   for (let tries = 0; tries < 40 && hover === ''; tries += 1) {
     await new Promise(resolve => setTimeout(resolve, 100));
     hover = (
       await evaluate<string>(
         name,
-        `(document.querySelector('.monaco-hover .monaco-hover-content, .workbench-hover')?.textContent ?? '')`,
+        `(document.querySelector('.monaco-hover:not(.hidden) .monaco-hover-content')?.textContent ?? '')`,
       )
     ).trim();
   }
+  await evaluate<boolean>(name, CLOSE_HOVERS);
   return hover;
 }
 
@@ -421,6 +429,8 @@ describe('the associations and the discontinued namespace of the authoring aids 
   it('F-0810 AC-42 (c208-ac42-container-part): the warning shows in a dev container window for a configuration that exists only inside the container', async () => {
     const {name, containerId} = await connectedWindow('c208-ac42dc');
     opened.push(name);
+    // The configuration lives in the container alone, outside the workspace mount the window opens from.
+    const inContainer = '/tmp/c208-only/devcontainer.json';
     const text =
       '{"features": {"devcontainers-contrib/features/bash-command:1": {}}}';
     await docker(
@@ -428,10 +438,22 @@ describe('the associations and the discontinued namespace of the authoring aids 
       containerId,
       'sh',
       '-c',
-      `printf '%s' '${text}' > /workspaces/c208-ac42dc/devcontainer.json`,
+      `mkdir -p /tmp/c208-only && printf '%s' '${text}' > ${inContainer}`,
     );
-    await inWindow(name, 'acceptance.agent.openFile', 'devcontainer.json');
-    const problems = await problemsSettled(name, 1, 120_000);
+    await inWindow(name, 'acceptance.agent.openUri', `file://${inContainer}`);
+    let problems: Problem[];
+    try {
+      problems = await problemsSettled(name, 1, 120_000);
+    } catch (caught) {
+      const state = await windowState(name);
+      throw new Error(
+        `${String(caught)}; the window: remote ${JSON.stringify(state.remoteName)}, ` +
+          `authority ${JSON.stringify(state.remoteAuthority)}, folders ${JSON.stringify(state.folders)}, ` +
+          `tab ${JSON.stringify(state.activeTab?.uri ?? null)}, ` +
+          `trusted ${JSON.stringify(await isTrusted(name))}`,
+        {cause: caught},
+      );
+    }
     deepStrictEqual(
       [
         problems.map(each => [each.file, each.message, each.severity]),

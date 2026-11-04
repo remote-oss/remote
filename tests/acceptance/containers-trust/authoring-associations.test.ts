@@ -7,10 +7,13 @@ import {
   isTrusted,
   trustSettled,
   variable,
+  waitFor,
 } from '../windows/harness.ts';
-import {openFolderWindow, setUserSetting} from '../windows/folder-windows.ts';
+import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
+  clickButton,
   editorTabs,
+  pageText,
   problemsOf,
   type Problem,
   statusBarText,
@@ -275,10 +278,15 @@ describe('the authoring aids in Restricted Mode (card containers-208)', function
       'devcontainer-feature.json',
     );
     await problemsIncluding(window, SCHEMA_BLOCKED);
-    await setUserSetting('security.workspace.trust.untrustedFiles', ['**']);
+    await inWindow(window, 'workbench.trust.manage');
+    await waitFor(
+      `window ${window}'s trust editor`,
+      async () => (await pageText(window)).includes('Workspace Trust Editor'),
+      30_000,
+    );
+    await clickButton(window, 'Trust');
     const settled = await trustSettled(window, true);
     const remaining = await problemsSettled(window, 0, 90_000);
-    await setUserSetting('security.workspace.trust.untrustedFiles', undefined);
     deepStrictEqual(
       [settled, remaining.length, await isTrusted(window)],
       [true, 0, true],

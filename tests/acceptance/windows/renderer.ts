@@ -762,6 +762,21 @@ export async function hoverRow(
   await new Promise(resolve => setTimeout(resolve, 300));
 }
 
+/** Clicks the point {x, y} of window `name`'s renderer with the mouse, which focuses the element there and places a cursor of an editor under it. */
+export async function clickAt(
+  name: string,
+  point: {x: number; y: number},
+): Promise<void> {
+  await dispatchInput(
+    await pageOf(name),
+    name,
+    ['mousePressed', 'mouseReleased'].map(type => ({
+      method: 'Input.dispatchMouseEvent',
+      params: {type, ...point, button: 'left', clickCount: 1},
+    })),
+  );
+}
+
 /** Clicks the label of the one row labelled `rowLabel` in view `viewName` of window `name` with the mouse, which selects and focuses it. */
 export async function clickRowLabel(
   name: string,
@@ -1800,10 +1815,15 @@ export async function problemsOf(name: string): Promise<Problem[]> {
       const problems = [];
       let file = '';
       for (const row of document.querySelectorAll('.markers-panel [role="treeitem"]')) {
-        if (row.getAttribute('aria-level') === '1') {
+        const level = row.getAttribute('aria-level');
+        if (level === '1') {
           const folder = row.querySelector('.label-description')?.textContent ?? '';
           const label = row.querySelector('.label-name')?.textContent ?? '';
           file = folder === '' ? label : folder + '/' + label;
+          continue;
+        }
+        if (level !== '2') {
+          // A deeper row is the reference of a problem to another location, not a problem of its own.
           continue;
         }
         const line = row.querySelector('.marker-line')?.textContent ?? '';
