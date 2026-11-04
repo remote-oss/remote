@@ -807,6 +807,40 @@ export function containerConnectorOf(
     return list;
   }
 
+  /**
+   * Takes the rebuild intent and then runs the resolve-time check of the engine. The intent is taken first, so a check
+   * that fails has dropped it and a Retry after it reconnects without a rebuild.
+   */
+  async function takenBeforeCheck(
+    input: ConnectInput,
+    engine: EngineHost,
+    settings: Tools['settings'],
+    base: string | undefined,
+    cancellation: AbortSignal,
+  ): Promise<{
+    rebuild: {buildNoCache: boolean} | undefined;
+    failure: Failed | undefined;
+  }> {
+    const rebuild = await takenRebuild(input);
+    phases.tell({name: 'initializing'});
+    const checked = await secondCheck(
+      {
+        ...dependencies.preflight,
+        engineFor: () => engine,
+        dockerPath: () => settings.dockerPath,
+      },
+      base,
+      cancellation,
+    );
+    return {
+      rebuild,
+      failure:
+        checked.kind === 'failed'
+          ? engineCheckFailed(checked.detail)
+          : undefined,
+    };
+  }
+
   /** The rebuild the window asked for before its reload, taken once on the first attempt of a connect. */
   async function takenRebuild(
     input: ConnectInput,
@@ -1190,20 +1224,15 @@ export function containerConnectorOf(
       return trustDeclined();
     }
     const connectionId = registerWithShutdown(folder, tools);
-    // Taken before the check, so that a check that fails drops the intent and a Retry reconnects without a rebuild.
-    const rebuild = await takenRebuild(input);
-    phases.tell({name: 'initializing'});
-    const checked = await secondCheck(
-      {
-        ...dependencies.preflight,
-        engineFor: () => engine,
-        dockerPath: () => settings.dockerPath,
-      },
+    const {rebuild, failure} = await takenBeforeCheck(
+      input,
+      engine,
+      settings,
       folder.hostPath,
       cancellation,
     );
-    if (checked.kind === 'failed') {
-      return engineCheckFailed(checked.detail);
+    if (failure !== undefined) {
+      return failure;
     }
     // A read that failed with the engine answering is the CLI's own failure, unless its configuration is gone; one
     // that ran out of time is not.
@@ -1706,20 +1735,15 @@ export function containerConnectorOf(
       dependencies.engineFor(executable.file),
       () => environment,
     );
-    // Taken before the check, so that a check that fails drops the intent and a Retry reconnects without a rebuild.
-    const rebuild = await takenRebuild(input);
-    phases.tell({name: 'initializing'});
-    const checked = await secondCheck(
-      {
-        ...dependencies.preflight,
-        engineFor: () => engine,
-        dockerPath: () => settings.dockerPath,
-      },
+    const {rebuild, failure} = await takenBeforeCheck(
+      input,
+      engine,
+      settings,
       undefined,
       cancellation,
     );
-    if (checked.kind === 'failed') {
-      return engineCheckFailed(checked.detail);
+    if (failure !== undefined) {
+      return failure;
     }
     const cliEnvironment = {...dependencies.editorEnvironment, ...environment};
     const dockerFile = executable.file;
