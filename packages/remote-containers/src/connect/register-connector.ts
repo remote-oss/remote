@@ -6,6 +6,8 @@
  */
 
 import {
+  type ContainerTarget,
+  type DecodedTarget,
   type LabelFormatterHost,
   type LastResolve,
   enablePortsViewWhenConnected,
@@ -23,6 +25,7 @@ import {
   decodedFolderOf,
 } from '../authority/payload.ts';
 import {attachedSuffixOf} from '../attach/label.ts';
+import {attachPickKeyOf} from '../attach/pick-record.ts';
 import {attachedTargetOf} from '../attach/payload.ts';
 import {runtimeCommands} from '../identifiers.generated.ts';
 import type {Forwarder} from '../ports/forwarder.ts';
@@ -33,6 +36,7 @@ import {
   recoveryPresenterOf,
 } from '../surfaces/recovery-presenter.ts';
 import type {ContainerConnector} from './connector.ts';
+import {attachWarningRefused} from './failures.ts';
 import {phaseTitleOf, startTitleOf} from './progress-titles.ts';
 import {volumeTargetOf} from '../volumes/volume-payload.ts';
 import type {IntentMemento} from '../state/timed-store.ts';
@@ -248,53 +252,84 @@ export async function registerContainerResolver(
   };
 }
 
-/** What the attached family's registration needs beyond the container family's. */
+/** What the attached families' registration needs beyond the container family's. */
 export interface AttachedRegistrationPorts {
   /** Reopens the picker of running containers in this window. */
   chooseContainer(): PromiseLike<unknown>;
+  /** Whether the user picked the target named `key`: the command or a row action recorded it before it opened the window. */
+  picked(key: string): boolean;
+  /** Records the target named `key` as picked. */
+  record(key: string): Promise<void>;
+  /** The attach warning, asked whatever was answered before; whether the user confirmed. */
+  confirm(): Promise<boolean>;
+}
+
+/** What differs between the families that register through the attach family's registration. */
+export interface AttachedFamily {
+  /** The authority family the resolver is registered for. */
+  family: 'attached-container' | 'k8s-container';
+  /** The name of the target a payload names in the record of picks; none for a payload that names no target. */
+  pickKeyOf(payload: string): string | undefined;
+  /** The suffix of the label a failure that leaves the window disconnected sets; none when the payload names none. */
+  disconnectedSuffixOf(decoded: DecodedTarget | undefined): string | undefined;
+}
+
+/** The attached container family: the label of the container the attempt found, with the engine the payload pins. */
+export function attachedContainerFamilyOf(
+  connector: ContainerConnector,
+  translate: Translate,
+): AttachedFamily {
+  return {
+    family: 'attached-container',
+    pickKeyOf: payload => {
+      const target = attachedTargetOf(payload);
+      return 'malformed' in target ? undefined : attachPickKeyOf(target);
+    },
+    disconnectedSuffixOf: decoded => {
+      const target =
+        decoded !== undefined && 'payload' in decoded.target
+          ? attachedTargetOf(decoded.target.payload)
+          : undefined;
+      if (target === undefined || 'malformed' in target) {
+        return undefined;
+      }
+      const found = connector.attachedContainer();
+      return attachedSuffixOf(
+        found === undefined
+          ? undefined
+          : {image: found.image, name: found.name},
+        target,
+        translate,
+      );
+    },
+  };
 }
 
 /**
- * Registers the resolver of the `attached-container` authority: the same connector, the attach family's presenter, and
- * the window's label, which a failure that leaves the window disconnected sets from the container it found.
+ * Registers the resolver of an attached family's authority: the same connector, the attach family's presenter, shared by
+ * the families (S033 and its recovery picker), and the window's label, which a failure that leaves the window
+ * disconnected sets from `family`.
  */
 export async function registerAttachedResolver(
   host: ConnectorRegistrationHost,
   connector: ContainerConnector,
   served: ConnectorServed,
   attached: AttachedRegistrationPorts,
+  family: AttachedFamily,
 ): Promise<{registration: Registration['kind']; dispose(): void}> {
   const {translate} = host;
   let handle:
     Extract<Registration, {kind: 'registered'}>['resolver'] | undefined;
   let label: {dispose(): void} | undefined;
-  /** The label of the disconnected window: the container the attempt found, with the engine the payload pins. */
+  /** The label of the disconnected window, from what the family reads of its payload. */
   function registerDisconnectedLabel(): void {
     const decoded = handle?.currentConnection()?.decodedTarget;
-    const target =
-      decoded !== undefined && 'payload' in decoded.target
-        ? attachedTargetOf(decoded.target.payload)
-        : undefined;
-    if (
-      decoded === undefined ||
-      target === undefined ||
-      'malformed' in target
-    ) {
+    const suffix = family.disconnectedSuffixOf(decoded);
+    if (decoded === undefined || suffix === undefined) {
       return;
     }
-    const found = connector.attachedContainer();
     label?.dispose();
-    label = registerAuthorityLabel(
-      host.labels,
-      decoded,
-      attachedSuffixOf(
-        found === undefined
-          ? undefined
-          : {image: found.image, name: found.name},
-        target,
-        translate,
-      ),
-    );
+    label = registerAuthorityLabel(host.labels, decoded, suffix);
   }
   const presenter = attachRecoveryPresenterOf(
     {
@@ -315,11 +350,31 @@ export async function registerAttachedResolver(
     },
     translate,
   );
+  /**
+   * The connector behind the gate (`ruling-2186-attach-gate`): a target the user didn't pick, such as one a link or an
+   * old recent entry names, is connected only after the attach warning is confirmed, and confirming records it. Nothing
+   * runs in the target before the answer.
+   */
+  const gated: ContainerConnector = {
+    ...connector,
+    connect: async input => {
+      const payload = (input.target as ContainerTarget).payload;
+      const key = family.pickKeyOf(payload);
+      if (key !== undefined && !attached.picked(key)) {
+        if (!(await attached.confirm())) {
+          served.logger.info('the attach warning was not confirmed');
+          return attachWarningRefused();
+        }
+        await attached.record(key);
+      }
+      return connector.connect(input);
+    },
+  };
   const registration = await registerResolver(
     host.resolverEditor,
     {
-      family: 'attached-container',
-      connector,
+      family: family.family,
+      connector: gated,
       presenter,
       cancellable: false,
       determinateStages: true,

@@ -121,7 +121,6 @@ import {
 import {
   cancelled,
   attachFailed,
-  attachWarningRefused,
   cloneConsentRefused,
   configurationInvalid,
   containerGone,
@@ -289,8 +288,6 @@ export interface VolumeConnectDependencies {
 interface AttachedConnectDependencies {
   /** The ids recorded at successful attaches. */
   record: IdRecord;
-  /** Whether the attach warning was accepted now or earlier; the window asks it itself, whatever opened it. */
-  warning: () => Promise<boolean>;
   /** The attach configuration file that applies to the container; none when there is none. */
   configFileOf: (container: ListedContainer) => Promise<string | undefined>;
 }
@@ -1978,10 +1975,6 @@ export function containerConnectorOf(
     failedContainer = undefined;
     attemptIdentity = undefined;
     attachedFound = undefined;
-    if (!(await attached.warning())) {
-      logger.info('the attach warning was not accepted');
-      return attachWarningRefused();
-    }
     const prepared = await pinnedEngineChecked(target, cancellation);
     if ('kind' in prepared) {
       return prepared;

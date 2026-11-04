@@ -11,6 +11,13 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     open in a window whose remote authority did not resolve (measured on VS Code 1.139.1 and VSCodium); the settings
     file opens there (athena on #737; spec question on remote-oss/remote-ssh#79).
 
+- **A window that attaches to a container asks the attach warning again when the user never picked that container.**
+  - F-0601 asks the warning once per profile. An `attached-container` authority can come from a link or an old recent
+    entry, so the registration of the attached families connects only to a target the attach command or a row action
+    recorded in the profile; any other target gets the warning whatever "Got It" said before. Confirming records it and
+    connects, Cancel or Escape connects nothing, and the window stays trusted (F-0106 BR-13). Athena on #2186
+    (`ruling-2186-attach-gate`), card containers-163.
+
 - **A Feature named in `features` and again in `dev.containers.defaultFeatures`, differing only in letter case, is installed once, with the configuration's options.**
   - F-0414 AC-28 and BR-14 have `features` win on the same id; the dev container CLI merges the two lists by their ids'
     text, so it would install both and let the defaults' options apply last. The extension leaves out of

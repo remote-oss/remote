@@ -1038,4 +1038,53 @@ describe('the CLI bridge: templates (card containers-76)', () => {
     await bridge.templateMetadata('x', controller.signal);
     deepStrictEqual(seen, true);
   });
+
+  it('F-0601 AC-17 (c163-bridge-set-up): set-up runs for the container with its attach file read for secrets, the editor’s environment and the target’s own, and gives the merged configuration; without a file it reads nothing', async () => {
+    const withFile = setup(
+      ending(
+        '{"outcome":"success","mergedConfiguration":{"remoteUser":"node"}}',
+      ),
+      {configText: '{"a": 1}'},
+    );
+    const without = setup(
+      ending('{"outcome":"success","mergedConfiguration":{}}'),
+    );
+    const target = {
+      containerId: 'c1',
+      configFile: '/s/names/web.json',
+      dockerPath: 'docker',
+      logLevel: 'info' as const,
+      environment: {DOCKER_CONTEXT: 'remote'},
+    };
+    const results = [
+      await withFile.bridge.setUp(target, () => undefined, NEVER),
+      await without.bridge.setUp(
+        {
+          containerId: target.containerId,
+          dockerPath: target.dockerPath,
+          logLevel: target.logLevel,
+          environment: target.environment,
+        },
+        () => undefined,
+        NEVER,
+      ),
+    ];
+    deepStrictEqual(
+      [
+        results,
+        withFile.calls[0]?.slice(0, 3),
+        withFile.environments[0],
+        without.calls[0]?.includes('--config'),
+      ],
+      [
+        [
+          {kind: 'setUp', mergedConfiguration: {remoteUser: 'node'}},
+          {kind: 'setUp', mergedConfiguration: {}},
+        ],
+        ['set-up', '--container-id', 'c1'],
+        {DOCKER_CONTEXT: 'remote'},
+        false,
+      ],
+    );
+  });
 });

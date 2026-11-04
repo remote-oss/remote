@@ -37,13 +37,13 @@ export interface AttachWarningPorts {
   translate: Translate;
 }
 
-/** Whether the command goes on: the warning was accepted now or earlier. It is shown even when workspace trust is off. */
-export async function attachWarningAccepted(
+/**
+ * Shows the warning whatever was answered before, and whether it was confirmed. Learn More opens the page and ends the
+ * question, as Cancel does; nothing is kept.
+ */
+export async function attachWarningConfirmed(
   ports: AttachWarningPorts,
 ): Promise<boolean> {
-  if (ports.global.get(ATTACH_TRUST_KEY) === true) {
-    return true;
-  }
   const gotIt = ports.translate(WARNING_TEMPLATES.gotIt);
   const learnMore = ports.translate(WARNING_TEMPLATES.learnMore);
   const answer = await ports.show(
@@ -54,7 +54,17 @@ export async function attachWarningAccepted(
   if (answer === learnMore) {
     await ports.openExternal(ATTACH_TRUST_PAGE);
   }
-  if (answer !== gotIt) {
+  return answer === gotIt;
+}
+
+/** Whether the command goes on: the warning was accepted now or earlier. It is shown even when workspace trust is off. */
+export async function attachWarningAccepted(
+  ports: AttachWarningPorts,
+): Promise<boolean> {
+  if (ports.global.get(ATTACH_TRUST_KEY) === true) {
+    return true;
+  }
+  if (!(await attachWarningConfirmed(ports))) {
     return false;
   }
   await ports.global.update(ATTACH_TRUST_KEY, true);

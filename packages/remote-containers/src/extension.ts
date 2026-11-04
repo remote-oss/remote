@@ -96,6 +96,7 @@ import {containerConnectorOf, noEngineProgramOf} from './connect/connector.ts';
 import {openHostRelay} from './connect/host-relay.ts';
 import {recentLabelPortsOf} from './connect/recent-editor.ts';
 import {
+  attachedContainerFamilyOf,
   registerAttachedResolver,
   registerContainerResolver,
   RESOLVER_EDITOR_OPTIONS,
@@ -171,7 +172,12 @@ import {
   applicableConfigOf,
   attachConfigFilesOf,
 } from './attach/config-files.ts';
-import {attachWarningAccepted} from './attach/warning.ts';
+import {
+  type AttachWarningPorts,
+  attachWarningAccepted,
+  attachWarningConfirmed,
+} from './attach/warning.ts';
+import {attachPicked, recordAttachPick} from './attach/pick-record.ts';
 import {
   k8sAttachCommandsOf,
   type K8sPickItem,
@@ -332,9 +338,9 @@ function translate(template: string): string {
   return vscode.l10n.t(template);
 }
 
-/** Asks the attach warning of the profile whose global state is `memento`; whether the attach may go on. */
-function attachWarningAsked(memento: vscode.Memento): Promise<boolean> {
-  return attachWarningAccepted({
+/** What the attach warning needs of the editor, over the profile whose global state is `memento`. */
+function attachWarningPortsOf(memento: vscode.Memento): AttachWarningPorts {
+  return {
     global: memento,
     show: (message, detail, buttons) =>
       vscode.window.showWarningMessage(
@@ -344,7 +350,12 @@ function attachWarningAsked(memento: vscode.Memento): Promise<boolean> {
       ),
     openExternal: address => vscode.env.openExternal(vscode.Uri.parse(address)),
     translate,
-  });
+  };
+}
+
+/** Asks the attach warning of the profile whose global state is `memento`; whether the attach may go on. */
+function attachWarningAsked(memento: vscode.Memento): Promise<boolean> {
+  return attachWarningAccepted(attachWarningPortsOf(memento));
 }
 
 /** A modal dialog with the buttons, the first the primary one and Cancel the close affordance; gives the title chosen. */
@@ -1940,6 +1951,7 @@ export async function activate(
           execute: () =>
             attachToRunningContainer({
               warning: () => attachWarningAsked(context.globalState),
+              recordPick: key => recordAttachPick(context.globalState, key),
               engine: () =>
                 engineOfWindow(
                   windowEnginePortsOf(served.preflight),
@@ -2117,7 +2129,6 @@ export async function activate(
     const connector = containerConnectorOf({
       attached: {
         record: idRecordOf(context.globalState),
-        warning: () => attachWarningAsked(context.globalState),
         configFileOf: container =>
           applicableConfigOf(
             attachConfigFilesOf(
@@ -2590,7 +2601,12 @@ export async function activate(
       {
         chooseContainer: () =>
           vscode.commands.executeCommand(commands.attachToRunningContainer.id),
+        picked: key => attachPicked(context.globalState, key),
+        record: key => recordAttachPick(context.globalState, key),
+        confirm: () =>
+          attachWarningConfirmed(attachWarningPortsOf(context.globalState)),
       },
+      attachedContainerFamilyOf(connector, translate),
     );
     resolved.lastResolve = () => registered.lastResolve();
     const configWatch =
