@@ -17,6 +17,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     `--additional-features` every default whose id equals a key of `features` ignoring case (athena on #1204;
     remote-oss/remote-containers#59, card containers-93).
 
+- **The pod listing of "Attach to Running Kubernetes Container" ends after 180 seconds with the listing's error.**
+  - F-0604 7.E6 has the listing wait exactly as long as `kubectl` does (about 160 s against a black hole, and for ever
+    with a broken kubeconfig). Ours shows the "Select pod" picker busy at once, lets Escape cancel it, and ends the
+    wait at 180 s with the dialog "Error while attaching to Kubernetes container." (athena on #2110; ruling
+    `ruling-2110-kubectl-bound`, card containers-190). A `kubectl` that answers in time is never cut.
+
 - **The notification that offers to reopen a folder in a container appears at once and does not wait for Docker.**
   - F-0101 AC-20 has the offer wait for the Docker CLI's answer (observed after 12.3 to 12.6 s with a CLI that waits
     12 s), while commands from the palette work meanwhile. Ours decides from the folder's files alone, so the offer shows
