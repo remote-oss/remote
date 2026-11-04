@@ -50,7 +50,7 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
     deepStrictEqual(upArguments(TARGET, PLAIN), [
       'up',
       ...COMMON,
-      '--skip-non-blocking-commands',
+      '--skip-post-create',
       '--workspace-mount-consistency',
       'cached',
     ]);
@@ -113,7 +113,7 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
         buildNoCache: true,
       }).slice(-5),
       [
-        '--skip-non-blocking-commands',
+        '--skip-post-create',
         '--workspace-mount-consistency',
         'cached',
         '--remove-existing-container',
@@ -341,7 +341,7 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
           ...COMMON,
           '--additional-features',
           json,
-          '--skip-non-blocking-commands',
+          '--skip-post-create',
           '--workspace-mount-consistency',
           'cached',
         ],
@@ -367,6 +367,51 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
         ),
       ],
       [false, true, false, false],
+    );
+  });
+
+  it('F-0415 with brief-personalization §1: run-user-commands takes the blocking stop, the personalization stop, each relay variable and the dotfiles, in that order, and none by default', () => {
+    const full = runUserCommandsArguments(TARGET, 'c1', {
+      skipNonBlocking: true,
+      stopForPersonalization: true,
+      remoteEnvironment: {SSH_AUTH_SOCK: '/tmp/a b.sock', DISPLAY: ':1'},
+      dotfiles: {
+        repository: 'https://example.com/dots',
+        installCommand: 'install.sh',
+        targetPath: '~/dots',
+      },
+    });
+    const bare = runUserCommandsArguments(TARGET, 'c1');
+    deepStrictEqual(
+      [
+        full.slice(full.indexOf('c1') + 1),
+        bare.slice(bare.indexOf('c1') + 1),
+        runUserCommandsArguments(TARGET, 'c1', {
+          dotfiles: {repository: ''},
+        }).slice(bare.length),
+        runUserCommandsArguments(TARGET, 'c1', {
+          dotfiles: {repository: 'r'},
+        }).slice(bare.length),
+      ],
+      [
+        [
+          '--skip-non-blocking-commands',
+          '--stop-for-personalization',
+          '--remote-env',
+          'SSH_AUTH_SOCK=/tmp/a b.sock',
+          '--remote-env',
+          'DISPLAY=:1',
+          '--dotfiles-repository',
+          'https://example.com/dots',
+          '--dotfiles-install-command',
+          'install.sh',
+          '--dotfiles-target-path',
+          '~/dots',
+        ],
+        [],
+        [],
+        ['--dotfiles-repository', 'r'],
+      ],
     );
   });
 });

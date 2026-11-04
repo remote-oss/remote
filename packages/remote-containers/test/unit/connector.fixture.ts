@@ -152,6 +152,10 @@ export interface Scene {
     hostPort: number;
   }>;
   stopped: number;
+  /** The lifecycle's runs after `prepare`, in order: `blocking`, then `background`. */
+  lifecycleRuns: string[];
+  /** What the blocking run gives; done by default. */
+  blockingResult: Awaited<ReturnType<ContainerLifecycle['runBlocking']>>;
   revealed: number;
   /** What the shutdown helper was told, in order, and how many configuration reads had started at each message. */
   shutdownSent: ShutdownRequest[];
@@ -354,6 +358,8 @@ export function sceneOf(
     relayRequests: [],
     relays: [],
     stopped: 0,
+    lifecycleRuns: [],
+    blockingResult: {kind: 'done'},
     revealed: 0,
     shutdownSent: [],
     readsAtShutdown: [],
@@ -545,6 +551,15 @@ export function sceneOf(
         ? scene.outcome()
         : scene.outcome;
     },
+    runBlocking: remoteEnvironment => {
+      scene.lifecycleRuns.push(`blocking ${JSON.stringify(remoteEnvironment)}`);
+      return Promise.resolve(scene.blockingResult);
+    },
+    startBackground: remoteEnvironment => {
+      scene.lifecycleRuns.push(
+        `background ${JSON.stringify(remoteEnvironment)}`,
+      );
+    },
     stopBackground: () => {
       scene.stopped += 1;
     },
@@ -688,12 +703,22 @@ export function sceneOf(
     },
     runServer: async request => {
       scene.serverRequests.push(request);
-      for (const phase of scene.phasesOfServer) {
-        request.onPhase(phase);
+      // As the steps do: the install phase before the files, the start's phase only when the server is launched.
+      if (scene.phasesOfServer.includes('installing')) {
+        request.onPhase('installing');
       }
       for (const percent of scene.percentsOfServer) {
         request.onDownloadPercent(percent);
       }
+      scene.lifecycleRuns.push('server files');
+      const beforeStart = await request.beforeStart?.();
+      if (beforeStart !== undefined) {
+        return {kind: 'failed', failure: beforeStart};
+      }
+      if (scene.phasesOfServer.includes('startingServer')) {
+        request.onPhase('startingServer');
+      }
+      scene.lifecycleRuns.push('server start');
       return typeof scene.server === 'function' ? scene.server() : scene.server;
     },
     openRelay: async (request: RelayRequest) => {

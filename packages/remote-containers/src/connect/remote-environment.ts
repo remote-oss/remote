@@ -106,10 +106,11 @@ export function probedEnvironmentOf(
   return environment;
 }
 
-/** The extension host's environment: the probe's, with `remoteEnv` over it (BR-11a). */
+/** The extension host's environment: the probe's, then the relays' variables, with `remoteEnv` over both (BR-11a). */
 export function extensionHostEnvironmentOf(
   probed: Readonly<Record<string, string>> | undefined,
+  relays: Readonly<Record<string, string>>,
   remoteEnv: Readonly<Record<string, string | null>>,
 ): Readonly<Record<string, string | null>> {
-  return {...probed, ...remoteEnv};
+  return {...probed, ...relays, ...remoteEnv};
 }
