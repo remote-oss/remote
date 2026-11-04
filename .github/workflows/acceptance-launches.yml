@@ -80,6 +80,8 @@ jobs:
           df -h / | tail -1
       - if: contains(needs.select.outputs.launches, 'containers-podman')
         run: tools/install-podman
+      # the buildx plugin when the machine's Docker has none (the harness builds with `docker build --load`)
+      - run: tools/install-buildx
       - run: tools/start-display
       - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         env:

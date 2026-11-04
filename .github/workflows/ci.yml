@@ -448,6 +448,8 @@ jobs:
           df -h / | tail -1
       - if: contains(matrix.launches, '@containers') || contains(matrix.launches, 'containers-podman')
         run: tools/install-podman
+      # the buildx plugin when the machine's Docker has none (the harness builds with `docker build --load`)
+      - run: tools/install-buildx
       - run: tools/start-display
       # the part's launches: a group selection, or the launches a dispatch names
       - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
