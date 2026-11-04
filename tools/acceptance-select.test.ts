@@ -398,12 +398,12 @@ describe('acceptance-select: the plan of a pull request (card tooling-120)', () 
     );
   });
 
-  it('tooling-120: up to the limit, every selected launch runs, with or without the full label, in the same 180 minutes', () => {
+  it('tooling-120: up to the limit, every selected launch runs, with or without the full label, in the same 360 minutes', () => {
     const {launches, parts} = wideTable(PULL_REQUEST_LAUNCHES);
     const selection = selectionOf(...launches.map(launch => launch.label));
     const planned = {
       launches: launches.map(launch => launch.label).join(','),
-      minutes: 180,
+      minutes: PULL_REQUEST_MINUTES,
     };
     deepStrictEqual(
       [true, false].map(full =>
@@ -426,12 +426,12 @@ describe('acceptance-select: the plan of a pull request (card tooling-120)', () 
     );
   });
 
-  it('tooling-120: over the limit with the full label, the whole selection runs in 180 minutes', () => {
+  it('tooling-120: over the limit with the full label, the whole selection runs in 360 minutes', () => {
     const {launches, parts} = wideTable(PULL_REQUEST_LAUNCHES + 1);
     const labels = launches.map(launch => launch.label);
     deepStrictEqual(
       pullRequestPlan(selectionOf(...labels), launches, parts, true),
-      {launches: labels.join(','), minutes: 180},
+      {launches: labels.join(','), minutes: 360},
     );
   });
 
