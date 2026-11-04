@@ -122,13 +122,20 @@ describe('what a window close and a reopen do to a dev container (card coverage-
       postAttachCommand: 'echo x >> marker-post-attach',
     });
     try {
-      const first = [
+      const markers = [
         'marker-initialize',
         'marker-create',
         'marker-post-create',
         'marker-post-start',
         'marker-post-attach',
-      ].map(file => linesOf(connected.folder, file).length);
+      ];
+      // The last two commands run after the window has connected, later on a slower machine.
+      await waitFor(
+        'every lifecycle command to have run once',
+        () => markers.every(file => linesOf(connected.folder, file).length > 0),
+        60_000,
+      );
+      const first = markers.map(file => linesOf(connected.folder, file).length);
       const outcome = await closedAndWatched(connected, 20);
       const window = await openFolderWindow(connected.folder);
       await reopenInContainer(window);

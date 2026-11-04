@@ -312,6 +312,13 @@ describe('Reopen Folder Locally from a dev container window (card coverage-103, 
       await reloadingCommand(connected.window, REOPEN_LOCALLY);
       const firstWindow = await shownBy(connected.window);
       const windowsMid = openWindows();
+      // The second window can still be reloading after the first one's reopen, later on a slower machine: it is compared once its indicator has settled.
+      await waitFor(
+        'the second window’s indicator to settle',
+        async () =>
+          !(await shownBy(second)).indicator.startsWith('Opening Remote'),
+        120_000,
+      );
       const secondBefore = await shownBy(second);
       void inWindow(second, REOPEN_LOCALLY).catch(() => undefined);
       await new Promise(resolve => setTimeout(resolve, 30_000));

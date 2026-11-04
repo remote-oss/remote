@@ -119,15 +119,21 @@ describe('the lines that waited on Reopen Folder Locally (card coverage-103)', f
         postAttachCommand: 'sleep 60',
       });
       try {
-        const running = await execFileAsync('docker', [
-          'exec',
-          connected.containerId,
-          'sh',
-          '-c',
-          'ps -eo args | grep -c "[s]leep 60"',
-        ]).then(
-          ({stdout}) => Number(stdout.trim()),
-          () => 0,
+        // The command starts after the window has connected, later on a slower machine: the row leaves only once it runs.
+        await waitFor(
+          `${label}: the postAttachCommand's sleep to run in the container`,
+          async () =>
+            await execFileAsync('docker', [
+              'exec',
+              connected.containerId,
+              'sh',
+              '-c',
+              'ps -eo args | grep -c "[s]leep 60"',
+            ]).then(
+              ({stdout}) => Number(stdout.trim()) > 0,
+              () => false,
+            ),
+          60_000,
         );
         const from = Date.now();
         await leave(connected.window);
@@ -135,13 +141,12 @@ describe('the lines that waited on Reopen Folder Locally (card coverage-103)', f
         await new Promise(resolve => setTimeout(resolve, 30_000));
         deepStrictEqual(
           [
-            running > 0,
             stoppedWithin(outcome, 0, {from: 9, until: 14}),
             await stateOf(connected.containerId),
             label === 'reopen' ? await otherNotices(connected.window) : [],
             label === 'reopen' ? await dialogOf(connected.window) : undefined,
           ],
-          [true, true, {status: 'exited', exitCode: 0}, [], undefined],
+          [true, {status: 'exited', exitCode: 0}, [], undefined],
           `${label}: ${JSON.stringify(outcome.states.slice(0, 16))}`,
         );
       } finally {
