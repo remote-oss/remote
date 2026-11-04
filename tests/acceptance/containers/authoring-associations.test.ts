@@ -256,19 +256,17 @@ describe('the associations and the discontinued namespace of the authoring aids 
       'devcontainer-feature.json',
       0,
     );
-    // The hover names the schema's description only once the schema the file points at has loaded, so the read
-    // retries for it; the status bar's hover opens only after the read, since its hover holds the window's
-    // hover slot and the editor's hover then shows none.
+    // The hover names the schema's description only once the schema the file points at has loaded, and a valid
+    // file holds no problem until then, so the read retries for the description; the status bar's hover opens
+    // only after the read, since its hover holds the window's hover slot and the editor's hover then shows none.
     let hover = '';
-    for (
-      let tries = 0;
-      tries < 5 && !hover.includes(ID_DESCRIPTION);
-      tries += 1
-    ) {
+    const began = Date.now();
+    for (;;) {
       hover = await editorHoverOf(window, '"id"');
-      if (!hover.includes(ID_DESCRIPTION)) {
-        await new Promise(resolve => setTimeout(resolve, 2_000));
+      if (hover.includes(ID_DESCRIPTION) || Date.now() - began > 90_000) {
+        break;
       }
+      await new Promise(resolve => setTimeout(resolve, 2_000));
     }
     const count = (await problemsOf(window)).length;
     const status = await languageStatusOf(window);
