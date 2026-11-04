@@ -83,30 +83,6 @@
     {
       "package": "remote-containers",
       "kind": "module",
-      "key": "src/attach/config-writer.ts",
-      "card": "#2163",
-      "slice": "authoring release 2",
-      "decision": "contributed, consumed by #2164/#2167 (the first callers); the consuming card removes this entry"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/config/configuration-edit.ts",
-      "card": "#2163",
-      "slice": "authoring release 2",
-      "decision": "contributed, consumed by #2164/#2167 (the first callers); the consuming card removes this entry"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/config/edit-target.ts",
-      "card": "#2163",
-      "slice": "authoring release 2",
-      "decision": "contributed, consumed by #2164/#2167 (the first callers); the consuming card removes this entry"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
       "key": "src/engine/engine-host-of.ts",
       "card": "#2156",
       "slice": "containers release 2",
