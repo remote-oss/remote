@@ -80,10 +80,9 @@ async function refreshed(): Promise<void> {
 describe('the recent folders under a host (card coverage-102, part 1)', function () {
   this.timeout(600_000);
 
-  before(async () => {
-    await rememberPage('local');
-    deepStrictEqual(await historyOf(), {}, 'the launch starts with no history');
-  });
+  // The history of a run outlives a row, and other files of the launch visit folders of their own: each row counts only
+  // the entries that start with its own prefix.
+  before(() => rememberPage('local'));
 
   it('F-2503 AC-3, AC-4, AC-8 (order-and-hosts): a folder opened on a host is the first child of its row, a folder opened again moves to the top with no duplicate, and each host row lists only its own', async () => {
     const first = `${HOME}/c102-a1`;
@@ -101,12 +100,16 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
     await visit(HOST_A, 'c102-a1');
     await titleAction('local', VIEW, 'Refresh');
     await foldersSettled('local', HOST_A, [first, second], scope);
-    // The launch's first row: the history holds these two hosts and nothing else.
+    // The history holds these two hosts' entries of this row, whatever other rows of the launch visited.
     deepStrictEqual(
-      Object.entries(await historyOf()).map(([host, entries]) => [
-        host,
-        entries.map(entry => entry.path),
-      ]),
+      Object.entries(await historyOf())
+        .map(([host, entries]) => [
+          host,
+          entries
+            .map(entry => entry.path)
+            .filter(entryPath => entryPath.startsWith(`${HOME}/c102-`)),
+        ])
+        .filter(([, paths]) => (paths?.length ?? 0) > 0),
       [
         [HOST_B, [other]],
         [HOST_A, [first, second]],
@@ -534,6 +537,13 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
     );
     try {
       await connectedTo(remote, HOST_B);
+      // The connection of the SSH window writes to the log for a while after it is connected, and longer on a slow runner.
+      let lines = -1;
+      for (let attempt = 0; attempt < 20 && lines !== connectionLog().length;) {
+        lines = connectionLog().length;
+        attempt += 1;
+        await new Promise(resolve => setTimeout(resolve, 3_000));
+      }
       const before = stateOf();
       const historyBefore = await historyOf();
       const toasts: unknown[] = [];
