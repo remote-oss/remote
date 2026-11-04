@@ -192,6 +192,18 @@ export function payloadJsonOf(
   }
 }
 
+/** The record a payload's JSON holds, none when the JSON is another kind of value; or the refusal at the step that failed. */
+export function payloadRecordOf(
+  payload: string,
+): {record: Record<string, unknown> | undefined} | PayloadMalformed {
+  const text = payloadTextOf(payload);
+  if (typeof text !== 'string') {
+    return text;
+  }
+  const parsed = payloadJsonOf(text);
+  return 'malformed' in parsed ? parsed : {record: recordOf(parsed.json)};
+}
+
 /** Reads a payload: a folder target, the legacy host path, or why it is neither. */
 export function devContainerTargetOf(
   payload: string,
