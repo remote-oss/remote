@@ -418,13 +418,10 @@ jobs:
       # Podman 5 for the containers-podman launch, on a part that can choose it (the @containers group includes it)
       - if: contains(matrix.launches, '@containers') || contains(matrix.launches, 'containers-podman')
         run: tools/install-podman
+      # the display the rows are written against: :99 at 1920x1080 with a window manager (tools/start-display)
+      - run: tools/start-display
       # the part's launches: a group selection, or the launches a dispatch names
-      - run: |
-          if command -v xvfb-run >/dev/null; then
-            xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm test:acceptance:vscodium --launches "$LAUNCHES"
-          else
-            DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium --launches "$LAUNCHES"
-          fi
+      - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         env:
           LAUNCHES: ${{ matrix.launches }}
       # the disk the part used, before the clean-up
@@ -484,12 +481,9 @@ jobs:
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
           fi
-      - run: |
-          if command -v xvfb-run >/dev/null; then
-            xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm test:acceptance:vscodium --launches "$LAUNCHES"
-          else
-            DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium --launches "$LAUNCHES"
-          fi
+      # the display the rows are written against: :99 at 1920x1080 with a window manager (tools/start-display)
+      - run: tools/start-display
+      - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         env:
           HARNESS_GENUINE_VERSION: ${{ matrix.version }}
           LAUNCHES: ${{ matrix.launches }}

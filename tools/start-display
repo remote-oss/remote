@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# start-display: the display the acceptance launches run on, :99 at 1920x1080x24 with openbox as its window manager.
+#
+#   tools/start-display    start that display when :99 has none, and name it in $GITHUB_ENV when that is set
+#
+# A machine whose :99 is already served keeps it. Otherwise Xvfb and then openbox start in the background, openbox
+# installed with apt-get when it is missing; both keep running until the job's processes are ended. Without a window
+# manager no window takes the focus, and the rows that type into a dialog, a menu or a picker are written against a
+# focused window.
+set -euo pipefail
+
+DISPLAY_NAME=:99
+SOCKET=/tmp/.X11-unix/X99
+LOGS=${RUNNER_TEMP:-/tmp}
+
+if [ ! -S "$SOCKET" ]; then
+  command -v Xvfb >/dev/null || {
+    echo "start-display: Xvfb is needed and not installed" >&2
+    exit 1
+  }
+  if ! command -v openbox >/dev/null; then
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq openbox >/dev/null
+  fi
+  nohup Xvfb "$DISPLAY_NAME" -screen 0 1920x1080x24 -nolisten tcp >"$LOGS/xvfb.log" 2>&1 &
+  for _ in $(seq 1 100); do
+    [ ! -S "$SOCKET" ] || break
+    sleep 0.1
+  done
+  [ -S "$SOCKET" ] || {
+    echo "start-display: Xvfb did not start" >&2
+    cat "$LOGS/xvfb.log" >&2
+    exit 1
+  }
+  DISPLAY=$DISPLAY_NAME nohup openbox >"$LOGS/openbox.log" 2>&1 &
+  sleep 1
+  pgrep -x openbox >/dev/null || {
+    echo "start-display: openbox did not start" >&2
+    cat "$LOGS/openbox.log" >&2
+    exit 1
+  }
+fi
+echo "start-display: $DISPLAY_NAME"
+[ -z "${GITHUB_ENV:-}" ] || echo "DISPLAY=$DISPLAY_NAME" >>"$GITHUB_ENV"
