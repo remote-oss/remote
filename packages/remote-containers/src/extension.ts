@@ -163,6 +163,7 @@ import {volumeRewriteOf} from './volumes/volume-rewrite.ts';
 import {bootstrapAuthoringFiles} from './volumes/bootstrap-authoring-files.ts';
 import {configurationAdded} from './volumes/volume-configuration.ts';
 import {containerCliHost} from './cli/container-cli-host.ts';
+import {labelCommandOf} from './ports/label-command.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import {cloneText} from './volumes/clone-strings.ts';
 import {linkRequestOf} from './volumes/clone-link.ts';
@@ -2002,6 +2003,27 @@ export async function activate(
           void vscode.window.showErrorMessage(message);
         },
       });
+      const labelPort = labelCommandOf({
+        askLabel: entry =>
+          vscode.commands.executeCommand('remote.tunnel.label', entry),
+        edit: configurationEditPortsOf(),
+        attached: () => {
+          const found = windowTarget.attached();
+          return found === undefined
+            ? undefined
+            : {image: found.image, folder: found.folder};
+        },
+        ownConfigFile: () => windowTarget.ownConfigFile(),
+        storage: context.globalStorageUri.fsPath,
+        translate: authoringBase.translate,
+        logger: served.logger,
+        notify: message => {
+          void vscode.window.showInformationMessage(message);
+        },
+        notifyError: message => {
+          void vscode.window.showErrorMessage(message);
+        },
+      });
       const configureFeatures = configureFeaturesOf({
         ...authoringBase,
         features: featuresRunOf({
@@ -2096,6 +2118,11 @@ export async function activate(
               return;
             }
             await addExtension(extensionId);
+          },
+        },
+        labelPortAndUpdateConfig: {
+          execute: async (entry?: unknown) => {
+            await labelPort(entry);
           },
         },
         configureContainerFeatures: {

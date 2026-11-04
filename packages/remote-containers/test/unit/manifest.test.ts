@@ -1162,7 +1162,10 @@ describe('the manifest', () => {
     ).menus;
     return Object.fromEntries(
       Object.entries(menus)
-        .filter(([name]) => name !== 'extension/context')
+        .filter(
+          ([name]) =>
+            name !== 'extension/context' && name !== 'ports/item/port/inline',
+        )
         .map(([name, entries]) => [
           name,
           entries.filter(entry => commands.includes(entry.command)),
@@ -1194,6 +1197,41 @@ describe('the manifest', () => {
             command,
             group: '1_devcontainer@1',
             when: '!isBuiltinExtension && !remote-containers:standingDown',
+          },
+        ],
+      ],
+    );
+  });
+
+  it('F-1103 AC-1, AC-12, AC-13, AC-14 (c210-manifest): Set Label and Update devcontainer.json is the first inline action of a forwarded port row in a dev or attached container window, with the tag icon, and is hidden from the palette', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: Array<Record<string, unknown>>;
+      menus: Record<string, Array<Record<string, unknown>>>;
+    };
+    const command = 'remote-containers.labelPortAndUpdateConfig';
+    deepStrictEqual(
+      [
+        contributes.commands.find(entry => entry.command === command),
+        readJson('package.nls.json')['commands.labelPortAndUpdateConfig.title'],
+        contributes.menus.commandPalette?.find(
+          entry => entry.command === command,
+        ),
+        contributes.menus['ports/item/port/inline'],
+      ],
+      [
+        {
+          command,
+          title: '%commands.labelPortAndUpdateConfig.title%',
+          category: 'Dev Containers',
+          icon: '$(tag)',
+        },
+        'Set Label and Update devcontainer.json',
+        {command, when: 'false'},
+        [
+          {
+            command,
+            group: '0_manage@4',
+            when: 'remoteName =~ /^(dev-container|attached-container)$/ && tunnelType == Forwarded && !remote-containers:standingDown',
           },
         ],
       ],

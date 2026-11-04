@@ -277,5 +277,10 @@
   "The configuration {0} is not a JSON object, so the extension was not added.": "The configuration {0} is not a JSON object, so the extension was not added.",
   "{0} in the configuration is not an array, so the extension was not added.": "{0} in the configuration is not an array, so the extension was not added.",
   "The extension could not be added: {0}": "The extension could not be added: {0}",
-  "it is not an extension id": "it is not an extension id"
+  "it is not an extension id": "it is not an extension id",
+  "Port attributes have been added to the {0}.": "Port attributes have been added to the {0}.",
+  "The label could not be written: {0}": "The label could not be written: {0}",
+  "{0} wasn't changed: it links to a file outside the workspace folders.": "{0} wasn't changed: it links to a file outside the workspace folders.",
+  "{0} wasn't changed: it's a link whose target can't be checked.": "{0} wasn't changed: it's a link whose target can't be checked.",
+  "{0} wasn't changed: it isn't a JSON object.": "{0} wasn't changed: it isn't a JSON object."
 }

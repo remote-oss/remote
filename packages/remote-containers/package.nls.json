@@ -12,6 +12,7 @@
   "commands.Createdevcontainerfile.title": "Add Dev Container Configuration Files...",
   "commands.Configurecontainerfeatures.title": "Configure Container Features...",
   "commands.addExtensionToConfig.title": "Add to devcontainer.json",
+  "commands.labelPortAndUpdateConfig.title": "Set Label and Update devcontainer.json",
   "commands.Rebuildcontainer.title": "Rebuild Container",
   "commands.Rebuildcontainerwithoutcache.title": "Rebuild Container Without Cache",
   "commands.Showreopenincontainernotificationreset.title": "Reset Don't Show Reopen Notification",

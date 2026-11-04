@@ -13,6 +13,11 @@ const OWN_TEMPLATES = {
     "Only the latest commits of {0} were cloned: fetching the repository's full history and tags failed. Run 'git fetch --unshallow --tags' in the container to try again.",
   noServerSource:
     "{0} has no built-in VS Code Server download location for {1}. Set remote.serverDownloadBaseUrl to a URL template for this editor's own server builds.",
+  configurationOutsideWorkspace:
+    "{0} wasn't changed: it links to a file outside the workspace folders.",
+  configurationLinkUnchecked:
+    "{0} wasn't changed: it's a link whose target can't be checked.",
+  configurationNotObject: "{0} wasn't changed: it isn't a JSON object.",
   vscodeMountReserved: `'{0}' mounts '{1}': '/vscode' and the paths below it are reserved for the cache volume while dev.containers.cacheVolume is true.`,
 } as const;
 
