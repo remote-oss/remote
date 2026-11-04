@@ -116,7 +116,7 @@ installed with no start.
   - **The qualifying texts:** Docker Desktop's WSL-integration advice from its stand-in `docker` is a third text in
     #2146's table (F-0202 BR-12's last point).
   - **The rest** is #2146's: no second start while it runs (BR-13), six re-checks, or 5 minutes after our own start.
-- **`(reading-NNNN-wsl-start)`, F-1301 AC-17 with F-0202 BR-13:**
+- **`(reading-2147-wsl-start)`, F-1301 AC-17 with F-0202 BR-13:**
   - **The conflict:** AC-17 has the extension launch Docker Desktop.
   - **The reading:** F-0202 owns the mechanism (F-1301 BR-11 says so). In AC-17's own setting, Docker Desktop
     already runs, so it isn't launched again, the six re-checks run, and the dialog follows after about 30 seconds.
@@ -217,5 +217,5 @@ installed with no start.
 4. **Install Docker in WSL:** §5.
 5. **Rows and tags.**
 
-**Spec questions for metis** (with this brief's PR): `reading-NNNN-wsl-start`, and whether S136's `docker info`
+**Spec questions for metis** (with this brief's PR): `reading-2147-wsl-start`, and whether S136's `docker info`
 predicate matches the dirty side's reading of 7.E1.
