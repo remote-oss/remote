@@ -5,6 +5,7 @@
  * lives in the window alone and is never written, logged or put in an environment.
  */
 
+import {deferred} from '../deferred.ts';
 import {isHostKeyQuestion} from '../askpass-text.ts';
 
 /** Who started the operation whose `docker` processes may ask: whether a question may open a box. */
@@ -89,12 +90,9 @@ export function createQuestionRouter(ports: QuestionPorts): QuestionRouter {
   /** Opens the box of `question`, keeps its result and gives it. */
   function openBoxFor(question: string): Promise<Remembered> {
     const masked = !isHostKeyQuestion(question);
-    let finish: () => void = () => undefined;
-    const closed = new Promise<void>(resolve => {
-      finish = resolve;
-    });
+    const closed = deferred<void>();
     if (!ports.windowFocused()) {
-      ports.pointAtBox(closed);
+      ports.pointAtBox(closed.promise);
     }
     const result = ports
       .openBox(question === '' ? ports.emptyPrompt : question, masked)
@@ -104,7 +102,7 @@ export function createQuestionRouter(ports: QuestionPorts): QuestionRouter {
       .then(remembered => {
         memory.set(question, remembered);
         boxes.delete(question);
-        finish();
+        closed.resolve();
         changed();
         return remembered;
       });
