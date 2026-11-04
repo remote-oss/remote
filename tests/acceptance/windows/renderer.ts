@@ -2794,11 +2794,9 @@ function answerLabelsOf(label: string): readonly string[] {
   return TRUST_BUTTON_GROUPS.find(group => group.includes(label)) ?? [label];
 }
 
-/** Clicks the button labelled exactly `label` of the dialog open in window `name`; it fails naming what it found. */
-export async function answerDialog(name: string, label: string): Promise<void> {
-  const missing = await evaluate<string | null>(
-    name,
-    `(() => {
+/** The page-side click of the dialog button labelled `label`: `null` when it was clicked, else what was missing. */
+function clickDialogButtonExpression(label: string): string {
+  return `(() => {
       const box = document.querySelector('${DIALOG_BOX}');
       if (box === null) {
         return 'no dialog open';
@@ -2811,10 +2809,69 @@ export async function answerDialog(name: string, label: string): Promise<void> {
       }
       button.click();
       return null;
-    })()`,
+    })()`;
+}
+
+/** Clicks the button labelled exactly `label` of the dialog open in window `name`; it fails naming what it found. */
+export async function answerDialog(name: string, label: string): Promise<void> {
+  const missing = await evaluate<string | null>(
+    name,
+    clickDialogButtonExpression(label),
   );
   if (missing !== null) {
     throw new Error(`window ${name}: ${missing}`);
+  }
+}
+
+/** A dialog open in a page other than window `name`'s, and the address that answers it. */
+export interface DialogElsewhere {
+  dialog: ShownDialog;
+  address: string;
+}
+
+/**
+ * Waits until a page other than window `name`'s shows a dialog, for a window that has no agent to name it by (a
+ * failed attach shows its dialog and reports nothing).
+ */
+export async function waitForDialogElsewhere(
+  name: string,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<DialogElsewhere> {
+  const own = await pageOf(name);
+  return settled(
+    () => `a dialog in a page other than window ${name}'s`,
+    async () => {
+      for (const page of await pages()) {
+        const address = page.webSocketDebuggerUrl;
+        if (address !== undefined && address !== own) {
+          const dialog = await evaluateAt<ShownDialog | null>(
+            address,
+            `page ${page.title}`,
+            DIALOG_EXPRESSION,
+          ).catch(() => null);
+          if (dialog !== null) {
+            return {dialog, address};
+          }
+        }
+      }
+      return undefined;
+    },
+    milliseconds,
+  );
+}
+
+/** Clicks the button `label` of the dialog open in the page at `address`. */
+export async function answerDialogAt(
+  address: string,
+  label: string,
+): Promise<void> {
+  const missing = await evaluateAt<string | null>(
+    address,
+    `page ${address}`,
+    clickDialogButtonExpression(label),
+  );
+  if (missing !== null) {
+    throw new Error(`page ${address}: ${missing}`);
   }
 }
 
