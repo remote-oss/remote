@@ -8,8 +8,7 @@ import {pickSetAdd, pickSetHas} from '../state/pick-set.ts';
 import type {IntentMemento} from '../state/timed-store.ts';
 
 /** The key under which the profile keeps the names of the volumes whose recovery was asked for. */
-const RECOVERY_VOLUMES_KEY =
-  'remote-oss.remote-containers.recoveryVolumes';
+const RECOVERY_VOLUMES_KEY = 'remote-oss.remote-containers.recoveryVolumes';
 
 /** Whether the recovery of `volumeName` was asked for. */
 export function recoveryPicked(
