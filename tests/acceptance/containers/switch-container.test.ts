@@ -4,18 +4,8 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {mkdirSync, writeFileSync} from 'node:fs';
-import path from 'node:path';
-import {
-  closeWindow,
-  connectedToContainer,
-  devContainersOf,
-  inWindow,
-  runLabelArguments,
-  variable,
-  waitFor,
-} from '../windows/harness.ts';
-import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
+import {devContainersOf, inWindow, waitFor} from '../windows/harness.ts';
+import {SWITCH, switchScene} from './switch-support.ts';
 import {
   chooseQuickPickItem,
   dialogOf,
@@ -31,7 +21,6 @@ import {
   windowTitle,
 } from '../windows/renderer.ts';
 
-const SWITCH = 'remote-containers.switchContainer';
 const MAIN = '.devcontainer/devcontainer.json';
 const OTHER = '.devcontainer/other/devcontainer.json';
 const NO_OTHER =
@@ -39,78 +28,10 @@ const NO_OTHER =
 
 describe('Switch Container (card containers-166, F-0407)', function () {
   this.timeout(900_000);
-  const opened: string[] = [];
-  const folders: string[] = [];
+  const {folderOf, connected, opening, stateOf, waitForOwnEntry, cleanUp} =
+    switchScene();
 
-  /** A folder of the run holding the configurations `names` (path to display name), each on the run's image and labels. */
-  function folderOf(
-    label: string,
-    files: Record<string, string | undefined>,
-  ): string {
-    const folder = path.join(variable('HARNESS_RUN_FOLDER'), label);
-    for (const [relative, name] of Object.entries(files)) {
-      const file = path.join(folder, relative);
-      mkdirSync(path.dirname(file), {recursive: true});
-      writeFileSync(
-        file,
-        JSON.stringify({
-          ...(name === undefined ? {} : {name}),
-          image: variable('HARNESS_DEVCONTAINER_IMAGE'),
-          runArgs: runLabelArguments(),
-        }),
-      );
-    }
-    folders.push(folder);
-    return folder;
-  }
-
-  /** Opens `folder` and connects it through the configuration the picker lists as `label`, or the only one. */
-  async function connected(folder: string, label?: string): Promise<string> {
-    const window = await openFolderWindow(folder);
-    opened.push(window);
-    const running = inWindow(window, 'remote-containers.reopenInContainer');
-    if (label !== undefined) {
-      await waitForQuickPick(window, 60_000);
-      await chooseQuickPickItem(window, label);
-    }
-    await running.catch(() => undefined);
-    await connectedToContainer(window, 300_000);
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    return window;
-  }
-
-  /** What identifies the connection of `window`: its title, its indicator and its tabs. */
-  async function stateOf(
-    window: string,
-  ): Promise<{title: string; indicator: string; tabs: string[]}> {
-    return {
-      title: await windowTitle(window),
-      indicator: (await statusItem(window, 'status.host')).text,
-      tabs: (await editorTabs(window)).map(each => each.label),
-    };
-  }
-
-  /** Whether the palette of `window` lists an entry of this extension, once it does; the palette fills late in a new window. */
-  async function waitForOwnEntry(window: string): Promise<boolean> {
-    await waitFor(
-      `the palette of ${window} to list the entries of Dev Containers`,
-      async () =>
-        (await paletteRows(window, 'Dev Containers: Reopen in Container')).some(
-          each => each === 'Dev Containers: Reopen in Container',
-        ),
-      60_000,
-    );
-    return true;
-  }
-
-  afterEach(async () => {
-    for (const window of opened.splice(0)) {
-      await closeWindow(window).catch(() => undefined);
-    }
-    for (const folder of folders.splice(0)) {
-      await removeContainers(folder);
-    }
-  });
+  afterEach(cleanUp);
 
   it('F-0407 AC-2, AC-5, AC-11, AC-19 (c166-picker): the picker has the title Select Configuration, the placeholder of the initial picker, one row per configuration with its path and an Open File button, the connected one marked (Current), the first row focused; Escape changes nothing', async () => {
     const folder = folderOf('c166-picker', {[MAIN]: 'Main', [OTHER]: 'Other'});
@@ -211,10 +132,9 @@ describe('Switch Container (card containers-166, F-0407)', function () {
     const inside = (
       await paletteRows(window, 'Dev Containers: Switch Container')
     ).filter(each => each === 'Dev Containers: Switch Container');
-    const local = await openFolderWindow(
+    const local = await opening(
       folderOf('c166-palette-local', {[MAIN]: 'Main'}),
     );
-    opened.push(local);
     const own = await waitForOwnEntry(local);
     const outside = (await paletteRows(local, 'Switch Container')).filter(
       each => each.includes('Switch Container'),
@@ -251,10 +171,7 @@ describe('Switch Container (card containers-166, F-0407)', function () {
   });
 
   it('F-0407 AC-28, AC-29 (c166-local): in a local window the command shows the dialog with at most one configuration, and with several the picker of Reopen in Container, which Escape closes with nothing created', async () => {
-    const single = await openFolderWindow(
-      folderOf('c166-local-one', {[MAIN]: 'Main'}),
-    );
-    opened.push(single);
+    const single = await opening(folderOf('c166-local-one', {[MAIN]: 'Main'}));
     const singleRun = inWindow(single, SWITCH);
     await waitFor(
       'the dialog',
@@ -268,8 +185,7 @@ describe('Switch Container (card containers-166, F-0407)', function () {
       [MAIN]: 'Main',
       [OTHER]: 'Other',
     });
-    const pair = await openFolderWindow(several);
-    opened.push(pair);
+    const pair = await opening(several);
     const pairRun = inWindow(pair, SWITCH);
     await waitForQuickPick(pair, 60_000);
     const facts = await quickPickFacts(pair);
