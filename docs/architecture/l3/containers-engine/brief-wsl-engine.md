@@ -51,7 +51,7 @@ The SSH host keeps its exec-server adapter (`brief-remote-ssh-engines.md` §3).
 ### 2.2 The WSL adapter
 
 C2's `EngineHost` gains its third adapter:
-- `run` and `spawn` go through D1's `exec(distro, '~', 'docker', argv, env)`;
+- `spawn` goes through D1's `start(distro, '~', 'docker', argv, env)`, and `run` through `spawnedEngineHost(spawn)`;
 - the engine coordinate is the distro's environment, plus the window's settings, as F-0205's rules have it;
 - C11's exec channel (`docker exec -i`) and C10's spawns go through it too.
 
