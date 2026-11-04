@@ -7,6 +7,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
 import {
   activeEditorTextOf,
   closeWindow,
@@ -34,30 +35,35 @@ const PLUS = 'New Remote';
 const GROUP = 'SSH';
 const ADDED = 'c102-written-locally';
 
-/** How long one command on the SSH host may take, in milliseconds. */
-const HOST_COMMAND_MILLISECONDS = 120_000;
+/** How long one step of the row may take, in milliseconds. */
+const STEP_MILLISECONDS = 90_000;
 
-/** The output of the shell script `script` run on the SSH host as `user`, or the error that names `step` once it takes too long. */
-async function onSshHost(
+/** The result of `work`, or the error that names `step` once it takes longer than a step may. */
+async function within<Result>(
+  step: string,
+  work: Promise<Result>,
+): Promise<Result> {
+  const expiry = new AbortController();
+  const late = delay(STEP_MILLISECONDS, undefined, {
+    signal: expiry.signal,
+  }).then(() => {
+    throw new Error(`${step} took more than ${String(STEP_MILLISECONDS)} ms`);
+  });
+  try {
+    return await Promise.race([work, late]);
+  } finally {
+    expiry.abort();
+    late.catch(() => undefined);
+  }
+}
+
+/** The output of the shell script `script` run on the SSH host as `user`. */
+function onSshHost(
   step: string,
   user: string,
   script: string,
 ): Promise<string> {
-  let timer: NodeJS.Timeout | undefined;
-  const expiry = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      reject(
-        new Error(
-          `${step} took more than ${String(HOST_COMMAND_MILLISECONDS)} ms on the SSH host`,
-        ),
-      );
-    }, HOST_COMMAND_MILLISECONDS);
-  });
-  try {
-    return await Promise.race([onHostAs(user, 'sh', '-c', script), expiry]);
-  } finally {
-    clearTimeout(timer);
-  }
+  return within(step, onHostAs(user, 'sh', '-c', script));
 }
 
 describe('the SSH group in a window connected through Remote - SSH (card coverage-102, part 2)', function () {
@@ -87,10 +93,16 @@ describe('the SSH group in a window connected through Remote - SSH (card coverag
         'harness',
         `mkdir -p /home/harness/.ssh && printf 'Host c102-remote-only\\n' >> ${remoteFile}`,
       );
-      await inWindow('local', 'workbench.view.remote');
-      await openWindow(HOST, window);
-      await connectedTo(window, HOST);
-      await inWindow(window, 'workbench.view.remote');
+      await within(
+        'showing the Remote view in the local window',
+        inWindow('local', 'workbench.view.remote'),
+      );
+      await within(`opening window ${window}`, openWindow(HOST, window));
+      await within(`window ${window} connecting`, connectedTo(window, HOST));
+      await within(
+        `showing the Remote view in window ${window}`,
+        inWindow(window, 'workbench.view.remote'),
+      );
       const local = await waitFor(
         'the local window to list hosts',
         async () => (await hostLabels('local')).length > 0,
@@ -101,9 +113,15 @@ describe('the SSH group in a window connected through Remote - SSH (card coverag
         async () => (await hostLabels(window)).length > 0,
         30_000,
       ).then(() => hostLabels(window));
-      await rowAction(window, VIEW, GROUP, GEAR);
-      const picker = await pickShown(window);
-      await chooseQuickPickRow(window, config);
+      await within(
+        'the gear of the SSH group',
+        rowAction(window, VIEW, GROUP, GEAR),
+      );
+      const picker = await within('the picker of the gear', pickShown(window));
+      await within(
+        'choosing the local file',
+        chooseQuickPickRow(window, config),
+      );
       await waitFor(
         `window ${window} to open the local file`,
         async () =>
@@ -112,13 +130,28 @@ describe('the SSH group in a window connected through Remote - SSH (card coverag
           ),
         30_000,
       );
-      const opened = await activeEditorTextOf(window);
-      await startInWindow(window, 'workbench.action.closeAllEditors');
-      await rowAction(window, VIEW, GROUP, PLUS);
-      await pickShown(window);
-      await answerInputBox(window, `ssh ${ADDED}`);
-      await pickShown(window);
-      await chooseQuickPickRow(window, config);
+      const opened = await within(
+        'reading the open file',
+        activeEditorTextOf(window),
+      );
+      await within(
+        'closing the editors',
+        startInWindow(window, 'workbench.action.closeAllEditors'),
+      );
+      await within(
+        'the plus of the SSH group',
+        rowAction(window, VIEW, GROUP, PLUS),
+      );
+      await within('the first picker of New Remote', pickShown(window));
+      await within(
+        'typing the host line',
+        answerInputBox(window, `ssh ${ADDED}`),
+      );
+      await within('the second picker of New Remote', pickShown(window));
+      await within(
+        'choosing the file to write',
+        chooseQuickPickRow(window, config),
+      );
       await waitFor(
         `window ${window} to list ${ADDED}`,
         async () => (await hostLabels(window)).includes(ADDED),
@@ -138,13 +171,16 @@ describe('the SSH group in a window connected through Remote - SSH (card coverag
               `timeout 90 grep -rlD skip ${ADDED} /home /root /etc/ssh 2>/dev/null; true`,
             )
           ).trim(),
-          await notifications(window),
+          await within('reading the notifications', notifications(window)),
         ],
         [local, false, config, true, true, '', []],
       );
     } finally {
-      await closeIfOpen(window);
-      await closeWindow(window).catch(() => undefined);
+      await within(`closing window ${window}`, closeIfOpen(window));
+      await within(
+        `closing window ${window} again`,
+        closeWindow(window).catch(() => undefined),
+      );
       await onSshHost(
         'restoring the SSH account’s config',
         'harness',
