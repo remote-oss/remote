@@ -14,8 +14,12 @@ import {
   attachedNotFound,
   attachedNotRunning,
   attachFailed,
+  requirementsNotMet,
 } from '../../src/connect/failures.ts';
-import {CONTAINERS_DOCUMENTATION} from '../../src/surfaces/recovery-presenter.ts';
+import {
+  CONTAINERS_DOCUMENTATION,
+  CONTAINERS_REQUIREMENTS,
+} from '../../src/surfaces/recovery-presenter.ts';
 
 function translate(template: string): string {
   return template;
@@ -58,6 +62,23 @@ describe('the dialogs of an attach that failed (card containers-163, part A)', (
       [
         'An error occurred attaching to the container.',
         ['Retry', 'Close Remote', 'More Actions...'],
+      ],
+    );
+  });
+
+  it('F-0503 AC-46 (c163-requirements-dialog): a container that does not meet the server’s requirements has S346 as its message, Learn More first, and the same first item in the picker', () => {
+    const failed = requirementsNotMet('no libstdc++');
+    const dialog = attachDialogOf(failed, translate);
+    deepStrictEqual(
+      [
+        dialog.message,
+        labelsOf(dialog.buttons),
+        labelsOf(attachPickOf(failed, translate).items),
+      ],
+      [
+        'The container does not meet all the requirements of the VS Code Server.',
+        ['Learn More', 'Close Remote', 'More Actions...'],
+        ['Learn More', 'Open Recent...', 'Open Documentation'],
       ],
     );
   });
@@ -217,5 +238,28 @@ describe('the presenter of an attach that failed (card containers-163, part A)',
     await scene.present(attachedNotFound('/n'));
     await settled();
     deepStrictEqual(scene.done.at(-1), 'choose');
+  });
+
+  it('F-0503 AC-47 (c163-requirements-learn-more): Learn More opens our requirements page and leaves the window disconnected with the recovery picker, whose Learn More item opens it again', async () => {
+    const scene = sceneOf({
+      dialog: 'Learn More',
+      picks: ['Learn More', undefined],
+    });
+    const outcome = await scene.present(requirementsNotMet('x'));
+    await settled();
+    await settled();
+    deepStrictEqual(
+      [outcome, scene.done.slice(1)],
+      [
+        'handled',
+        [
+          `open ${CONTAINERS_REQUIREMENTS}`,
+          'disconnected',
+          'pick Learn More|Open Recent...|Open Documentation',
+          `open ${CONTAINERS_REQUIREMENTS}`,
+          'pick Learn More|Open Recent...|Open Documentation',
+        ],
+      ],
+    );
   });
 });

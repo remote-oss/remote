@@ -334,6 +334,8 @@ async function runSteps(
     machineSettings?: Record<string, unknown>;
     devPort?: string;
     created?: boolean;
+    previewNoteAlways?: boolean;
+    extensionsOncePerUser?: boolean;
     cancellation?: AbortSignal;
     root?: RecordingChannel;
     beforeStart?: ServerRequest['beforeStart'];
@@ -356,6 +358,10 @@ async function runSteps(
     defaultExtensions: options.defaultExtensions ?? [],
     devPort: options.devPort ?? '',
     created: options.created ?? false,
+    ...(options.previewNoteAlways === true ? {previewNoteAlways: true} : {}),
+    ...(options.extensionsOncePerUser === true
+      ? {extensionsOncePerUser: true}
+      : {}),
     machineSettings: options.machineSettings ?? {},
     onPhase: phase => {
       seen.phases.push(phase);
@@ -741,6 +747,50 @@ describe('the server steps of a connect (card containers-08)', () => {
     deepStrictEqual(await previewLines('musl', true), [
       'Support for Alpine Linux is in preview.',
     ]);
+  });
+
+  it('F-0502 AC-17 (c163-preview-always): an attached container logs the preview line whether or not this connect created it, and still none for a glibc one on x64', async () => {
+    const musl = await runSteps(channelOf({libc: 'musl'}), {
+      previewNoteAlways: true,
+    });
+    const glibc = await runSteps(channelOf({libc: 'glibc'}), {
+      previewNoteAlways: true,
+    });
+    function lines(seen: Seen): string[] {
+      return seen.sink.lines
+        .map(line => line.message)
+        .filter(message => message.includes('is in preview'));
+    }
+    deepStrictEqual(
+      [lines(musl.seen), lines(glibc.seen)],
+      [['Support for Alpine Linux is in preview.'], []],
+    );
+  });
+
+  it('F-0602 BR-4, F-0505 AC-22 (c163-once-per-user): the default extensions reach the start for a user with no server data yet, and not for one that has it', async () => {
+    async function startWith(dataFolderExists: boolean): Promise<string> {
+      const channel = channelOf({
+        extra: [
+          answer(
+            script => script.startsWith('[ -e '),
+            [],
+            dataFolderExists ? 0 : 1,
+          ),
+        ],
+      });
+      await runSteps(channel, {
+        defaultExtensions: ['a.b'],
+        extensionsOncePerUser: true,
+      });
+      return scriptsOf(channel).find(isStart) ?? '';
+    }
+    deepStrictEqual(
+      [
+        (await startWith(false)).includes("'--install-extension' 'a.b'"),
+        (await startWith(true)).includes("'--install-extension' 'a.b'"),
+      ],
+      [true, false],
+    );
   });
 
   it('F-0502 AC-17: a container that ran already, or a glibc one on x64, logs no preview line', async () => {

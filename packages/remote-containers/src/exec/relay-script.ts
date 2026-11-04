@@ -64,3 +64,22 @@ export async function installRelayScript(
         detail: `relay script not written (exit ${String(outcome.status)})`,
       };
 }
+
+/** Whether `folder` exists in the target, as the channel's user sees it; an error of the channel counts as it not existing. */
+export async function folderExistsOver(
+  channel: HostChannel,
+  folder: string,
+  cancellation: AbortSignal,
+): Promise<boolean> {
+  const outcome = await channel.runScript(
+    {
+      script: `[ -e ${posixQuote(folder)} ]`,
+      interpreter: 'posixShell',
+      environment: {},
+      input: {kind: 'text', text: ''},
+      cancellation,
+    },
+    () => undefined,
+  );
+  return outcome.kind === 'exited' && outcome.status === 0;
+}
