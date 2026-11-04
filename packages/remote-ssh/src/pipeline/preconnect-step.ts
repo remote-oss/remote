@@ -188,6 +188,11 @@ export function preconnectStep(
     }
     const expanded = expandedPath(choice.path, ports.home);
     const stored = ports.approvals.hashFor(expanded);
+    logger.info(
+      stored === undefined
+        ? 'no confirmation is stored for the pre-connection script'
+        : 'a confirmation is stored for the pre-connection script',
+    );
     let changed = false;
     if (stored !== undefined) {
       const read = await contentsOf(expanded);
