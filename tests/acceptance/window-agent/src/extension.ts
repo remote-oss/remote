@@ -697,6 +697,27 @@ export function activate(context: vscode.ExtensionContext): void {
       },
     ),
     vscode.commands.registerCommand(
+      'acceptance.agent.cursorOn',
+      (needle: string) => {
+        const editor = vscode.window.activeTextEditor;
+        if (editor === undefined) {
+          throw new Error(
+            `no active editor to rest the cursor on ${JSON.stringify(needle)}`,
+          );
+        }
+        const offset = editor.document.getText().indexOf(needle);
+        if (offset === -1) {
+          throw new Error(
+            `the active editor ${String(editor.document.uri)} holds no occurrence of ${JSON.stringify(needle)}`,
+          );
+        }
+        editor.selection = new vscode.Selection(
+          editor.document.positionAt(offset),
+          editor.document.positionAt(offset + needle.length),
+        );
+      },
+    ),
+    vscode.commands.registerCommand(
       'acceptance.agent.call',
       async (commandId: string, ...parameters: unknown[]) => {
         let value: unknown;

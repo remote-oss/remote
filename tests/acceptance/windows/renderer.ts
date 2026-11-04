@@ -1787,6 +1787,24 @@ export interface Problem {
 /** The windows whose Problems panel `problemsOf` maximized, so that it shows many rows at once. */
 const maximizedPanels = new Set<string>();
 
+/**
+ * The raw rows of window `name`'s Problems panel, every aria level: the level, line, message and icon of each row.
+ * A read beside `problemsOf`, for the moments when the problems it holds do not say what the panel shows.
+ */
+export async function problemRows(
+  name: string,
+): Promise<Array<[string, string, string, string]>> {
+  return evaluate(
+    name,
+    `(() => [...document.querySelectorAll('.markers-panel [role="treeitem"]')].map(row => [
+      row.getAttribute('aria-level') ?? '',
+      row.querySelector('.marker-line')?.textContent ?? '',
+      row.querySelector('.marker-message')?.textContent ?? '',
+      row.querySelector('.marker-icon')?.className ?? '',
+    ]))()`,
+  );
+}
+
 /** Focuses the Problems panel of window `name`, maximized, and reads its problems in the order shown. */
 export async function problemsOf(name: string): Promise<Problem[]> {
   await paletteRun(name, 'Problems: Focus on Problems View');
@@ -1800,10 +1818,15 @@ export async function problemsOf(name: string): Promise<Problem[]> {
       const problems = [];
       let file = '';
       for (const row of document.querySelectorAll('.markers-panel [role="treeitem"]')) {
-        if (row.getAttribute('aria-level') === '1') {
+        const level = row.getAttribute('aria-level');
+        if (level === '1') {
           const folder = row.querySelector('.label-description')?.textContent ?? '';
           const label = row.querySelector('.label-name')?.textContent ?? '';
           file = folder === '' ? label : folder + '/' + label;
+          continue;
+        }
+        if (level !== '2') {
+          // A deeper row is the reference of a problem to another location, not a problem of its own.
           continue;
         }
         const line = row.querySelector('.marker-line')?.textContent ?? '';

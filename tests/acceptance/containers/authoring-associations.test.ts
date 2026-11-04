@@ -1,7 +1,14 @@
 import {deepStrictEqual} from 'node:assert';
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {closeWindow, inWindow, variable} from '../windows/harness.ts';
+import {
+  closeWindow,
+  inWindow,
+  isTrusted,
+  variable,
+  windowEvents,
+  windowState,
+} from '../windows/harness.ts';
 import {
   connectedWindow,
   openFolderWindow,
@@ -10,10 +17,11 @@ import {
 } from '../windows/folder-windows.ts';
 import {
   editorTabs,
-  pressEscape,
+  problemRows,
   problemsOf,
   type Problem,
   statusBarText,
+  statusBarItemIds,
   evaluate,
 } from '../windows/renderer.ts';
 import {docker} from '../windows/dev-containers-view.ts';
@@ -59,121 +67,96 @@ function folderWithFile(name: string, file: string, text: string): string {
   return folder;
 }
 
-/** The text of the hover a mouse resting on `needle` in window `name`'s active editor shows, empty when none. */
+/** The text of the hover window `name`'s active editor shows at the token `needle`, empty when it shows none. */
 async function editorHoverOf(name: string, needle: string): Promise<string> {
-  await evaluate<boolean>(
-    name,
-    `(() => {
-      const line = [...document.querySelectorAll('.view-lines .view-line')].find(
-        entry => (entry.textContent ?? '').includes(${JSON.stringify(needle)}),
-      );
-      if (line === undefined) {
-        return;
-      }
-      const text = line.textContent ?? '';
-      const index = text.indexOf(${JSON.stringify(needle)});
-      const nodeIterator = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
-      let count = 0;
-      let startNode: Text | null = null;
-      let startOffset = 0;
-      let endNode: Text | null = null;
-      let endOffset = 0;
-      let textNode: Node | null;
-      while ((textNode = nodeIterator.nextNode()) !== null) {
-        const length = textNode.nodeValue.length;
-        if (startNode === null && count + length > index) {
-          startNode = textNode as Text;
-          startOffset = index - count;
-        }
-        if (endNode === null && count + length >= index + 1) {
-          endNode = textNode as Text;
-          endOffset = index + 1 - count;
-          break;
-        }
-        count += length;
-      }
-      if (startNode === null || endNode === null) {
-        return;
-      }
-      const range = document.createRange();
-      range.setStart(startNode, startOffset);
-      range.setEnd(endNode, endOffset);
-      const rect = range.getBoundingClientRect();
-      const point = {
-        x: rect.left + rect.width / 2,
-        y: rect.top + rect.height / 2,
-      };
-      const target =
-        document.elementFromPoint(point.x, point.y) ?? line;
-      for (const type of ['mouseover', 'mousemove']) {
-        target.dispatchEvent(
-          new MouseEvent(type, {bubbles: true, clientX: point.x, clientY: point.y}),
-        );
-      }
-      return true;
-    })()`,
-  );
+  // The cursor rests on the token read from the model, so a line the editor has not rendered yet is no obstacle; the
+  // editor is focused first, since the command acts on the editor a preceding read may have unfocused.
+  await inWindow(name, 'workbench.action.focusActiveEditorGroup');
+  await inWindow(name, 'acceptance.agent.cursorOn', needle);
   let hover = '';
-  for (let tries = 0; tries < 40 && hover === ''; tries += 1) {
-    await new Promise(resolve => setTimeout(resolve, 100));
-    hover = (
-      await evaluate<string>(
-        name,
-        `(document.querySelector('.monaco-hover .monaco-hover-content, .workbench-hover')?.textContent ?? '')`,
-      )
-    ).trim();
+  for (let tries = 0; tries < 3 && hover === ''; tries += 1) {
+    await inWindow(name, 'editor.action.showHover');
+    for (let polls = 0; polls < 50 && hover === ''; polls += 1) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      hover = (
+        await evaluate<string>(
+          name,
+          `(() => {
+            for (const open of document.querySelectorAll('.monaco-hover:not(.hidden)')) {
+              // A hover the status bar holds, not the editor's: the editor's hover is the one that names its content.
+              if (open.querySelector('.hover-language-status') !== null) {
+                continue;
+              }
+              const text = open.querySelector('.monaco-hover-content')?.textContent ?? '';
+              if (text !== '') {
+                return text;
+              }
+            }
+            return '';
+          })()`,
+        )
+      ).trim();
+    }
   }
+  await evaluate<boolean>(name, CLOSE_HOVERS);
   return hover;
 }
 
-/** Waits until the language status menu of window `name` holds the item `entry`, naming the state when it does not. */
-async function settledStatusOf(name: string, entry: string): Promise<void> {
-  let state: {item: string; menu: string[]};
+/** Clicks the language status item of window `name`'s status bar so that its hover shows. */
+const OPEN_LANGUAGE_STATUS = `(() => {
+  document.getElementById('status.languageStatus')
+    ?.querySelector('a')
+    ?.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+  return true;
+})()`;
+
+/** The entries the language status hover shows, each as "label, detail" in the order shown. */
+const LANGUAGE_STATUS_ENTRIES = `[...document.querySelectorAll('.hover-language-status .element .left')].map(left =>
+  [...left.childNodes].map(part => (part.textContent ?? '').trim()).filter(part => part !== '').join(', '))`;
+
+/** Closes the hovers of window `name`, so that the next read starts clean. */
+const CLOSE_HOVERS = `(() => {
+  for (const hover of document.querySelectorAll('.monaco-hover')) {
+    hover.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
+  }
+  return true;
+})()`;
+
+/** Waits until the language status of window `name` shows the entry `expected`, naming the state when it stops short. */
+async function settledStatusOf(name: string, expected: string): Promise<void> {
+  let state: {item: string; entries: string[]};
   const began = Date.now();
   for (;;) {
     state = await languageStatusOf(name);
-    if (state.menu.includes(entry)) {
+    if (state.entries.includes(expected)) {
       return;
     }
     if (Date.now() - began > 90_000) {
+      const itemIds = await statusBarItemIds(name);
       throw new Error(
-        `window ${name}'s language status ${JSON.stringify(state.item)} has menu ` +
-          `${JSON.stringify(state.menu)}, without ${JSON.stringify(entry)}`,
+        `window ${name}'s language status ${JSON.stringify(state.item)} shows entries ` +
+          `${JSON.stringify(state.entries)}, without ${JSON.stringify(expected)}: ` +
+          `status bar ids ${JSON.stringify(itemIds)}`,
       );
     }
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 }
 
-/** The language item of window `name`'s status bar with the items of the menu clicking it shows, read and closed. */
+/** The language mode of window `name`'s active editor with the entries of the status clicking it shows, read and closed. */
 async function languageStatusOf(
   name: string,
-): Promise<{item: string; menu: string[]}> {
-  const item = await statusBarText(name, 'status.language');
-  await evaluate<boolean>(
-    name,
-    `(() => {
-      const entry = document.getElementById('status.language');
-      entry?.dispatchEvent(new MouseEvent('click', {bubbles: true}));
-      return entry !== null;
-    })()`,
-  );
-  let menu: string[] = [];
+): Promise<{item: string; entries: string[]}> {
+  const item = await statusBarText(name, 'status.editor.mode');
+  await evaluate<boolean>(name, OPEN_LANGUAGE_STATUS);
+  let entries: string[] = [];
   const began = Date.now();
-  while (menu.length === 0 && Date.now() - began < 15_000) {
-    menu = await evaluate<string[]>(
-      name,
-      `[...document.querySelectorAll('.context-view [role="menuitem"]')].map(each => (each.textContent ?? '').trim()).filter(text => text !== '')`,
-    );
+  while (entries.length === 0 && Date.now() - began < 15_000) {
+    entries = await evaluate<string[]>(name, LANGUAGE_STATUS_ENTRIES);
     await new Promise(resolve => setTimeout(resolve, 250));
   }
-  if (menu.length === 0) {
-    throw new Error(
-      `window ${name} shows no language status menu for the item ${JSON.stringify(item)}`,
-    );
-  }
-  await pressEscape(name);
-  return {item, menu};
+  await evaluate<boolean>(name, CLOSE_HOVERS);
+  return {item, entries};
 }
 
 describe('the associations and the discontinued namespace of the authoring aids (card containers-208)', function () {
@@ -209,7 +192,8 @@ describe('the associations and the discontinued namespace of the authoring aids 
     } while (Date.now() - began < budget);
     throw new Error(
       `window ${name} holds ${String(problems.length)} problems, not ${String(count)}: ` +
-        `problems ${JSON.stringify(problems.map(each => [each.file, each.message, each.severity]))}, ` +
+        `problems ${JSON.stringify(problems.map(each => [each.file, each.message, each.severity, each.line, each.code, each.source, each.target]))}, ` +
+        `rows ${JSON.stringify(await problemRows(name))}, ` +
         `tabs ${JSON.stringify((await editorTabs(name)).map(each => each.label))}`,
     );
   }
@@ -272,18 +256,46 @@ describe('the associations and the discontinued namespace of the authoring aids 
       'devcontainer-feature.json',
       0,
     );
-    await settledStatusOf(window, SCHEMA_VALIDATED);
-    const hover = await editorHoverOf(window, '"id"');
+    // The hover names the schema's description only once the schema the file points at has loaded, and a valid
+    // file holds no problem until then, so the read retries for the description. The cursor rests at the end of
+    // the word, since the end of its selection is where the editor shows the hover, and a quote past the word
+    // lands on the separator, which holds no hover.
+    let hover: string;
+    const began = Date.now();
+    for (;;) {
+      hover = await editorHoverOf(window, 'id');
+      if (hover.includes(ID_DESCRIPTION) || Date.now() - began > 90_000) {
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 2_000));
+    }
+    const count = (await problemsOf(window)).length;
     const status = await languageStatusOf(window);
-    deepStrictEqual(
-      [
-        status.item,
-        status.menu.includes(SCHEMA_VALIDATED),
-        hover.includes(ID_DESCRIPTION),
-        (await problemsOf(window)).length,
-      ],
-      ['JSON with Comments', true, true, 0],
-    );
+    try {
+      deepStrictEqual(
+        [
+          status.item,
+          status.entries.includes(SCHEMA_VALIDATED),
+          hover.includes(ID_DESCRIPTION),
+          count,
+        ],
+        ['JSON with Comments', true, true, 0],
+        `the hover ${JSON.stringify(hover)} at ${JSON.stringify(window)}`,
+      );
+    } catch (caught) {
+      // Name what the window holds when the hover stops short: its open hovers and the tab it shows.
+      const hovers = await evaluate<string>(
+        window,
+        `(() => JSON.stringify([...document.querySelectorAll('.monaco-hover:not(.hidden)')].map(
+          each => [each.className, (each.textContent ?? '').slice(0, 120)],
+        )))()`,
+      );
+      const tab = (await windowState(window)).activeTab?.uri ?? 'no tab';
+      throw new Error(
+        `${String(caught)}; hovers ${hovers}; the window: ${tab}`,
+        {cause: caught},
+      );
+    }
   });
 
   it('F-0810 AC-12 (c208-s294): a devcontainers-contrib entry earns the warning over its whole entry, with its code link, no source and no quick fix, in a trusted window', async () => {
@@ -374,7 +386,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
     deepStrictEqual(
       [
         status.item,
-        status.menu.includes(NO_SCHEMA),
+        status.entries.includes(NO_SCHEMA),
         (await problemsOf(window)).length,
       ],
       ['JSON with Comments', true, 0],
@@ -404,7 +416,27 @@ describe('the associations and the discontinued namespace of the authoring aids 
       'acceptance.agent.openUri',
       'memfs:/devcontainer.json',
     );
-    const problems = await problemsSettled(window, 1);
+    let problems: Problem[];
+    try {
+      problems = await problemsSettled(window, 1, 120_000);
+    } catch (caught) {
+      await inWindow(
+        window,
+        'acceptance.agent.extensionPresent',
+        'remote-oss.remote-containers',
+      );
+      const present = [...windowEvents(window)]
+        .reverse()
+        .find(
+          each =>
+            each.event === 'extension' &&
+            each.extensionId === 'remote-oss.remote-containers',
+        )?.present;
+      throw new Error(
+        `${String(caught)}; the Dev Containers extension present ${JSON.stringify(present)}`,
+        {cause: caught},
+      );
+    }
     deepStrictEqual(
       problems.map(each => [each.file, each.message, each.severity]),
       [['devcontainer.json', S294, 'warning']],
@@ -414,17 +446,74 @@ describe('the associations and the discontinued namespace of the authoring aids 
   it('F-0810 AC-42 (c208-ac42-container-part): the warning shows in a dev container window for a configuration that exists only inside the container', async () => {
     const {name, containerId} = await connectedWindow('c208-ac42dc');
     opened.push(name);
+    // The configuration lives in the container alone, outside the workspace mount the window opens from.
+    const inContainer = '/tmp/c208-only/devcontainer.json';
     const text =
       '{"features": {"devcontainers-contrib/features/bash-command:1": {}}}';
-    await docker(
-      'exec',
-      containerId,
-      'sh',
-      '-c',
-      `printf '%s' '${text}' > /workspaces/c208-ac42dc/devcontainer.json`,
-    );
-    await inWindow(name, 'acceptance.agent.openFile', 'devcontainer.json');
-    const problems = await problemsSettled(name, 1);
+    let problems: Problem[];
+    try {
+      await docker(
+        'exec',
+        containerId,
+        'sh',
+        '-c',
+        `mkdir -p /tmp/c208-only && printf '%s' '${text}' > ${inContainer}`,
+      );
+      // The container's own paths are the window's remote paths: the file is addressed by the window's authority,
+      // the scheme and authority of the folder the window opened, not by a bare file uri.
+      const folder = (await windowState(name)).folders[0];
+      if (folder === undefined) {
+        throw new Error(
+          `window ${name} reports no folder to address ${inContainer} from`,
+        );
+      }
+      const scheme = folder.slice(0, folder.indexOf('://'));
+      const authority = folder.slice(
+        folder.indexOf('://') + 3,
+        folder.indexOf('/', folder.indexOf('://') + 3),
+      );
+      await inWindow(
+        name,
+        'acceptance.agent.openUri',
+        `${scheme}://${authority}${inContainer}`,
+      );
+      problems = await problemsSettled(name, 1, 120_000);
+    } catch (caught) {
+      const state = await windowState(name);
+      await inWindow(
+        name,
+        'acceptance.agent.extensionPresent',
+        'remote-oss.remote-containers',
+      );
+      const present = [...windowEvents(name)]
+        .reverse()
+        .find(
+          each =>
+            each.event === 'extension' &&
+            each.extensionId === 'remote-oss.remote-containers',
+        )?.present;
+      let listing: string;
+      try {
+        listing = await docker(
+          'exec',
+          containerId,
+          'ls',
+          '-la',
+          '/tmp/c208-only',
+        );
+      } catch (listingFailure) {
+        listing = `docker ls failed: ${String(listingFailure)}`;
+      }
+      throw new Error(
+        `${String(caught)}; the window: remote ${JSON.stringify(state.remoteName)}, ` +
+          `authority ${JSON.stringify(state.remoteAuthority)}, folders ${JSON.stringify(state.folders)}, ` +
+          `tab ${JSON.stringify(state.activeTab?.uri ?? null)}, ` +
+          `trusted ${JSON.stringify(await isTrusted(name))}, ` +
+          `the Dev Containers extension present ${JSON.stringify(present)}, ` +
+          `the container's ${inContainer} listed: ${JSON.stringify(listing)}`,
+        {cause: caught},
+      );
+    }
     deepStrictEqual(
       [
         problems.map(each => [each.file, each.message, each.severity]),
@@ -436,7 +525,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
           ),
         ),
       ],
-      [[['devcontainer.json', S294, 'warning']], false],
+      [[[inContainer, S294, 'warning']], false],
     );
   });
 
@@ -458,6 +547,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
       'devcontainers-extra',
     );
     const problems = await problemsSettled(window, 0, 30_000);
+    await inWindow(window, 'workbench.action.revertAndCloseActiveEditor');
     deepStrictEqual(
       [
         problems.length,
