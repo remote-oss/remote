@@ -78,12 +78,9 @@ jobs:
           df -h / | tail -1
       - if: contains(needs.select.outputs.launches, 'containers-podman')
         run: tools/install-podman
-      - run: |
-          if command -v xvfb-run >/dev/null; then
-            xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm test:acceptance:vscodium --launches "$LAUNCHES"
-          else
-            DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium --launches "$LAUNCHES"
-          fi
+      # the display the rows are written against: :99 at 1920x1080 with a window manager (tools/start-display)
+      - run: tools/start-display
+      - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         env:
           LAUNCHES: ${{ needs.select.outputs.launches }}
       - if: always()
