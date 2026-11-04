@@ -43,6 +43,8 @@ import {downloadPortOf, nodeClientFiles, nodeCredentialsPort} from 'lib-server';
 import {standDownHost} from 'lib-standdown';
 import {containersChannelPortFor} from './acceptance-log.ts';
 import {activateContainers} from './activation.ts';
+import {refreshCliBin} from './cli-bin/cli-bin.ts';
+import {nodeCliBinFs} from './cli-bin/node-cli-bin-fs.ts';
 import {serializedUriOf, windowOriginOf} from './authority/payload.ts';
 import {manifestStoreOf} from './features/manifest-store.ts';
 import {downloadTextOver} from './authoring/catalogue-download.ts';
@@ -1140,6 +1142,21 @@ export async function activate(
       };
     },
     handlers: served => {
+      // The launchers of the `devcontainer` command are made again when they are out of date; a failure is one log line.
+      refreshCliBin(
+        context.globalStorageUri.fsPath,
+        {
+          extensionPath: context.extensionPath,
+          appRoot: vscode.env.appRoot,
+          editorPath: process.execPath,
+          quality: profile.quality,
+        },
+        nodeCliBinFs,
+      ).catch((caught: unknown) => {
+        served.logger.warn(
+          `the devcontainer launchers could not be written: ${caught instanceof Error ? caught.message : String(caught)}`,
+        );
+      });
       // The two edit-session commands are registered and hidden; no proposal is requested, so the editor never offers them.
       const dormantCommand = {execute: () => Promise.resolve()};
       function firstFolder(): string | undefined {
