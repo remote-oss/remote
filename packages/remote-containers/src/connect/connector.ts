@@ -33,6 +33,7 @@ import {
   type DevContainerVolume,
   volumeTargetOf,
 } from '../volumes/volume-payload.ts';
+import {volumeInspectArguments} from '../volumes/clone-volume.ts';
 import {
   EXPLORE_WORKSPACE_MOUNT,
   type ExploreDefinition,
@@ -1584,6 +1585,16 @@ export function containerConnectorOf(
       logger.info('the volume to explore has no name Docker accepts');
       return containerSetupFailed();
     }
+    const existing = await engine.run(
+      volumeInspectArguments(target.volumeName),
+      {kind: 'none'},
+      {cancellation},
+    );
+    logger.info(
+      existing.kind === 'ran' && existing.status === 0
+        ? `the volume ${target.volumeName} exists`
+        : `the volume ${target.volumeName} does not exist yet, so the mount creates it`,
+    );
     const definition = await volumes.exploreDefinition();
     const bridge = dependencies.cliFor({
       ...cliEnvironment,

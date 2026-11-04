@@ -194,6 +194,7 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
           'identity' in each ? each.identity : each.type,
         ),
         label: scene.connector.heldIdentity()?.explored,
+        asked: linesOf(scene).filter(line => line.startsWith('volume inspect')),
       },
       {
         trusted: false,
@@ -212,6 +213,7 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
         variable: 'data',
         shutdown: [{volumeName: 'data', configFile: definition}, 'container'],
         label: true,
+        asked: ['volume inspect --format {{.Name}} -- data'],
       },
     );
   });
