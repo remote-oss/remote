@@ -3,6 +3,7 @@ import {
   type EngineWindow,
   type EngineWslSettings,
   engineHostOf,
+  labelFolderOf,
 } from '../../src/engine/engine-host-of.ts';
 
 const LOCAL: EngineWindow = {remoteName: undefined, distro: undefined};
@@ -122,6 +123,29 @@ describe('the engine host of a command (card containers-203, F-0207 BR-18)', () 
         {kind: 'local', folder: '/home/me/app'},
         {kind: 'local', folder: '\\\\wsl.localhost\\Ubuntu\\home\\me\\app'},
         {kind: 'local', folder: '/home/me/app'},
+      ],
+    );
+  });
+});
+
+describe('the folder label of a container in a distro (card containers-203, F-0207 BR-19)', () => {
+  it('F-0207 BR-19: executeInWSL keeps the Windows folder, and a folder of the distro, by a share or a wsl window, is the wsl.localhost form', () => {
+    const choices = [
+      engineHostOf(LOCAL, 'c:\\work\\app', SETTINGS_ON, 'win32'),
+      engineHostOf(
+        LOCAL,
+        '\\\\wsl$\\Ubuntu\\home\\me\\app',
+        SETTINGS_OFF,
+        'win32',
+      ),
+      engineHostOf(WSL_WINDOW, '/home/me/app', SETTINGS_OFF, 'win32'),
+    ].flatMap(choice => (choice.kind === 'distro' ? [choice] : []));
+    deepStrictEqual(
+      choices.map(choice => labelFolderOf(choice, 'Ubuntu')),
+      [
+        'c:\\work\\app',
+        '\\\\wsl.localhost\\Ubuntu\\home\\me\\app',
+        '\\\\wsl.localhost\\Ubuntu\\home\\me\\app',
       ],
     );
   });

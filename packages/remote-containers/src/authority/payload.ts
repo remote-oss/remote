@@ -59,7 +59,13 @@ export function serializedUriOf(uri: UriParts): SerializedUri {
 }
 
 /** The engine members a payload's `settings` may name, in their fixed order. */
-const ENGINE_MEMBERS = ['context', 'host', 'certPath', 'tlsVerify'] as const;
+const ENGINE_MEMBERS = [
+  'context',
+  'host',
+  'certPath',
+  'tlsVerify',
+  'wslDistro',
+] as const;
 
 /** A payload's `settings` member for an engine, or nothing when it is the default. */
 export function pinnedSettingsOf(

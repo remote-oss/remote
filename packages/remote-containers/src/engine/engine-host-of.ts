@@ -3,7 +3,12 @@
  * read for every command, so a setting changed since the last one applies without a reload.
  */
 
-import {isWindowsMountShape, mountToWindows, shareToDistro} from 'lib-wsl';
+import {
+  distroToShare,
+  isWindowsMountShape,
+  mountToWindows,
+  shareToDistro,
+} from 'lib-wsl';
 
 /** What the window is. */
 export interface EngineWindow {
@@ -20,6 +25,17 @@ export interface EngineWslSettings {
   executeInWSLDistro: string;
 }
 
+/** An engine in a WSL distro. */
+export interface DistroChoice {
+  kind: 'distro';
+  /** The registered name when it is known, else the typed one; none asks for WSL's default distro. */
+  distro: string | undefined;
+  /** The folder: in the distro for a share or a `wsl` window, the Windows folder for `executeInWSL`. */
+  folder: string;
+  /** What chose the distro: the folder's share, the `wsl` window, or the settings. */
+  chosenBy: 'share' | 'window' | 'settings';
+}
+
 /** Where a command's engine lives and which folder it acts on. */
 export type EngineHostChoice =
   | {
@@ -27,15 +43,7 @@ export type EngineHostChoice =
       /** The folder, a Windows folder when a `wsl` window's `/mnt/<drive>/` folder was handed off. */
       folder: string;
     }
-  | {
-      kind: 'distro';
-      /** The registered name when it is known, else the typed one; none asks for WSL's default distro. */
-      distro: string | undefined;
-      /** The folder: in the distro for a share or a `wsl` window, the Windows folder for `executeInWSL`. */
-      folder: string;
-      /** What chose the distro: the folder's share, the `wsl` window, or the settings. */
-      chosenBy: 'share' | 'window' | 'settings';
-    };
+  | DistroChoice;
 
 /** The engine host for the folder in the window, under the settings, on the platform of the editor. */
 export function engineHostOf(
@@ -79,4 +87,15 @@ export function engineHostOf(
     };
   }
   return local;
+}
+
+/**
+ * The folder the container's `devcontainer.local_folder` label names: the Windows folder for `executeInWSL`, and the
+ * `\\wsl.localhost\<distro>\...` form, never `wsl$`, for a folder that lives in `distro`, by a share or a `wsl` window,
+ * so both routes find the same container.
+ */
+export function labelFolderOf(choice: DistroChoice, distro: string): string {
+  return choice.chosenBy === 'settings'
+    ? choice.folder
+    : distroToShare(distro, choice.folder);
 }
