@@ -1148,6 +1148,19 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
+  it('F-0206 BR-5, BR-16: the GPU availability is read at each connect and goes to the lifecycle as written, detect when unset', async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    scene.gpuAvailability = 'none';
+    await connected(scene);
+    scene.gpuAvailability = 'sometimes';
+    await connected(scene);
+    deepStrictEqual(
+      scene.prepared.map(request => request.gpuAvailability),
+      ['detect', 'none', 'sometimes'],
+    );
+  });
+
   it('F-0411 BR-7, BR-11: the settings are read at each connect, so a change between two connects takes effect', async () => {
     const scene = sceneOf();
     scene.workspaceMountConsistency = 'cached';

@@ -264,6 +264,18 @@
   "Cannot attach to the container with name/id {0}, it no longer exists.": "Cannot attach to the container with name/id {0}, it no longer exists.",
   "Cannot attach to the container {0} ({1}){2}, it is not running.": "Cannot attach to the container {0} ({1}){2}, it is not running.",
   "Start Container": "Start Container",
-  "Choose Container": "Choose Container",
-  "{0} in {1} ({2})": "{0} in {1} ({2})"
+  "{0} in {1} ({2})": "{0} in {1} ({2})",
+  "Not all host requirements in devcontainer.json are met by the Docker daemon.": "Not all host requirements in devcontainer.json are met by the Docker daemon.",
+  "Docker daemon: {0}\ndevcontainer.json: {1}": "Docker daemon: {0}\ndevcontainer.json: {1}",
+  "CPUs {0}": "CPUs {0}",
+  "RAM {0}": "RAM {0}",
+  "disk {0}": "disk {0}",
+  "GPU": "GPU",
+  "Extension has been added to the {0}.": "Extension has been added to the {0}.",
+  "Extension is already included in the {0}.": "Extension is already included in the {0}.",
+  "Dev Container configuration": "Dev Container configuration",
+  "The configuration {0} is not a JSON object, so the extension was not added.": "The configuration {0} is not a JSON object, so the extension was not added.",
+  "{0} in the configuration is not an array, so the extension was not added.": "{0} in the configuration is not an array, so the extension was not added.",
+  "The extension could not be added: {0}": "The extension could not be added: {0}",
+  "it is not an extension id": "it is not an extension id"
 }

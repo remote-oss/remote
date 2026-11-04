@@ -83,26 +83,42 @@
     {
       "package": "remote-containers",
       "kind": "module",
-      "key": "src/attach/config-writer.ts",
-      "card": "#2163",
-      "slice": "authoring release 2",
-      "decision": "contributed, consumed by #2164/#2167 (the first callers); the consuming card removes this entry"
+      "key": "src/engine/engine-host-of.ts",
+      "card": "#2156",
+      "slice": "containers release 2",
+      "decision": "F-0207 BR-18 (2026-11-04): the engine host choice per command; the adapter and the wiring in the next commits of the card consume it"
     },
     {
       "package": "remote-containers",
       "kind": "module",
-      "key": "src/config/configuration-edit.ts",
-      "card": "#2163",
-      "slice": "authoring release 2",
-      "decision": "contributed, consumed by #2164/#2167 (the first callers); the consuming card removes this entry"
+      "key": "src/engine/wsl-engine-host.ts",
+      "card": "#2156",
+      "slice": "containers release 2",
+      "decision": "F-0207 BR-15 (2026-11-04): the WSL adapter of the engine host; the wiring of engineHostOf into the commands consumes it in the next commits of the card"
     },
     {
       "package": "remote-containers",
       "kind": "module",
-      "key": "src/config/edit-target.ts",
-      "card": "#2163",
-      "slice": "authoring release 2",
-      "decision": "contributed, consumed by #2164/#2167 (the first callers); the consuming card removes this entry"
+      "key": "src/engine/wsl-distro-check.ts",
+      "card": "#2156",
+      "slice": "containers release 2",
+      "decision": "F-0207 BR-3, BR-17 (2026-11-04): the check of a typed distro against WSL's list; the wiring of engineHostOf into the commands consumes it in the next commits of the card"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "settings",
+      "key": "executeInWSLDistro",
+      "card": "#2156",
+      "slice": "containers release 2",
+      "decision": "F-0207 BR-3 (2026-11-04): contributed, read by the wiring of engineHostOf into the commands, the next part of the card"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "settings",
+      "key": "forwardWSLServices",
+      "card": "#2156",
+      "slice": "containers release 2",
+      "decision": "F-0207 BR-14 (2026-11-04): contributed; its effect belongs to the relays' cards (F-1003, F-1007, F-1008)"
     }
   ]
 }

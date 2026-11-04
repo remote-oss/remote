@@ -53,6 +53,8 @@ interface Scene {
   titles: Array<string | undefined>;
   rows: unknown[];
   targets: unknown[];
+  /** Whether each read asked for the merged configuration. */
+  merged: Array<boolean | undefined>;
   sink: MemorySink;
 }
 
@@ -86,6 +88,7 @@ function sceneOf(contents: Scene['contents']): Scene {
     rows: [],
     titles: [],
     targets: [],
+    merged: [],
     sink: new MemorySink(),
   };
 }
@@ -118,6 +121,7 @@ async function choose(
   configFile?: string,
   switching?: {current: string; reconnectCurrent: boolean},
   external?: boolean,
+  mergedRead?: boolean,
 ): Promise<ConfigurationChoice> {
   const tree = listing(scene);
   return chooseConfiguration(
@@ -131,6 +135,7 @@ async function choose(
       ...(configFile === undefined ? {} : {configFile}),
       ...(switching === undefined ? {} : {switching}),
       ...(external === undefined ? {} : {external}),
+      ...(mergedRead === undefined ? {} : {mergedRead}),
     },
     {
       files: {
@@ -200,8 +205,16 @@ async function choose(
       },
       // eslint-disable-next-line id-length -- the choice's dependency is named cli
       cli: {
-        readConfiguration: (target, containerId, onEvent) => {
+        readConfiguration: (
+          target,
+          containerId,
+          onEvent,
+          cancellation,
+          onStdin,
+          includeMerged,
+        ) => {
           scene.targets.push([target, containerId]);
+          scene.merged.push(includeMerged);
           scene.calls.push('readConfiguration');
           onEvent({
             kind: 'log',
@@ -281,6 +294,37 @@ describe('choosing the configuration (card containers-13)', () => {
           features: [],
         },
         [true],
+      ],
+    );
+  });
+
+  it('F-0206 BR-13: a merged read reports what the merged configuration asks of the daemon, and a read that is not merged reports nothing', async () => {
+    const merged = sceneOf({[ONLY]: IMAGE});
+    merged.read = {
+      ...configurationOf('/workspaces/p'),
+      mergedConfiguration: {hostRequirements: {cpus: 64, memory: '512gb'}},
+    };
+    const plain = sceneOf({[ONLY]: IMAGE});
+    const mergedChoice = await choose(
+      merged,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+    const plainChoice = await choose(plain);
+    deepStrictEqual(
+      [
+        mergedChoice.kind === 'chosen' && mergedChoice.hostRequirements,
+        merged.merged,
+        plainChoice.kind === 'chosen' && 'hostRequirements' in plainChoice,
+        plain.merged,
+      ],
+      [
+        {cpus: 64, memory: 512 * 1024 ** 3, needsGpu: false},
+        [true],
+        false,
+        [false],
       ],
     );
   });

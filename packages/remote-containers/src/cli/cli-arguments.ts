@@ -45,6 +45,8 @@ export interface UpOptions {
   buildNoCache: boolean;
   /** The consistency of the workspace mount, as the setting has it; the CLI refuses a value it doesn't know. */
   workspaceMountConsistency: string;
+  /** `dev.containers.gpuAvailability` as the setting has it; the CLI refuses a value it doesn't know. */
+  gpuAvailability: string;
 }
 
 /** The size of the terminal a run's lifecycle commands show in, as arguments; none when the size is not known. */
@@ -113,6 +115,8 @@ export function upArguments(target: CliTarget, options: UpOptions): string[] {
     ...additionalFeatures(target),
     ...(target.features.lockfile ? [] : ['--no-lockfile']),
     '--skip-post-create',
+    '--gpu-availability',
+    options.gpuAvailability,
     '--workspace-mount-consistency',
     options.workspaceMountConsistency,
     ...(options.removeExistingContainer ? ['--remove-existing-container'] : []),
@@ -186,19 +190,21 @@ export function runUserCommandsArguments(
 }
 
 /**
- * Reads the configuration. With a container id it is merged with the container's metadata; without one the merge would
- * read the image's metadata and pull the image, which the read before a reload must not do.
+ * Reads the configuration. With a container id it is merged with the container's metadata. `includeMerged` asks for the
+ * merged configuration, which the CLI builds from the Features and the image's label, read from the registry when the
+ * image is not local and never pulled (measured on 0.89.0); a read before trust asks for no merge, since that fetches what
+ * the configuration names.
  */
 export function readConfigurationArguments(
   target: CliTarget,
   containerId?: string,
+  includeMerged = containerId !== undefined,
 ): string[] {
   return [
     ...commonArguments('read-configuration', target),
     ...additionalFeatures(target),
-    ...(containerId === undefined
-      ? []
-      : ['--container-id', containerId, '--include-merged-configuration']),
+    ...(containerId === undefined ? [] : ['--container-id', containerId]),
+    ...(includeMerged ? ['--include-merged-configuration'] : []),
   ];
 }
 

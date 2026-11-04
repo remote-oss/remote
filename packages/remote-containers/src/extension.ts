@@ -9,6 +9,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  realpath,
   rename,
   rm,
   stat,
@@ -43,6 +44,8 @@ import {downloadPortOf, nodeClientFiles, nodeCredentialsPort} from 'lib-server';
 import {standDownHost} from 'lib-standdown';
 import {containersChannelPortFor} from './acceptance-log.ts';
 import {activateContainers} from './activation.ts';
+import {refreshCliBin} from './cli-bin/cli-bin.ts';
+import {nodeCliBinFs} from './cli-bin/node-cli-bin-fs.ts';
 import {serializedUriOf, windowOriginOf} from './authority/payload.ts';
 import {manifestStoreOf} from './features/manifest-store.ts';
 import {downloadTextOver} from './authoring/catalogue-download.ts';
@@ -66,9 +69,16 @@ import {storedCandidate, type StoredLookup} from './config/stored-candidate.ts';
 import type {LocationRow} from './authoring/location.ts';
 import {wizardRunnerOf} from './authoring/wizard.ts';
 import {
+  type ConfigureFeaturesPorts,
   configureFeaturesOf,
   type WindowFolder,
 } from './authoring/configure-features.ts';
+import {addExtensionCommandOf} from './authoring/add-extension-command.ts';
+import type {
+  ConfigDocument,
+  ConfigUri,
+  ConfigurationEditPorts,
+} from './config/configuration-edit.ts';
 import {addFilesForFeatures} from './authoring/features-add-files.ts';
 import {featuresRunOf} from './authoring/features-run.ts';
 import {versionCheckOf} from './authoring/version-check.ts';
@@ -121,7 +131,9 @@ import {desktopPortsOf} from './engine/desktop-host.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {
   composeCheck,
+  containerRequirements,
   currentContext,
+  daemonFigures,
   firstCheck,
   type PreflightDependencies,
 } from './engine/preflight.ts';
@@ -339,6 +351,75 @@ function withoutLocation(ports: WizardPorts): WizardPorts {
 
 function translate(template: string): string {
   return vscode.l10n.t(template);
+}
+
+/** The document-edit seam over the editor: its open documents, its edits and saves, and its file system. */
+function configurationEditPortsOf(): ConfigurationEditPorts {
+  const files = vscode.workspace.fs;
+  function uriOf(uri: ConfigUri): vscode.Uri {
+    return uri as vscode.Uri;
+  }
+  function documentOf(document: ConfigDocument): vscode.TextDocument {
+    return document as vscode.TextDocument;
+  }
+  return {
+    openDocuments: () => vscode.workspace.textDocuments,
+    openTextDocument: uri =>
+      Promise.resolve(vscode.workspace.openTextDocument(uriOf(uri))),
+    applyEdit: (document, text) => {
+      const target = documentOf(document);
+      const edit = new vscode.WorkspaceEdit();
+      edit.replace(
+        target.uri,
+        new vscode.Range(
+          target.positionAt(0),
+          target.positionAt(target.getText().length),
+        ),
+        text,
+      );
+      return Promise.resolve(vscode.workspace.applyEdit(edit));
+    },
+    save: document => Promise.resolve(documentOf(document).save()),
+    fileSystem: {
+      stat: async uri => ({
+        symbolicLink:
+          ((await files.stat(uriOf(uri))).type &
+            vscode.FileType.SymbolicLink) !==
+          0,
+      }),
+      readFile: async uri =>
+        new TextDecoder().decode(await files.readFile(uriOf(uri))),
+      writeFile: (uri, text) =>
+        Promise.resolve(
+          files.writeFile(uriOf(uri), new TextEncoder().encode(text)),
+        ),
+      rename: (from, target) =>
+        Promise.resolve(
+          files.rename(uriOf(from), uriOf(target), {overwrite: true}),
+        ),
+      delete: uri => Promise.resolve(files.delete(uriOf(uri))),
+    },
+    realPath: uri => realpath(uri.fsPath),
+    workspaceFolders: () =>
+      (vscode.workspace.workspaceFolders ?? []).map(each => each.uri),
+    fileUri: fsPath => vscode.Uri.file(fsPath),
+    sibling: (uri, name) =>
+      vscode.Uri.joinPath(vscode.Uri.joinPath(uriOf(uri), '..'), name),
+    unique: randomUUID,
+  };
+}
+
+/** The id of the extension a row of the Extensions view hands the command: its `identifier.id`; none for anything else. */
+function extensionIdOf(extension: unknown): string | undefined {
+  const identifier =
+    typeof extension === 'object' && extension !== null
+      ? (extension as Record<string, unknown>).identifier
+      : undefined;
+  const written =
+    typeof identifier === 'object' && identifier !== null
+      ? (identifier as Record<string, unknown>).id
+      : undefined;
+  return typeof written === 'string' && written !== '' ? written : undefined;
 }
 
 /** What the attach warning needs of the editor, over the profile whose global state is `memento`. */
@@ -733,6 +814,12 @@ export async function activate(
   let logChannel: RevealableChannel | undefined;
   /** The lines of the connect attempt that is running or has failed, which a failure dialog writes to a file. */
   const attemptLog = createAttemptLog();
+  /** What the window's connection says of its target, for the commands that edit its configuration; the connector gives it once it exists. */
+  const windowTarget: {
+    attached: () =>
+      {image: string; name: string; folder: string | undefined} | undefined;
+    ownConfigFile: () => string | undefined;
+  } = {attached: () => undefined, ownConfigFile: () => undefined};
   /** How this window's last settled resolve ended; the resolver gives it once it is registered. */
   const resolved: {lastResolve: () => LastResolve} = {
     lastResolve: () => 'none',
@@ -1140,6 +1227,21 @@ export async function activate(
       };
     },
     handlers: served => {
+      // The launchers of the `devcontainer` command are made again when they are out of date; a failure is one log line.
+      refreshCliBin(
+        context.globalStorageUri.fsPath,
+        {
+          extensionPath: context.extensionPath,
+          appRoot: vscode.env.appRoot,
+          editorPath: process.execPath,
+          quality: profile.quality,
+        },
+        nodeCliBinFs,
+      ).catch((caught: unknown) => {
+        served.logger.warn(
+          `the devcontainer launchers could not be written: ${caught instanceof Error ? caught.message : String(caught)}`,
+        );
+      });
       // The two edit-session commands are registered and hidden; no proposal is requested, so the editor never offers them.
       const dormantCommand = {execute: () => Promise.resolve()};
       function firstFolder(): string | undefined {
@@ -1507,6 +1609,30 @@ export async function activate(
         served.logger,
       );
       const reopenPorts: ReopenPorts = {
+        requirements: {
+          daemonFigures: (base, cancellation) =>
+            daemonFigures(served.preflight, base, cancellation),
+          containerRequirements: (base, identity, cancellation) =>
+            containerRequirements(
+              served.preflight,
+              base,
+              identity,
+              cancellation,
+            ),
+          readText: file =>
+            readFile(file, 'utf8').then(
+              text => text,
+              () => undefined,
+            ),
+          confirm: async (message, detail, acceptLabel) =>
+            (await vscode.window.showWarningMessage(
+              message,
+              {modal: true, detail},
+              acceptLabel,
+            )) === acceptLabel,
+          translate,
+          logger: served.logger,
+        },
         authoring,
         gate: {
           missing: served.missing,
@@ -1763,7 +1889,19 @@ export async function activate(
           file => addressIn(root, file),
         );
       }
-      const configureFeatures = configureFeaturesOf({
+      const authoringBase: Pick<
+        ConfigureFeaturesPorts,
+        | 'window'
+        | 'filesOf'
+        | 'hostFiles'
+        | 'compare'
+        | 'stored'
+        | 'mirrored'
+        | 'surfaces'
+        | 'addFiles'
+        | 'translate'
+        | 'logger'
+      > = {
         window: {
           folders: windowFolders,
           remoteName: () => vscode.env.remoteName,
@@ -1840,6 +1978,32 @@ export async function activate(
             translate,
             logger: served.logger,
           }),
+        translate,
+        logger: served.logger,
+      };
+      const addExtension = addExtensionCommandOf({
+        ...authoringBase,
+        edit: configurationEditPortsOf(),
+        attached: () => windowTarget.attached(),
+        ownConfigFile: () => windowTarget.ownConfigFile(),
+        storage: context.globalStorageUri.fsPath,
+        exists: file =>
+          stat(file).then(
+            () => true,
+            () => false,
+          ),
+        uriOf: (file, root) => addressIn(root, file),
+        reveal: uri =>
+          vscode.window.showTextDocument(uri as vscode.Uri, {preview: false}),
+        notify: message => {
+          void vscode.window.showInformationMessage(message);
+        },
+        notifyError: message => {
+          void vscode.window.showErrorMessage(message);
+        },
+      });
+      const configureFeatures = configureFeaturesOf({
+        ...authoringBase,
         features: featuresRunOf({
           catalogue: wizardPorts.catalogue,
           quick: {...wizardPorts.options, translate},
@@ -1872,8 +2036,6 @@ export async function activate(
           translate,
           logger: served.logger,
         }),
-        translate,
-        logger: served.logger,
       });
       const kubernetes = k8sAttachCommandsOf({
         warning: () => attachWarningAsked(context.globalState),
@@ -1926,6 +2088,16 @@ export async function activate(
         reopenInTunnel: {execute: reopenOrigin.reopenInTunnel},
         openFolder: {execute: openFolder},
         switchContainer: {execute: switchContainerHandler},
+        addExtensionToConfig: {
+          execute: async (extension?: unknown) => {
+            const extensionId = extensionIdOf(extension);
+            if (extensionId === undefined) {
+              served.logger.info('Add to devcontainer.json got no extension');
+              return;
+            }
+            await addExtension(extensionId);
+          },
+        },
         configureContainerFeatures: {
           execute: async () => {
             await configureFeatures();
@@ -2409,6 +2581,7 @@ export async function activate(
           legacyWorkspaceMountConsistency: configuration.inspect(
             settings.workspaceMountConsistency.legacyId,
           )?.globalValue,
+          gpuAvailability: configuration.get(settings.gpuAvailability.id),
           mountGitWorktreeCommonDir: configuration.inspect(
             settings.experimentalMountGitWorktreeCommonDir.id,
           )?.globalValue,
@@ -2652,6 +2825,23 @@ export async function activate(
       k8sContainerFamilyOf(translate),
     );
     resolved.lastResolve = () => registered.lastResolve();
+    windowTarget.attached = () => {
+      const found = connector.attachedContainer();
+      return vscode.env.remoteName === 'attached-container' &&
+        found !== undefined
+        ? {
+            image: found.image,
+            name: found.name,
+            folder: (vscode.workspace.workspaceFolders ?? [])[0]?.uri.path,
+          }
+        : undefined;
+    };
+    windowTarget.ownConfigFile = () => {
+      const held = connector.heldConnection();
+      return held === undefined || held.hostPath === ''
+        ? undefined
+        : held.configFile;
+    };
     const configWatch =
       registered.registration === 'registered'
         ? configWatchOf({
@@ -2887,8 +3077,8 @@ export async function activate(
           platform: process.platform,
           executeInWSL:
             vscode.workspace
-              .getConfiguration('dev.containers')
-              .get('executeInWSL') === true,
+              .getConfiguration()
+              .get(settings.executeInWSL.id) === true,
           remoteName: vscode.env.remoteName,
         }),
       editor: {

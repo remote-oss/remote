@@ -20,6 +20,10 @@ import {
   problematicFeatureRefused,
 } from '../features/problematic-check.ts';
 import {requestedFeaturesOf} from '../cli/failing-feature.ts';
+import {
+  type HostRequirementsCheck,
+  hostRequirementsAccepted,
+} from './host-requirements-step.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
 import {startingDockerTitleOf} from '../connect/progress-titles.ts';
 import {
@@ -224,6 +228,7 @@ export async function commandBeforeReload(
   configFile?: string,
   switching?: ConfigurationRequest['switching'],
   external?: boolean,
+  hostRequirements?: HostRequirementsCheck,
 ): ReturnType<typeof beforeReload> {
   const result = await beforeReload(
     {
@@ -247,6 +252,7 @@ export async function commandBeforeReload(
       ...(configFile === undefined ? {} : {configFile}),
       ...(switching === undefined ? {} : {switching}),
       ...(external === undefined ? {} : {external}),
+      ...(hostRequirements?.stage === 'merged' ? {mergedRead: true} : {}),
     },
   );
   if (result.choice.kind !== 'chosen') {
@@ -283,6 +289,34 @@ export async function commandBeforeReload(
       };
     }
     throw caught;
+  }
+  if (hostRequirements !== undefined) {
+    const accepted = await hostRequirementsAccepted(
+      {
+        ...hostRequirements.ports,
+        confirm: closing(
+          result.progress,
+          (message: string, detail: string, acceptLabel: string) =>
+            hostRequirements.ports.confirm(message, detail, acceptLabel),
+        ),
+      },
+      {
+        base: hostRequirements.base,
+        folder,
+        configFile: result.choice.configFile,
+        stage: hostRequirements.stage,
+        merged: result.choice.hostRequirements,
+      },
+      result.cancellation,
+    );
+    if (!accepted) {
+      ports.logger.info('the host requirements dialog was cancelled');
+      return {
+        choice: {kind: 'cancelled'},
+        progress: result.progress,
+        cancellation: result.cancellation,
+      };
+    }
   }
   return result;
 }

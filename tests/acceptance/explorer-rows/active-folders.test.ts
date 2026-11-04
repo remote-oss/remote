@@ -7,9 +7,11 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   appendScript,
+  callCommand,
   closeWindow,
   companionCalls,
   connectedWithin,
+  hostAliases,
   inWindow,
   nextEmptyWindow,
   onHost,
@@ -18,8 +20,13 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
-import {rememberPage, toggleRow, viewRows} from '../windows/renderer.ts';
-import {VIEW} from '../windows/explorer-rows.ts';
+import {
+  rememberPage,
+  titleAction,
+  toggleRow,
+  viewRows,
+} from '../windows/renderer.ts';
+import {rowsOf, rowsSettled, VIEW} from '../windows/explorer-rows.ts';
 
 /** The command of the push. */
 const PUSH = 'remote-internal.setActiveFolders';
@@ -157,5 +164,31 @@ describe('the push of the active folders (card coverage-100, F-2501 AC-36)', fun
     } finally {
       await closeWindow('af36b').catch(() => undefined);
     }
+  });
+  it('F-5902 AC-19 (push-not-mark): (reading-1809-harness-push) a push of the outcome connected for a listed host, while the companion’s query answers none, marks no row connected before or after Refresh', async () => {
+    const hosts = hostAliases();
+    await inWindow('local', SHOW_REMOTE_EXPLORER);
+    await rowsSettled('local', rowsOf(hosts, undefined));
+    const before = companionCalls(PUSH).length;
+    const answer = await callCommand('local', PUSH, {
+      interfaceVersion: {major: 1, minor: 0},
+      outcome: 'connected',
+      hostKey: hosts[0],
+    });
+    async function marked(): Promise<string[]> {
+      return ((await viewRows('local', VIEW)) ?? [])
+        .filter(each => each.description === 'connected')
+        .map(each => each.label);
+    }
+    const seen = [await marked()];
+    await new Promise(resolve => setTimeout(resolve, SETTLE_MILLISECONDS));
+    seen.push(await marked());
+    await titleAction('local', VIEW, 'Refresh');
+    await new Promise(resolve => setTimeout(resolve, SETTLE_MILLISECONDS));
+    seen.push(await marked());
+    deepStrictEqual(
+      [answer.rejection, pushesSince(before).length, seen],
+      [undefined, 1, [[], [], []]],
+    );
   });
 });

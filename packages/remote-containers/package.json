@@ -82,6 +82,10 @@
         "category": "Dev Containers"
       },
       {
+        "command": "remote-containers.addExtensionToConfig",
+        "title": "%commands.addExtensionToConfig.title%"
+      },
+      {
         "command": "remote-containers.rebuildContainer",
         "title": "%commands.Rebuildcontainer.title%",
         "category": "Dev Containers",
@@ -280,6 +284,10 @@
         {
           "command": "remote-containers.configureContainerFeatures",
           "when": "remoteName =~ /^(dev-container|wsl|ssh-remote|tunnel)?$/ && !virtualWorkspace && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.addExtensionToConfig",
+          "when": "false"
         },
         {
           "command": "remote-containers.rebuildContainer",
@@ -578,6 +586,13 @@
           "group": "remote_30_dev-container_2_actions@2",
           "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
         }
+      ],
+      "extension/context": [
+        {
+          "command": "remote-containers.addExtensionToConfig",
+          "group": "1_devcontainer@1",
+          "when": "!isBuiltinExtension && !remote-containers:standingDown"
+        }
       ]
     },
     "views": {
@@ -710,6 +725,22 @@
           "deprecationMessage": "%setting.WorkspaceMountConsistency.deprecationMessage%",
           "markdownDeprecationMessage": "%setting.WorkspaceMountConsistency.markdownDeprecationMessage%"
         },
+        "dev.containers.gpuAvailability": {
+          "type": "string",
+          "default": "detect",
+          "scope": "machine",
+          "enum": [
+            "all",
+            "detect",
+            "none"
+          ],
+          "enumDescriptions": [
+            "%setting.GpuAvailability.all%",
+            "%setting.GpuAvailability.detect%",
+            "%setting.GpuAvailability.none%"
+          ],
+          "description": "%setting.GpuAvailability.description%"
+        },
         "dev.containers.experimentalMountGitWorktreeCommonDir": {
           "type": "boolean",
           "default": false,
@@ -753,6 +784,23 @@
           "default": false,
           "scope": "application",
           "description": "%setting.BootstrapImagePull.description%"
+        },
+        "dev.containers.executeInWSL": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "%setting.Executeinwsl.description%"
+        },
+        "dev.containers.executeInWSLDistro": {
+          "type": "string",
+          "scope": "application",
+          "markdownDescription": "%setting.Executeinwsldistro.markdownDescription%"
+        },
+        "dev.containers.forwardWSLServices": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "%setting.Forwardwslservices.description%"
         }
       }
     },
@@ -785,6 +833,7 @@
     "lib-product": "workspace:*",
     "lib-server": "workspace:*",
     "lib-standdown": "workspace:*",
+    "lib-wsl": "workspace:*",
     "yaml": "2.9.1"
   }
 }

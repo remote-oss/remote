@@ -92,6 +92,49 @@ describe('the dev-container payload', () => {
     );
   });
 
+  it('F-0207 BR-15: the WSL distro is the last member of settings, and a payload without it is a local one', () => {
+    const text = textOf(
+      devContainerPayloadOf({
+        ...FOLDER,
+        context: 'desktop-linux',
+        tlsVerify: '1',
+        wslDistro: 'Ubuntu-24.04',
+      }),
+    );
+    deepStrictEqual(
+      [
+        Object.keys((JSON.parse(text) as {settings: object}).settings),
+        devContainerTargetOf(
+          devContainerPayloadOf({...FOLDER, wslDistro: 'Ubuntu-24.04'}),
+        ),
+        devContainerTargetOf(devContainerPayloadOf(FOLDER)),
+      ],
+      [
+        ['context', 'tlsVerify', 'wslDistro'],
+        {...FOLDER, wslDistro: 'Ubuntu-24.04'},
+        FOLDER,
+      ],
+    );
+  });
+
+  it('F-0207 BR-15: a settings member whose distro is empty or not a string is malformed', () => {
+    deepStrictEqual(
+      [{wslDistro: ''}, {wslDistro: 7}].map(settings =>
+        devContainerTargetOf(
+          hexOf(
+            JSON.stringify({
+              hostPath: '/home/u/p',
+              localDocker: false,
+              settings,
+              configFile: CONFIG,
+            }),
+          ),
+        ),
+      ),
+      [{malformed: 'shape'}, {malformed: 'shape'}],
+    );
+  });
+
   it('F-0501 BR-2a: a host path with a space, a hash, a non-ASCII letter and a quote survives the round trip', () => {
     const target = {...FOLDER, hostPath: '/home/u/h #é "x"'};
     deepStrictEqual(
@@ -178,6 +221,24 @@ describe('the dev-container payload', () => {
     });
   });
 
+  it('F-1201 BR-17, contracts §3: a payload without localDocker reads as a local engine, the form devcontainer open --config writes, and a localDocker that is no boolean stays malformed', () => {
+    const configFile = {$mid: 1, path: CONFIG_PATH, scheme: 'file'};
+    deepStrictEqual(
+      [
+        devContainerTargetOf(
+          hexOf(JSON.stringify({hostPath: '/p', configFile})),
+        ),
+        devContainerTargetOf(
+          hexOf(JSON.stringify({hostPath: '/p', localDocker: 7, configFile})),
+        ),
+      ],
+      [
+        {kind: 'folder', hostPath: '/p', localDocker: false, configFile},
+        {malformed: 'shape'},
+      ],
+    );
+  });
+
   it('contracts §3: each member of the wrong shape makes the payload malformed', () => {
     const file = {path: CONFIG_PATH, scheme: 'file'};
     const base = {hostPath: '/p', localDocker: false, configFile: file};
@@ -185,7 +246,6 @@ describe('the dev-container payload', () => {
       {},
       {...base, hostPath: ''},
       {...base, hostPath: 5},
-      {hostPath: '/p', configFile: file},
       {...base, localDocker: 'no'},
       {...base, settings: []},
       {...base, settings: {context: ''}},
