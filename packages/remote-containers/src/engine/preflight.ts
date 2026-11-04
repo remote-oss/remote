@@ -19,6 +19,11 @@ import {
   type SecondCheckOutcome,
   secondCheckOutcomeOf,
 } from './check-outcome.ts';
+import {
+  type CheckResult,
+  checkAndStart,
+  type DesktopPorts,
+} from './check-and-start.ts';
 import {type ComposeRoute, composeRouteOf} from './compose-route.ts';
 import {type Executable, executableOf} from './executable.ts';
 import type {EngineHost} from './engine-host.ts';
@@ -63,6 +68,8 @@ export interface PreflightDependencies {
     base: string | undefined,
     cancellation: AbortSignal,
   ): Promise<string | undefined>;
+  /** Starts Docker Desktop when the second check finds the daemon down; a host without it has none. */
+  desktop?: DesktopPorts;
 }
 
 /** How the first check ended for its caller: the window may go on, or it must not. */
@@ -230,10 +237,20 @@ export async function secondCheck(
   if (executable.kind === 'notFound') {
     return secondCheckOutcomeOf(executable, {kind: 'failed', detail: ''});
   }
-  return secondCheckOutcomeOf(
-    executable,
-    await query(dependencies, executable, ['version'], cancellation),
-  );
+  let latest: SecondCheckOutcome = {kind: 'passed'};
+  const check = async (signal: AbortSignal): Promise<CheckResult> => {
+    const result = await query(dependencies, executable, ['version'], signal);
+    latest = secondCheckOutcomeOf(executable, result);
+    return latest.kind === 'passed'
+      ? {ok: true}
+      : {ok: false, errorText: result.kind === 'ran' ? result.stderr : ''};
+  };
+  if (dependencies.desktop === undefined) {
+    await check(cancellation);
+  } else {
+    await checkAndStart({...dependencies.desktop, check}, cancellation);
+  }
+  return latest;
 }
 
 /** What `docker context show` says: the current context, that the engine has no contexts, or nothing usable. */
