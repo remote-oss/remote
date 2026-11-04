@@ -2145,17 +2145,17 @@ export function containerConnectorOf(
           return result;
         }
         if (dependencies.pods !== undefined) {
-          const pod = k8sTargetOf(target.payload);
-          if (!('malformed' in pod)) {
+          const podTarget = k8sTargetOf(target.payload);
+          if (!('malformed' in podTarget)) {
             return await connectPod(
               dependencies.pods,
               target.payload,
-              pod,
+              podTarget,
               controller,
             );
           }
-          if (pod.malformed === 'invalid') {
-            logger.info(`the pod's ${pod.member} is not a valid name`);
+          if (podTarget.malformed === 'invalid') {
+            logger.info(`the pod's ${podTarget.member} is not a valid name`);
             return malformedAuthority();
           }
         }

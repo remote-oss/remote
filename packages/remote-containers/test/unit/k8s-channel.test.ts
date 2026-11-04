@@ -61,7 +61,10 @@ describe('the exec channel of a pod window (card containers-191)', () => {
   it('F-0604 BR-12: the byte count of the prelude covers the export lines and the script, so the input after it is the script’s own', async () => {
     const engine = fakeEngine(endsWith(0));
     await execChannelOver(engine, k8sExecCommands(TARGET)).runScript(
-      request({environment: {ONE: '1'}, input: {kind: 'text', text: 'DATA'}}),
+      request({
+        environment: {GREETING: '1'},
+        input: {kind: 'text', text: 'DATA'},
+      }),
       () => undefined,
     );
     const [spawned] = engine.processes;
@@ -70,7 +73,7 @@ describe('the exec channel of a pod window (card containers-191)', () => {
     const written = spawned?.stdin().toString('utf8') ?? '';
     deepStrictEqual(
       [written.slice(0, count), written.slice(count)],
-      ["export ONE='1'\necho hi", 'DATA'],
+      ["export GREETING='1'\necho hi", 'DATA'],
     );
   });
 
@@ -92,25 +95,32 @@ describe('the exec channel of a pod window (card containers-191)', () => {
     deepStrictEqual([outcome.kind, engine.runs.length], ['exited', 0]);
   });
 
-  it('F-0604 BR-12: a file is unpacked by tar -x through kubectl exec -i, and the channel is named by namespace, pod and container', async () => {
-    const engine = fakeEngine(endsWith(0));
-    const channel = execChannelOver(engine, k8sExecCommands(TARGET));
-    deepStrictEqual(channel.identity(), 'default/web-1/app');
-    deepStrictEqual(k8sExecCommands(TARGET).copy('/home/user/.server'), [
-      'exec',
-      '-i',
-      '--context=kind-lab',
-      '--namespace=default',
-      'web-1',
-      '--container=app',
-      '--',
-      'tar',
-      '-x',
-      '-f',
-      '-',
-      '-C',
-      '/home/user/.server',
-    ]);
+  it('F-0604 BR-12: a file is unpacked by tar -x through kubectl exec -i, and the channel is named by namespace, pod and container', () => {
+    const channel = execChannelOver(
+      fakeEngine(endsWith(0)),
+      k8sExecCommands(TARGET),
+    );
+    deepStrictEqual(
+      [channel.identity(), k8sExecCommands(TARGET).copy('/home/user/.server')],
+      [
+        'default/web-1/app',
+        [
+          'exec',
+          '-i',
+          '--context=kind-lab',
+          '--namespace=default',
+          'web-1',
+          '--container=app',
+          '--',
+          'tar',
+          '-x',
+          '-f',
+          '-',
+          '-C',
+          '/home/user/.server',
+        ],
+      ],
+    );
   });
 
   it('F-0604 BR-12: the dialer runs the relay with the installed node through kubectl exec -i, and refuses a socket target', async () => {

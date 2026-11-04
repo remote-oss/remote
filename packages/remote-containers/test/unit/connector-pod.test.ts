@@ -149,8 +149,8 @@ describe('the connect of a Kubernetes pod window (card containers-191, §4)', ()
   it('F-0604 AC-35: a member that fails its name rule is refused before any kubectl call', async () => {
     const kubectl = podEngine('webuser');
     const scene = sceneOf({}, {pods: kubectl});
-    const bad = k8sPayloadOf({...TARGET, namespace: '--context=other'});
-    const result = await scene.connector.connect(inputOf(bad));
+    const badPayload = k8sPayloadOf({...TARGET, namespace: '--context=other'});
+    const result = await scene.connector.connect(inputOf(badPayload));
     deepStrictEqual(
       [
         'connectionToken' in result ? 'connected' : result.kind,
