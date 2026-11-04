@@ -715,28 +715,32 @@ export async function rowAction(
   );
 }
 
-/** The titles of the inline actions of the one row labelled `rowLabel` in view `viewName` of window `name`, in the order shown. */
+/**
+ * The titles of the inline actions of the one row labelled `rowLabel` in view `viewName` of window `name`, in the order
+ * shown. It waits for the row to be drawn, so a row that is not drawn yet, or is mid-render, is found.
+ */
 export async function rowActionTitles(
   name: string,
   viewName: string,
   rowLabel: string,
 ): Promise<string[]> {
-  const titles = await evaluate<string[] | null>(
-    name,
-    `(() => {
-      const pane = ${paneExpression(viewName)};
-      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
-      return rows.length !== 1
-        ? null
-        : [...rows[0].querySelectorAll('.actions .action-label')].map(label => label.getAttribute('aria-label') ?? '');
-    })()`,
+  return settled(
+    () =>
+      `the one row labelled ${JSON.stringify(rowLabel)} of ${viewName} in window ${name}`,
+    async () => {
+      const titles = await evaluate<string[] | null>(
+        name,
+        `(() => {
+          const pane = ${paneExpression(viewName)};
+          const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+          return rows.length !== 1
+            ? null
+            : [...rows[0].querySelectorAll('.actions .action-label')].map(label => label.getAttribute('aria-label') ?? '');
+        })()`,
+      );
+      return titles ?? undefined;
+    },
   );
-  if (titles === null) {
-    throw new Error(
-      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
-    );
-  }
-  return titles;
 }
 
 /**
@@ -781,19 +785,19 @@ async function moveMouseTo(
 
 /**
  * Moves the mouse of window `name` onto the one row labelled `rowLabel` of view `viewName`, or to the corner of the
- * window when `rowLabel` is `undefined`, so that no row is hovered. It fails naming the row when the view has not one.
+ * window when `rowLabel` is `undefined`, so that no row is hovered. It waits for the row to be drawn, so a row that is
+ * not drawn yet, or is mid-render, is found; it fails naming the row when it never is.
  */
 export async function hoverRow(
   name: string,
   viewName: string,
   rowLabel: string | undefined,
 ): Promise<void> {
-  const point = await rowPoint(name, viewName, rowLabel);
-  if (point === null) {
-    throw new Error(
-      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
-    );
-  }
+  const point = await settled(
+    () =>
+      `the one row labelled ${JSON.stringify(rowLabel)} of ${viewName} in window ${name}`,
+    () => rowPoint(name, viewName, rowLabel).then(point => point ?? undefined),
+  );
   await moveMouseTo(name, point);
 }
 
@@ -813,29 +817,34 @@ async function hoverRowIfPresent(
   await moveMouseTo(name, point);
 }
 
-/** Clicks the label of the one row labelled `rowLabel` in view `viewName` of window `name` with the mouse, which selects and focuses it. */
+/**
+ * Clicks the label of the one row labelled `rowLabel` in view `viewName` of window `name` with the mouse, which selects
+ * and focuses it. It waits for the row to be drawn, so a row that is not drawn yet, or is mid-render, is found.
+ */
 export async function clickRowLabel(
   name: string,
   viewName: string,
   rowLabel: string,
 ): Promise<void> {
-  const point = await evaluate<{x: number; y: number} | null>(
-    name,
-    `(() => {
-      const pane = ${paneExpression(viewName)};
-      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
-      if (rows.length !== 1) {
-        return null;
-      }
-      const box = rows[0].querySelector('.label-name').getBoundingClientRect();
-      return {x: box.x + box.width / 2, y: box.y + box.height / 2};
-    })()`,
+  const point = await settled(
+    () =>
+      `the one row labelled ${JSON.stringify(rowLabel)} of ${viewName} in window ${name}`,
+    async () => {
+      const found = await evaluate<{x: number; y: number} | null>(
+        name,
+        `(() => {
+          const pane = ${paneExpression(viewName)};
+          const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+          if (rows.length !== 1) {
+            return null;
+          }
+          const box = rows[0].querySelector('.label-name').getBoundingClientRect();
+          return {x: box.x + box.width / 2, y: box.y + box.height / 2};
+        })()`,
+      );
+      return found ?? undefined;
+    },
   );
-  if (point === null) {
-    throw new Error(
-      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
-    );
-  }
   await dispatchInput(
     await pageOf(name),
     name,
@@ -848,7 +857,9 @@ export async function clickRowLabel(
 
 /**
  * The tooltip the editor draws for the inline action `actionTitle` of the one row labelled `rowLabel` in view
- * `viewName` of window `name`, read after the mouse rests on the action; the mouse is moved away again.
+ * `viewName` of window `name`, read after the mouse rests on the action; the mouse is moved away again. The row's
+ * actions stay out of sight until the row is hovered, so the row is hovered again before each re-read until the
+ * action is drawn; it fails naming the action when it never is.
  */
 export async function actionTooltip(
   name: string,
@@ -857,24 +868,29 @@ export async function actionTooltip(
   actionTitle: string,
 ): Promise<string> {
   await hoverRow(name, viewName, rowLabel);
-  const point = await evaluate<{x: number; y: number} | null>(
-    name,
-    `(() => {
-      const pane = ${paneExpression(viewName)};
-      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
-      const action = rows.length === 1 ? [...rows[0].querySelectorAll('.actions .action-label')].find(label => (label.getAttribute('aria-label') ?? '').startsWith(${JSON.stringify(actionTitle)})) : undefined;
-      if (action === undefined) {
-        return null;
+  const point = await settled(
+    () =>
+      `the action ${JSON.stringify(actionTitle)} on the row ${JSON.stringify(rowLabel)} of ${viewName} in window ${name}`,
+    async () => {
+      const found = await evaluate<{x: number; y: number} | null>(
+        name,
+        `(() => {
+          const pane = ${paneExpression(viewName)};
+          const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+          const action = rows.length === 1 ? [...rows[0].querySelectorAll('.actions .action-label')].find(label => (label.getAttribute('aria-label') ?? '').startsWith(${JSON.stringify(actionTitle)})) : undefined;
+          if (action === undefined) {
+            return null;
+          }
+          const box = action.getBoundingClientRect();
+          return {x: box.x + box.width / 2, y: box.y + box.height / 2};
+        })()`,
+      );
+      if (found === null) {
+        await hoverRowIfPresent(name, viewName, rowLabel);
       }
-      const box = action.getBoundingClientRect();
-      return {x: box.x + box.width / 2, y: box.y + box.height / 2};
-    })()`,
+      return found ?? undefined;
+    },
   );
-  if (point === null) {
-    throw new Error(
-      `window ${name}, view ${viewName}: no action ${JSON.stringify(actionTitle)} on the row ${JSON.stringify(rowLabel)}`,
-    );
-  }
   await dispatchInput(await pageOf(name), name, [
     {
       method: 'Input.dispatchMouseEvent',
@@ -892,31 +908,33 @@ export async function actionTooltip(
 
 /**
  * The titles of the inline actions of the one row labelled `rowLabel` in view `viewName` of window `name` that are
- * drawn now, in the order shown: the row's actions stay out of sight until it is hovered, focused or selected.
+ * drawn now, in the order shown: the row's actions stay out of sight until it is hovered, focused or selected. It waits
+ * for the row to be drawn, so a row that is not drawn yet, or is mid-render, is found.
  */
 export async function shownRowActionTitles(
   name: string,
   viewName: string,
   rowLabel: string,
 ): Promise<string[]> {
-  const titles = await evaluate<string[] | null>(
-    name,
-    `(() => {
-      const pane = ${paneExpression(viewName)};
-      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
-      return rows.length !== 1
-        ? null
-        : [...rows[0].querySelectorAll('.actions .action-label')]
-            .filter(label => label.getBoundingClientRect().width > 0 && getComputedStyle(label.closest('.actions')).display !== 'none')
-            .map(label => label.getAttribute('aria-label') ?? '');
-    })()`,
+  return settled(
+    () =>
+      `the one row labelled ${JSON.stringify(rowLabel)} of ${viewName} in window ${name}`,
+    async () => {
+      const titles = await evaluate<string[] | null>(
+        name,
+        `(() => {
+          const pane = ${paneExpression(viewName)};
+          const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+          return rows.length !== 1
+            ? null
+            : [...rows[0].querySelectorAll('.actions .action-label')]
+                .filter(label => label.getBoundingClientRect().width > 0 && getComputedStyle(label.closest('.actions')).display !== 'none')
+                .map(label => label.getAttribute('aria-label') ?? '');
+        })()`,
+      );
+      return titles ?? undefined;
+    },
   );
-  if (titles === null) {
-    throw new Error(
-      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
-    );
-  }
-  return titles;
 }
 
 /** The titles of the title actions of view `viewName` in window `name`, in the order shown; none when the view is not there. */
@@ -950,30 +968,37 @@ export async function titleAction(
   );
 }
 
-/** Clicks the twistie of the one row labelled `rowLabel` in view `viewName` of window `name`, which collapses or expands it. */
+/**
+ * Clicks the twistie of the one row labelled `rowLabel` in view `viewName` of window `name`, which collapses or expands
+ * it. It waits for the row to be drawn, so a row that is not drawn yet, or is mid-render, is found.
+ */
 export async function toggleRow(
   name: string,
   viewName: string,
   rowLabel: string,
 ): Promise<void> {
-  const missing = await evaluate<string | null>(
-    name,
-    `(() => {
-      const pane = ${paneExpression(viewName)};
-      if (pane === undefined) {
-        return 'no view ' + ${JSON.stringify(viewName)};
-      }
-      const rows = [...pane.querySelectorAll('[role="treeitem"]')].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
-      if (rows.length !== 1) {
-        return rows.length + ' rows labelled ' + ${JSON.stringify(JSON.stringify(rowLabel))};
-      }
-      rows[0].querySelector('.monaco-tl-twistie').click();
-      return null;
-    })()`,
+  await settled(
+    () =>
+      `the one row labelled ${JSON.stringify(rowLabel)} of ${viewName} in window ${name}`,
+    async () => {
+      const missing = await evaluate<string | null>(
+        name,
+        `(() => {
+          const pane = ${paneExpression(viewName)};
+          if (pane === undefined) {
+            return 'no view ' + ${JSON.stringify(viewName)};
+          }
+          const rows = [...pane.querySelectorAll('[role="treeitem"]')].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+          if (rows.length !== 1) {
+            return rows.length + ' rows labelled ' + ${JSON.stringify(JSON.stringify(rowLabel))};
+          }
+          rows[0].querySelector('.monaco-tl-twistie').click();
+          return null;
+        })()`,
+      );
+      return missing === null ? 'clicked' : undefined;
+    },
   );
-  if (missing !== null) {
-    throw new Error(`window ${name}, view ${viewName}: ${missing}`);
-  }
 }
 
 /** Which of the `count` rows that share a label a right click is made on: the `index`th in the view's order. */
@@ -1011,8 +1036,8 @@ function rowMenuScript(
 
 /**
  * The labels of the context menu that a right click on the row `rowLabel` of view `viewName` in window `name` opens, in
- * order; none when it opens no menu. The menu is closed again. It fails naming the row when the view has none by that
- * label.
+ * order; none when it opens no menu. The menu is closed again. It waits for the row to be drawn, so a row that is not
+ * drawn yet, or is mid-render, is found; it fails naming the row when it never is.
  */
 export async function rowContextMenu(
   name: string,
@@ -1020,30 +1045,32 @@ export async function rowContextMenu(
   rowLabel: string,
   position?: RowPosition,
 ): Promise<string[]> {
-  const menu = await evaluate<string[] | null>(
-    name,
-    rowMenuScript(
-      viewName,
-      rowLabel,
-      'null',
-      `for (const type of ['keydown', 'keyup']) {
+  return settled(
+    () =>
+      `the one row labelled ${JSON.stringify(rowLabel)} of ${viewName} in window ${name}`,
+    async () => {
+      const menu = await evaluate<string[] | null>(
+        name,
+        rowMenuScript(
+          viewName,
+          rowLabel,
+          'null',
+          `for (const type of ['keydown', 'keyup']) {
         (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
       }
       return items.map(label => label.textContent ?? '');`,
-      position,
-    ),
+          position,
+        ),
+      );
+      return menu ?? undefined;
+    },
   );
-  if (menu === null) {
-    throw new Error(
-      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
-    );
-  }
-  return menu;
 }
 
 /**
  * Clicks the item `itemLabel` of the context menu that a right click on the row `rowLabel` of view `viewName` in
- * window `name` opens. It fails naming the row, or the menu's items, when it finds no such row or item.
+ * window `name` opens. It waits for the row to be drawn, so a row that is not drawn yet, or is mid-render, is found; it
+ * fails naming the row, or the menu's items, when it finds no such row or item.
  */
 export async function rowMenuAction(
   name: string,
@@ -1052,13 +1079,17 @@ export async function rowMenuAction(
   itemLabel: string,
   position?: RowPosition,
 ): Promise<void> {
-  const outcome = await evaluate<string | null>(
-    name,
-    rowMenuScript(
-      viewName,
-      rowLabel,
-      `'no such row'`,
-      `// The first menu of a window may not be drawn within the first wait, so the right click is made again.
+  const outcome = await settled(
+    () =>
+      `the one row labelled ${JSON.stringify(rowLabel)} of ${viewName} in window ${name}`,
+    async () => {
+      const found = await evaluate<string | null>(
+        name,
+        rowMenuScript(
+          viewName,
+          rowLabel,
+          `'no such row'`,
+          `// The first menu of a window may not be drawn within the first wait, so the right click is made again.
       for (let again = 0; items.length === 0 && again < 3; again += 1) {
         rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
         await new Promise(resolve => setTimeout(resolve, 1200));
@@ -1072,8 +1103,11 @@ export async function rowMenuAction(
         (item.closest('li') ?? item).dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, button: 0}));
       }
       return '';`,
-      position,
-    ),
+          position,
+        ),
+      );
+      return found === 'no such row' ? undefined : found;
+    },
   );
   if (outcome !== '') {
     throw new Error(
