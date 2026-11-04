@@ -93,10 +93,11 @@ export const CONTAINERS_RELEASE_ONE_FEATURES: readonly string[] = [
   'F-1406',
 ];
 
-/** The features of Remote - Containers release 2, the 54 reviewed families no release had taken yet. */
+/** The features of Remote - Containers release 2, the 56 families no release had taken yet. */
 export const CONTAINERS_RELEASE_TWO_FEATURES: readonly string[] = [
   'F-0102',
   'F-0103',
+  'F-0104',
   'F-0107',
   'F-0108',
   'F-0109',
@@ -147,6 +148,7 @@ export const CONTAINERS_RELEASE_TWO_FEATURES: readonly string[] = [
   'F-1007',
   'F-1103',
   'F-1201',
+  'F-1202',
   'F-1301',
   'F-1302',
   'F-1404',

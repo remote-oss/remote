@@ -119,6 +119,14 @@
       "card": "#2156",
       "slice": "containers release 2",
       "decision": "F-0207 BR-14 (2026-11-04): contributed; its effect belongs to the relays' cards (F-1003, F-1007, F-1008)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/logging/log-files.ts",
+      "card": "#2093",
+      "slice": "containers release 1",
+      "decision": "F-0104 BR-4, BR-6, BR-7 (2026-11-04): the names, the pick, the previous log and the level; the next commits of the card consume it"
     }
   ]
 }
