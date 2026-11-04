@@ -121,8 +121,11 @@ describe('the code command opens host files in the window (card coverage-80)', f
         'c80-stdin',
         `echo piped | ${command} - ; echo DONE_$?\n`,
       );
-      const lines = await linesUntil('c80-stdin', each =>
-        each.some(line => /^DONE_\d/.test(line)),
+      const lines = await linesUntil(
+        'c80-stdin',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
       );
       deepStrictEqual(
         [

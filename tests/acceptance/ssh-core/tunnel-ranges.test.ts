@@ -13,6 +13,7 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
+import {runSshArguments} from '../windows/pty-support.ts';
 import {notifications, statusItem} from '../windows/renderer.ts';
 import {
   addedSince,
@@ -145,6 +146,12 @@ describe('the local port range of a window (card coverage-79)', function () {
       const wildcard = await holdPorts([41068], '0.0.0.0');
       try {
         await userSettings({[SETTING]: '41068-41068', ...PLATFORM});
+        // The shared connection of the first window keeps its ssh for a grace after the window closed; this connect is its own.
+        await waitFor(
+          'the ssh clients of the first connect to end',
+          () => Promise.resolve(runSshArguments().length === 0),
+          90_000,
+        );
         appendScript(dismissing('c79-wild', 'Close Remote'));
         await openWindow('harness', 'c79-wild');
         const dialogs = await dialogsOf('c79-wild', 1);
