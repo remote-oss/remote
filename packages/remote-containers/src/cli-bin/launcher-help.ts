@@ -162,7 +162,7 @@ export const OPEN_HELP_TEXT = rendered(OPEN_HELP);
 export const BUILD_HELP_TEXT = rendered(BUILD_HELP);
 
 /** The command line the top-level help lists first. */
-export const OPEN_COMMAND_LINE =
+const OPEN_COMMAND_LINE =
   '  devcontainer open [path]          Open a dev container in VS Code';
 
 /**
