@@ -1432,6 +1432,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'containers-view',
       suite: 'containers-view',
       registry: true,
+      files: ['targets-row-open.test.ts'],
     },
   ];
   return launches;
