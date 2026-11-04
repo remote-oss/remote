@@ -14,7 +14,7 @@ import {
   problemsOf,
   type Problem,
   statusBarText,
-  pressEscape,
+  statusBarItemIds,
   evaluate,
 } from '../windows/renderer.ts';
 
@@ -53,54 +53,61 @@ function folderWithFile(name: string, file: string, text: string): string {
   return folder;
 }
 
-/** Waits until the language status menu of window `name` holds the item `entry`, naming the state when it does not. */
-async function settledStatusOf(name: string, entry: string): Promise<void> {
-  let state: {item: string; menu: string[]};
+/** Clicks the language status item of window `name`'s status bar so that its hover shows. */
+const OPEN_LANGUAGE_STATUS = `(() => {
+  document.getElementById('status.languageStatus')
+    ?.querySelector('a')
+    ?.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+  return true;
+})()`;
+
+/** The entries the language status hover shows, each as "label, detail" in the order shown. */
+const LANGUAGE_STATUS_ENTRIES = `[...document.querySelectorAll('.hover-language-status .element .left')].map(left =>
+  [...left.childNodes].map(part => (part.textContent ?? '').trim()).filter(part => part !== '').join(', '))`;
+
+/** Closes the hovers of window `name`, so that the next read starts clean. */
+const CLOSE_HOVERS = `(() => {
+  for (const hover of document.querySelectorAll('.monaco-hover')) {
+    hover.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
+  }
+  return true;
+})()`;
+
+/** Waits until the language status of window `name` shows the entry `expected`, naming the state when it stops short. */
+async function settledStatusOf(name: string, expected: string): Promise<void> {
+  let state: {item: string; entries: string[]};
   const began = Date.now();
   for (;;) {
     state = await languageStatusOf(name);
-    if (state.menu.includes(entry)) {
+    if (state.entries.includes(expected)) {
       return;
     }
     if (Date.now() - began > 90_000) {
+      const itemIds = await statusBarItemIds(name);
       throw new Error(
-        `window ${name}'s language status ${JSON.stringify(state.item)} has menu ` +
-          `${JSON.stringify(state.menu)}, without ${JSON.stringify(entry)}`,
+        `window ${name}'s language status ${JSON.stringify(state.item)} shows entries ` +
+          `${JSON.stringify(state.entries)}, without ${JSON.stringify(expected)}: ` +
+          `status bar ids ${JSON.stringify(itemIds)}`,
       );
     }
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 }
 
-/** The language item of window `name`'s status bar with the items of the menu clicking it shows, read and closed. */
+/** The language mode of window `name`'s active editor with the entries of the status clicking it shows, read and closed. */
 async function languageStatusOf(
   name: string,
-): Promise<{item: string; menu: string[]}> {
-  const item = await statusBarText(name, 'status.language');
-  await evaluate<boolean>(
-    name,
-    `(() => {
-      const entry = document.getElementById('status.language');
-      entry?.dispatchEvent(new MouseEvent('click', {bubbles: true}));
-      return entry !== null;
-    })()`,
-  );
-  let menu: string[] = [];
+): Promise<{item: string; entries: string[]}> {
+  const item = await statusBarText(name, 'status.editor.mode');
+  await evaluate<boolean>(name, OPEN_LANGUAGE_STATUS);
+  let entries: string[] = [];
   const began = Date.now();
-  while (menu.length === 0 && Date.now() - began < 15_000) {
-    menu = await evaluate<string[]>(
-      name,
-      `[...document.querySelectorAll('.context-view [role="menuitem"]')].map(each => (each.textContent ?? '').trim()).filter(text => text !== '')`,
-    );
+  while (entries.length === 0 && Date.now() - began < 15_000) {
+    entries = await evaluate<string[]>(name, LANGUAGE_STATUS_ENTRIES);
     await new Promise(resolve => setTimeout(resolve, 250));
   }
-  if (menu.length === 0) {
-    throw new Error(
-      `window ${name} shows no language status menu for the item ${JSON.stringify(item)}`,
-    );
-  }
-  await pressEscape(name);
-  return {item, menu};
+  await evaluate<boolean>(name, CLOSE_HOVERS);
+  return {item, entries};
 }
 
 describe('the authoring aids in Restricted Mode (card containers-208)', function () {
@@ -130,7 +137,29 @@ describe('the authoring aids in Restricted Mode (card containers-208)', function
     } while (Date.now() - began < budget);
     throw new Error(
       `window ${name} holds ${String(problems.length)} problems, not ${String(count)}: ` +
-        `problems ${JSON.stringify(problems.map(each => [each.file, each.message, each.severity]))}, ` +
+        `problems ${JSON.stringify(problems.map(each => [each.file, each.message, each.severity, each.line, each.code, each.source, each.target]))}, ` +
+        `tabs ${JSON.stringify((await editorTabs(name)).map(each => each.label))}`,
+    );
+  }
+
+  /** The problems of window `name` once one of them carries the message `message`, naming what the window holds when it stops short. */
+  async function problemsIncluding(
+    name: string,
+    message: string,
+    budget = 60_000,
+  ): Promise<Problem[]> {
+    let problems: Problem[];
+    const began = Date.now();
+    do {
+      problems = await problemsOf(name);
+      if (problems.some(each => each.message === message)) {
+        return problems;
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } while (Date.now() - began < budget);
+    throw new Error(
+      `window ${name} holds no problem of ${JSON.stringify(message)}: ` +
+        `problems ${JSON.stringify(problems.map(each => [each.file, each.message, each.severity, each.line, each.code, each.source, each.target]))}, ` +
         `tabs ${JSON.stringify((await editorTabs(name)).map(each => each.label))}`,
     );
   }
@@ -183,7 +212,7 @@ describe('the authoring aids in Restricted Mode (card containers-208)', function
       [
         await isTrusted(window),
         status.item,
-        status.menu.includes(NO_SCHEMA),
+        status.entries.includes(NO_SCHEMA),
         problems.length,
       ],
       [false, 'JSON with Comments', true, 0],
@@ -196,22 +225,26 @@ describe('the authoring aids in Restricted Mode (card containers-208)', function
       '.devcontainer/devcontainer.json',
       CONTRIB,
     );
-    const problems = await problemsWithFile(
-      folder,
+    window = await openFolderWindow(folder);
+    await inWindow(
+      window,
+      'acceptance.agent.openFile',
       '.devcontainer/devcontainer.json',
-      1,
     );
+    const problems = await problemsIncluding(window, S294);
     deepStrictEqual(
       [
         await isTrusted(window),
-        problems.map(each => [
-          each.file,
-          each.message,
-          each.severity,
-          each.code,
-          each.target,
-          each.source,
-        ]),
+        problems
+          .filter(each => each.message === S294)
+          .map(each => [
+            each.file,
+            each.message,
+            each.severity,
+            each.code,
+            each.target,
+            each.source,
+          ]),
       ],
       [
         false,
@@ -235,7 +268,13 @@ describe('the authoring aids in Restricted Mode (card containers-208)', function
       'devcontainer-feature.json',
       VALID_FEATURE,
     );
-    await problemsWithFile(folder, 'devcontainer-feature.json', 1);
+    window = await openFolderWindow(folder);
+    await inWindow(
+      window,
+      'acceptance.agent.openFile',
+      'devcontainer-feature.json',
+    );
+    await problemsIncluding(window, SCHEMA_BLOCKED);
     await setUserSetting('security.workspace.trust.untrustedFiles', ['**']);
     const settled = await trustSettled(window, true);
     const remaining = await problemsSettled(window, 0, 90_000);

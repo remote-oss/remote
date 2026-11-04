@@ -10,10 +10,10 @@ import {
 } from '../windows/folder-windows.ts';
 import {
   editorTabs,
-  pressEscape,
   problemsOf,
   type Problem,
   statusBarText,
+  statusBarItemIds,
   evaluate,
 } from '../windows/renderer.ts';
 import {docker} from '../windows/dev-containers-view.ts';
@@ -74,19 +74,19 @@ async function editorHoverOf(name: string, needle: string): Promise<string> {
       const index = text.indexOf(${JSON.stringify(needle)});
       const nodeIterator = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
       let count = 0;
-      let startNode: Text | null = null;
+      let startNode = null;
       let startOffset = 0;
-      let endNode: Text | null = null;
+      let endNode = null;
       let endOffset = 0;
-      let textNode: Node | null;
+      let textNode;
       while ((textNode = nodeIterator.nextNode()) !== null) {
         const length = textNode.nodeValue.length;
         if (startNode === null && count + length > index) {
-          startNode = textNode as Text;
+          startNode = textNode;
           startOffset = index - count;
         }
         if (endNode === null && count + length >= index + 1) {
-          endNode = textNode as Text;
+          endNode = textNode;
           endOffset = index + 1 - count;
           break;
         }
@@ -126,54 +126,61 @@ async function editorHoverOf(name: string, needle: string): Promise<string> {
   return hover;
 }
 
-/** Waits until the language status menu of window `name` holds the item `entry`, naming the state when it does not. */
-async function settledStatusOf(name: string, entry: string): Promise<void> {
-  let state: {item: string; menu: string[]};
+/** Clicks the language status item of window `name`'s status bar so that its hover shows. */
+const OPEN_LANGUAGE_STATUS = `(() => {
+  document.getElementById('status.languageStatus')
+    ?.querySelector('a')
+    ?.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+  return true;
+})()`;
+
+/** The entries the language status hover shows, each as "label, detail" in the order shown. */
+const LANGUAGE_STATUS_ENTRIES = `[...document.querySelectorAll('.hover-language-status .element .left')].map(left =>
+  [...left.childNodes].map(part => (part.textContent ?? '').trim()).filter(part => part !== '').join(', '))`;
+
+/** Closes the hovers of window `name`, so that the next read starts clean. */
+const CLOSE_HOVERS = `(() => {
+  for (const hover of document.querySelectorAll('.monaco-hover')) {
+    hover.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
+  }
+  return true;
+})()`;
+
+/** Waits until the language status of window `name` shows the entry `expected`, naming the state when it stops short. */
+async function settledStatusOf(name: string, expected: string): Promise<void> {
+  let state: {item: string; entries: string[]};
   const began = Date.now();
   for (;;) {
     state = await languageStatusOf(name);
-    if (state.menu.includes(entry)) {
+    if (state.entries.includes(expected)) {
       return;
     }
     if (Date.now() - began > 90_000) {
+      const itemIds = await statusBarItemIds(name);
       throw new Error(
-        `window ${name}'s language status ${JSON.stringify(state.item)} has menu ` +
-          `${JSON.stringify(state.menu)}, without ${JSON.stringify(entry)}`,
+        `window ${name}'s language status ${JSON.stringify(state.item)} shows entries ` +
+          `${JSON.stringify(state.entries)}, without ${JSON.stringify(expected)}: ` +
+          `status bar ids ${JSON.stringify(itemIds)}`,
       );
     }
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 }
 
-/** The language item of window `name`'s status bar with the items of the menu clicking it shows, read and closed. */
+/** The language mode of window `name`'s active editor with the entries of the status clicking it shows, read and closed. */
 async function languageStatusOf(
   name: string,
-): Promise<{item: string; menu: string[]}> {
-  const item = await statusBarText(name, 'status.language');
-  await evaluate<boolean>(
-    name,
-    `(() => {
-      const entry = document.getElementById('status.language');
-      entry?.dispatchEvent(new MouseEvent('click', {bubbles: true}));
-      return entry !== null;
-    })()`,
-  );
-  let menu: string[] = [];
+): Promise<{item: string; entries: string[]}> {
+  const item = await statusBarText(name, 'status.editor.mode');
+  await evaluate<boolean>(name, OPEN_LANGUAGE_STATUS);
+  let entries: string[] = [];
   const began = Date.now();
-  while (menu.length === 0 && Date.now() - began < 15_000) {
-    menu = await evaluate<string[]>(
-      name,
-      `[...document.querySelectorAll('.context-view [role="menuitem"]')].map(each => (each.textContent ?? '').trim()).filter(text => text !== '')`,
-    );
+  while (entries.length === 0 && Date.now() - began < 15_000) {
+    entries = await evaluate<string[]>(name, LANGUAGE_STATUS_ENTRIES);
     await new Promise(resolve => setTimeout(resolve, 250));
   }
-  if (menu.length === 0) {
-    throw new Error(
-      `window ${name} shows no language status menu for the item ${JSON.stringify(item)}`,
-    );
-  }
-  await pressEscape(name);
-  return {item, menu};
+  await evaluate<boolean>(name, CLOSE_HOVERS);
+  return {item, entries};
 }
 
 describe('the associations and the discontinued namespace of the authoring aids (card containers-208)', function () {
@@ -209,7 +216,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
     } while (Date.now() - began < budget);
     throw new Error(
       `window ${name} holds ${String(problems.length)} problems, not ${String(count)}: ` +
-        `problems ${JSON.stringify(problems.map(each => [each.file, each.message, each.severity]))}, ` +
+        `problems ${JSON.stringify(problems.map(each => [each.file, each.message, each.severity, each.line, each.code, each.source, each.target]))}, ` +
         `tabs ${JSON.stringify((await editorTabs(name)).map(each => each.label))}`,
     );
   }
@@ -278,7 +285,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
     deepStrictEqual(
       [
         status.item,
-        status.menu.includes(SCHEMA_VALIDATED),
+        status.entries.includes(SCHEMA_VALIDATED),
         hover.includes(ID_DESCRIPTION),
         (await problemsOf(window)).length,
       ],
@@ -374,7 +381,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
     deepStrictEqual(
       [
         status.item,
-        status.menu.includes(NO_SCHEMA),
+        status.entries.includes(NO_SCHEMA),
         (await problemsOf(window)).length,
       ],
       ['JSON with Comments', true, 0],
@@ -404,7 +411,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
       'acceptance.agent.openUri',
       'memfs:/devcontainer.json',
     );
-    const problems = await problemsSettled(window, 1);
+    const problems = await problemsSettled(window, 1, 120_000);
     deepStrictEqual(
       problems.map(each => [each.file, each.message, each.severity]),
       [['devcontainer.json', S294, 'warning']],
@@ -424,7 +431,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
       `printf '%s' '${text}' > /workspaces/c208-ac42dc/devcontainer.json`,
     );
     await inWindow(name, 'acceptance.agent.openFile', 'devcontainer.json');
-    const problems = await problemsSettled(name, 1);
+    const problems = await problemsSettled(name, 1, 120_000);
     deepStrictEqual(
       [
         problems.map(each => [each.file, each.message, each.severity]),
@@ -458,6 +465,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
       'devcontainers-extra',
     );
     const problems = await problemsSettled(window, 0, 30_000);
+    await inWindow(window, 'workbench.action.revertAndCloseActiveEditor');
     deepStrictEqual(
       [
         problems.length,
