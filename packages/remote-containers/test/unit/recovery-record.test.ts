@@ -50,13 +50,13 @@ describe('the recorded recovery picks (card containers-160, ruling-2162-recovery
   });
 
   it('F-0410 AC-14: a stored value of another shape holds no name, and a name in a list with other values still counts', async () => {
-    const odd = mementoOf('vol-a');
+    const stranger = mementoOf('vol-a');
     const mixed = mementoOf(['vol-a', 3, null]);
-    await recordRecoveryPick(odd, 'vol-b');
+    await recordRecoveryPick(stranger, 'vol-b');
     deepStrictEqual(
       [
-        recoveryPicked(odd, 'vol-a'),
-        odd.writes,
+        recoveryPicked(stranger, 'vol-a'),
+        stranger.writes,
         recoveryPicked(mixed, 'vol-a'),
       ],
       [false, [['vol-b']], true],
