@@ -95,6 +95,43 @@ async function reopened(folder: string): Promise<string> {
 }
 
 /** Reopens `folder` in its container, closes the window, and gives the container it made. */
+/** The folder of the bundled CLI in the built package. */
+const CLI_ENTRY = path.join(
+  import.meta.dirname,
+  '..',
+  '..',
+  '..',
+  'packages',
+  'remote-containers',
+  'dist',
+  'devcontainers-cli',
+  'devcontainer.js',
+);
+
+/**
+ * Makes the container of `folder` with the bundled CLI, under the labels the extension looks for, and so with no window
+ * of this profile: the profile holds no acknowledgment of the configuration (F-0303 AC-12b), where one that built the
+ * container through a window holds it and is told an edit (AC-12c).
+ */
+async function containerMadeByCli(folder: string): Promise<string> {
+  const configFile = path.join(folder, '.devcontainer', 'devcontainer.json');
+  await execFileAsync('node', [
+    CLI_ENTRY,
+    'up',
+    '--workspace-folder',
+    folder,
+    '--config',
+    configFile,
+    '--id-label',
+    `devcontainer.local_folder=${folder}`,
+    '--id-label',
+    `devcontainer.config_file=${configFile}`,
+    '--skip-non-blocking-commands',
+  ]);
+  const [containerId = ''] = await devContainersOf(folder);
+  return containerId;
+}
+
 async function containerLeftBy(folder: string): Promise<string> {
   const name = await reopened(folder);
   const containerId = await containerOf(folder);
@@ -1100,12 +1137,12 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it('F-0405 AC-12 (r12): a stopped container whose configuration was edited is restarted as it is from the reopen notification: same id, the edit not applied, and no configuration-change notice', async () => {
+  it('F-0405 AC-12 (r12) (reading-2099-r12-no-acknowledgment): a stopped container, of a profile that holds no acknowledgment, whose configuration was edited is restarted as it is from the reopen notification: same id, the edit not applied, and no configuration-change notice', async () => {
     const folder = devContainerFolder('c54-stopped-edit', {
       name: 'Stopped Edit',
     });
     try {
-      const containerId = await containerLeftBy(folder);
+      const containerId = await containerMadeByCli(folder);
       await execFileAsync('docker', ['stop', containerId]);
       writeFileSync(
         path.join(folder, '.devcontainer', 'devcontainer.json'),
