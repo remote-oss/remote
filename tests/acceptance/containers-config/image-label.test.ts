@@ -47,9 +47,9 @@ async function imageWithLabel(
       '',
     ].join('\n'),
   );
-  const tag = `${label}:${variable('HARNESS_RUN_ID')}`;
-  await docker('build', '--tag', tag, ...runLabelArguments(), context);
-  return tag;
+  const imageTag = `${label}:${variable('HARNESS_RUN_ID')}`;
+  await docker('build', '--tag', imageTag, ...runLabelArguments(), context);
+  return imageTag;
 }
 
 describe('The image’s metadata label merged into the container (card coverage-112)', function () {
