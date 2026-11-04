@@ -76,6 +76,28 @@ export interface ExecRequest {
   cancellation: AbortSignal;
 }
 
+/** A program to start in a distro, with no input given: the caller writes to the process it gets. */
+export type StartRequest = Omit<ExecRequest, 'input'>;
+
+/**
+ * A program running in a distro. Its output reaches the listeners byte for byte, in order; chunks that come before a
+ * listener is added are kept for it. `exited` settles once, with the program's status, or why `wsl.exe` or the caller
+ * ended it.
+ */
+export interface LiveProcess {
+  /** Calls `listener` with each piece of standard output. */
+  onOutput(listener: (chunk: Uint8Array) => void): void;
+  /** Calls `listener` with each piece of standard error. */
+  onError(listener: (chunk: Uint8Array) => void): void;
+  /** Writes to standard input; resolves when the data has been handed on. */
+  write(data: Uint8Array): Promise<void>;
+  /** Closes standard input. */
+  endInput(): void;
+  /** Ends `wsl.exe`. It does nothing after the first call and after `exited` has settled. */
+  kill(): void;
+  readonly exited: Promise<ExecExited | RunFailed>;
+}
+
 /** A program that ran to its end. Its status is a result for the caller to interpret. */
 export interface ExecExited {
   kind: 'exited';
@@ -88,6 +110,13 @@ export interface WslRunner {
   locate(): Promise<{kind: 'located'; path: string} | RunFailed>;
   /** Runs a management verb and decodes its output. */
   manage(request: ManageRequest): Promise<ManageRan | RunFailed>;
+  /**
+   * Starts a program in a distro and gives the process, after the checks and with the argument list that `exec` uses.
+   * Cancelling `request.cancellation` ends it.
+   */
+  start(
+    request: StartRequest,
+  ): Promise<{kind: 'started'; process: LiveProcess} | RunFailed>;
   /** Runs a program in a distro; each output line goes to `onLine` before the outcome settles. */
   exec(
     request: ExecRequest,
@@ -168,6 +197,25 @@ function joined(first: Uint8Array, second: Uint8Array): Uint8Array {
 
 /** How a process that was watched ended. */
 type Ending = {kind: 'exit'; status: number | undefined} | {kind: 'cancelled'};
+
+/** Chunks passed to one listener, in order; those that come before it is added are kept for it. */
+class Relay {
+  private listener: ((chunk: Uint8Array) => void) | undefined;
+  private readonly waiting: Uint8Array[] = [];
+
+  push(chunk: Uint8Array): void {
+    if (this.listener === undefined) {
+      this.waiting.push(chunk);
+    } else {
+      this.listener(chunk);
+    }
+  }
+
+  listen(listener: (chunk: Uint8Array) => void): void {
+    this.listener = listener;
+    this.waiting.splice(0).forEach(listener);
+  }
+}
 
 /** Runs `wsl.exe` through `ports`. */
 export function createWslRunner(ports: WslRunnerPorts): WslRunner {
@@ -277,7 +325,7 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
   }
 
   /** The arguments that run the program in the distro. */
-  function execArguments(request: ExecRequest): string[] {
+  function execArguments(request: StartRequest): string[] {
     return [
       '-d',
       request.distro,
@@ -309,7 +357,7 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
   }
 
   /** Writes the input of a run to its process, then closes it; a failure shows in the process's exit. */
-  async function feed(handle: WslProcess, input: ExecInput): Promise<void> {
+  async function feed(handle: LiveProcess, input: ExecInput): Promise<void> {
     try {
       if (input.kind === 'text') {
         await handle.write(new TextEncoder().encode(input.text));
@@ -332,32 +380,26 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
     return match === undefined ? undefined : failed(match[1], text.trim());
   }
 
-  async function exec(
-    request: ExecRequest,
-    onLine: (line: string) => void,
-  ): Promise<ExecExited | RunFailed> {
-    const {cancellation} = request;
-    if (cancellation.aborted) {
+  /** The failure that stops a request before anything is looked for or started, if any. */
+  function rejected(request: StartRequest): RunFailed | undefined {
+    if (request.cancellation.aborted) {
       return failed('cancelled', 'cancelled before the run');
     }
     const badName = Object.keys(request.environment).find(
       name => !ENVIRONMENT_NAME.test(name),
     );
-    if (badName !== undefined) {
-      return failed(
-        'spawnFailed',
-        `'${badName}' is not a name an environment variable can have`,
-      );
-    }
-    if (
-      request.input.kind === 'file' &&
-      !(await files.exists(request.input.localFile))
-    ) {
-      return failed(
-        'spawnFailed',
-        `no such local file: ${request.input.localFile}`,
-      );
-    }
+    return badName === undefined
+      ? undefined
+      : failed(
+          'spawnFailed',
+          `'${badName}' is not a name an environment variable can have`,
+        );
+  }
+
+  /** The process of `request`, after the checks: it is located, started, and watched until it ends or is cancelled. */
+  async function launch(
+    request: StartRequest,
+  ): Promise<{kind: 'started'; process: LiveProcess} | RunFailed> {
     const located = await locate();
     if (located.kind === 'failed') {
       return located;
@@ -371,8 +413,100 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
       return started;
     }
     const {process: handle} = started;
-    let delivering = true;
+    const {cancellation} = request;
     let kept: Uint8Array = new Uint8Array(0);
+    function keep(chunk: Uint8Array): void {
+      if (kept.length < CLASSIFY_BYTES) {
+        kept = joined(kept, chunk.subarray(0, CLASSIFY_BYTES - kept.length));
+      }
+    }
+    const output = new Relay();
+    const complaints = new Relay();
+    handle.onOutput(chunk => {
+      keep(chunk);
+      output.push(chunk);
+    });
+    handle.onError(chunk => {
+      keep(chunk);
+      complaints.push(chunk);
+    });
+    let ended = false;
+    let killed = false;
+    const exited = new Promise<ExecExited | RunFailed>(resolve => {
+      function cancel(): void {
+        resolve(failed('cancelled', 'cancelled while the program ran'));
+        live.kill();
+      }
+      handle.onExit(status => {
+        ended = true;
+        cancellation.removeEventListener('abort', cancel);
+        if (status === undefined) {
+          resolve(
+            killed
+              ? failed('cancelled', 'ended by kill()')
+              : failed('spawnFailed', 'wsl.exe ended by a signal'),
+          );
+          return;
+        }
+        resolve(
+          (WSL_FAILED_STATUSES.includes(status)
+            ? reportedFailure(kept)
+            : undefined) ?? {kind: 'exited', status},
+        );
+      });
+      cancellation.addEventListener('abort', cancel, {once: true});
+    });
+    const live: LiveProcess = {
+      onOutput: listener => {
+        output.listen(listener);
+      },
+      onError: listener => {
+        complaints.listen(listener);
+      },
+      write: data => handle.write(data),
+      endInput: () => {
+        handle.endInput();
+      },
+      kill: () => {
+        if (!ended && !killed) {
+          killed = true;
+          handle.kill();
+        }
+      },
+      exited,
+    };
+    return {kind: 'started', process: live};
+  }
+
+  function startProcess(
+    request: StartRequest,
+  ): Promise<{kind: 'started'; process: LiveProcess} | RunFailed> {
+    return Promise.resolve(rejected(request) ?? launch(request));
+  }
+
+  async function exec(
+    request: ExecRequest,
+    onLine: (line: string) => void,
+  ): Promise<ExecExited | RunFailed> {
+    const refused = rejected(request);
+    if (refused !== undefined) {
+      return refused;
+    }
+    if (
+      request.input.kind === 'file' &&
+      !(await files.exists(request.input.localFile))
+    ) {
+      return failed(
+        'spawnFailed',
+        `no such local file: ${request.input.localFile}`,
+      );
+    }
+    const launched = await launch(request);
+    if (launched.kind === 'failed') {
+      return launched;
+    }
+    const {process: live} = launched;
+    let delivering = true;
     const lines = new LineDecoder(line => {
       if (delivering) {
         onLine(line);
@@ -383,36 +517,22 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
         onLine(line);
       }
     });
-    function keep(chunk: Uint8Array): void {
-      if (kept.length < CLASSIFY_BYTES) {
-        kept = joined(kept, chunk.subarray(0, CLASSIFY_BYTES - kept.length));
-      }
-    }
-    handle.onOutput(chunk => {
-      keep(chunk);
+    live.onOutput(chunk => {
       lines.push(chunk);
     });
-    handle.onError(chunk => {
-      keep(chunk);
+    live.onError(chunk => {
       errorLines.push(chunk);
     });
-    void feed(handle, request.input);
-    const ending = await supervise(handle, cancellation);
-    if (ending.kind === 'cancelled') {
+    void feed(live, request.input);
+    const outcome = await live.exited;
+    if (outcome.kind === 'failed') {
       delivering = false;
-      return failed('cancelled', 'cancelled while the program ran');
+      return outcome;
     }
     lines.flush();
     errorLines.flush();
-    if (ending.status === undefined) {
-      return failed('spawnFailed', 'wsl.exe ended by a signal');
-    }
-    return (
-      (WSL_FAILED_STATUSES.includes(ending.status)
-        ? reportedFailure(kept)
-        : undefined) ?? {kind: 'exited', status: ending.status}
-    );
+    return outcome;
   }
 
-  return {locate, manage, exec};
+  return {locate, manage, start: startProcess, exec};
 }

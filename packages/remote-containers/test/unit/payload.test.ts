@@ -92,6 +92,49 @@ describe('the dev-container payload', () => {
     );
   });
 
+  it('F-0207 BR-15: the WSL distro is the last member of settings, and a payload without it is a local one', () => {
+    const text = textOf(
+      devContainerPayloadOf({
+        ...FOLDER,
+        context: 'desktop-linux',
+        tlsVerify: '1',
+        wslDistro: 'Ubuntu-24.04',
+      }),
+    );
+    deepStrictEqual(
+      [
+        Object.keys((JSON.parse(text) as {settings: object}).settings),
+        devContainerTargetOf(
+          devContainerPayloadOf({...FOLDER, wslDistro: 'Ubuntu-24.04'}),
+        ),
+        devContainerTargetOf(devContainerPayloadOf(FOLDER)),
+      ],
+      [
+        ['context', 'tlsVerify', 'wslDistro'],
+        {...FOLDER, wslDistro: 'Ubuntu-24.04'},
+        FOLDER,
+      ],
+    );
+  });
+
+  it('F-0207 BR-15: a settings member whose distro is empty or not a string is malformed', () => {
+    deepStrictEqual(
+      [{wslDistro: ''}, {wslDistro: 7}].map(settings =>
+        devContainerTargetOf(
+          hexOf(
+            JSON.stringify({
+              hostPath: '/home/u/p',
+              localDocker: false,
+              settings,
+              configFile: CONFIG,
+            }),
+          ),
+        ),
+      ),
+      [{malformed: 'shape'}, {malformed: 'shape'}],
+    );
+  });
+
   it('F-0501 BR-2a: a host path with a space, a hash, a non-ASCII letter and a quote survives the round trip', () => {
     const target = {...FOLDER, hostPath: '/home/u/h #é "x"'};
     deepStrictEqual(

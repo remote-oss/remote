@@ -769,6 +769,23 @@
           "default": false,
           "scope": "application",
           "description": "%setting.BootstrapImagePull.description%"
+        },
+        "dev.containers.executeInWSL": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "%setting.Executeinwsl.description%"
+        },
+        "dev.containers.executeInWSLDistro": {
+          "type": "string",
+          "scope": "application",
+          "markdownDescription": "%setting.Executeinwsldistro.markdownDescription%"
+        },
+        "dev.containers.forwardWSLServices": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "%setting.Forwardwslservices.description%"
         }
       }
     },
@@ -801,6 +818,7 @@
     "lib-product": "workspace:*",
     "lib-server": "workspace:*",
     "lib-standdown": "workspace:*",
+    "lib-wsl": "workspace:*",
     "yaml": "2.9.1"
   }
 }

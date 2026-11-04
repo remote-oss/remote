@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {
   distroToShare,
   isWindowsMountShape,
+  mountToWindows,
   parseWslpathOutput,
   shareToDistro,
 } from '../../src/index.ts';
@@ -166,4 +167,19 @@ describe('parseWslpathOutput', () => {
       deepStrictEqual(parseWslpathOutput(text), {kind: 'unusable'});
     });
   }
+});
+
+describe('mountToWindows', () => {
+  it('a path under a drive’s mount is that drive’s Windows path, and any other path has none', () => {
+    deepStrictEqual(
+      [
+        mountToWindows('/mnt/c/Users/me/x y'),
+        mountToWindows('/mnt/d/a'),
+        mountToWindows('/mnt/c'),
+        mountToWindows('/mnt/C/a'),
+        mountToWindows('/home/me/x'),
+      ],
+      ['c:\\Users\\me\\x y', 'd:\\a', undefined, undefined, undefined],
+    );
+  });
 });
