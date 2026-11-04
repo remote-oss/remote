@@ -37,10 +37,13 @@ const FIVE_MINUTES: RecheckBound = {kind: 'time', limit: 5 * 60 * 1000};
 const DESKTOP_DATA: Readonly<Record<string, DesktopData>> = {
   darwin: {
     application: '/Applications/Docker.app',
-    start: {program: 'open', args: ['--background', '-a', 'Docker']},
+    start: {
+      program: '/usr/bin/open',
+      args: ['--background', '-a', 'Docker'],
+    },
     listing: {
-      program: 'pgrep',
-      args: ['-x', 'Docker Desktop'],
+      program: '/usr/bin/pgrep',
+      args: ['-lx', 'Docker Desktop'],
       processName: 'Docker Desktop',
     },
     recheckIntervalMilliseconds: INTERVAL,
@@ -53,7 +56,7 @@ const DESKTOP_DATA: Readonly<Record<string, DesktopData>> = {
       args: [],
     },
     listing: {
-      program: 'tasklist',
+      program: 'C:\\Windows\\System32\\tasklist.exe',
       args: ['/FI', 'IMAGENAME eq Docker Desktop.exe', '/FO', 'CSV', '/NH'],
       processName: 'Docker Desktop.exe',
     },

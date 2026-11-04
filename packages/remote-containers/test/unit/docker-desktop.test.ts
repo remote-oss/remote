@@ -29,10 +29,13 @@ describe('Docker Desktop on each host (card containers-200, §1)', () => {
       ],
       [
         '/Applications/Docker.app',
-        {program: 'open', args: ['--background', '-a', 'Docker']},
         {
-          program: 'pgrep',
-          args: ['-x', 'Docker Desktop'],
+          program: '/usr/bin/open',
+          args: ['--background', '-a', 'Docker'],
+        },
+        {
+          program: '/usr/bin/pgrep',
+          args: ['-lx', 'Docker Desktop'],
           processName: 'Docker Desktop',
         },
         5000,
@@ -51,7 +54,7 @@ describe('Docker Desktop on each host (card containers-200, §1)', () => {
           args: [],
         },
         {
-          program: 'tasklist',
+          program: 'C:\\Windows\\System32\\tasklist.exe',
           args: ['/FI', 'IMAGENAME eq Docker Desktop.exe', '/FO', 'CSV', '/NH'],
           processName: 'Docker Desktop.exe',
         },

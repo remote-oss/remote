@@ -29,7 +29,11 @@ describe('Docker Desktop over child processes (card containers-200, §1)', () =>
         desktopPortsOf('darwin')?.data?.application,
         desktopPortsOf('win32')?.data?.listing.program,
       ],
-      [undefined, '/Applications/Docker.app', 'tasklist'],
+      [
+        undefined,
+        '/Applications/Docker.app',
+        'C:\\Windows\\System32\\tasklist.exe',
+      ],
     );
   });
 
@@ -66,6 +70,21 @@ describe('Docker Desktop over child processes (card containers-200, §1)', () =>
     deepStrictEqual(
       [await ports.installed(), await ports.running()],
       [true, true],
+    );
+  });
+
+  it('F-0202 BR-9: a listing counts as running when it names the process, as pgrep -lx prints it, and not when it prints a bare pid', async () => {
+    const listing = (printed: string) =>
+      desktopPortsOver({
+        ...NODE_DATA,
+        listing: {
+          ...NODE_DATA.listing,
+          args: ['-p', JSON.stringify(printed)],
+        },
+      }).running();
+    deepStrictEqual(
+      [await listing('4242 Docker Desktop\n'), await listing('4242\n')],
+      [true, false],
     );
   });
 });
