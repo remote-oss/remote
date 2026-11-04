@@ -53,7 +53,10 @@ function hostWorld(world: World): EngineHost {
 }
 
 /** The scene: one stopped dev container, one unused clone volume, and the editor's answers. */
-function scene(overrides: Record<string, EngineRunOutcome> = {}): {
+function scene(
+  overrides: Record<string, EngineRunOutcome> = {},
+  dismissed = false,
+): {
   world: World;
   events: string[];
   commands: ReturnType<typeof cleanUpCommandsOf>;
@@ -88,7 +91,7 @@ function scene(overrides: Record<string, EngineRunOutcome> = {}): {
       events.push(
         `pick ${placeholder}: ${items.map(item => item.label).join(',')}`,
       );
-      return Promise.resolve([...items.keys()]);
+      return Promise.resolve(dismissed ? undefined : [...items.keys()]);
     },
     showDone: detail => {
       events.push(`done ${detail}`);
@@ -188,30 +191,16 @@ describe('the Clean Up commands over the engine (card containers-168)', () => {
   });
 
   it('F-0905 AC-2: a containers picker that closes without a pick removes nothing, scans no volume and shows no dialog', async () => {
-    const world: World = {commands: [], answers: scene().world.answers};
-    const events: string[] = [];
-    const commands = cleanUpCommandsOf({
-      engine: () => hostWorld(world),
-      program: () => 'docker',
-      pickMany: () => Promise.resolve(undefined),
-      showDone: detail => {
-        events.push(`done ${detail}`);
-        return Promise.resolve();
-      },
-      refresh: () => {
-        events.push('refresh');
-        return Promise.resolve();
-      },
-      report: line => {
-        events.push(`log ${line}`);
-      },
-      translate: template => template,
-      cancellation: new AbortController().signal,
-    });
+    const {world, events, commands} = scene({}, true);
     await commands.devContainers();
     deepStrictEqual(
-      [events, world.commands.some(command => command.startsWith('rm'))],
-      [[], false],
+      [
+        events,
+        world.commands.some(
+          command => command.startsWith('rm') || command.startsWith('volume'),
+        ),
+      ],
+      [['pick Select stopped dev containers to delete: proj'], false],
     );
   });
 
