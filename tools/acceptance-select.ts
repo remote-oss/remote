@@ -143,11 +143,17 @@ export function partsOf(
 /** The most launches a pull request's own acceptance job runs; a larger selection needs a dispatch or the full label. */
 export const PULL_REQUEST_LAUNCHES = 6;
 
+/**
+ * The time limit of a pull request's acceptance job, whatever it runs: one launch alone (containers-a, containers-b,
+ * explorer-folders) takes about an hour on the runners, so a selection of one or two of them outgrew 60 minutes.
+ */
+export const PULL_REQUEST_MINUTES = 180;
+
 /** What a pull request's acceptance job does for its selection. */
 export interface PullRequestPlan {
   /** The launches it runs, joined by commas; empty when it runs none. */
   launches: string;
-  /** Its time limit: 60 minutes, or 180 for a whole selection under the full label. */
+  /** Its time limit, `PULL_REQUEST_MINUTES` for any selection. */
   minutes: number;
   /** A notice for the pull request when the selection is over the limit and the label is absent. */
   notice?: string;
@@ -176,17 +182,14 @@ export function pullRequestPlan(
   }
   const chosen = selection.labels.filter(label => inParts.has(label));
   if (chosen.length === 0) {
-    return {launches: '', minutes: 60};
+    return {launches: '', minutes: PULL_REQUEST_MINUTES};
   }
-  if (chosen.length <= PULL_REQUEST_LAUNCHES) {
-    return {launches: chosen.join(','), minutes: 60};
-  }
-  if (full) {
-    return {launches: chosen.join(','), minutes: 180};
+  if (chosen.length <= PULL_REQUEST_LAUNCHES || full) {
+    return {launches: chosen.join(','), minutes: PULL_REQUEST_MINUTES};
   }
   return {
     launches: '',
-    minutes: 60,
+    minutes: PULL_REQUEST_MINUTES,
     notice: `this change selects ${String(chosen.length)} launches, more than the ${String(PULL_REQUEST_LAUNCHES)} a pull request runs by itself: ${chosen.join(', ')}. Run them at this head with a dispatch, or with the acceptance-full label.`,
   };
 }
