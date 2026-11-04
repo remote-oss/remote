@@ -199,4 +199,21 @@ describe('the discovery of configurations (card containers-13)', () => {
     );
     deepStrictEqual(found, []);
   });
+
+  it('F-0207 AC-17 (c114-dotless-part): a dotless devcontainer.json at the root is no location at all, and a dotfile at the root is', async () => {
+    const dotlessOnly = await discoverConfigurations(
+      FOLDER,
+      filesOf({[FOLDER]: [['devcontainer.json', 'file']]}),
+      english,
+    );
+    const dotfile = await discoverConfigurations(
+      FOLDER,
+      filesOf({[FOLDER]: [['.devcontainer.json', 'file']]}),
+      english,
+    );
+    deepStrictEqual(
+      [dotlessOnly, relatives(dotfile)],
+      [[], ['.devcontainer.json']],
+    );
+  });
 });

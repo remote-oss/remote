@@ -803,4 +803,15 @@ describe('the shutdown registry, the Compose stop (card containers-144)', () => 
       [['10s stop c0ffee'], {accepted: false, problem: 'unknown connection'}],
     );
   });
+
+  it('F-0207 AC-46 (c114-stop-not-remove): a window that leaves its container ends with the lookup and one docker stop of it, and no docker remove', async () => {
+    const found = await lookedUp(IDENTITY);
+    deepStrictEqual(
+      found.runs.map(run => run.split(' ').slice(1).join(' ')),
+      [
+        'ps -q --filter label=devcontainer.local_folder=/home/user/proj --filter label=devcontainer.config_file=/home/user/proj/.devcontainer/devcontainer.json',
+        'stop c0ffee',
+      ],
+    );
+  });
 });

@@ -142,3 +142,65 @@ describe('the dialogs of an ssh Docker host (card containers-173)', () => {
     );
   });
 });
+
+describe('the dialogs a missing Docker program shows (card coverage-114)', () => {
+  it('F-0207 AC-13 (c114-notfound-dialog): the notFound dialog is S146 with the licence detail, Install first beside License', () => {
+    const dialog = dialogOf('notFound', 'docker', identity);
+    deepStrictEqual(
+      [
+        dialog.message,
+        dialog.detail,
+        dialog.buttons.map(button => [button.label, button.action]),
+      ],
+      [
+        'Docker version 17.12.0 or later required.',
+        'Check the license for details.',
+        [
+          ['Install', 'openInstall'],
+          ['License', 'openLicence'],
+        ],
+      ],
+    );
+  });
+
+  it('F-0207 AC-14 (c114-licence-page): the License button of the notFound dialog opens the subscription service agreement page, an own address under R-31', () => {
+    const notFound = dialogOf('notFound', 'docker', identity);
+    deepStrictEqual(
+      notFound.buttons.map(button =>
+        button.action === 'openLicence'
+          ? BUTTON_LINKS.openLicence
+          : button.action,
+      ),
+      [
+        'openInstall',
+        'https://www.docker.com/legal/docker-subscription-service-agreement/',
+      ],
+    );
+  });
+
+  it('F-0207 AC-24 (c114-no-app-launch): no button action of the engine dialogs launches an application, and the notFound dialog opens its two pages only', () => {
+    const notFound = dialogOf('notFound', 'docker', identity);
+    deepStrictEqual(
+      [
+        notFound.buttons.map(button => button.action),
+        Object.keys(BUTTON_LINKS).sort(),
+      ],
+      [
+        ['openInstall', 'openLicence'],
+        ['openCompose', 'openInstall', 'openLicence', 'openPermission'],
+      ],
+    );
+  });
+
+  it('F-1301 AC-6 (c114-notfound-no-wsl-wording): a missing Docker program shows no WSL wording in its dialog', () => {
+    const notFound = dialogOf('notFound', 'docker', identity);
+    deepStrictEqual(
+      [
+        notFound.message,
+        notFound.detail,
+        ...notFound.buttons.map(button => button.label),
+      ].filter(text => /\bWSL\b/i.test(text)),
+      [],
+    );
+  });
+});

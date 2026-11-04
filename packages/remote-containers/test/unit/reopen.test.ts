@@ -1030,3 +1030,112 @@ describe('Reopen in Container', () => {
     });
   });
 });
+
+describe('Reopen in Container on a platform without WSL (card coverage-114)', () => {
+  it('F-0207 AC-16 (c114-trust-before-check): the trust request, for the command, stops a declined flow before the engine check, the read and the open', async () => {
+    const answered = setup();
+    await reopened(answered);
+    const declined = setup();
+    declined.trust = 'declined';
+    await reopened(declined);
+    deepStrictEqual(
+      [
+        answered.calls.filter(call => /^(ensureTrusted|firstCheck)/.test(call)),
+        [declined.calls, declined.commands, declined.titles],
+      ],
+      [
+        ['ensureTrusted', 'firstCheck /w/p'],
+        [['ensureTrusted'], [], ['Reopen in Container']],
+      ],
+    );
+  });
+
+  it('F-0207 AC-15 (c114-stopped-check-again): a first check that stopped ends the command with no open, and a second run stops again with the same calls', async () => {
+    const state = setup();
+    state.check = 'stopped';
+    await reopened(state);
+    const first = [[...state.commands], [...state.calls]];
+    await reopened(state);
+    deepStrictEqual(
+      [state.commands, state.calls, first],
+      [
+        [],
+        [
+          'ensureTrusted',
+          'firstCheck /w/p',
+          'readConfiguration /w/p',
+          'ensureTrusted',
+          'firstCheck /w/p',
+          'readConfiguration /w/p',
+        ],
+        [[], ['ensureTrusted', 'firstCheck /w/p', 'readConfiguration /w/p']],
+      ],
+    );
+  });
+
+  it('F-0207 AC-17 (c114-dotless-routing): a dotless devcontainer.json at the root is no location, so the flow writes one in the wizard and reopens on it; a located configuration skips the wizard', async () => {
+    const dotless = setup();
+    dotless.existing = ['/w/p/devcontainer.json'];
+    dotless.wizard = WRITTEN_IN_FOLDER;
+    dotless.wizardLeaves = [CONFIG];
+    await reopened(dotless);
+    const located = setup();
+    located.existing = ['/w/p/.devcontainer.json'];
+    await reopened(located);
+    deepStrictEqual(
+      [
+        dotless.calls.filter(call =>
+          /^(ensureTrusted|wizard|firstCheck)/.test(call),
+        ),
+        located.calls.filter(call =>
+          /^(ensureTrusted|wizard|firstCheck)/.test(call),
+        ),
+        [dotless.commands.length, located.commands.length],
+      ],
+      [
+        ['ensureTrusted', 'firstCheck /w/p', 'wizard /w/p'],
+        ['ensureTrusted', 'firstCheck /w/p'],
+        [1, 1],
+      ],
+    );
+  });
+
+  it('F-0207 AC-5 (c114-linux-no-wsl-coordinate): the flow on this platform carries no WSL or distro coordinate in its open, its log or its surfaces', async () => {
+    const state = setup();
+    await reopened(state);
+    const surface = [
+      ...state.lines,
+      ...state.shown,
+      ...state.modals,
+      ...state.confirms,
+      ...state.commands.map(command => JSON.stringify(command)),
+    ];
+    deepStrictEqual(
+      [
+        surface.filter(text =>
+          /\bWSL\b|\bexecuteInWSL\b|\bdistro\b/i.test(text),
+        ),
+        state.commands.map(command => command.command),
+      ],
+      [[], ['vscode.openFolder']],
+    );
+  });
+
+  it('F-1301 AC-9 (c114-no-wsl-text): a Reopen in Container flow, passing or stopped at the engine check, shows no WSL string in its dialogs, notices or log', async () => {
+    const passed = setup();
+    await reopened(passed);
+    const stopped = setup();
+    stopped.check = 'stopped';
+    await reopened(stopped);
+    const surface = [passed, stopped].flatMap(state => [
+      ...state.lines,
+      ...state.shown,
+      ...state.modals,
+      ...state.confirms,
+    ]);
+    deepStrictEqual(
+      surface.filter(text => /\bWSL\b/i.test(text)),
+      [],
+    );
+  });
+});

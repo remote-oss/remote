@@ -1729,3 +1729,58 @@ describe('where Switch Container is offered (F-0407 AC-1)', () => {
     );
   });
 });
+
+describe('where Reopen Folder in WSL is offered, and Install Docker in WSL exists (card coverage-114)', () => {
+  const contributes = MANIFEST.contributes as {
+    commands: Array<{command: string; title: string}>;
+    menus: {
+      commandPalette: Array<{command: string; when: string}>;
+      'statusBar/remoteIndicator': Array<{
+        command: string;
+        group: string;
+        when: string;
+      }>;
+    };
+  };
+
+  it('F-1301 AC-3 (c114-wsl-gate): the palette offers Reopen Folder in WSL only under canReopenInWSL, which a plain local window does not have', () => {
+    const entry = contributes.menus.commandPalette.find(
+      each => each.command === 'remote-containers.reopenInWSL',
+    );
+    deepStrictEqual(
+      entry?.when,
+      'canReopenInWSL && !hideConnectCommands && !remote-containers:standingDown',
+    );
+  });
+
+  it('F-0207 AC-53 (c114-wsl-row-gate): every WSL entry of the manifest is behind canReopenInWSL, so no WSL row shows while the context is unset', () => {
+    const wslEntries = [
+      ...contributes.menus.commandPalette,
+      ...contributes.menus['statusBar/remoteIndicator'],
+    ].filter(each => /wsl/i.test(each.command));
+    deepStrictEqual(
+      wslEntries.map(each => [each.command, each.when]),
+      [
+        [
+          'remote-containers.reopenInWSL',
+          'canReopenInWSL && !hideConnectCommands && !remote-containers:standingDown',
+        ],
+        [
+          'remote-containers.reopenInWSL',
+          'canReopenInWSL && !hideConnectCommands && !remote-containers:standingDown',
+        ],
+      ],
+    );
+  });
+
+  it('F-0204 AC-1 (c114-no-install-docker-wsl): the manifest contributes no Install Docker in WSL command anywhere, and it must stay absent on non-Windows', () => {
+    deepStrictEqual(
+      [
+        ...contributes.commands,
+        ...contributes.menus.commandPalette,
+        ...contributes.menus['statusBar/remoteIndicator'],
+      ].filter(each => /installDockerInWSL/i.test(each.command)),
+      [],
+    );
+  });
+});
