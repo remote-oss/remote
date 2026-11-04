@@ -10,9 +10,11 @@ import {pathToFileURL} from 'node:url';
 import {promisify} from 'node:util';
 import {
   closeWindow,
+  devContainerFolder,
   devContainersOf,
   inWindow,
   isOpen,
+  reopenInContainer,
   variable,
   waitFor,
   windowEvents,
@@ -116,6 +118,24 @@ export async function setUserSetting(
   value: unknown,
 ): Promise<void> {
   await writeUserSetting(settingId, value, 'local', 30_000);
+}
+
+/** Connects a window on a new folder named `label` with `configuration`, and gives the window, its container and the folder; a window that fails to connect is closed. */
+export async function connectedWindow(
+  label: string,
+  configuration: Readonly<Record<string, unknown>> = {},
+): Promise<{name: string; containerId: string; folder: string}> {
+  const folder = devContainerFolder(label, {name: label, ...configuration});
+  const name = await openFolderWindow(folder);
+  try {
+    await reopenInContainer(name);
+  } catch (failure) {
+    // A window that did not connect is closed here, since the row has no name to close it by.
+    await closeWindow(name).catch(() => undefined);
+    throw failure;
+  }
+  const [containerId = ''] = await devContainersOf(folder);
+  return {name, containerId, folder};
 }
 
 /** Removes every container of the run made for `folder`. */
