@@ -156,6 +156,9 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
           PATH: `${programs}:${process.env.PATH ?? ''}`,
         },
       });
+      // The reopen reads the folder's settings when it starts, so it starts only once the view has taken the change of
+      // the file: with the dead host still in force the connect waits on it.
+      seen.push(await lists(own, window));
       void startInWindow(window, 'remote-containers.reopenInContainer');
       await waitForDialog(window, 60_000);
       await answerDialog(window, 'Trust Folder & Continue');
@@ -163,7 +166,7 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       const title = await windowTitle(window);
       deepStrictEqual(
         [controlFails, seen, title.includes(' @ '), existsSync(marker)],
-        [true, [true, true, true, true], false, false],
+        [true, [true, true, true, true, true], false, false],
       );
     } finally {
       await closeWindow(window).catch(() => undefined);
