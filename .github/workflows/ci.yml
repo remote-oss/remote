@@ -5,7 +5,8 @@
 # the tag of a release (`<package>-v<semver>`). A pull request runs the VSCodium launches its change selects, up to six
 # (acceptance-pr). Every push to main runs the VSCodium launches the merged change can reach (the post-merge run), and
 # the schedule runs all of them: the backstops for main's launches. The
-# jobs run on the self-hosted runners, so they use no Actions minutes.
+# VSCodium and genuine jobs run on the self-hosted runners, and every other job on GitHub's standard runners, which use
+# no Actions minutes in a public repository.
 # A draft pull request runs nothing: its pushes would hold the runners while merge-ready heads wait. Marking it ready for
 # review starts its run (`ready_for_review`), and that run, at the head, is the one green-at-head looks for.
 name: ci
@@ -19,8 +20,9 @@ on:
     inputs:
       runner-arch:
         description: >-
-          The self-hosted runners' architecture for all five acceptance jobs of this dispatch. A pull request runs
-          slice 1 and server lifecycle on the pr-pool runners (either architecture) and the rest on X64
+          The architecture of the five acceptance jobs of this dispatch: slice 1, server lifecycle, host variants and
+          real server on ubuntu-24.04 (X64) or ubuntu-24.04-arm (ARM64), and VSCodium on the self-hosted runners of
+          that architecture. A pull request and the genuine job run on X64
         type: choice
         options: [X64, ARM64]
         default: X64
@@ -227,10 +229,9 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }} # coverage runs the unit tests; see the unit job
 
-  # Slice 1 and server lifecycle, the two acceptance jobs of a pull request, run on the pr-pool runners: ci-1 to ci-8
-  # (X64) and the two Mac minis (ARM64), where they pass (2026-10-20); the user's own Mac runners lack the label. The
-  # other acceptance jobs stay on X64: the VSCodium run outlasts its hour on a mini, and real-server and host-variants
-  # haven't been shown on arm64. A dispatch's runner-arch (X64 | ARM64) still picks one architecture for all five.
+  # Slice 1, server lifecycle, host variants and real server run on GitHub's ubuntu-24.04, a fresh machine per job
+  # (ubuntu-24.04-arm when a dispatch's runner-arch is ARM64), where all four pass; the VSCodium launches and the genuine
+  # job stay on the self-hosted runners for now. Slice 1 and server lifecycle are the two of a pull request.
   # The editor under test against the SSH host container of tests/acceptance, one job per slice. The runner's Docker
   # and OpenSSH client are preinstalled, and xvfb or a display of its own.
   acceptance-slice-1:
@@ -241,7 +242,7 @@ jobs:
       !(github.event_name == 'push' && github.ref_type == 'branch') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'pr-pool')) || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -251,8 +252,8 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # The runner is shared and keeps its Docker state: remove what an earlier attempt of this run left, by the
-      # run's own label. The same step, with `if: always()`, closes the job, so a killed run leaves nothing.
+      # A machine that keeps its Docker state between jobs gets what an earlier attempt of this run left removed, by
+      # the run's own label; a fresh runner has nothing to remove. The same step, with `if: always()`, closes the job.
       - run: pnpm acceptance:clean
       # Ubuntu 24.04 restricts unprivileged user namespaces, which the editor's renderer sandbox needs; a kernel
       # without that AppArmor switch (the org's Fedora runners) has nothing to lift.
@@ -283,7 +284,7 @@ jobs:
       !(github.event_name == 'push' && github.ref_type == 'branch') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'pr-pool')) || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -304,7 +305,7 @@ jobs:
   acceptance-host-variants:
     name: acceptance (host variants)
     if: inputs.variants || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -328,7 +329,7 @@ jobs:
   acceptance-real-server:
     name: acceptance (real server)
     if: inputs.real-server || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
