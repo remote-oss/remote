@@ -45,6 +45,8 @@ export interface Setup {
   requirementsAccepted: boolean;
   /** The dialogs of host requirements shown: message, detail and the accepting button. */
   requirementDialogs: Array<[string, string, string]>;
+  /** The results the next reads give, in turn, before `read` is the answer. */
+  readQueue: Array<ConfigurationResult | CliFailure>;
   /** Whether each read of the configuration asked for the merged one. */
   mergedReads: Array<boolean | undefined>;
   /** The queries of the host requirements check, in order. */
@@ -142,6 +144,7 @@ export function setup(): Setup {
     requirementDialogs: [],
     requirementQueries: [],
     mergedReads: [],
+    readQueue: [],
     cancels: [],
     wizard: {kind: 'cancelled'},
     wizardLeaves: [],
@@ -339,7 +342,7 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
         const hold = state.waitOnRead;
         state.waitOnRead = Promise.resolve();
         await hold;
-        return state.read;
+        return state.readQueue.shift() ?? state.read;
       },
     },
     problematic: {

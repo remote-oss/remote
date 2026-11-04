@@ -214,14 +214,12 @@ export async function chooseConfiguration(
     }
   }
 
-  /**
-   * The CLI's read of the candidate, started now. A rejection waits in the promise until it is awaited, so it is never
-   * unhandled meanwhile.
-   */
-  function startRead(
+  /** One CLI read of the candidate, merged with the Features and the image's label or not. */
+  function readOnce(
     candidate: Candidate,
+    includeMerged: boolean,
   ): Promise<ConfigurationResult | CliFailure> {
-    const reading = ports.cli.readConfiguration(
+    return ports.cli.readConfiguration(
       {
         workspaceFolder: folder,
         configFile: candidate.file,
@@ -239,8 +237,38 @@ export async function chooseConfiguration(
       },
       request.cancellation,
       undefined,
-      request.mergedRead === true,
+      includeMerged,
     );
+  }
+
+  /**
+   * A merged read, and, when it fails where the image or a Feature can't be fetched, the plain one: the open goes on and
+   * the failure shows in the container window. A cancelled read has no fallback.
+   */
+  async function readMergedOrPlain(
+    candidate: Candidate,
+  ): Promise<ConfigurationResult | CliFailure> {
+    const merged = await readOnce(candidate, true);
+    if (merged.kind === 'configuration' || merged.kind === 'cancelled') {
+      return merged;
+    }
+    logger.warn(
+      `the merged configuration could not be read (${cliFailureText(merged)}); the configuration is read without it`,
+    );
+    return readOnce(candidate, false);
+  }
+
+  /**
+   * The CLI's read of the candidate, started now. A rejection waits in the promise until it is awaited, so it is never
+   * unhandled meanwhile.
+   */
+  function startRead(
+    candidate: Candidate,
+  ): Promise<ConfigurationResult | CliFailure> {
+    const reading =
+      request.mergedRead === true
+        ? readMergedOrPlain(candidate)
+        : readOnce(candidate, false);
     reading.catch(() => undefined);
     return reading;
   }

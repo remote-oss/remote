@@ -521,6 +521,41 @@ describe('Reopen in Container', () => {
     );
   });
 
+  it('F-0206 reading-2146-requirements-lookup: a merged read that fails falls back to the plain one, and the requirements written in the file still show their dialog before the reload', async () => {
+    const state = setup();
+    state.daemon = {cpus: 4, memory: 16 * 1024 ** 3, nvidia: false};
+    state.configText =
+      '{ "image": "missing", "hostRequirements": { "cpus": 64 } }';
+    state.readQueue = [{kind: 'configurationFailed', message: 'no image'}];
+    await reopened(state);
+    deepStrictEqual(
+      [
+        state.mergedReads,
+        state.requirementDialogs.map(dialog => dialog[1]),
+        state.commands.map(each => each.command),
+      ],
+      [
+        [true, false],
+        ['Docker daemon: CPUs 4, RAM 16gb\ndevcontainer.json: CPUs 64'],
+        ['vscode.openFolder'],
+      ],
+    );
+  });
+
+  it('F-0410 AC-13, F-0414 AC-9: a merged read that fails with requirements met or absent shows no dialog and the window reloads, where the resolve shows the failure', async () => {
+    const state = setup();
+    state.readQueue = [{kind: 'configurationFailed', message: 'no image'}];
+    await reopened(state);
+    deepStrictEqual(
+      [
+        state.mergedReads,
+        state.requirementDialogs,
+        state.commands.map(each => each.command),
+      ],
+      [[true, false], [], ['vscode.openFolder']],
+    );
+  });
+
   it('F-0206 AC-5, AC-25, 6.2: Cancel on the dialog ends Reopen and its rebuild variants with no reload and no intent stored', async () => {
     const state = setup();
     state.daemon = {cpus: 4, memory: 16 * 1024 ** 3, nvidia: false};
@@ -739,6 +774,7 @@ describe('Reopen in Container', () => {
         [],
         [
           'info: Reading configuration',
+          'warn: the merged configuration could not be read (buildFailed: no build); the configuration is read without it',
           'warn: the configuration could not be read: buildFailed: no build',
           'info: Reading configuration: 0 ms',
         ],
@@ -753,6 +789,7 @@ describe('Reopen in Container', () => {
     const {lines} = await reopened(state);
     deepStrictEqual(lines, [
       'info: Reading configuration',
+      'warn: the merged configuration could not be read (noResult); the configuration is read without it',
       'warn: the configuration could not be read: noResult',
       'info: Reading configuration: 0 ms',
     ]);
