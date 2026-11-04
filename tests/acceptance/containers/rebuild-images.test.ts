@@ -13,6 +13,7 @@ import {
 } from '../windows/harness.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {docker} from './resolve-support.ts';
+import {runTemplatesReady} from '../windows/run-templates.ts';
 
 /** The tag and id of one image object. */
 interface ImageObject {
@@ -65,6 +66,7 @@ async function mtimeOf(folder: string, file: string): Promise<number> {
 
 /** A base image the run's registry holds, so that a build that pulls finds it; its name. */
 async function pushedBase(label: string): Promise<string> {
+  await runTemplatesReady();
   const base = `${variable('HARNESS_REGISTRY')}/c67-base-${label}:${String(Date.now())}`;
   await docker('tag', variable('HARNESS_DEVCONTAINER_IMAGE'), base);
   await docker('push', base);

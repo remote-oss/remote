@@ -33,6 +33,7 @@ import {
   slowBuildFolder,
   windowLogFiles,
 } from '../windows/sampling.ts';
+import {runTemplatesReady} from '../windows/run-templates.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -189,6 +190,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
   });
 
   it('F-0408 AC-15 (c68-pull): an image that is not local is pulled inside the Starting container step, and no notification, suffix, title or editor names the pull', async () => {
+    await runTemplatesReady();
     const imageTag = `${variable('HARNESS_REGISTRY')}/c68-pull:${String(Date.now())}`;
     await execFileAsync('docker', [
       'tag',
