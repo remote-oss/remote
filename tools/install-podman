@@ -41,19 +41,17 @@ if [ -z "$major" ] || [ "$major" -lt 5 ]; then
   rm -f "$work/podman-linux-$arch/usr/local/bin/runc"
   sudo cp -r "$work/podman-linux-$arch/usr" "$work/podman-linux-$arch/etc" /
   hash -r
+  # podman looks for crun in /usr/bin first, where the machine's older crun refuses the OCI version of this Podman's
+  # container specification ("unknown version specified"): the crun that came with it, which this script has just put
+  # in /usr/local/bin, is named instead
+  sudo mkdir -p /etc/containers/containers.conf.d
+  printf '[engine.runtimes]\ncrun = ["/usr/local/bin/crun"]\n' |
+    sudo tee /etc/containers/containers.conf.d/10-crun.conf >/dev/null
   major=$(podman_major)
   [ "${major:-0}" -ge 5 ] || {
     echo "install-podman: the podman on the PATH is still $(podman --version 2>&1)" >&2
     exit 1
   }
-fi
-
-# podman looks for crun in /usr/bin first, where the machine's older crun refuses the OCI version of this Podman's
-# container specification ("unknown version specified"): the crun that came with it is named instead
-if [ -x /usr/local/bin/crun ]; then
-  sudo mkdir -p /etc/containers/containers.conf.d
-  printf '[engine.runtimes]\ncrun = ["/usr/local/bin/crun"]\n' |
-    sudo tee /etc/containers/containers.conf.d/10-crun.conf >/dev/null
 fi
 
 command -v newuidmap >/dev/null || {
