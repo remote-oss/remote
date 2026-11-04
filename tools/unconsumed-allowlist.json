@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "package": "remote-containers",
+      "kind": "settings",
+      "key": "optimisticallyLaunchDocker",
+      "card": "#2150",
+      "slice": "containers release 2",
+      "decision": "F-0202 BR-3: contributed, read by nothing"
+    },
+    {
       "package": "remote-ssh",
       "kind": "settings",
       "key": "enhancedSessionLogs",

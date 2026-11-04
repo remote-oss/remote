@@ -10,6 +10,7 @@ import {type Executable, executableOf} from '../engine/executable.ts';
 import {openPathAllowed} from './open-gate.ts';
 import {chooseOrAuthor} from './author-first.ts';
 import type {RebuildOptions} from './rebuild-intent.ts';
+import {invocationGuardOf} from './invocation-guard.ts';
 import {reloadIntoContainer} from './reload.ts';
 import type {ReopenPorts} from './reopen-ports.ts';
 import {workspaceFoldersAccepted} from './workspace-folders.ts';
@@ -45,7 +46,7 @@ export function reopenHandlersOf(
   ports: ReopenPorts,
 ): (rebuild?: RebuildOptions) => () => Promise<void> {
   const {window, logger} = ports;
-  let running = false;
+  const guard = invocationGuardOf(logger);
 
   /**
    * What to reopen in this window: its one `file` folder; or, in a saved workspace, whatever its roots, the folder of
@@ -93,6 +94,7 @@ export function reopenHandlersOf(
   async function attempt(
     title: string,
     rebuild: RebuildOptions | undefined,
+    pass: () => boolean,
   ): Promise<void> {
     if (!(await openPathAllowed(ports.gate, title))) {
       return;
@@ -121,8 +123,14 @@ export function reopenHandlersOf(
     ) as Extract<Executable, {kind: 'spawn'}>;
     const {choice, progress} = await chooseOrAuthor(
       ports,
-      (base, dialogs, cancellation) =>
-        ports.engine.firstCheck(base, dialogs, cancellation),
+      async (base, dialogs, cancellation) => {
+        const checked = await ports.engine.firstCheck(
+          base,
+          dialogs,
+          cancellation,
+        );
+        return checked === 'proceed' && !pass() ? 'stopped' : checked;
+      },
       {
         title,
         folder,
@@ -161,17 +169,6 @@ export function reopenHandlersOf(
 
   return rebuild => {
     const title = titleOf(rebuild);
-    return async () => {
-      if (running) {
-        logger.info(`${title} is already running`);
-        return;
-      }
-      running = true;
-      try {
-        await attempt(title, rebuild);
-      } finally {
-        running = false;
-      }
-    };
+    return () => guard.run(title, pass => attempt(title, rebuild, pass));
   };
 }
