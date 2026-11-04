@@ -79,8 +79,7 @@ export function hostFiles(): AuthoringFiles {
       }
       return access(nearest, fileConstants.W_OK).then(
         () => undefined,
-        (caught: unknown) =>
-          caught instanceof Error ? caught.message : String(caught),
+        (caught: Error) => caught.message,
       );
     },
   };
