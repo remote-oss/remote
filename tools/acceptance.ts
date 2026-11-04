@@ -857,10 +857,12 @@ export function harnessSshConfig(
       'ForwardX11 yes',
       'ForwardX11Trusted yes',
     ]),
-    // The same without the trusted request, so the server's X11 extensions are the untrusted client's.
+    // The same without the trusted request, so the server's X11 extensions are the untrusted client's. The trusted
+    // request is refused in so many words: Debian's and Ubuntu's OpenSSH make `ForwardX11 yes` alone trusted.
     ...accountAlias('x11-untrusted', 'harness', port, folder, [
       ...keyLines(folder),
       'ForwardX11 yes',
+      'ForwardX11Trusted no',
     ]),
     // Untrusted forwarding whose cookie expires after a minute.
     ...accountAlias('x11-timeout', 'harness', port, folder, [
@@ -873,6 +875,7 @@ export function harnessSshConfig(
     ...accountAlias('x11-noauth', 'harness', port, folder, [
       ...keyLines(folder),
       'ForwardX11 yes',
+      'ForwardX11Trusted no',
       'XAuthLocation /nonexistent/xauth',
     ]),
     // ForwardX11 given only in a Match block that applies to the alias.
