@@ -155,16 +155,9 @@ function dotfilesArguments(dotfiles: DotfilesOptions | undefined): string[] {
   ];
 }
 
-/** Runs lifecycle commands in the container: the blocking ones, or the rest in the background, as `options` say. */
-export function runUserCommandsArguments(
-  target: CliTarget,
-  containerId: string,
-  options: RunUserCommandsOptions = {},
-): string[] {
+/** The stages of a `run-user-commands`, the variables it hands the commands and the dotfiles. */
+function stageArguments(options: RunUserCommandsOptions): string[] {
   return [
-    ...commonArguments('run-user-commands', target),
-    '--container-id',
-    containerId,
     ...(options.skipNonBlocking === true
       ? ['--skip-non-blocking-commands']
       : []),
@@ -175,6 +168,20 @@ export function runUserCommandsArguments(
       ([name, value]) => ['--remote-env', `${name}=${value}`],
     ),
     ...dotfilesArguments(options.dotfiles),
+  ];
+}
+
+/** Runs lifecycle commands in the container: the blocking ones, or the rest in the background, as `options` say. */
+export function runUserCommandsArguments(
+  target: CliTarget,
+  containerId: string,
+  options: RunUserCommandsOptions = {},
+): string[] {
+  return [
+    ...commonArguments('run-user-commands', target),
+    '--container-id',
+    containerId,
+    ...stageArguments(options),
   ];
 }
 
@@ -309,5 +316,20 @@ export function setUpArguments(target: AttachedCliTarget): string[] {
     ...attachedCommonArguments(target),
     '--skip-non-blocking-commands',
     '--include-merged-configuration',
+  ];
+}
+
+/**
+ * Runs lifecycle commands in an attached container: no folder is named, the container is found by its id, and the
+ * run's stages are chosen as for a dev container's.
+ */
+export function attachedUserCommandsArguments(
+  target: AttachedCliTarget,
+  options: RunUserCommandsOptions = {},
+): string[] {
+  return [
+    'run-user-commands',
+    ...attachedCommonArguments(target),
+    ...stageArguments(options),
   ];
 }

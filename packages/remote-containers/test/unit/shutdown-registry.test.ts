@@ -803,4 +803,62 @@ describe('the shutdown registry, the Compose stop (card containers-144)', () => 
       [['10s stop c0ffee'], {accepted: false, problem: 'unknown connection'}],
     );
   });
+
+  it('F-0417 AC-14, AC-44 (c163-non-owning): a connection that does not own stops nothing when it ends, and while it lives another connection to the same container stops nothing either', async () => {
+    const alone = scene();
+    alone.registry.register(1, {
+      type: 'register',
+      connectionId: 'attached',
+      identity: {containerName: 'web'},
+      engine: ENGINE,
+      owning: false,
+    });
+    alone.registry.setContainer({
+      type: 'container',
+      connectionId: 'attached',
+      containerId: 'c0ffee',
+      action: 'none',
+    });
+    alone.registry.leasesChanged([]);
+    await alone.advance(10 * CHECK_MILLISECONDS);
+    const shared = scene();
+    connect(shared.registry, 1, 'owner', IDENTITY, STOP);
+    shared.registry.register(2, {
+      type: 'register',
+      connectionId: 'attached',
+      identity: {containerName: 'web'},
+      engine: ENGINE,
+      owning: false,
+    });
+    shared.registry.setContainer({
+      type: 'container',
+      connectionId: 'attached',
+      containerId: 'c0ffee',
+      action: 'none',
+    });
+    shared.registry.leasesChanged([2]);
+    await shared.advance(CHECK_MILLISECONDS);
+    deepStrictEqual([alone.runs, shared.runs], [[], []]);
+  });
+
+  it('F-0417 AC-14 (c163-non-owning-end): the owner stops the container when the non-owning connection has gone too', async () => {
+    const {registry, advance, runs} = scene();
+    connect(registry, 1, 'owner', IDENTITY, STOP);
+    registry.register(2, {
+      type: 'register',
+      connectionId: 'attached',
+      identity: {containerName: 'web'},
+      engine: ENGINE,
+      owning: false,
+    });
+    registry.setContainer({
+      type: 'container',
+      connectionId: 'attached',
+      containerId: 'c0ffee',
+      action: 'none',
+    });
+    registry.leasesChanged([]);
+    await advance(CHECK_MILLISECONDS);
+    deepStrictEqual(runs, ['10s stop c0ffee']);
+  });
 });

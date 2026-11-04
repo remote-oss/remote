@@ -22,7 +22,8 @@ import {
   devContainerTargetOf,
   folderTargetOf,
 } from '../authority/payload.ts';
-import type {CliTarget} from '../cli/cli-arguments.ts';
+import type {AttachedCliTarget, CliTarget} from '../cli/cli-arguments.ts';
+import {attachedReadyTarget, attachedRunsBridge} from './attached-bridge.ts';
 import type {VolumeWorkspace} from '../cli/override-pre-pass.ts';
 import {
   bootstrapRemoveArguments,
@@ -1031,6 +1032,7 @@ export function containerConnectorOf(
   function registerConnection(
     identity: ContainerIdentity,
     engine: EngineCoordinates,
+    owning = true,
   ): string {
     if (shutdownConnection !== undefined) {
       return shutdownConnection;
@@ -1042,6 +1044,7 @@ export function containerConnectorOf(
       connectionId,
       identity,
       engine,
+      ...(owning ? {} : {owning: false as const}),
     });
     return connectionId;
   }
@@ -2204,6 +2207,34 @@ export function containerConnectorOf(
       return step.failure;
     }
     const {container, mergedConfiguration: merged} = step;
+    const connectionId = registerConnection(
+      {containerName: container.name},
+      {dockerPath: dockerFile, environment},
+      false,
+    );
+    void dependencies.shutdown.send({
+      type: 'container',
+      connectionId,
+      containerId: container.id,
+      action: 'none',
+    });
+    const runsOn: AttachedCliTarget = {
+      containerId: container.id,
+      ...(step.configFile === undefined ? {} : {configFile: step.configFile}),
+      dockerPath: dockerFile,
+      logLevel: 'info',
+      environment,
+    };
+    const runsBridge = attachedRunsBridge(
+      dependencies.cliFor({...dependencies.editorEnvironment, ...environment}),
+      runsOn,
+    );
+    lifecycle = dependencies.lifecycleFor(
+      engine,
+      runsBridge,
+      dependencies.lifecyclePresenter,
+    );
+    lifecycle.adopt(container.id, attachedReadyTarget(runsOn), logCliEvent);
     const remoteUser = await attachedUserOf(
       engine,
       container.id,
@@ -2232,7 +2263,7 @@ export function containerConnectorOf(
         pinned: target,
         name: undefined,
         explored: false,
-        beforeStart: () => Promise.resolve(undefined),
+        beforeStart: () => blockingHooks(cancellation),
         openRelay: (server, onConnectionClosed) =>
           dependencies.openRelay({
             engine,
@@ -2254,7 +2285,11 @@ export function containerConnectorOf(
           created: false,
           serviceDockerfile: undefined,
         },
-        afterConnect: () => undefined,
+        afterConnect: () => {
+          lifecycle?.startBackground(RELAY_ENVIRONMENT, () =>
+            Promise.resolve(),
+          );
+        },
       },
       cancellation,
     );
@@ -2401,13 +2436,17 @@ export function containerConnectorOf(
           attachedTarget !== undefined &&
           !('malformed' in attachedTarget)
         ) {
-          return await connectAttached(
+          const result = await connectAttached(
             dependencies.attached,
             target.payload,
             attachedTarget,
             controller,
             input,
           );
+          if (!('connectionToken' in result)) {
+            await leaveShutdown();
+          }
+          return result;
         }
         if (dependencies.pods !== undefined) {
           const podTarget = k8sTargetOf(target.payload);

@@ -3,6 +3,7 @@ import {
   type CliTarget,
   readConfigurationArguments,
   runUserCommandsArguments,
+  attachedUserCommandsArguments,
   setUpArguments,
   upArguments,
   type UpOptions,
@@ -467,6 +468,57 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
         [],
         [],
         ['--dotfiles-repository', 'r'],
+      ],
+    );
+  });
+
+  it('F-0602 AC-11 (c163-attached-run): run-user-commands for an attached container names the id and the common flags, no folder, and the stages as asked', () => {
+    const attached = {
+      containerId: 'abc',
+      dockerPath: 'docker',
+      logLevel: 'info' as const,
+    };
+    const common = [
+      '--container-id',
+      'abc',
+      '--docker-path',
+      'docker',
+      '--log-level',
+      'info',
+      '--log-format',
+      'json',
+    ];
+    deepStrictEqual(
+      [
+        attachedUserCommandsArguments(attached),
+        attachedUserCommandsArguments(
+          {...attached, configFile: '/store/n.json'},
+          {
+            skipNonBlocking: true,
+            remoteEnvironment: {NAMED: 'b'},
+            dotfiles: {repository: 'https://example.test/dots'},
+          },
+        ),
+        attachedUserCommandsArguments(attached, {
+          stopForPersonalization: true,
+        }),
+      ],
+      [
+        ['run-user-commands', ...common],
+        [
+          'run-user-commands',
+          '--container-id',
+          'abc',
+          '--config',
+          '/store/n.json',
+          ...common.slice(2),
+          '--skip-non-blocking-commands',
+          '--remote-env',
+          'NAMED=b',
+          '--dotfiles-repository',
+          'https://example.test/dots',
+        ],
+        ['run-user-commands', ...common, '--stop-for-personalization'],
       ],
     );
   });

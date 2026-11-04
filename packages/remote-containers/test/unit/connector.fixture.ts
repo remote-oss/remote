@@ -563,6 +563,10 @@ export function sceneOf(
       scene.setUps.push(target.containerId);
       return Promise.resolve(scene.setUpResult);
     },
+    runAttachedUserCommands: () =>
+      Promise.reject(
+        new Error('the connector fixture runs through the lifecycle'),
+      ),
     applyTemplate: () =>
       Promise.reject(new Error('the connector never applies a template')),
     outdated: () =>
@@ -582,6 +586,9 @@ export function sceneOf(
       return typeof scene.outcome === 'function'
         ? scene.outcome()
         : scene.outcome;
+    },
+    adopt: containerId => {
+      scene.lifecycleRuns.push(`adopt ${containerId}`);
     },
     runBlocking: remoteEnvironment => {
       scene.lifecycleRuns.push(`blocking ${JSON.stringify(remoteEnvironment)}`);

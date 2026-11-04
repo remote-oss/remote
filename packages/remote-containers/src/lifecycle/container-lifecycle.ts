@@ -142,6 +142,15 @@ export interface ContainerLifecycle {
     cancellation: AbortSignal,
   ): Promise<ContainerOutcome>;
   /**
+   * Takes a running container that `prepare` did not make as the ready one, with the target its runs are told and where
+   * their events go.
+   */
+  adopt(
+    containerId: string,
+    target: CliTarget,
+    onCliEvent: (event: CliEvent) => void,
+  ): void;
+  /**
    * Runs the blocking lifecycle commands of the container `prepare` made ready, up to the one `waitFor` names, with
    * `remoteEnvironment` added; the failure carries the container for the failure's pick. With no ready container,
    * nothing runs.
@@ -937,6 +946,9 @@ export function containerLifecycleOf(dependencies: {
 
   return {
     prepare,
+    adopt: (containerId, target, onCliEvent) => {
+      ready = {target, containerId, onCliEvent};
+    },
     runBlocking,
     startBackground,
     stopBackground: () => {
