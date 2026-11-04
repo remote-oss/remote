@@ -4,14 +4,14 @@
 # costly jobs (real server, the whole VSCodium suite, host variants) stay opt-in on a manual dispatch, and always run on
 # the tag of a release (`<package>-v<semver>`). A pull request runs the VSCodium launches its change selects, up to six
 # (acceptance-pr). Every push to main runs the VSCodium launches the merged change can reach (the post-merge run), and
-# the schedule runs all of them: the backstops for main's launches. The
-# jobs run on the self-hosted runners, so they use no Actions minutes.
+# the schedule runs all of them: the backstops for main's launches. Every
+# job runs on GitHub's standard runners, which use no Actions minutes in a public repository.
 # A draft pull request runs nothing: its pushes would hold the runners while merge-ready heads wait. Marking it ready for
 # review starts its run (`ready_for_review`), and that run, at the head, is the one green-at-head looks for.
 name: ci
 
 on:
-  # a fork's pull request never runs: its code would run on the self-hosted runners (each job checks the head's repo);
+  # a fork's pull request never runs: no job runs a fork's code (each job checks the head's repo);
   # nor does a draft (each job checks `draft`) until it is marked ready
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -19,8 +19,8 @@ on:
     inputs:
       runner-arch:
         description: >-
-          The self-hosted runners' architecture for all five acceptance jobs of this dispatch. A pull request runs
-          slice 1 and server lifecycle on the pr-pool runners (either architecture) and the rest on X64
+          The architecture of slice 1, server lifecycle, host variants, real server and VSCodium in this dispatch:
+          X64 runs on ubuntu-24.04, ARM64 on ubuntu-24.04-arm. A pull request and the genuine job run on X64
         type: choice
         options: [X64, ARM64]
         default: X64
@@ -47,13 +47,13 @@ on:
         type: boolean
         default: false
   # every six hours the VSCodium job runs alone on main: the backstop that shows whether main's launches are green, which
-  # PR CI never runs. It ran whole on every merge until 2026-10-20, which kept one of the eight runners busy with it
+  # PR CI never runs. It ran whole on every merge until 2026-10-20, which kept one of eight runners busy with it
   # almost all the time; since 2026-11-02 a merge runs only the launches its change reaches (post-merge-select)
   # and once a day the genuine VS Code job runs alone on main. Each job reads which of the two fired
   schedule:
     - cron: '17 */6 * * *'
     - cron: '43 4 * * *'
-  # Each merge to main runs checks, unit and coverage, on GitHub's runners and not the self-hosted ones. Two pull
+  # Each merge to main runs checks, unit and coverage. Two pull
   # requests that pass alone can break each other once both are in: main shows it within minutes, not at the next pull
   # request's run.
   push:
@@ -81,7 +81,7 @@ jobs:
   # brings to the base it would merge into. Dispatches and tags skip this job and run everything.
   changes:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
-    # a git diff only, so a GitHub runner (allowed by the user, 2026-10-20) and no wait for a self-hosted one
+    # a git diff only
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
@@ -108,7 +108,7 @@ jobs:
   # succession collapse into a run of the latest main, which holds each of them.
   post-merge-select:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    # a git diff and the launch table only, so a GitHub runner, as the changes job
+    # a git diff and the launch table only
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
@@ -139,7 +139,7 @@ jobs:
 
   checks:
     if: (github.event_name != 'pull_request' && github.event_name != 'schedule') || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
-    # no Docker and no display: a GitHub runner (the user, 2026-10-20), so the self-hosted ones are left to acceptance
+    # no Docker and no display
     runs-on: ubuntu-24.04
     timeout-minutes: 20 # 5 to 7.6 min on a free runner; 10 was cut twice under load (2026-10-14)
     steps:
@@ -210,7 +210,7 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4] # coverage.ts --shard: each unit in one shard, the four at once (2026-10-20)
-    # the unit tests under coverage need no Docker and no display either: a GitHub runner, as checks
+    # the unit tests under coverage need no Docker and no display either
     runs-on: ubuntu-24.04
     timeout-minutes: 10 # the slowest shard took 6 minutes with each unit's tests in parallel (2026-10-31, #1383)
     steps:
@@ -227,12 +227,10 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }} # coverage runs the unit tests; see the unit job
 
-  # Slice 1 and server lifecycle, the two acceptance jobs of a pull request, run on the pr-pool runners: ci-1 to ci-8
-  # (X64) and the two Mac minis (ARM64), where they pass (2026-10-20); the user's own Mac runners lack the label. The
-  # other acceptance jobs stay on X64: the VSCodium run outlasts its hour on a mini, and real-server and host-variants
-  # haven't been shown on arm64. A dispatch's runner-arch (X64 | ARM64) still picks one architecture for all five.
+  # The acceptance jobs run on ubuntu-24.04, a fresh machine per job with 4 CPUs and 16 GB, or on ubuntu-24.04-arm when
+  # a dispatch's runner-arch is ARM64 (not measured there). Slice 1 and server lifecycle are the two of a pull request.
   # The editor under test against the SSH host container of tests/acceptance, one job per slice. The runner's Docker
-  # and OpenSSH client are preinstalled, and xvfb or a display of its own.
+  # and OpenSSH client are preinstalled, and xvfb.
   acceptance-slice-1:
     name: acceptance (slice 1)
     needs: changes
@@ -241,7 +239,7 @@ jobs:
       !(github.event_name == 'push' && github.ref_type == 'branch') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'pr-pool')) || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -251,17 +249,17 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # The runner is shared and keeps its Docker state: remove what an earlier attempt of this run left, by the
-      # run's own label. The same step, with `if: always()`, closes the job, so a killed run leaves nothing.
+      # A machine that keeps its Docker state between jobs gets what an earlier attempt of this run left removed, by
+      # the run's own label; a fresh runner has nothing to remove. The same step, with `if: always()`, closes the job.
       - run: pnpm acceptance:clean
-      # Ubuntu 24.04 restricts unprivileged user namespaces, which the editor's renderer sandbox needs; a kernel
-      # without that AppArmor switch (the org's Fedora runners) has nothing to lift.
+      # Ubuntu 24.04 restricts unprivileged user namespaces, which the editor's renderer sandbox and rootless Podman
+      # need; a kernel without that AppArmor switch (Fedora) has nothing to lift.
       - run: |
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
           fi
       # The run retries once inside the tool when the editor window is reported unresponsive; both attempts land in this
-      # log. A runner without xvfb-run has a display of its own (DISPLAY, :99 on the org's runners). xvfb-run's own screen
+      # log. A machine without xvfb-run has a display of its own (DISPLAY, else :99). xvfb-run's own screen
       # is 640x480, where a view or a panel draws only the rows that fit and a toast may not show; the acceptance jobs
       # give it the 1920x1080 screen of :99, the size the rows are written against.
       - run: |
@@ -283,7 +281,7 @@ jobs:
       !(github.event_name == 'push' && github.ref_type == 'branch') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'pr-pool')) || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -304,7 +302,7 @@ jobs:
   acceptance-host-variants:
     name: acceptance (host variants)
     if: inputs.variants || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -328,7 +326,7 @@ jobs:
   acceptance-real-server:
     name: acceptance (real server)
     if: inputs.real-server || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -374,30 +372,29 @@ jobs:
       needs.post-merge-select.result == 'success' && needs.post-merge-select.outputs.parts != '[]'))
     # Every launch of the suite (`all`) runs as six parts on six runners at once: the ssh launches in two, ssh-core and
     # windows (about 40 and 30 minutes) and the rest of the group (about an hour), since the group outgrew the job's 120
-    # minutes on 2026-11-02 (41428931974 was cancelled with three launches left); the two parts of the `containers`
+    # minutes on 2026-11-02 (41428931974 was cancelled with three launches left), without cli-path until CI holds the
+    # CLI archives' token; the two parts of the `containers`
     # launch, containers-a and containers-b, about an hour each (half the suite's files each); the other containers
     # launches; and the explorer and host-case launches together. Each runner has its own Docker daemon, so
     # the containers parts never wait for each other's lock. The genuine group
     # has its own job. A dispatch that names its launches runs them as one part; one whose launches input is empty runs
     # all.
-    # Two parts at a time: the runners share one machine's memory with other work, and six VSCodium parts at once, each
-    # with its editor and containers, ran it out (2026-11-03). A full run then takes three rounds of two parts.
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix:
-        launches: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.post-merge-select.outputs.parts || github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh,!ssh-core,!windows","ssh-core,windows","containers-a","containers-b","@containers,!containers","@explorer,@hosts"]') }}
+        launches: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.post-merge-select.outputs.parts || github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh,!ssh-core,!windows,!cli-path","ssh-core,windows","containers-a","containers-b","@containers,!containers","@explorer,@hosts"]') }}
     # GitHub keeps one pending job per group, and a newer one replaces it. The scheduled backstop has its own group per
     # part, where only the latest main matters; each release tag has a group of its own per part, so nothing displaces it;
     # dispatches keep theirs, fed one at a time per part, so the backstop never displaces them.
     concurrency:
       group: ${{ github.event_name == 'schedule' && 'acceptance-vscodium-main' || (github.event_name == 'push' && format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}-${{ matrix.launches }}
       cancel-in-progress: false
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     # the whole VSCodium suite outgrew 60 minutes on 2026-10-20 (the first scheduled backstop, 39387179525, was cancelled
     # at 60), so it runs in parts. The containers launch alone took 44 minutes then and 83 to 110 by 2026-11-01
-    # (41252320561, 41264381137, 41279176317); its two parts take about an hour each, so the limit is 120 again
-    timeout-minutes: 120
+    # (41252320561, 41264381137, 41279176317); its two parts take about an hour each. GitHub's runners are not the
+    # machines those times were taken on, so the limit is 180 until the parts are measured there
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -411,23 +408,16 @@ jobs:
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
           fi
-      # Podman 5 for the containers-podman launch, on a part that can choose it (the @containers group includes it): run
-      # as the job's user, rootless Podman needs newuidmap and newgidmap setuid, which the runners' image does not have,
-      # and subordinate ids for that user. A runner keeps what an earlier job installed.
-      - if: contains(matrix.launches, '@containers') || contains(matrix.launches, 'containers-podman')
+      # The containers parts build and pull many images; the runner's image keeps toolchains the run never uses
+      # (Android, .NET, Haskell, CodeQL), removed to leave the images the disk they need
+      - if: contains(matrix.launches, 'containers')
         run: |
-          command -v podman >/dev/null || sudo dnf install -y -q podman
-          sudo chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap
-          grep -q "^$(id -un):" /etc/subuid || sudo usermod --add-subuids 200000-265535 --add-subgids 200000-265535 "$(id -un)"
-          podman --version
-          # a runner restarted since podman last ran keeps a run folder podman refuses ("boot ID differs from cached
-          # boot ID"): the two folders that error names are removed, and only for that error
-          if ! out=$(podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}' 2>&1); then
-            printf '%s\n' "$out"
-            printf '%s' "$out" | grep -q 'boot ID differs from cached boot ID' || exit 1
-            rm -rf "/tmp/storage-run-$(id -u)/containers" "/tmp/storage-run-$(id -u)/libpod/tmp"
-          fi
-          podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}'
+          df -h / | tail -1
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h / | tail -1
+      # Podman 5 for the containers-podman launch, on a part that can choose it (the @containers group includes it)
+      - if: contains(matrix.launches, '@containers') || contains(matrix.launches, 'containers-podman')
+        run: tools/install-podman
       # the part's launches: a group selection, or the launches a dispatch names
       - run: |
           if command -v xvfb-run >/dev/null; then
@@ -437,6 +427,9 @@ jobs:
           fi
         env:
           LAUNCHES: ${{ matrix.launches }}
+      # the disk the part used, before the clean-up
+      - if: always()
+        run: df -h / | tail -1 && docker system df
       - if: always()
         run: pnpm acceptance:clean
 
@@ -472,7 +465,7 @@ jobs:
     concurrency:
       group: ${{ github.event_name == 'schedule' && 'acceptance-genuine-main' || (github.event_name == 'push' && format('acceptance-genuine-{0}', github.ref)) || 'acceptance-genuine' }}-${{ matrix.version }}
       cancel-in-progress: false
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","X64"]', vars.CI_RUNS_ON)) || 'ubuntu-latest' }}
+    runs-on: ubuntu-24.04
     # Measured on the runners (2026-11-01): a leg takes about 3 minutes. One server from the publisher is 205 MiB at
     # 1.139.1 and 154 MiB at 1.125.0, and downloaded in 3 to 7 s on the runner or in a container on it. A fresh
     # profile downloads it once, and the planned launches have four such profiles at most, under a minute in all, so
@@ -506,8 +499,7 @@ jobs:
   # The one check the main ruleset requires (athena, 2026-10-19): it needs every job and runs whatever they did. A job
   # that failed or was cancelled fails it; a skipped job passes (a docs-only change, a draft, a dispatch's opt-in jobs).
   # A fork's pull request runs no CI here (every job checks the head's repo), so the gate fails it rather than passing
-  # on skipped jobs. It runs on a GitHub runner (allowed by the user, 2026-10-20): it only reads the needed jobs'
-  # results, so it takes no self-hosted runner, and no step of a fork's run reaches one.
+  # on skipped jobs. It only reads the needed jobs' results.
   ci-gate:
     name: ci-gate
     needs:

@@ -262,7 +262,7 @@ describe('acceptance-select', () => {
           ),
         ),
         [
-          '@ssh,!ssh-core,!windows',
+          '@ssh,!ssh-core,!windows,!cli-path',
           'ssh-core,windows',
           'containers-a',
           'containers-b',
