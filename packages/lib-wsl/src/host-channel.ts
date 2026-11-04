@@ -22,7 +22,6 @@ import type {
   WslRunner,
 } from './runner.ts';
 import type {PathMapper} from './path-mapper.ts';
-import {isWindowsMountShape} from './share-path.ts';
 
 /** The channel kind of each failure of the runner. */
 const CHANNEL_KINDS: Readonly<Record<WslFailureKind, ChannelFailureKind>> = {
@@ -51,6 +50,9 @@ export interface WslHostChannelPorts {
   /** The registered spelling of the distro's name: the channel's identity. */
   distro: string;
 }
+
+/** A path on a drive of Windows, as `X:\\` or `X:/` begins it. */
+const DRIVE_PATH = /^[A-Za-z]:[\\/]/;
 
 /** The input of a script: the prelude command's bytes in front of the script's own input. */
 function scriptInput(request: ScriptRequest): {
@@ -122,14 +124,32 @@ export function createWslHostChannel(ports: WslHostChannelPorts): HostChannel {
     identity: () => distro,
     platformHint: (): PlatformHint => 'linux',
     clientPathOnHost: async localFile => {
-      const mapped = await mapper.toDistro(
-        localFile,
-        distro,
-        new AbortController().signal,
+      if (!DRIVE_PATH.test(localFile)) {
+        return undefined;
+      }
+      const cancellation = new AbortController().signal;
+      const mapped = await mapper.toDistro(localFile, distro, cancellation);
+      if (mapped.kind !== 'mapped' || mapped.mapped.distro !== distro) {
+        return undefined;
+      }
+      const readable = await runner.exec(
+        {
+          distro,
+          folder: '~',
+          program: 'sh',
+          programArguments: [
+            '-c',
+            'test -r "$1"',
+            'sh',
+            mapped.mapped.linuxPath,
+          ],
+          environment: {},
+          input: {kind: 'none'},
+          cancellation,
+        },
+        () => undefined,
       );
-      return mapped.kind === 'mapped' &&
-        mapped.mapped.distro === distro &&
-        isWindowsMountShape(mapped.mapped.linuxPath)
+      return readable.kind !== 'failed' && readable.status === 0
         ? mapped.mapped.linuxPath
         : undefined;
     },

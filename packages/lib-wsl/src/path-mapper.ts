@@ -48,7 +48,7 @@ export function createPathMapper(runner: WslRunner): PathMapper {
           distro,
           folder: '~',
           program: 'wslpath',
-          programArguments: ['-u', '--', windowsPath],
+          programArguments: ['-u', windowsPath],
           environment: {},
           input: {kind: 'none'},
           cancellation,

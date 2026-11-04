@@ -44,7 +44,6 @@ describe('D3: the path mapper’s process half', () => {
       '--exec',
       'wslpath',
       '-u',
-      '--',
       'C:\\Users\\me',
     ]);
   });
@@ -142,7 +141,7 @@ describe('D1: -u appears only on the root install’s path', () => {
           .slice(0, each.programArguments.indexOf('--exec'))
           .includes('-u'),
       ),
-      [false, false, false, false],
+      [false, false, false, false, false],
     );
   });
 });
@@ -272,13 +271,84 @@ describe('D4: the channel’s own rules', () => {
     );
   });
 
-  it('cw01 channel: a client path under a custom automount root is not read in place', async () => {
-    const {channel} = channelOver({
+  it('cw01 channel: a client path under a custom automount root is read in place when the distro can read it', async () => {
+    const {fake, channel} = channelOver({
       kind: 'exits',
       stdout: utf8Output('/windir/c/x\n'),
       status: 0,
     });
-    deepStrictEqual(await channel.clientPathOnHost?.('C:\\x'), undefined);
+    deepStrictEqual(
+      [
+        await channel.clientPathOnHost?.('C:\\x'),
+        fake.started.at(-1)?.programArguments.slice(-4),
+      ],
+      ['/windir/c/x', ['-c', 'test -r "$1"', 'sh', '/windir/c/x']],
+    );
+  });
+
+  it('cw01 channel: a mapped client path the distro cannot read (automount off) is not read in place', async () => {
+    const behaviours: FakeRun[] = [
+      {kind: 'exits', stdout: utf8Output('/mnt/c/x\n'), status: 0},
+      {kind: 'exits', status: 1},
+    ];
+    let index = 0;
+    const fake = fakeWsl(
+      () => behaviours[index++] ?? behaviours[1] ?? {kind: 'exits', status: 1},
+    );
+    const runner = createWslRunner(fake);
+    const channel = createWslHostChannel({
+      runner,
+      mapper: createPathMapper(runner),
+      distro: 'Ubuntu',
+    });
+    deepStrictEqual(
+      [await channel.clientPathOnHost?.('C:\\x'), fake.started.length],
+      [undefined, 2],
+    );
+  });
+
+  it('cw01 channel: the readable test passes a path with spaces and quotes as one argument', async () => {
+    const {fake, channel} = channelOver({
+      kind: 'exits',
+      stdout: utf8Output('/mnt/c/My "dir"/it\'s x\n'),
+      status: 0,
+    });
+    await channel.clientPathOnHost?.('C:\\My "dir"\\it\'s x');
+    deepStrictEqual(fake.started.at(-1)?.programArguments.slice(-4), [
+      '-c',
+      'test -r "$1"',
+      'sh',
+      '/mnt/c/My "dir"/it\'s x',
+    ]);
+  });
+
+  it('cw01 channel: a client path on a share of the channel’s own distro is not a drive path and starts no process', async () => {
+    const {fake, channel} = channelOver({kind: 'exits', status: 0});
+    deepStrictEqual(
+      [
+        await channel.clientPathOnHost?.(
+          '\\\\wsl.localhost\\Ubuntu\\home\\me\\x',
+        ),
+        fake.started.length,
+      ],
+      [undefined, 0],
+    );
+  });
+
+  it('cw01 channel: a copy to a path with spaces and quotes passes the path as one argument', async () => {
+    const {fake, channel} = channelOver({kind: 'writesInput'});
+    fake.local.set('C:\\x', new Uint8Array(1));
+    await channel.copyToHost({
+      localFile: 'C:\\x',
+      remotePath: '/home/my "dir"/it\'s $x',
+      cancellation: NEVER,
+    });
+    deepStrictEqual(fake.started[0]?.programArguments.slice(-4), [
+      '-c',
+      'cat > "$1"',
+      'sh',
+      '/home/my "dir"/it\'s $x',
+    ]);
   });
 
   it('cw01 channel: a missing wsl.exe fails a script as spawnFailed', async () => {
