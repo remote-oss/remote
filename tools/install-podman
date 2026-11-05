@@ -12,8 +12,8 @@
 # A version change here is the only way the pin moves.
 set -euo pipefail
 
-PODMAN_VERSION=5.8.8
-PODMAN_SHA256_AMD64=e0e12f9de61bdb054d19a77df0e84ddd51cadfee13688e0fb607d61b6833e8cd
+PODMAN_VERSION=6.1.4
+PODMAN_SHA256_AMD64=9dd51073fac5a1742f88cf3caff5554615cb4d67ba554d25e8807be635547af5
 PODMAN_SHA256_ARM64=816bc5b97dc62396838d825aaccd9d3eb841167a2d31968efc1e6a3e6a0a463b
 CONMON_VERSION=2.2.1
 CONMON_SHA256_AMD64=1d97294c14c43d477e0a0826e9cd0f2a2af373ddfafe6f10252e8a3c43f32be6
@@ -50,15 +50,6 @@ if [ -z "$major" ] || [ "$major" -lt 5 ]; then
   sudo mkdir -p /etc/containers/containers.conf.d
   printf '[engine.runtimes]\ncrun = ["/usr/local/bin/crun"]\n' |
     sudo tee /etc/containers/containers.conf.d/10-crun.conf >/dev/null
-  # the conmon that comes with that build (2.1.10) never passes the end of its input to a process started by
-  # `podman exec -i`, so the command waits for ever: conmon 2.2.1, its own static build, is named instead
-  conmon="$work/conmon"
-  curl -fsSL -o "$conmon" \
-    "https://github.com/containers/conmon/releases/download/v$CONMON_VERSION/conmon.$arch"
-  echo "$conmon_sha256  $conmon" | sha256sum -c - >/dev/null
-  sudo install -D -m 0755 "$conmon" /usr/local/libexec/podman/conmon-$CONMON_VERSION
-  printf '[engine]\nconmon_path = ["/usr/local/libexec/podman/conmon-%s"]\n' "$CONMON_VERSION" |
-    sudo tee /etc/containers/containers.conf.d/11-conmon.conf >/dev/null
   major=$(podman_major)
   [ "${major:-0}" -ge 5 ] || {
     echo "install-podman: the podman on the PATH is still $(podman --version 2>&1)" >&2
@@ -86,14 +77,9 @@ podman info --format '{{.Host.OCIRuntime.Path}}'
 # debug (hosted only): where does an exec of this podman wait
 set +e
 podman run -d --name dbg docker.io/library/alpine:3.20 sleep 600
-nproc; uname -r
-for command in "sleep 1" "sleep 3" "sh -c sleep\ 0.3" "true"; do echo "--- exec $command"; timeout 15 podman exec dbg $command; echo "exec [$command] rc=$?"; done
-echo "--- exec true, pinned to one cpu"; timeout 15 taskset -c 0 podman exec dbg true; echo "pinned rc=$?"
-echo "--- GOMAXPROCS=1"; GOMAXPROCS=1 timeout 15 podman exec dbg true; echo "gomaxprocs1 rc=$?"
-echo "--- GOMAXPROCS=2"; GOMAXPROCS=2 timeout 15 podman exec dbg true; echo "gomaxprocs2 rc=$?"
-echo "--- exec true, three in a row"; for each in 1 2 3; do timeout 15 podman exec dbg true; echo "again $each rc=$?"; done
-sudo apt-get install -y -qq strace >/dev/null 2>&1
-echo "--- exec true under strace without tracing anything"; timeout 25 strace -f -e trace=none -o /dev/null timeout 12 podman exec dbg true; echo "strace-none rc=$?"
+podman --version; podman info --format '{{.Host.Conmon.Path}} {{.Host.Conmon.Version}}'
+for each in 1 2 3; do timeout 15 podman exec dbg true; echo "true $each rc=$?"; done
+printf hi | timeout 15 podman exec -i dbg cat; echo "cat rc=$?"
 echo "--- cleanup"; podman rm -f dbg
 set -e
 exit 1 # debug (hosted only): end the job here, so that the probe's lines can be read
