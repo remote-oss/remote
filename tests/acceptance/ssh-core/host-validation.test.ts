@@ -38,7 +38,6 @@ import {
   dismissals,
   INSTALL_MILLISECONDS,
   pickHost,
-  runWith,
   typeHost,
 } from '../windows/maintenance.ts';
 
@@ -143,7 +142,7 @@ describe('host and user name validation (card coverage-120)', function () {
     }
   });
 
-  it('F-2205 AC-5 (c120-chars-host): the first forbidden character of the host is the one named', async () => {
+  it('F-2205 AC-5 (c120-chars-host): the host check names the character the criterion reports', async () => {
     const seen: string[] = [];
     for (const host of ["a%b'c", 'a!b`c', 'a`%b']) {
       const name = await reject(host);
@@ -154,9 +153,9 @@ describe('host and user name validation (card coverage-120)', function () {
       }
     }
     deepStrictEqual(seen, [
-      'Could not establish connection to "a%b\'c": SSH host name cannot include the character %.',
-      'Could not establish connection to "a!b`c": SSH host name cannot include the character !.',
-      'Could not establish connection to "a`%b": SSH host name cannot include the character %.',
+      'Could not establish connection to "a%b\'c": SSH host name cannot include the character \'.',
+      'Could not establish connection to "a!b`c": SSH host name cannot include the character `.',
+      'Could not establish connection to "a`%b": SSH host name cannot include the character `.',
     ]);
   });
 
@@ -488,24 +487,24 @@ describe('host and user name validation (card coverage-120)', function () {
 
   it('F-2205 AC-14 (c120-alias): configured aliases with a forbidden name are listed, and each refuses as in AC-2 and AC-4', async () => {
     await withConfig(
-      '\nHost -badhost\nHost pct-x\n  HostName a%b\n',
+      '\nHost -badhost\nHost c120pct%x\n',
       async () => {
         const names: [string, string] = [
           await rejectViaPick('-badhost'),
-          await rejectViaPick('pct-x'),
+          await rejectViaPick('c120pct%x'),
         ];
         try {
           deepStrictEqual(
             [
               hostAliases().includes('-badhost') &&
-                hostAliases().includes('pct-x'),
+                hostAliases().includes('c120pct%x'),
               failureDialog(names[0]).detail,
               failureDialog(names[1]).detail,
             ],
             [
               true,
               'Could not establish connection to "-badhost": SSH host name cannot begin with -.',
-              'Could not establish connection to "a%b": SSH host name cannot include the character %.',
+              'Could not establish connection to "c120pct%x": SSH host name cannot include the character %.',
             ],
           );
         } finally {
@@ -593,26 +592,26 @@ describe('host and user name validation (card coverage-120)', function () {
     }
   });
 
-  it('F-2205 AC-28 (c120-alias-reasonless): an alias whose configured host is forbidden gives the reasonless dialog, not the check', async () => {
-    await withConfig('\nHost sem-host\n  HostName a;b\n', async () => {
-      appendScript([pickHost('sem-host')]);
-      const name = await nextEmptyWindow(() =>
-        inWindow('local', 'opensshremotes.openEmptyWindow'),
-      );
-      try {
-        await waitFor(
-          `the failure dialog of ${name}`,
-          () => recordLines('failureDialog', name).length > 0,
-          120_000,
-        );
-        deepStrictEqual(
-          failureDialog(name).detail,
-          'Could not establish connection to "sem-host": Could not resolve hostname.',
-        );
-      } finally {
-        await closeWindow(name).catch(() => undefined);
-      }
-    });
+  it('F-2205 AC-28 (c120-alias-reasonless): an alias whose configured value is invalid is not validated; the reason is not an F-2205 check', async () => {
+    await withConfig(
+      '\nHost c120pval\n  HostName a%b\nHost c120uval\n  User u%x\nHost c120sval\n  HostName a;b\n',
+      async () => {
+        const seen: string[] = [];
+        for (const label of ['c120pval', 'c120uval', 'c120sval']) {
+          const name = await rejectViaPick(label);
+          try {
+            seen.push(failureDialog(name).detail ?? '');
+          } finally {
+            await closeWindow(name).catch(() => undefined);
+          }
+        }
+        deepStrictEqual(seen, [
+          'Could not establish connection to "c120pval".',
+          'Could not establish connection to "c120uval".',
+          'Could not establish connection to "c120sval": Could not resolve hostname.',
+        ]);
+      },
+    );
   });
 
   it('F-2205 AC-34 (c120-alias-dash): an alias written with a leading dash refuses in Connect to Host with the host check', async () => {
@@ -637,39 +636,46 @@ describe('host and user name validation (card coverage-120)', function () {
     });
   });
 
-  it('F-2205 AC-17, AC-33 (c120-add): Add New SSH Host writes the command as given, with no validation message', async () => {
+  it('F-2205 AC-17, AC-33 (c120-add): Add New SSH Host writes the command as given, with no F-2205 message', async () => {
     const file = variable('HARNESS_SSH_CONFIG');
     const saved = configFile();
+    const cases = [
+      {command: 'ssh -- -bad', host: '-bad'},
+      {command: 'ssh -l -bad h.invalid', host: 'h.invalid', user: '-bad'},
+      {command: 'a%b', host: 'a%b'},
+      {command: 'u%x@h.invalid', host: 'h.invalid', user: 'u%x'},
+    ];
+    const results: boolean[] = [];
     try {
-      const mark = await runWith('local', 'opensshremotes.addNewSshHost', [
-        {
-          surface: 'textInput',
-          match: 'Enter SSH Connection Command',
-          answer: {text: 'ssh -- -bad'},
-        },
-        {
-          surface: 'filePick',
-          match: 'SSH configuration file',
-          answer: {label: file},
-        },
-        {surface: 'notice', match: 'Host added!', answer: 'dismiss'},
-      ]);
-      const lines = recordLines().slice(mark);
-      deepStrictEqual(
-        [
-          lines.some(
-            line =>
-              line.surface === 'notice' && line.question === 'Host added!',
-          ),
-          configFile().includes('-bad'),
-          lines.some(
+      for (const each of cases) {
+        const mark = recordLines(undefined, 'local').length;
+        appendScript([
+          {surface: 'textInput', match: 'Enter SSH Connection Command', answer: {text: each.command}, window: 'local'},
+          {surface: 'filePick', match: 'SSH configuration file', answer: {label: file}, window: 'local'},
+          {surface: 'notice', match: 'Host added!', answer: 'dismiss', window: 'local'},
+        ]);
+        await inWindow('local', 'opensshremotes.addNewSshHost');
+        const added = recordLines(undefined, 'local').slice(mark);
+        results.push(
+          added.some(
+            line => line.surface === 'notice' && line.question === 'Host added!',
+          ) &&
+          !added.some(
             line =>
               line.question.includes('cannot begin with') ||
               line.question.includes('cannot include the character'),
           ),
-        ],
-        [true, true, false],
+        );
+      }
+      const text = configFile();
+      results.push(
+        cases.every(
+          each =>
+            text.includes(each.host) &&
+            (each.user === undefined || text.includes(each.user)),
+        ),
       );
+      deepStrictEqual(results, [true, true, true, true, true]);
     } finally {
       writeFileSync(file, saved);
     }
@@ -806,6 +812,24 @@ describe('host and user name validation (card coverage-120)', function () {
       ],
       [true, true],
     );
+  });
+
+  it('F-2205 AC-37 (c120-control): a host carrying a control character fails the check naming the code point, so no ssh is started', async () => {
+    const before = (await connectionHelpers()).length;
+    const name = 'c120-control';
+    await openWindow('c120ctl%0A', name);
+    try {
+      const detail = failureDialog(name).detail ?? '';
+      deepStrictEqual(
+        [
+          detail.includes('SSH host name cannot include the character U+000A'),
+          (await connectionHelpers()).length - before,
+        ],
+        [true, 0],
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+    }
   });
 
   it('F-2205 AC-24 (c120-valid): a valid alias proceeds normally, so no validation dialog appears', async () => {
