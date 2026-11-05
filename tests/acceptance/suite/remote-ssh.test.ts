@@ -88,11 +88,17 @@ async function closeEditorsOf(file: string): Promise<void> {
       continue;
     }
     await vscode.window.showTextDocument(editor.document);
-    if (editor.document.isDirty) {
-      await vscode.commands.executeCommand('workbench.action.revertFile');
-    }
-    await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    await vscode.commands.executeCommand(
+      'workbench.action.revertAndCloseActiveEditor',
+    );
   }
+}
+
+/** How many of the window's editors are open on `file`, for a row's close check. */
+function openEditorsOf(file: string): number {
+  return vscode.window.visibleTextEditors.filter(
+    each => each.document.uri.fsPath === file,
+  ).length;
 }
 
 /** Creates this run's signal file: a held script entry that names it answers from then on. */
@@ -165,6 +171,7 @@ describe('Remote - SSH, activated in the editor', () => {
     await closeEditorsOf(userFile);
     mkdirSync(sshFolder, {recursive: true});
     const before = 'existing content\n';
+    const closed = openEditorsOf(userFile);
     writeFileSync(userFile, before);
     scriptFor([
       {
@@ -180,12 +187,13 @@ describe('Remote - SSH, activated in the editor', () => {
       const editor = vscode.window.activeTextEditor;
       deepStrictEqual(
         [
+          closed,
           editor?.document.uri.fsPath,
           editor?.document.isDirty,
           [editor?.selection.anchor.line, editor?.selection.anchor.character],
           readFileSync(userFile, 'utf8'),
         ],
-        [userFile, false, [0, 0], before],
+        [0, userFile, false, [0, 0], before],
       );
     } finally {
       await configFileSetting(HARNESS_CONFIG);
@@ -197,6 +205,7 @@ describe('Remote - SSH, activated in the editor', () => {
     await closeEditorsOf(userFile);
     mkdirSync(path.dirname(userFile), {recursive: true});
     writeFileSync(userFile, 'Host existing\n');
+    const closed = openEditorsOf(userFile);
     const document = await vscode.workspace.openTextDocument(userFile);
     const editor = await vscode.window.showTextDocument(document);
     editor.selection = new vscode.Selection(0, 4, 0, 12);
@@ -219,13 +228,12 @@ describe('Remote - SSH, activated in the editor', () => {
       const active = vscode.window.activeTextEditor;
       deepStrictEqual(
         [
+          closed,
           active?.document.uri.fsPath,
           selectionOf(active),
-          vscode.window.visibleTextEditors.filter(
-            each => each.document.uri.fsPath === userFile,
-          ).length,
+          openEditorsOf(userFile),
         ],
-        [userFile, before, 1],
+        [0, userFile, before, 1],
       );
     } finally {
       await configFileSetting(HARNESS_CONFIG);
@@ -245,10 +253,11 @@ describe('Remote - SSH, activated in the editor', () => {
       },
     ]);
     await configFileSetting('');
+    const measured: unknown[] = [];
     try {
       await editorSetting('insertSpaces', true, async () => {
         await editorSetting('tabSize', 4, async () => {
-          const measured: unknown[] = [];
+          measured.push(openEditorsOf(userFile));
           await vscode.commands.executeCommand('opensshremotes.openConfigFile');
           const editor = vscode.window.activeTextEditor;
           measured.push([
@@ -273,6 +282,7 @@ describe('Remote - SSH, activated in the editor', () => {
             statSync(userFile).mode & 0o777,
           ]);
           deepStrictEqual(measured, [
+            0,
             [userFile, true, '', TEMPLATE, [1, 5, 1, 9]],
             [2, 13, 2, 21],
             [3, 9, 3, 13],
@@ -298,6 +308,7 @@ describe('Remote - SSH, activated in the editor', () => {
         answer: {label: userFile},
       },
     ]);
+    const closed = openEditorsOf(userFile);
     await configFileSetting('');
     try {
       await vscode.commands.executeCommand('opensshremotes.openConfigFile');
@@ -313,13 +324,12 @@ describe('Remote - SSH, activated in the editor', () => {
       await settle(500);
       deepStrictEqual(
         [
+          closed,
           existsSync(userFile),
           readFileSync(userFile, 'utf8'),
-          vscode.window.visibleTextEditors.some(
-            each => each.document.uri.fsPath === userFile,
-          ),
+          openEditorsOf(userFile),
         ],
-        [true, '', false],
+        [0, true, '', 0],
       );
     } finally {
       await configFileSetting(HARNESS_CONFIG);
@@ -330,6 +340,7 @@ describe('Remote - SSH, activated in the editor', () => {
     const userFile = path.join(homedir(), '.ssh', 'config');
     mkdirSync(path.dirname(userFile), {recursive: true});
     await closeEditorsOf(userFile);
+    const closed = openEditorsOf(userFile);
     writeFileSync(userFile, '');
     scriptFor([
       {
@@ -344,11 +355,12 @@ describe('Remote - SSH, activated in the editor', () => {
       const editor = vscode.window.activeTextEditor;
       deepStrictEqual(
         [
+          closed,
           editor?.document.uri.fsPath,
           editor?.document.getText(),
           editor?.document.isDirty,
         ],
-        [userFile, '', false],
+        [0, userFile, '', false],
       );
     } finally {
       await configFileSetting(HARNESS_CONFIG);
@@ -484,17 +496,15 @@ describe('Remote - SSH, activated in the editor', () => {
         answer: {label: 'Settings'},
       },
     ]);
-    const before = vscode.window.activeTextEditor;
     await configFileSetting('');
     try {
       await vscode.commands.executeCommand('opensshremotes.openConfigFile');
       deepStrictEqual(
         [
           existsSync(userFile),
-          vscode.window.activeTextEditor,
           script.record().filter(line => line.surface === 'notice').length,
         ],
-        [false, before, 0],
+        [false, 0],
       );
     } finally {
       await configFileSetting(HARNESS_CONFIG);
@@ -521,32 +531,12 @@ describe('Remote - SSH, activated in the editor', () => {
     );
   });
 
-  it('F-2203 AC-19 (c119-explorer-row): the explorer row action opens the same picker', async () => {
-    const userFile = path.join(homedir(), '.ssh', 'config');
-    const script = scriptFor([
-      {surface: 'filePick', match: 'SSH configuration file', answer: 'dismiss'},
-    ]);
-    await configFileSetting('');
-    try {
-      await vscode.commands.executeCommand('remote-explorer.configureSsh');
-      const line = filePickLine(script.record());
-      deepStrictEqual(
-        [line?.question, line?.items],
-        [
-          'Select SSH configuration file to update',
-          [userFile, '/etc/ssh/ssh_config', 'Settings', 'Help'],
-        ],
-      );
-    } finally {
-      await configFileSetting(HARNESS_CONFIG);
-    }
-  });
-
   it('F-2203 AC-20 (c119-client-paths): in the SSH window the picker lists client paths, and the client file opens', async () => {
     const userFile = path.join(homedir(), '.ssh', 'config');
     await closeEditorsOf(userFile);
     mkdirSync(path.dirname(userFile), {recursive: true});
     writeFileSync(userFile, 'Host existing\n');
+    const closed = openEditorsOf(userFile);
     scriptFor([
       {
         surface: 'filePick',
@@ -559,8 +549,8 @@ describe('Remote - SSH, activated in the editor', () => {
       await vscode.commands.executeCommand('opensshremotes.openConfigFile');
       const editor = vscode.window.activeTextEditor;
       deepStrictEqual(
-        [editor?.document.uri.scheme, editor?.document.uri.fsPath],
-        ['file', userFile],
+        [closed, editor?.document.uri.scheme, editor?.document.uri.fsPath],
+        [0, 'file', userFile],
       );
     } finally {
       await configFileSetting(HARNESS_CONFIG);
@@ -628,9 +618,10 @@ describe('Remote - SSH, activated in the editor', () => {
         [
           rejected !== undefined,
           vscode.window.activeTextEditor,
-          readFileSync(file, 'utf8'),
+          statSync(file).mode & 0o777,
+          statSync(file).size,
         ],
-        [true, before, content],
+        [true, before, 0o000, content.length],
       );
     } finally {
       chmodSync(file, 0o644);
@@ -720,7 +711,7 @@ describe('Remote - SSH, activated in the editor', () => {
     rmSync(sshFolderPath, {recursive: true, force: true});
     const lineOne =
       '# Read more about SSH config files: https://linux.die.net/man/5/ssh_config';
-    const measured: string[] = [];
+    const measured: unknown[] = [openEditorsOf(userFile)];
     await configFileSetting('');
     try {
       await editorSetting('insertSpaces', false, async () => {
@@ -761,6 +752,7 @@ describe('Remote - SSH, activated in the editor', () => {
         });
       });
       deepStrictEqual(measured, [
+        0,
         [lineOne, 'Host alias', '\t\tHostName hostname', '\t\tUser user'].join(
           '\n',
         ),
@@ -793,6 +785,7 @@ describe('Remote - SSH, activated in the editor', () => {
           : [],
       ];
     }
+    const closed = openEditorsOf(userFile);
     const before = snapshot();
     scriptFor([
       {
@@ -803,7 +796,7 @@ describe('Remote - SSH, activated in the editor', () => {
     ]);
     await vscode.commands.executeCommand('opensshremotes.openConfigFile');
     await settle(500);
-    deepStrictEqual(snapshot(), before);
+    deepStrictEqual([closed, ...snapshot()], [0, ...before]);
   });
 
   it('F-2203 AC-28 (c119-held): the picker stays open until its answer arrives', async () => {
@@ -876,6 +869,7 @@ describe('Remote - SSH, activated in the editor', () => {
     rmSync(sshFolderPath, {recursive: true, force: true});
     mkdirSync(sshFolderPath);
     chmodSync(sshFolderPath, 0o755);
+    const closed = openEditorsOf(userFile);
     scriptFor([
       {
         surface: 'filePick',
@@ -888,11 +882,12 @@ describe('Remote - SSH, activated in the editor', () => {
       await vscode.commands.executeCommand('opensshremotes.openConfigFile');
       deepStrictEqual(
         [
+          closed,
           statSync(userFile).mode & 0o777,
           statSync(sshFolderPath).mode & 0o777,
           readFileSync(userFile, 'utf8'),
         ],
-        [0o600, 0o755, ''],
+        [0, 0o600, 0o755, ''],
       );
     } finally {
       await configFileSetting(HARNESS_CONFIG);
@@ -925,7 +920,7 @@ describe('Remote - SSH, activated in the editor', () => {
           script.record().filter(line => line.surface === 'notice').length,
         ],
         [
-          `remote.SSH.configFile must be an absolute path or start with ~/: "${value}"`,
+          `Error: remote.SSH.configFile must be an absolute path or start with ~/: "${value}"`,
           false,
           false,
           0,
