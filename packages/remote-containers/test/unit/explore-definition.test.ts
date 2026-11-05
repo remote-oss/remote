@@ -9,7 +9,7 @@ import {
 } from '../../src/volumes/explore-definition.ts';
 
 describe('the definition Explore a Volume opens a volume in (card containers-155)', () => {
-  it('F-0705 BR-4, BR-8: the definition is the pinned base-alpine image as root with the volume at /volume read from the variable of the run, naming no volume and no Docker socket', () => {
+  it('F-0705 BR-4, BR-8: the definition is the pinned base-alpine image as root with the volume at /volume read from the variable of the run, naming no volume and no Docker socket, and it turns extension recommendations off', () => {
     deepStrictEqual(
       [
         JSON.parse(exploreDefinitionText()) as Record<string, unknown>,
@@ -22,6 +22,9 @@ describe('the definition Explore a Volume opens a volume in (card containers-155
           remoteUser: 'root',
           workspaceMount: `source=\${localEnv:${EXPLORE_VOLUME_VARIABLE}},target=/volume,type=volume`,
           workspaceFolder: '/volume',
+          customizations: {
+            vscode: {settings: {'extensions.ignoreRecommendations': true}},
+          },
         },
         false,
       ],
