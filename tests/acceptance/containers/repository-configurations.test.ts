@@ -204,6 +204,14 @@ describe('configurations outside the repository (card containers-161, F-0302)', 
     try {
       await startInWindow(window, REOPEN);
       await connectedToContainer(window, 600_000);
+      // The window reports itself connected while its connection is still being resolved; its title names the
+      // container once the connection is up, so the row reads the rest after that.
+      await waitFor(
+        `the title of ${window} to name the container`,
+        async () =>
+          (await windowTitle(window)).includes(`[Dev Container: X-${name}]`),
+        300_000,
+      );
       const facts = {
         title: (await windowTitle(window)).includes(
           `[Dev Container: X-${name}]`,
