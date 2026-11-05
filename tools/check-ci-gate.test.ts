@@ -3,6 +3,7 @@ import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   ciGateProblems,
+  dispatchFallbackOf,
   dispatchGroupProblems,
   poolJobProblems,
   postMergeProblems,
@@ -194,10 +195,25 @@ describe('check-ci-gate', () => {
     );
   });
 
-  it("tooling-159: the launch jobs' groups name the run for a dispatch; a group of the part alone is named", () => {
+  it("tooling-159: a dispatch's fallback is the group expression's last top-level || operand, the text when there is no expression", () => {
+    deepStrictEqual(
+      [
+        dispatchFallbackOf(
+          "${{ github.event_name == 'schedule' && 'a' || (github.event_name == 'push' && format('b-{0}', github.ref)) || format('c-{0}', github.run_id) }}-${{ matrix.part.name }}",
+        ),
+        dispatchFallbackOf("${{ 'x || y' }}"),
+        dispatchFallbackOf('fixed-group'),
+      ],
+      ["format('c-{0}', github.run_id)", "'x || y'", 'fixed-group'],
+    );
+  });
+
+  it("tooling-159: the launch jobs' groups name the run in the dispatch fallback; a group of the part alone, or with the run only in the push branch, is named", () => {
     function jobsWith(group: string): string {
-      return `jobs:\n  acceptance-vscodium:\n    concurrency:\n      group: "${group}"\n  acceptance-vscodium-containers:\n    concurrency:\n      group: "x-\${{ github.run_id }}"\n  acceptance-genuine:\n    concurrency:\n      group: "y-\${{ github.run_id }}"\n`;
+      return `jobs:\n  acceptance-vscodium:\n    concurrency:\n      group: "${group}"\n  acceptance-vscodium-containers:\n    concurrency:\n      group: "\${{ format('x-{0}', github.run_id) }}"\n  acceptance-genuine:\n    concurrency:\n      group: "\${{ format('y-{0}', github.run_id) }}"\n`;
     }
+    const problem =
+      ".github/workflows/ci.yml: acceptance-vscodium's concurrency group doesn't name the run for a dispatch, so one dispatch can replace another's pending job";
     deepStrictEqual(
       [
         dispatchGroupProblems(
@@ -209,19 +225,18 @@ describe('check-ci-gate', () => {
           jobsWith('acceptance-vscodium-${{ matrix.part.name }}'),
         ),
         dispatchGroupProblems(
+          jobsWith(
+            "${{ github.event_name == 'push' && format('v-{0}', github.run_id) || 'acceptance-vscodium' }}-a",
+          ),
+        ),
+        dispatchGroupProblems(
           readFileSync(
             path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
             'utf8',
           ),
         ),
       ],
-      [
-        [],
-        [
-          ".github/workflows/ci.yml: acceptance-vscodium's concurrency group doesn't name the run, so one dispatch can replace another's pending job",
-        ],
-        [],
-      ],
+      [[], [problem], [problem], []],
     );
   });
 });
