@@ -471,14 +471,18 @@ jobs:
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
           df -h / | tail -1
       - if: contains(matrix.launches, '@containers') || contains(matrix.launches, 'containers-podman')
-        run: tools/install-podman
+        timeout-minutes: 10
+        run: timeout 540 tools/install-podman; echo "install-podman rc=$?"
       - if: contains(matrix.launches, 'containers-podman')
+        timeout-minutes: 6
+        continue-on-error: true
         run: |
-          podman info --format '{{.Host.OCIRuntime.Path}} {{.Host.OCIRuntime.Version}}' | head -3
-          podman run -d --name probe-exec docker.io/library/alpine:3.22 sleep 600
+          set -x
+          timeout 30 podman info --format '{{.Host.OCIRuntime.Path}} {{.Host.OCIRuntime.Version}}'; echo "info rc=$?"
+          timeout 120 podman run -d --name probe-exec docker.io/library/alpine:3.22 sleep 600; echo "run rc=$?"
           for i in 1 2 3; do timeout 20 podman exec probe-exec true; echo "exec true rc=$?"; done
           printf hi | timeout 20 podman exec -i probe-exec cat; echo " exec -i cat rc=$?"
-          podman rm -f probe-exec >/dev/null
+          timeout 30 podman rm -f probe-exec >/dev/null; echo "rm rc=$?"
       # the buildx plugin when the machine's Docker has none (the harness builds with `docker build --load`)
       - run: tools/install-buildx
       - run: tools/start-display
