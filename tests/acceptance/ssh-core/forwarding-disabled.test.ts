@@ -457,15 +457,23 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
         120_000,
       );
       const [dialog] = recordLines('failureDialog', name);
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      return {
-        dialog: [dialog?.question, dialog?.buttons],
-        waited: Date.now() - started,
-        hints: hintRecords()
+      function errorHints(): Array<[unknown, unknown]> {
+        return hintRecords()
           .filter(record => record.started >= since)
           .flatMap(record => record.hints)
           .filter(hint => hint.kind === 'error')
-          .map(hint => [hint.status, hint.details]),
+          .map(hint => [hint.status, hint.details] as [unknown, unknown]);
+      }
+      // The connect stores its error hint when the attempt ends, a moment after the dialog; a slower runner takes longer.
+      await waitFor(
+        'the error hint of the attempt',
+        () => errorHints().length > 0,
+        30_000,
+      ).catch(() => undefined);
+      return {
+        dialog: [dialog?.question, dialog?.buttons],
+        waited: Date.now() - started,
+        hints: errorHints(),
       };
     });
   }

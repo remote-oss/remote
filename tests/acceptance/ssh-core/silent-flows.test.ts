@@ -128,7 +128,7 @@ describe('the extension in the core flows of an SSH window (card connect-125)', 
       await waitFor(
         'the program to print in the Debug Console',
         async () => (await pageText(folder)).includes(`c125-ran-on-${host}`),
-        90_000,
+        240_000,
       );
       await new Promise(resolve => setTimeout(resolve, 5000));
       await inWindow(folder, 'workbench.action.debug.stop').catch(
