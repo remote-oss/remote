@@ -197,4 +197,19 @@ describe('the volumes Clean Up offers (card containers-168)', () => {
       ],
     );
   });
+
+  it('coverage-117: a unique volume that names no repository shows its own name', () => {
+    deepStrictEqual(
+      volumeRowsOf(
+        [
+          volume('orphan', {
+            'dev.container.volume': 'true',
+            'vsch.local.repository.unique': 'true',
+          }),
+        ],
+        [],
+      ),
+      [{label: 'orphan', target: 'orphan'}],
+    );
+  });
 });

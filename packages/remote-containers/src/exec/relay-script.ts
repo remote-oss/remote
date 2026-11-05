@@ -6,6 +6,7 @@
 
 import {createHash} from 'node:crypto';
 import {type HostChannel, posixQuote} from 'lib-host';
+import {writeHostFile} from './host-file.ts';
 
 /** The script, in CommonJS for the server's `node`: stdin to the socket, the socket to stdout, and its end ends it. */
 export const RELAY_SCRIPT = `'use strict';
@@ -19,50 +20,66 @@ process.stdin.pipe(socket);
 socket.pipe(process.stdout);
 `;
 
-/** Where the script goes: in the server's data folder, under a name that follows its text. */
-export function relayScriptPath(dataFolder: string): string {
-  const digest = createHash('sha256').update(RELAY_SCRIPT).digest('hex');
-  return `${dataFolder}/relay-${digest.slice(0, 12)}.js`;
+/** Where a script of ours named `name` goes: in the server's data folder, under a name that follows its text. */
+export function dataScriptPath(
+  dataFolder: string,
+  name: string,
+  text: string,
+): string {
+  const digest = createHash('sha256').update(text).digest('hex');
+  return `${dataFolder}/${name}-${digest.slice(0, 12)}.js`;
 }
 
-/** How installing the script ended. */
+/** Where the relay script goes. */
+export function relayScriptPath(dataFolder: string): string {
+  return dataScriptPath(dataFolder, 'relay', RELAY_SCRIPT);
+}
+
+/** How installing a script ended. */
 export type RelayInstall =
   {kind: 'written'; path: string} | {kind: 'failed'; detail: string};
 
-/** Writes the script into the data folder as the channel's user, mode 0644, so a changed script never meets an old one. */
-export async function installRelayScript(
+/**
+ * Writes the script `text` named `name` into the data folder as the channel's user, mode 0644, so a changed script
+ * never meets an old one.
+ */
+export async function installDataScript(
+  channel: HostChannel,
+  dataFolder: string,
+  script: {name: string; text: string},
+  cancellation: AbortSignal,
+): Promise<RelayInstall> {
+  const target = dataScriptPath(dataFolder, script.name, script.text);
+  const written = await writeHostFile(
+    channel,
+    target,
+    script.text,
+    '0644',
+    cancellation,
+  );
+  if (written.kind === 'written') {
+    return {kind: 'written', path: target};
+  }
+  return written.kind === 'failed'
+    ? written
+    : {
+        kind: 'failed',
+        detail: `${script.name} script not written (exit ${String(written.status)})`,
+      };
+}
+
+/** Writes the relay script into the data folder. */
+export function installRelayScript(
   channel: HostChannel,
   dataFolder: string,
   cancellation: AbortSignal,
 ): Promise<RelayInstall> {
-  const target = relayScriptPath(dataFolder);
-  const part = posixQuote(`${target}.part`);
-  const outcome = await channel.runScript(
-    {
-      script: [
-        'set -e',
-        'umask 022',
-        `mkdir -p ${posixQuote(dataFolder)}`,
-        `cat > ${part}`,
-        `chmod 0644 ${part}`,
-        `mv -f ${part} ${posixQuote(target)}`,
-      ].join('\n'),
-      interpreter: 'posixShell',
-      environment: {},
-      input: {kind: 'text', text: RELAY_SCRIPT},
-      cancellation,
-    },
-    () => undefined,
+  return installDataScript(
+    channel,
+    dataFolder,
+    {name: 'relay', text: RELAY_SCRIPT},
+    cancellation,
   );
-  if (outcome.kind === 'failed') {
-    return {kind: 'failed', detail: outcome.failure.detail};
-  }
-  return outcome.status === 0
-    ? {kind: 'written', path: target}
-    : {
-        kind: 'failed',
-        detail: `relay script not written (exit ${String(outcome.status)})`,
-      };
 }
 
 /** Whether `folder` exists in the target, as the channel's user sees it; an error of the channel counts as it not existing. */

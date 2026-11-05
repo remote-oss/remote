@@ -77,3 +77,23 @@ export function dialArguments(
     String(port),
   ];
 }
+
+/** Runs the relay host with the installed server's `node`, listening on each `<kind>=<socket path>` of `sockets`. */
+export function relayHostArguments(
+  containerId: string,
+  user: string,
+  nodePath: string,
+  scriptPath: string,
+  sockets: readonly string[],
+): string[] {
+  return [
+    'exec',
+    '-i',
+    '--user',
+    user,
+    containerId,
+    nodePath,
+    scriptPath,
+    ...sockets,
+  ];
+}

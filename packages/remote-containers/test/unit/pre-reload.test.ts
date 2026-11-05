@@ -7,7 +7,12 @@ import type {
   EngineDialogPort,
   FirstCheckResult,
 } from '../../src/engine/preflight.ts';
-import {beforeReload, type PreReloadPorts} from '../../src/open/pre-reload.ts';
+import {
+  beforeReload,
+  type BeforeReload,
+  commandBeforeReload,
+  type PreReloadPorts,
+} from '../../src/open/pre-reload.ts';
 import {type Pending, pendingOf, settled, unhandledDuring} from './pending.ts';
 
 const FOLDER = '/w/p';
@@ -540,5 +545,169 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
     scene.read.catch(() => undefined);
     const outcome = await cancelledRun(scene);
     deepStrictEqual(outcome.choice.kind, 'cancelled');
+  });
+});
+
+describe('the checks an open command runs before its reload (card coverage-117)', () => {
+  const FEATURE = 'ghcr.io/owner/features/bad';
+  const MANIFEST = JSON.stringify({
+    disallowedFeatures: [{featureIdPrefix: FEATURE}],
+  });
+
+  /** A port value the scene does not check: it resolves to nothing. */
+  function noOperation(): Promise<undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  /** A translate port the scene does not check: the template itself. */
+  function identity(template: string): string {
+    return template;
+  }
+
+  /** The command's scene: its pending refusal warning, its timers, and the checks' cancel. */
+  interface CommandScene {
+    warn: Pending<'learnMore' | 'cancel'>;
+    timers: Array<() => void>;
+    cancels: Array<() => void>;
+    lines: () => string[];
+  }
+
+  /** The command over its scene, whose chosen configuration asks for `FEATURE`. */
+  function commandOf(): {
+    scene: CommandScene;
+    start: () => Promise<BeforeReload>;
+  } {
+    const sink = new MemorySink();
+    const warn = pendingOf<'learnMore' | 'cancel'>();
+    const timers: Array<() => void> = [];
+    const cancels: Array<() => void> = [];
+    const scene: CommandScene = {
+      warn,
+      timers,
+      cancels,
+      lines: () => sink.lines.map(line => `${line.level}: ${line.message}`),
+    };
+    function start() {
+      return commandBeforeReload(
+        {
+          settings: {
+            mountGitWorktreeCommonDir: () => false,
+            defaultFeatures: () => undefined,
+            lockfile: () => undefined,
+          },
+          dialogs: {
+            showError: noOperation,
+            openExternal: noOperation,
+            revealLog: () => undefined,
+          },
+          config: {
+            files: {
+              list: folder =>
+                Promise.resolve(
+                  (folder === FOLDER
+                    ? ['.devcontainer']
+                    : folder === `${FOLDER}/.devcontainer`
+                      ? ['devcontainer.json']
+                      : []
+                  ).map(name => ({
+                    name,
+                    kind: name.endsWith('.json') ? 'file' : 'folder',
+                  })),
+                ),
+              read: () => Promise.resolve(Buffer.from('{"image":"i"}')),
+              exists: () => Promise.resolve(true),
+            },
+            surfaces: {
+              pick: () => Promise.resolve({kind: 'picked', index: 0}),
+              dialogs: {
+                showError: noOperation,
+                revealLog: () => undefined,
+              },
+              showWarning: noOperation,
+              openPreview: () => Promise.resolve(),
+            },
+            useTemplate: noOperation,
+            compare: (left, right) => left.localeCompare(right, 'en'),
+            translate: identity,
+          },
+          bridge: {
+            readConfiguration: () =>
+              Promise.resolve({
+                kind: 'configuration',
+                configuration: {image: 'i', features: {[FEATURE]: {}}},
+                workspaceFolder: '/workspaces/p',
+                workspaceMount: undefined,
+                mergedConfiguration: undefined,
+              }),
+          },
+          progress: {
+            showProgress: (title, until, cancel) => {
+              cancels.push(cancel);
+              void until;
+            },
+            setTimer: (milliseconds, callback) => {
+              timers.push(callback);
+              return () => undefined;
+            },
+            translate: identity,
+          },
+          clock: () => 0,
+          problematic: {
+            manifest: {
+              environment: {},
+              download: () => Promise.resolve(MANIFEST),
+              kept: () => undefined,
+              keep: () => undefined,
+              now: () => 0,
+              setTimer: () => () => undefined,
+              translate: identity,
+              logger: createLogger(sink, {minimumLevel: () => 'info'}),
+            },
+            warn: () => warn.promise,
+            openExternal: noOperation,
+          },
+          logger: createLogger(sink, {minimumLevel: () => 'info'}),
+        },
+        () => Promise.resolve('proceed'),
+        FOLDER,
+        '/usr/bin/docker',
+      );
+    }
+    return {scene, start};
+  }
+
+  it('coverage-117: a refusal warning that fails while the checks are not cancelled rethrows', async () => {
+    const {scene, start} = commandOf();
+    scene.warn.reject(new Error('the dialog died'));
+    scene.warn.promise.catch(() => undefined);
+    const running = start();
+    const caught: unknown[] = [];
+    running.catch((reason: unknown) => caught.push(reason));
+    await settled();
+    deepStrictEqual(
+      caught.length === 1 && caught[0] instanceof Error && caught[0].message,
+      'the dialog died',
+    );
+  });
+
+  it('coverage-117: a cancel while the refusal is asked gives a cancelled choice', async () => {
+    const {scene, start} = commandOf();
+    const running = start();
+    await settled();
+    scene.timers[1]?.();
+    scene.cancels[0]?.();
+    scene.warn.reject(new Error('the dialog died'));
+    scene.warn.promise.catch(() => undefined);
+    const outcome = await running;
+    deepStrictEqual(
+      [
+        [outcome.choice, outcome.cancellation.aborted],
+        scene.lines().filter(line => line.includes('cancelled')),
+      ],
+      [
+        [{kind: 'cancelled'}, true],
+        ['info: the command was cancelled while reading the configuration'],
+      ],
+    );
   });
 });
