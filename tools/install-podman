@@ -89,6 +89,8 @@ podman run -d --name dbg docker.io/library/alpine:3.20 sleep 600
 nproc; uname -r
 for command in "sleep 1" "sleep 3" "sh -c sleep\ 0.3" "true"; do echo "--- exec $command"; timeout 15 podman exec dbg $command; echo "exec [$command] rc=$?"; done
 echo "--- exec true, pinned to one cpu"; timeout 15 taskset -c 0 podman exec dbg true; echo "pinned rc=$?"
+echo "--- GOMAXPROCS=1"; GOMAXPROCS=1 timeout 15 podman exec dbg true; echo "gomaxprocs1 rc=$?"
+echo "--- GOMAXPROCS=2"; GOMAXPROCS=2 timeout 15 podman exec dbg true; echo "gomaxprocs2 rc=$?"
 echo "--- exec true, three in a row"; for each in 1 2 3; do timeout 15 podman exec dbg true; echo "again $each rc=$?"; done
 sudo apt-get install -y -qq strace >/dev/null 2>&1
 echo "--- exec true under strace without tracing anything"; timeout 25 strace -f -e trace=none -o /dev/null timeout 12 podman exec dbg true; echo "strace-none rc=$?"
