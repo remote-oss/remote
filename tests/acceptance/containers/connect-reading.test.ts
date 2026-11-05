@@ -199,6 +199,14 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
     ]);
     await execFileAsync('docker', ['push', imageTag]);
     await execFileAsync('docker', ['image', 'rm', imageTag]);
+    const localAfterRemoval = await execFileAsync('docker', [
+      'image',
+      'ls',
+      '--filter',
+      `reference=${imageTag}`,
+      '--format',
+      '{{.Repository}}:{{.Tag}}',
+    ]);
     const folder = devContainerFolder('c68-pull', {
       name: 'Remote Image',
       image: imageTag,
@@ -236,7 +244,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
           ),
         },
         {inside: true, named: []},
-        `the positions of Starting container, the pull, the download and Container started are ${[step, pull, downloaded, started].join(', ')} in:\n${lines.join('\n')}`,
+        `the image was listed locally after its removal: ${JSON.stringify(localAfterRemoval.stdout)}; the positions of Starting container, the pull, the download and Container started are ${[step, pull, downloaded, started].join(', ')} in:\n${lines.join('\n')}`,
       );
       await closeWindow(name);
     } finally {
