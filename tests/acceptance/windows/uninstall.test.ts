@@ -25,6 +25,7 @@ import {
 } from './harness.ts';
 import {
   closeAllButLocal,
+  dumpEditorLogs,
   DATA_FOLDER,
   addHarnessCopy,
   existsOnHost,
@@ -139,6 +140,16 @@ function passwordHostName(): string {
 }
 
 describe('Uninstall VS Code Server (card coverage-40)', function () {
+  let rowStarted = Date.now();
+  beforeEach(() => {
+    rowStarted = Date.now();
+  });
+  afterEach(function () {
+    if (this.currentTest?.state === 'failed') {
+      dumpEditorLogs(this.currentTest.title, rowStarted - 5_000);
+    }
+  });
+
   this.timeout(900_000);
 
   /** The user files around the rows that must not change them. */

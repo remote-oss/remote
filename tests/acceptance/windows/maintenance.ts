@@ -7,8 +7,10 @@
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -20,6 +22,7 @@ import {
   closeWindow,
   connectedWithin,
   connectionLog,
+  editorLogsFolder,
   hostPassword,
   inWindow,
   isOpen,
@@ -397,4 +400,27 @@ export function fishServerRuns(): Promise<boolean> {
     () => true,
     () => false,
   );
+}
+
+/** Throwaway diagnostic: the tail of every log of the editor written since `sinceMilliseconds`, on stderr. */
+export function dumpEditorLogs(title: string, sinceMilliseconds: number): void {
+  const lines: string[] = [];
+  const walk = (folder: string): void => {
+    for (const entry of readdirSync(folder, {withFileTypes: true})) {
+      const file = path.join(folder, entry.name);
+      if (entry.isDirectory()) {
+        walk(file);
+      } else if (
+        entry.name.endsWith('.log') &&
+        statSync(file).mtimeMs >= sinceMilliseconds
+      ) {
+        lines.push(
+          `==== ${file}`,
+          ...readFileSync(file, 'utf8').split('\n').slice(-60),
+        );
+      }
+    }
+  };
+  walk(editorLogsFolder());
+  process.stderr.write(`#### logs for ${title}\n${lines.join('\n')}\n`);
 }

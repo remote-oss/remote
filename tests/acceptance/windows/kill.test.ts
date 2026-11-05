@@ -27,6 +27,7 @@ import {
 } from './harness.ts';
 import {
   closeAllButLocal,
+  dumpEditorLogs,
   DATA_FOLDER,
   FIXED_ROWS,
   harnessPort,
@@ -110,6 +111,16 @@ async function shownChannel(name: string): Promise<string | null | undefined> {
 }
 
 describe('Kill VS Code Server (card coverage-39)', function () {
+  let rowStarted = Date.now();
+  beforeEach(() => {
+    rowStarted = Date.now();
+  });
+  afterEach(function () {
+    if (this.currentTest?.state === 'failed') {
+      dumpEditorLogs(this.currentTest.title, rowStarted - 5_000);
+    }
+  });
+
   this.timeout(900_000);
 
   /** The mark of the record at the first kill of the host, which the next row reads on from. */
