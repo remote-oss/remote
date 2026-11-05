@@ -25,6 +25,23 @@ async function imageWithUser(label: string): Promise<string> {
   return imageTag;
 }
 
+/** The digest of a layer that holds no file: the empty tar archive, which a build step that changes nothing leaves, whichever image store lists it. */
+const EMPTY_LAYER =
+  'sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef';
+
+/** The digests of the layers of image `tag`, bottom first. */
+async function layersOf(tag: string): Promise<string[]> {
+  return JSON.parse(
+    await docker(
+      'image',
+      'inspect',
+      '--format',
+      '{{json .RootFS.Layers}}',
+      tag,
+    ),
+  ) as string[];
+}
+
 /** The number `id` prints for `vscode` with `option` (`-u` or `-g`) in container `containerId`. */
 async function userIdOf(containerId: string, option: string): Promise<string> {
   return (await docker('exec', containerId, 'id', option, 'vscode')).trim();
@@ -33,7 +50,7 @@ async function userIdOf(containerId: string, option: string): Promise<string> {
 describe('F-0403 the container Open Folder in Container creates (card coverage-71)', function () {
   this.timeout(600_000);
 
-  it('F-0403 AC-11 (c71-inspect): the created container has a random name, the folder labels and the metadata with the remote user, the base image’s labels, the folder bind and the vscode volume; the derived -uid image adds only zero-size layers; the remote user has the host’s UID and GID and the server runs as it, while the container runs as root', async () => {
+  it('F-0403 AC-11 (c71-inspect): the created container has a random name, the folder labels and the metadata with the remote user, the base image’s labels, the folder bind and the vscode volume; the derived -uid image adds only empty layers; the remote user has the host’s UID and GID and the server runs as it, while the container runs as root', async () => {
     const image = await imageWithUser('c71-uid');
     const {name, containerId, folder} = await connectedWindow('c71-inspect', {
       image,
@@ -65,13 +82,9 @@ describe('F-0403 the container Open Folder in Container creates (card coverage-7
       ) as Array<{
         Config: {Labels: Record<string, string>; User: string};
       }>;
-      const history = (
-        await docker('history', '--no-trunc', '--format', '{{.Size}}', derived)
-      ).split('\n');
-      const baseHistory = (
-        await docker('history', '--no-trunc', '--format', '{{.Size}}', image)
-      ).split('\n');
-      const onTop = history.slice(0, history.length - baseHistory.length);
+      const baseLayers = await layersOf(image);
+      const derivedLayers = await layersOf(derived);
+      const added = derivedLayers.slice(baseLayers.length);
       const [server] = await serverProcessesOf(containerId);
       const serverUser = await docker(
         'exec',
@@ -102,7 +115,9 @@ describe('F-0403 the container Open Folder in Container creates (card coverage-7
           derivedName: /^vsc-c71-inspect-[0-9a-f]{64}-uid:latest$/.test(
             derived,
           ),
-          zeroLayers: onTop.every(size => size === '0B'),
+          addsOnlyEmptyLayers:
+            derivedLayers.slice(0, baseLayers.length).join() ===
+              baseLayers.join() && added.every(layer => layer === EMPTY_LAYER),
           derivedLabelsKept:
             derivedInspect[0]?.Config.Labels['c71.base'] === 'present',
           derivedUser: derivedInspect[0]?.Config.User,
@@ -120,7 +135,7 @@ describe('F-0403 the container Open Folder in Container creates (card coverage-7
           bind: [['bind', folder, true]],
           volume: [['volume', 'vscode']],
           derivedName: true,
-          zeroLayers: true,
+          addsOnlyEmptyLayers: true,
           derivedLabelsKept: true,
           derivedUser: 'root',
           userId: String(process.getuid?.()),
@@ -128,6 +143,7 @@ describe('F-0403 the container Open Folder in Container creates (card coverage-7
           containerUser: 'root',
           serverUser: 'vscode',
         },
+        `the layers of the derived image ${JSON.stringify(derivedLayers)} and of the base ${JSON.stringify(baseLayers)}`,
       );
     } finally {
       await removeContainers(folder);
