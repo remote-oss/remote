@@ -1312,7 +1312,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it('F-0405 AC-10 (r10): a failing postCreateCommand on a rebuild leaves a connected window with no notification or dialog, skips postStartCommand, and the log names the command, its exit code and the skip', async () => {
+  for (let round = 0; round < 8; round += 1) it(`F-0405 AC-10 (r10) round ${String(round)}: a failing postCreateCommand on a rebuild leaves a connected window with no notification or dialog, skips postStartCommand, and the log names the command, its exit code and the skip`, async () => {
     const folder = devContainerFolder('c54-rebuild-poststart', {
       name: 'Rebuild Poststart',
       postCreateCommand: 'exit 7',
