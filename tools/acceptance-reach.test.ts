@@ -3,7 +3,13 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import * as launchTable from './acceptance-launches.ts';
@@ -11,6 +17,7 @@ import type {Launch} from './acceptance-launches.ts';
 import {
   changedLabels,
   labelsChangedSince,
+  measurableEdit,
   type TableModule,
   testsOfHelper,
   withHelpersAsTests,
@@ -70,6 +77,82 @@ describe('acceptance-reach: the launch table (card tooling-169)', () => {
         ),
       ],
       [undefined, undefined, undefined],
+    );
+  });
+
+  it('tooling-169: a pattern, a set or a value of its own class that changes reaches every launch, never none', () => {
+    class Holder {
+      held = 1;
+    }
+    deepStrictEqual(
+      [
+        changedLabels(
+          tableOf([LOCAL], /^a$/),
+          tableOf([LOCAL], /^b$/),
+          '/repo',
+        ),
+        changedLabels(
+          tableOf([LOCAL], new Set(['a'])),
+          tableOf([LOCAL], new Set(['b'])),
+          '/repo',
+        ),
+        changedLabels(
+          tableOf([LOCAL], new Holder()),
+          tableOf([LOCAL], new Holder()),
+          '/repo',
+        ),
+      ],
+      [undefined, undefined, undefined],
+    );
+  });
+
+  it("tooling-169: in the repository's table an edit of launchesOf, of a helper or constant only it uses, or of a comment is measured; one of an export, of what an export uses, or of an import is not", () => {
+    const real = readFileSync(
+      path.join(REPOSITORY_ROOT, 'tools', 'acceptance-launches.ts'),
+      'utf8',
+    );
+    /** The table with `before` replaced by `after`, which must be in it. */
+    function edited(before: string, after: string): string {
+      if (!real.includes(before)) {
+        throw new Error(`the table has no ${before}`);
+      }
+      return real.replace(before, after);
+    }
+    deepStrictEqual(
+      [
+        edited(
+          "forwardingLaunch('agent', 'agentfwd'),",
+          "forwardingLaunch('agent', 'other'),",
+        ),
+        edited(
+          'folderUri: `vscode-remote://ssh-remote+${alias}/home/harness`,',
+          'folderUri: `vscode-remote://ssh-remote+${alias}/home/other`,',
+        ),
+        edited(
+          'const AGENT_NOTMP_ACL =',
+          "const ADDED = 'x';\nconst AGENT_NOTMP_ACL =",
+        ).replace(
+          "forwardingLaunch('agent', 'agentfwd'),",
+          "forwardingLaunch('agent', ADDED),",
+        ),
+        edited(
+          '/** The host setup of the agent-notmp launch',
+          '/** The setup of the agent-notmp launch',
+        ),
+        edited(
+          'return value.map(item => withStrings(item as unknown, replace)) as Value;',
+          'return value.map(item => withStrings(item as unknown, replace)).reverse() as Value;',
+        ),
+        edited(
+          'export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;',
+          'export const LABEL_FORM = /^[a-z][a-z0-9_-]*$/;',
+        ),
+        edited(
+          "import path from 'node:path';",
+          "import path from 'node:path';\nimport os from 'node:os';",
+        ),
+      ].map(text => measurableEdit(real, text)),
+      [true, true, true, true, false, false, false],
     );
   });
 
@@ -138,6 +221,21 @@ describe("acceptance-reach: a suite's own helper (card tooling-169)", () => {
       'tests/acceptance/alpha/a.test.ts',
       'tests/acceptance/alpha/b.test.ts',
     ]);
+  });
+
+  it('tooling-169: an import for its side effect, or a require, counts as importing the helper', () => {
+    write('tests/acceptance/gamma/side.ts', 'export {};\n');
+    write('tests/acceptance/gamma/s.test.ts', "import './side.ts';\n");
+    write('tests/acceptance/delta/r.test.ts', "require('../gamma/side.ts');\n");
+    deepStrictEqual(
+      [
+        testsOfHelper(root, 'tests/acceptance/gamma/side.ts', [
+          'tests/acceptance/gamma',
+        ]),
+        testsOfHelper(root, 'tests/acceptance/gamma/side.ts'),
+      ],
+      [['tests/acceptance/gamma/s.test.ts'], undefined],
+    );
   });
 
   it('tooling-169: a helper that another folder imports reaches every launch, and one that nothing imports stands for no test', () => {

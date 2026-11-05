@@ -1,8 +1,9 @@
 /**
  * @fileoverview acceptance-reach: what a change to the launch table or to a suite's own helper reaches, measured from
- * the files rather than assumed. A change to tools/acceptance-launches.ts reaches the launches whose entries differ
- * between the base and the head; a helper in a suite folder that only that suite's tests import stands for those tests.
- * Anything the measurement cannot account for reaches every launch, as before.
+ * the files rather than assumed. A change to tools/acceptance-launches.ts whose changed declarations are `launchesOf`
+ * and what only it uses reaches the launches whose entries differ between the base and the head; a helper in a suite
+ * folder that only that suite's tests import stands for those tests. Anything the measurement cannot account for
+ * (an export, what an export uses, an import, a value with no text of its own) reaches every launch, as before.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -17,6 +18,7 @@ import {
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import typescript from 'typescript';
 import type {Launch} from './acceptance-launches.ts';
 
 /** The launch table's file, as a changed path names it. */
@@ -39,13 +41,33 @@ const PER_LAUNCH = [
   'needsDevContainerImage',
 ];
 
-/** A value as text holds it: a function as its source, a map as its entries. */
+/**
+ * A value as text holds it: a function as its source, a map as its entries, a set as its members, a pattern as its
+ * source and flags. Any other object of its own class has no text that would show its changes, so it throws.
+ */
 function heldAsText(...entry: [string, unknown]): unknown {
   const held = entry[1];
   if (typeof held === 'function') {
     return `function ${String(held)}`;
   }
-  return held instanceof Map ? [...(held as Map<unknown, unknown>)] : held;
+  if (held instanceof Map) {
+    return ['map', ...(held as Map<unknown, unknown>)];
+  }
+  if (held instanceof Set) {
+    return ['set', ...(held as Set<unknown>)];
+  }
+  if (held instanceof RegExp) {
+    return `pattern ${String(held)}`;
+  }
+  if (
+    typeof held === 'object' &&
+    held !== null &&
+    !Array.isArray(held) &&
+    ![Object.prototype, null].includes(Object.getPrototypeOf(held) as object)
+  ) {
+    throw new Error('a value with no text of its own');
+  }
+  return held;
 }
 
 /** The text of a value: functions as their source, maps as their entries. */
@@ -54,10 +76,7 @@ function textOf(value: unknown): string {
 }
 
 /** Each launch's fingerprint by label: its entry, its group, its settings and whether it needs the dev container image. */
-function fingerprintsOf(
-  table: TableModule,
-  root: string,
-): Map<string, string> {
+function fingerprintsOf(table: TableModule, root: string): Map<string, string> {
   return new Map(
     table
       .launchesOf(root)
@@ -92,13 +111,131 @@ export function changedLabels(
   after: TableModule,
   root: string,
 ): string[] | undefined {
-  if (restOf(before) !== restOf(after)) {
+  try {
+    if (restOf(before) !== restOf(after)) {
+      return undefined;
+    }
+  } catch {
     return undefined;
   }
   const earlier = fingerprintsOf(before, root);
   return [...fingerprintsOf(after, root)]
     .filter(([label, print]) => earlier.get(label) !== print)
     .map(([label]) => label);
+}
+
+/** The names a top-level statement declares, or one name standing for a statement that declares none. */
+function namesOf(statement: typescript.Statement, index: number): string[] {
+  if (
+    typescript.isFunctionDeclaration(statement) ||
+    typescript.isClassDeclaration(statement) ||
+    typescript.isInterfaceDeclaration(statement) ||
+    typescript.isTypeAliasDeclaration(statement) ||
+    typescript.isEnumDeclaration(statement)
+  ) {
+    return [statement.name?.text ?? `<statement ${String(index)}>`];
+  }
+  if (typescript.isVariableStatement(statement)) {
+    return statement.declarationList.declarations.map(declaration =>
+      typescript.isIdentifier(declaration.name)
+        ? declaration.name.text
+        : `<statement ${String(index)}>`,
+    );
+  }
+  return [
+    typescript.isImportDeclaration(statement)
+      ? '<imports>'
+      : `<statement ${String(index)}>`,
+  ];
+}
+
+/** Each top-level declaration of a source text: its text (without comments), whether it is exported, and the names it uses. */
+function declarationsOf(
+  text: string,
+): Map<string, {text: string; exported: boolean; uses: Set<string>}> {
+  const source = typescript.createSourceFile(
+    LAUNCH_TABLE,
+    text,
+    typescript.ScriptTarget.Latest,
+    true,
+  );
+  const declarations = new Map<
+    string,
+    {text: string; exported: boolean; uses: Set<string>}
+  >();
+  source.statements.forEach((statement, index) => {
+    const uses = new Set<string>();
+    function visit(node: typescript.Node): void {
+      if (typescript.isIdentifier(node)) {
+        uses.add(node.text);
+      }
+      typescript.forEachChild(node, visit);
+    }
+    typescript.forEachChild(statement, visit);
+    const exported =
+      typescript.canHaveModifiers(statement) &&
+      (typescript.getModifiers(statement) ?? []).some(
+        modifier => modifier.kind === typescript.SyntaxKind.ExportKeyword,
+      );
+    for (const name of namesOf(statement, index)) {
+      const earlier = declarations.get(name);
+      declarations.set(name, {
+        text: `${earlier?.text ?? ''}${statement.getText(source)}`,
+        exported: exported || earlier?.exported === true,
+        uses: new Set([...(earlier?.uses ?? []), ...uses]),
+      });
+    }
+  });
+  return declarations;
+}
+
+/** The declarations `starts` use, and the ones those use, over the declarations of both texts. */
+function usedBy(
+  starts: readonly string[],
+  graphs: ReadonlyArray<Map<string, {uses: Set<string>}>>,
+): Set<string> {
+  const reached = new Set<string>();
+  const pending = [...starts];
+  while (pending.length > 0) {
+    const name = String(pending.pop());
+    for (const graph of graphs) {
+      for (const used of graph.get(name)?.uses ?? []) {
+        if (graph.has(used) && !reached.has(used)) {
+          reached.add(used);
+          pending.push(used);
+        }
+      }
+    }
+  }
+  return reached;
+}
+
+/**
+ * Whether a change to the launch table's text can be measured through its launches: every top-level declaration
+ * that differs is `launchesOf` or something only `launchesOf` uses. A change to an import, to a statement that names
+ * nothing, or to a declaration an exported value or function other than `launchesOf` uses reaches every launch.
+ */
+export function measurableEdit(before: string, after: string): boolean {
+  const earlier = declarationsOf(before);
+  const current = declarationsOf(after);
+  const changed = [...new Set([...earlier.keys(), ...current.keys()])].filter(
+    name => earlier.get(name)?.text !== current.get(name)?.text,
+  );
+  const graphs = [earlier, current];
+  const exported = [...earlier, ...current]
+    .filter(
+      ([name, declaration]) => declaration.exported && name !== 'launchesOf',
+    )
+    .map(([name]) => name);
+  const outsideTable = usedBy(exported, graphs);
+  const insideTable = usedBy(['launchesOf'], graphs);
+  return changed.every(
+    name =>
+      !name.startsWith('<') &&
+      !exported.includes(name) &&
+      !outsideTable.has(name) &&
+      (name === 'launchesOf' || insideTable.has(name)),
+  );
 }
 
 /**
@@ -130,6 +267,14 @@ export async function labelsChangedSince(
       path.join(root, 'node_modules'),
       path.join(folder, 'node_modules'),
     );
+    if (
+      !measurableEdit(
+        readFileSync(file, 'utf8'),
+        readFileSync(path.join(root, LAUNCH_TABLE), 'utf8'),
+      )
+    ) {
+      return undefined;
+    }
     const before = (await import(pathToFileURL(file).href)) as TableModule;
     return changedLabels(before, after, root);
   } catch {
@@ -171,7 +316,9 @@ function importersOf(
   return sources.filter(source => {
     const text = readFileSync(path.join(root, source), 'utf8');
     return [
-      ...text.matchAll(/(?:from\s+|import\s*\(\s*)['"](\.{1,2}\/[^'"]+)['"]/g),
+      ...text.matchAll(
+        /(?:from\s+|import\s*\(\s*|import\s+|require\s*\(\s*)['"](\.{1,2}\/[^'"]+)['"]/g,
+      ),
     ].some(
       match =>
         stem(path.join(path.dirname(source), String(match[1]))) ===
