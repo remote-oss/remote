@@ -1,4 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import {homedir} from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
@@ -48,6 +55,49 @@ describe('Remote - SSH, activated in the editor', () => {
         'Select SSH configuration file to update',
         [userFile, '/etc/ssh/ssh_config', 'Settings', 'Help'],
       ],
+    );
+  });
+
+  it('F-2203 AC-3 (c119-open): an existing user file opens at Ln 1 Col 1, not dirty, and nothing is written', async () => {
+    const sshFolder = path.join(homedir(), '.ssh');
+    const userFile = path.join(sshFolder, 'config');
+    mkdirSync(sshFolder, {recursive: true});
+    const before = 'existing content\n';
+    writeFileSync(userFile, before);
+    scriptFor([
+      {
+        surface: 'filePick',
+        match: 'SSH configuration file',
+        answer: {label: userFile},
+      },
+    ]);
+    await commandsAfterActivation();
+    await vscode.commands.executeCommand('opensshremotes.openConfigFile');
+    const editor = vscode.window.activeTextEditor;
+    deepStrictEqual(
+      [
+        editor?.document.uri.fsPath,
+        editor?.document.isDirty,
+        [editor?.selection.anchor.line, editor?.selection.anchor.character],
+        readFileSync(userFile, 'utf8'),
+      ],
+      [userFile, false, [0, 0], before],
+    );
+  });
+
+  it('F-2203 AC-16 (c119-escape): Escape in the picker creates nothing and opens nothing', async () => {
+    const sshFolder = path.join(homedir(), '.ssh');
+    const userFile = path.join(sshFolder, 'config');
+    rmSync(sshFolder, {recursive: true, force: true});
+    const before = vscode.window.activeTextEditor;
+    scriptFor([
+      {surface: 'filePick', match: 'SSH configuration file', answer: 'dismiss'},
+    ]);
+    await commandsAfterActivation();
+    await vscode.commands.executeCommand('opensshremotes.openConfigFile');
+    deepStrictEqual(
+      [existsSync(userFile), vscode.window.activeTextEditor],
+      [false, before],
     );
   });
 
