@@ -12,6 +12,7 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import {
   closeWindow,
+  containersLog,
   connectedToContainer,
   runLabelArguments,
   startInWindow,
@@ -121,13 +122,28 @@ async function labelOf(folder: string, label: string): Promise<string> {
   ]);
   const [container = ''] = containerIds.split('\n');
   if (container === '') {
+    const began = Date.now();
+    let appeared = '';
+    while (appeared === '' && Date.now() - began < 90_000) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const {stdout: again} = await execFileAsync('docker', [
+        'ps',
+        '--all',
+        '--quiet',
+        '--filter',
+        `label=devcontainer.local_folder=${folder}`,
+      ]);
+      appeared = again.split('\n')[0] ?? '';
+    }
     const {stdout: all} = await execFileAsync('docker', [
       'ps',
       '--all',
       '--format',
-      '{{.ID}} {{.Names}} {{.Image}} {{.Labels}}',
+      '{{.ID}} {{.Names}} {{.Image}} {{.Status}} {{.Labels}}',
     ]);
-    throw new Error(`NO CONTAINER FOR ${folder}; docker ps -a: ${all}`);
+    throw new Error(
+      `NO CONTAINER FOR ${folder}; after ${String(Date.now() - began)} ms: ${appeared === '' ? 'still none' : `appeared ${appeared}`}; docker ps -a: ${all}\nLOG: ${JSON.stringify(containersLog().slice(-60))}`,
+    );
   }
   const {stdout} = await execFileAsync('docker', [
     'inspect',
