@@ -140,7 +140,9 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   When the refusal comes from the local ssh after a changed host key was accepted, the reason is "Port forwarding is
   disabled" in every mode. Every wait in the family is bounded (R-79).
   - Rows: `ruling-1985-forwarding-fails`.
-  - F-2604 BR-5, AC-6 and AC-19, and F-2304 AC-20, describe the reference's wait; ruled on remote#1985 (F-2604 Q3).
+  - F-2604 BR-5, AC-6 and AC-19, F-2304 AC-20 and F-2605 AC-12, describe the reference's wait; ruled on remote#1985
+    (F-2604 Q3). F-2605 AC-12's two situations came from that wait; the refusal is recognised before the step ends now, so
+    the terminal opens (F-2605 AC-5).
 
 ## Known issues
 
