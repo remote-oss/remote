@@ -12,8 +12,8 @@
 # A version change here is the only way the pin moves.
 set -euo pipefail
 
-PODMAN_VERSION=6.1.4
-PODMAN_SHA256_AMD64=9dd51073fac5a1742f88cf3caff5554615cb4d67ba554d25e8807be635547af5
+PODMAN_VERSION=5.7.1
+PODMAN_SHA256_AMD64=52772424db65197cea22e4adcbdc27665cbf5395247032dabd864315d7baffe6
 PODMAN_SHA256_ARM64=816bc5b97dc62396838d825aaccd9d3eb841167a2d31968efc1e6a3e6a0a463b
 CONMON_VERSION=2.2.1
 CONMON_SHA256_AMD64=1d97294c14c43d477e0a0826e9cd0f2a2af373ddfafe6f10252e8a3c43f32be6
@@ -78,7 +78,7 @@ podman info --format '{{.Host.OCIRuntime.Path}}'
 set +e
 podman run -d --name dbg docker.io/library/alpine:3.20 sleep 600
 podman --version; podman info --format '{{.Host.Conmon.Path}} {{.Host.Conmon.Version}}'
-for each in 1 2 3; do timeout 15 podman exec dbg true; echo "true $each rc=$?"; done
+for each in 1 2 3 4 5; do timeout 15 podman exec dbg true; echo "true $each rc=$?"; done
 printf hi | timeout 15 podman exec -i dbg cat; echo "cat rc=$?"
 echo "--- cleanup"; podman rm -f dbg
 set -e
