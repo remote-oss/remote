@@ -3692,11 +3692,11 @@ describe('acceptance', () => {
       );
     });
 
-    it('coverage-11, tooling-34: the run waits for the helper of the launch before to end: the grace before the slow launch, the secrets and agent-notmp launches and each host-case launch, 5 s before a client-search launch', async () => {
+    it('coverage-11, tooling-34: the run waits for the helper of the launch before to end: the grace before the agent-off and slow launches, the secrets and agent-notmp launches and each host-case launch, 5 s before a client-search launch', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
       deepStrictEqual(
         harness.sleeps,
-        [3000, 5000, 3000, 3000, 3000, 3000, 3000],
+        [3000, 3000, 5000, 3000, 3000, 3000, 3000, 3000],
       );
     });
 
