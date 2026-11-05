@@ -86,15 +86,12 @@ podman info --format '{{.Host.OCIRuntime.Path}}'
 # debug (hosted only): where does an exec of this podman wait
 set +e
 podman run -d --name dbg docker.io/library/alpine:3.20 sleep 600
-echo "--- host"; uname -r; cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns; cat /proc/sys/kernel/yama/ptrace_scope 2>&1
-echo "--- A: with libpod.conf"; ls -l /etc/containers/libpod.conf; timeout 15 podman exec dbg true; echo "with rc=$?"
-echo "--- B: without libpod.conf"; sudo mv /etc/containers/libpod.conf /tmp/libpod.conf.moved; timeout 15 podman exec dbg true; echo "without rc=$?"
-echo "--- conmon arguments"; (timeout 12 podman --log-level=debug exec dbg true 2>&1 | grep -E "running conmon|Received|Successfully|exit" | cut -c1-900) &
-sleep 5; find /run/user/"$(id -u)"/libpod /run/user/"$(id -u)"/containers -path '*exit*' -o -path '*persist*' 2>/dev/null | head -20; wait
-sudo apt-get install -y -qq strace >/dev/null 2>&1; command -v strace
-echo "--- strace exec"; timeout 25 strace -f -tt -s 100 -e trace=process,openat,write,unlinkat -o /tmp/st.txt timeout 12 podman exec dbg true; echo "strace rc=$?"
-wc -l /tmp/st.txt; grep -E "execve|exit_group|killed|exited|exit-dir|exits/" /tmp/st.txt | cut -c1-260 | tail -40
-echo "--- dmesg"; sudo dmesg 2>&1 | grep -iE "apparmor|denied|audit|seccomp" | tail -15
+nproc; uname -r
+for command in "sleep 1" "sleep 3" "sh -c sleep\ 0.3" "true"; do echo "--- exec $command"; timeout 15 podman exec dbg $command; echo "exec [$command] rc=$?"; done
+echo "--- exec true, pinned to one cpu"; timeout 15 taskset -c 0 podman exec dbg true; echo "pinned rc=$?"
+echo "--- exec true, three in a row"; for each in 1 2 3; do timeout 15 podman exec dbg true; echo "again $each rc=$?"; done
+sudo apt-get install -y -qq strace >/dev/null 2>&1
+echo "--- exec true under strace without tracing anything"; timeout 25 strace -f -e trace=none -o /dev/null timeout 12 podman exec dbg true; echo "strace-none rc=$?"
 echo "--- cleanup"; podman rm -f dbg
 set -e
 exit 1 # debug (hosted only): end the job here, so that the probe's lines can be read
