@@ -432,9 +432,10 @@ jobs:
         launches: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.post-merge-select.outputs.parts || github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh,!ssh-core,!windows,!cli-path","ssh-core,windows","containers-a","containers-b","@containers,!containers","@explorer,!explorer-folders","explorer-folders","@hosts"]') }}
     # GitHub keeps one pending job per group, and a newer one replaces it. The scheduled backstop has its own group per
     # part, where only the latest main matters; each release tag has a group of its own per part, so nothing displaces it;
-    # dispatches keep theirs, fed one at a time per part, so the backstop never displaces them.
+    # a dispatch's parts have groups of their own run, so no dispatch, of any ref, replaces another's pending part or is
+    # replaced by it.
     concurrency:
-      group: ${{ github.event_name == 'schedule' && 'acceptance-vscodium-main' || (github.event_name == 'push' && format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}-${{ matrix.launches }}
+      group: ${{ github.event_name == 'schedule' && 'acceptance-vscodium-main' || (github.event_name == 'push' && format('acceptance-vscodium-{0}', github.ref)) || format('acceptance-vscodium-run-{0}', github.run_id) }}-${{ matrix.launches }}
       cancel-in-progress: false
     # GitHub's runners and the organisation's pool share the parts: with the repository variable CI_POOL_RUNS_ON set (a
     # pool label; the part also asks for X64 and ephemeral, a fresh machine per job), a part with no containers launch
@@ -487,7 +488,7 @@ jobs:
   # and the product never accepts a licence on the user's behalf. It runs on a dispatch (the `genuine`
   # input), once a day on main, and on the tag of a release, never on a pull request, and always on X64, the
   # architecture the launch is measured on. Its concurrency follows the VSCodium job's, per version: the daily run keeps
-  # one group, each tag its own, and dispatches queue. ssh-no-proposals runs after genuine in the same run (the table's
+  # one group, each tag its own, and each dispatch its own run's, so no dispatch replaces another's. ssh-no-proposals runs after genuine in the same run (the table's
   # order): the family's setup notice is told once per profile, genuine's passing probe clears an earlier "Not Now", and
   # the VSCodium no-proposals launch, which dismisses it, never shares this run. It runs at the recorded version only:
   # at the floor the editor lets Remote - SSH resolve without the proposals, and the run refuses that pair.
@@ -509,7 +510,7 @@ jobs:
           - version: 1.125.0
             launches: genuine,genuine-licensed,genuine-containers,genuine-accept-a,genuine-accept-b
     concurrency:
-      group: ${{ github.event_name == 'schedule' && 'acceptance-genuine-main' || (github.event_name == 'push' && format('acceptance-genuine-{0}', github.ref)) || 'acceptance-genuine' }}-${{ matrix.version }}
+      group: ${{ github.event_name == 'schedule' && 'acceptance-genuine-main' || (github.event_name == 'push' && format('acceptance-genuine-{0}', github.ref)) || format('acceptance-genuine-run-{0}', github.run_id) }}-${{ matrix.version }}
       cancel-in-progress: false
     runs-on: ubuntu-24.04
     # Measured on the runners (2026-11-01): a leg takes about 3 minutes. One server from the publisher is 205 MiB at
