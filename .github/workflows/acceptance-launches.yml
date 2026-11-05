@@ -1,9 +1,9 @@
 # The VSCodium acceptance launches a pull request's change selects, as the parts of the select job's plan, each a job of
 # its own with its own time limit, run side by side. A change to test files only runs each changed file alone in the
-# launches that run it, and a smoke part beside them. Any other change runs its whole selection as one part: at most
-# six launches, or with `full` (the acceptance-full label, ci.yml or acceptance-full.yml) all of them, in 360 minutes,
-# the most a job may run on GitHub's runners; a larger selection without `full` runs nothing and gets a notice naming
-# its launches. The run's steps are those of ci.yml's VSCodium job.
+# launches that run it, and a smoke part beside them. Any other change, or `full` (the acceptance-full label, ci.yml or
+# acceptance-full.yml), runs every part of the VSCodium suite's table that makes a launch it reaches, about fifteen
+# minutes of rows each. The parts with a containers launch run on GitHub's runners, eight at once at most; the others
+# on the pool when it is set. The run's steps are those of ci.yml's VSCodium job.
 name: acceptance-launches
 
 on:
@@ -26,6 +26,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       parts: ${{ steps.select.outputs.parts }}
+      containers-parts: ${{ steps.select.outputs.containers-parts }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -44,29 +45,25 @@ jobs:
         run: |
           plan=$(node tools/acceptance-select.ts --base "$BASE" --head "$HEAD" --pull-request $([ "$FULL" = true ] && echo --full))
           echo "plan: $plan"
-          notice=$(printf '%s' "$plan" | jq -r '.notice // empty')
-          if [ -n "$notice" ]; then
-            echo "::notice title=VSCodium launches::$notice"
-            printf '%s\n' "**VSCodium launches:** $notice" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo "parts=$(printf '%s' "$plan" | jq -c '.parts')" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "**VSCodium parts:** $(printf '%s' "$plan" | jq -r '[.parts[].name] | join(", ") | if . == "" then "none" else . end')" >> "$GITHUB_STEP_SUMMARY"
+          echo "parts=$(printf '%s' "$plan" | jq -c '[.parts[] | select(.launches | contains("containers") | not)]')" >> "$GITHUB_OUTPUT"
+          echo "containers-parts=$(printf '%s' "$plan" | jq -c '[.parts[] | select(.launches | contains("containers"))]')" >> "$GITHUB_OUTPUT"
 
   run:
-    name: acceptance (vscodium, ${{ matrix.part.launches }})
+    name: acceptance (vscodium, ${{ matrix.part.name }})
     needs: select
     if: needs.select.outputs.parts != '[]'
     strategy:
       fail-fast: false
       matrix:
         part: ${{ fromJSON(needs.select.outputs.parts) }}
-    # a part with no containers launch runs on the organisation's pool when the repository variable CI_POOL_RUNS_ON
-    # names its label (with X64 and ephemeral, as ci.yml's VSCodium parts); otherwise on GitHub's ubuntu-24.04
+    # the parts with no containers launch, on the organisation's pool when the repository variable CI_POOL_RUNS_ON names
+    # its label (with X64 and ephemeral, as ci.yml's VSCodium parts); otherwise on GitHub's ubuntu-24.04
     runs-on: >-
-      ${{ vars.CI_POOL_RUNS_ON && !contains(matrix.part.launches, 'containers') &&
-      !contains(matrix.part.launches, 'explorer-folders') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      ${{ vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON)) || 'ubuntu-24.04' }}
     timeout-minutes: ${{ matrix.part.minutes }}
-    steps:
+    steps: &launch-steps
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -96,3 +93,18 @@ jobs:
           LAUNCHES: ${{ matrix.part.launches }}
       - if: always()
         run: pnpm acceptance:clean
+
+  # the parts with a containers launch, on GitHub's ubuntu-24.04, at most eight at once, so that one pull request's
+  # parts keep some of the organisation's 20 runners free for the others' legs, genuine and ci-gate
+  run-containers:
+    name: acceptance (vscodium, ${{ matrix.part.name }})
+    needs: select
+    if: needs.select.outputs.containers-parts != '[]'
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        part: ${{ fromJSON(needs.select.outputs.containers-parts) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ matrix.part.minutes }}
+    steps: *launch-steps
