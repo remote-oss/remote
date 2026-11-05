@@ -433,6 +433,18 @@ describe('the first check', () => {
       'warn: dk was not found; PATH: /usr/bin:/bin',
     ]);
   });
+
+  it('coverage-117: a spawn that fails with no system code is logged as failed, with no path line', async () => {
+    const scene = sceneOf(
+      {'--version': {kind: 'failed', detail: 'spawn dk'}},
+      {values: ['dk']},
+    );
+    await firstCheck(scene.dependencies, undefined, NEVER_ABORTED);
+    deepStrictEqual(
+      [scene.lines, scene.dialogs],
+      [['debug: docker: --version → failed (0 ms)'], [ERROR_DIALOG]],
+    );
+  });
 });
 
 describe('the second check', () => {

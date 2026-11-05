@@ -183,6 +183,19 @@ describe('Open Folder in Container', () => {
     );
   });
 
+  it('coverage-117: a container window that names no authority opens the dialog at home, and a cancel says so', async () => {
+    const state = setup();
+    state.remoteName = 'dev-container';
+    state.folders = [];
+    const {handler, dialog, sink} = commandOf(state);
+    dialog.answer = undefined;
+    await handler();
+    deepStrictEqual(
+      [dialog.starts, state.commands, linesOf(sink)],
+      [['/home/u'], [], ['info: Open Folder in Container was cancelled']],
+    );
+  });
+
   it('F-0403 6.1: a folder of another scheme does nothing', async () => {
     const state = setup();
     const {handler, dialog, sink} = commandOf(state);
