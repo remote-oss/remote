@@ -14,7 +14,11 @@ import {
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import * as launchTable from './acceptance-launches.ts';
-import {type Launch, launchesOf} from './acceptance-launches.ts';
+import {
+  bundleFolderOf,
+  type Launch,
+  launchesOf,
+} from './acceptance-launches.ts';
 import {type PartsTable, suiteFilesIn} from './acceptance-parts.ts';
 import {
   changedLabels,
@@ -23,6 +27,7 @@ import {
   labelsOfChangedParts,
   labelsOfTableSince,
   measuredPaths,
+  OWN_JOB_FOLDERS,
   packageReach,
   PARTS_TABLE_FILE,
   sourceGraph,
@@ -31,6 +36,7 @@ import {
   testsOfHelper,
   withHelpersAsTests,
 } from './acceptance-reach.ts';
+import {acceptanceConfiguration} from './acceptance.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 
 /** A launch table of `launches`, with one more export whose value is `extra`. */
@@ -480,6 +486,22 @@ describe('acceptance-reach: what a change to a package reaches (card tooling-169
     );
   });
 
+  it("tooling-169: a changed test of a folder its own job runs (server) reaches no launch, until a launch's test imports it", () => {
+    const changed = ['tests/acceptance/server/s.test.ts'];
+    const alone = measuredPaths(changed, 'HEAD', PACKAGE_LAUNCHES, root);
+    write(
+      'tests/acceptance/alpha/c.test.ts',
+      "import '../server/s.test.ts';\n",
+    );
+    deepStrictEqual(
+      [[...alone], [...measuredPaths(changed, 'HEAD', PACKAGE_LAUNCHES, root)]],
+      [
+        [['tests/acceptance/server/s.test.ts', []]],
+        [['tests/acceptance/server/s.test.ts', ['alpha-one']]],
+      ],
+    );
+  });
+
   it('tooling-169: a library that only unit tests use reaches every launch, since the imports show no launch, as does one that nothing uses; a unit test adds nothing', () => {
     deepStrictEqual(reachOf('lib-unused', 'lib-unit'), [
       undefined,
@@ -673,5 +695,63 @@ describe('acceptance-reach: the names other sources import from the launch table
   it("tooling-169: a workspace the graph can't read leaves every name imported", () => {
     write('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
     deepStrictEqual(tableImports(root)('zeta'), true);
+  });
+});
+
+describe('acceptance-reach: the tests of a folder its own job runs (card tooling-169)', () => {
+  it('tooling-169: in the repository a server or shared-suite test reaches no launch; a containers-cli test (no job runs it), a server helper and a folder of no job are not measured', () => {
+    deepStrictEqual(
+      [
+        ...measuredPaths(
+          [
+            'tests/acceptance/server/login-shells.test.ts',
+            'tests/acceptance/suite/host.test.ts',
+            'tests/acceptance/containers-cli/cli-bridge.test.ts',
+            'tests/acceptance/server/helper-stop.ts',
+            'tests/acceptance/elsewhere/x.test.ts',
+          ],
+          'HEAD',
+          launchesOf(REPOSITORY_ROOT),
+          REPOSITORY_ROOT,
+        ),
+      ],
+      [
+        ['tests/acceptance/server/login-shells.test.ts', []],
+        ['tests/acceptance/suite/host.test.ts', []],
+      ],
+    );
+  });
+
+  it("tooling-169: each folder's script is in package.json and a CI job runs it, the server script on the server folder and the slice's run on the shared suite's bundle", () => {
+    const scripts = (
+      JSON.parse(
+        readFileSync(path.join(REPOSITORY_ROOT, 'package.json'), 'utf8'),
+      ) as {scripts: Record<string, string>}
+    ).scripts;
+    const workflow = readFileSync(
+      path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
+      'utf8',
+    );
+    deepStrictEqual(
+      [
+        [...OWN_JOB_FOLDERS].map(([folder, script]) => [
+          folder,
+          new RegExp(`pnpm ${script}(?![\\w:-])`).test(workflow),
+        ]),
+        scripts[String(OWN_JOB_FOLDERS.get('server'))]?.includes(
+          "'tests/acceptance/server/*.test.ts'",
+        ),
+        acceptanceConfiguration(REPOSITORY_ROOT, {}).files ===
+          `${bundleFolderOf('suite')}/**/*.test.cjs`,
+      ],
+      [
+        [
+          ['server', true],
+          ['suite', true],
+        ],
+        true,
+        true,
+      ],
+    );
   });
 });
