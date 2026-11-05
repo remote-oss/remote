@@ -53,10 +53,5 @@ class FileTimes extends Mocha.reporters.Spec {
   }
 }
 
-/**
- * Mocha takes a reporter as the module's value: `require` of this module gives the class. The plain launches name the
- * module by its path (acceptance-plain.ts), so no module imports it.
- *
- * @public
- */
+// Mocha takes a reporter as the module's value: `require` of this module gives the class.
 export {FileTimes as 'module.exports'};

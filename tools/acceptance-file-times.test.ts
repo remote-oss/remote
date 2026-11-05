@@ -2,15 +2,23 @@
  * @fileoverview acceptance-file-times: the spec reporter that prints each test file's time when the run ends.
  */
 
-import {deepStrictEqual} from 'node:assert';
+import {deepStrictEqual, strictEqual} from 'node:assert';
 import {spawnSync} from 'node:child_process';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {fileTimeLine} from './acceptance-file-times.ts';
+import Mocha from 'mocha';
+import {
+  fileTimeLine,
+  'module.exports' as FileTimes,
+} from './acceptance-file-times.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 
 describe('acceptance-file-times (card tooling-159)', () => {
+  it("tooling-159: the module's value is the reporter, mocha's spec reporter with the times beside it", () => {
+    strictEqual(FileTimes.prototype instanceof Mocha.reporters.Spec, true);
+  });
+
   it('tooling-159: a line names the suite folder and file, with the seconds to one decimal', () => {
     deepStrictEqual(
       fileTimeLine('/repo/tests/acceptance/containers/reuse.test.ts', 391.26),
