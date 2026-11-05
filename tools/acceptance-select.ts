@@ -19,7 +19,7 @@ import {
 import {
   LAUNCH_TABLE,
   labelsChangedSince,
-  measuredPackages,
+  measuredPaths,
   NO_LAUNCH,
   SUITE_TEST,
   withHelpersAsTests,
@@ -259,9 +259,10 @@ export function planOfChange(
 }
 
 /**
- * The changed paths of `base`...`head` as the selection reads them, and the reach measured for the launch table and
- * the packages: each suite helper as the tests that stand for it, a changed launch table as the launches whose entries
- * differ, and a package's path as the launches its package reaches (packageReach), read at the head.
+ * The changed paths of `base`...`head` as the selection reads them, and the reach measured for the two tables and the
+ * packages: each suite helper as the tests that stand for it, a changed launch table as the launches whose entries
+ * differ, a changed parts table as the launches of the parts it makes otherwise, and a package's path as the launches
+ * its package reaches (packageReach), read at the head.
  */
 export async function measuredChange(
   base: string,
@@ -276,7 +277,7 @@ export async function measuredChange(
     REPOSITORY_ROOT,
     new Set(launches.map(launch => launch.suite)),
   );
-  const measured = measuredPackages(changed, launches, REPOSITORY_ROOT);
+  const measured = measuredPaths(changed, base, launches, REPOSITORY_ROOT);
   const labels = changed.includes(LAUNCH_TABLE)
     ? await labelsChangedSince(base, launchTable, REPOSITORY_ROOT)
     : undefined;

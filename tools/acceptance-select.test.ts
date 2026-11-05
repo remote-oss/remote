@@ -24,7 +24,7 @@ import {
   selectLaunches,
   SMOKE_PART,
 } from './acceptance-select.ts';
-import {measuredPackages} from './acceptance-reach.ts';
+import {measuredPaths} from './acceptance-reach.ts';
 import {chosenLaunches} from './acceptance.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 
@@ -69,7 +69,7 @@ function selectionOf(
   return selectLaunches(
     changed,
     launches,
-    measuredPackages(changed, launches, REPOSITORY_ROOT),
+    measuredPaths(changed, 'HEAD', launches, REPOSITORY_ROOT),
   );
 }
 

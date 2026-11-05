@@ -1,14 +1,15 @@
 /**
- * @fileoverview acceptance-reach: what a change to the launch table or to a suite's own helper reaches, measured from
- * the files rather than assumed. A change to tools/acceptance-launches.ts whose changed declarations are `launchesOf`
- * and what only it uses reaches the launches whose entries differ between the base and the head; a helper in a suite
+ * @fileoverview acceptance-reach: what a change to the launch table, the parts table, a suite's own helper or a package
+ * reaches, measured from the files rather than assumed. A change to tools/acceptance-launches.ts whose changed
+ * declarations are `launchesOf` and what only it uses reaches the launches whose entries differ between the base and
+ * the head; a change to the parts table reaches the launches of the parts it makes otherwise; a helper in a suite
  * folder that only that suite's tests import stands for those tests; a change to a package reaches the launches that
  * install an extension built from it, and those that run a test importing it. Anything the measurement cannot account
  * for (an export, what an export uses, an import, a value with no text of its own, a package it cannot place) reaches
  * every launch, as before.
  */
 
-import {spawnSync} from 'node:child_process';
+import {execFileSync, spawnSync} from 'node:child_process';
 import {
   existsSync,
   mkdtempSync,
@@ -22,10 +23,19 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import typescript from 'typescript';
 import type {Launch} from './acceptance-launches.ts';
+import {
+  type Part,
+  partsOfTable,
+  type PartsTable,
+  suiteFilesIn,
+} from './acceptance-parts.ts';
 import {isInside, isLibraryFolder} from './repository.ts';
 
 /** The launch table's file, as a changed path names it. */
 export const LAUNCH_TABLE = 'tools/acceptance-launches.ts';
+
+/** The parts table's file, as a changed path names it. */
+export const PARTS_TABLE_FILE = 'tools/acceptance-parts.json';
 
 /**
  * Paths no launch can reach: documentation, unit tests, and the selection's own two modules (acceptance-select.ts and
@@ -680,11 +690,13 @@ export function packageReach(
 }
 
 /**
- * The reach of each changed path in a package's folder that is not a unit test, by path, for the packages the reach
- * can place; the graph is read once, at `root`, and only when such a path changed.
+ * The reach measured at `root`, the head, for the changed paths it can place: each path in a package's folder that is
+ * not a unit test, by its package (the graph is read once, and only when such a path changed), and the parts table, by
+ * the parts it makes otherwise than at `base`.
  */
-export function measuredPackages(
+export function measuredPaths(
   changed: readonly string[],
+  base: string,
   launches: readonly Launch[],
   root: string,
 ): Map<string, readonly string[]> {
@@ -706,5 +718,71 @@ export function measuredPackages(
       measured.set(file, reach);
     }
   }
+  const parts = changed.includes(PARTS_TABLE_FILE)
+    ? labelsOfTableSince(base, launches, root)
+    : undefined;
+  if (parts !== undefined) {
+    measured.set(PARTS_TABLE_FILE, parts);
+  }
   return measured;
+}
+
+/** A part as a run makes it: its launches, in their order, and its time limit. */
+function madeAs(part: Part): string {
+  return `${part.launches} ${String(part.minutes)}`;
+}
+
+/**
+ * The labels of the launches in the parts that differ between the table `before` and the table `after`, both packed
+ * from `launches`: a part of `after` that `before` has not, with the same launches in the same order and the same
+ * limit. A launch held with another is in its part, so it comes with it. Only the plan reads the table, so a part made
+ * as before runs as before.
+ */
+export function labelsOfChangedParts(
+  before: PartsTable,
+  after: PartsTable,
+  launches: readonly Launch[],
+  suiteFiles: (suite: string) => string[],
+): string[] {
+  const made = new Set(partsOfTable(launches, before, suiteFiles).map(madeAs));
+  const labels = new Set(
+    partsOfTable(launches, after, suiteFiles)
+      .filter(part => !made.has(madeAs(part)))
+      .flatMap(part =>
+        part.launches.split(',').map(entry => entry.split(':')[0] ?? ''),
+      ),
+  );
+  return launches
+    .map(launch => launch.label)
+    .filter(label => labels.has(label));
+}
+
+/**
+ * The labels whose parts a change of the parts table since `base` makes otherwise, both tables packed from the head's
+ * launches so that only the table's change counts; undefined, so every launch, when the base's table can't be read or
+ * packed.
+ */
+export function labelsOfTableSince(
+  base: string,
+  launches: readonly Launch[],
+  root: string,
+): string[] | undefined {
+  try {
+    return labelsOfChangedParts(
+      JSON.parse(
+        execFileSync('git', ['show', `${base}:${PARTS_TABLE_FILE}`], {
+          cwd: root,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        }),
+      ) as PartsTable,
+      JSON.parse(
+        readFileSync(path.join(root, PARTS_TABLE_FILE), 'utf8'),
+      ) as PartsTable,
+      launches,
+      suiteFilesIn(root),
+    );
+  } catch {
+    return undefined;
+  }
 }

@@ -1,5 +1,6 @@
 /**
- * @fileoverview acceptance-reach: what a change to the launch table, to a suite's own helper or to a package reaches.
+ * @fileoverview acceptance-reach: what a change to the launch table, the parts table, a suite's own helper or a package
+ * reaches.
  */
 
 import {deepStrictEqual} from 'node:assert';
@@ -14,12 +15,16 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import * as launchTable from './acceptance-launches.ts';
 import {type Launch, launchesOf} from './acceptance-launches.ts';
+import {type PartsTable, suiteFilesIn} from './acceptance-parts.ts';
 import {
   changedLabels,
   labelsChangedSince,
   measurableEdit,
-  measuredPackages,
+  labelsOfChangedParts,
+  labelsOfTableSince,
+  measuredPaths,
   packageReach,
+  PARTS_TABLE_FILE,
   sourceGraph,
   type TableModule,
   testsOfHelper,
@@ -492,23 +497,74 @@ describe('acceptance-reach: what a change to a package reaches (card tooling-169
     );
   });
 
-  it('tooling-169: the changed paths of a package are measured unless they are its unit tests, and a package that reaches every launch is not measured', () => {
-    const launches = launchesOf(REPOSITORY_ROOT);
+  it('tooling-169: the changed paths of a package are measured unless they are its unit tests, a package that reaches every launch is not measured, and the parts table is', () => {
+    const measured = measuredPaths(
+      [
+        'packages/lib-wsl/src/wsl.ts',
+        'packages/lib-wsl/src/path.ts',
+        'packages/lib-wsl/test/unit/wsl.test.ts',
+        'packages/lib-host/src/host.ts',
+        'docs/notes.md',
+        PARTS_TABLE_FILE,
+      ],
+      'HEAD',
+      launchesOf(REPOSITORY_ROOT),
+      REPOSITORY_ROOT,
+    );
+    deepStrictEqual(
+      [[...measured.keys()], measured.get(PARTS_TABLE_FILE)],
+      [
+        [
+          'packages/lib-wsl/src/wsl.ts',
+          'packages/lib-wsl/src/path.ts',
+          PARTS_TABLE_FILE,
+        ],
+        [],
+      ],
+    );
+  });
+});
+
+describe('acceptance-reach: what a change to the parts table reaches (card tooling-169)', () => {
+  const launches = launchesOf(REPOSITORY_ROOT);
+  const table = JSON.parse(
+    readFileSync(path.join(REPOSITORY_ROOT, PARTS_TABLE_FILE), 'utf8'),
+  ) as PartsTable;
+  /** The labels of the parts that `after` makes otherwise than the repository's table. */
+  function changedBy(after: PartsTable): string[] {
+    return labelsOfChangedParts(
+      table,
+      after,
+      launches,
+      suiteFilesIn(REPOSITORY_ROOT),
+    );
+  }
+
+  it('tooling-169: the same table, or one without a pin that changes no part, reaches no launch', () => {
+    deepStrictEqual(
+      [changedBy(table), changedBy({...table, together: []})],
+      [[], []],
+    );
+  });
+
+  it("tooling-169: a launch's minutes that change its part reach the launches of the parts made otherwise, and no other group", () => {
+    const reached = changedBy({
+      ...table,
+      minutes: {...table.minutes, slow: 30},
+    });
+    deepStrictEqual(
+      [reached.includes('slow'), reached.includes('containers-a')],
+      [true, false],
+    );
+  });
+
+  it("tooling-169: the table at HEAD reaches no launch, and a base whose table can't be read reaches every launch", () => {
     deepStrictEqual(
       [
-        ...measuredPackages(
-          [
-            'packages/lib-wsl/src/wsl.ts',
-            'packages/lib-wsl/src/path.ts',
-            'packages/lib-wsl/test/unit/wsl.test.ts',
-            'packages/lib-host/src/host.ts',
-            'docs/notes.md',
-          ],
-          launches,
-          REPOSITORY_ROOT,
-        ).keys(),
+        labelsOfTableSince('HEAD', launches, REPOSITORY_ROOT),
+        labelsOfTableSince('no-such-commit', launches, REPOSITORY_ROOT),
       ],
-      ['packages/lib-wsl/src/wsl.ts', 'packages/lib-wsl/src/path.ts'],
+      [[], undefined],
     );
   });
 });
