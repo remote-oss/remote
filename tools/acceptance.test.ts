@@ -518,6 +518,7 @@ const LAUNCH_ORDER = [
     'containers-trust',
     'containers-nodocker',
     'containers-volume',
+    'containers-volume-trust',
     'containers-config',
   ],
   'containers-explorer',
@@ -1565,6 +1566,7 @@ describe('acceptance', () => {
             'containers-trust',
             'containers-nodocker',
             'containers-volume',
+            'containers-volume-trust',
             'containers-config',
           ].map(containersOnly),
           {
