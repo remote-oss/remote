@@ -21,7 +21,10 @@ export const EXPLORE_VOLUME_VARIABLE = 'REMOTE_OSS_INSPECT_VOLUME';
 /** The workspace mount of the definition: the volume at `/volume`. */
 export const EXPLORE_WORKSPACE_MOUNT = `source=\${localEnv:${EXPLORE_VOLUME_VARIABLE}},target=/volume,type=volume`;
 
-/** The text of the definition: the pinned base-alpine image, as root, with the volume at `/volume` and no Docker socket. */
+/**
+ * The text of the definition: the pinned base-alpine image, as root, with the volume at `/volume`, no Docker socket, and
+ * no extension recommendations in the window.
+ */
 export function exploreDefinitionText(): string {
   return `${JSON.stringify(
     {
@@ -30,6 +33,9 @@ export function exploreDefinitionText(): string {
       remoteUser: 'root',
       workspaceMount: EXPLORE_WORKSPACE_MOUNT,
       workspaceFolder: '/volume',
+      customizations: {
+        vscode: {settings: {'extensions.ignoreRecommendations': true}},
+      },
     },
     undefined,
     2,
