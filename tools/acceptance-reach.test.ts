@@ -699,7 +699,7 @@ describe('acceptance-reach: the names other sources import from the launch table
 });
 
 describe('acceptance-reach: the tests of a folder its own job runs (card tooling-169)', () => {
-  it('tooling-169: in the repository a server or shared-suite test reaches no launch; a containers-cli test (no job runs it), a server helper and a folder of no job are not measured', () => {
+  it('tooling-169, tooling-143: in the repository a server, shared-suite or containers-cli test reaches no launch; a server helper and a folder of no job are not measured', () => {
     deepStrictEqual(
       [
         ...measuredPaths(
@@ -718,11 +718,12 @@ describe('acceptance-reach: the tests of a folder its own job runs (card tooling
       [
         ['tests/acceptance/server/login-shells.test.ts', []],
         ['tests/acceptance/suite/host.test.ts', []],
+        ['tests/acceptance/containers-cli/cli-bridge.test.ts', []],
       ],
     );
   });
 
-  it("tooling-169: each folder's script is in package.json and a CI job runs it, the server script on the server folder and the slice's run on the shared suite's bundle", () => {
+  it("tooling-169: each folder's script is in package.json and a CI job runs it, the server and containers-cli scripts on their folders and the slice's run on the shared suite's bundle", () => {
     const scripts = (
       JSON.parse(
         readFileSync(path.join(REPOSITORY_ROOT, 'package.json'), 'utf8'),
@@ -738,8 +739,10 @@ describe('acceptance-reach: the tests of a folder its own job runs (card tooling
           folder,
           new RegExp(`pnpm ${script}(?![\\w:-])`).test(workflow),
         ]),
-        scripts[String(OWN_JOB_FOLDERS.get('server'))]?.includes(
-          "'tests/acceptance/server/*.test.ts'",
+        ['server', 'containers-cli'].map(folder =>
+          scripts[String(OWN_JOB_FOLDERS.get(folder))]?.includes(
+            `'tests/acceptance/${folder}/*.test.ts'`,
+          ),
         ),
         acceptanceConfiguration(REPOSITORY_ROOT, {}).files ===
           `${bundleFolderOf('suite')}/**/*.test.cjs`,
@@ -748,8 +751,9 @@ describe('acceptance-reach: the tests of a folder its own job runs (card tooling
         [
           ['server', true],
           ['suite', true],
+          ['containers-cli', true],
         ],
-        true,
+        [true, true],
         true,
       ],
     );
