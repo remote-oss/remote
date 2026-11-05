@@ -101,6 +101,25 @@ describe('acceptance-parts (card tooling-159)', () => {
     ]);
   });
 
+  it('tooling-159: the host cases run in one part in the table order, past the target, and a launch of the CLI-source editor is left out', () => {
+    const launches: Launch[] = [
+      {label: 'case-one', runner: 'runner-remote', suite: 'suite-ports'},
+      {label: 'case-two', runner: 'runner-remote', suite: 'suite-ports'},
+      {label: 'cli-copy', kind: 'plain', suite: 'cli-copy', cliSource: true},
+    ];
+    deepStrictEqual(
+      partsOfTable(
+        launches,
+        {
+          targetMinutes: 15,
+          minutes: {'case-one': 4, 'case-two': 14, 'cli-copy': 1},
+        },
+        suiteFiles,
+      ),
+      [{name: 'hosts 1/1', launches: 'case-one,case-two', minutes: 46}],
+    );
+  });
+
   it('tooling-159: a refresh reads file lines per launch, merged over the logs, and a launch without them from its stamps to the next launch or the end', () => {
     const table: PartsTable = {
       targetMinutes: 15,
@@ -149,7 +168,13 @@ describe('acceptance-parts (card tooling-159)', () => {
           );
     }
     const made = parts.flatMap(part => units(part.launches.split(',')));
-    const wanted = units(['@ssh', '@hosts', '@explorer', '@containers']);
+    const wanted = units([
+      '@ssh',
+      '@hosts',
+      '@explorer',
+      '@containers',
+      '!cli-path',
+    ]);
     deepStrictEqual(
       [
         [...made].sort(),

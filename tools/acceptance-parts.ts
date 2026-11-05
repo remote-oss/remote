@@ -148,10 +148,24 @@ function entriesOf(
   ];
 }
 
+/** The groups whose launches run in one part, in the table's order: the host cases, each of which can need the ones before it. */
+export const ORDERED_GROUPS: readonly string[] = ['hosts'];
+
+/**
+ * Whether the parts leave a launch out: the genuine group's, which have a job of their own, and a launch that starts the
+ * CLI-source editor, which needs the CLI archives' token that CI does not hold.
+ */
+function leftOut(launch: Launch): boolean {
+  return (
+    launchGroupOf(launch) === 'genuine' ||
+    (launch.kind === 'plain' && launch.cliSource === true)
+  );
+}
+
 /**
  * Every part of a VSCodium run, group by group in the table's order: each group's entries packed first-fit, the longest
- * first, into parts of at most the target, an entry over the target alone in its part. The genuine group has a job of
- * its own and is left out; named-only launches are in, as their group's selection makes them.
+ * first, into parts of at most the target, an entry over the target alone in its part; an ordered group's launches all
+ * in one part. Named-only launches are in, as their group's selection makes them, unless the parts leave them out.
  */
 export function partsOfTable(
   launches: readonly Launch[],
@@ -159,15 +173,23 @@ export function partsOfTable(
   suiteFiles: (suite: string) => string[],
 ): Part[] {
   const entries = launches
-    .filter(launch => launchGroupOf(launch) !== 'genuine')
+    .filter(launch => !leftOut(launch))
     .flatMap(launch => entriesOf(launch, table, suiteFiles));
   const groups = [...new Set(entries.map(entry => entry.group))];
   return groups.flatMap(group => {
     const packed: Array<{total: number; members: Entry[]}> = [];
     const ofGroup = entries.filter(entry => entry.group === group);
-    for (const entry of [...ofGroup].sort(
-      (left, right) => right.minutes - left.minutes,
-    )) {
+    const ordered = ORDERED_GROUPS.includes(group);
+    if (ordered) {
+      packed.push({
+        total: ofGroup.reduce((total, entry) => total + entry.minutes, 0),
+        members: ofGroup,
+      });
+    }
+    const longestFirst = ordered
+      ? []
+      : [...ofGroup].sort((left, right) => right.minutes - left.minutes);
+    for (const entry of longestFirst) {
       const room = packed.find(
         part => part.total + entry.minutes <= table.targetMinutes,
       );
