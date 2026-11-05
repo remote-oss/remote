@@ -290,9 +290,9 @@ describe('the associations and the discontinued namespace of the authoring aids 
           each => [each.className, (each.textContent ?? '').slice(0, 120)],
         )))()`,
       );
-      const tab = (await windowState(window)).activeTab?.uri ?? 'no tab';
+      const openTab = (await windowState(window)).activeTab?.uri ?? 'no tab';
       throw new Error(
-        `${String(caught)}; hovers ${hovers}; the window: ${tab}`,
+        `${String(caught)}; hovers ${hovers}; the window: ${openTab}`,
         {cause: caught},
       );
     }
