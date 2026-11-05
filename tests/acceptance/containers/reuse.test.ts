@@ -1448,7 +1448,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it('F-0401 AC-20 (r20): two Reopen in Container commands in immediate succession make one container', async () => {
+  for (let round = 0; round < 8; round += 1) it(`F-0401 AC-20 (r20) round ${String(round)}: two Reopen in Container commands in immediate succession make one container`, async () => {
     const folder = devContainerFolder('c54-twice', {name: 'Twice'});
     try {
       const name = await openFolderWindow(folder);
@@ -1458,8 +1458,10 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       } catch {
         // The first command's reload may have ended the agent before it could accept the second.
       }
+      const began = containersLog().length;
       await connectedToContainer(name, DIALOG_MILLISECONDS);
       const containers = await devContainersOf(folder);
+      console.log('MEASURE r20', JSON.stringify({containers: containers.length, indicator: (await statusItem(name, 'status.host')).text, remoteName: (await windowState(name)).remoteName, log: containersLogSince(began).slice(-12).map(line => line.slice(0, 160))}));
       await closeWindow(name);
       deepStrictEqual(containers.length, 1);
     } finally {
@@ -1467,7 +1469,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it('F-0201 AC-1 (m1): Reopen in Container on a trusted folder with a pre-pulled image shows no dialog, makes the vscode volume, starts the container and connects the same window', async () => {
+  for (let round = 0; round < 8; round += 1) it(`F-0201 AC-1 (m1) round ${String(round)}: Reopen in Container on a trusted folder with a pre-pulled image shows no dialog, makes the vscode volume, starts the container and connects the same window`, async () => {
     const folder = devContainerFolder('c54-first-reopen', {
       name: 'First Reopen',
     });
