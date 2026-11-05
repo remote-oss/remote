@@ -1,7 +1,7 @@
 /**
  * @fileoverview The SSH group in a window connected through Remote - SSH (card coverage-102, #1809, part 2): the
  * hosts it lists and the files its two buttons offer, open and write are the local machine's, and nothing is written
- * on the SSH host. The file runs before folders.test.ts (the names run alphabetically): after it, the view lists the
+ * on the SSH host. The file runs before the folders-N files (the names run alphabetically): after it, the view lists the
  * folders of 122 visits and reading its rows scrolls for minutes. Its window is named outside the `c102-` prefix of the
  * rows that count their own history.
  */
