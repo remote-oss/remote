@@ -97,6 +97,71 @@ export function hostImageOf(runId: string, base: HostBase = 'alpine'): string {
     : `${HOST_IMAGE}:${runId}-${base}`;
 }
 
+/** How often the pull of one base image is tried before the build gives up. */
+export const PULL_TRIES = 3;
+
+/** The seconds between two tries of a base image's pull. */
+export const PULL_PAUSE_SECONDS = 15;
+
+/**
+ * The base images a Dockerfile's text builds from, in order and each once: the image of every `FROM`, but not a stage
+ * an earlier `FROM` names, `scratch`, or an image an argument names, which the build resolves itself.
+ */
+export function baseImagesOf(dockerfile: string): string[] {
+  const stages = new Set<string>();
+  const bases: string[] = [];
+  for (const line of dockerfile.split('\n')) {
+    const [instruction = '', ...rest] = line.trim().split(/\s+/);
+    const words = rest.filter(word => !word.startsWith('--'));
+    const image = words[0];
+    if (instruction.toUpperCase() !== 'FROM' || image === undefined) {
+      continue;
+    }
+    if (
+      !image.includes('$') &&
+      image !== 'scratch' &&
+      !stages.has(image.toLowerCase())
+    ) {
+      bases.push(image);
+    }
+    if (words[1]?.toUpperCase() === 'AS' && words[2] !== undefined) {
+      stages.add(words[2].toLowerCase());
+    }
+  }
+  return [...new Set(bases)];
+}
+
+/**
+ * Pulls the base images of the Dockerfile in `folder` before it is built, each tried up to PULL_TRIES times with a
+ * pause between, so the build finds them local and asks no registry: one failed request to the registry or its
+ * content network no longer fails the run before any row. It throws with every try's error when one base's tries all
+ * fail. A folder with no Dockerfile pulls nothing, and its build says why.
+ */
+export function pullBaseImages(command: CommandRunner, folder: string): void {
+  const dockerfile = path.join(folder, 'Dockerfile');
+  if (!existsSync(dockerfile)) {
+    return;
+  }
+  for (const image of baseImagesOf(readFileSync(dockerfile, 'utf8'))) {
+    const errors: string[] = [];
+    while (errors.length < PULL_TRIES) {
+      if (errors.length > 0) {
+        command('sleep', [String(PULL_PAUSE_SECONDS)]);
+      }
+      const result = command('docker', ['pull', '--quiet', image]);
+      if (result.status === 0) {
+        break;
+      }
+      errors.push(`try ${String(errors.length + 1)}: ${result.stderr.trim()}`);
+    }
+    if (errors.length === PULL_TRIES) {
+      throw new Error(
+        `docker pull ${image} failed ${String(PULL_TRIES)} times: ${errors.join('; ')}`,
+      );
+    }
+  }
+}
+
 /** The image tag of the run's dev container image: `remote-oss-acceptance-devcontainer:<run id>`. */
 export function devContainerImageOf(runId: string): string {
   return `${DEVCONTAINER_IMAGE}:${runId}`;
@@ -112,6 +177,8 @@ export function buildDevContainerImage(
   runId: string,
 ): string {
   const imageTag = devContainerImageOf(runId);
+  const folder = path.join(root, 'tests', 'acceptance', 'devcontainer-image');
+  pullBaseImages(command, folder);
   checked(command, 'docker', [
     'build',
     '--load',
@@ -124,7 +191,7 @@ export function buildDevContainerImage(
     `${DEVCONTAINER_LABEL}=1`,
     '--tag',
     imageTag,
-    path.join(root, 'tests', 'acceptance', 'devcontainer-image'),
+    folder,
   ]);
   return imageTag;
 }
@@ -379,6 +446,7 @@ export function startHostContainer(
   extraArguments: readonly string[] = [],
   base: HostBase = 'alpine',
 ): HostContainer {
+  pullBaseImages(command, hostFolderOf(root, base));
   checked(command, 'docker', [
     'build',
     '--load',

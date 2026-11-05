@@ -21,6 +21,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
   acceptanceRunId,
+  baseImagesOf,
   buildDevContainerImage,
   cleanPodmanRun,
   cleanRun,
@@ -31,6 +32,9 @@ import {
   loadImageIntoPodman,
   NETWORK_AGE_FORMAT,
   newPassword,
+  PULL_PAUSE_SECONDS,
+  PULL_TRIES,
+  pullBaseImages,
   requirePodman,
   RUN_LABEL,
   runNetworkOf,
@@ -215,6 +219,90 @@ function startingCommands(): ScriptedCommands & CommandRunner {
   scripted.passes('127.0.0.1:49153\n'); // docker port
   return scripted;
 }
+
+describe('the base images pulled before a build (card tooling-173)', () => {
+  const ALPINE =
+    'alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8';
+  let folder = '';
+
+  beforeEach(() => {
+    folder = mkdtempSync(path.join(tmpdir(), 'acceptance-bases-'));
+    writeFileSync(
+      path.join(folder, 'Dockerfile'),
+      `FROM ${ALPINE}\nRUN true\n`,
+    );
+  });
+
+  afterEach(() => {
+    rmSync(folder, {recursive: true, force: true});
+  });
+
+  it("tooling-173: a Dockerfile's bases are its FROM images, each once, without a stage it names, scratch or an argument", () => {
+    deepStrictEqual(
+      baseImagesOf(
+        [
+          `FROM --platform=linux/amd64 ${ALPINE} AS build`,
+          'RUN true',
+          'from build',
+          'FROM scratch',
+          'FROM ${ENGINE_IMAGE}',
+          `FROM ${ALPINE}`,
+          'FROM debian:12 as other',
+        ].join('\n'),
+      ),
+      [ALPINE, 'debian:12'],
+    );
+  });
+
+  it('tooling-173: a base that pulls at once is pulled once, and one that fails twice is tried a third time after a pause each', () => {
+    const once = scriptedCommands();
+    once.passes();
+    pullBaseImages(once, folder);
+    const third = scriptedCommands();
+    third.fails(1, 'httpReadSeeker: failed open');
+    third.passes();
+    third.fails(1, 'failed to resolve source metadata');
+    third.passes();
+    third.passes();
+    pullBaseImages(third, folder);
+    deepStrictEqual(
+      [once.calls, third.calls.map(call => [call.program, ...call.argv])],
+      [
+        [{program: 'docker', argv: ['pull', '--quiet', ALPINE]}],
+        [
+          ['docker', 'pull', '--quiet', ALPINE],
+          ['sleep', String(PULL_PAUSE_SECONDS)],
+          ['docker', 'pull', '--quiet', ALPINE],
+          ['sleep', String(PULL_PAUSE_SECONDS)],
+          ['docker', 'pull', '--quiet', ALPINE],
+        ],
+      ],
+    );
+  });
+
+  it("tooling-173: a base whose tries all fail fails with every try's error, and a folder with no Dockerfile pulls nothing", () => {
+    const failing = scriptedCommands();
+    for (let tries = 0; tries < PULL_TRIES; tries += 1) {
+      failing.fails(1, `error ${String(tries + 1)}`);
+      failing.passes();
+    }
+    const empty = scriptedCommands();
+    pullBaseImages(empty, path.join(folder, 'none'));
+    let message = '';
+    try {
+      pullBaseImages(failing, folder);
+    } catch (error) {
+      message = error instanceof Error ? error.message : '';
+    }
+    deepStrictEqual(
+      {message, calls: empty.calls},
+      {
+        message: `docker pull ${ALPINE} failed 3 times: try 1: error 1; try 2: error 2; try 3: error 3`,
+        calls: [],
+      },
+    );
+  });
+});
 
 describe('startHostContainer (card tooling-10)', () => {
   it('passes the extra arguments to docker run, before the image (card tooling-14)', () => {

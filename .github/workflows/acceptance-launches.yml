@@ -71,7 +71,8 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # the containerd image store, the one Docker 29 uses by default and the image-build rows are written against
+      # the containerd image store, the one Docker 29 uses by default and the image-build rows are written against, and a
+      # registry mirror for Docker Hub's images
       - run: tools/docker-containerd-store
       - run: pnpm acceptance:clean
       - run: |

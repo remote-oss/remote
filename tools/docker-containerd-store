@@ -1,46 +1,86 @@
 #!/usr/bin/env bash
 # docker-containerd-store: the local Docker daemon on the containerd image store, the store Docker 29 uses by default
-# and the acceptance rows of image builds and rebuilds are written against.
+# and the acceptance rows of image builds and rebuilds are written against, pulling Docker Hub's images through a
+# registry mirror.
 #
-#   tools/docker-containerd-store    switch the daemon to the containerd image store unless it is on it, then check it
+#   tools/docker-containerd-store    switch the daemon to the containerd image store unless it is on it, give it a
+#                                    mirror unless it lists one, then check both
 #
-# A daemon already on the store is left alone. Otherwise `"features": {"containerd-snapshotter": true}` is merged into
-# /etc/docker/daemon.json, keeping every setting the machine has there, and the daemon is restarted through systemd.
-# Images and containers of the other store are not carried over. The check reads `docker info` and fails unless the
-# daemon reports the containerd snapshotter. Needs sudo, systemd and node.
+# A daemon already on the store and listing a mirror is left alone. Otherwise what it lacks is merged into
+# /etc/docker/daemon.json, keeping every setting the machine has there: `"features": {"containerd-snapshotter": true}`
+# and `"registry-mirrors": ["https://mirror.gcr.io"]`. A new store restarts the daemon through systemd, and its images
+# and containers are not carried over; a new mirror alone only reloads its configuration. The daemon still pulls from
+# Docker Hub an image the mirror doesn't hold. The check reads `docker info` and fails unless the daemon reports the
+# containerd snapshotter and a mirror. Needs sudo, systemd and node.
 set -euo pipefail
 
 CONFIG=/etc/docker/daemon.json
 SNAPSHOTTER=io.containerd.snapshotter.v1
+MIRROR=https://mirror.gcr.io
 
 # The daemon's storage driver and its driver type, as `docker info` reports them.
 store() {
   docker info --format '{{.Driver}} {{range .DriverStatus}}{{if eq (index . 0) "driver-type"}}{{index . 1}}{{end}}{{end}}'
 }
 
+# The registry mirrors the daemon pulls Docker Hub's images through, as a JSON list.
+mirrors() {
+  docker info --format '{{json .RegistryConfig.Mirrors}}'
+}
+
+# Whether a JSON list of mirrors, as `mirrors` prints it, names none.
+no_mirror() {
+  [ "$1" = '[]' ] || [ "$1" = 'null' ]
+}
+
 current=$(store)
+listed=$(mirrors)
+switch=no
 if [ "${current#* }" != "$SNAPSHOTTER" ]; then
+  switch=yes
   echo "docker-containerd-store: the daemon is on '$current'; switching it to the containerd image store"
+fi
+mirror=''
+if no_mirror "$listed"; then
+  mirror=$MIRROR
+  echo "docker-containerd-store: the daemon lists no registry mirror; giving it $mirror"
+fi
+if [ "$switch" = yes ] || [ -n "$mirror" ]; then
   merged=$(sudo cat "$CONFIG" 2>/dev/null || echo '{}')
-  merged=$(printf '%s' "$merged" | node -e '
+  merged=$(printf '%s' "$merged" | SWITCH=$switch MIRROR=$mirror node -e '
     let text = "";
     process.stdin.on("data", chunk => (text += chunk));
     process.stdin.on("end", () => {
       const config = text.trim() === "" ? {} : JSON.parse(text);
-      config.features = {...config.features, "containerd-snapshotter": true};
+      if (process.env.SWITCH === "yes") {
+        config.features = {...config.features, "containerd-snapshotter": true};
+      }
+      if (process.env.MIRROR !== "") {
+        config["registry-mirrors"] = [process.env.MIRROR];
+      }
       process.stdout.write(JSON.stringify(config, undefined, 2) + "\n");
     });
   ')
   printf '%s\n' "$merged" | sudo tee "$CONFIG" >/dev/null
-  sudo systemctl restart docker
+  # dockerd rereads registry-mirrors on a reload (SIGHUP); a new store needs a restart
+  if [ "$switch" = yes ]; then
+    sudo systemctl restart docker
+  else
+    sudo systemctl reload docker
+  fi
   for _ in $(seq 1 60); do
-    docker info >/dev/null 2>&1 && break
+    listed=$(mirrors 2>/dev/null) && ! no_mirror "$listed" && break
     sleep 1
   done
   current=$(store)
+  listed=$(mirrors)
 fi
 if [ "${current#* }" != "$SNAPSHOTTER" ]; then
   echo "docker-containerd-store: the daemon reports '$current', not the containerd snapshotter" >&2
   exit 1
 fi
-echo "docker-containerd-store: $current ($(docker version --format '{{.Server.Version}}'))"
+if no_mirror "$listed"; then
+  echo "docker-containerd-store: the daemon reports no registry mirror" >&2
+  exit 1
+fi
+echo "docker-containerd-store: $current ($(docker version --format '{{.Server.Version}}')), Docker Hub through $listed"
