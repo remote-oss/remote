@@ -1335,6 +1335,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
         '-c',
         'test -e /tmp/c54-poststart && echo yes || echo no',
       ]);
+      console.log('MEASURE r10 log since mark', JSON.stringify(containersLogSince(mark).map(line => line.slice(0, 200))));
       const lines = containersLogSince(mark).filter(
         line => line.includes('postCreateCommand') && line.includes('failed'),
       );
