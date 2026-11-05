@@ -236,6 +236,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
           ),
         },
         {inside: true, named: []},
+        `the positions of Starting container, the pull, the download and Container started are ${[step, pull, downloaded, started].join(', ')} in:\n${lines.join('\n')}`,
       );
       await closeWindow(name);
     } finally {
