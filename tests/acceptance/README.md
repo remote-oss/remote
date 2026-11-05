@@ -375,6 +375,13 @@ with junk and any other client with the archive. Before each launch the run note
 `<run>/<label>-requests-start`, so `downloadRequests()` of `suite-install/install.ts` reads only the case's own. The
 host's downloaders send a `Wget` or `curl` user agent, and the editor's download doesn't.
 
+A case that keeps what an earlier connect left (`keepServer`, `keepFiles`) names a primer in `needs`: the case listed right
+before it with `primer: true`, whose connect makes that state. The primer's launch is `named only` and a part of the
+case's launch, so a selection that names the case runs the primer right before it, and none runs the primer alone; the
+primer's one row is its own connect, tagged with no criterion. The three pairs are `install-present`,
+`install-present-stopped` (a primer that installs and connects) and `install-repaired` (a primer whose install fails and
+leaves its files). Each pair passes on a fresh host, whatever ran before.
+
 A launch with host setup also waits the helper's grace before it starts: the helper of the previous launch outlives
 its window by `HELPER_GRACE_MILLISECONDS` of the extension, and a live one would be reused by the resolve without any
 check. The run's `FRESH_RESOLVE_WAIT_MILLISECONDS` is that grace, and a unit row keeps the two equal. The cases need

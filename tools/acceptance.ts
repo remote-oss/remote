@@ -2426,9 +2426,7 @@ function launchesNamed(
   }
   // A launch run in parts is named by the launch it is a part of.
   const named = launches.filter(
-    launch =>
-      launch.label === name ||
-      (launch.kind === 'plain' && launch.partOf === name),
+    launch => launch.label === name || launch.partOf === name,
   );
   return named.length === 0 ? undefined : named;
 }
