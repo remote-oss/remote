@@ -117,6 +117,11 @@ describe('the configuration’s extensions in the container (card containers-16)
         flags: GALLERY_VERSIONS_AND_PROPERTIES,
       }),
     });
+    if (!answer.ok) {
+      throw new Error(
+        `the gallery answered ${String(answer.status)} to the query for ${extensionId}`,
+      );
+    }
     const versions = (
       (await answer.json()) as {
         results: Array<{
@@ -129,15 +134,20 @@ describe('the configuration’s extensions in the container (card containers-16)
         }>;
       }
     ).results[0]?.extensions[0]?.versions;
-    return (
-      versions?.find(entry =>
-        entry.properties?.some(
-          property =>
-            property.key === 'Microsoft.VisualStudio.Code.PreRelease' &&
-            property.value === 'true',
-        ),
-      )?.version ?? ''
+    if (versions === undefined) {
+      throw new Error(`the gallery lists no extension ${extensionId}`);
+    }
+    const prerelease = versions.find(entry =>
+      entry.properties?.some(
+        property =>
+          property.key === 'Microsoft.VisualStudio.Code.PreRelease' &&
+          property.value === 'true',
+      ),
     );
+    if (prerelease === undefined) {
+      throw new Error(`the gallery lists no pre-release of ${extensionId}`);
+    }
+    return prerelease.version;
   }
 
   /** Opens `folder`, reopens it in its container and gives the window and the container's id. */
@@ -218,6 +228,7 @@ describe('the configuration’s extensions in the container (card containers-16)
           startingWith(installed, DRACULA_PREFIX),
         ],
         [1, true, false, [`${DRACULA_PREFIX}${latest}${UNIVERSAL}`]],
+        `the gallery listed ${prereleaseBefore} before the connect and ${prereleaseAfter} after it; the container has ${installed.join(', ')}`,
       );
     } finally {
       await removeContainers(folder);
