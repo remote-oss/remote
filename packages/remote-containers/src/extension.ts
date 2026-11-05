@@ -5,10 +5,9 @@
 
 import {appendFileSync, readFileSync, watch} from 'node:fs';
 import {
-  mkdir,
-  mkdtemp,
   appendFile,
   mkdir,
+  mkdtemp,
   readdir,
   readFile,
   realpath,
