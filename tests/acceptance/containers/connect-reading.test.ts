@@ -236,6 +236,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
           ),
         },
         {inside: true, named: []},
+        JSON.stringify({step, pull, downloaded, started, lines}),
       );
       await closeWindow(name);
     } finally {
