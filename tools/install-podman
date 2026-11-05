@@ -87,11 +87,13 @@ podman info --format '{{.Host.OCIRuntime.Path}}'
 set +e
 podman run -d --name dbg docker.io/library/alpine:3.20 sleep 600
 echo "--- host"; uname -r; cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns; cat /proc/sys/kernel/yama/ptrace_scope 2>&1
-echo "--- apparmor"; sudo aa-status 2>&1 | head -12
+echo "--- A: with libpod.conf"; ls -l /etc/containers/libpod.conf; timeout 15 podman exec dbg true; echo "with rc=$?"
+echo "--- B: without libpod.conf"; sudo mv /etc/containers/libpod.conf /tmp/libpod.conf.moved; timeout 15 podman exec dbg true; echo "without rc=$?"
+echo "--- conmon arguments"; (timeout 12 podman --log-level=debug exec dbg true 2>&1 | grep -E "running conmon|Received|Successfully|exit" | cut -c1-900) &
+sleep 5; find /run/user/"$(id -u)"/libpod /run/user/"$(id -u)"/containers -path '*exit*' -o -path '*persist*' 2>/dev/null | head -20; wait
 sudo apt-get install -y -qq strace >/dev/null 2>&1; command -v strace
-echo "--- strace exec"; timeout 25 strace -f -tt -s 80 -o /tmp/st.txt timeout 12 podman exec dbg true; echo "strace rc=$?"
-wc -l /tmp/st.txt; grep -n "exec\|conmon\|crun" /tmp/st.txt | grep -E "execve|clone|exit_group|kill|SIGCHLD" | head -30
-echo "--- tail of the podman process"; tail -40 /tmp/st.txt | cut -c1-220
+echo "--- strace exec"; timeout 25 strace -f -tt -s 100 -e trace=process,openat,write,unlinkat -o /tmp/st.txt timeout 12 podman exec dbg true; echo "strace rc=$?"
+wc -l /tmp/st.txt; grep -E "execve|exit_group|killed|exited|exit-dir|exits/" /tmp/st.txt | cut -c1-260 | tail -40
 echo "--- dmesg"; sudo dmesg 2>&1 | grep -iE "apparmor|denied|audit|seccomp" | tail -15
 echo "--- cleanup"; podman rm -f dbg
 set -e
