@@ -107,6 +107,29 @@ async function inspected(container: string, format: string): Promise<string> {
   return stdout.trim();
 }
 
+/** The volumes container `container` mounts, as `<name> <destination>`: the clone's, and the `vscode` cache at `/vscode`. */
+async function mountsOf(container: string): Promise<{
+  clones: string;
+  cache: string;
+}> {
+  const mounts = (
+    await inspected(
+      container,
+      '{{range .Mounts}}{{.Name}}={{.Destination}} {{end}}',
+    )
+  )
+    .trim()
+    .split(' ')
+    .filter(each => each !== '');
+  return {
+    clones: mounts
+      .filter(each => !each.endsWith('=/vscode'))
+      .map(each => each.split('=')[0])
+      .join(' '),
+    cache: mounts.filter(each => each.endsWith('=/vscode')).join(' '),
+  };
+}
+
 describe('The recovery container (card containers-160, part A)', function () {
   this.timeout(2_400_000);
   let repository: BrokenRepository;
@@ -190,16 +213,14 @@ describe('The recovery container (card containers-160, part A)', function () {
       '-c',
       'git --version; docker version 2>&1; true',
     ]);
-    const mounted = await inspected(
-      String(container),
-      '{{range .Mounts}}{{.Name}} {{end}}',
-    );
+    const mounted = await mountsOf(String(container));
     const state = await windowState(FIRST);
     const first = {
       count: (await recoveryContainers(volume)).length,
       remoteName: state.remoteName,
       image: await inspected(String(container), '{{.Config.Image}}'),
-      mounted: mounted.trim(),
+      clones: mounted.clones,
+      cache: mounted.cache,
       hasGit: tools.stdout.includes('git version'),
       hasClient: tools.stdout.includes('Client:'),
       noDaemon: tools.stdout.includes(
@@ -221,7 +242,8 @@ describe('The recovery container (card containers-160, part A)', function () {
           count: 1,
           remoteName: 'dev-container',
           image: 'vsc-volume-bootstrap:latest',
-          mounted: volume,
+          clones: volume,
+          cache: 'vscode=/vscode',
           hasGit: true,
           hasClient: true,
           noDaemon: true,
@@ -315,18 +337,13 @@ describe('The recovery container (card containers-160, part A)', function () {
         const containers = await recoveryContainers(volume);
         return {
           containers: containers.length,
-          mounted: (
-            await inspected(
-              String(containers[0]),
-              '{{range .Mounts}}{{.Name}} {{end}}',
-            )
-          ).trim(),
+          clones: (await mountsOf(String(containers[0]))).clones,
           volume,
         };
       }),
     );
     deepStrictEqual(
-      mounts.map(each => [each.containers, each.mounted === each.volume]),
+      mounts.map(each => [each.containers, each.clones === each.volume]),
       [
         [1, true],
         [1, true],
