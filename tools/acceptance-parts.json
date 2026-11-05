@@ -2,7 +2,7 @@
   "targetMinutes": 15,
   "together": [
     ["agent", "agent-off"],
-    ["terminal", "socket"]
+    ["socket-prime", "socket"]
   ],
   "minutes": {
     "add-host": {"add-host.test.ts": 0.4},
