@@ -487,7 +487,11 @@ jobs:
     concurrency:
       group: ${{ github.event_name == 'schedule' && format('acceptance-vscodium-nightly-{0}', github.sha) || (github.event_name == 'push' && format('acceptance-vscodium-{0}', github.ref)) || format('acceptance-vscodium-run-{0}', github.run_id) }}-${{ matrix.part.name }}
       cancel-in-progress: false
-    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    runs-on: >-
+      ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' ||
+      (vars.CI_POOL_RUNS_ON &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON))) || 'ubuntu-24.04' }}
     timeout-minutes: ${{ matrix.part.minutes }}
     steps: *vscodium-steps
 
