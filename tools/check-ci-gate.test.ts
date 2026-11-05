@@ -1,7 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
-import {readFileSync} from 'node:fs';
+import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {ciGateProblems} from './check-ci-gate.ts';
+import {
+  ciGateProblems,
+  poolJobProblems,
+  SAME_REPOSITORY_GUARD,
+} from './check-ci-gate.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 
 function workflow(gateNeeds: string): string {
@@ -51,6 +55,104 @@ describe('check-ci-gate', () => {
         ),
       ),
       [],
+    );
+  });
+
+  /** A workflow with one job `pool` whose runs-on is `runsOn`, and the `extra` lines of its body. */
+  function poolWorkflow(runsOn: string, extra = ''): string {
+    return `jobs:\n  pool:\n    runs-on: ${JSON.stringify(runsOn)}\n${extra}`;
+  }
+  const labels = `fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON))`;
+  const guarded = `\${{ vars.CI_POOL_RUNS_ON && ${SAME_REPOSITORY_GUARD} && ${labels} || 'ubuntu-24.04' }}`;
+
+  it('#2219: a pool job with the guard, X64 and ephemeral and no secret passes, as does a job off the pool', () => {
+    deepStrictEqual(
+      [
+        poolJobProblems('w.yml', poolWorkflow(guarded)),
+        poolJobProblems(
+          'w.yml',
+          poolWorkflow(
+            'ubuntu-24.04',
+            '    env:\n      TOKEN: ${{ secrets.A }}\n',
+          ),
+        ),
+      ],
+      [[], []],
+    );
+  });
+
+  it('#2219: a pool job without the same-repository guard is named', () => {
+    deepStrictEqual(
+      poolJobProblems(
+        'w.yml',
+        poolWorkflow(
+          `\${{ vars.CI_POOL_RUNS_ON && ${labels} || 'ubuntu-24.04' }}`,
+        ),
+      ),
+      [
+        'w.yml: pool can run on the pool, and its runs-on lacks the same-repository guard',
+      ],
+    );
+  });
+
+  it('#2219: a pool job on the checks variable without X64 and ephemeral is named', () => {
+    deepStrictEqual(
+      poolJobProblems(
+        'w.yml',
+        poolWorkflow(
+          `\${{ vars.CI_CHECKS_RUNS_ON && ${SAME_REPOSITORY_GUARD} && fromJSON(format('["{0}"]', vars.CI_CHECKS_RUNS_ON)) || 'ubuntu-24.04' }}`,
+        ),
+      ),
+      ['w.yml: pool can run on the pool without asking for X64 and ephemeral'],
+    );
+  });
+
+  it('#2219: a pool job that reads a secret is named', () => {
+    deepStrictEqual(
+      poolJobProblems(
+        'w.yml',
+        poolWorkflow(
+          guarded,
+          '    steps:\n      - run: echo ${{ secrets.A }}\n',
+        ),
+      ),
+      ['w.yml: pool can run on the pool and reads a secret'],
+    );
+  });
+
+  it('#2219: every workflow of the repository holds, and its ci.yml without the guard names every pool job', () => {
+    const folder = path.join(REPOSITORY_ROOT, '.github/workflows');
+    const ciText = readFileSync(path.join(folder, 'ci.yml'), 'utf8');
+    deepStrictEqual(
+      [
+        readdirSync(folder)
+          .filter(file => file.endsWith('.yml'))
+          .flatMap(file =>
+            poolJobProblems(
+              file,
+              readFileSync(path.join(folder, file), 'utf8'),
+            ),
+          ),
+        poolJobProblems(
+          'ci.yml',
+          ciText.split(SAME_REPOSITORY_GUARD).join('true'),
+        ).map(problem => problem.split(' ')[1]),
+      ],
+      [
+        [],
+        [
+          'changes',
+          'post-merge-select',
+          'checks',
+          'unit',
+          'quality',
+          'acceptance-slice-1',
+          'acceptance-server',
+          'acceptance-host-variants',
+          'acceptance-real-server',
+          'acceptance-vscodium',
+        ],
+      ],
     );
   });
 });

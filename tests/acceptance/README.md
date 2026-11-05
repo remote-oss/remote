@@ -320,14 +320,16 @@ runners this way:
     node tools/acceptance.ts --editor vscodium --launches containers-a
     node tools/acceptance.ts --editor vscodium --launches containers-b
     node tools/acceptance.ts --editor vscodium --launches @containers,!containers
-    node tools/acceptance.ts --editor vscodium --launches @explorer,@hosts
+    node tools/acceptance.ts --editor vscodium --launches @explorer,!explorer-folders
+    node tools/acceptance.ts --editor vscodium --launches explorer-folders
+    node tools/acceptance.ts --editor vscodium --launches @hosts
 
 `@ssh,!terminal` is the ssh group without one launch.
 
 To add a launch: add a row to `launchesOf` and put its tests in the suite folder it names. A runner suite's folder goes
 in `tests/acceptance/tsconfig.json`'s `include`. A plain suite has a `tsconfig.json` of its own, which goes in the root
-`tsconfig.json`'s `references` and in `eslint.config.ts`'s `TYPESCRIPT_PROJECTS`. Either kind's test files go in the
-entries of `knip.jsonc`.
+`tsconfig.json`'s `references`; eslint finds it by itself, since typescript-eslint's project service lints each file
+with the `tsconfig.json` that includes it. Either kind's test files go in the entries of `knip.jsonc`.
 
 ### Ports cases
 

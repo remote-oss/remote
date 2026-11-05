@@ -19,7 +19,9 @@ permissions:
 jobs:
   select:
     # a git diff and the launch table only
-    runs-on: ubuntu-24.04
+    runs-on: >-
+      ${{ vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON)) || 'ubuntu-24.04' }}
     timeout-minutes: 10
     outputs:
       launches: ${{ steps.select.outputs.launches }}
@@ -54,7 +56,12 @@ jobs:
     name: acceptance (vscodium, ${{ needs.select.outputs.launches }})
     needs: select
     if: needs.select.outputs.launches != ''
-    runs-on: ubuntu-24.04
+    # a selection with no containers launch runs on the organisation's pool when the repository variable CI_POOL_RUNS_ON
+    # names its label (with X64 and ephemeral, as ci.yml's VSCodium parts); otherwise on GitHub's ubuntu-24.04
+    runs-on: >-
+      ${{ vars.CI_POOL_RUNS_ON && !contains(needs.select.outputs.launches, 'containers') &&
+      !contains(needs.select.outputs.launches, 'explorer-folders') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON)) || 'ubuntu-24.04' }}
     timeout-minutes: ${{ fromJSON(needs.select.outputs.minutes) }}
     steps:
       - uses: actions/checkout@v7
@@ -76,6 +83,8 @@ jobs:
           df -h / | tail -1
       - if: contains(needs.select.outputs.launches, 'containers-podman')
         run: tools/install-podman
+      # the buildx plugin when the machine's Docker has none (the harness builds with `docker build --load`)
+      - run: tools/install-buildx
       - run: tools/start-display
       - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         env:

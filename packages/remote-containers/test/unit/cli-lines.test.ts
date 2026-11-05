@@ -507,6 +507,15 @@ describe('the daemon refusal (card containers-11)', () => {
     );
   });
 
+  it('F-0410 7.E2, AC-12: the wording of Docker 28 for a port that is taken, failed to bind host port … address already in use, is portAllocated too', () => {
+    const taken =
+      'Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint angry_cohen (1e85834bf3fa): failed to bind host port for 0.0.0.0:32770:172.17.0.5:8000/tcp: address already in use';
+    deepStrictEqual(
+      [taken, `docker: ${taken}`, `${taken} (retrying)`].map(daemonRefusalOf),
+      ['portAllocated', 'portAllocated', undefined],
+    );
+  });
+
   it('ADR-0010: a line with text before the daemon words, another daemon error, text after the port words, or nothing is no refusal', () => {
     deepStrictEqual(
       [

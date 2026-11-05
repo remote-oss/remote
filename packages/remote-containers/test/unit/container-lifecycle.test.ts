@@ -2050,6 +2050,24 @@ describe('containerLifecycleOf', () => {
     );
   });
 
+  it('coverage-117: a compose build that names the service’s Dockerfile gives it to the ready outcome', async () => {
+    const ready = composeReady('proj');
+    const resolution =
+      ready.kind === 'ready'
+        ? {...ready, serviceDockerfile: '/w/proj/Dockerfile.app'}
+        : ready;
+    const {lifecycle} = composeLifecycle(resolution);
+    const outcome = await prepareOf(lifecycle);
+    await settle();
+    deepStrictEqual(
+      [
+        outcome.kind,
+        outcome.kind === 'ready' ? outcome.serviceDockerfile : undefined,
+      ],
+      ['ready', '/w/proj/Dockerfile.app'],
+    );
+  });
+
   /** A Compose resolution whose primary service `app` has the `volumes` entries. */
   function composeWithVolumes(volumes: readonly unknown[]): ComposeResolution {
     const ready = composeReady('proj');

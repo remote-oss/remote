@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# install-buildx: Docker's buildx plugin at the version pinned below, on a machine whose Docker has none. The harness
+# builds its images with `docker build --load`, which the legacy builder refuses.
+#
+#   tools/install-buildx    install the plugin unless `docker buildx` answers, then print its version
+#
+# A machine whose Docker already has buildx keeps it. Otherwise the release binary is checked against its pinned
+# sha256 (the sums GitHub lists for the release's assets) and installed as /usr/local/lib/docker/cli-plugins/
+# docker-buildx, the system folder the CLI searches whatever DOCKER_CONFIG a launch sets. Needs sudo, curl and
+# sha256sum, on Linux x86_64 or aarch64. A version change here is the only way the pins move.
+set -euo pipefail
+
+BUILDX_VERSION=0.38.1
+BUILDX_SHA256_AMD64=e25d5cd675092bb5d1d03632fdc46cdf3fede7b514dc5f023a105e00d3ce5ad4
+BUILDX_SHA256_ARM64=3b83b3731916ba433feccaaa689fe5bcdc81c641d92c8e6c2ea865dfa141c97a
+PLUGINS=/usr/local/lib/docker/cli-plugins
+
+if ! docker buildx version >/dev/null 2>&1; then
+  case "$(uname -m)" in
+    x86_64) arch=amd64 sha256=$BUILDX_SHA256_AMD64 ;;
+    aarch64 | arm64) arch=arm64 sha256=$BUILDX_SHA256_ARM64 ;;
+    *)
+      echo "install-buildx: no pinned buildx for $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+  work=$(mktemp -d)
+  trap 'rm -rf "$work"' EXIT
+  url="https://github.com/docker/buildx/releases/download/v$BUILDX_VERSION/buildx-v$BUILDX_VERSION.linux-$arch"
+  # A refused or failed request (a 403 or 5xx from the release host) is tried again, five times in all.
+  curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 -o "$work/docker-buildx" "$url" || {
+    echo "install-buildx: $url could not be downloaded" >&2
+    exit 1
+  }
+  echo "$sha256  $work/docker-buildx" | sha256sum --check --quiet - || {
+    echo "install-buildx: $url does not match its pinned sha256" >&2
+    exit 1
+  }
+  sudo mkdir -p "$PLUGINS"
+  sudo install -m 0755 "$work/docker-buildx" "$PLUGINS/docker-buildx"
+fi
+echo "install-buildx: $(docker buildx version)"
