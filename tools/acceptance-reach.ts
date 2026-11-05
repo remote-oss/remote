@@ -121,11 +121,14 @@ function fingerprintsOf(table: TableModule, root: string): Map<string, string> {
   );
 }
 
-/** The module's other exports, as text. */
-function restOf(table: TableModule): string {
+/** The module's other exports that a source outside it imports (`imported`), as text. */
+function restOf(
+  table: TableModule,
+  imported: (name: string) => boolean,
+): string {
   return textOf(
     Object.keys(table)
-      .filter(name => !PER_LAUNCH.includes(name))
+      .filter(name => !PER_LAUNCH.includes(name) && imported(name))
       .sort()
       .map(name => [name, table[name]]),
   );
@@ -133,15 +136,18 @@ function restOf(table: TableModule): string {
 
 /**
  * The labels whose launches differ between two tables, added ones included: undefined when anything else the module
- * exports differs, since a launch could then change through it.
+ * exports differs, since a launch could then change through it. An export no source outside the table imports
+ * (`imported`) is the table's own helper: it changes a launch only through the entries it builds, which the launches
+ * show.
  */
 export function changedLabels(
   before: TableModule,
   after: TableModule,
   root: string,
+  imported: (name: string) => boolean = () => true,
 ): string[] | undefined {
   try {
-    if (restOf(before) !== restOf(after)) {
+    if (restOf(before, imported) !== restOf(after, imported)) {
       return undefined;
     }
   } catch {
@@ -242,9 +248,15 @@ function usedBy(
 /**
  * Whether a change to the launch table's text can be measured through its launches: every top-level declaration
  * that differs is `launchesOf` or something only `launchesOf` uses. A change to an import, to a statement that names
- * nothing, or to a declaration an exported value or function other than `launchesOf` uses reaches every launch.
+ * nothing, or to a declaration an exported value or function other than `launchesOf` uses reaches every launch. An
+ * export that no source outside the table imports (`imported`; its unit tests are not such a source) counts as one of
+ * the table's own helpers.
  */
-export function measurableEdit(before: string, after: string): boolean {
+export function measurableEdit(
+  before: string,
+  after: string,
+  imported: (name: string) => boolean = () => true,
+): boolean {
   const earlier = declarationsOf(before);
   const current = declarationsOf(after);
   const changed = [...new Set([...earlier.keys(), ...current.keys()])].filter(
@@ -253,7 +265,8 @@ export function measurableEdit(before: string, after: string): boolean {
   const graphs = [earlier, current];
   const exported = [...earlier, ...current]
     .filter(
-      ([name, declaration]) => declaration.exported && name !== 'launchesOf',
+      ([name, declaration]) =>
+        declaration.exported && name !== 'launchesOf' && imported(name),
     )
     .map(([name]) => name);
   const outsideTable = usedBy(exported, graphs);
@@ -296,16 +309,18 @@ export async function labelsChangedSince(
       path.join(root, 'node_modules'),
       path.join(folder, 'node_modules'),
     );
+    const imported = tableImports(root);
     if (
       !measurableEdit(
         readFileSync(file, 'utf8'),
         readFileSync(path.join(root, LAUNCH_TABLE), 'utf8'),
+        imported,
       )
     ) {
       return undefined;
     }
     const before = (await import(pathToFileURL(file).href)) as TableModule;
-    return changedLabels(before, after, root);
+    return changedLabels(before, after, root, imported);
   } catch {
     return undefined;
   } finally {
@@ -690,9 +705,21 @@ export function packageReach(
 }
 
 /**
+ * The folders of the acceptance tests that no launch has as its suite and that a job of its own runs on every pull
+ * request, each with the package script that job runs: the server tests (`acceptance (server lifecycle)`) and the
+ * shared suite's (`acceptance (slice 1)`, whose VS Code run takes that suite's bundle). A folder that no job runs
+ * (containers-cli) is not one, so a change to its tests still reaches every launch.
+ */
+export const OWN_JOB_FOLDERS: ReadonlyMap<string, string> = new Map([
+  ['server', 'test:acceptance:server'],
+  ['suite', 'test:acceptance'],
+]);
+
+/**
  * The reach measured at `root`, the head, for the changed paths it can place: each path in a package's folder that is
- * not a unit test, by its package (the graph is read once, and only when such a path changed), and the parts table, by
- * the parts it makes otherwise than at `base`.
+ * not a unit test, by its package; each test of a folder of its own job, by the launch tests that import it (none
+ * when nothing does: its own job runs it); and the parts table, by the parts it makes otherwise than at `base`. The
+ * graph is read once, and only when such a path changed.
  */
 export function measuredPaths(
   changed: readonly string[],
@@ -705,9 +732,25 @@ export function measuredPaths(
       /^packages\/[^/]+\//.test(file) &&
       !NO_LAUNCH.some(pattern => pattern.test(file)),
   );
-  const graph = paths.length === 0 ? undefined : sourceGraph(root);
+  const ownTests = changed.filter(file => {
+    const folder = SUITE_TEST.exec(file)?.[1];
+    return (
+      folder !== undefined &&
+      OWN_JOB_FOLDERS.has(folder) &&
+      !launches.some(launch => launch.suite === folder)
+    );
+  });
+  const graph =
+    paths.length === 0 && ownTests.length === 0 ? undefined : sourceGraph(root);
   const reached = new Map<string, readonly string[] | undefined>();
   const measured = new Map<string, readonly string[]>();
+  for (const file of ownTests) {
+    const reach =
+      graph === undefined ? undefined : testReach(graph, file, launches);
+    if (reach !== undefined) {
+      measured.set(file, reach);
+    }
+  }
   for (const file of paths) {
     const folder = file.split('/').slice(0, 2).join('/');
     if (graph !== undefined && !reached.has(folder)) {
@@ -785,4 +828,104 @@ export function labelsOfTableSince(
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The names a source imports from the module `target` (both relative to the root), or `all` when it can use any of
+ * them: a namespace or default import, `export *`, a dynamic import or a require.
+ */
+function namesImportedFrom(
+  text: string,
+  source: string,
+  target: string,
+): string[] | 'all' {
+  const file = typescript.createSourceFile(
+    source,
+    text,
+    typescript.ScriptTarget.Latest,
+    true,
+  );
+  /** Whether a module specifier names `target`. */
+  function isTarget(specifier: typescript.Node | undefined): boolean {
+    return (
+      specifier !== undefined &&
+      typescript.isStringLiteral(specifier) &&
+      isRelative(specifier.text) &&
+      stem(path.join(path.dirname(source), specifier.text)) === stem(target)
+    );
+  }
+  const taken: {names: string[]; every: boolean} = {names: [], every: false};
+  /** Collects what `node` and its children take from the target. */
+  function visit(node: typescript.Node): void {
+    if (
+      typescript.isImportDeclaration(node) &&
+      isTarget(node.moduleSpecifier)
+    ) {
+      const bindings = node.importClause?.namedBindings;
+      taken.every ||=
+        node.importClause?.name !== undefined ||
+        (bindings !== undefined && typescript.isNamespaceImport(bindings));
+      if (bindings !== undefined && typescript.isNamedImports(bindings)) {
+        taken.names.push(
+          ...bindings.elements.map(
+            element => (element.propertyName ?? element.name).text,
+          ),
+        );
+      }
+    } else if (
+      typescript.isExportDeclaration(node) &&
+      isTarget(node.moduleSpecifier)
+    ) {
+      const clause = node.exportClause;
+      if (clause !== undefined && typescript.isNamedExports(clause)) {
+        taken.names.push(
+          ...clause.elements.map(
+            element => (element.propertyName ?? element.name).text,
+          ),
+        );
+      } else {
+        taken.every = true;
+      }
+    } else if (
+      typescript.isCallExpression(node) &&
+      (node.expression.kind === typescript.SyntaxKind.ImportKeyword ||
+        (typescript.isIdentifier(node.expression) &&
+          node.expression.text === 'require')) &&
+      isTarget(node.arguments[0])
+    ) {
+      taken.every = true;
+    } else if (
+      typescript.isImportEqualsDeclaration(node) &&
+      typescript.isExternalModuleReference(node.moduleReference) &&
+      isTarget(node.moduleReference.expression)
+    ) {
+      taken.every = true;
+    }
+    typescript.forEachChild(node, visit);
+  }
+  visit(file);
+  return taken.every ? 'all' : taken.names;
+}
+
+/**
+ * Whether a name the launch table exports is imported by a source outside it that the graph holds (no unit test and
+ * not the selection itself): every name when the graph can't be read, or when a source can use them all.
+ */
+export function tableImports(root: string): (name: string) => boolean {
+  const graph = sourceGraph(root);
+  const imported = new Set<string>();
+  for (const source of graph?.importers.get(stem(LAUNCH_TABLE)) ?? []) {
+    const names = namesImportedFrom(
+      readFileSync(path.join(root, source), 'utf8'),
+      source,
+      LAUNCH_TABLE,
+    );
+    if (names === 'all') {
+      return () => true;
+    }
+    for (const name of names) {
+      imported.add(name);
+    }
+  }
+  return graph === undefined ? () => true : name => imported.has(name);
 }
