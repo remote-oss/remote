@@ -152,7 +152,7 @@ export function linesSince(mark: number, window: string): RecordLine[] {
 }
 
 /** The first line of `window` since `mark` that shows core resolving the authority of SSH host `host` again. */
-export function resolvedAgainSince(
+function resolvedAgainSince(
   mark: number,
   window: string,
   host: string,
