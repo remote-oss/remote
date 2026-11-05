@@ -5,7 +5,15 @@
 
 import {execFile} from 'node:child_process';
 import * as network from 'node:net';
-import {mkdirSync, rmSync} from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {SECOND_ENGINE_IMAGE} from '../../../tools/acceptance-second-engine.ts';
@@ -93,6 +101,35 @@ function clientOf(engine: {
   };
 }
 
+/**
+ * Gives the daemon that `client` reaches a copy of the run's dev container image under the repository `marker`, and
+ * runs the one container that only this daemon holds from it.
+ */
+async function holdMarker(
+  client: Readonly<Record<string, string>>,
+  marker: string,
+): Promise<void> {
+  const image = variable('HARNESS_DEVCONTAINER_IMAGE');
+  const target = Object.entries(client)
+    .map(([key, value]) => `${key}='${value}'`)
+    .join(' ');
+  await execFileAsync('sh', [
+    '-c',
+    `env -u DOCKER_HOST -u DOCKER_CONTEXT docker save '${image}' | env ${target} docker load >/dev/null`,
+  ]);
+  await dockerWith(client, 'tag', image, `${marker}:only`);
+  await dockerWith(
+    client,
+    'run',
+    '-d',
+    '--name',
+    'only',
+    `${marker}:only`,
+    'sleep',
+    '3600',
+  );
+}
+
 /** How many daemons this process has started, so that each one's names are its own. */
 let started = 0;
 
@@ -158,30 +195,308 @@ export async function secondEngine(
       },
       120_000,
     );
-    const image = variable('HARNESS_DEVCONTAINER_IMAGE');
-    const target = Object.entries(clientOf(engine))
-      .map(([key, value]) => `${key}='${value}'`)
-      .join(' ');
-    await execFileAsync('sh', [
-      '-c',
-      `env -u DOCKER_HOST -u DOCKER_CONTEXT docker save '${image}' | env ${target} docker load >/dev/null`,
-    ]);
-    await dockerWith(clientOf(engine), 'tag', image, `${marker}:only`);
-    await dockerWith(
-      clientOf(engine),
-      'run',
-      '-d',
-      '--name',
-      'only',
-      `${marker}:only`,
-      'sleep',
-      '3600',
-    );
+    await holdMarker(clientOf(engine), marker);
   } catch (error) {
     await stop();
     throw error;
   }
   return {...engine, marker, container: name, stop};
+}
+
+/** An SSH Docker host address nothing listens on: the discard port refuses connections. */
+export const SSH_DEAD = 'ssh://engine@127.0.0.1:9';
+
+/** The image of the SSH Docker host, built from `tests/acceptance/ssh-engine` on the pinned second engine image. */
+const SSH_ENGINE_IMAGE = 'remote-oss-acceptance-ssh-engine:1';
+
+/** The accounts of the SSH Docker host, each logging in one way (`tests/acceptance/ssh-engine/Dockerfile`). */
+export type EngineAccount =
+  | 'engine'
+  | 'engine-pw'
+  | 'engine-pw2'
+  | 'engine-enc'
+  | 'engine-refused'
+  | 'engine-tries';
+
+/** The run's key files each account's client offers, from the run's folder; none for the password accounts. */
+const ACCOUNT_KEYS: Readonly<Record<EngineAccount, readonly string[]>> = {
+  engine: ['id_ed25519'],
+  'engine-pw': [],
+  'engine-pw2': [],
+  'engine-enc': ['id_passphrase'],
+  'engine-refused': ['id_ed25519'],
+  'engine-tries': [
+    'id_ed25519',
+    'id_second',
+    'id_unauthorised',
+    'id_noportfwd',
+  ],
+};
+
+/** The folder of the run's SSH client for the engine: its `ssh_config`, its known hosts file and the wrapper's folder. */
+function sshClientFolder(): string {
+  return path.join(variable('HARNESS_RUN_FOLDER'), 'ssh-engine');
+}
+
+/** The folder that `containers-ssh-engine` puts first on its editor's `PATH`: an `ssh` that reads the run's own `ssh_config`. */
+function sshWrapperFolder(): string {
+  return path.join(variable('HARNESS_RUN_FOLDER'), 'ssh-engine-bin');
+}
+
+/** The folder that is the whole `PATH` of `containers-ssh-noclient`'s editor: `docker` and nothing else. */
+export function dockerOnlyFolder(): string {
+  return path.join(variable('HARNESS_RUN_FOLDER'), 'docker-only-bin');
+}
+
+/** The known hosts file the run's SSH client reads for the engine. */
+function engineKnownHosts(): string {
+  return path.join(sshClientFolder(), 'known_hosts');
+}
+
+/** The environment of a `docker` of this process that reaches an engine over SSH through the run's own client. */
+export function sshClientEnvironment(): Record<string, string> {
+  return {PATH: `${sshWrapperFolder()}:${process.env.PATH ?? ''}`};
+}
+
+/** Where `program` is on this process's `PATH`, outside the run's own folders, so that it is never the run's wrapper. */
+async function realProgram(program: string): Promise<string> {
+  const runFolder = variable('HARNESS_RUN_FOLDER');
+  const outside = (process.env.PATH ?? '')
+    .split(':')
+    .filter(entry => entry !== '' && !entry.startsWith(runFolder))
+    .join(':');
+  const {stdout} = await execFileAsync('sh', ['-c', `command -v ${program}`], {
+    env: {...process.env, PATH: outside},
+  });
+  return stdout.trim();
+}
+
+/** The `ssh` wrapper's text: the real `ssh` with the run's own `ssh_config`. */
+async function wrapperText(): Promise<string> {
+  return `#!/bin/sh\nexec '${await realProgram('ssh')}' -F '${path.join(sshClientFolder(), 'ssh_config')}' "$@"\n`;
+}
+
+/**
+ * Puts an SSH stand-in in the wrapper's place until the returned function puts the wrapper back: it asks its askpass
+ * with an empty question and, on `password`, runs the real `ssh` as the wrapper does; on any other answer it fails as
+ * a refused password does, with status 255.
+ */
+export async function sshStandIn(
+  password: string,
+): Promise<() => Promise<void>> {
+  const wrapper = path.join(sshWrapperFolder(), 'ssh');
+  const real = (await wrapperText()).split('\n')[1] ?? '';
+  writeFileSync(
+    wrapper,
+    [
+      '#!/bin/sh',
+      'answer=$("$SSH_ASKPASS" "")',
+      `if [ "$answer" = '${password}' ]; then`,
+      `  ${real}`,
+      'fi',
+      "echo 'Permission denied (password).' >&2",
+      'exit 255',
+      '',
+    ].join('\n'),
+  );
+  return async () => {
+    writeFileSync(wrapper, await wrapperText());
+  };
+}
+
+/**
+ * Writes the run's SSH client for the engine, once: an `ssh_config` that names each account's key and the run's known
+ * hosts file, with no agent, so that the run never reads the account's real `~/.ssh` (OpenSSH takes it from the password
+ * database, not `HOME`); an `ssh` wrapper that runs the real one with that file; and the folder with `docker` alone.
+ */
+export async function writeSshClient(): Promise<void> {
+  const folder = sshClientFolder();
+  if (existsSync(path.join(folder, 'ssh_config'))) {
+    return;
+  }
+  mkdirSync(folder, {recursive: true});
+  const runFolder = variable('HARNESS_RUN_FOLDER');
+  writeFileSync(engineKnownHosts(), '');
+  writeFileSync(
+    path.join(folder, 'ssh_config'),
+    [
+      'Host 127.0.0.1',
+      `  UserKnownHostsFile ${engineKnownHosts()}`,
+      '  StrictHostKeyChecking ask',
+      '  IdentitiesOnly yes',
+      '  IdentityAgent none',
+      ...Object.entries(ACCOUNT_KEYS).flatMap(([account, keys]) =>
+        keys.length === 0
+          ? []
+          : [
+              `Match user ${account}`,
+              ...keys.map(key => `  IdentityFile ${path.join(runFolder, key)}`),
+            ],
+      ),
+      '',
+    ].join('\n'),
+  );
+  mkdirSync(sshWrapperFolder(), {recursive: true});
+  const wrapper = path.join(sshWrapperFolder(), 'ssh');
+  writeFileSync(wrapper, await wrapperText());
+  chmodSync(wrapper, 0o755);
+  mkdirSync(dockerOnlyFolder(), {recursive: true});
+  symlinkSync(
+    await realProgram('docker'),
+    path.join(dockerOnlyFolder(), 'docker'),
+  );
+}
+
+/** An SSH Docker host of the run: a daemon in a container of its own, reached as `ssh://`, and the one container only it holds. */
+export interface SshEngine {
+  /** The `ssh://` address of the daemon for `account`. */
+  address(account: EngineAccount): string;
+  /** The repository of the image of the container only this daemon holds, as the view labels the container. */
+  marker: string;
+  /** The line of the run's known hosts file that makes the host's key known. */
+  knownHostsLine: string;
+  /** Makes the host's key known to the run's client, or unknown again. */
+  trustHostKey(known: boolean): void;
+  /** Whether the run's known hosts file holds the host's key, as after a "yes" to ssh's question. */
+  hostKeyKnown(): boolean;
+  /** The name of the container that runs the daemon and sshd. */
+  container: string;
+  stop(): Promise<void>;
+}
+
+/** Builds the SSH Docker host's image once per process; a later build of an unchanged folder is Docker's cache. */
+let imageBuilt: Promise<string> | undefined;
+
+/**
+ * Starts an SSH Docker host of the run: the second engine's daemon with OpenSSH's server, in a privileged container of
+ * the run, sshd published on 127.0.0.1. Its accounts are `ACCOUNT_KEYS`'s, `engine-pw` and `engine-pw2` with the
+ * passwords given. It waits until `docker -H ssh://engine@…` answers through the run's client with the host's key
+ * known, and creates the container only it holds. A `shared` folder is mounted at the same path, as for `secondEngine`,
+ * and a `hostPort` fixes the port sshd is published on.
+ */
+export async function sshEngine(
+  options: {
+    password?: string;
+    password2?: string;
+    shared?: string;
+    hostPort?: number;
+  } = {},
+): Promise<SshEngine> {
+  await writeSshClient();
+  imageBuilt ??= localDocker(
+    'build',
+    '--quiet',
+    '--build-arg',
+    `ENGINE_IMAGE=${SECOND_ENGINE_IMAGE}`,
+    '--tag',
+    SSH_ENGINE_IMAGE,
+    path.join(import.meta.dirname, '..', 'ssh-engine'),
+  );
+  await imageBuilt;
+  started += 1;
+  const name = runScopedName(`c205-ssh${String(started)}`);
+  const marker = runScopedName(`c205ssh${String(started)}only`);
+  const runFolder = variable('HARNESS_RUN_FOLDER');
+  /** The public part of the run's key `file`. */
+  function keyOf(file: string): string {
+    return readFileSync(path.join(runFolder, `${file}.pub`), 'utf8').trim();
+  }
+  await localDocker(
+    'run',
+    '-d',
+    '--rm',
+    '--privileged',
+    '--name',
+    name,
+    ...runLabelArguments(),
+    '-e',
+    'DOCKER_TLS_CERTDIR=',
+    '-e',
+    `ENGINE_KEY=${keyOf('id_ed25519')}`,
+    '-e',
+    `ENGINE_ENC_KEY=${keyOf('id_passphrase')}`,
+    '-e',
+    `ENGINE_PASSWORD=${options.password ?? 'engine-password'}`,
+    '-e',
+    `ENGINE_PASSWORD_2=${options.password2 ?? 'engine-password-2'}`,
+    ...(options.shared === undefined
+      ? []
+      : ['-v', `${options.shared}:${options.shared}`]),
+    '-p',
+    `127.0.0.1:${options.hostPort === undefined ? '' : String(options.hostPort)}:22`,
+    SSH_ENGINE_IMAGE,
+  );
+  async function stop(): Promise<void> {
+    await localDocker('rm', '-f', name).catch(() => undefined);
+  }
+  try {
+    const port =
+      ((await localDocker('port', name, '22/tcp')).split('\n')[0] ?? '')
+        .split(':')
+        .pop() ?? '';
+    /** The `ssh://` address of the daemon for `account`. */
+    function address(account: EngineAccount): string {
+      return `ssh://${account}@127.0.0.1:${port}`;
+    }
+    let knownHostsLine = '';
+    await waitFor(
+      `sshd in ${name}`,
+      async () => {
+        const key = await localDocker(
+          'exec',
+          name,
+          'cat',
+          '/etc/ssh/ssh_host_ed25519_key.pub',
+        ).catch(() => '');
+        knownHostsLine = `[127.0.0.1]:${port} ${key.split(' ').slice(0, 2).join(' ')}`;
+        return key !== '';
+      },
+      60_000,
+    );
+    /** Makes the host's key known to the run's client, or unknown again. */
+    function trustHostKey(known: boolean): void {
+      const others = readFileSync(engineKnownHosts(), 'utf8')
+        .split('\n')
+        .filter(line => line !== '' && line !== knownHostsLine);
+      writeFileSync(
+        engineKnownHosts(),
+        [...others, ...(known ? [knownHostsLine] : []), ''].join('\n'),
+      );
+    }
+    /** Whether the run's known hosts file holds the host's key. */
+    function hostKeyKnown(): boolean {
+      return readFileSync(engineKnownHosts(), 'utf8')
+        .split('\n')
+        .some(line => line.startsWith(`[127.0.0.1]:${port} `));
+    }
+    trustHostKey(true);
+    const client = {...sshClientEnvironment(), DOCKER_HOST: address('engine')};
+    await waitFor(
+      `the daemon in ${name} over SSH`,
+      async () => {
+        try {
+          await dockerWith(client, 'info');
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      120_000,
+    );
+    await holdMarker(client, marker);
+    return {
+      address,
+      marker,
+      knownHostsLine,
+      trustHostKey,
+      hostKeyKnown,
+      container: name,
+      stop,
+    };
+  } catch (error) {
+    await stop();
+    throw error;
+  }
 }
 
 /** Asks the view of the local window to refresh. */

@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {TUNNEL_WAIT_LIMITS, type PortProber} from 'lib-forwarding';
+import {TUNNEL_WAIT_LIMITS, type Dialer, type PortProber} from 'lib-forwarding';
 import {FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {createLogger} from 'lib-log';
@@ -20,6 +20,7 @@ function relayOver(
     prober?: PortProber;
     local?: FakeLocalPort;
     plans?: SpawnPlan[];
+    dialer?: Dialer;
   } = {},
 ) {
   const engine = fakeEngine(...(options.plans ?? []));
@@ -41,6 +42,7 @@ function relayOver(
       nodePath: '/vscode/node',
       relayPath: '/home/node/relay.js',
       containerPort: 41000,
+      ...(options.dialer === undefined ? {} : {dialer: options.dialer}),
       onConnectionClosed: () => {
         closes.push('closed');
       },
@@ -60,6 +62,25 @@ describe('the host relay (card containers-08)', () => {
     deepStrictEqual(
       [relay.kind === 'open' && relay.hostPort, seen.local.listened],
       [41000, [41000]],
+    );
+  });
+
+  it('F-0604 BR-12: a dialer the request carries opens the connections instead of the Docker exec one, which starts no process', async () => {
+    const dialled: unknown[] = [];
+    const seen = relayOver({
+      dialer: {
+        dial: target => {
+          dialled.push(target);
+          return Promise.reject(new Error('refused'));
+        },
+      },
+    });
+    await tick();
+    seen.clock.advance(TUNNEL_WAIT_LIMITS.readyMilliseconds);
+    await seen.opening;
+    deepStrictEqual(
+      [dialled.length > 0, seen.engine.processes.length],
+      [true, 0],
     );
   });
 

@@ -7,16 +7,14 @@ import {
   type ChildProcessByStdio,
   spawn as spawnProcess,
 } from 'node:child_process';
-import {createReadStream} from 'node:fs';
 import type {Readable, Writable} from 'node:stream';
 import type {
   EngineHost,
-  EngineInput,
   EngineOptions,
   EngineProcess,
-  EngineRunOutcome,
   EngineSpawn,
 } from './engine-host.ts';
+import {spawnedEngineHost} from './engine-runs.ts';
 
 type Child = ChildProcessByStdio<Writable, Readable, Readable>;
 
@@ -68,43 +66,5 @@ export function nodeEngineHost(dockerPath: string): EngineHost {
     });
   }
 
-  /** Gives the process its input and closes its standard input. */
-  function feed(process: EngineProcess, input: EngineInput): void {
-    // A process that ends before reading its input must not fail the run with a broken pipe.
-    process.stdin.on('error', () => undefined);
-    if (input.kind === 'file') {
-      createReadStream(input.localFile).pipe(process.stdin);
-    } else if (input.kind === 'text') {
-      process.stdin.end(input.text);
-    } else {
-      process.stdin.end();
-    }
-  }
-
-  async function runOnce(
-    argv: readonly string[],
-    input: EngineInput,
-    options: EngineOptions,
-  ): Promise<EngineRunOutcome> {
-    const spawned = await spawn(argv, options);
-    if (spawned.kind === 'failed') {
-      return spawned;
-    }
-    const {process} = spawned;
-    const printed: Buffer[] = [];
-    const complaints: Buffer[] = [];
-    process.stdout.on('data', (chunk: Buffer) => printed.push(chunk));
-    process.stderr.on('data', (chunk: Buffer) => complaints.push(chunk));
-    feed(process, input);
-    const status = await process.exited;
-    return {
-      kind: 'ran',
-      status,
-      stdout: Buffer.concat(printed).toString('utf8'),
-      stderr: Buffer.concat(complaints).toString('utf8'),
-    };
-  }
-
-  // eslint-disable-next-line id-length -- the port's method is named run
-  return {run: runOnce, spawn};
+  return spawnedEngineHost(spawn);
 }

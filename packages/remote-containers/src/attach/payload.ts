@@ -6,12 +6,10 @@
 
 import {
   engineOf,
-  payloadJsonOf,
-  payloadTextOf,
+  payloadRecordOf,
   pinnedSettingsOf,
 } from '../authority/payload.ts';
 import type {PinnedEngine} from '../engine/effective-engine.ts';
-import {recordOf} from '../json-record.ts';
 
 /** An attached container: its name with the slash Docker keeps, the engine, and a WSL window's working folder. */
 export interface AttachedTarget extends PinnedEngine {
@@ -39,15 +37,11 @@ export function attachedPayloadOf(target: AttachedTarget): string {
 export function attachedTargetOf(
   payload: string,
 ): AttachedTarget | AttachedMalformed {
-  const text = payloadTextOf(payload);
-  if (typeof text !== 'string') {
-    return text;
+  const read = payloadRecordOf(payload);
+  if ('malformed' in read) {
+    return read;
   }
-  const parsed = payloadJsonOf(text);
-  if ('malformed' in parsed) {
-    return parsed;
-  }
-  const record = recordOf(parsed.json);
+  const {record} = read;
   const engine = engineOf(record?.settings);
   if (
     typeof record?.containerName !== 'string' ||

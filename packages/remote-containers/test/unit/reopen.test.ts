@@ -40,14 +40,14 @@ async function reopened(state: Setup, rebuild?: RebuildOptions) {
   return {lines: linesOf(sink)};
 }
 
-/** Runs the command with the progress shown while the first check waits, and gives the order of what followed. */
+/** Runs the command with the progress shown while the configuration is read, and gives the order of what followed. */
 async function reopenedSlowly(state: Setup): Promise<string[]> {
   const release = pendingOf<undefined>();
-  state.waitOnCheck = release.promise;
+  state.waitOnRead = release.promise;
   const {ports} = portsOf(state);
   const running = handlerOf(ports)();
   await settled();
-  state.timers[0]?.callback();
+  state.timers[1]?.callback();
   release.resolve(undefined);
   await running;
   await settled();
@@ -60,7 +60,7 @@ async function reopenedSlowly(state: Setup): Promise<string[]> {
  */
 async function reentered(
   state: Setup,
-  hold: 'waitOnCheck' | 'waitOnTrust',
+  hold: 'waitOnRead',
   rebuild?: RebuildOptions,
 ): Promise<{during: string[]; lines: string[]}> {
   const release = pendingOf<undefined>();
@@ -493,13 +493,106 @@ describe('Reopen in Container', () => {
     deepStrictEqual([state.calls, state.shown], [['ensureTrusted'], []]);
   });
 
+  it('F-0206 AC-3, AC-4, BR-13: Reopen asks for the merged configuration, and requirements it records that the daemon does not meet show the dialog before the reload, which goes on when the user continues', async () => {
+    const state = setup();
+    state.daemon = {cpus: 4, memory: 16 * 1024 ** 3, nvidia: false};
+    state.read = {
+      ...CONFIGURATION,
+      mergedConfiguration: {hostRequirements: {cpus: 64}},
+    };
+    await reopened(state);
+    deepStrictEqual(
+      [
+        state.mergedReads,
+        state.requirementDialogs,
+        state.commands.map(each => each.command),
+      ],
+      [
+        [true],
+        [
+          [
+            'Not all host requirements in devcontainer.json are met by the Docker daemon.',
+            'Docker daemon: CPUs 4, RAM 16gb\ndevcontainer.json: CPUs 64',
+            'Continue',
+          ],
+        ],
+        ['vscode.openFolder'],
+      ],
+    );
+  });
+
+  it('F-0206 reading-2146-requirements-lookup: a merged read that fails falls back to the plain one, and the requirements written in the file still show their dialog before the reload', async () => {
+    const state = setup();
+    state.daemon = {cpus: 4, memory: 16 * 1024 ** 3, nvidia: false};
+    state.configText =
+      '{ "image": "missing", "hostRequirements": { "cpus": 64 } }';
+    state.readQueue = [{kind: 'configurationFailed', message: 'no image'}];
+    await reopened(state);
+    deepStrictEqual(
+      [
+        state.mergedReads,
+        state.requirementDialogs.map(dialog => dialog[1]),
+        state.commands.map(each => each.command),
+      ],
+      [
+        [true, false],
+        ['Docker daemon: CPUs 4, RAM 16gb\ndevcontainer.json: CPUs 64'],
+        ['vscode.openFolder'],
+      ],
+    );
+  });
+
+  it('F-0410 AC-13, F-0414 AC-9: a merged read that fails with requirements met or absent shows no dialog and the window reloads, where the resolve shows the failure', async () => {
+    const state = setup();
+    state.readQueue = [{kind: 'configurationFailed', message: 'no image'}];
+    await reopened(state);
+    deepStrictEqual(
+      [
+        state.mergedReads,
+        state.requirementDialogs,
+        state.commands.map(each => each.command),
+      ],
+      [[true, false], [], ['vscode.openFolder']],
+    );
+  });
+
+  it('F-0206 AC-5, AC-25, 6.2: Cancel on the dialog ends Reopen and its rebuild variants with no reload and no intent stored', async () => {
+    const state = setup();
+    state.daemon = {cpus: 4, memory: 16 * 1024 ** 3, nvidia: false};
+    state.read = {
+      ...CONFIGURATION,
+      mergedConfiguration: {hostRequirements: {memory: '64gb'}},
+    };
+    state.requirementsAccepted = false;
+    await reopened(state);
+    await reopened(state, {buildNoCache: false});
+    deepStrictEqual(
+      [state.requirementDialogs.length, state.commands, state.updates],
+      [2, [], []],
+    );
+  });
+
+  it('F-0206 AC-50, BR-19: no dialog before the engine check passes or the picker answers: with the daemon unreachable the check stops the command', async () => {
+    const state = setup();
+    state.check = 'stopped';
+    state.read = {
+      ...CONFIGURATION,
+      mergedConfiguration: {hostRequirements: {cpus: 64}},
+    };
+    await reopened(state);
+    deepStrictEqual(
+      [state.requirementDialogs, state.requirementQueries],
+      [[], []],
+    );
+  });
+
   it('F-0201 5.0, ruling (c): a first check that stopped ends the command with no reload and no lookup of the Docker context', async () => {
     const state = setup();
     state.check = 'stopped';
     await reopened(state);
     deepStrictEqual(
       [state.calls, state.commands],
-      [['ensureTrusted', 'firstCheck /w/p', 'readConfiguration /w/p'], []],
+      [['ensureTrusted', 'firstCheck /w/p'], []],
     );
   });
 
@@ -510,18 +603,21 @@ describe('Reopen in Container', () => {
         await reopenedSlowly(state),
         state.timers.map(timer => timer.milliseconds),
       ],
-      [[`progress shown ${START}`, 'leave', 'progress closed', 'open'], [500]],
+      [
+        [`progress shown ${START}`, 'leave', 'progress closed', 'open'],
+        [2000, 500],
+      ],
     );
   });
 
   it('F-0408 AC-7: Cancel on the progress ends Reopen with no reload, no other notification and a line in the log', async () => {
     const state = setup();
     const release = pendingOf<undefined>();
-    state.waitOnCheck = release.promise;
+    state.waitOnRead = release.promise;
     const {ports, sink} = portsOf(state);
     const running = handlerOf(ports)();
     await settled();
-    state.timers[0]?.callback();
+    state.timers[1]?.callback();
     state.cancels[0]?.();
     release.resolve(undefined);
     await running;
@@ -560,10 +656,11 @@ describe('Reopen in Container', () => {
       answer(state);
       seen.push(await reopenedSlowly(state));
     }
-    deepStrictEqual(
-      seen,
-      answers.map(() => [`progress shown ${START}`, 'progress closed']),
-    );
+    deepStrictEqual(seen, [
+      [],
+      [`progress shown ${START}`, 'progress closed'],
+      [`progress shown ${START}`, 'progress closed'],
+    ]);
   });
 
   it('F-0301 6.2: no configuration opens nothing, runs the wizard once after the trust check, and says so in the log', async () => {
@@ -677,6 +774,7 @@ describe('Reopen in Container', () => {
         [],
         [
           'info: Reading configuration',
+          'warn: the merged configuration could not be read (buildFailed: no build); the configuration is read without it',
           'warn: the configuration could not be read: buildFailed: no build',
           'info: Reading configuration: 0 ms',
         ],
@@ -691,6 +789,7 @@ describe('Reopen in Container', () => {
     const {lines} = await reopened(state);
     deepStrictEqual(lines, [
       'info: Reading configuration',
+      'warn: the merged configuration could not be read (noResult); the configuration is read without it',
       'warn: the configuration could not be read: noResult',
       'info: Reading configuration: 0 ms',
     ]);
@@ -720,9 +819,9 @@ describe('Reopen in Container', () => {
     ]);
   });
 
-  it('F-0401 BR-7a: a call while another waits on the first check returns at once, and a call after the first ends runs again', async () => {
+  it('F-0202 AC-45, AC-51: a call while another is past its check runs its own check and is absorbed, and a call after the first ends runs again', async () => {
     const state = setup();
-    const {during, lines} = await reentered(state, 'waitOnCheck');
+    const {during, lines} = await reentered(state, 'waitOnRead');
     deepStrictEqual(
       [
         during,
@@ -730,28 +829,34 @@ describe('Reopen in Container', () => {
         state.commands.length,
       ],
       [
-        ['ensureTrusted', 'firstCheck /w/p', 'readConfiguration /w/p'],
+        [
+          'ensureTrusted',
+          'ensureTrusted',
+          'firstCheck /w/p',
+          'firstCheck /w/p',
+          'readConfiguration /w/p',
+        ],
         ['info: Reopen in Container is already running'],
         2,
       ],
     );
   });
 
-  it('F-0401 BR-7a: a call while the trust request is open calls nothing, and after a decline a third call asks again', async () => {
+  it('F-0202 AC-45: a call while the trust request is open asks again, as the check has not passed', async () => {
     const state = setup();
     state.trust = 'declined';
-    const {during, lines} = await reentered(state, 'waitOnTrust');
+    const release = pendingOf<undefined>();
+    state.waitOnTrust = release.promise;
+    const {ports, sink} = portsOf(state);
+    const handler = handlerOf(ports);
+    const calls = [handler(), handler()];
+    await settled();
+    const during = [...state.calls];
+    release.resolve(undefined);
+    await Promise.all(calls);
     deepStrictEqual(
-      [
-        during,
-        state.calls,
-        lines.filter(line => line.includes('already running')),
-      ],
-      [
-        ['ensureTrusted'],
-        ['ensureTrusted', 'ensureTrusted'],
-        ['info: Reopen in Container is already running'],
-      ],
+      [during, linesOf(sink).filter(line => line.includes('already running'))],
+      [['ensureTrusted', 'ensureTrusted'], []],
     );
   });
 
@@ -866,7 +971,7 @@ describe('Reopen in Container', () => {
     away.remoteName = 'dev-container';
     const {lines: awayLines} = await reopened(away, {buildNoCache: false});
     const state = setup();
-    const {lines} = await reentered(state, 'waitOnCheck', {buildNoCache: true});
+    const {lines} = await reentered(state, 'waitOnRead', {buildNoCache: true});
     deepStrictEqual(
       [awayLines, lines.filter(line => line.includes('already running'))],
       [
@@ -881,7 +986,7 @@ describe('Reopen in Container', () => {
   it('F-0405 BR-1: a Reopen and a rebuild and reopen never run at once in one window', async () => {
     const state = setup();
     const release = pendingOf<undefined>();
-    state.waitOnCheck = release.promise;
+    state.waitOnRead = release.promise;
     const {ports, sink} = portsOf(state);
     const handlers = reopenHandlersOf(ports);
     const first = handlers()();

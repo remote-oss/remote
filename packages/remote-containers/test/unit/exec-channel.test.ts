@@ -2,38 +2,16 @@ import {deepStrictEqual} from 'node:assert';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {hostPathOf, type ScriptRequest} from 'lib-host';
+import {hostPathOf} from 'lib-host';
 import type {EngineRunOutcome} from '../../src/engine/engine-host.ts';
 import {VOLUME_FOLDERS_SCRIPT} from '../../src/connect/volume-folders.ts';
 import {execChannelOf} from '../../src/exec/exec-channel.ts';
 import {ustarHeader, ustarTrailer} from '../../src/exec/tar-stream.ts';
-import {fakeEngine, type ProcessScript} from './fake-engine.ts';
+import {endsWith, fakeEngine, scriptRequest as request} from './fake-engine.ts';
 
 const NEVER = new AbortController().signal;
 
 let folder = '';
-
-/** Ends when stdin does, with `status`. */
-function endsWith(status: number, error = ''): ProcessScript {
-  return async process => {
-    await process.stdinEnded;
-    if (error !== '') {
-      process.printError(error);
-    }
-    process.exit(status);
-  };
-}
-
-function request(changes: Partial<ScriptRequest> = {}): ScriptRequest {
-  return {
-    script: 'echo hi',
-    interpreter: 'posixShell',
-    environment: {},
-    input: {kind: 'text', text: ''},
-    cancellation: NEVER,
-    ...changes,
-  };
-}
 
 describe('the exec channel (card containers-02)', () => {
   before(() => {

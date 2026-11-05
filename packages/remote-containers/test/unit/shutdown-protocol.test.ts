@@ -1,5 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
-import {readShutdownRequest} from '../../src/shutdown/protocol.ts';
+import {
+  identityFilters,
+  identityLabel,
+  readShutdownRequest,
+  sameIdentity,
+} from '../../src/shutdown/protocol.ts';
 
 const IDENTITY = {
   hostPath: '/home/user/proj',
@@ -227,6 +232,67 @@ describe('the shutdown helper’s messages (card containers-68)', () => {
             'register needs the identity with a hostPath and a configFile, a volumeName and a folder, or a volumeName and a configFile',
         },
       ],
+    );
+  });
+
+  it('F-0417 AC-14 (c163-attached-identity): a register for an attached container names the container, and says it does not own with owning false', () => {
+    const engine = {dockerPath: 'docker', environment: {}};
+    function register(owning?: unknown): unknown {
+      return readShutdownRequest({
+        type: 'register',
+        connectionId: 'c1',
+        identity: {containerName: 'web'},
+        engine,
+        ...(owning === undefined ? {} : {owning}),
+      });
+    }
+    deepStrictEqual(
+      [register(), register(false), register(true), register('no')],
+      [
+        {
+          kind: 'request',
+          request: {
+            type: 'register',
+            connectionId: 'c1',
+            identity: {containerName: 'web'},
+            engine,
+          },
+        },
+        {
+          kind: 'request',
+          request: {
+            type: 'register',
+            connectionId: 'c1',
+            identity: {containerName: 'web'},
+            engine,
+            owning: false,
+          },
+        },
+        {
+          kind: 'request',
+          request: {
+            type: 'register',
+            connectionId: 'c1',
+            identity: {containerName: 'web'},
+            engine,
+          },
+        },
+        {kind: 'malformed', problem: 'register needs owning to be a boolean'},
+      ],
+    );
+  });
+
+  it('F-0417 AC-14 (c163-attached-names): an attached container’s identity is told by its name, labelled and found by it', () => {
+    const left = {containerName: 'web'};
+    deepStrictEqual(
+      [
+        sameIdentity(left, {containerName: 'web'}),
+        sameIdentity(left, {containerName: 'db'}),
+        sameIdentity(left, {volumeName: 'web', folder: 'web'}),
+        identityLabel(left),
+        identityFilters(left),
+      ],
+      [true, false, false, 'the container web', ['--filter', 'name=^/web$']],
     );
   });
 });

@@ -249,11 +249,15 @@ describe('Dev Containers release 1 gate rows (card containers-09)', function () 
     }
   });
 
-  it('ruling (c) (P1), containers-24: with a Docker that answers after a second, the Reading Dev Container Configuration toast is on screen before the window reloads, and then it connects', async () => {
+  it('ruling (c) (P1), containers-24: with a Docker whose engine check is quick and whose other calls answer after a second, the Reading Dev Container Configuration toast is on screen before the window reloads, and then it connects', async () => {
     const wrapper = path.join(variable('HARNESS_RUN_FOLDER'), 'slow-docker');
-    writeFileSync(wrapper, '#!/bin/sh\nsleep 1\nexec docker "$@"\n', {
-      mode: 0o755,
-    });
+    writeFileSync(
+      wrapper,
+      '#!/bin/sh\ncase "$1" in --version|version) exec docker "$@";; esac\nsleep 1\nexec docker "$@"\n',
+      {
+        mode: 0o755,
+      },
+    );
     const folder = devContainerFolder('gate-slow', {name: 'Gate Slow'});
     await setUserSetting('dev.containers.dockerPath', wrapper);
     try {
@@ -287,9 +291,13 @@ describe('Dev Containers release 1 gate rows (card containers-09)', function () 
 
   it('F-0408 AC-7 (c114-cancel): Cancel on the Reading Dev Container Configuration toast, shown with a primary Cancel, removes it, and the window does not reload, no container is made and no other notification or dialog shows', async () => {
     const wrapper = path.join(variable('HARNESS_RUN_FOLDER'), 'slow-docker-8');
-    writeFileSync(wrapper, '#!/bin/sh\nsleep 8\nexec docker "$@"\n', {
-      mode: 0o755,
-    });
+    writeFileSync(
+      wrapper,
+      '#!/bin/sh\ncase "$1" in --version|version) exec docker "$@";; esac\nsleep 8\nexec docker "$@"\n',
+      {
+        mode: 0o755,
+      },
+    );
     const folder = devContainerFolder('c114-cancel', {name: 'Cancel Reading'});
     await setUserSetting('dev.containers.dockerPath', wrapper);
     try {

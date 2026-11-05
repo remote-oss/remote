@@ -129,11 +129,73 @@ async function stoppedDuring(
     : undefined;
 }
 
+/** What differs between the engines that carry the channel: the commands, where environment values travel, and what a kill means. */
+export interface ExecCommands {
+  /** The identity the channel reports: the container's id, or the pod's address. */
+  identity: string;
+  /** The arguments that run the prelude, which evaluates the first `scriptByteCount` bytes of standard input. */
+  script(
+    environmentNames: readonly string[],
+    scriptByteCount: number,
+  ): string[];
+  /** The arguments that unpack a tar archive from standard input into `directory`. */
+  copy(directory: string): string[];
+  /**
+   * Where the environment values go: into the engine process's own environment (`process`), or ahead of the script as
+   * `export` lines on standard input (`script`), for an engine that cannot pass a variable on.
+   */
+  environment: 'process' | 'script';
+  /** The failure of a target that stopped during an operation, or nothing. */
+  stopped(
+    status: number | undefined,
+    stderr: string,
+    cancellation: AbortSignal,
+  ): Promise<ReturnType<typeof failedWith> | undefined>;
+}
+
+/** The commands of the container `containerId`, whose commands run as `user`, over `engine`'s `docker`. */
+function dockerExecCommands(
+  engine: EngineHost,
+  containerId: string,
+  user: string,
+): ExecCommands {
+  return {
+    identity: containerId,
+    script: (names, count) => scriptArguments(containerId, user, names, count),
+    copy: directory => copyArguments(containerId, user, directory),
+    environment: 'process',
+    stopped: (status, stderr, cancellation) =>
+      stoppedDuring(engine, containerId, status, stderr, cancellation),
+  };
+}
+
 /** The host channel of the container `containerId`, whose commands run as `user`. */
 export function execChannelOf(
   engine: EngineHost,
   containerId: string,
   user: string,
+  files: ExecFiles = nodeFiles,
+): HostChannel {
+  return execChannelOver(
+    engine,
+    dockerExecCommands(engine, containerId, user),
+    files,
+  );
+}
+
+/** The `export` lines that put `environment` ahead of a script; every name was checked, every value is single-quoted. */
+function exportLines(environment: Readonly<Record<string, string>>): string {
+  return Object.entries(environment)
+    .map(
+      ([name, value]) => `export ${name}='${value.replaceAll("'", "'\\''")}'\n`,
+    )
+    .join('');
+}
+
+/** The host channel over `commands`, run through `engine`. */
+export function execChannelOver(
+  engine: EngineHost,
+  commands: ExecCommands,
   files: ExecFiles = nodeFiles,
 ): HostChannel {
   async function runScript(
@@ -166,10 +228,20 @@ export function execChannelOf(
         `the input file ${request.input.localFile} does not exist`,
       );
     }
-    const scriptBytes = Buffer.from(request.script, 'utf8');
+    const scriptBytes = Buffer.from(
+      commands.environment === 'script'
+        ? exportLines(request.environment) + request.script
+        : request.script,
+      'utf8',
+    );
     const spawned = await engine.spawn(
-      scriptArguments(containerId, user, names, scriptBytes.length),
-      {environment: request.environment, cancellation: request.cancellation},
+      commands.script(names, scriptBytes.length),
+      {
+        ...(commands.environment === 'process'
+          ? {environment: request.environment}
+          : {}),
+        cancellation: request.cancellation,
+      },
     );
     if (spawned.kind === 'failed') {
       return failedWith('spawnFailed', spawned.detail);
@@ -202,13 +274,8 @@ export function execChannelOf(
     }
     const tail = stderr();
     return (
-      (await stoppedDuring(
-        engine,
-        containerId,
-        status,
-        tail,
-        request.cancellation,
-      )) ?? exitOutcome(status, tail, 'script')
+      (await commands.stopped(status, tail, request.cancellation)) ??
+      exitOutcome(status, tail, 'script')
     );
   }
 
@@ -226,10 +293,9 @@ export function execChannelOf(
     } catch (caught) {
       return failFrom('copyFailed', caught);
     }
-    const spawned = await engine.spawn(
-      copyArguments(containerId, user, directory),
-      {cancellation: request.cancellation},
-    );
+    const spawned = await engine.spawn(commands.copy(directory), {
+      cancellation: request.cancellation,
+    });
     if (spawned.kind === 'failed') {
       return failedWith('spawnFailed', spawned.detail);
     }
@@ -249,20 +315,15 @@ export function execChannelOf(
     }
     const tail = stderr();
     return (
-      (await stoppedDuring(
-        engine,
-        containerId,
-        status,
-        tail,
-        request.cancellation,
-      )) ?? exitOutcome(status, tail, 'copy')
+      (await commands.stopped(status, tail, request.cancellation)) ??
+      exitOutcome(status, tail, 'copy')
     );
   }
 
   return {
     runScript,
     copyToHost,
-    identity: () => containerId,
+    identity: () => commands.identity,
     platformHint: () => 'linux',
   };
 }

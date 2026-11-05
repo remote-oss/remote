@@ -59,7 +59,13 @@ export function serializedUriOf(uri: UriParts): SerializedUri {
 }
 
 /** The engine members a payload's `settings` may name, in their fixed order. */
-const ENGINE_MEMBERS = ['context', 'host', 'certPath', 'tlsVerify'] as const;
+const ENGINE_MEMBERS = [
+  'context',
+  'host',
+  'certPath',
+  'tlsVerify',
+  'wslDistro',
+] as const;
 
 /** A payload's `settings` member for an engine, or nothing when it is the default. */
 export function pinnedSettingsOf(
@@ -137,10 +143,12 @@ function folderOf(parsed: unknown): DevContainerFolder | PayloadMalformed {
   const record = recordOf(parsed);
   const engine = engineOf(record?.settings);
   const configFile = configFileOf(record?.configFile);
+  // `devcontainer open --config` writes no `localDocker`: a payload without it is a local engine.
+  const localDocker = record?.localDocker ?? false;
   if (
     typeof record?.hostPath !== 'string' ||
     record.hostPath === '' ||
-    typeof record.localDocker !== 'boolean' ||
+    typeof localDocker !== 'boolean' ||
     engine === false ||
     configFile === undefined
   ) {
@@ -149,7 +157,7 @@ function folderOf(parsed: unknown): DevContainerFolder | PayloadMalformed {
   return {
     kind: 'folder',
     hostPath: record.hostPath,
-    localDocker: record.localDocker,
+    localDocker,
     ...engine,
     configFile,
   };
@@ -175,21 +183,31 @@ export function folderTargetOf(
 }
 
 /** The text a payload holds, or the refusal for a payload that is not lowercase hex. */
-export function payloadTextOf(payload: string): string | PayloadMalformed {
+function payloadTextOf(payload: string): string | PayloadMalformed {
   return /^(?:[0-9a-f]{2})+$/.test(payload)
     ? Buffer.from(payload, 'hex').toString('utf8')
     : {malformed: 'hex'};
 }
 
 /** The JSON a payload's text holds, or the refusal for a text that is not JSON. */
-export function payloadJsonOf(
-  text: string,
-): {json: unknown} | PayloadMalformed {
+function payloadJsonOf(text: string): {json: unknown} | PayloadMalformed {
   try {
     return {json: JSON.parse(text)};
   } catch {
     return {malformed: 'json'};
   }
+}
+
+/** The record a payload's JSON holds, none when the JSON is another kind of value; or the refusal at the step that failed. */
+export function payloadRecordOf(
+  payload: string,
+): {record: Record<string, unknown> | undefined} | PayloadMalformed {
+  const text = payloadTextOf(payload);
+  if (typeof text !== 'string') {
+    return text;
+  }
+  const parsed = payloadJsonOf(text);
+  return 'malformed' in parsed ? parsed : {record: recordOf(parsed.json)};
 }
 
 /** Reads a payload: a folder target, the legacy host path, or why it is neither. */

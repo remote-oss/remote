@@ -44,7 +44,11 @@ import {
   transfer,
   type TransferFailure,
 } from 'lib-server';
-import {installRelayScript, relayScriptPath} from '../exec/relay-script.ts';
+import {
+  folderExistsOver,
+  installRelayScript,
+  relayScriptPath,
+} from '../exec/relay-script.ts';
 import {
   type MachineSettings,
   writeMachineSettings,
@@ -116,6 +120,13 @@ export interface ServerRequest {
   defaultExtensions: readonly string[];
   /** Whether this connect created the container, which is when a preview platform is told in the log. */
   created: boolean;
+  /** Whether the preview platform is told in the log whether or not this connect created the target. */
+  previewNoteAlways?: boolean;
+  /**
+   * Whether `defaultExtensions` apply only when the remote user's server data folder is not there yet, so that a
+   * container that is attached to is given them once for each user.
+   */
+  extensionsOncePerUser?: boolean;
   /** The server's port range from the configuration's `devPort`: `port-port` for a fixed port, empty for a dynamic one. */
   devPort: string;
   /** The settings to set in the container's machine settings before the server starts. */
@@ -446,7 +457,10 @@ export async function runServerSteps(
   }
   const platform = templatePlatformOf(discovered.host);
   const previewNote = previewNoteOf(platform);
-  if (request.created && previewNote !== undefined) {
+  if (
+    (request.created || request.previewNoteAlways === true) &&
+    previewNote !== undefined
+  ) {
     logger.info(
       filled(dependencies.translate, PREVIEW_TEMPLATES.previewNote, [
         previewNote,
@@ -477,6 +491,10 @@ export async function runServerSteps(
     host = withTree.host;
   }
   const dataFolder = `${host.home}/${serverDataFolderNameOrDefault(profile)}`;
+  const firstForUser =
+    request.extensionsOncePerUser !== true ||
+    !(await folderExistsOver(channel, dataFolder, cancellation));
+  const wantedExtensions = firstForUser ? request.defaultExtensions : [];
   const installed = await installRelayScript(channel, dataFolder, cancellation);
   if (installed.kind === 'failed') {
     logger.info(`the relay script was not installed: ${installed.detail}`);
@@ -646,7 +664,7 @@ export async function runServerSteps(
     logger,
   };
   const cacheRequest = {
-    extensions: request.defaultExtensions,
+    extensions: wantedExtensions,
     serviceUrl: typeof serviceUrl === 'string' ? serviceUrl : '',
     target: platformName,
     productVersion: profile.version,
@@ -659,8 +677,8 @@ export async function runServerSteps(
     queryMilliseconds: GALLERY_QUERY_MILLISECONDS,
   };
   const extensionPlan =
-    request.defaultExtensions.length === 0 || typeof serviceUrl !== 'string'
-      ? {installs: [...request.defaultExtensions], pending: []}
+    wantedExtensions.length === 0 || typeof serviceUrl !== 'string'
+      ? {installs: [...wantedExtensions], pending: []}
       : await planExtensions(cachePorts, {...cacheRequest, cancellation});
   const defaultExtensions = extensionPlan.installs;
   const beforeStart = await request.beforeStart?.();

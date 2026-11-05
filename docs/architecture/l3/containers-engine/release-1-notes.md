@@ -11,6 +11,13 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     open in a window whose remote authority did not resolve (measured on VS Code 1.139.1 and VSCodium); the settings
     file opens there (athena on #737; spec question on remote-oss/remote-ssh#79).
 
+- **A window that attaches to a container asks the attach warning again when the user never picked that container.**
+  - F-0601 asks the warning once per profile. An `attached-container` authority can come from a link or an old recent
+    entry, so the registration of the attached families connects only to a target the attach command or a row action
+    recorded in the profile; any other target gets the warning whatever "Got It" said before. Confirming records it and
+    connects, Cancel or Escape connects nothing, and the window stays trusted (F-0106 BR-13). Athena on #2186
+    (`ruling-2186-attach-gate`), card containers-163.
+
 - **A Feature named in `features` and again in `dev.containers.defaultFeatures`, differing only in letter case, is installed once, with the configuration's options.**
   - F-0414 AC-28 and BR-14 have `features` win on the same id; the dev container CLI merges the two lists by their ids'
     text, so it would install both and let the defaults' options apply last. The extension leaves out of
@@ -80,13 +87,14 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   - F-0807 AC-62 and F-0404 7.E10 describe the reference's text; ruled on remote-oss/remote#1971 (spec question on
     remote-oss/remote-containers#132).
 
-- **Open Folder in Container... and Open Workspace in Container... show a host-requirements dialog caused only by the
-  image's own label after the trust dialog, not before it.** Requirements written in the configuration file, or
-  recorded on the folder's existing container, still show before trust, as the reference does.
+- **Open Folder in Container... and Open Workspace in Container... don't show a host-requirements dialog for a
+  requirement that only the image's own label records.** Requirements written in the configuration file, or recorded
+  on the folder's existing container, still show before trust, as the reference does.
   - F-0206 BR-17 has the whole check run before the target's trust dialog for these two commands. Reading the image's
     label means asking the registries that the untrusted configuration names, and fetching its Features, before the
-    user has trusted it (F-0106; F-0201 AC-55). Ours does that read only after trust (athena on #2146, after dike's
-    review; ruling `ruling-2146-trust-first`; spec question on remote-oss/remote-containers#133).
+    user has trusted it, and these two commands ask for trust only in the window they open (F-0106), so no point
+    before the reload is both safe and in time (athena on #2146 and #2152; ruling `ruling-2146-trust-first`; spec
+    question on remote-oss/remote-containers#133).
 
 - **The version lookups for Features in `devcontainer.json` run only in a trusted workspace.** In Restricted Mode the
   file shows no version CodeLenses; the Feature hover, the completions and the deprecated-namespace warning still work.

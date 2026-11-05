@@ -19,7 +19,8 @@ import {
 } from './config-files.ts';
 import {type AttachItem, runningItemsOf} from './containers.ts';
 import {attachedSuffixOf} from './label.ts';
-import {attachedPayloadOf} from './payload.ts';
+import {attachPickKeyOf} from './pick-record.ts';
+import {type AttachedTarget, attachedPayloadOf} from './payload.ts';
 
 /** The English templates of the dialogs this command shows. */
 const COMMAND_TEMPLATES = {
@@ -62,6 +63,8 @@ export interface AttachPorts {
   /** The distro's UNC root in a WSL window; none otherwise. */
   wslRoot(): string | undefined;
   registerLabel(decoded: DecodedTarget, suffix: string): void;
+  /** Records the target named `key` as picked, before its window opens. */
+  recordPick(key: string): Promise<void>;
   /** Opens a new window on the authority, on the folder when there is one. */
   openWindow(
     authority: string,
@@ -136,11 +139,12 @@ export async function attachToRunningContainer(
   const folder = await folderOf(ports, item);
   const pinned = await ports.pinnedEngine();
   const wslRoot = ports.wslRoot();
-  const payload = attachedPayloadOf({
+  const target: AttachedTarget = {
     containerName: `/${item.name}`,
     ...pinned,
     ...(wslRoot === undefined ? {} : {cwd: wslRoot}),
-  });
+  };
+  const payload = attachedPayloadOf(target);
   const decoded: DecodedTarget = {
     family: 'attached-container',
     target: {payload},
@@ -150,6 +154,7 @@ export async function attachToRunningContainer(
     decoded,
     attachedSuffixOf({image: item.image, name: item.name}, pinned, translate),
   );
+  await ports.recordPick(attachPickKeyOf(target));
   const opened = await ports.openWindow(encodeAuthority(decoded), folder);
   if (opened.kind === 'rejected') {
     logger.warn(`Attach to Running Container was refused: ${opened.reason}`);

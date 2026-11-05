@@ -13,7 +13,7 @@ import {
 import type {CliTarget} from '../../src/cli/cli-arguments.ts';
 import type {CliBridge} from '../../src/cli/cli-bridge.ts';
 import type {BackgroundStage} from '../../src/lifecycle/container-lifecycle.ts';
-import type {CliEvent} from '../../src/cli/cli-lines.ts';
+import type {CliEvent, SetUpResult} from '../../src/cli/cli-lines.ts';
 import {
   type ContainerConnector,
   type ContainerConnectorDependencies,
@@ -190,6 +190,8 @@ export interface Scene {
   /** The user's values of the workspace mount's consistency, of its deprecated twin and of the worktree setting. */
   workspaceMountConsistency: unknown;
   legacyWorkspaceMountConsistency: unknown;
+  /** The value of `dev.containers.gpuAvailability`. */
+  gpuAvailability: unknown;
   mountGitWorktreeCommonDir: unknown;
   /** The user's values of the setting for the extensions of a new container, and of its deprecated twin. */
   defaultFeatures: unknown;
@@ -230,6 +232,15 @@ export interface Scene {
   consentGiven: boolean;
   /** The background stages the lifecycles were made with, in order. */
   backgroundStages: Array<BackgroundStage | undefined>;
+  /** What the CLI's set-up gives, and the containers it was asked to set up. */
+  setUpResult: SetUpResult;
+  setUps: string[];
+  /** The ids the attached record holds, by payload. */
+  attachedIds: Record<string, string>;
+  /** The targets the user picked, how many times the attach warning was asked, and what it is answered. */
+  attachPicks: string[];
+  confirmations: number;
+  confirmAnswer: boolean;
 }
 
 /** What a probe that worked prints: noise, the markers and two variables. */
@@ -348,7 +359,7 @@ function volumeDependenciesOf(
 /** The connector over fakes, and the knobs that steer them. */
 export function sceneOf(
   overrides: Partial<Pick<Scene, 'dockerPath'>> = {},
-  options: {volumes?: boolean} = {},
+  options: {volumes?: boolean; attached?: boolean; pods?: EngineHost} = {},
 ): Scene {
   const sink = new MemorySink();
   const scene: Scene = {
@@ -396,6 +407,7 @@ export function sceneOf(
     cacheVolumeInspect: undefined,
     workspaceMountConsistency: undefined,
     legacyWorkspaceMountConsistency: undefined,
+    gpuAvailability: undefined,
     mountGitWorktreeCommonDir: undefined,
     defaultFeatures: undefined,
     lockfile: undefined,
@@ -424,6 +436,12 @@ export function sceneOf(
     recoveryPicks: [],
     consentGiven: true,
     backgroundStages: [],
+    setUpResult: {kind: 'setUp', mergedConfiguration: {}},
+    setUps: [],
+    attachedIds: {},
+    attachPicks: [],
+    confirmations: 0,
+    confirmAnswer: true,
     ...overrides,
   };
   const kills = fakeEngine(
@@ -544,6 +562,14 @@ export function sceneOf(
         ? scene.configuration()
         : Promise.resolve(scene.configuration);
     },
+    setUp: target => {
+      scene.setUps.push(target.containerId);
+      return Promise.resolve(scene.setUpResult);
+    },
+    runAttachedUserCommands: () =>
+      Promise.reject(
+        new Error('the connector fixture runs through the lifecycle'),
+      ),
     applyTemplate: () =>
       Promise.reject(new Error('the connector never applies a template')),
     outdated: () =>
@@ -564,6 +590,9 @@ export function sceneOf(
         ? scene.outcome()
         : scene.outcome;
     },
+    adopt: containerId => {
+      scene.lifecycleRuns.push(`adopt ${containerId}`);
+    },
     runBlocking: remoteEnvironment => {
       scene.lifecycleRuns.push(`blocking ${JSON.stringify(remoteEnvironment)}`);
       return Promise.resolve(scene.blockingResult);
@@ -575,6 +604,20 @@ export function sceneOf(
     },
     stopBackground: () => {
       scene.stopped += 1;
+    },
+  };
+  /** The profile's picks and the attach warning, which the scene records and answers. */
+  const gate = {
+    picks: {
+      includes: (key: string) => scene.attachPicks.includes(key),
+      record: (key: string) => {
+        scene.attachPicks.push(key);
+        return Promise.resolve();
+      },
+    },
+    confirm: () => {
+      scene.confirmations += 1;
+      return Promise.resolve(scene.confirmAnswer);
     },
   };
   let connections = 0;
@@ -611,8 +654,26 @@ export function sceneOf(
       scene.backgroundStages.push(stage);
       return lifecycle;
     },
+    ...(options.pods === undefined
+      ? {}
+      : {pods: {...gate, kubectl: options.pods}}),
     ...(options.volumes === true
       ? {volumes: volumeDependenciesOf(scene, bridge)}
+      : {}),
+    ...(options.attached === true
+      ? {
+          attached: {
+            ...gate,
+            record: {
+              read: payload => scene.attachedIds[payload],
+              write: (payload, containerId) => {
+                scene.attachedIds[payload] = containerId;
+                return Promise.resolve();
+              },
+            },
+            configFileOf: () => Promise.resolve(undefined),
+          },
+        }
       : {}),
     lifecyclePresenter: {
       output: () => undefined,
@@ -634,6 +695,7 @@ export function sceneOf(
         ),
       workspaceMountConsistency: scene.workspaceMountConsistency,
       legacyWorkspaceMountConsistency: scene.legacyWorkspaceMountConsistency,
+      gpuAvailability: scene.gpuAvailability,
       mountGitWorktreeCommonDir: scene.mountGitWorktreeCommonDir,
       defaultExtensions: scene.defaultExtensions,
       deprecatedDefaultExtensions: scene.deprecatedDefaultExtensions,

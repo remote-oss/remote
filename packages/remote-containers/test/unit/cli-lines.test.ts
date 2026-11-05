@@ -8,6 +8,7 @@ import {
   parseLogLine,
   readConfigurationResult,
   readRunUserCommandsResult,
+  readSetUpResult,
   readUpResult,
 } from '../../src/cli/cli-lines.ts';
 
@@ -203,6 +204,31 @@ describe('the output of the dev container CLI (card containers-04)', () => {
         {kind: 'malformedResult', field: 'result'},
         {kind: 'malformedResult', field: 'result'},
         {kind: 'malformedResult', field: 'result'},
+      ],
+    );
+  });
+
+  it('F-0601 BR-13: set-up gives the merged configuration, an error line gives its failure, and anything else is malformed or no result', () => {
+    deepStrictEqual(
+      [
+        readSetUpResult(
+          '{"outcome":"success","mergedConfiguration":{"remoteUser":"vscode"}}',
+          0,
+        ),
+        readSetUpResult(
+          '{"outcome":"error","message":"no user","description":"d"}',
+          1,
+        ).kind,
+        readSetUpResult('{"outcome":"success"}', 0),
+        readSetUpResult('not json', 0),
+        readSetUpResult(undefined, 1),
+      ],
+      [
+        {kind: 'setUp', mergedConfiguration: {remoteUser: 'vscode'}},
+        'setupFailed',
+        {kind: 'malformedResult', field: 'mergedConfiguration'},
+        {kind: 'malformedResult', field: 'result'},
+        {kind: 'noResult', status: 1},
       ],
     );
   });
@@ -478,6 +504,15 @@ describe('the daemon refusal (card containers-11)', () => {
     deepStrictEqual(
       [PORT_TAKEN, PORT_TAKEN.slice('docker: '.length)].map(daemonRefusalOf),
       ['portAllocated', 'portAllocated'],
+    );
+  });
+
+  it('F-0410 7.E2, AC-12: the wording of Docker 28 for a port that is taken, failed to bind host port … address already in use, is portAllocated too', () => {
+    const taken =
+      'Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint angry_cohen (1e85834bf3fa): failed to bind host port for 0.0.0.0:32770:172.17.0.5:8000/tcp: address already in use';
+    deepStrictEqual(
+      [taken, `docker: ${taken}`, `${taken} (retrying)`].map(daemonRefusalOf),
+      ['portAllocated', 'portAllocated', undefined],
     );
   });
 

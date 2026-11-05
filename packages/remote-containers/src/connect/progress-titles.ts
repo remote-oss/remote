@@ -10,6 +10,7 @@ import type {Translate} from '../surfaces/engine-dialogs.ts';
 const PROGRESS_TEMPLATES = {
   S087: '[Connecting to Dev Container (show log)](command:remote-containers.revealLogTerminal)',
   S283: '[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)',
+  S332: '[Starting Docker (show log)](command:remote-containers.revealLogTerminal)',
   S074: 'Cloning Repository',
   S209: 'Installing server',
   S334: 'Starting server',
@@ -27,6 +28,11 @@ const STAGE_TEMPLATES = {
 /** The title the progress before a reload has while the configuration is read. */
 export function readTitleOf(translate: Translate): string {
   return translate(PROGRESS_TEMPLATES.S283);
+}
+
+/** The title of the notice the first check shows while Docker starts. */
+export function startingDockerTitleOf(translate: Translate): string {
+  return translate(PROGRESS_TEMPLATES.S332);
 }
 
 /** The title the progress starts with. */

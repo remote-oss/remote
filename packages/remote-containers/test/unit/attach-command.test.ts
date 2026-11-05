@@ -12,7 +12,9 @@ import {runningItemsOf} from '../../src/attach/containers.ts';
 import {
   ATTACH_TRUST_KEY,
   ATTACH_TRUST_PAGE,
+  type AttachWarningPorts,
   attachWarningAccepted,
+  attachWarningConfirmed,
 } from '../../src/attach/warning.ts';
 import {wslRootOf} from '../../src/attach/payload.ts';
 import type {
@@ -177,33 +179,35 @@ describe('the attach warning (card containers-162, brief-attach §7.1)', () => {
     opened: string[];
     writes: unknown[][];
     accepted(): Promise<boolean>;
+    confirmed(): Promise<boolean>;
   } {
     const shown: Array<[string, string, readonly string[]]> = [];
     const opened: string[] = [];
     const writes: unknown[][] = [];
+    const ports: AttachWarningPorts = {
+      global: {
+        get: key => (key === ATTACH_TRUST_KEY ? stored : undefined),
+        update: (key, value) => {
+          writes.push([key, value]);
+          return Promise.resolve();
+        },
+      },
+      show: (message, detail, buttons) => {
+        shown.push([message, detail, buttons]);
+        return Promise.resolve(answer);
+      },
+      openExternal: address => {
+        opened.push(address);
+        return Promise.resolve();
+      },
+      translate: template => template,
+    };
     return {
       shown,
       opened,
       writes,
-      accepted: () =>
-        attachWarningAccepted({
-          global: {
-            get: key => (key === ATTACH_TRUST_KEY ? stored : undefined),
-            update: (key, value) => {
-              writes.push([key, value]);
-              return Promise.resolve();
-            },
-          },
-          show: (message, detail, buttons) => {
-            shown.push([message, detail, buttons]);
-            return Promise.resolve(answer);
-          },
-          openExternal: address => {
-            opened.push(address);
-            return Promise.resolve();
-          },
-          translate: template => template,
-        }),
+      accepted: () => attachWarningAccepted(ports),
+      confirmed: () => attachWarningConfirmed(ports),
     };
   }
 
@@ -231,6 +235,24 @@ describe('the attach warning (card containers-162, brief-attach §7.1)', () => {
         [[ATTACH_TRUST_KEY, true]],
         [],
       ],
+    );
+  });
+
+  it('F-0601 AC-1 (c163-warning-confirmed): the confirming question is asked even when the profile kept Got It, keeps nothing, and is confirmed by Got It alone; Learn More opens the page and Cancel or Escape do not confirm', async () => {
+    const kept = sceneOf(true, 'Got It');
+    const learn = sceneOf(undefined, 'Learn More');
+    const cancel = sceneOf(true, undefined);
+    deepStrictEqual(
+      [
+        await kept.confirmed(),
+        await learn.confirmed(),
+        await cancel.confirmed(),
+        kept.shown.length,
+        kept.writes,
+        learn.opened.length,
+        cancel.shown.length,
+      ],
+      [true, false, false, 1, [], 1, 1],
     );
   });
 
@@ -270,6 +292,7 @@ describe('the attach command (card containers-162, brief-attach §2)', () => {
     labels: Array<[DecodedTarget, string]>;
     modals: Array<[string, string, string]>;
     refused: boolean;
+    recorded: string[];
   }
 
   function sceneOf(containers: readonly unknown[]): Scene {
@@ -289,6 +312,7 @@ describe('the attach command (card containers-162, brief-attach §2)', () => {
       labels: [],
       modals: [],
       refused: false,
+      recorded: [],
     };
   }
 
@@ -339,6 +363,11 @@ describe('the attach command (card containers-162, brief-attach §2)', () => {
       wslRoot: () => distroRoot,
       registerLabel: (decoded, suffix) => {
         scene.labels.push([decoded, suffix]);
+      },
+      recordPick: key => {
+        scene.events.push('record');
+        scene.recorded.push(key);
+        return Promise.resolve();
       },
       openWindow: (authority, folder) => {
         scene.events.push('open');
@@ -428,11 +457,17 @@ describe('the attach command (card containers-162, brief-attach §2)', () => {
         'malformed' in decoded ? decoded : [decoded.family, folder],
         again.labels.map(each => each[1]),
         again.events.indexOf('open') > again.events.indexOf('picker fill'),
+        scene.recorded,
+        again.recorded,
+        again.events.indexOf('record') < again.events.indexOf('open'),
       ],
       [
         [],
         ['attached-container', undefined],
         ['Container nginx:1 (web) @ remote'],
+        true,
+        [],
+        ['["/web",{"settings":{"context":"remote"}}]'],
         true,
       ],
     );

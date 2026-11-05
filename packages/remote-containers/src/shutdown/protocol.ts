@@ -22,12 +22,17 @@ export type ContainerIdentity =
       configFile: string;
     }
   | {volumeName: string; folder: string}
-  | {volumeName: string; configFile: string};
+  | {volumeName: string; configFile: string}
+  /** A container the window attached to, by its name. */
+  | {containerName: string};
 
 /** What names an identity, so that two identities of the same container name it alike. */
 function identityKey(identity: ContainerIdentity): string {
   if ('hostPath' in identity) {
     return JSON.stringify(['folder', identity.hostPath, identity.configFile]);
+  }
+  if ('containerName' in identity) {
+    return JSON.stringify(['attached', identity.containerName]);
   }
   return 'folder' in identity
     ? JSON.stringify(['clone', identity.volumeName, identity.folder])
@@ -47,11 +52,17 @@ export function identityLabel(identity: ContainerIdentity): string {
   if ('hostPath' in identity) {
     return identity.hostPath;
   }
+  if ('containerName' in identity) {
+    return `the container ${identity.containerName}`;
+  }
   return `the ${'folder' in identity ? 'volume' : 'explored volume'} ${identity.volumeName}`;
 }
 
 /** The `docker ps` filters that find the dev container of an identity by its labels. */
 export function identityFilters(identity: ContainerIdentity): string[] {
+  if ('containerName' in identity) {
+    return ['--filter', `name=^/${identity.containerName}$`];
+  }
   let labels: string[];
   if ('hostPath' in identity) {
     labels = [
@@ -87,6 +98,8 @@ export type ShutdownRequest =
       connectionId: string;
       identity: ContainerIdentity;
       engine: EngineCoordinates;
+      /** False for a connection whose end stops nothing, such as an attached window's; absent means it owns. */
+      owning?: false;
     }
   | {
       type: 'compose';
@@ -149,6 +162,10 @@ function identityOf(value: unknown): ContainerIdentity | undefined {
   if (hostPath !== undefined && configFile !== undefined) {
     return {hostPath, configFile};
   }
+  const containerName = textOf(value, 'containerName');
+  if (containerName !== undefined) {
+    return {containerName};
+  }
   const volumeName = textOf(value, 'volumeName');
   const folder = textOf(value, 'folder');
   if (volumeName === undefined) {
@@ -187,6 +204,12 @@ function readRegister(
         'register needs the engine with a dockerPath and an environment of text',
     };
   }
+  if (record.owning !== undefined && typeof record.owning !== 'boolean') {
+    return {
+      kind: 'malformed',
+      problem: 'register needs owning to be a boolean',
+    };
+  }
   return {
     kind: 'request',
     request: {
@@ -194,6 +217,7 @@ function readRegister(
       connectionId,
       identity,
       engine: {dockerPath, environment},
+      ...(record.owning === false ? {owning: false as const} : {}),
     },
   };
 }

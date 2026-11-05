@@ -20,7 +20,16 @@ import {
   problematicFeatureRefused,
 } from '../features/problematic-check.ts';
 import {requestedFeaturesOf} from '../cli/failing-feature.ts';
+import {
+  type HostRequirementsCheck,
+  hostRequirementsAccepted,
+} from './host-requirements-step.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
+import {startingDockerTitleOf} from '../connect/progress-titles.ts';
+import {
+  type StartingDockerPorts,
+  watchedCheck,
+} from '../engine/starting-docker.ts';
 import {
   type PreReloadProgress,
   type PreReloadProgressPorts,
@@ -98,10 +107,30 @@ export interface BeforeReload {
   cancellation: AbortSignal;
 }
 
+/** The progress of the checks that end before the reading starts: nothing was shown, so there is nothing to close. */
+const NO_PROGRESS: PreReloadProgress = {close: () => undefined};
+
+/** The ports of the first check's notice, over the progress ports of the checks. */
+function startingDockerPortsOf(
+  progress: PreReloadProgressPorts,
+): StartingDockerPorts {
+  return {
+    setTimer: (callback, milliseconds) =>
+      progress.setTimer(milliseconds, callback),
+    show: (ended, cancel) => {
+      progress.showProgress(
+        startingDockerTitleOf(progress.translate),
+        ended,
+        cancel,
+      );
+    },
+  };
+}
+
 /**
- * The checks before a reload: the engine and the configuration together, with S283 and a Cancel after 500 ms. Cancel
- * aborts them all: the engine's queries, the CLI's read and a pull it makes. The caller closes the progress before its
- * reload, and when it ends without one.
+ * The checks before a reload, in order: the engine's availability, with S332 and a Cancel after 2 s, then the
+ * configuration's choice and read, with S283 and a Cancel after 500 ms. Cancel aborts what runs: the engine's queries,
+ * the CLI's read and a pull it makes. The caller closes the progress before its reload, and when it ends without one.
  */
 export async function beforeReload(
   ports: PreReloadPorts,
@@ -110,22 +139,35 @@ export async function beforeReload(
   const {logger} = ports.config;
   const controller = new AbortController();
   const cancellation = controller.signal;
+  const available = await watchedCheck(
+    startingDockerPortsOf(ports.progress),
+    (signal, noticeOver) =>
+      ports
+        .firstCheck(
+          request.folder,
+          closingDialogs(ports.dialogs, {close: noticeOver}),
+          signal,
+        )
+        .catch((caught: unknown): FirstCheckResult => {
+          logger.error(
+            `the engine check failed: ${caught instanceof Error ? caught.message : String(caught)}`,
+          );
+          return 'stopped';
+        }),
+    cancellation,
+  );
+  if (available.kind === 'stopped') {
+    controller.abort();
+    logger.info('the command was cancelled while the engine was checked');
+    return {choice: {kind: 'cancelled'}, progress: NO_PROGRESS, cancellation};
+  }
+  if (available.result === 'stopped') {
+    return {choice: {kind: 'stopped'}, progress: NO_PROGRESS, cancellation};
+  }
   const progress = startPreReloadProgress(ports.progress, () => {
     controller.abort();
   });
-  const engineCheck = ports
-    .firstCheck(
-      request.folder,
-      closingDialogs(ports.dialogs, progress),
-      cancellation,
-    )
-    .catch((caught: unknown): FirstCheckResult => {
-      logger.error(
-        `the engine check failed: ${caught instanceof Error ? caught.message : String(caught)}`,
-      );
-      progress.close();
-      return 'stopped';
-    });
+  const engineCheck = Promise.resolve<FirstCheckResult>('proceed');
   logger.info('Reading configuration');
   const began = ports.clock();
   try {
@@ -186,6 +228,7 @@ export async function commandBeforeReload(
   configFile?: string,
   switching?: ConfigurationRequest['switching'],
   external?: boolean,
+  hostRequirements?: HostRequirementsCheck,
 ): ReturnType<typeof beforeReload> {
   const result = await beforeReload(
     {
@@ -209,6 +252,7 @@ export async function commandBeforeReload(
       ...(configFile === undefined ? {} : {configFile}),
       ...(switching === undefined ? {} : {switching}),
       ...(external === undefined ? {} : {external}),
+      ...(hostRequirements?.stage === 'merged' ? {mergedRead: true} : {}),
     },
   );
   if (result.choice.kind !== 'chosen') {
@@ -245,6 +289,34 @@ export async function commandBeforeReload(
       };
     }
     throw caught;
+  }
+  if (hostRequirements !== undefined) {
+    const accepted = await hostRequirementsAccepted(
+      {
+        ...hostRequirements.ports,
+        confirm: closing(
+          result.progress,
+          (message: string, detail: string, acceptLabel: string) =>
+            hostRequirements.ports.confirm(message, detail, acceptLabel),
+        ),
+      },
+      {
+        base: hostRequirements.base,
+        folder,
+        configFile: result.choice.configFile,
+        stage: hostRequirements.stage,
+        merged: result.choice.hostRequirements,
+      },
+      result.cancellation,
+    );
+    if (!accepted) {
+      ports.logger.info('the host requirements dialog was cancelled');
+      return {
+        choice: {kind: 'cancelled'},
+        progress: result.progress,
+        cancellation: result.cancellation,
+      };
+    }
   }
   return result;
 }

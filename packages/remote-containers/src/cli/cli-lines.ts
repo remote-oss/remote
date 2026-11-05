@@ -9,7 +9,7 @@ export type DaemonRefusal = 'invalidMount' | 'portAllocated';
 const INVALID_MOUNT =
   /^(?:docker: )?Error response from daemon: invalid mount config for type "[^"]*": (?:bind source path does not exist: |field Source must not be empty$)/u;
 const PORT_ALLOCATED =
-  /^(?:docker: )?Error response from daemon: .*: Bind for \S+ failed: port is already allocated$/u;
+  /^(?:docker: )?Error response from daemon: .*: (?:Bind for \S+ failed: port is already allocated|failed to bind host port for \S+: address already in use)$/u;
 
 /** The refusal one line of the Docker client says, or undefined; the line has no colour codes and no CR. */
 export function daemonRefusalOf(line: string): DaemonRefusal | undefined {
@@ -88,6 +88,10 @@ export type UpResult =
 
 /** What `run-user-commands` gives. */
 export type RunUserCommandsResult = {kind: 'done'} | CliFailure;
+
+/** What `set-up` gives: the container's merged configuration. */
+export type SetUpResult =
+  {kind: 'setUp'; mergedConfiguration: Record<string, unknown>} | CliFailure;
 
 /** What `templates apply` gives. */
 export type ApplyTemplateResult =
@@ -365,6 +369,24 @@ export function readRunUserCommandsResult(
     FINISHED_RESULTS.has(fields.result)
     ? {kind: 'done'}
     : {kind: 'malformedResult', field: 'result'};
+}
+
+/** What `set-up` gave, from its result line and the process's status. */
+export function readSetUpResult(
+  result: string | undefined,
+  status: number | null,
+): SetUpResult {
+  const parsed = parsedResult(result, status);
+  if ('failure' in parsed) {
+    return parsed.failure;
+  }
+  const {fields} = parsed;
+  if (fields.outcome === 'error') {
+    return errorOf(fields);
+  }
+  return isFields(fields.mergedConfiguration)
+    ? {kind: 'setUp', mergedConfiguration: fields.mergedConfiguration}
+    : {kind: 'malformedResult', field: 'mergedConfiguration'};
 }
 
 /**

@@ -265,10 +265,19 @@ describe('the tunnel of a window that its host or its configuration refuses (car
         );
         // The link of the message runs this command, which the row then runs, as the editor does for a click.
         await inWindow(name, 'opensshremotes.showLog');
-        await windowState(name);
-        const channel = windowEvents(name)
-          .filter(entry => entry.event === 'state')
-          .at(-1)?.visibleOutputChannel;
+        // The channel is shown a moment after the command ran: the state is read again until it names one.
+        let channel: string | null | undefined;
+        await waitFor(
+          'the window to show an output channel',
+          async () => {
+            await windowState(name);
+            channel = windowEvents(name)
+              .filter(entry => entry.event === 'state')
+              .at(-1)?.visibleOutputChannel;
+            return channel !== null && channel !== undefined;
+          },
+          30_000,
+        );
         seen.push({
           notices: recordLines('notice', name).map(line => [
             line.question,

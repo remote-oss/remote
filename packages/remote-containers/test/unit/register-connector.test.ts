@@ -11,6 +11,8 @@ import {recordingResolverEditor} from 'lib-authority/testing/recording-resolver-
 import type {CommandHost} from 'lib-identifiers';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
+import {k8sPayloadOf} from '../../src/attach/k8s-payload.ts';
+import {attachedPayloadOf} from '../../src/attach/payload.ts';
 import {devContainerPayloadOf} from '../../src/authority/payload.ts';
 import {
   containerSetupFailed,
@@ -83,8 +85,10 @@ async function registered(
   const commands = new Map<string, () => unknown>();
   const recording = recordingResolverEditor(events);
   const listeners: Array<(phase: ConnectPhase) => void> = [];
+  let connectCount = 0;
   const connector: ContainerConnector = {
     connect: () => {
+      connectCount += 1;
       for (const listener of listeners) {
         listener({name: 'installing'});
       }
@@ -102,6 +106,8 @@ async function registered(
     heldConnection: () => undefined,
     announceShutdown: () => undefined,
     leaveShutdown: () => Promise.resolve(),
+    attachedContainer: () => undefined,
+    startAttachedContainer: () => Promise.resolve(false),
     failedContainer: () => options.failedContainer,
     heldIdentity: () => identity,
     attemptIdentity: () => options.attemptIdentity,
@@ -235,6 +241,7 @@ async function registered(
     };
   });
   return {
+    connects: () => connectCount,
     thrown,
     result,
     events,
@@ -295,6 +302,44 @@ function suffixesOf(seen: Awaited<ReturnType<typeof registered>>): string[] {
 }
 
 describe('the registration of the container connector (card containers-08)', () => {
+  it('F-0601 AC-1 (c163-dev-container-decodes): the dev-container authority decodes only its own payloads: one that reads as an attached container is malformed, and the connector is never reached', async () => {
+    const attached = encodeAuthority({
+      family: 'dev-container',
+      target: {payload: attachedPayloadOf({containerName: '/x'})},
+      rawHostString: 'x',
+    });
+    const crafted = await registered();
+    await settledResolve(crafted, 1, attached);
+    const plain = await registered();
+    await settledResolve(plain, 1);
+    deepStrictEqual([crafted.connects(), plain.connects()], [0, 1]);
+  });
+
+  it('F-0604 AC-35 (c191-dev-container-pod): a pod payload on the dev-container authority is malformed too, valid or with a member that fails its name rule, and the connector is never reached', async () => {
+    const podTarget = {
+      context: 'kind-lab',
+      podname: 'web-1',
+      namespace: 'default',
+      name: 'app',
+      image: 'nginx',
+    };
+    const authorities = [
+      podTarget,
+      {...podTarget, namespace: '--context=other'},
+    ].map(target =>
+      encodeAuthority({
+        family: 'dev-container',
+        target: {payload: k8sPayloadOf(target)},
+        rawHostString: 'x',
+      }),
+    );
+    const crafted = await registered();
+    for (const authority of authorities) {
+      await settledResolve(crafted, 1, authority);
+    }
+    deepStrictEqual(crafted.connects(), 0);
+  });
+
   it('F-1101 AC-1, AC-22: every resolve that settles connected hands the connection’s ports to the forwarder', async () => {
     const ports = {
       forwardPorts: [3000],

@@ -170,6 +170,7 @@ describe('the dev container CLI through the bridge, on local Docker (card contai
     removeExistingContainer: false,
     buildNoCache: false,
     workspaceMountConsistency: 'cached',
+    gpuAvailability: 'detect',
   };
 
   it('C3: up creates the container, as root, with the workspace under /workspaces', async () => {

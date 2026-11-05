@@ -9,6 +9,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  realpath,
   rename,
   rm,
   stat,
@@ -43,6 +44,8 @@ import {downloadPortOf, nodeClientFiles, nodeCredentialsPort} from 'lib-server';
 import {standDownHost} from 'lib-standdown';
 import {containersChannelPortFor} from './acceptance-log.ts';
 import {activateContainers} from './activation.ts';
+import {refreshCliBin} from './cli-bin/cli-bin.ts';
+import {nodeCliBinFs} from './cli-bin/node-cli-bin-fs.ts';
 import {serializedUriOf, windowOriginOf} from './authority/payload.ts';
 import {manifestStoreOf} from './features/manifest-store.ts';
 import {downloadTextOver} from './authoring/catalogue-download.ts';
@@ -66,9 +69,16 @@ import {storedCandidate, type StoredLookup} from './config/stored-candidate.ts';
 import type {LocationRow} from './authoring/location.ts';
 import {wizardRunnerOf} from './authoring/wizard.ts';
 import {
+  type ConfigureFeaturesPorts,
   configureFeaturesOf,
   type WindowFolder,
 } from './authoring/configure-features.ts';
+import {addExtensionCommandOf} from './authoring/add-extension-command.ts';
+import type {
+  ConfigDocument,
+  ConfigUri,
+  ConfigurationEditPorts,
+} from './config/configuration-edit.ts';
 import {addFilesForFeatures} from './authoring/features-add-files.ts';
 import {featuresRunOf} from './authoring/features-run.ts';
 import {versionCheckOf} from './authoring/version-check.ts';
@@ -96,6 +106,9 @@ import {containerConnectorOf, noEngineProgramOf} from './connect/connector.ts';
 import {openHostRelay} from './connect/host-relay.ts';
 import {recentLabelPortsOf} from './connect/recent-editor.ts';
 import {
+  attachedContainerFamilyOf,
+  k8sContainerFamilyOf,
+  registerAttachedResolver,
   registerContainerResolver,
   RESOLVER_EDITOR_OPTIONS,
 } from './connect/register-connector.ts';
@@ -114,10 +127,13 @@ import {configWatchOf} from './config-watch/config-watch.ts';
 import {engineBaseOf, executableOf} from './engine/executable.ts';
 import type {EngineHost} from './engine/engine-host.ts';
 import type {TargetsViewPorts} from './explorer/targets-view.ts';
+import {desktopPortsOf} from './engine/desktop-host.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {
   composeCheck,
+  containerRequirements,
   currentContext,
+  daemonFigures,
   firstCheck,
   type PreflightDependencies,
 } from './engine/preflight.ts';
@@ -166,14 +182,24 @@ import {
   attachToRunningContainer,
 } from './attach/attach-command.ts';
 import type {AttachItem} from './attach/containers.ts';
-import {attachConfigFilesOf} from './attach/config-files.ts';
-import {attachWarningAccepted} from './attach/warning.ts';
+import {
+  applicableConfigOf,
+  attachConfigFilesOf,
+} from './attach/config-files.ts';
+import {
+  type AttachWarningPorts,
+  attachWarningAccepted,
+  attachWarningConfirmed,
+} from './attach/warning.ts';
+import {attachPicked, recordAttachPick} from './attach/pick-record.ts';
 import {
   k8sAttachCommandsOf,
   type K8sPickItem,
   type K8sPicker,
 } from './attach/k8s-command.ts';
 import {kubectlHostOf} from './engine/kubectl-host.ts';
+import {k8sWindowOpenerOf} from './attach/k8s-window.ts';
+import {idRecordOf} from './attach/id-record.ts';
 import {wslRootOf} from './attach/payload.ts';
 import type {Translate} from './surfaces/engine-dialogs.ts';
 import {filled} from './surfaces/filled.ts';
@@ -325,6 +351,95 @@ function withoutLocation(ports: WizardPorts): WizardPorts {
 
 function translate(template: string): string {
   return vscode.l10n.t(template);
+}
+
+/** The document-edit seam over the editor: its open documents, its edits and saves, and its file system. */
+function configurationEditPortsOf(): ConfigurationEditPorts {
+  const files = vscode.workspace.fs;
+  function uriOf(uri: ConfigUri): vscode.Uri {
+    return uri as vscode.Uri;
+  }
+  function documentOf(document: ConfigDocument): vscode.TextDocument {
+    return document as vscode.TextDocument;
+  }
+  return {
+    openDocuments: () => vscode.workspace.textDocuments,
+    openTextDocument: uri =>
+      Promise.resolve(vscode.workspace.openTextDocument(uriOf(uri))),
+    applyEdit: (document, text) => {
+      const target = documentOf(document);
+      const edit = new vscode.WorkspaceEdit();
+      edit.replace(
+        target.uri,
+        new vscode.Range(
+          target.positionAt(0),
+          target.positionAt(target.getText().length),
+        ),
+        text,
+      );
+      return Promise.resolve(vscode.workspace.applyEdit(edit));
+    },
+    save: document => Promise.resolve(documentOf(document).save()),
+    fileSystem: {
+      stat: async uri => ({
+        symbolicLink:
+          ((await files.stat(uriOf(uri))).type &
+            vscode.FileType.SymbolicLink) !==
+          0,
+      }),
+      readFile: async uri =>
+        new TextDecoder().decode(await files.readFile(uriOf(uri))),
+      writeFile: (uri, text) =>
+        Promise.resolve(
+          files.writeFile(uriOf(uri), new TextEncoder().encode(text)),
+        ),
+      rename: (from, target) =>
+        Promise.resolve(
+          files.rename(uriOf(from), uriOf(target), {overwrite: true}),
+        ),
+      delete: uri => Promise.resolve(files.delete(uriOf(uri))),
+    },
+    realPath: uri => realpath(uri.fsPath),
+    workspaceFolders: () =>
+      (vscode.workspace.workspaceFolders ?? []).map(each => each.uri),
+    fileUri: fsPath => vscode.Uri.file(fsPath),
+    sibling: (uri, name) =>
+      vscode.Uri.joinPath(vscode.Uri.joinPath(uriOf(uri), '..'), name),
+    unique: randomUUID,
+  };
+}
+
+/** The id of the extension a row of the Extensions view hands the command: its `identifier.id`; none for anything else. */
+function extensionIdOf(extension: unknown): string | undefined {
+  const identifier =
+    typeof extension === 'object' && extension !== null
+      ? (extension as Record<string, unknown>).identifier
+      : undefined;
+  const written =
+    typeof identifier === 'object' && identifier !== null
+      ? (identifier as Record<string, unknown>).id
+      : undefined;
+  return typeof written === 'string' && written !== '' ? written : undefined;
+}
+
+/** What the attach warning needs of the editor, over the profile whose global state is `memento`. */
+function attachWarningPortsOf(memento: vscode.Memento): AttachWarningPorts {
+  return {
+    global: memento,
+    show: (message, detail, buttons) =>
+      vscode.window.showWarningMessage(
+        message,
+        {modal: true, detail},
+        ...buttons,
+      ),
+    openExternal: address => vscode.env.openExternal(vscode.Uri.parse(address)),
+    translate,
+  };
+}
+
+/** Asks the attach warning of the profile whose global state is `memento`; whether the attach may go on. */
+function attachWarningAsked(memento: vscode.Memento): Promise<boolean> {
+  return attachWarningAccepted(attachWarningPortsOf(memento));
 }
 
 /** A modal dialog with the buttons, the first the primary one and Cancel the close affordance; gives the title chosen. */
@@ -721,6 +836,12 @@ export async function activate(
   let logChannel: RevealableChannel | undefined;
   /** The lines of the connect attempt that is running or has failed, which a failure dialog writes to a file. */
   const attemptLog = createAttemptLog();
+  /** What the window's connection says of its target, for the commands that edit its configuration; the connector gives it once it exists. */
+  const windowTarget: {
+    attached: () =>
+      {image: string; name: string; folder: string | undefined} | undefined;
+    ownConfigFile: () => string | undefined;
+  } = {attached: () => undefined, ownConfigFile: () => undefined};
   /** How this window's last settled resolve ended; the resolver gives it once it is registered. */
   const resolved: {lastResolve: () => LastResolve} = {
     lastResolve: () => 'none',
@@ -1036,6 +1157,12 @@ export async function activate(
       variant,
     );
   }
+  const kubectl = kubectlHostOf({
+    kubectl: nodeEngineHost('kubectl'),
+    shell: nodeEngineHost('/bin/sh'),
+    platform: process.platform,
+    environment: process.env,
+  });
   const {openInformationAboutMountPerformance, ...activationCommands} =
     commands;
   const result = await activateContainers({
@@ -1113,13 +1240,30 @@ export async function activate(
         logger,
         searchPath: () => process.env.PATH ?? '',
       };
+      const desktop = desktopPortsOf(process.platform);
       return {
         ...dependencies,
         endpoint: (base, cancellation) =>
           endpointInEffect(engineSources(), dependencies, base, cancellation),
+        ...(desktop === undefined ? {} : {desktop}),
       };
     },
     handlers: served => {
+      // The launchers of the `devcontainer` command are made again when they are out of date; a failure is one log line.
+      refreshCliBin(
+        context.globalStorageUri.fsPath,
+        {
+          extensionPath: context.extensionPath,
+          appRoot: vscode.env.appRoot,
+          editorPath: process.execPath,
+          quality: profile.quality,
+        },
+        nodeCliBinFs,
+      ).catch((caught: unknown) => {
+        served.logger.warn(
+          `the devcontainer launchers could not be written: ${caught instanceof Error ? caught.message : String(caught)}`,
+        );
+      });
       // The two edit-session commands are registered and hidden; no proposal is requested, so the editor never offers them.
       const dormantCommand = {execute: () => Promise.resolve()};
       function firstFolder(): string | undefined {
@@ -1487,6 +1631,30 @@ export async function activate(
         served.logger,
       );
       const reopenPorts: ReopenPorts = {
+        requirements: {
+          daemonFigures: (base, cancellation) =>
+            daemonFigures(served.preflight, base, cancellation),
+          containerRequirements: (base, identity, cancellation) =>
+            containerRequirements(
+              served.preflight,
+              base,
+              identity,
+              cancellation,
+            ),
+          readText: file =>
+            readFile(file, 'utf8').then(
+              text => text,
+              () => undefined,
+            ),
+          confirm: async (message, detail, acceptLabel) =>
+            (await vscode.window.showWarningMessage(
+              message,
+              {modal: true, detail},
+              acceptLabel,
+            )) === acceptLabel,
+          translate,
+          logger: served.logger,
+        },
         authoring,
         gate: {
           missing: served.missing,
@@ -1743,7 +1911,19 @@ export async function activate(
           file => addressIn(root, file),
         );
       }
-      const configureFeatures = configureFeaturesOf({
+      const authoringBase: Pick<
+        ConfigureFeaturesPorts,
+        | 'window'
+        | 'filesOf'
+        | 'hostFiles'
+        | 'compare'
+        | 'stored'
+        | 'mirrored'
+        | 'surfaces'
+        | 'addFiles'
+        | 'translate'
+        | 'logger'
+      > = {
         window: {
           folders: windowFolders,
           remoteName: () => vscode.env.remoteName,
@@ -1820,6 +2000,32 @@ export async function activate(
             translate,
             logger: served.logger,
           }),
+        translate,
+        logger: served.logger,
+      };
+      const addExtension = addExtensionCommandOf({
+        ...authoringBase,
+        edit: configurationEditPortsOf(),
+        attached: () => windowTarget.attached(),
+        ownConfigFile: () => windowTarget.ownConfigFile(),
+        storage: context.globalStorageUri.fsPath,
+        exists: file =>
+          stat(file).then(
+            () => true,
+            () => false,
+          ),
+        uriOf: (file, root) => addressIn(root, file),
+        reveal: uri =>
+          vscode.window.showTextDocument(uri as vscode.Uri, {preview: false}),
+        notify: message => {
+          void vscode.window.showInformationMessage(message);
+        },
+        notifyError: message => {
+          void vscode.window.showErrorMessage(message);
+        },
+      });
+      const configureFeatures = configureFeaturesOf({
+        ...authoringBase,
         features: featuresRunOf({
           catalogue: wizardPorts.catalogue,
           quick: {...wizardPorts.options, translate},
@@ -1852,31 +2058,9 @@ export async function activate(
           translate,
           logger: served.logger,
         }),
-        translate,
-        logger: served.logger,
-      });
-      function attachWarning(): Promise<boolean> {
-        return attachWarningAccepted({
-          global: context.globalState,
-          show: (message, detail, buttons) =>
-            vscode.window.showWarningMessage(
-              message,
-              {modal: true, detail},
-              ...buttons,
-            ),
-          openExternal: address =>
-            vscode.env.openExternal(vscode.Uri.parse(address)),
-          translate,
-        });
-      }
-      const kubectl = kubectlHostOf({
-        kubectl: nodeEngineHost('kubectl'),
-        shell: nodeEngineHost('/bin/sh'),
-        platform: process.platform,
-        environment: process.env,
       });
       const kubernetes = k8sAttachCommandsOf({
-        warning: attachWarning,
+        warning: () => attachWarningAsked(context.globalState),
         listPods: kubectl.listPods,
         currentContext: kubectl.currentContext,
         openPicker: placeholder => k8sPickerOf(placeholder),
@@ -1895,12 +2079,26 @@ export async function activate(
         revealLog: () => {
           logChannel?.show(true);
         },
-        attach: selection => {
-          served.logger.info(
-            `Kubernetes container picked: ${selection.container.name} in ${selection.podName} (${selection.namespace}, ${selection.context})`,
-          );
-          return Promise.resolve();
-        },
+        attach: k8sWindowOpenerOf({
+          registerLabel: (decoded, suffix) => {
+            context.subscriptions.push(
+              registerAuthorityLabel(vscode.workspace, decoded, suffix),
+            );
+          },
+          recordPick: key => recordAttachPick(context.globalState, key),
+          openWindow: authority =>
+            openRemote(
+              {
+                executeCommand: (command, ...parameters) =>
+                  vscode.commands.executeCommand(command, ...parameters),
+                addressOf: parts => vscode.Uri.from(parts),
+              },
+              authority,
+              {pathKind: 'folder', target: 'new'},
+            ),
+          translate,
+          logger: served.logger,
+        }),
         translate,
         logger: served.logger,
       });
@@ -1912,6 +2110,16 @@ export async function activate(
         reopenInTunnel: {execute: reopenOrigin.reopenInTunnel},
         openFolder: {execute: openFolder},
         switchContainer: {execute: switchContainerHandler},
+        addExtensionToConfig: {
+          execute: async (extension?: unknown) => {
+            const extensionId = extensionIdOf(extension);
+            if (extensionId === undefined) {
+              served.logger.info('Add to devcontainer.json got no extension');
+              return;
+            }
+            await addExtension(extensionId);
+          },
+        },
         configureContainerFeatures: {
           execute: async () => {
             await configureFeatures();
@@ -1955,7 +2163,8 @@ export async function activate(
         attachToRunningContainer: {
           execute: () =>
             attachToRunningContainer({
-              warning: attachWarning,
+              warning: () => attachWarningAsked(context.globalState),
+              recordPick: key => recordAttachPick(context.globalState, key),
               engine: () =>
                 engineOfWindow(
                   windowEnginePortsOf(served.preflight),
@@ -2130,7 +2339,33 @@ export async function activate(
       SHUTDOWN_CLIENT_WAITS,
       process.platform,
     );
+    const gate = {
+      picks: {
+        includes: (key: string) => attachPicked(context.globalState, key),
+        record: (key: string) => recordAttachPick(context.globalState, key),
+      },
+      confirm: () =>
+        attachWarningConfirmed(attachWarningPortsOf(context.globalState)),
+    };
     const connector = containerConnectorOf({
+      pods: {...gate, kubectl: kubectl.engine},
+      attached: {
+        ...gate,
+        record: idRecordOf(context.globalState),
+        configFileOf: container =>
+          applicableConfigOf(
+            attachConfigFilesOf(
+              context.globalStorageUri.fsPath,
+              container.image,
+              container.name,
+            ),
+            file =>
+              stat(file).then(
+                () => true,
+                () => false,
+              ),
+          ),
+      },
       shutdown: createWindowLease({
         acquire: () =>
           acquire(
@@ -2368,6 +2603,7 @@ export async function activate(
           legacyWorkspaceMountConsistency: configuration.inspect(
             settings.workspaceMountConsistency.legacyId,
           )?.globalValue,
+          gpuAvailability: configuration.get(settings.gpuAvailability.id),
           mountGitWorktreeCommonDir: configuration.inspect(
             settings.experimentalMountGitWorktreeCommonDir.id,
           )?.globalValue,
@@ -2505,82 +2741,129 @@ export async function activate(
         );
       });
     }
-    const registered = await registerContainerResolver(
-      {
-        resolverEditor: resolverEditorOf(vscode, RESOLVER_EDITOR_OPTIONS),
-        labels: vscode.workspace,
-        portsView: {
-          enablePortsView: () =>
-            vscode.commands.executeCommand('setContext', PORTS_VIEW_KEY, true),
-        },
-        commands: host,
-        recentLabel: recentLabelPortsOf(vscode, () => os.homedir()),
-        knownNames: context.globalState,
-        presenter: recoveryPortsOf(vscode, {
-          writeAttemptLog: async () =>
-            writeAttemptLog(attemptLog, context.logUri.fsPath, Date.now()),
-          fileExists: file =>
-            Promise.resolve(
-              vscode.workspace.fs.stat(
-                vscode.Uri.from({scheme: file.scheme, path: file.path}),
-              ),
-            ).then(
-              () => true,
-              () => false,
-            ),
-          keepEdit: (folder, configFile, logFile) =>
-            storePendingEdit(
-              context.globalState,
-              folder,
-              configFile,
-              Date.now(),
-              logFile,
-            ),
-          storePausedRetry: containerId =>
-            storePausedRetry(context.globalState, containerId, Date.now()),
-          rebuildContainer: () =>
-            vscode.commands.executeCommand(commands.rebuildContainer.id),
-          openRecoveryContainer: async () => {
-            const authority = vscode.env.remoteAuthority ?? '';
-            const volume = authority.startsWith('dev-container+')
-              ? volumeTargetOf(authority.slice('dev-container+'.length))
-              : undefined;
-            const recovery =
-              volume === undefined
-                ? undefined
-                : recoveryTargetOf(volume, 'typed');
-            if (recovery === undefined) {
-              logger.info('the window is no clone in a volume to recover');
-              return;
-            }
-            await recordRecoveryPick(context.globalState, recovery.volumeName);
-            await vscode.commands.executeCommand(
-              'vscode.openFolder',
-              vscode.Uri.parse(volumeWindowUriOf(recovery)),
-              {forceReuseWindow: true},
-            );
-          },
-          logger,
-        }),
-        translate,
-        forwarder: forwarderOf({
-          // openTunnel is a proposed API ('tunnels'); the types of the proposal are not part of this project.
-          tunnels: vscode.workspace as unknown as TunnelHost,
-          showError: text => vscode.window.showErrorMessage(text),
-          logger,
-          translate,
-        }),
+    const registrationHost = {
+      resolverEditor: resolverEditorOf(vscode, RESOLVER_EDITOR_OPTIONS),
+      labels: vscode.workspace,
+      portsView: {
+        enablePortsView: () =>
+          vscode.commands.executeCommand('setContext', PORTS_VIEW_KEY, true),
       },
-      connector,
-      {
-        resolversGranted: !served.missing.includes('resolvers'),
-        revealLog: () => {
-          logChannel?.show(true);
+      commands: host,
+      recentLabel: recentLabelPortsOf(vscode, () => os.homedir()),
+      knownNames: context.globalState,
+      presenter: recoveryPortsOf(vscode, {
+        writeAttemptLog: async () =>
+          writeAttemptLog(attemptLog, context.logUri.fsPath, Date.now()),
+        fileExists: file =>
+          Promise.resolve(
+            vscode.workspace.fs.stat(
+              vscode.Uri.from({scheme: file.scheme, path: file.path}),
+            ),
+          ).then(
+            () => true,
+            () => false,
+          ),
+        keepEdit: (folder, configFile, logFile) =>
+          storePendingEdit(
+            context.globalState,
+            folder,
+            configFile,
+            Date.now(),
+            logFile,
+          ),
+        storePausedRetry: containerId =>
+          storePausedRetry(context.globalState, containerId, Date.now()),
+        rebuildContainer: () =>
+          vscode.commands.executeCommand(commands.rebuildContainer.id),
+        openRecoveryContainer: async () => {
+          const authority = vscode.env.remoteAuthority ?? '';
+          const volume = authority.startsWith('dev-container+')
+            ? volumeTargetOf(authority.slice('dev-container+'.length))
+            : undefined;
+          const recovery =
+            volume === undefined
+              ? undefined
+              : recoveryTargetOf(volume, 'typed');
+          if (recovery === undefined) {
+            logger.info('the window is no clone in a volume to recover');
+            return;
+          }
+          await recordRecoveryPick(context.globalState, recovery.volumeName);
+          await vscode.commands.executeCommand(
+            'vscode.openFolder',
+            vscode.Uri.parse(volumeWindowUriOf(recovery)),
+            {forceReuseWindow: true},
+          );
         },
         logger,
+      }),
+      translate,
+      forwarder: forwarderOf({
+        // openTunnel is a proposed API ('tunnels'); the types of the proposal are not part of this project.
+        tunnels: vscode.workspace as unknown as TunnelHost,
+        showError: text => vscode.window.showErrorMessage(text),
+        logger,
+        translate,
+      }),
+    };
+    const registrationServed = {
+      resolversGranted: !served.missing.includes('resolvers'),
+      revealLog: () => {
+        logChannel?.show(true);
       },
+      logger,
+    };
+    const registered = await registerContainerResolver(
+      registrationHost,
+      connector,
+      registrationServed,
+    );
+    const registeredAttached = await registerAttachedResolver(
+      registrationHost,
+      connector,
+      registrationServed,
+      {
+        chooseContainer: () =>
+          vscode.commands.executeCommand(commands.attachToRunningContainer.id),
+        picked: key => attachPicked(context.globalState, key),
+        record: key => recordAttachPick(context.globalState, key),
+        confirm: () =>
+          attachWarningConfirmed(attachWarningPortsOf(context.globalState)),
+      },
+      attachedContainerFamilyOf(connector, translate),
+    );
+    const registeredPods = await registerAttachedResolver(
+      registrationHost,
+      connector,
+      registrationServed,
+      {
+        chooseContainer: () =>
+          vscode.commands.executeCommand(commands.attachToK8sContainer.id),
+        picked: key => attachPicked(context.globalState, key),
+        record: key => recordAttachPick(context.globalState, key),
+        confirm: () =>
+          attachWarningConfirmed(attachWarningPortsOf(context.globalState)),
+      },
+      k8sContainerFamilyOf(translate),
     );
     resolved.lastResolve = () => registered.lastResolve();
+    windowTarget.attached = () => {
+      const found = connector.attachedContainer();
+      return vscode.env.remoteName === 'attached-container' &&
+        found !== undefined
+        ? {
+            image: found.image,
+            name: found.name,
+            folder: (vscode.workspace.workspaceFolders ?? [])[0]?.uri.path,
+          }
+        : undefined;
+    };
+    windowTarget.ownConfigFile = () => {
+      const held = connector.heldConnection();
+      return held === undefined || held.hostPath === ''
+        ? undefined
+        : held.configFile;
+    };
     const configWatch =
       registered.registration === 'registered'
         ? configWatchOf({
@@ -2816,8 +3099,8 @@ export async function activate(
           platform: process.platform,
           executeInWSL:
             vscode.workspace
-              .getConfiguration('dev.containers')
-              .get('executeInWSL') === true,
+              .getConfiguration()
+              .get(settings.executeInWSL.id) === true,
           remoteName: vscode.env.remoteName,
         }),
       editor: {
@@ -2852,6 +3135,8 @@ export async function activate(
       {
         dispose: () => {
           registered.dispose();
+          registeredAttached.dispose();
+          registeredPods.dispose();
         },
       },
       {

@@ -23,6 +23,16 @@ export function imageFileNameOf(image: string): string {
   return `${image.replaceAll(':', '%3a').replaceAll('/', '%2f')}.json`;
 }
 
+/** The file of an image or of a container name below `storage`. */
+export function attachFileOf(
+  storage: string,
+  target: {image: string} | {name: string},
+): string {
+  return 'image' in target
+    ? path.join(storage, IMAGE_FOLDER, imageFileNameOf(target.image))
+    : path.join(storage, NAME_FOLDER, `${target.name}.json`);
+}
+
 /** The files that may apply to a container with the image `image` and the name `name`, which has no leading slash. */
 export function attachConfigFilesOf(
   storage: string,
@@ -30,8 +40,8 @@ export function attachConfigFilesOf(
   name: string,
 ): AttachConfigFiles {
   return {
-    name: path.join(storage, NAME_FOLDER, `${name}.json`),
-    image: path.join(storage, IMAGE_FOLDER, imageFileNameOf(image)),
+    name: attachFileOf(storage, {name}),
+    image: attachFileOf(storage, {image}),
   };
 }
 

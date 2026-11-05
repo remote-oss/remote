@@ -1,11 +1,12 @@
 import {deepStrictEqual, rejects} from 'node:assert';
 import {createHash} from 'node:crypto';
-import type {ChannelFailureKind, ScriptInput} from '../../src/index.ts';
+import type {ChannelFailureKind} from '../../src/index.ts';
 import {
   channelContractCases,
   type ChannelHarness,
   type ContractScenario,
   type StagedChannel,
+  stagedInputOf,
 } from '../../src/testing/channel-contract.ts';
 import {
   RecordingChannel,
@@ -103,20 +104,6 @@ function setupFor(scenario: ContractScenario): RecordingSetup {
   }
 }
 
-function inputFor(scenario: ContractScenario): ScriptInput {
-  switch (scenario.kind) {
-    case 'digestsInput':
-      return scenario.input.kind === 'text'
-        ? scenario.input
-        : {kind: 'file', localFile: LOCAL_FILE};
-    case 'missingInputFile':
-    case 'streamsUntilCancelled':
-      return {kind: 'file', localFile: LOCAL_FILE};
-    default:
-      return {kind: 'text', text: ''};
-  }
-}
-
 const FAKE_HARNESS: ChannelHarness = {
   scriptFailures: ALL_KINDS,
   copyFailures: ALL_KINDS,
@@ -128,7 +115,7 @@ const FAKE_HARNESS: ChannelHarness = {
         script: 'scenario',
         interpreter: 'posixShell',
         environment: {},
-        input: inputFor(scenario),
+        input: stagedInputOf(scenario, LOCAL_FILE),
       },
       copy: {localFile: LOCAL_FILE, remotePath: '/home/user/archive.tar.gz'},
       ...(scenario.kind === 'clientFile' && scenario.reachable

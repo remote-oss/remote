@@ -1,31 +1,9 @@
 import {deepStrictEqual} from 'node:assert';
 import {
-  RECOVERY_VOLUMES_KEY,
   recordRecoveryPick,
   recoveryPicked,
 } from '../../src/volumes/recovery-record.ts';
-
-/** A memento over a map, whose updates are kept as they were written. */
-function mementoOf(initial?: unknown): {
-  get(key: string): unknown;
-  update(key: string, value: unknown): Promise<void>;
-  writes: unknown[];
-} {
-  const values = new Map<string, unknown>();
-  if (initial !== undefined) {
-    values.set(RECOVERY_VOLUMES_KEY, initial);
-  }
-  const writes: unknown[] = [];
-  return {
-    get: key => values.get(key),
-    update: (key, value) => {
-      values.set(key, value);
-      writes.push(value);
-      return Promise.resolve();
-    },
-    writes,
-  };
-}
+import {mementoOf} from './memento.fixture.ts';
 
 describe('the recorded recovery picks (card containers-160, ruling-2162-recovery-gate)', () => {
   it('F-0410 AC-14: a volume is picked once the handler recorded it, and not before', async () => {

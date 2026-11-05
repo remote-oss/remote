@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {RecordingChannel} from 'lib-host/testing/recording-channel';
 import {
+  folderExistsOver,
   installRelayScript,
   RELAY_SCRIPT,
   relayScriptPath,
@@ -92,6 +93,24 @@ describe('the relay script of the exec dialer (card containers-02)', () => {
       kind: 'failed',
       detail: 'container stopped',
     });
+  });
+});
+
+describe('the folder check of the exec dialer (card containers-163)', () => {
+  it('F-0602 BR-4 (c163-folder-exists): a folder exists when the quoted test passes, and not when it fails', async () => {
+    const present = channelAnswering(0);
+    const absent = channelAnswering(1);
+    const results = [
+      await folderExistsOver(present, "/home/u/it's", NEVER),
+      await folderExistsOver(absent, '/home/u/x', NEVER),
+    ];
+    const [call] = present.calls;
+    const script =
+      call?.operation === 'runScript' ? call.request.script : undefined;
+    deepStrictEqual(
+      [results, script],
+      [[true, false], "[ -e '/home/u/it'\\''s' ]"],
+    );
   });
 });
 

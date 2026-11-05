@@ -128,6 +128,41 @@ describe('the kubectl host (card containers-190, #2116)', () => {
     );
   });
 
+  it('F-0604 BR-12: the engine of the host runs and spawns kubectl in the login shell’s environment, and a variable the caller names wins', async () => {
+    const seen: Array<[string, Readonly<Record<string, string>> | undefined]> =
+      [];
+    const kubectl: EngineHost = {
+      // eslint-disable-next-line id-length -- the port's method is named run
+      run: (argv, input, options) => {
+        seen.push(['run', options.environment]);
+        return exits('');
+      },
+      spawn: (argv, options) => {
+        seen.push(['spawn', options.environment]);
+        return Promise.resolve({kind: 'failed', detail: 'no process'});
+      },
+    };
+    const host = kubectlHostOf({
+      kubectl,
+      shell: hostOf([], () => exits(PROBE_OUTPUT)),
+      platform: 'linux',
+      environment: {PATH: '/editor/bin', Path: undefined},
+    });
+    await host.engine.run(
+      ['version'],
+      {kind: 'none'},
+      {
+        environment: {EXTRA: '1', HOME: '/override'},
+        cancellation: NEVER,
+      },
+    );
+    await host.engine.spawn(['exec'], {cancellation: NEVER});
+    deepStrictEqual(seen, [
+      ['run', {PATH: '/login/bin:/usr/bin', HOME: '/override', EXTRA: '1'}],
+      ['spawn', {PATH: '/login/bin:/usr/bin', HOME: '/home/u'}],
+    ]);
+  });
+
   it('F-0604 AC-6 (c190-probe-fallback): a login shell that fails leaves the editor’s own environment, and native Windows is not probed', async () => {
     const failing = sceneOf({shell: () => exits('', 1, 'no shell')});
     const windows = sceneOf({platform: 'win32'});

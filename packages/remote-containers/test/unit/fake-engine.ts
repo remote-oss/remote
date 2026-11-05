@@ -4,6 +4,7 @@
  */
 
 import {PassThrough, Writable} from 'node:stream';
+import type {ScriptRequest} from 'lib-host';
 import type {
   EngineHost,
   EngineOptions,
@@ -161,4 +162,29 @@ export function fakeEngine(...plans: SpawnPlan[]): FakeEngine {
     spawn,
   };
   return engine;
+}
+
+/** A script that ends when stdin does, with `status`, after printing `error` on stderr when there is one. */
+export function endsWith(status: number, error = ''): ProcessScript {
+  return async process => {
+    await process.stdinEnded;
+    if (error !== '') {
+      process.printError(error);
+    }
+    process.exit(status);
+  };
+}
+
+/** A request to run `echo hi` in a POSIX shell with no environment and no input, as `changes` alter it. */
+export function scriptRequest(
+  changes: Partial<ScriptRequest> = {},
+): ScriptRequest {
+  return {
+    script: 'echo hi',
+    interpreter: 'posixShell',
+    environment: {},
+    input: {kind: 'text', text: ''},
+    cancellation: new AbortController().signal,
+    ...changes,
+  };
 }
