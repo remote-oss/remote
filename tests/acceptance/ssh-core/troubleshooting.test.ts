@@ -4,7 +4,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {writeFileSync} from 'node:fs';
+import {readFileSync, writeFileSync} from 'node:fs';
 import {
   appendScript,
   closeWindow,
@@ -195,35 +195,155 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
     }
   });
 
-  it('F-2605 AC-15 (c136-kill): killing the terminal removes it and leaves the stored records as they were', async () => {
+  it('F-2605 AC-15 (c136-kill-1): killing the terminal removes it and leaves the stored records as they were', async () => {
     await inWindow('local', CLEAR);
     await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
-    await failed('c136-c');
+    await failed('c136-c1');
     try {
       await waitFor(
         'the troubleshooting terminal',
-        async () => (await troubleshootingTabs('c136-c')).length > 0,
+        async () => (await troubleshootingTabs('c136-c1')).length > 0,
         TERMINAL_MILLISECONDS,
       );
-      await waitFor(
-        'the newest record with its log hint',
-        () =>
-          hintRecords()
-            .at(-1)
-            ?.hints.some(hint => hint.kind === 'log') ?? false,
-        // The log hint is kept when the attempt has ended, which a slower runner takes longer to do.
-        180_000,
-      );
+      try {
+        await waitFor(
+          'the newest record with its log hint',
+          () =>
+            hintRecords()
+              .at(-1)
+              ?.hints.some(hint => hint.kind === 'log') ?? false,
+          60_000,
+        );
+      } catch (caught) {
+        throw new Error(
+          `${String(caught)}\nRECORDS: ${JSON.stringify(hintRecords().map(record => ({started: record.started, hints: record.hints.map(hint => `${String(hint.kind)}`)})))}\nTRACE:\n${readFileSync('/tmp/hint-trace.log', 'utf8')}`,
+          {cause: caught},
+        );
+      }
       const before = JSON.stringify(hintRecords());
-      await inWindow('c136-c', 'workbench.action.terminal.kill');
+      await inWindow('c136-c1', 'workbench.action.terminal.kill');
       await waitFor(
         'the terminal to be gone',
-        async () => (await troubleshootingTabs('c136-c')).length === 0,
+        async () => (await troubleshootingTabs('c136-c1')).length === 0,
         30_000,
       );
       deepStrictEqual(JSON.stringify(hintRecords()), before);
     } finally {
-      await closeWindow('c136-c').catch(() => undefined);
+      await closeWindow('c136-c1').catch(() => undefined);
+    }
+  });
+
+  it('F-2605 AC-15 (c136-kill-2): killing the terminal removes it and leaves the stored records as they were', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    await failed('c136-c2');
+    try {
+      await waitFor(
+        'the troubleshooting terminal',
+        async () => (await troubleshootingTabs('c136-c2')).length > 0,
+        TERMINAL_MILLISECONDS,
+      );
+      try {
+        await waitFor(
+          'the newest record with its log hint',
+          () =>
+            hintRecords()
+              .at(-1)
+              ?.hints.some(hint => hint.kind === 'log') ?? false,
+          60_000,
+        );
+      } catch (caught) {
+        throw new Error(
+          `${String(caught)}\nRECORDS: ${JSON.stringify(hintRecords().map(record => ({started: record.started, hints: record.hints.map(hint => `${String(hint.kind)}`)})))}\nTRACE:\n${readFileSync('/tmp/hint-trace.log', 'utf8')}`,
+          {cause: caught},
+        );
+      }
+      const before = JSON.stringify(hintRecords());
+      await inWindow('c136-c2', 'workbench.action.terminal.kill');
+      await waitFor(
+        'the terminal to be gone',
+        async () => (await troubleshootingTabs('c136-c2')).length === 0,
+        30_000,
+      );
+      deepStrictEqual(JSON.stringify(hintRecords()), before);
+    } finally {
+      await closeWindow('c136-c2').catch(() => undefined);
+    }
+  });
+
+  it('F-2605 AC-15 (c136-kill-3): killing the terminal removes it and leaves the stored records as they were', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    await failed('c136-c3');
+    try {
+      await waitFor(
+        'the troubleshooting terminal',
+        async () => (await troubleshootingTabs('c136-c3')).length > 0,
+        TERMINAL_MILLISECONDS,
+      );
+      try {
+        await waitFor(
+          'the newest record with its log hint',
+          () =>
+            hintRecords()
+              .at(-1)
+              ?.hints.some(hint => hint.kind === 'log') ?? false,
+          60_000,
+        );
+      } catch (caught) {
+        throw new Error(
+          `${String(caught)}\nRECORDS: ${JSON.stringify(hintRecords().map(record => ({started: record.started, hints: record.hints.map(hint => `${String(hint.kind)}`)})))}\nTRACE:\n${readFileSync('/tmp/hint-trace.log', 'utf8')}`,
+          {cause: caught},
+        );
+      }
+      const before = JSON.stringify(hintRecords());
+      await inWindow('c136-c3', 'workbench.action.terminal.kill');
+      await waitFor(
+        'the terminal to be gone',
+        async () => (await troubleshootingTabs('c136-c3')).length === 0,
+        30_000,
+      );
+      deepStrictEqual(JSON.stringify(hintRecords()), before);
+    } finally {
+      await closeWindow('c136-c3').catch(() => undefined);
+    }
+  });
+
+  it('F-2605 AC-15 (c136-kill-4): killing the terminal removes it and leaves the stored records as they were', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    await failed('c136-c4');
+    try {
+      await waitFor(
+        'the troubleshooting terminal',
+        async () => (await troubleshootingTabs('c136-c4')).length > 0,
+        TERMINAL_MILLISECONDS,
+      );
+      try {
+        await waitFor(
+          'the newest record with its log hint',
+          () =>
+            hintRecords()
+              .at(-1)
+              ?.hints.some(hint => hint.kind === 'log') ?? false,
+          60_000,
+        );
+      } catch (caught) {
+        throw new Error(
+          `${String(caught)}\nRECORDS: ${JSON.stringify(hintRecords().map(record => ({started: record.started, hints: record.hints.map(hint => `${String(hint.kind)}`)})))}\nTRACE:\n${readFileSync('/tmp/hint-trace.log', 'utf8')}`,
+          {cause: caught},
+        );
+      }
+      const before = JSON.stringify(hintRecords());
+      await inWindow('c136-c4', 'workbench.action.terminal.kill');
+      await waitFor(
+        'the terminal to be gone',
+        async () => (await troubleshootingTabs('c136-c4')).length === 0,
+        30_000,
+      );
+      deepStrictEqual(JSON.stringify(hintRecords()), before);
+    } finally {
+      await closeWindow('c136-c4').catch(() => undefined);
     }
   });
 

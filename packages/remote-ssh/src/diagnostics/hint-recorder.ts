@@ -90,6 +90,16 @@ function sameError(left: SessionHint, right: SessionHint): boolean {
   );
 }
 
+import {appendFileSync} from 'node:fs';
+
+/** Throwaway trace. */
+function trace(line: string): void {
+  appendFileSync(
+    '/tmp/hint-trace.log',
+    `${new Date().toISOString()} ${line}\n`,
+  );
+}
+
 /** The recorder over `state`. */
 export function hintRecorderOf(
   state: HintRecorderState,
@@ -109,10 +119,17 @@ export function hintRecorderOf(
    */
   function append(mine: string, hints: SessionHint[], starts: boolean): void {
     const gone = begun && !starts;
+    trace(
+      `append queued mine=${mine} kinds=${hints.map(each => each.kind).join(',')} starts=${String(starts)}`,
+    );
     writing = writing.then(() => {
       const store = state.get(HINT_STORE_KEY) ?? emptyHintStore();
       const existing = store.records.find(each => each.started === mine);
+      trace(
+        `append running mine=${mine} kinds=${hints.map(each => each.kind).join(',')} existing=${String(existing !== undefined)} records=${store.records.map(each => each.started).join('|')} gone=${String(gone)}`,
+      );
       if (existing === undefined && gone) {
+        trace('append DROPPED');
         return undefined;
       }
       const kept = existing?.hints ?? [];
@@ -131,6 +148,7 @@ export function hintRecorderOf(
   return {
     begin: () => {
       started = environment.now().toISOString();
+      trace(`begin ${started}`);
       begun = true;
       open = true;
       attemptErrors = [];
@@ -159,6 +177,7 @@ export function hintRecorderOf(
     },
     errors: () => [...attemptErrors],
     end: () => {
+      trace(`end open=${String(open)} started=${started}`);
       if (open) {
         open = false;
         append(
