@@ -13,6 +13,7 @@ import {promisify} from 'node:util';
 import {
   closeWindow,
   containersLog,
+  windowEvents,
   connectedToContainer,
   runLabelArguments,
   startInWindow,
@@ -128,6 +129,16 @@ async function labelOf(
   if (container === '') {
     const stateThen =
       window === '' ? null : await windowState(window).catch(() => 'no state');
+    const checkedAt = Date.now();
+    const eventsThen =
+      window === ''
+        ? []
+        : windowEvents(window)
+            .slice(-30)
+            .map(
+              entry =>
+                `${entry.event}${entry.id === undefined ? '' : `#${entry.id}`}@${String(entry.time - checkedAt)}${entry.event === 'state' ? `:${String(entry.remoteName)}` : ''}${entry.message === undefined ? '' : `:${entry.message.slice(0, 60)}`}`,
+            );
     const began = Date.now();
     let appeared = '';
     while (appeared === '' && Date.now() - began < 90_000) {
@@ -148,7 +159,7 @@ async function labelOf(
       '{{.ID}} {{.Names}} {{.Image}} {{.Status}} {{.Labels}}',
     ]);
     throw new Error(
-      `STATE-AT-CHECK ${JSON.stringify(stateThen)}\nNO CONTAINER FOR ${folder}; after ${String(Date.now() - began)} ms: ${appeared === '' ? 'still none' : `appeared ${appeared}`}; docker ps -a: ${all}\nLOG: ${JSON.stringify(containersLog().slice(-60))}`,
+      `EVENTS ${JSON.stringify(eventsThen)}\nSTATE-AT-CHECK ${JSON.stringify(stateThen).slice(0, 200)}\nNO CONTAINER FOR ${folder}; after ${String(Date.now() - began)} ms: ${appeared === '' ? 'still none' : `appeared ${appeared}`}; docker ps -a: ${all}\nLOG: ${JSON.stringify(containersLog().slice(-60))}`,
     );
   }
   const {stdout} = await execFileAsync('docker', [
