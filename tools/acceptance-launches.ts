@@ -1094,6 +1094,12 @@ export function launchesOf(root: string): Launch[] {
       ...EXPLORER_LAUNCH,
       label: 'explorer-folders',
       suite: 'explorer-folders',
+      files: [
+        'folders-1-history.test.ts',
+        'folders-2-remove.test.ts',
+        'folders-3-clear-and-rename.test.ts',
+        'folders-4-many.test.ts',
+      ],
       // The confirmation of File: Clear Recently Opened... is drawn in the window, where the renderer helpers read it.
       settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
       // The empty script makes Remote - SSH show its real pickers, which the SSH group's hand-overs in an SSH window read.
