@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# docker-containerd-store: the local Docker daemon on the containerd image store, the store Docker 29 uses by default
+# and the acceptance rows of image builds and rebuilds are written against.
+#
+#   tools/docker-containerd-store    switch the daemon to the containerd image store unless it is on it, then check it
+#
+# A daemon already on the store is left alone. Otherwise `"features": {"containerd-snapshotter": true}` is merged into
+# /etc/docker/daemon.json, keeping every setting the machine has there, and the daemon is restarted through systemd.
+# Images and containers of the other store are not carried over. The check reads `docker info` and fails unless the
+# daemon reports the containerd snapshotter. Needs sudo, systemd and node.
+set -euo pipefail
+
+CONFIG=/etc/docker/daemon.json
+SNAPSHOTTER=io.containerd.snapshotter.v1
+
+# The daemon's storage driver and its driver type, as `docker info` reports them.
+store() {
+  docker info --format '{{.Driver}} {{range .DriverStatus}}{{if eq (index . 0) "driver-type"}}{{index . 1}}{{end}}{{end}}'
+}
+
+current=$(store)
+if [ "${current#* }" != "$SNAPSHOTTER" ]; then
+  echo "docker-containerd-store: the daemon is on '$current'; switching it to the containerd image store"
+  merged=$(sudo cat "$CONFIG" 2>/dev/null || echo '{}')
+  merged=$(printf '%s' "$merged" | node -e '
+    let text = "";
+    process.stdin.on("data", chunk => (text += chunk));
+    process.stdin.on("end", () => {
+      const config = text.trim() === "" ? {} : JSON.parse(text);
+      config.features = {...config.features, "containerd-snapshotter": true};
+      process.stdout.write(JSON.stringify(config, undefined, 2) + "\n");
+    });
+  ')
+  printf '%s\n' "$merged" | sudo tee "$CONFIG" >/dev/null
+  sudo systemctl restart docker
+  for _ in $(seq 1 60); do
+    docker info >/dev/null 2>&1 && break
+    sleep 1
+  done
+  current=$(store)
+fi
+if [ "${current#* }" != "$SNAPSHOTTER" ]; then
+  echo "docker-containerd-store: the daemon reports '$current', not the containerd snapshotter" >&2
+  exit 1
+fi
+echo "docker-containerd-store: $current ($(docker version --format '{{.Server.Version}}'))"

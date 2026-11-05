@@ -460,11 +460,13 @@ describe('the server steps of a connect (card containers-08)', () => {
     );
   });
 
-  it('brief-personalization §1 step 4: the hook before the start runs after the server files are in place, and the server then starts', async () => {
+  it('brief-personalization §1 step 4: the hook before the start runs after the server files are in place, given the server’s node and data folder, and the server then starts', async () => {
     const channel = channelOf();
     const atHook: boolean[] = [];
+    const given: unknown[] = [];
     const {result} = await runSteps(channel, {
-      beforeStart: () => {
+      beforeStart: files => {
+        given.push(files);
         atHook.push(
           channel.calls.some(call => call.operation === 'copyToHost'),
           scriptsOf(channel).some(isStart),
@@ -473,8 +475,18 @@ describe('the server steps of a connect (card containers-08)', () => {
       },
     });
     deepStrictEqual(
-      [result.kind, atHook, scriptsOf(channel).some(isStart)],
-      ['started', [true, false], true],
+      [result.kind, atHook, scriptsOf(channel).some(isStart), given],
+      [
+        'started',
+        [true, false],
+        true,
+        [
+          {
+            nodePath: '/home/node/.fixture-server/bin/abc123/node',
+            dataFolder: '/home/node/.fixture-server',
+          },
+        ],
+      ],
     );
   });
 

@@ -7,14 +7,20 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {type Launch, launchesOf} from './acceptance-launches.ts';
 import {
+  FILE_PART_MINUTES,
+  FILE_PARTS,
   launchesInput,
+  narrowedParts,
   partsOf,
+  planOfChange,
   PULL_REQUEST_LAUNCHES,
   PULL_REQUEST_MINUTES,
   pullRequestPlan,
   selectLaunches,
+  SMOKE_PART,
   workflowParts,
 } from './acceptance-select.ts';
+import {chosenLaunches} from './acceptance.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 
 /** A launch table of each kind the selector reads: runner and plain launches, with and without extensions. */
@@ -388,15 +394,14 @@ describe('acceptance-select: the plan of a pull request (card tooling-120)', () 
 
   it('tooling-120: no selected launch runs nothing, with no notice', () => {
     deepStrictEqual(pullRequestPlan(selectionOf(), LAUNCHES, PARTS, false), {
-      launches: '',
-      minutes: PULL_REQUEST_MINUTES,
+      parts: [],
     });
   });
 
   it('tooling-120: a launch in no part, as the genuine ones are, is left out', () => {
     deepStrictEqual(
       pullRequestPlan(selectionOf('windows', 'local'), LAUNCHES, PARTS, false),
-      {launches: 'local', minutes: PULL_REQUEST_MINUTES},
+      {parts: [{launches: 'local', minutes: PULL_REQUEST_MINUTES}]},
     );
   });
 
@@ -404,8 +409,12 @@ describe('acceptance-select: the plan of a pull request (card tooling-120)', () 
     const {launches, parts} = wideTable(PULL_REQUEST_LAUNCHES);
     const selection = selectionOf(...launches.map(launch => launch.label));
     const planned = {
-      launches: launches.map(launch => launch.label).join(','),
-      minutes: PULL_REQUEST_MINUTES,
+      parts: [
+        {
+          launches: launches.map(launch => launch.label).join(','),
+          minutes: PULL_REQUEST_MINUTES,
+        },
+      ],
     };
     deepStrictEqual(
       [true, false].map(full =>
@@ -421,8 +430,7 @@ describe('acceptance-select: the plan of a pull request (card tooling-120)', () 
     deepStrictEqual(
       pullRequestPlan(selectionOf(...labels), launches, parts, false),
       {
-        launches: '',
-        minutes: PULL_REQUEST_MINUTES,
+        parts: [],
         notice: `this change selects ${String(labels.length)} launches, more than the ${String(PULL_REQUEST_LAUNCHES)} a pull request runs by itself: ${labels.join(', ')}. Run them at this head with a dispatch, or with the acceptance-full label.`,
       },
     );
@@ -433,7 +441,7 @@ describe('acceptance-select: the plan of a pull request (card tooling-120)', () 
     const labels = launches.map(launch => launch.label);
     deepStrictEqual(
       pullRequestPlan(selectionOf(...labels), launches, parts, true),
-      {launches: labels.join(','), minutes: 360},
+      {parts: [{launches: labels.join(','), minutes: 360}]},
     );
   });
 
@@ -447,6 +455,152 @@ describe('acceptance-select: the plan of a pull request (card tooling-120)', () 
           false,
         ),
       /ci\.yml's part no-such-launch/,
+    );
+  });
+});
+
+describe('acceptance-select: the parts of a test-only change (card tooling-159)', () => {
+  /** A table with a suite run in two parts by its files, a suite run whole, and a runner launch. */
+  const TABLE: Launch[] = [
+    {label: 'local', runner: 'runner', suite: 'suite-local'},
+    {
+      label: 'big-a',
+      kind: 'plain',
+      suite: 'big',
+      files: ['a.test.ts', 'b.test.ts'],
+      partOf: 'big',
+    },
+    {
+      label: 'big-b',
+      kind: 'plain',
+      suite: 'big',
+      files: ['c.test.ts'],
+      partOf: 'big',
+    },
+    {label: 'whole', kind: 'plain', suite: 'whole'},
+  ];
+  /** The parts of `changed` over the table, every file existing. */
+  function partsFor(...changed: string[]) {
+    return narrowedParts(changed, TABLE, () => true);
+  }
+  /** A file part of `launches`. */
+  function filePart(launches: string) {
+    return {launches, minutes: FILE_PART_MINUTES};
+  }
+
+  it('tooling-159: each changed test file runs alone in the part that lists it, or in its whole-suite launch, then the smoke part', () => {
+    deepStrictEqual(
+      partsFor(
+        'tests/acceptance/big/c.test.ts',
+        'tests/acceptance/big/a.test.ts',
+        'tests/acceptance/whole/w.test.ts',
+      ),
+      [
+        filePart('big-b:c.test.ts'),
+        filePart('big-a:a.test.ts'),
+        filePart('whole:w.test.ts'),
+        SMOKE_PART,
+      ],
+    );
+  });
+
+  it('tooling-159: documentation and unit tests beside the test files run nothing more, and alone they run nothing', () => {
+    deepStrictEqual(
+      [
+        partsFor(
+          'docs/architecture/catalogue/coverage-containers-r2.tsv',
+          'packages/remote-ssh/test/unit/hint-recorder.test.ts',
+          'tests/acceptance/whole/w.test.ts',
+        ),
+        partsFor('docs/notes.md'),
+      ],
+      [[filePart('whole:w.test.ts'), SMOKE_PART], []],
+    );
+  });
+
+  it('tooling-159: a removed test file runs nowhere', () => {
+    deepStrictEqual(
+      narrowedParts(
+        ['tests/acceptance/big/a.test.ts', 'tests/acceptance/whole/w.test.ts'],
+        TABLE,
+        file => file !== 'tests/acceptance/big/a.test.ts',
+      ),
+      [filePart('whole:w.test.ts'), SMOKE_PART],
+    );
+  });
+
+  it('tooling-159: product code, harness files, a nested test, a runner suite and a test no part lists keep the whole selection', () => {
+    deepStrictEqual(
+      [
+        'packages/remote-containers/src/extension.ts',
+        'tests/acceptance/windows/renderer.ts',
+        'tests/acceptance/big/nested/d.test.ts',
+        'tests/acceptance/suite-local/one.test.ts',
+        'tests/acceptance/big/new.test.ts',
+        'tests/acceptance/nosuite/x.test.ts',
+        'tools/acceptance-launches.ts',
+      ].map(file => partsFor('tests/acceptance/whole/w.test.ts', file)),
+      [
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      ],
+    );
+  });
+
+  it('tooling-159: past the file-part limit, each launch runs its changed files as one part', () => {
+    const files = [...Array(FILE_PARTS + 1).keys()].map(
+      index => `tests/acceptance/whole/w${String(index)}.test.ts`,
+    );
+    deepStrictEqual(partsFor(...files, 'tests/acceptance/big/c.test.ts'), [
+      filePart(`whole:${files.map(file => path.basename(file)).join('+')}`),
+      filePart('big-b:c.test.ts'),
+      SMOKE_PART,
+    ]);
+  });
+
+  it('tooling-159: the plan of a test-only change is its narrowed parts, and the full label or any other change gives the whole selection', () => {
+    const parts = ['local', 'big-a,big-b,whole'];
+    const testOnly = ['tests/acceptance/whole/w.test.ts'];
+    const product = [...testOnly, 'tools/acceptance-launches.ts'];
+    const whole = {
+      parts: [
+        {launches: 'local,big-a,big-b,whole', minutes: PULL_REQUEST_MINUTES},
+      ],
+    };
+    deepStrictEqual(
+      [
+        planOfChange(testOnly, TABLE, parts, false, () => true),
+        planOfChange(testOnly, TABLE, parts, true, () => true),
+        planOfChange(product, TABLE, parts, false, () => true),
+      ],
+      [
+        {parts: [filePart('whole:w.test.ts'), SMOKE_PART]},
+        {parts: [{launches: 'whole', minutes: PULL_REQUEST_MINUTES}]},
+        whole,
+      ],
+    );
+  });
+
+  it("tooling-159: the smoke part's entries name launches and a file of the repository's table", () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    const chosen = chosenLaunches(launches, SMOKE_PART.launches.split(','));
+    deepStrictEqual(
+      typeof chosen === 'string'
+        ? chosen
+        : chosen.map(launch => [
+            launch.label,
+            launch.kind === 'plain' ? launch.files : undefined,
+          ]),
+      [
+        ['local', undefined],
+        ['remote', undefined],
+        ['containers-shutdown', ['reopen-locally-lines.test.ts']],
+      ],
     );
   });
 });

@@ -163,6 +163,8 @@ import {volumeRewriteOf} from './volumes/volume-rewrite.ts';
 import {bootstrapAuthoringFiles} from './volumes/bootstrap-authoring-files.ts';
 import {configurationAdded} from './volumes/volume-configuration.ts';
 import {containerCliHost} from './cli/container-cli-host.ts';
+import {harnessRelayKindsOf} from './relays/echo-relay.ts';
+import {startRelayHost} from './relays/relay-host.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import {cloneText} from './volumes/clone-strings.ts';
 import {linkRequestOf} from './volumes/clone-link.ts';
@@ -2609,6 +2611,17 @@ export async function activate(
         }
       },
       preflight: served.preflight,
+      relayKinds: () => harnessRelayKindsOf(process.env),
+      startRelayHost: request =>
+        startRelayHost(
+          {
+            logger: served.logger,
+            randomName: () => randomBytes(8).toString('hex'),
+            setTimer: (milliseconds, callback) =>
+              served.preflight.setTimer(milliseconds, callback),
+          },
+          request,
+        ),
       editorEnvironment: process.env,
       intents: context.globalState,
       trust: served.trust,

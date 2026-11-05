@@ -8,6 +8,9 @@
  * A job whose `runs-on` reads a pool variable holds, in that expression, the same-repository guard (a fork's pull
  * request takes GitHub's runner), asks for X64 and ephemeral (a fresh machine per job), and reads no secret (athena on
  * #2219).
+ *
+ * The launch jobs give a dispatch concurrency groups of its own run (`github.run_id`): a group that names only the part
+ * lets one dispatch replace another's pending part.
  */
 
 import {readdirSync, readFileSync} from 'node:fs';
@@ -55,6 +58,28 @@ export function ciGateProblems(text: string): string[] {
   return problems;
 }
 
+/** The launch jobs whose concurrency groups name the run for a dispatch. */
+export const DISPATCH_GROUP_JOBS = [
+  'acceptance-vscodium',
+  'acceptance-genuine',
+];
+
+/** What is wrong with the launch jobs' groups in the workflow text: a group a dispatch of another run can share. */
+export function dispatchGroupProblems(text: string): string[] {
+  const workflow = parseYaml(text) as {
+    jobs?: Record<string, {concurrency?: {group?: unknown}}>;
+  };
+  return DISPATCH_GROUP_JOBS.flatMap(name =>
+    JSON.stringify(workflow.jobs?.[name]?.concurrency?.group ?? '').includes(
+      'github.run_id',
+    )
+      ? []
+      : [
+          `${WORKFLOW}: ${name}'s concurrency group doesn't name the run, so one dispatch can replace another's pending job`,
+        ],
+  );
+}
+
 /** What is wrong with the pool jobs of the workflow `file`: a missing guard or labels, or a secret read. */
 export function poolJobProblems(file: string, text: string): string[] {
   const workflow = parseYaml(text) as {
@@ -85,10 +110,13 @@ export function poolJobProblems(file: string, text: string): string[] {
 }
 
 if (isMainModule(import.meta.url)) {
+  const workflowText = readFileSync(
+    path.join(REPOSITORY_ROOT, WORKFLOW),
+    'utf8',
+  );
   const problems = [
-    ...ciGateProblems(
-      readFileSync(path.join(REPOSITORY_ROOT, WORKFLOW), 'utf8'),
-    ),
+    ...ciGateProblems(workflowText),
+    ...dispatchGroupProblems(workflowText),
     ...readdirSync(path.join(REPOSITORY_ROOT, WORKFLOWS))
       .filter(file => file.endsWith('.yml'))
       .flatMap(file =>

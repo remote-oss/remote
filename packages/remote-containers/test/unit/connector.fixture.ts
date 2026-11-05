@@ -41,6 +41,11 @@ import type {
   ContainerStep,
 } from '../../src/lifecycle/container-lifecycle.ts';
 import {storeRebuildIntent} from '../../src/open/rebuild-intent.ts';
+import type {
+  RelayHostRequest,
+  RelayHostStart,
+  RelayKind,
+} from '../../src/relays/relay-host.ts';
 import {fakeEngine, type ProcessScript, type SpawnPlan} from './fake-engine.ts';
 
 /** The extension's global storage folder of the fixture: nothing is ever created in it. */
@@ -157,6 +162,13 @@ export interface Scene {
   lifecycleRuns: string[];
   /** What the blocking run gives; done by default. */
   blockingResult: Awaited<ReturnType<ContainerLifecycle['runBlocking']>>;
+  /** The relay kinds the connector sets up; none by default. */
+  relayKinds: RelayKind[];
+  /** The relay host requests, and how starting one ends: started with no variables by default. */
+  relayHostRequests: RelayHostRequest[];
+  relayHostStart: RelayHostStart;
+  /** How many times a started relay host was ended. */
+  relayHostsEnded: number;
   revealed: number;
   /** What the shutdown helper was told, in order, and how many configuration reads had started at each message. */
   shutdownSent: ShutdownRequest[];
@@ -383,6 +395,13 @@ export function sceneOf(
     stopped: 0,
     lifecycleRuns: [],
     blockingResult: {kind: 'done'},
+    relayKinds: [],
+    relayHostRequests: [],
+    relayHostStart: {
+      kind: 'started',
+      host: {variables: {}, dispose: () => undefined},
+    },
+    relayHostsEnded: 0,
     revealed: 0,
     shutdownSent: [],
     readsAtShutdown: [],
@@ -776,6 +795,25 @@ export function sceneOf(
       scene.trustCalls.push(`reopenLocally ${hostPath}`);
       return Promise.resolve();
     },
+    relayKinds: () => scene.relayKinds,
+    startRelayHost: request => {
+      scene.relayHostRequests.push(request);
+      scene.lifecycleRuns.push('relay host');
+      const start = scene.relayHostStart;
+      return Promise.resolve(
+        start.kind === 'failed'
+          ? start
+          : {
+              kind: 'started',
+              host: {
+                variables: start.host.variables,
+                dispose: () => {
+                  scene.relayHostsEnded += 1;
+                },
+              },
+            },
+      );
+    },
     runServer: async request => {
       scene.serverRequests.push(request);
       // As the steps do: the install phase before the files, the start's phase only when the server is launched.
@@ -786,7 +824,10 @@ export function sceneOf(
         request.onDownloadPercent(percent);
       }
       scene.lifecycleRuns.push('server files');
-      const beforeStart = await request.beforeStart?.();
+      const beforeStart = await request.beforeStart?.({
+        nodePath: '/home/node/.server/bin/abc/node',
+        dataFolder: '/home/node/.server',
+      });
       if (beforeStart !== undefined) {
         return {kind: 'failed', failure: beforeStart};
       }

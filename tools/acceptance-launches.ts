@@ -1246,7 +1246,12 @@ export function launchesOf(root: string): Launch[] {
       ...CONTAINERS_LAUNCH,
       label: 'containers-config',
       suite: 'containers-config',
-      environment: {C112_SET: 'from-host', C112_EMPTY: ''},
+      // The harness's echo relay is on only here, so the relay host runs only for this launch's connects.
+      environment: {
+        C112_SET: 'from-host',
+        C112_EMPTY: '',
+        REMOTE_OSS_ACCEPTANCE_RELAY_ECHO: '1',
+      },
     },
     {
       ...CONTAINERS_LAUNCH,

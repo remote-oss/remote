@@ -258,6 +258,7 @@ describe('the connector of an attached container (card containers-163, #2030)', 
         [
           `adopt ${CONTAINER_ID}`,
           'server files',
+          'relay host',
           'blocking {}',
           'server start',
           'background {}',
