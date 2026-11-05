@@ -108,6 +108,12 @@ export interface ServerStepDependencies {
   translate: Translate;
 }
 
+/** Where the server's files are, once installed: its own `node` and its data folder. */
+export interface ServerFiles {
+  nodePath: string;
+  dataFolder: string;
+}
+
 /** What one connect asks of the steps. */
 export interface ServerRequest {
   channel: HostChannel;
@@ -138,7 +144,7 @@ export interface ServerRequest {
    * Runs once the server's files are in place and before it starts: the early personalization and the blocking
    * lifecycle commands. A failure it gives ends the steps with it.
    */
-  beforeStart?: () => Promise<Failed | undefined>;
+  beforeStart?: (server: ServerFiles) => Promise<Failed | undefined>;
   cancellation: AbortSignal;
 }
 
@@ -681,7 +687,10 @@ export async function runServerSteps(
       ? {installs: [...wantedExtensions], pending: []}
       : await planExtensions(cachePorts, {...cacheRequest, cancellation});
   const defaultExtensions = extensionPlan.installs;
-  const beforeStart = await request.beforeStart?.();
+  const beforeStart = await request.beforeStart?.({
+    nodePath: `${nodeFolder}/node`,
+    dataFolder,
+  });
   if (beforeStart !== undefined) {
     return failedWith(beforeStart);
   }

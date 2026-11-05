@@ -12,24 +12,9 @@ import {
   RELAY_SCRIPT,
   relayScriptPath,
 } from '../../src/exec/relay-script.ts';
+import {channelAnswering} from './answering-channel.ts';
 
 const NEVER = new AbortController().signal;
-
-/** A channel that answers the install script with `status`. */
-function channelAnswering(status: number): RecordingChannel {
-  return new RecordingChannel({
-    identity: 'c1',
-    platformHint: 'linux',
-    scripts: [
-      {
-        interpreter: 'posixShell',
-        matches: () => true,
-        lines: [],
-        ending: {kind: 'exit', status},
-      },
-    ],
-  });
-}
 
 describe('the relay script of the exec dialer (card containers-02)', () => {
   it('relay: the path is in the data folder, with 12 hex digits of the text’s SHA-256', () => {
