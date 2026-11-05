@@ -140,6 +140,8 @@
     // The editor calls an extension's activate().
     "packages/*/src/extension.ts": ["exports"],
     "packages/*/src/web-extension.ts": ["exports"],
+    // Mocha loads a reporter by its path and takes the module's value.
+    "tools/acceptance-file-times.ts": ["exports"],
   },
   // System tools the tests and checks run, which no package provides.
   "ignoreBinaries": ["pwsh", "shellcheck", "ssh-add", "ssh-agent", "ss"],

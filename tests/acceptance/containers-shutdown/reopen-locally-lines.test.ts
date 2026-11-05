@@ -86,6 +86,12 @@ describe('Reopen Folder Locally from a dev container window (card coverage-101)'
       postCreateCommand: 'sleep 60',
     });
     try {
+      // The postCreateCommand starts after the window has connected, later on a slower machine: the row leaves only once it runs.
+      await waitFor(
+        'the postCreateCommand’s sleep to be running in the container',
+        async () => (await sleepersIn(connected.containerId)) > 0,
+        60_000,
+      );
       const sleepers = await sleepersIn(connected.containerId);
       const from = Date.now();
       await reloadingCommand(

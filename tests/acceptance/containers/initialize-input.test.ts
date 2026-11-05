@@ -197,9 +197,13 @@ function answerOf(folderName: string): {host: string; container: string} {
   };
 }
 
-/** The command that reads a line with echo off after the prompt `code > `, and writes it to `answerFile`. */
+/**
+ * The command that reads a line with echo off after the prompt `code > `, and writes it to `answerFile`. The terminal's
+ * echo is turned off with `stty`, since the CLI runs the command with `/bin/sh`, which is dash on Ubuntu and has no
+ * `read -s`.
+ */
 function hiddenRead(answerFile: string): string {
-  return `printf 'code > ' && read -r -s a && printf '\\n' && printf 'answered: %s\\n' "$a" > ${answerFile}`;
+  return `printf 'code > ' && stty -echo && read -r a && stty echo && printf '\\n' && printf 'answered: %s\\n' "$a" > ${answerFile}`;
 }
 
 /** Types `SECRET7` and Enter at the `code > ` prompt; gives the answer and whether the terminal shows the text. */

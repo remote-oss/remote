@@ -3,7 +3,9 @@
  * listener's greeting, and the programs that open the connections to a port of the host.
  */
 
+import {execFile} from 'node:child_process';
 import {connect} from 'node:net';
+import {promisify} from 'node:util';
 import {
   type ForwardedTunnel,
   inWindow,
@@ -12,6 +14,8 @@ import {
   waitFor,
 } from './harness.ts';
 import {answerInputBox} from './renderer.ts';
+
+const execFileAsync = promisify(execFile);
 
 /** The command that shows core's Ports view. */
 const FOCUS_PORTS = '~remote.forwardedPorts.focus';
@@ -22,20 +26,44 @@ export interface Held {
   release(): void;
 }
 
-/** Connects to a local port and gives the listener's greeting, keeping the connection open. */
+/**
+ * Connects to a local port and gives the listener's greeting, keeping the connection open. The greeting is a line: what
+ * arrives is read up to its line end, as a slow tunnel can hand it over in pieces, and for five seconds at most.
+ */
 export function holdOpen(port: number): Promise<Held> {
   return new Promise((resolve, reject) => {
     const socket = connect(port, '127.0.0.1');
-    socket.once('data', (chunk: Buffer) => {
+    const received: Buffer[] = [];
+    function held(): void {
+      clearTimeout(limit);
       resolve({
-        greeting: chunk.toString('utf8').trim(),
+        greeting: Buffer.concat(received).toString('utf8').trim(),
         release: () => {
           socket.destroy();
         },
       });
+    }
+    const limit = setTimeout(held, 5_000);
+    socket.on('data', (chunk: Buffer) => {
+      received.push(chunk);
+      if (chunk.includes(0x0a)) {
+        held();
+      }
     });
     socket.on('error', reject);
   });
+}
+
+/** The lines of this machine's listening sockets that name `port`, with their processes. */
+export async function listenersOf(port: number): Promise<string> {
+  const listing = await execFileAsync('ss', ['-ltnp']).then(
+    ({stdout}) => stdout,
+    (caught: unknown) => String(caught),
+  );
+  return listing
+    .split('\n')
+    .filter(line => line.includes(`:${String(port)} `))
+    .join(' | ');
 }
 
 /** The program column of each host connection to the listener's port, from the side that opened it. */

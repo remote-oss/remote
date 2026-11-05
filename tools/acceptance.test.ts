@@ -83,7 +83,12 @@ import {
   type Launch,
   type RunnerLaunch,
 } from './acceptance-launches.ts';
-import {workflowParts as partsOfWorkflow} from './acceptance-select.ts';
+import {
+  PARTS_TABLE,
+  type PartsTable,
+  partsOfTable,
+  suiteFilesIn,
+} from './acceptance-parts.ts';
 import type {RunRegistry} from './acceptance-registry.ts';
 import {STOP_PROGRAM} from './acceptance-helper-stop.ts';
 import {acceptanceRunId} from './acceptance-run.ts';
@@ -524,13 +529,21 @@ const CLIENT_CASE = {
 };
 
 /** The labels of the launches `selected` chooses from `launches`, or the error text alone when it names an unknown one. */
-/** The repository's `ci.yml`, and the launch selections of its scheduled VSCodium split. */
+/** The repository's `ci.yml`, and the launch selections of the VSCodium suite's parts. */
 function workflowParts(): {workflow: string; parts: string[]} {
   const workflow = readFileSync(
     path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
     'utf8',
   );
-  return {workflow, parts: partsOfWorkflow(workflow)};
+  const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
+  return {
+    workflow,
+    parts: partsOfTable(
+      launchesOf(REPOSITORY_ROOT),
+      table,
+      suiteFilesIn(REPOSITORY_ROOT),
+    ).map(part => part.launches),
+  };
 }
 
 function chosenLabels(
@@ -4556,7 +4569,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('#1430: the scheduled split’s parts make every launch of `all` but the genuine group’s, and no launch in two parts', () => {
+    it('#1430, tooling-159: the parts make every launch of `all` but the genuine group’s', () => {
       const launches = launchesOf(REPOSITORY_ROOT);
       const {parts} = workflowParts();
       const made = parts.flatMap(part =>
@@ -4564,12 +4577,10 @@ describe('acceptance', () => {
       );
       const wanted = chosenLabels(launches, ['all', '!@genuine']);
       // a group also makes its named-only launches (containers-podman), which `all` leaves out
+      // a launch run as parts by its files is in each of them; acceptance-parts.test.ts checks each file once
       deepStrictEqual(
-        [
-          wanted.filter(label => !made.includes(label)),
-          made.length === new Set(made).size,
-        ],
-        [[], true],
+        wanted.filter(label => !made.includes(label)),
+        [],
       );
     });
 
@@ -4725,6 +4736,78 @@ describe('acceptance', () => {
           false,
           ['containers-b'],
         ],
+      );
+    });
+
+    it('tooling-159: <label>:<file>+… makes the plain launch that runs those files with only them, in its own order', () => {
+      /** A suite run in two parts by its files, a suite run whole, and a runner launch. */
+      const table: Launch[] = [
+        {label: 'local', runner: 'runner', suite: 'suite-local'},
+        {
+          label: 'wide-a',
+          kind: 'plain',
+          suite: 'wide',
+          files: ['a.test.ts', 'b.test.ts'],
+          partOf: 'wide',
+        },
+        {
+          label: 'wide-b',
+          kind: 'plain',
+          suite: 'wide',
+          files: ['c.test.ts'],
+          partOf: 'wide',
+        },
+        {label: 'entire', kind: 'plain', suite: 'entire'},
+      ];
+      /** The label and files of each launch a selection makes, or its error text. */
+      function made(...selected: string[]): unknown {
+        const chosen = chosenLaunches(table, selected);
+        return typeof chosen === 'string'
+          ? chosen
+          : chosen.map(launch => [
+              launch.label,
+              launch.kind === 'plain' ? launch.files : undefined,
+            ]);
+      }
+      deepStrictEqual(
+        [
+          made('wide:c.test.ts+a.test.ts'),
+          made('wide-a:b.test.ts', 'wide-a:a.test.ts'),
+          made('entire:y.test.ts+x.test.ts', 'local'),
+          made('wide-a:a.test.ts', 'wide-a'),
+          made('wide-b:a.test.ts'),
+          made('local:one.test.ts'),
+          made('entire:../x.test.ts'),
+        ],
+        [
+          [
+            ['wide-a', ['a.test.ts']],
+            ['wide-b', ['c.test.ts']],
+          ],
+          [['wide-a', ['a.test.ts', 'b.test.ts']]],
+          [
+            ['local', undefined],
+            ['entire', ['x.test.ts', 'y.test.ts']],
+          ],
+          [['wide-a', ['a.test.ts', 'b.test.ts']]],
+          'unknown launch label(s): wide-b:a.test.ts; the known ones: local, wide-a, wide-b, entire; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+          'unknown launch label(s): local:one.test.ts; the known ones: local, wide-a, wide-b, entire; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+          'unknown launch label(s): entire:../x.test.ts; the known ones: local, wide-a, wide-b, entire; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+        ],
+      );
+    });
+
+    it("tooling-159: a part of the repository's containers launch is named by a file it lists", () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      const chosen = chosenLaunches(launches, ['containers:reuse.test.ts']);
+      deepStrictEqual(
+        typeof chosen === 'string'
+          ? chosen
+          : chosen.map(launch => [
+              launch.label,
+              launch.kind === 'plain' ? launch.files : undefined,
+            ]),
+        [['containers-b', ['reuse.test.ts']]],
       );
     });
 

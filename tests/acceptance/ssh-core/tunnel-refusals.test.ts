@@ -357,6 +357,15 @@ describe('the tunnel of a window that its host or its configuration refuses (car
         "pkill -f '[.]vscodium-server-insiders/bin/' || true",
       );
       await waitForDialogRecord(name);
+      // The indicator follows the dialog by a moment, later on a slower machine.
+      await waitFor(
+        'the host indicator to settle',
+        async () =>
+          !(await statusItem(name, 'status.host')).text.startsWith(
+            'Opening Remote',
+          ),
+        30_000,
+      );
       const lines = recordLines(undefined, name);
       const result = {
         dialogs: lines
