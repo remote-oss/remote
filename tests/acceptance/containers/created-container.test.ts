@@ -29,15 +29,15 @@ async function imageWithUser(label: string): Promise<string> {
 const EMPTY_LAYER =
   'sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef';
 
-/** The digests of the layers of image `tag`, bottom first. */
-async function layersOf(tag: string): Promise<string[]> {
+/** The digests of the layers of the image `reference` names, bottom first. */
+async function layersOf(reference: string): Promise<string[]> {
   return JSON.parse(
     await docker(
       'image',
       'inspect',
       '--format',
       '{{json .RootFS.Layers}}',
-      tag,
+      reference,
     ),
   ) as string[];
 }
