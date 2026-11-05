@@ -120,6 +120,15 @@ async function labelOf(folder: string, label: string): Promise<string> {
     `label=devcontainer.local_folder=${folder}`,
   ]);
   const [container = ''] = containerIds.split('\n');
+  if (container === '') {
+    const {stdout: all} = await execFileAsync('docker', [
+      'ps',
+      '--all',
+      '--format',
+      '{{.ID}} {{.Names}} {{.Image}} {{.Labels}}',
+    ]);
+    throw new Error(`NO CONTAINER FOR ${folder}; docker ps -a: ${all}`);
+  }
   const {stdout} = await execFileAsync('docker', [
     'inspect',
     '-f',
@@ -141,6 +150,15 @@ async function textInContainer(
     `label=devcontainer.local_folder=${folder}`,
   ]);
   const [container = ''] = containerIds.split('\n');
+  if (container === '') {
+    const {stdout: all} = await execFileAsync('docker', [
+      'ps',
+      '--all',
+      '--format',
+      '{{.ID}} {{.Names}} {{.Image}} {{.Labels}}',
+    ]);
+    throw new Error(`NO CONTAINER FOR ${folder}; docker ps -a: ${all}`);
+  }
   const {stdout} = await execFileAsync('docker', [
     'exec',
     container,
@@ -159,6 +177,15 @@ async function bindMountsOf(folder: string): Promise<string[]> {
     `label=devcontainer.local_folder=${folder}`,
   ]);
   const [container = ''] = containerIds.split('\n');
+  if (container === '') {
+    const {stdout: all} = await execFileAsync('docker', [
+      'ps',
+      '--all',
+      '--format',
+      '{{.ID}} {{.Names}} {{.Image}} {{.Labels}}',
+    ]);
+    throw new Error(`NO CONTAINER FOR ${folder}; docker ps -a: ${all}`);
+  }
   const {stdout} = await execFileAsync('docker', [
     'inspect',
     '-f',
