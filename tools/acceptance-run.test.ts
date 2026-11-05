@@ -255,18 +255,23 @@ describe('the base images pulled before a build (card tooling-173)', () => {
   });
 
   it('tooling-173: a base that pulls at once is pulled once, and one that fails twice is tried a third time after a pause each', () => {
+    const reported: string[] = [];
     const once = scriptedCommands();
     once.passes();
-    pullBaseImages(once, folder);
+    pullBaseImages(once, folder, line => reported.push(line));
     const third = scriptedCommands();
     third.fails(1, 'httpReadSeeker: failed open');
     third.passes();
     third.fails(1, 'failed to resolve source metadata');
     third.passes();
     third.passes();
-    pullBaseImages(third, folder);
+    pullBaseImages(third, folder, line => reported.push(line));
     deepStrictEqual(
-      [once.calls, third.calls.map(call => [call.program, ...call.argv])],
+      [
+        once.calls,
+        third.calls.map(call => [call.program, ...call.argv]),
+        reported,
+      ],
       [
         [{program: 'docker', argv: ['pull', '--quiet', ALPINE]}],
         [
@@ -275,6 +280,10 @@ describe('the base images pulled before a build (card tooling-173)', () => {
           ['docker', 'pull', '--quiet', ALPINE],
           ['sleep', String(PULL_PAUSE_SECONDS)],
           ['docker', 'pull', '--quiet', ALPINE],
+        ],
+        [
+          `acceptance: pulled ${ALPINE} on try 1`,
+          `acceptance: pulled ${ALPINE} on try 3 (try 1: httpReadSeeker: failed open; try 2: failed to resolve source metadata)`,
         ],
       ],
     );
@@ -287,10 +296,10 @@ describe('the base images pulled before a build (card tooling-173)', () => {
       failing.passes();
     }
     const empty = scriptedCommands();
-    pullBaseImages(empty, path.join(folder, 'none'));
+    pullBaseImages(empty, path.join(folder, 'none'), () => undefined);
     let message = '';
     try {
-      pullBaseImages(failing, folder);
+      pullBaseImages(failing, folder, () => undefined);
     } catch (error) {
       message = error instanceof Error ? error.message : '';
     }

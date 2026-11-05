@@ -134,10 +134,17 @@ export function baseImagesOf(dockerfile: string): string[] {
 /**
  * Pulls the base images of the Dockerfile in `folder` before it is built, each tried up to PULL_TRIES times with a
  * pause between, so the build finds them local and asks no registry: one failed request to the registry or its
- * content network no longer fails the run before any row. It throws with every try's error when one base's tries all
- * fail. A folder with no Dockerfile pulls nothing, and its build says why.
+ * content network no longer fails the run before any row. Each pulled base is reported with the try that pulled it
+ * and the errors of the ones before; it throws with every try's error when one base's tries all fail. A folder with
+ * no Dockerfile pulls nothing, and its build says why.
  */
-export function pullBaseImages(command: CommandRunner, folder: string): void {
+export function pullBaseImages(
+  command: CommandRunner,
+  folder: string,
+  report: (line: string) => void = line => {
+    console.log(line);
+  },
+): void {
   const dockerfile = path.join(folder, 'Dockerfile');
   if (!existsSync(dockerfile)) {
     return;
@@ -150,6 +157,9 @@ export function pullBaseImages(command: CommandRunner, folder: string): void {
       }
       const result = command('docker', ['pull', '--quiet', image]);
       if (result.status === 0) {
+        report(
+          `acceptance: pulled ${image} on try ${String(errors.length + 1)}${errors.length === 0 ? '' : ` (${errors.join('; ')})`}`,
+        );
         break;
       }
       errors.push(`try ${String(errors.length + 1)}: ${result.stderr.trim()}`);
