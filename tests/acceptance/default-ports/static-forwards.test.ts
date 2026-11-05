@@ -18,7 +18,7 @@ import {
 } from '../windows/harness.ts';
 import {
   dialogOf,
-  notificationCentre,
+  noticesOnceSettled,
   panelBadge,
   portsRows,
   statusItem,
@@ -156,7 +156,7 @@ describe('the static forwards of the ssh configuration (card coverage-83)', func
       deepStrictEqual(
         {
           dialog: await dialogOf('c83-s25'),
-          notices: await notificationCentre('c83-s25'),
+          notices: await noticesOnceSettled('c83-s25'),
         },
         {dialog: undefined, notices: []},
       );
@@ -357,7 +357,7 @@ describe('the static forwards of the ssh configuration (card coverage-83)', func
             entry => entry.port,
           ),
           dialog: await dialogOf('c83-s39'),
-          notices: await notificationCentre('c83-s39'),
+          notices: await noticesOnceSettled('c83-s39'),
         },
         {reached: 'c83-ping', rows: [], dialog: undefined, notices: []},
       );
@@ -391,7 +391,7 @@ describe('the static forwards of the ssh configuration (card coverage-83)', func
             entry => entry.port,
           ),
           dialog: await dialogOf('c83-s40'),
-          notices: await notificationCentre('c83-s40'),
+          notices: await noticesOnceSettled('c83-s40'),
         },
         {
           holder: 'ssh',
@@ -477,7 +477,7 @@ describe('the static forwards of the ssh configuration (card coverage-83)', func
       return {
         granted: answer === '0500',
         dialog: await dialogOf(window),
-        notices: await notificationCentre(window),
+        notices: await noticesOnceSettled(window),
       };
     } finally {
       await release();

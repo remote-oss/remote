@@ -2381,6 +2381,27 @@ export async function centreNotifications(
   );
 }
 
+/**
+ * The notifications of window `name` once the editor's own progress, "Activating Extensions...", has gone: it shows while
+ * a window starts, later on a slower machine, and is the notice of no extension. Fails naming the progress when it stays.
+ */
+export async function noticesOnceSettled(
+  name: string,
+  milliseconds = 60_000,
+): Promise<string[]> {
+  await settled(
+    () => `the editor’s activation progress in window ${name} to be gone`,
+    async () =>
+      (await notificationCentre(name)).some(text =>
+        text.startsWith('Activating Extensions'),
+      )
+        ? undefined
+        : true,
+    milliseconds,
+  );
+  return notificationCentre(name);
+}
+
 /** The text of each notification of window `name`, newest first, read in the notification centre. */
 export async function notificationCentre(name: string): Promise<string[]> {
   return (await centreNotifications(name)).map(each => each.message);
