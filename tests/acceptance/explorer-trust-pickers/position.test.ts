@@ -15,6 +15,7 @@ import {
   startInWindow,
   userSettings,
   variable,
+  waitFor,
   readUserSettings,
   restoreUserSettings,
 } from '../windows/harness.ts';
@@ -32,6 +33,9 @@ const POSITIONS = [1, 1000, HOSTS];
 
 /** The command of the picker of Connect to Host. */
 const CONNECT = 'opensshremotes.openEmptyWindow';
+
+/** How long the view is given to list the hosts of the file, in milliseconds. */
+const LISTING_MILLISECONDS = 120_000;
 
 /** The most a single read of a position may take. */
 const READ_MILLISECONDS = 30_000;
@@ -66,6 +70,16 @@ describe('the readers of a long list by position (card tooling-122)', function (
     try {
       const trusted = await isTrusted(window);
       await inWindow(window, 'workbench.view.remote');
+      // The group lists its hosts once the companion has read the file, which on a slow runner is after the view is shown.
+      await waitFor(
+        'the view to list the hosts',
+        () =>
+          viewRowAt(window, VIEW, 1).then(
+            reading => reading.size > 0,
+            () => false,
+          ),
+        LISTING_MILLISECONDS,
+      );
       const fromView: Array<{label: string; size: number; took: boolean}> = [];
       for (const position of POSITIONS) {
         const started = Date.now();
