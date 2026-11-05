@@ -320,17 +320,43 @@ describe('the input of the "Configuring..." terminal', function () {
     await closeWindow('postecho');
   });
 
-  it('F-0415 AC-36 (initcmd-hidden): an initializeCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
-    const {host} = answerOf('initcmdhidden');
-    const window = await openedWith('initcmdhidden', {
+  it('F-0415 AC-36 (initcmd-hidden-1): an initializeCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
+    const {host} = answerOf('ih1');
+    const window = await openedWith('ih1', {
       initializeCommand: hiddenRead(host),
     });
     deepStrictEqual(await typedHidden(window, host), {
       answer: 'answered: SECRET7\n',
       theTypedTextShows: false,
     });
-    await connectedToContainer('initcmdhidden');
-    await closeWindow('initcmdhidden');
+    await connectedToContainer('ih1');
+    await closeWindow('ih1');
+  });
+
+  it('F-0415 AC-36 (initcmd-hidden-2): an initializeCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
+    const {host} = answerOf('ih2');
+    const window = await openedWith('ih2', {
+      initializeCommand: hiddenRead(host),
+    });
+    deepStrictEqual(await typedHidden(window, host), {
+      answer: 'answered: SECRET7\n',
+      theTypedTextShows: false,
+    });
+    await connectedToContainer('ih2');
+    await closeWindow('ih2');
+  });
+
+  it('F-0415 AC-36 (initcmd-hidden-3): an initializeCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
+    const {host} = answerOf('ih3');
+    const window = await openedWith('ih3', {
+      initializeCommand: hiddenRead(host),
+    });
+    deepStrictEqual(await typedHidden(window, host), {
+      answer: 'answered: SECRET7\n',
+      theTypedTextShows: false,
+    });
+    await connectedToContainer('ih3');
+    await closeWindow('ih3');
   });
 
   it('F-0415 AC-36 (postcreate-hidden): a postCreateCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
