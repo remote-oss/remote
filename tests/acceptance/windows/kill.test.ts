@@ -204,7 +204,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
 
   it('F-2411 AC-10: the window on the killed host stays where it is, core reconnects it, and a reload connects it', async () => {
     const mark = firstKill;
-    await waitForReconnection(mark, 'x1', 'harness', 120_000);
+    await waitForReconnection(mark, 'x1', 'harness', 30_000);
     const state = await windowState('x1');
     await reloadWindow('x1');
     deepStrictEqual(

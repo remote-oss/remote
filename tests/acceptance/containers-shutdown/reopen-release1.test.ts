@@ -68,7 +68,7 @@ describe('the lines that waited on Reopen Folder Locally (card coverage-103)', f
 
   before(closeOtherWindows);
 
-  it('F-0906 AC-6 (c103-close-remote): Close Remote Connection turns the same window into an empty local window within 2 s, with the title and indicator of a plain one, and the container exits 0 afterwards', async () => {
+  it('F-0906 AC-6 (reading-2273-close-remote-bound): Close Remote Connection turns the same window into an empty local window near-immediately (under 3 s; the criterion’s about 1–2 s), with the title and indicator of a plain one, and the container exits 0 afterwards', async () => {
     await rememberPage('local');
     const connected = await connectedWindow('c103-close-remote');
     try {
