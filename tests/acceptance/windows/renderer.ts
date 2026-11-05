@@ -10,7 +10,13 @@
 import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {editorLogTail, isOpen, variable, windowState} from './harness.ts';
+import {
+  editorLogTail,
+  isOpen,
+  machineState,
+  variable,
+  windowState,
+} from './harness.ts';
 
 /** How long a wait for the renderer lasts, in milliseconds. */
 const WAIT_MILLISECONDS = 60_000;
@@ -302,7 +308,7 @@ export async function pageOf(
   const started = Date.now();
   return settled(
     () =>
-      `one page of window ${name} among ${JSON.stringify(titles)}; the editor's logs: ${editorLogTail()}`,
+      `one page of window ${name} among ${JSON.stringify(titles)}; the machine: ${machineState()}; the editor's logs: ${editorLogTail()}`,
     async () => {
       const found = await pages();
       titles = found.map(page => page.title);

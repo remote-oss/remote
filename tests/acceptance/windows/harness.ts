@@ -5,7 +5,7 @@
  * behind a signal, and read back what was held and what the host accepted.
  */
 
-import {execFile} from 'node:child_process';
+import {execFile, execFileSync} from 'node:child_process';
 import {
   appendFileSync,
   existsSync,
@@ -278,6 +278,25 @@ function logLinesOf(variableName: string): string[] {
 /** The folder the launch's editor keeps its state in, its logs included: one session folder per start of the editor, with `main.log` below it. */
 export function editorLogsFolder(): string {
   return variable('HARNESS_EDITOR_LOGS');
+}
+
+/** What the machine has left when a window cannot be reached: available memory, and how many editor and server processes run. */
+export function machineState(): string {
+  const meminfo = existsSync('/proc/meminfo')
+    ? readFileSync('/proc/meminfo', 'utf8')
+    : '';
+  const available = /^MemAvailable:\s+(\d+) kB/m.exec(meminfo)?.[1];
+  let processes: string;
+  try {
+    processes = execFileSync(
+      'pgrep',
+      ['-c', '-f', 'vscode-server|codium|electron'],
+      {encoding: 'utf8'},
+    ).trim();
+  } catch {
+    processes = '0';
+  }
+  return `memory available ${available === undefined ? 'unknown' : `${String(Math.round(Number(available) / 1024))} MiB`}; editor and server processes: ${processes}`;
 }
 
 /**
