@@ -258,13 +258,6 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
   it('F-2605 AC-15 (c136-kill-1): killing the terminal removes it and leaves the stored records as they were', async () => {
     await inWindow('local', CLEAR);
     await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
-    const pressure1 = setInterval(() => {
-      try {
-        hintRecords();
-      } catch {
-        // a locked read is part of the pressure
-      }
-    }, 2);
     await failed('c136-c1');
     try {
       await waitFor(
@@ -272,17 +265,16 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
         async () => (await troubleshootingTabs('c136-c1')).length > 0,
         TERMINAL_MILLISECONDS,
       );
-      try {
-        await waitFor(
-          'the newest record with its log hint',
-          () =>
-            hintRecords()
-              .at(-1)
-              ?.hints.some(hint => hint.kind === 'log') ?? false,
-          60_000,
+      await new Promise(resolve => setTimeout(resolve, 8000));
+      if (!(
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false
+      )) {
+        await lateDump(
+          'c136-c1',
+          new Error('no log hint after 8 s of no reads'),
         );
-      } catch (caught) {
-        await lateDump('c136-c1', caught);
       }
       const before = JSON.stringify(hintRecords());
       await inWindow('c136-c1', 'workbench.action.terminal.kill');
@@ -293,7 +285,6 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
       );
       deepStrictEqual(JSON.stringify(hintRecords()), before);
     } finally {
-      clearInterval(pressure1);
       await closeWindow('c136-c1').catch(() => undefined);
     }
   });
@@ -301,13 +292,6 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
   it('F-2605 AC-15 (c136-kill-2): killing the terminal removes it and leaves the stored records as they were', async () => {
     await inWindow('local', CLEAR);
     await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
-    const pressure2 = setInterval(() => {
-      try {
-        hintRecords();
-      } catch {
-        // a locked read is part of the pressure
-      }
-    }, 2);
     await failed('c136-c2');
     try {
       await waitFor(
@@ -315,17 +299,16 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
         async () => (await troubleshootingTabs('c136-c2')).length > 0,
         TERMINAL_MILLISECONDS,
       );
-      try {
-        await waitFor(
-          'the newest record with its log hint',
-          () =>
-            hintRecords()
-              .at(-1)
-              ?.hints.some(hint => hint.kind === 'log') ?? false,
-          60_000,
+      await new Promise(resolve => setTimeout(resolve, 8000));
+      if (!(
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false
+      )) {
+        await lateDump(
+          'c136-c2',
+          new Error('no log hint after 8 s of no reads'),
         );
-      } catch (caught) {
-        await lateDump('c136-c2', caught);
       }
       const before = JSON.stringify(hintRecords());
       await inWindow('c136-c2', 'workbench.action.terminal.kill');
@@ -336,7 +319,6 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
       );
       deepStrictEqual(JSON.stringify(hintRecords()), before);
     } finally {
-      clearInterval(pressure2);
       await closeWindow('c136-c2').catch(() => undefined);
     }
   });
@@ -344,13 +326,6 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
   it('F-2605 AC-15 (c136-kill-3): killing the terminal removes it and leaves the stored records as they were', async () => {
     await inWindow('local', CLEAR);
     await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
-    const pressure3 = setInterval(() => {
-      try {
-        hintRecords();
-      } catch {
-        // a locked read is part of the pressure
-      }
-    }, 2);
     await failed('c136-c3');
     try {
       await waitFor(
@@ -358,17 +333,16 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
         async () => (await troubleshootingTabs('c136-c3')).length > 0,
         TERMINAL_MILLISECONDS,
       );
-      try {
-        await waitFor(
-          'the newest record with its log hint',
-          () =>
-            hintRecords()
-              .at(-1)
-              ?.hints.some(hint => hint.kind === 'log') ?? false,
-          60_000,
+      await new Promise(resolve => setTimeout(resolve, 8000));
+      if (!(
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false
+      )) {
+        await lateDump(
+          'c136-c3',
+          new Error('no log hint after 8 s of no reads'),
         );
-      } catch (caught) {
-        await lateDump('c136-c3', caught);
       }
       const before = JSON.stringify(hintRecords());
       await inWindow('c136-c3', 'workbench.action.terminal.kill');
@@ -379,7 +353,6 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
       );
       deepStrictEqual(JSON.stringify(hintRecords()), before);
     } finally {
-      clearInterval(pressure3);
       await closeWindow('c136-c3').catch(() => undefined);
     }
   });
@@ -387,13 +360,6 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
   it('F-2605 AC-15 (c136-kill-4): killing the terminal removes it and leaves the stored records as they were', async () => {
     await inWindow('local', CLEAR);
     await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
-    const pressure4 = setInterval(() => {
-      try {
-        hintRecords();
-      } catch {
-        // a locked read is part of the pressure
-      }
-    }, 2);
     await failed('c136-c4');
     try {
       await waitFor(
@@ -401,17 +367,16 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
         async () => (await troubleshootingTabs('c136-c4')).length > 0,
         TERMINAL_MILLISECONDS,
       );
-      try {
-        await waitFor(
-          'the newest record with its log hint',
-          () =>
-            hintRecords()
-              .at(-1)
-              ?.hints.some(hint => hint.kind === 'log') ?? false,
-          60_000,
+      await new Promise(resolve => setTimeout(resolve, 8000));
+      if (!(
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false
+      )) {
+        await lateDump(
+          'c136-c4',
+          new Error('no log hint after 8 s of no reads'),
         );
-      } catch (caught) {
-        await lateDump('c136-c4', caught);
       }
       const before = JSON.stringify(hintRecords());
       await inWindow('c136-c4', 'workbench.action.terminal.kill');
@@ -422,8 +387,211 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
       );
       deepStrictEqual(JSON.stringify(hintRecords()), before);
     } finally {
-      clearInterval(pressure4);
       await closeWindow('c136-c4').catch(() => undefined);
+    }
+  });
+
+  it('F-2605 AC-15 (c136-kill-5): killing the terminal removes it and leaves the stored records as they were', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    await failed('c136-c5');
+    try {
+      await waitFor(
+        'the troubleshooting terminal',
+        async () => (await troubleshootingTabs('c136-c5')).length > 0,
+        TERMINAL_MILLISECONDS,
+      );
+      await new Promise(resolve => setTimeout(resolve, 8000));
+      if (!(
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false
+      )) {
+        await lateDump(
+          'c136-c5',
+          new Error('no log hint after 8 s of no reads'),
+        );
+      }
+      const before = JSON.stringify(hintRecords());
+      await inWindow('c136-c5', 'workbench.action.terminal.kill');
+      await waitFor(
+        'the terminal to be gone',
+        async () => (await troubleshootingTabs('c136-c5')).length === 0,
+        30_000,
+      );
+      deepStrictEqual(JSON.stringify(hintRecords()), before);
+    } finally {
+      await closeWindow('c136-c5').catch(() => undefined);
+    }
+  });
+
+  it('F-2605 AC-15 (c136-kill-6): killing the terminal removes it and leaves the stored records as they were', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    await failed('c136-c6');
+    try {
+      await waitFor(
+        'the troubleshooting terminal',
+        async () => (await troubleshootingTabs('c136-c6')).length > 0,
+        TERMINAL_MILLISECONDS,
+      );
+      await new Promise(resolve => setTimeout(resolve, 8000));
+      if (!(
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false
+      )) {
+        await lateDump(
+          'c136-c6',
+          new Error('no log hint after 8 s of no reads'),
+        );
+      }
+      const before = JSON.stringify(hintRecords());
+      await inWindow('c136-c6', 'workbench.action.terminal.kill');
+      await waitFor(
+        'the terminal to be gone',
+        async () => (await troubleshootingTabs('c136-c6')).length === 0,
+        30_000,
+      );
+      deepStrictEqual(JSON.stringify(hintRecords()), before);
+    } finally {
+      await closeWindow('c136-c6').catch(() => undefined);
+    }
+  });
+
+  it('F-2605 AC-15 (c136-kill-7): killing the terminal removes it and leaves the stored records as they were', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    await failed('c136-c7');
+    try {
+      await waitFor(
+        'the troubleshooting terminal',
+        async () => (await troubleshootingTabs('c136-c7')).length > 0,
+        TERMINAL_MILLISECONDS,
+      );
+      await new Promise(resolve => setTimeout(resolve, 8000));
+      if (!(
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false
+      )) {
+        await lateDump(
+          'c136-c7',
+          new Error('no log hint after 8 s of no reads'),
+        );
+      }
+      const before = JSON.stringify(hintRecords());
+      await inWindow('c136-c7', 'workbench.action.terminal.kill');
+      await waitFor(
+        'the terminal to be gone',
+        async () => (await troubleshootingTabs('c136-c7')).length === 0,
+        30_000,
+      );
+      deepStrictEqual(JSON.stringify(hintRecords()), before);
+    } finally {
+      await closeWindow('c136-c7').catch(() => undefined);
+    }
+  });
+
+  it('F-2605 AC-15 (c136-kill-8): killing the terminal removes it and leaves the stored records as they were', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    await failed('c136-c8');
+    try {
+      await waitFor(
+        'the troubleshooting terminal',
+        async () => (await troubleshootingTabs('c136-c8')).length > 0,
+        TERMINAL_MILLISECONDS,
+      );
+      await new Promise(resolve => setTimeout(resolve, 8000));
+      if (!(
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false
+      )) {
+        await lateDump(
+          'c136-c8',
+          new Error('no log hint after 8 s of no reads'),
+        );
+      }
+      const before = JSON.stringify(hintRecords());
+      await inWindow('c136-c8', 'workbench.action.terminal.kill');
+      await waitFor(
+        'the terminal to be gone',
+        async () => (await troubleshootingTabs('c136-c8')).length === 0,
+        30_000,
+      );
+      deepStrictEqual(JSON.stringify(hintRecords()), before);
+    } finally {
+      await closeWindow('c136-c8').catch(() => undefined);
+    }
+  });
+
+  it('F-2605 AC-15 (c136-kill-9): killing the terminal removes it and leaves the stored records as they were', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    await failed('c136-c9');
+    try {
+      await waitFor(
+        'the troubleshooting terminal',
+        async () => (await troubleshootingTabs('c136-c9')).length > 0,
+        TERMINAL_MILLISECONDS,
+      );
+      await new Promise(resolve => setTimeout(resolve, 8000));
+      if (!(
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false
+      )) {
+        await lateDump(
+          'c136-c9',
+          new Error('no log hint after 8 s of no reads'),
+        );
+      }
+      const before = JSON.stringify(hintRecords());
+      await inWindow('c136-c9', 'workbench.action.terminal.kill');
+      await waitFor(
+        'the terminal to be gone',
+        async () => (await troubleshootingTabs('c136-c9')).length === 0,
+        30_000,
+      );
+      deepStrictEqual(JSON.stringify(hintRecords()), before);
+    } finally {
+      await closeWindow('c136-c9').catch(() => undefined);
+    }
+  });
+
+  it('F-2605 AC-15 (c136-kill-10): killing the terminal removes it and leaves the stored records as they were', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    await failed('c136-c10');
+    try {
+      await waitFor(
+        'the troubleshooting terminal',
+        async () => (await troubleshootingTabs('c136-c10')).length > 0,
+        TERMINAL_MILLISECONDS,
+      );
+      await new Promise(resolve => setTimeout(resolve, 8000));
+      if (!(
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false
+      )) {
+        await lateDump(
+          'c136-c10',
+          new Error('no log hint after 8 s of no reads'),
+        );
+      }
+      const before = JSON.stringify(hintRecords());
+      await inWindow('c136-c10', 'workbench.action.terminal.kill');
+      await waitFor(
+        'the terminal to be gone',
+        async () => (await troubleshootingTabs('c136-c10')).length === 0,
+        30_000,
+      );
+      deepStrictEqual(JSON.stringify(hintRecords()), before);
+    } finally {
+      await closeWindow('c136-c10').catch(() => undefined);
     }
   });
 
