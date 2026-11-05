@@ -22,17 +22,29 @@ export interface Held {
   release(): void;
 }
 
-/** Connects to a local port and gives the listener's greeting, keeping the connection open. */
+/**
+ * Connects to a local port and gives the listener's greeting, keeping the connection open. The greeting is a line: what
+ * arrives is read up to its line end, as a slow tunnel can hand it over in pieces, and for five seconds at most.
+ */
 export function holdOpen(port: number): Promise<Held> {
   return new Promise((resolve, reject) => {
     const socket = connect(port, '127.0.0.1');
-    socket.once('data', (chunk: Buffer) => {
+    const received: Buffer[] = [];
+    function held(): void {
+      clearTimeout(limit);
       resolve({
-        greeting: chunk.toString('utf8').trim(),
+        greeting: Buffer.concat(received).toString('utf8').trim(),
         release: () => {
           socket.destroy();
         },
       });
+    }
+    const limit = setTimeout(held, 5_000);
+    socket.on('data', (chunk: Buffer) => {
+      received.push(chunk);
+      if (chunk.includes(0x0a)) {
+        held();
+      }
     });
     socket.on('error', reject);
   });
