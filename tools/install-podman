@@ -42,6 +42,11 @@ if [ "$(podman_release)" != "$PODMAN_VERSION" ]; then
   tar -xzf "$archive" -C "$work"
   rm -f "$work/podman-linux-$arch/usr/local/bin/runc"
   sudo cp -r "$work/podman-linux-$arch/usr" "$work/podman-linux-$arch/etc" /
+  # the archive's crun, not the machine's: Ubuntu 24.04's /usr/bin/crun, which podman finds first, refuses the runtime
+  # spec Podman 6 writes ("crun: unknown version specified")
+  sudo mkdir -p /etc/containers/containers.conf.d
+  printf '[engine.runtimes]\ncrun = ["/usr/local/bin/crun"]\n' |
+    sudo tee /etc/containers/containers.conf.d/50-install-podman-crun.conf >/dev/null
   hash -r
   [ "$(podman_release)" = "$PODMAN_VERSION" ] || {
     echo "install-podman: the podman on the PATH is $(podman --version 2>&1), not $PODMAN_VERSION" >&2
@@ -64,4 +69,9 @@ if ! out=$(podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDrive
   printf '%s' "$out" | grep -q 'boot ID differs from cached boot ID' || exit 1
   rm -rf "/tmp/storage-run-$(id -u)/containers" "/tmp/storage-run-$(id -u)/libpod/tmp"
 fi
-podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}'
+podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}} {{.Host.OCIRuntime.Path}}'
+runtime=$(podman info --format '{{.Host.OCIRuntime.Path}}')
+[ "$runtime" = /usr/local/bin/crun ] || {
+  echo "install-podman: Podman $PODMAN_VERSION runs $runtime, not the archive's /usr/local/bin/crun" >&2
+  exit 1
+}
