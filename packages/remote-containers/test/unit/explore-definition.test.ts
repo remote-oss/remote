@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   ensureExploreDefinition,
+  EXPLORE_BASE_IMAGE,
   EXPLORE_VOLUME_VARIABLE,
   exploreDefinitionText,
   exploreIdLabels,
@@ -8,7 +9,7 @@ import {
 } from '../../src/volumes/explore-definition.ts';
 
 describe('the definition Explore a Volume opens a volume in (card containers-155)', () => {
-  it('F-0705 BR-4, BR-8: the definition is Alpine as root with the volume at /volume read from the variable of the run, naming no volume and no Docker socket', () => {
+  it('F-0705 BR-4, BR-8: the definition is the pinned base-alpine image as root with the volume at /volume read from the variable of the run, naming no volume and no Docker socket', () => {
     deepStrictEqual(
       [
         JSON.parse(exploreDefinitionText()) as Record<string, unknown>,
@@ -17,13 +18,20 @@ describe('the definition Explore a Volume opens a volume in (card containers-155
       [
         {
           name: 'Inspect Volume',
-          image: 'alpine:3.20',
+          image: EXPLORE_BASE_IMAGE,
           remoteUser: 'root',
           workspaceMount: `source=\${localEnv:${EXPLORE_VOLUME_VARIABLE}},target=/volume,type=volume`,
           workspaceFolder: '/volume',
         },
         false,
       ],
+    );
+  });
+
+  it('F-0705 BR-4 (decision Q2 option a): the base is base-alpine release v0.4.17 on Alpine 3.20, pinned by its digest, not a moving tag', () => {
+    deepStrictEqual(
+      EXPLORE_BASE_IMAGE,
+      'mcr.microsoft.com/devcontainers/base:0.210.5-alpine3.20@sha256:f1cb8e3d768ee56f9101c8782aac43305d48d4367555cb4c0ebb5a62830feae4',
     );
   });
 
@@ -51,9 +59,9 @@ describe('the definition Explore a Volume opens a volume in (card containers-155
     deepStrictEqual(
       [first.folder, first.configFile, second.configFile, [...files.values()]],
       [
-        '/storage/u/inspect-volume/1',
-        '/storage/u/inspect-volume/1/.devcontainer/devcontainer.json',
-        '/storage/u/inspect-volume/1/.devcontainer/devcontainer.json',
+        '/storage/u/inspect-volume/2',
+        '/storage/u/inspect-volume/2/.devcontainer/devcontainer.json',
+        '/storage/u/inspect-volume/2/.devcontainer/devcontainer.json',
         ['{"edited": true}'],
       ],
     );
