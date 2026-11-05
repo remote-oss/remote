@@ -24,6 +24,7 @@ import {
   selectLaunches,
   SMOKE_PART,
 } from './acceptance-select.ts';
+import {measuredPaths} from './acceptance-reach.ts';
 import {chosenLaunches} from './acceptance.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 
@@ -60,18 +61,35 @@ const LAUNCHES: Launch[] = [
 ];
 const EVERY = LAUNCHES.map(launch => launch.label);
 
+/** The selection of `changed` from `launches`, with its packages' paths measured in the repository. */
+function selectionOf(
+  changed: readonly string[],
+  launches: readonly Launch[] = LAUNCHES,
+): ReturnType<typeof selectLaunches> {
+  return selectLaunches(
+    changed,
+    launches,
+    measuredPaths(changed, 'HEAD', launches, REPOSITORY_ROOT),
+  );
+}
+
 /** The labels a list of changed paths selects from the fixture table. */
 function labelsFor(...changed: string[]): string[] {
-  return selectLaunches(changed, LAUNCHES).labels;
+  return selectionOf(changed).labels;
 }
 
 describe('acceptance-select', () => {
-  it('a Dev Containers change reaches the containers launches only', () => {
-    deepStrictEqual(labelsFor('packages/remote-containers/src/extension.ts'), [
-      'containers-one',
-      'containers-two',
-      'containers-three',
-    ]);
+  it('a Dev Containers change reaches the containers launches only, as its package is measured; unmeasured, every launch', () => {
+    deepStrictEqual(
+      [
+        labelsFor('packages/remote-containers/src/extension.ts'),
+        selectLaunches(
+          ['packages/remote-containers/src/extension.ts'],
+          LAUNCHES,
+        ).labels,
+      ],
+      [['containers-one', 'containers-two', 'containers-three'], EVERY],
+    );
   });
 
   it('a Remote Explorer change reaches the explorer launches only', () => {
@@ -178,13 +196,15 @@ describe('acceptance-select', () => {
     );
   });
 
-  it('documentation and unit tests reach no launch', () => {
+  it("documentation, unit tests and the selection's own modules reach no launch", () => {
     deepStrictEqual(
       labelsFor(
         'docs/architecture/x.md',
         'README.md',
         'packages/remote-containers/test/unit/a.test.ts',
         'tools/build.test.ts',
+        'tools/acceptance-select.ts',
+        'tools/acceptance-reach.ts',
       ),
       [],
     );
@@ -232,7 +252,7 @@ describe('acceptance-select', () => {
       },
     ];
     deepStrictEqual(
-      selectLaunches(['packages/remote-containers/src/a.ts'], more).labels,
+      selectionOf(['packages/remote-containers/src/a.ts'], more).labels,
       [
         'containers-one',
         'containers-two',
@@ -244,7 +264,7 @@ describe('acceptance-select', () => {
 
   it('names, per selected launch, the changed path that selected it', () => {
     deepStrictEqual(
-      selectLaunches(['packages/remote-containers/src/a.ts'], LAUNCHES).reasons,
+      selectionOf(['packages/remote-containers/src/a.ts']).reasons,
       [
         'containers-one: packages/remote-containers/src/a.ts',
         'containers-two: packages/remote-containers/src/a.ts',
@@ -259,7 +279,7 @@ describe('acceptance-select', () => {
         launchesInput(selectLaunches(['docs/a.md'], LAUNCHES), LAUNCHES),
         launchesInput(selectLaunches(['tools/build.ts'], LAUNCHES), LAUNCHES),
         launchesInput(
-          selectLaunches(['packages/remote-containers/src/a.ts'], LAUNCHES),
+          selectionOf(['packages/remote-containers/src/a.ts']),
           LAUNCHES,
         ),
       ],

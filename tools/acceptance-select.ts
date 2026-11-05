@@ -19,6 +19,9 @@ import {
 import {
   LAUNCH_TABLE,
   labelsChangedSince,
+  measuredPaths,
+  NO_LAUNCH,
+  SUITE_TEST,
   withHelpersAsTests,
 } from './acceptance-reach.ts';
 import {chosenLaunches} from './acceptance.ts';
@@ -30,28 +33,10 @@ export interface Selection {
   reasons: string[];
 }
 
-/** Paths no launch can reach: documentation and unit tests. A closed list: any other path runs more, never less. */
-const NO_LAUNCH = [
-  /^docs\//,
-  /\.md$/,
-  /^packages\/[^/]+\/test\/unit\//,
-  /^tools\/.*\.test\.ts$/,
-];
-
-/** The packages whose launches carry their extension, by the extension's id. */
-const PACKAGE_EXTENSIONS: ReadonlyMap<string, string> = new Map([
-  ['remote-containers', 'remote-oss.remote-containers'],
-  ['remote-explorer', 'remote-oss.remote-explorer'],
-]);
-
-/** The extension ids a launch installs (plain launches name them in `withExtensions`; runner launches install none). */
-function extensionsOfLaunch(launch: Launch): readonly string[] {
-  return launch.kind === 'plain' ? (launch.withExtensions ?? []) : [];
-}
-
 /**
  * The labels of the launches one changed path can reach, or undefined when it reaches every launch. `measured` holds
- * the reach of paths measured beforehand (the launch table's changed entries, acceptance-reach.ts).
+ * the reach of paths measured beforehand (the launch table's changed entries and the packages' paths,
+ * acceptance-reach.ts); a package's path that is not measured reaches every launch.
  */
 function reachedBy(
   changed: string,
@@ -64,14 +49,6 @@ function reachedBy(
   }
   if (NO_LAUNCH.some(pattern => pattern.test(changed))) {
     return [];
-  }
-  const packageName = /^packages\/([^/]+)\//.exec(changed)?.[1];
-  const extension =
-    packageName === undefined ? undefined : PACKAGE_EXTENSIONS.get(packageName);
-  if (extension !== undefined) {
-    return launches
-      .filter(launch => extensionsOfLaunch(launch).includes(extension))
-      .map(launch => launch.label);
   }
   // only a suite's own tests map to it: other files in a suite folder can be the harness several suites import
   // (tests/acceptance/windows/renderer.ts), so they reach every launch
@@ -159,9 +136,6 @@ export const SMOKE_PART: Part = {
   launches: 'local,remote,containers-shutdown:reopen-locally-lines.test.ts',
   minutes: 60,
 };
-
-/** A suite's own test file, directly in its folder: `[suite, file]`. */
-const SUITE_TEST = /^tests\/acceptance\/([^/]+)\/([^/]+\.test\.ts)$/;
 
 /**
  * The parts of a test-only change: each changed test file of a plain launch's suite runs alone in every launch that runs
@@ -285,8 +259,10 @@ export function planOfChange(
 }
 
 /**
- * The changed paths of `base`...`head` as the selection reads them, and the reach measured for the launch table: each
- * suite helper as the tests that stand for it, and a changed launch table as the launches whose entries differ.
+ * The changed paths of `base`...`head` as the selection reads them, and the reach measured for the two tables and the
+ * packages: each suite helper as the tests that stand for it, a changed launch table as the launches whose entries
+ * differ, a changed parts table as the launches of the parts it makes otherwise, and a package's path as the launches
+ * its package reaches (packageReach), read at the head.
  */
 export async function measuredChange(
   base: string,
@@ -301,7 +277,7 @@ export async function measuredChange(
     REPOSITORY_ROOT,
     new Set(launches.map(launch => launch.suite)),
   );
-  const measured = new Map<string, readonly string[]>();
+  const measured = measuredPaths(changed, base, launches, REPOSITORY_ROOT);
   const labels = changed.includes(LAUNCH_TABLE)
     ? await labelsChangedSince(base, launchTable, REPOSITORY_ROOT)
     : undefined;
