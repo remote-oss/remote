@@ -315,12 +315,16 @@ describe('Configure Container Features on a configuration outside the repository
             .some(line => line.includes('does not exist')),
         ],
         [true, [true, true], false],
-        JSON.stringify({
-          expected: [missing, root].map(each =>
-            path.join(each, 'github.com', 'o', name),
-          ),
-          lines,
-        }),
+        JSON.stringify(
+          [
+            ...[missing, root].map(each =>
+              path.join(each, 'github.com', 'o', name),
+            ),
+            ...lines.map(line =>
+              line.slice('looking for a configuration in '.length),
+            ),
+          ].map(text => text.replace(/[A-Za-z]/g, 'a').replace(/[0-9]/g, '9')),
+        ),
       );
     } finally {
       await closeWindow(window).catch(() => undefined);
