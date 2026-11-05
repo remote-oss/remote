@@ -3342,6 +3342,44 @@ export async function clearQuickPickInput(name: string): Promise<void> {
   await setQuickPickInput(name, '');
 }
 
+/** The value of the text input that has the focus in window `name`; none when the focus is in no text input. */
+export async function focusedInputValue(
+  name: string,
+): Promise<string | undefined> {
+  return (
+    (await evaluate<string | null>(
+      name,
+      `(() => {
+        const input = document.activeElement;
+        return input instanceof HTMLInputElement ? input.value : null;
+      })()`,
+    )) ?? undefined
+  );
+}
+
+/** Replaces the value of the text input that has the focus in window `name` with `text`; it fails when none has. */
+export async function typeInFocusedInput(
+  name: string,
+  text: string,
+): Promise<void> {
+  const missing = await evaluate<string | null>(
+    name,
+    `(() => {
+      const input = document.activeElement;
+      if (!(input instanceof HTMLInputElement)) {
+        return 'no text input has the focus';
+      }
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(input, ${JSON.stringify(text)});
+      input.dispatchEvent(new Event('input', {bubbles: true}));
+      return null;
+    })()`,
+  );
+  if (missing !== null) {
+    throw new Error(`window ${name}: ${missing}`);
+  }
+}
+
 /** Presses Enter in window `name` wherever its page has the focus, as the keyboard does. */
 export async function pressEnter(name: string): Promise<void> {
   await pressKey(await pageOf(name), name, 'Enter');
