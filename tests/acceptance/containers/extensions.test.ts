@@ -42,6 +42,12 @@ const YAML_PREFIX = `${YAML_ID}-`;
 /** The newest stable version of the YAML extension on Open VSX when this row was written; its pre-releases are newer. */
 const STABLE_YAML = '2.0.0';
 
+/** The gallery the editor installs from, the product's service address (Open VSX), which answers the extension query. */
+const GALLERY_SERVICE = 'https://open-vsx.org/vscode/gallery';
+
+/** The gallery query flags that bring every version with its properties. */
+const GALLERY_VERSIONS_AND_PROPERTIES = 17;
+
 /** The suffix the server gives the folder of a universal extension it installs from the gallery, which one it installs from a package file lacks. */
 const UNIVERSAL = '-universal';
 
@@ -90,6 +96,48 @@ describe('the configuration’s extensions in the container (card containers-16)
   async function openVsxVersion(path: string): Promise<string> {
     const answer = await fetch(`https://open-vsx.org/api/${path}`);
     return ((await answer.json()) as {version: string}).version;
+  }
+
+  /** The newest pre-release version the gallery lists for `extensionId`, asked of the same service and with the same query the editor installs from. */
+  async function galleryPrerelease(extensionId: string): Promise<string> {
+    const answer = await fetch(`${GALLERY_SERVICE}/extensionquery`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json;api-version=3.0-preview.1',
+      },
+      body: JSON.stringify({
+        filters: [
+          {
+            criteria: [{filterType: 7, value: extensionId}],
+            pageNumber: 1,
+            pageSize: 1,
+          },
+        ],
+        flags: GALLERY_VERSIONS_AND_PROPERTIES,
+      }),
+    });
+    const versions = (
+      (await answer.json()) as {
+        results: Array<{
+          extensions: Array<{
+            versions: Array<{
+              version: string;
+              properties?: Array<{key: string; value: string}>;
+            }>;
+          }>;
+        }>;
+      }
+    ).results[0]?.extensions[0]?.versions;
+    return (
+      versions?.find(entry =>
+        entry.properties?.some(
+          property =>
+            property.key === 'Microsoft.VisualStudio.Code.PreRelease' &&
+            property.value === 'true',
+        ),
+      )?.version ?? ''
+    );
   }
 
   /** Opens `folder`, reopens it in its container and gives the window and the container's id. */
@@ -149,9 +197,7 @@ describe('the configuration’s extensions in the container (card containers-16)
       },
     });
     try {
-      const prerelease = await openVsxVersion(
-        `${YAML_ID.replace('.', '/')}/pre-release`,
-      );
+      const prereleaseBefore = await galleryPrerelease(YAML_ID);
       const latest = await latestDracula();
       const {name, containerId} = await connected(folder);
       const installed = await installedWhen(
@@ -161,17 +207,17 @@ describe('the configuration’s extensions in the container (card containers-16)
           startingWith(folders, DRACULA_PREFIX).length > 0,
       );
       await closeWindow(name);
+      const prereleaseAfter = await galleryPrerelease(YAML_ID);
       deepStrictEqual(
         [
-          startingWith(installed, YAML_PREFIX),
+          startingWith(installed, YAML_PREFIX).length,
+          [prereleaseBefore, prereleaseAfter].some(version =>
+            installed.includes(`${YAML_PREFIX}${version}${UNIVERSAL}`),
+          ),
+          prereleaseAfter === STABLE_YAML,
           startingWith(installed, DRACULA_PREFIX),
-          prerelease === STABLE_YAML,
         ],
-        [
-          [`${YAML_PREFIX}${prerelease}${UNIVERSAL}`],
-          [`${DRACULA_PREFIX}${latest}${UNIVERSAL}`],
-          false,
-        ],
+        [1, true, false, [`${DRACULA_PREFIX}${latest}${UNIVERSAL}`]],
       );
     } finally {
       await removeContainers(folder);
