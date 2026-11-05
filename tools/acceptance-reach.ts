@@ -22,6 +22,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import typescript from 'typescript';
+import {parse as parseYaml} from 'yaml';
 import type {Launch} from './acceptance-launches.ts';
 import {
   type Part,
@@ -715,11 +716,146 @@ export const OWN_JOB_FOLDERS: ReadonlyMap<string, string> = new Map([
   ['suite', 'test:acceptance'],
 ]);
 
+/** A workflow file, as a changed path names it. */
+const WORKFLOW_FILE = /^\.github\/workflows\/[^/]+\.ya?ml$/;
+
+/** The workflow that makes a pull request's own launches: every job of it plans or runs them. */
+export const PR_LAUNCH_WORKFLOW = '.github/workflows/acceptance-launches.yml';
+
+/** The workflow whose jobs the two lists below name. */
+export const CI_WORKFLOW = '.github/workflows/ci.yml';
+
+/** The jobs of ci.yml that make a pull request's own launches: the one that calls PR_LAUNCH_WORKFLOW. */
+export const PR_LAUNCH_JOBS: ReadonlySet<string> = new Set(['acceptance-pr']);
+
+/**
+ * The jobs of ci.yml that make launches but never on a pull request: their `if` names inputs of a dispatch, the
+ * schedule or a push, never `pull_request` (a row checks it), so a pull request's parts can't show a change to them.
+ * Its proof is a dispatch, and the merge's own run makes every part with them.
+ */
+export const MAIN_ONLY_LAUNCH_JOBS: ReadonlySet<string> = new Set([
+  'vscodium-plan',
+  'acceptance-vscodium',
+  'acceptance-vscodium-containers',
+  'acceptance-genuine',
+]);
+
+/** What in a job's definition makes or plans launches: the VSCodium run, the plan's tools, a local workflow or action. */
+export const LAUNCH_MARKER =
+  /test:acceptance:vscodium|acceptance-select|acceptance-parts|"uses":"\.\//;
+
+/** A workflow as the reach compares it: its jobs by name, and the text of everything else. */
+interface Workflow {
+  jobs: Record<string, unknown>;
+  rest: string;
+}
+
+/** A workflow's text as a value: undefined when it is not a mapping with a mapping of jobs. */
+function workflowOf(text: string): Workflow | undefined {
+  const parsed = parseYaml(text) as unknown;
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return undefined;
+  }
+  const {jobs, ...rest} = parsed as Record<string, unknown>;
+  return typeof jobs === 'object' && jobs !== null && !Array.isArray(jobs)
+    ? {jobs: jobs as Record<string, unknown>, rest: JSON.stringify(rest)}
+    : undefined;
+}
+
+/** The jobs a job's definition needs, from its `needs` (a name or a list of names). */
+function needsOf(definition: unknown): string[] {
+  const needs = (definition as {needs?: unknown} | undefined)?.needs;
+  return [needs]
+    .flat()
+    .filter((name): name is string => typeof name === 'string');
+}
+
+/**
+ * What a change of the workflow `file` from the text `before` to the text `after` reaches: no launch (`[]`), or
+ * undefined, every launch. Every launch when a side can't be read as a workflow, or when anything but its jobs differs
+ * (its triggers, inputs, permissions, concurrency, environment). Else the changed jobs (added, removed or defined
+ * otherwise; comments are no part of a definition) and every job that needs one of them, on either side, are
+ * affected: every launch when one of them makes a pull request's launches (any job of PR_LAUNCH_WORKFLOW, or of
+ * PR_LAUNCH_JOBS in ci.yml), or makes launches and isn't in MAIN_ONLY_LAUNCH_JOBS of ci.yml, which the reach can't
+ * place; no launch otherwise.
+ */
+export function workflowEditReach(
+  file: string,
+  before: string,
+  after: string,
+): string[] | undefined {
+  let sides: Array<Workflow | undefined>;
+  try {
+    sides = [workflowOf(before), workflowOf(after)];
+  } catch {
+    return undefined;
+  }
+  const [earlier, later] = sides;
+  if (earlier === undefined || later === undefined) {
+    return undefined;
+  }
+  if (earlier.rest !== later.rest) {
+    return undefined;
+  }
+  const names = [
+    ...new Set([...Object.keys(earlier.jobs), ...Object.keys(later.jobs)]),
+  ];
+  /** A job's definition on one side, as text; undefined when that side has no such job. */
+  function definitionOf(side: Workflow, name: string): string | undefined {
+    return JSON.stringify(side.jobs[name]);
+  }
+  const affected = new Set(
+    names.filter(
+      name => definitionOf(earlier, name) !== definitionOf(later, name),
+    ),
+  );
+  const pending = [...affected];
+  while (pending.length > 0) {
+    const needed = String(pending.pop());
+    for (const name of names) {
+      const needing = [earlier, later].some(side =>
+        needsOf(side.jobs[name]).includes(needed),
+      );
+      if (needing && !affected.has(name)) {
+        affected.add(name);
+        pending.push(name);
+      }
+    }
+  }
+  const ofCi = file === CI_WORKFLOW;
+  const placed = [...affected].every(
+    name =>
+      file !== PR_LAUNCH_WORKFLOW &&
+      !(ofCi && PR_LAUNCH_JOBS.has(name)) &&
+      ((ofCi && MAIN_ONLY_LAUNCH_JOBS.has(name)) ||
+        [earlier, later].every(
+          side => !LAUNCH_MARKER.test(definitionOf(side, name) ?? ''),
+        )),
+  );
+  return placed ? [] : undefined;
+}
+
+/** What a change of the workflow `file` since `base` reaches (workflowEditReach), the head read at `root`. */
+export function workflowReach(
+  file: string,
+  base: string,
+  root: string,
+): string[] | undefined {
+  const absolute = path.join(root, file);
+  const before = spawnSync('git', ['show', `${base}:${file}`], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  return before.status === 0 && existsSync(absolute)
+    ? workflowEditReach(file, before.stdout, readFileSync(absolute, 'utf8'))
+    : undefined;
+}
+
 /**
  * The reach measured at `root`, the head, for the changed paths it can place: each path in a package's folder that is
  * not a unit test, by its package; each test of a folder of its own job, by the launch tests that import it (none
- * when nothing does: its own job runs it); and the parts table, by the parts it makes otherwise than at `base`. The
- * graph is read once, and only when such a path changed.
+ * when nothing does: its own job runs it); the parts table, by the parts it makes otherwise than at `base`; and each
+ * workflow file, by the jobs it changes (workflowReach). The graph is read once, and only when such a path changed.
  */
 export function measuredPaths(
   changed: readonly string[],
@@ -766,6 +902,12 @@ export function measuredPaths(
     : undefined;
   if (parts !== undefined) {
     measured.set(PARTS_TABLE_FILE, parts);
+  }
+  for (const file of changed.filter(each => WORKFLOW_FILE.test(each))) {
+    const reach = workflowReach(file, base, root);
+    if (reach !== undefined) {
+      measured.set(file, reach);
+    }
   }
   return measured;
 }

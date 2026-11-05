@@ -1,6 +1,6 @@
 /**
- * @fileoverview acceptance-reach: what a change to the launch table, the parts table, a suite's own helper or a package
- * reaches.
+ * @fileoverview acceptance-reach: what a change to the launch table, the parts table, a suite's own helper, a package or
+ * a workflow file reaches.
  */
 
 import {deepStrictEqual} from 'node:assert';
@@ -13,6 +13,7 @@ import {
 } from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {parse as parseYaml} from 'yaml';
 import * as launchTable from './acceptance-launches.ts';
 import {
   bundleFolderOf,
@@ -26,15 +27,22 @@ import {
   measurableEdit,
   labelsOfChangedParts,
   labelsOfTableSince,
+  CI_WORKFLOW,
+  LAUNCH_MARKER,
+  MAIN_ONLY_LAUNCH_JOBS,
   measuredPaths,
   OWN_JOB_FOLDERS,
   packageReach,
   PARTS_TABLE_FILE,
+  PR_LAUNCH_JOBS,
+  PR_LAUNCH_WORKFLOW,
   sourceGraph,
   tableImports,
   type TableModule,
   testsOfHelper,
   withHelpersAsTests,
+  workflowEditReach,
+  workflowReach,
 } from './acceptance-reach.ts';
 import {acceptanceConfiguration} from './acceptance.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
@@ -752,6 +760,182 @@ describe('acceptance-reach: the tests of a folder its own job runs (card tooling
         true,
         true,
       ],
+    );
+  });
+});
+
+describe("acceptance-reach: what a workflow file's change reaches (card tooling-177)", () => {
+  const WORKFLOW = [
+    'name: ci',
+    'on: [pull_request]',
+    'jobs:',
+    '  changes:',
+    '    runs-on: ubuntu-24.04',
+    '    steps: [{run: echo changes}]',
+    '  checks:',
+    '    needs: changes',
+    '    runs-on: ubuntu-24.04',
+    '    steps: [{run: pnpm lint}]',
+    '  acceptance-pr:',
+    '    uses: ./.github/workflows/acceptance-launches.yml',
+    '  vscodium-plan:',
+    '    if: inputs.vscodium',
+    '    steps: [{run: node tools/acceptance-parts.ts --matrix}]',
+    '  ci-gate:',
+    '    needs: [changes, checks, acceptance-pr]',
+    '    steps: [{run: echo gate}]',
+    '',
+  ].join('\n');
+  /** The workflow with `before`, which must be in it, replaced by `after`. */
+  function edited(before: string, after: string): string {
+    if (!WORKFLOW.includes(before)) {
+      throw new Error(`the workflow has no ${before}`);
+    }
+    return WORKFLOW.replace(before, after);
+  }
+  /** What ci.yml's change from WORKFLOW to `after` reaches. */
+  function reachOfCi(after: string): string[] | undefined {
+    return workflowEditReach(CI_WORKFLOW, WORKFLOW, after);
+  }
+
+  it('tooling-177: a comment, a job that makes no launch, a job only such jobs need, a new such job in the gate, or a job that makes launches only on main reaches no launch', () => {
+    deepStrictEqual(
+      [
+        reachOfCi(edited('  checks:\n', '  # the lint\n  checks:\n')),
+        reachOfCi(edited('pnpm lint', 'pnpm lint --quiet')),
+        reachOfCi(edited('echo changes', 'echo more')),
+        reachOfCi(
+          edited(
+            '  ci-gate:\n    needs: [changes, checks, acceptance-pr]',
+            '  extra:\n    steps: [{run: pnpm test:acceptance:containers-cli}]\n  ci-gate:\n    needs: [changes, checks, acceptance-pr, extra]',
+          ),
+        ),
+        reachOfCi(edited('--matrix', '--matrix --quiet')),
+      ],
+      [[], [], [], [], []],
+    );
+  });
+
+  it("tooling-177: a change to the job that makes a pull request's launches, to a job it needs, or to a new job that makes launches reaches every launch", () => {
+    const needing = edited(
+      '    uses: ./.github/workflows/acceptance-launches.yml',
+      '    needs: changes\n    uses: ./.github/workflows/acceptance-launches.yml',
+    );
+    deepStrictEqual(
+      [
+        reachOfCi(
+          edited(
+            '    uses: ./.github/workflows/acceptance-launches.yml',
+            '    uses: ./.github/workflows/acceptance-launches.yml\n    secrets: inherit',
+          ),
+        ),
+        workflowEditReach(
+          CI_WORKFLOW,
+          needing,
+          needing.replace('echo changes', 'echo more'),
+        ),
+        reachOfCi(
+          edited(
+            '  ci-gate:',
+            '  more:\n    steps: [{run: pnpm test:acceptance:vscodium --launches local}]\n  ci-gate:',
+          ),
+        ),
+      ],
+      [undefined, undefined, undefined],
+    );
+  });
+
+  it("tooling-177: a change of anything but the jobs, a side that isn't a workflow, any job of the launches workflow, or another file's job that makes launches reaches every launch; a comment there reaches none", () => {
+    const launchesWorkflow = 'jobs:\n  run:\n    steps: [{run: echo run}]\n';
+    const other =
+      'jobs:\n  build:\n    steps: [{run: pnpm test:acceptance:vscodium}]\n  notes:\n    steps: [{run: echo notes}]\n';
+    deepStrictEqual(
+      [
+        reachOfCi(edited('on: [pull_request]', 'on: [pull_request, push]')),
+        reachOfCi(`${WORKFLOW}  : : [\n`),
+        reachOfCi('- a list\n'),
+        reachOfCi('name: no jobs\n'),
+        workflowEditReach(
+          PR_LAUNCH_WORKFLOW,
+          launchesWorkflow,
+          launchesWorkflow.replace('echo run', 'echo again'),
+        ),
+        workflowEditReach(
+          PR_LAUNCH_WORKFLOW,
+          launchesWorkflow,
+          `# a note\n${launchesWorkflow}`,
+        ),
+        workflowEditReach(
+          '.github/workflows/platform.yml',
+          other,
+          other.replace(
+            'pnpm test:acceptance:vscodium',
+            'pnpm test:acceptance:vscodium --quiet',
+          ),
+        ),
+        workflowEditReach(
+          '.github/workflows/platform.yml',
+          other,
+          other.replace('echo notes', 'echo more'),
+        ),
+      ],
+      [
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        [],
+        undefined,
+        [],
+      ],
+    );
+  });
+
+  it("tooling-177: in the repository's ci.yml the lists hold: acceptance-pr calls the launches workflow, the main-only jobs' conditions name no pull request, and every job that makes launches is in a list", () => {
+    const jobs = (
+      parseYaml(
+        readFileSync(path.join(REPOSITORY_ROOT, CI_WORKFLOW), 'utf8'),
+      ) as {jobs: Record<string, {uses?: string; if?: string}>}
+    ).jobs;
+    deepStrictEqual(
+      [
+        [...PR_LAUNCH_JOBS].map(name => jobs[name]?.uses),
+        [...MAIN_ONLY_LAUNCH_JOBS].map(name => {
+          const condition = String(jobs[name]?.if);
+          return (
+            condition.includes('inputs.') && !condition.includes('pull_request')
+          );
+        }),
+        Object.entries(jobs)
+          .filter(([, definition]) =>
+            LAUNCH_MARKER.test(JSON.stringify(definition)),
+          )
+          .map(([name]) => name)
+          .filter(
+            name =>
+              !PR_LAUNCH_JOBS.has(name) && !MAIN_ONLY_LAUNCH_JOBS.has(name),
+          ),
+      ],
+      [[`./${PR_LAUNCH_WORKFLOW}`], [true, true, true, true], []],
+    );
+  });
+
+  it("tooling-177: the repository's ci.yml at HEAD reaches no launch and is measured so; a base that doesn't exist reaches every launch", () => {
+    deepStrictEqual(
+      [
+        workflowReach(CI_WORKFLOW, 'HEAD', REPOSITORY_ROOT),
+        workflowReach(CI_WORKFLOW, 'no-such-commit', REPOSITORY_ROOT),
+        [
+          ...measuredPaths(
+            [CI_WORKFLOW],
+            'HEAD',
+            launchesOf(REPOSITORY_ROOT),
+            REPOSITORY_ROOT,
+          ),
+        ],
+      ],
+      [[], undefined, [[CI_WORKFLOW, []]]],
     );
   });
 });
