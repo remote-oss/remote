@@ -10,8 +10,12 @@ const CONTAINER_ID = 'a'.repeat(64);
 const PICK_KEY = attachPickKeyOf({containerName: '/web'});
 
 /** A scene whose engine knows the container `web` in `state` and answers the Alpine step by `alpine`. */
-function attachedScene(state: string | undefined, alpine = 1): Scene {
-  const scene = sceneOf({}, {attached: true});
+function attachedScene(
+  state: string | undefined,
+  alpine = 1,
+  overrides: Parameters<typeof sceneOf>[0] = {},
+): Scene {
+  const scene = sceneOf(overrides, {attached: true});
   scene.attachPicks.push(PICK_KEY);
   scene.bootstrapAnswer = (argv): EngineRunOutcome | undefined => {
     if (argv[0] === 'inspect') {
@@ -244,6 +248,15 @@ describe('the connector of an attached container (card containers-163, #2030)', 
       ['kind' in result ? result.kind : undefined, scene.serverRequests.length],
       ['cancelled', 0],
     );
+  });
+
+  it('F-0104 AC-24: an attached window has no shutdownMonitor log: its register names none, though the activation has one', async () => {
+    const scene = attachedScene('running', 1, {
+      shutdownLogFile: '/logs/shutdownMonitor-2026-11-05T01-00-00.000Z.log',
+    });
+    await scene.connector.connect(inputOf(PAYLOAD));
+    const sent = scene.shutdownSent[0];
+    deepStrictEqual(sent !== undefined && 'logFile' in sent, false);
   });
 
   it('F-0602 AC-11, F-0417 AC-14 (c163-connector-hooks): the blocking commands run on the container before the server starts and the rest after the connect, and the window registers as one that does not own, with nothing to stop', async () => {

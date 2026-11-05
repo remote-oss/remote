@@ -420,6 +420,8 @@ export interface ContainerConnectorDependencies {
   shutdown: ShutdownMessenger;
   /** A fresh id for each connection of the window to a container. */
   newConnectionId(): string;
+  /** The `shutdownMonitor-<start>.log` of this activation, where the helper writes its owning connections' lines; none when there is no log folder. */
+  shutdownLogFile?: string;
   clock: () => number;
   logger: Logger;
   revealLog(): void;
@@ -1072,6 +1074,9 @@ export function containerConnectorOf(
       identity,
       engine,
       ...(owning ? {} : {owning: false as const}),
+      ...(owning && dependencies.shutdownLogFile !== undefined
+        ? {logFile: dependencies.shutdownLogFile}
+        : {}),
     });
     return connectionId;
   }

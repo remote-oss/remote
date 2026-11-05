@@ -38,7 +38,8 @@ export interface RegistryPorts {
   ): Promise<DockerResult>;
   /** Runs `callback` once after `milliseconds`; the result cancels it. */
   setTimer(milliseconds: number, callback: () => void): () => void;
-  logLine(line: string): void;
+  /** Writes a line of the log; `logFile` names the file of the connection the line is about, when it has one. */
+  logLine(line: string, logFile?: string): void;
 }
 
 /** The registry's decisions; each request method answers as the helper replies. */
@@ -74,6 +75,8 @@ interface Connection {
   action: 'stop' | 'none' | undefined;
   /** Whether the connection's end stops the container, unless it is in use. */
   owning: boolean;
+  /** The file the helper writes this connection's lines to, besides its own log. */
+  logFile: string | undefined;
   live: boolean;
 }
 
@@ -117,6 +120,11 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
   }
 
   /** Whether another live connection holds the container: by its id, or by the identity it is for. */
+  /** Writes a line about `connection` to the helper's log and to the connection's own file. */
+  function logAbout(connection: Connection, line: string): void {
+    ports.logLine(line, connection.logFile);
+  }
+
   function inUse(connection: Connection, containerId: string): boolean {
     return [...connections.values()].some(
       other =>
@@ -133,7 +141,10 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
     containerId: string,
   ): Promise<void> {
     if (inUse(connection, containerId)) {
-      ports.logLine(`container ${containerId} is in use and stays running`);
+      logAbout(
+        connection,
+        `container ${containerId} is in use and stays running`,
+      );
       return;
     }
     const result = await ports.runDocker(connection.engine, [
@@ -141,7 +152,8 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
       containerId,
     ]);
     if (result.status !== 0) {
-      ports.logLine(
+      logAbout(
+        connection,
         `docker stop ${containerId} failed with status ${String(result.status)}`,
       );
     }
@@ -179,7 +191,8 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
       `{{.ID}}\t{{.Label "${SERVICE_LABEL}"}}`,
     ]);
     if (result.status !== 0) {
-      ports.logLine(
+      logAbout(
+        connection,
         `docker ps for the project ${project} failed with status ${String(result.status)}`,
       );
       return undefined;
@@ -237,7 +250,8 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
         ),
     );
     if (primaryInUse) {
-      ports.logLine(
+      logAbout(
+        connection,
         `the primary service ${compose.service} of ${compose.project} is in use: nothing of its scope is stopped`,
       );
       for (const container of running) {
@@ -254,7 +268,8 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
         continue;
       }
       if (composeInUse(connection, compose, container)) {
-        ports.logLine(
+        logAbout(
+          connection,
           `container ${container.id} of ${container.service} is in use and stays running`,
         );
         remembered.add(container.service);
@@ -267,7 +282,8 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
       if (result.status === 0) {
         remembered.delete(container.service);
       } else {
-        ports.logLine(
+        logAbout(
+          connection,
           `docker kill ${container.id} failed with status ${String(result.status)}`,
         );
       }
@@ -286,7 +302,8 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
       ...identityFilters(connection.identity),
     ]);
     if (result.status !== 0) {
-      ports.logLine(
+      logAbout(
+        connection,
         `docker ps failed with status ${String(result.status)}; the lookup ends`,
       );
       return;
@@ -300,7 +317,8 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
       return;
     }
     if (attempt >= LOOKUP_ATTEMPTS) {
-      ports.logLine(
+      logAbout(
+        connection,
         `no running container for ${identityLabel(connection.identity)}; the lookup ends`,
       );
       return;
@@ -344,6 +362,7 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
         containerId: undefined,
         action: undefined,
         owning: request.owning !== false,
+        logFile: request.logFile,
         live: true,
       });
       return {accepted: true};

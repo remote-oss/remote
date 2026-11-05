@@ -6,18 +6,24 @@
  */
 
 import {execFile} from 'node:child_process';
+import {appendFileSync} from 'node:fs';
 import {inheritedEnvironment, nodeTimer, runHelper} from 'lib-helper';
 import {
   createShutdownRegistry,
   type DockerResult,
 } from '../shutdown/registry.ts';
 import type {EngineCoordinates} from '../shutdown/protocol.ts';
+import {helperLogOf} from '../shutdown/helper-log.ts';
 import {createShutdownHandler} from '../shutdown/shutdown-handler.ts';
 
-/** Writes a line to the error stream, which the extension that started the helper keeps as its log. */
-function logLine(line: string): void {
-  process.stderr.write(`${line}\n`);
-}
+/** Writes a line to the error stream, which the extension that started the helper keeps as its log, and to the file of its connection. */
+const logLine = helperLogOf({
+  stderr: text => process.stderr.write(text),
+  append: (file, text) => {
+    appendFileSync(file, text);
+  },
+  clock: Date.now,
+});
 
 /** Runs the engine's `docker` with its environment added to the helper's; the result is never a rejection. */
 function runDocker(

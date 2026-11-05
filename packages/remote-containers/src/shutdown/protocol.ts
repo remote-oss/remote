@@ -3,6 +3,9 @@
  * dev container, and how it answers. A message that is not one of these is answered with its problem and changes nothing.
  */
 
+import path from 'node:path';
+import {parseLogFileName} from '../logging/log-files.ts';
+
 /** The engine a connection used: no secret, only where `docker` is and the variables that pick the engine. */
 export interface EngineCoordinates {
   dockerPath: string;
@@ -100,6 +103,8 @@ export type ShutdownRequest =
       engine: EngineCoordinates;
       /** False for a connection whose end stops nothing, such as an attached window's; absent means it owns. */
       owning?: false;
+      /** The `shutdownMonitor-<start>.log` of the registering window, where the helper writes this connection's lines. */
+      logFile?: string;
     }
   | {
       type: 'compose';
@@ -177,6 +182,15 @@ function identityOf(value: unknown): ContainerIdentity | undefined {
   return configFile === undefined ? undefined : {volumeName, configFile};
 }
 
+/** Whether `value` is the absolute path of a log file the helper writes: a `shutdownMonitor-<start>.log`, and no other. */
+function isMonitorLog(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    path.isAbsolute(value) &&
+    parseLogFileName(path.basename(value))?.kind === 'shutdownMonitor'
+  );
+}
+
 /** The register request of `record`, or its problem. */
 function readRegister(
   record: Record<string, unknown>,
@@ -210,6 +224,14 @@ function readRegister(
       problem: 'register needs owning to be a boolean',
     };
   }
+  const {logFile} = record;
+  if (logFile !== undefined && !isMonitorLog(logFile)) {
+    return {
+      kind: 'malformed',
+      problem:
+        'register needs logFile to be the absolute path of a shutdownMonitor log file',
+    };
+  }
   return {
     kind: 'request',
     request: {
@@ -218,6 +240,7 @@ function readRegister(
       identity,
       engine: {dockerPath, environment},
       ...(record.owning === false ? {owning: false as const} : {}),
+      ...(logFile === undefined ? {} : {logFile}),
     },
   };
 }

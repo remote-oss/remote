@@ -33,6 +33,7 @@ function scene(
     [];
   const runs: string[] = [];
   const logs: string[] = [];
+  const files: Array<string | undefined> = [];
   const registry: ShutdownRegistry = createShutdownRegistry({
     runDocker: (engine, argv) => {
       runs.push(`${String(now / 1000)}s ${argv.join(' ')}`);
@@ -45,7 +46,10 @@ function scene(
         timer.live = false;
       };
     },
-    logLine: line => logs.push(line),
+    logLine: (line, file) => {
+      logs.push(line);
+      files.push(file);
+    },
   });
   /** Moves the clock on by `milliseconds`, firing each timer at its time and letting what it starts finish. */
   async function advance(milliseconds: number): Promise<void> {
@@ -64,7 +68,7 @@ function scene(
     }
     now = target;
   }
-  return {registry, advance, runs, logs, now: () => now};
+  return {registry, advance, runs, logs, files, now: () => now};
 }
 
 /** Registers connection `connectionId` of lease `leaseId` for `identity`, and tells where its container is. */
@@ -74,12 +78,14 @@ function connect(
   connectionId: string,
   identity: ContainerIdentity = IDENTITY,
   container?: {containerId: string; action: 'stop' | 'none'},
+  logFile?: string,
 ): void {
   registry.register(leaseId, {
     type: 'register',
     connectionId,
     identity,
     engine: ENGINE,
+    ...(logFile === undefined ? {} : {logFile}),
   });
   if (container !== undefined) {
     registry.setContainer({type: 'container', connectionId, ...container});
@@ -161,6 +167,28 @@ describe('the shutdown registry (card containers-68)', () => {
     deepStrictEqual(
       [late.runs, failing.runs.slice(0, 1)],
       [['10s stop c0ffee'], ['10s stop c0ffee']],
+    );
+  });
+
+  it('F-0104 BR-4, AC-24: the lines about a connection that registered a log file go with that file, and those about one that did not go with none', async () => {
+    const own = scene(() => ({status: 1, stdout: ''}));
+    connect(
+      own.registry,
+      1,
+      'a',
+      IDENTITY,
+      STOP,
+      '/logs/shutdownMonitor-2026-11-05T01-00-00.000Z.log',
+    );
+    own.registry.leasesChanged([]);
+    await own.advance(10 * CHECK_MILLISECONDS);
+    const plain = scene(() => ({status: 1, stdout: ''}));
+    connect(plain.registry, 1, 'a', IDENTITY, STOP);
+    plain.registry.leasesChanged([]);
+    await plain.advance(10 * CHECK_MILLISECONDS);
+    deepStrictEqual(
+      [own.files, plain.files],
+      [['/logs/shutdownMonitor-2026-11-05T01-00-00.000Z.log'], [undefined]],
     );
   });
 

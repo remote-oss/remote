@@ -873,6 +873,22 @@ describe('the container connector: the connect (card containers-08)', () => {
     });
   });
 
+  it('F-0104 BR-4, AC-24: the register of a dev container window names the shutdownMonitor log of the activation, and with no log folder it names none', async () => {
+    const withLog = sceneOf({
+      shutdownLogFile: '/logs/shutdownMonitor-2026-11-05T01-00-00.000Z.log',
+    });
+    await withLog.connector.connect(inputOf(devContainerPayloadOf(FOLDER)));
+    const without = sceneOf();
+    await without.connector.connect(inputOf(devContainerPayloadOf(FOLDER)));
+    deepStrictEqual(
+      [withLog, without].map(each => {
+        const sent = each.shutdownSent[0];
+        return sent !== undefined && 'logFile' in sent ? sent.logFile : null;
+      }),
+      ['/logs/shutdownMonitor-2026-11-05T01-00-00.000Z.log', null],
+    );
+  });
+
   it('F-0417 BR-4: the project the lifecycle identifies reaches the shutdown helper under the connection’s id', async () => {
     const scene = sceneOf();
     await scene.connector.connect(inputOf(devContainerPayloadOf(FOLDER)));

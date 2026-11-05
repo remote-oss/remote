@@ -282,6 +282,49 @@ describe('the shutdown helper’s messages (card containers-68)', () => {
     );
   });
 
+  it('F-0104 BR-4: a register may name the shutdownMonitor log of its window, and any other file, a relative path or text that is no path is refused', () => {
+    const engine = {dockerPath: 'docker', environment: {}};
+    function register(logFile: unknown): unknown {
+      return readShutdownRequest({
+        type: 'register',
+        connectionId: 'c1',
+        identity: {containerName: 'web'},
+        engine,
+        logFile,
+      });
+    }
+    const problem = {
+      kind: 'malformed',
+      problem:
+        'register needs logFile to be the absolute path of a shutdownMonitor log file',
+    };
+    deepStrictEqual(
+      [
+        register('/logs/shutdownMonitor-2026-11-05T01-00-00.000Z.log'),
+        register('/logs/remoteContainers-2026-11-05T01-00-00.000Z.log'),
+        register('/etc/passwd'),
+        register('shutdownMonitor-2026-11-05T01-00-00.000Z.log'),
+        register(7),
+      ],
+      [
+        {
+          kind: 'request',
+          request: {
+            type: 'register',
+            connectionId: 'c1',
+            identity: {containerName: 'web'},
+            engine,
+            logFile: '/logs/shutdownMonitor-2026-11-05T01-00-00.000Z.log',
+          },
+        },
+        problem,
+        problem,
+        problem,
+        problem,
+      ],
+    );
+  });
+
   it('F-0417 AC-14 (c163-attached-names): an attached container’s identity is told by its name, labelled and found by it', () => {
     const left = {containerName: 'web'};
     deepStrictEqual(

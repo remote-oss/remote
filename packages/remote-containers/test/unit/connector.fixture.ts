@@ -194,6 +194,8 @@ export interface Scene {
   gpuAvailability: unknown;
   /** The value of `dev.containers.logLevel`. */
   logLevel: unknown;
+  /** The `shutdownMonitor` log the connector is given, when the activation has a log folder. */
+  shutdownLogFile: string | undefined;
   mountGitWorktreeCommonDir: unknown;
   /** The user's values of the setting for the extensions of a new container, and of its deprecated twin. */
   defaultFeatures: unknown;
@@ -360,7 +362,7 @@ function volumeDependenciesOf(
 
 /** The connector over fakes, and the knobs that steer them. */
 export function sceneOf(
-  overrides: Partial<Pick<Scene, 'dockerPath'>> = {},
+  overrides: Partial<Pick<Scene, 'dockerPath' | 'shutdownLogFile'>> = {},
   options: {volumes?: boolean; attached?: boolean; pods?: EngineHost} = {},
 ): Scene {
   const sink = new MemorySink();
@@ -411,6 +413,7 @@ export function sceneOf(
     legacyWorkspaceMountConsistency: undefined,
     gpuAvailability: undefined,
     logLevel: undefined,
+    shutdownLogFile: undefined,
     mountGitWorktreeCommonDir: undefined,
     defaultFeatures: undefined,
     lockfile: undefined,
@@ -641,6 +644,9 @@ export function sceneOf(
         return Promise.resolve();
       },
     },
+    ...(scene.shutdownLogFile === undefined
+      ? {}
+      : {shutdownLogFile: scene.shutdownLogFile}),
     newConnectionId: () => {
       connections += 1;
       return `connection-${String(connections)}`;

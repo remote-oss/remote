@@ -2473,6 +2473,10 @@ export async function activate(
         logger,
       }),
       newConnectionId: randomUUID,
+      shutdownLogFile: path.join(
+        logFolder,
+        logFileNameOf('shutdownMonitor', activationStart),
+      ),
       engineFor: nodeEngineHost,
       cliFor: environment => bridgeFor(environment, logger),
       volumes: {
