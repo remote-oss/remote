@@ -120,9 +120,10 @@ jobs:
   # hour, on main, rather than at the next backstop. PR CI runs no VSCodium launch, so this is the first run that meets
   # a change together with everything merged before it. GitHub keeps one pending job per part, so merges in quick
   # succession collapse into a run of the latest main, which holds each of them.
-  # The parts of the VSCodium job: every part of tools/acceptance-parts.json's table, about fifteen minutes of rows each,
+  # The parts of the VSCodium jobs: every part of tools/acceptance-parts.json's table, about fifteen minutes of rows each,
   # for a merge to main (every merge runs every part, the full proof right after it), the nightly run, a release tag
-  # and a dispatch of all; the launches a dispatch names, as one part of 180 minutes.
+  # and a dispatch of all; the launches a dispatch names, as one part of 180 minutes. The parts with a containers launch
+  # go to their own job.
   vscodium-plan:
     if: inputs.vscodium || github.event_name == 'schedule' || github.event_name == 'push'
     # the launch table and the parts table only, as the changes job
@@ -132,6 +133,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       parts: ${{ steps.plan.outputs.parts }}
+      containers-parts: ${{ steps.plan.outputs.containers-parts }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -149,7 +151,8 @@ jobs:
           else
             parts=$(node tools/acceptance-parts.ts --matrix)
           fi
-          echo "parts=$parts" >> "$GITHUB_OUTPUT"
+          echo "parts=$(printf '%s' "$parts" | jq -c '[.[] | select(.launches | contains("containers") | not)]')" >> "$GITHUB_OUTPUT"
+          echo "containers-parts=$(printf '%s' "$parts" | jq -c '[.[] | select(.launches | contains("containers"))]')" >> "$GITHUB_OUTPUT"
 
   checks:
     if: >-
@@ -405,15 +408,15 @@ jobs:
   acceptance-vscodium:
     name: acceptance (vscodium, ${{ matrix.part.name }})
     needs: vscodium-plan
-    # every part vscodium-plan gives: on each merge to main, the nightly run, a release tag and a dispatch with vscodium.
-    # No variable turns the post-merge run off: it is the proof of what a pull request's narrowed parts left out.
+    # every part vscodium-plan gives with no containers launch: on each merge to main, the nightly run, a release tag and
+    # a dispatch with vscodium. No variable turns the post-merge run off: it is the proof of what a pull request's
+    # narrowed parts left out.
     if: >-
       !cancelled() && needs.vscodium-plan.result == 'success' && needs.vscodium-plan.outputs.parts != '[]' &&
       (inputs.vscodium || github.event_name == 'schedule' || github.event_name == 'push')
     # Each part is a job on a runner of its own, all at once as runners come free. A launch longer than fifteen
     # minutes runs as parts by its test files, never inside one (tools/acceptance-parts.ts), so no part comes near the
-    # job's limit; each runner has its own Docker daemon, so the containers parts never wait for each other's lock. The
-    # genuine group has its own job.
+    # job's limit. The genuine group has its own job.
     strategy:
       fail-fast: false
       matrix:
@@ -425,18 +428,16 @@ jobs:
     concurrency:
       group: ${{ github.event_name == 'schedule' && format('acceptance-vscodium-nightly-{0}', github.sha) || (github.event_name == 'push' && format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}-${{ matrix.part.name }}
       cancel-in-progress: false
-    # GitHub's runners and the organisation's pool share the parts: with the repository variable CI_POOL_RUNS_ON set (a
-    # pool label; the part also asks for X64 and ephemeral, a fresh machine per job), a part with no containers launch
-    # runs on the pool, and the containers parts stay on GitHub's runners, whose Docker their rows were measured on.
-    # Unset, every part runs on ubuntu-24.04.
+    # on the organisation's pool when the repository variable CI_POOL_RUNS_ON names its label (with X64 and ephemeral,
+    # a fresh machine per job); unset, on ubuntu-24.04
     runs-on: >-
       ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' ||
-      (vars.CI_POOL_RUNS_ON && !contains(matrix.part.launches, 'containers') &&
+      (vars.CI_POOL_RUNS_ON &&
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON))) || 'ubuntu-24.04' }}
     # the part's own limit: twice its measured minutes and ten more, at least thirty (tools/acceptance-parts.ts)
     timeout-minutes: ${{ matrix.part.minutes }}
-    steps:
+    steps: &vscodium-steps
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -465,6 +466,28 @@ jobs:
           LAUNCHES: ${{ matrix.part.launches }}
       - if: always()
         run: pnpm acceptance:clean
+
+  # The parts with a containers launch, on GitHub's runners, at most eight at once: a merge's 33 such parts would
+  # otherwise take all of the organisation's 20 and hold the pull requests' own legs, genuine and ci-gate behind them.
+  # They run on the pool, as ruling-2257-main-on-pool allows, once the pool's image matches GitHub's runners and both
+  # run Docker on the containerd store (tooling-144); the same steps, groups and limits as acceptance-vscodium.
+  acceptance-vscodium-containers:
+    name: acceptance (vscodium, ${{ matrix.part.name }})
+    needs: vscodium-plan
+    if: >-
+      !cancelled() && needs.vscodium-plan.result == 'success' && needs.vscodium-plan.outputs.containers-parts != '[]' &&
+      (inputs.vscodium || github.event_name == 'schedule' || github.event_name == 'push')
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        part: ${{ fromJSON(needs.vscodium-plan.outputs.containers-parts) }}
+    concurrency:
+      group: ${{ github.event_name == 'schedule' && format('acceptance-vscodium-nightly-{0}', github.sha) || (github.event_name == 'push' && format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}-${{ matrix.part.name }}
+      cancel-in-progress: false
+    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: ${{ matrix.part.minutes }}
+    steps: *vscodium-steps
 
   # The genuine launches: VS Code runs our VSIX with the real dialogs, at the two versions of ADR-0007: the recorded
   # version and the floor, each on its own runner. A launch the table marks `publisherDownloads` takes the server of
@@ -543,6 +566,7 @@ jobs:
       - acceptance-host-variants
       - acceptance-real-server
       - acceptance-vscodium
+      - acceptance-vscodium-containers
       - acceptance-pr
       - acceptance-genuine
     if: always()
@@ -553,7 +577,7 @@ jobs:
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
-          echo "changes vscodium-plan checks unit quality slice-1 server host-variants real-server vscodium pr-launches genuine: $RESULTS"
+          echo "changes vscodium-plan checks unit quality slice-1 server host-variants real-server vscodium vscodium-containers pr-launches genuine: $RESULTS"
       - name: A failed or cancelled job, or a fork's pull request, fails the gate
         if: >-
           contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||

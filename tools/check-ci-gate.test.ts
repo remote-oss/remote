@@ -159,7 +159,7 @@ describe('check-ci-gate', () => {
 
   it('tooling-159: the post-merge run holds when its jobs read no variable, and a variable in either if:, or a missing job, is named', () => {
     function jobs(plan: string, vscodium: string): string {
-      return `jobs:\n  vscodium-plan:\n    if: "${plan}"\n  acceptance-vscodium:\n    if: "${vscodium}"\n`;
+      return `jobs:\n  vscodium-plan:\n    if: "${plan}"\n  acceptance-vscodium:\n    if: "${vscodium}"\n  acceptance-vscodium-containers:\n    if: "${vscodium}"\n`;
     }
     deepStrictEqual(
       [
@@ -182,9 +182,11 @@ describe('check-ci-gate', () => {
         [],
         [
           ".github/workflows/ci.yml: acceptance-vscodium's if: reads a repository variable, which could turn the post-merge run off",
+          ".github/workflows/ci.yml: acceptance-vscodium-containers's if: reads a repository variable, which could turn the post-merge run off",
         ],
         [
           '.github/workflows/ci.yml: no vscodium-plan job, which the post-merge run needs',
+          '.github/workflows/ci.yml: no acceptance-vscodium-containers job, which the post-merge run needs',
         ],
         [],
       ],

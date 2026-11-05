@@ -59,7 +59,11 @@ export function ciGateProblems(text: string): string[] {
 }
 
 /** The jobs of the post-merge run, whose conditions read no repository variable. */
-export const POST_MERGE_JOBS = ['vscodium-plan', 'acceptance-vscodium'];
+export const POST_MERGE_JOBS = [
+  'vscodium-plan',
+  'acceptance-vscodium',
+  'acceptance-vscodium-containers',
+];
 
 /** What is wrong with the post-merge run of the workflow text: a job missing, or a condition that reads a variable. */
 export function postMergeProblems(text: string): string[] {
