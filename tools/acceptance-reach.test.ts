@@ -1,5 +1,5 @@
 /**
- * @fileoverview acceptance-reach: what a change to the launch table or to a suite's own helper reaches.
+ * @fileoverview acceptance-reach: what a change to the launch table, to a suite's own helper or to a package reaches.
  */
 
 import {deepStrictEqual} from 'node:assert';
@@ -13,11 +13,14 @@ import {
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import * as launchTable from './acceptance-launches.ts';
-import type {Launch} from './acceptance-launches.ts';
+import {type Launch, launchesOf} from './acceptance-launches.ts';
 import {
   changedLabels,
   labelsChangedSince,
   measurableEdit,
+  measuredPackages,
+  packageReach,
+  sourceGraph,
   type TableModule,
   testsOfHelper,
   withHelpersAsTests,
@@ -175,14 +178,16 @@ describe('acceptance-reach: the launch table (card tooling-169)', () => {
   });
 });
 
-describe("acceptance-reach: a suite's own helper (card tooling-169)", () => {
-  let root = '';
-  /** Writes `text` at `file` under the fixture root. */
-  function write(file: string, text: string): void {
-    mkdirSync(path.join(root, path.dirname(file)), {recursive: true});
-    writeFileSync(path.join(root, file), text);
-  }
+/** The root of the running row's fixture repository. */
+let root = '';
 
+/** Writes `text` at `file` under the fixture root. */
+function write(file: string, text: string): void {
+  mkdirSync(path.join(root, path.dirname(file)), {recursive: true});
+  writeFileSync(path.join(root, file), text);
+}
+
+describe("acceptance-reach: a suite's own helper (card tooling-169)", () => {
   beforeEach(() => {
     root = mkdtempSync(path.join(tmpdir(), 'reach-'));
     write('tests/acceptance/alpha/support.ts', 'export const one = 1;\n');
@@ -272,6 +277,238 @@ describe("acceptance-reach: a suite's own helper (card tooling-169)", () => {
         'tests/acceptance/windows/renderer.ts',
         'docs/notes.md',
       ],
+    );
+  });
+});
+
+describe('acceptance-reach: what a change to a package reaches (card tooling-169)', () => {
+  const PACKAGE_LAUNCHES: Launch[] = [
+    {label: 'local', runner: 'runner', suite: 'suite-local'},
+    {label: 'alpha-one', kind: 'plain', suite: 'alpha'},
+    {
+      label: 'containers-one',
+      kind: 'plain',
+      suite: 'containers',
+      withExtensions: ['remote-oss.remote-containers'],
+    },
+    {
+      label: 'containers-two',
+      kind: 'plain',
+      suite: 'containers-more',
+      withExtensions: ['remote-oss.remote-containers'],
+    },
+    {
+      label: 'explorer-one',
+      kind: 'plain',
+      suite: 'explorer',
+      withExtensions: ['remote-oss.remote-explorer'],
+    },
+  ];
+  const CONTAINERS = ['containers-one', 'containers-two'];
+  /** Writes a package.json for the package in packages/`name` with these run-time dependencies. */
+  function manifest(name: string, ...dependencies: string[]): void {
+    write(
+      `packages/${name}/package.json`,
+      JSON.stringify({
+        name,
+        dependencies: Object.fromEntries(
+          dependencies.map(dependency => [dependency, 'workspace:*']),
+        ),
+      }),
+    );
+  }
+  /** The reach of each named package of the fixture. */
+  function reachOf(...names: string[]): Array<string[] | undefined> {
+    const graph = sourceGraph(root);
+    if (graph === undefined) {
+      throw new Error('the fixture has no graph');
+    }
+    return names.map(name =>
+      packageReach(graph, `packages/${name}`, PACKAGE_LAUNCHES),
+    );
+  }
+
+  beforeEach(() => {
+    root = mkdtempSync(path.join(tmpdir(), 'package-reach-'));
+    write(
+      'pnpm-workspace.yaml',
+      'packages:\n  - packages/*\n  - tests/acceptance\n',
+    );
+    write(
+      'tests/acceptance/package.json',
+      JSON.stringify({name: 'acceptance'}),
+    );
+    manifest('lib-base');
+    manifest('lib-middle', 'lib-base');
+    manifest('remote-containers', 'lib-middle');
+    manifest('remote-explorer', 'lib-unit');
+    manifest('remote-ssh', 'lib-ssh-side');
+    manifest('lib-ssh-side');
+    manifest('lib-unit');
+    manifest('lib-unused');
+    manifest('lib-tested');
+    manifest('lib-relative');
+    manifest('lib-harness');
+    manifest('lib-tool');
+    manifest('lib-indexed');
+    write(
+      'packages/remote-containers/test/unit/a.test.ts',
+      "import {one} from 'lib-unused';\n",
+    );
+    write('tools/a.test.ts', "import {one} from 'lib-unit';\n");
+    write('tools/run.ts', "import {one} from 'lib-tool';\n");
+    write(
+      'tests/acceptance/alpha/support.ts',
+      "export {one} from 'lib-tested';\n",
+    );
+    write(
+      'tests/acceptance/alpha/mid.ts',
+      "export {one} from './support.ts';\n",
+    );
+    write(
+      'tests/acceptance/alpha/a.test.ts',
+      "import {one} from './support.ts';\nimport {one as two} from './mid.ts';\n",
+    );
+    write(
+      'tests/acceptance/alpha/b.test.ts',
+      "import {one} from '../../../packages/lib-relative/src/one.ts';\n",
+    );
+    write(
+      'tests/acceptance/server/s.test.ts',
+      "import {one} from '../../../packages/remote-containers/src/one.ts';\nimport {two} from 'lib-base';\n",
+    );
+    write(
+      'tests/acceptance/windows/helper.ts',
+      "import {one} from 'lib-harness';\n",
+    );
+    write(
+      'tests/acceptance/alpha/shared/index.ts',
+      "export {one} from 'lib-indexed';\n",
+    );
+    write(
+      'tests/acceptance/alpha/d.test.ts',
+      "import {one} from './shared';\n",
+    );
+  });
+
+  afterEach(() => {
+    rmSync(root, {recursive: true, force: true});
+  });
+
+  it("tooling-169: a library reaches the launches of the extensions that depend on it, through other libraries; the extension's own change the same", () => {
+    deepStrictEqual(reachOf('lib-base', 'lib-middle', 'remote-containers'), [
+      CONTAINERS,
+      CONTAINERS,
+      CONTAINERS,
+    ]);
+  });
+
+  it('tooling-169: a library an extension no launch carries by its id depends on (remote-ssh, in every launch) reaches every launch, and so does that extension', () => {
+    deepStrictEqual(reachOf('lib-ssh-side', 'remote-ssh'), [
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it("tooling-169: a library that a launch's test imports, through a helper of its suite, a folder's index or a path into the package, reaches that launch", () => {
+    deepStrictEqual(reachOf('lib-tested', 'lib-relative', 'lib-indexed'), [
+      ['alpha-one'],
+      ['alpha-one'],
+      ['alpha-one'],
+    ]);
+  });
+
+  it("tooling-169: a test of a folder no launch runs (the server tests, importing the containers package and a library) adds no launch, until a launch's test imports it", () => {
+    const alone = reachOf('lib-base', 'remote-containers');
+    write(
+      'tests/acceptance/alpha/c.test.ts',
+      "import '../server/s.test.ts';\n",
+    );
+    deepStrictEqual(
+      [alone, reachOf('lib-base')],
+      [[CONTAINERS, CONTAINERS], [['alpha-one', ...CONTAINERS]]],
+    );
+  });
+
+  it('tooling-169: a library that only unit tests use reaches every launch, since the imports show no launch, as does one that nothing uses; a unit test adds nothing', () => {
+    deepStrictEqual(reachOf('lib-unused', 'lib-unit'), [
+      undefined,
+      ['explorer-one'],
+    ]);
+  });
+
+  it('tooling-169: a library that a source no test imports (the windows harness) or a tool imports reaches every launch, and so does one whose helper a tool imports', () => {
+    const alone = reachOf('lib-harness', 'lib-tool');
+    write(
+      'tools/uses-helper.ts',
+      "import {one} from '../tests/acceptance/alpha/support.ts';\n",
+    );
+    deepStrictEqual(
+      [alone, reachOf('lib-tested')],
+      [[undefined, undefined], [undefined]],
+    );
+  });
+
+  it('tooling-169: an import of the acceptance package by its name, or a workspace of other folders, leaves no measure', () => {
+    write(
+      'tools/by-name.ts',
+      "import {one} from 'acceptance/alpha/support.ts';\n",
+    );
+    const byName = reachOf('lib-tested');
+    write('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
+    deepStrictEqual([byName, sourceGraph(root)], [[undefined], undefined]);
+  });
+
+  it('tooling-169: in the repository, lib-wsl and remote-containers reach the launches that install Dev Containers, and lib-host every launch', () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    const graph = sourceGraph(REPOSITORY_ROOT);
+    if (graph === undefined) {
+      throw new Error('the repository has no graph');
+    }
+    const containers = launches
+      .filter(
+        launch =>
+          launch.kind === 'plain' &&
+          (launch.withExtensions ?? []).includes(
+            'remote-oss.remote-containers',
+          ),
+      )
+      .map(launch => launch.label);
+    deepStrictEqual(
+      ['lib-wsl', 'remote-containers', 'lib-host'].map(name =>
+        packageReach(graph, `packages/${name}`, launches),
+      ),
+      [containers, containers, undefined],
+    );
+  });
+
+  it("tooling-169: no source the graph holds (none but unit tests and the selection itself is left out) imports the selection's own modules, so they reach no launch", () => {
+    const graph = sourceGraph(REPOSITORY_ROOT);
+    deepStrictEqual(
+      ['tools/acceptance-select', 'tools/acceptance-reach'].map(module => [
+        ...(graph?.importers.get(module) ?? []),
+      ]),
+      [[], []],
+    );
+  });
+
+  it('tooling-169: the changed paths of a package are measured unless they are its unit tests, and a package that reaches every launch is not measured', () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    deepStrictEqual(
+      [
+        ...measuredPackages(
+          [
+            'packages/lib-wsl/src/wsl.ts',
+            'packages/lib-wsl/src/path.ts',
+            'packages/lib-wsl/test/unit/wsl.test.ts',
+            'packages/lib-host/src/host.ts',
+            'docs/notes.md',
+          ],
+          launches,
+          REPOSITORY_ROOT,
+        ).keys(),
+      ],
+      ['packages/lib-wsl/src/wsl.ts', 'packages/lib-wsl/src/path.ts'],
     );
   });
 });
