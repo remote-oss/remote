@@ -335,6 +335,7 @@ describe('Remote - SSH, activated in the editor', () => {
             editor?.document.getText(),
             selectionOf(editor),
           ]);
+          await settle(200);
           await vscode.commands.executeCommand('type', {text: '\t'});
           await settle(200);
           measured.push(selectionOf(editor));
