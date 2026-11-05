@@ -3,7 +3,9 @@
  * listener's greeting, and the programs that open the connections to a port of the host.
  */
 
+import {execFile} from 'node:child_process';
 import {connect} from 'node:net';
+import {promisify} from 'node:util';
 import {
   type ForwardedTunnel,
   inWindow,
@@ -12,6 +14,8 @@ import {
   waitFor,
 } from './harness.ts';
 import {answerInputBox} from './renderer.ts';
+
+const execFileAsync = promisify(execFile);
 
 /** The command that shows core's Ports view. */
 const FOCUS_PORTS = '~remote.forwardedPorts.focus';
@@ -48,6 +52,18 @@ export function holdOpen(port: number): Promise<Held> {
     });
     socket.on('error', reject);
   });
+}
+
+/** The lines of this machine's listening sockets that name `port`, with their processes. */
+export async function listenersOf(port: number): Promise<string> {
+  const listing = await execFileAsync('ss', ['-ltnp']).then(
+    ({stdout}) => stdout,
+    (caught: unknown) => String(caught),
+  );
+  return listing
+    .split('\n')
+    .filter(line => line.includes(`:${String(port)} `))
+    .join(' | ');
 }
 
 /** The program column of each host connection to the listener's port, from the side that opened it. */

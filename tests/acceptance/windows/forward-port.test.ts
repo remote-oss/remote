@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {holdOpen, connectingPrograms} from './forward-support.ts';
+import {connectingPrograms, holdOpen, listenersOf} from './forward-support.ts';
 import {inWindow, onHost, openWindow, windowEvents} from './harness.ts';
 
 /** The port on the host that the listener answers on. */
@@ -54,10 +54,15 @@ describe('a port forwarded in a connected window (card connect-34)', function ()
     const port = localPortOf('f1');
     const held = await holdOpen(port);
     held.release();
+    // What listens on the port on each side, said only when the greeting is not the listener's.
+    const listeners =
+      held.greeting === GREETING
+        ? ''
+        : `; here: ${await listenersOf(port)}; on the host: ${await onHost('sh', '-c', `(ss -ltnp || netstat -ltnp) 2>&1 | grep ':${String(REMOTE_PORT)} ' || true`)}`;
     deepStrictEqual(
       held.greeting,
       GREETING,
-      `the forward's local port was ${String(port)}`,
+      `the forward's local port was ${String(port)}${listeners}`,
     );
   });
 
