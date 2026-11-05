@@ -886,6 +886,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'windows',
       kind: 'plain',
       suite: 'windows',
+      files: ['kill.test.ts', 'uninstall.test.ts'],
       environment: {REMOTE_OSS_SENTINEL: 'sent1nel-<run>'},
     },
     // Terminal mode with the login terminal shown and the extension's own prompts (no script), read through the renderer.
