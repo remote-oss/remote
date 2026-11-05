@@ -112,7 +112,11 @@ function tilde(file: string): string {
 }
 
 /** The label `label` of the first container the engine made for `folder`. */
-async function labelOf(folder: string, label: string): Promise<string> {
+async function labelOf(
+  folder: string,
+  label: string,
+  window = '',
+): Promise<string> {
   const {stdout: containerIds} = await execFileAsync('docker', [
     'ps',
     '--all',
@@ -122,6 +126,8 @@ async function labelOf(folder: string, label: string): Promise<string> {
   ]);
   const [container = ''] = containerIds.split('\n');
   if (container === '') {
+    const stateThen =
+      window === '' ? null : await windowState(window).catch(() => 'no state');
     const began = Date.now();
     let appeared = '';
     while (appeared === '' && Date.now() - began < 90_000) {
@@ -142,7 +148,7 @@ async function labelOf(folder: string, label: string): Promise<string> {
       '{{.ID}} {{.Names}} {{.Image}} {{.Status}} {{.Labels}}',
     ]);
     throw new Error(
-      `NO CONTAINER FOR ${folder}; after ${String(Date.now() - began)} ms: ${appeared === '' ? 'still none' : `appeared ${appeared}`}; docker ps -a: ${all}\nLOG: ${JSON.stringify(containersLog().slice(-60))}`,
+      `STATE-AT-CHECK ${JSON.stringify(stateThen)}\nNO CONTAINER FOR ${folder}; after ${String(Date.now() - began)} ms: ${appeared === '' ? 'still none' : `appeared ${appeared}`}; docker ps -a: ${all}\nLOG: ${JSON.stringify(containersLog().slice(-60))}`,
     );
   }
   const {stdout} = await execFileAsync('docker', [
@@ -251,8 +257,8 @@ describe('configurations outside the repository (card containers-161, F-0302)', 
         title: (await windowTitle(window)).includes(
           `[Dev Container: X-${name}]`,
         ),
-        configFile: await labelOf(folder, 'devcontainer.config_file'),
-        localFolder: await labelOf(folder, 'devcontainer.local_folder'),
+        configFile: await labelOf(folder, 'devcontainer.config_file', window),
+        localFolder: await labelOf(folder, 'devcontainer.local_folder', window),
         seed: await textInContainer(folder, '/seed.txt'),
         mounts: await bindMountsOf(folder),
         pick: await quickPickFacts(window),
@@ -312,8 +318,8 @@ describe('configurations outside the repository (card containers-161, F-0302)', 
         title: (await windowTitle(window)).includes(
           `[Dev Container: X-${name}]`,
         ),
-        configFile: await labelOf(folder, 'devcontainer.config_file'),
-        localFolder: await labelOf(folder, 'devcontainer.local_folder'),
+        configFile: await labelOf(folder, 'devcontainer.config_file', window),
+        localFolder: await labelOf(folder, 'devcontainer.local_folder', window),
         seed: await textInContainer(folder, '/seed.txt'),
         mounts: await bindMountsOf(folder),
         pick: await quickPickFacts(window),
@@ -373,8 +379,8 @@ describe('configurations outside the repository (card containers-161, F-0302)', 
         title: (await windowTitle(window)).includes(
           `[Dev Container: X-${name}]`,
         ),
-        configFile: await labelOf(folder, 'devcontainer.config_file'),
-        localFolder: await labelOf(folder, 'devcontainer.local_folder'),
+        configFile: await labelOf(folder, 'devcontainer.config_file', window),
+        localFolder: await labelOf(folder, 'devcontainer.local_folder', window),
         seed: await textInContainer(folder, '/seed.txt'),
         mounts: await bindMountsOf(folder),
         pick: await quickPickFacts(window),
@@ -434,8 +440,8 @@ describe('configurations outside the repository (card containers-161, F-0302)', 
         title: (await windowTitle(window)).includes(
           `[Dev Container: X-${name}]`,
         ),
-        configFile: await labelOf(folder, 'devcontainer.config_file'),
-        localFolder: await labelOf(folder, 'devcontainer.local_folder'),
+        configFile: await labelOf(folder, 'devcontainer.config_file', window),
+        localFolder: await labelOf(folder, 'devcontainer.local_folder', window),
         seed: await textInContainer(folder, '/seed.txt'),
         mounts: await bindMountsOf(folder),
         pick: await quickPickFacts(window),
@@ -495,8 +501,8 @@ describe('configurations outside the repository (card containers-161, F-0302)', 
         title: (await windowTitle(window)).includes(
           `[Dev Container: X-${name}]`,
         ),
-        configFile: await labelOf(folder, 'devcontainer.config_file'),
-        localFolder: await labelOf(folder, 'devcontainer.local_folder'),
+        configFile: await labelOf(folder, 'devcontainer.config_file', window),
+        localFolder: await labelOf(folder, 'devcontainer.local_folder', window),
         seed: await textInContainer(folder, '/seed.txt'),
         mounts: await bindMountsOf(folder),
         pick: await quickPickFacts(window),
@@ -556,8 +562,8 @@ describe('configurations outside the repository (card containers-161, F-0302)', 
         title: (await windowTitle(window)).includes(
           `[Dev Container: X-${name}]`,
         ),
-        configFile: await labelOf(folder, 'devcontainer.config_file'),
-        localFolder: await labelOf(folder, 'devcontainer.local_folder'),
+        configFile: await labelOf(folder, 'devcontainer.config_file', window),
+        localFolder: await labelOf(folder, 'devcontainer.local_folder', window),
         seed: await textInContainer(folder, '/seed.txt'),
         mounts: await bindMountsOf(folder),
         pick: await quickPickFacts(window),
