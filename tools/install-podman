@@ -83,21 +83,16 @@ if ! out=$(podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDrive
 fi
 podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}'
 podman info --format '{{.Host.OCIRuntime.Path}}'
-# debug (hosted only): which exec forms return on this runner
+# debug (hosted only): where does an exec of this podman wait
 set +e
 podman run -d --name dbg docker.io/library/alpine:3.20 sleep 600
-echo "--- config"; podman info --format 'logger={{.Host.EventLogger}}'; grep -rn 'tmp_dir\|events_logger' /etc/containers /usr/local/etc/containers ~/.config/containers 2>/dev/null
-echo "--- events file"; timeout 20 podman --events-backend=file exec dbg true; echo "events=file rc=$?"
-echo "--- events none"; timeout 20 podman --events-backend=none exec dbg true; echo "events=none rc=$?"
-touch /tmp/marker-exit
-echo "--- true"; timeout 20 podman exec dbg true; echo "true rc=$?"
-echo "--- echo"; timeout 20 podman exec dbg echo hi; echo "echo rc=$?"
-echo "--- stdin devnull"; timeout 20 podman exec -i dbg true </dev/null; echo "devnull rc=$?"
-echo "--- tty"; timeout 20 podman exec -t dbg true; echo "tty rc=$?"
-echo "--- exits dir"; ls -la /run/user/"$(id -u)"/libpod/tmp/exits /run/user/"$(id -u)"/libpod/tmp 2>&1 | head -20
-echo "--- hang with a listing"; (timeout 12 podman exec dbg true) & sleep 6; find /run/user/"$(id -u)"/containers /run/user/"$(id -u)"/libpod -maxdepth 4 2>&1 | head -40; ps -eo pid,ppid,stat,wchan:20,args | grep -E "conmon|podman|crun|sleep" | grep -v grep | head; wait
-echo "--- exit files"; find /run/user/"$(id -u)" -name "exit*" -newer /tmp/marker-exit 2>&1 | head -20
-echo "--- run exec"; timeout 20 podman run --rm docker.io/library/alpine:3.20 true; echo "run rc=$?"
-podman rm -f dbg
+echo "--- host"; uname -r; cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns; cat /proc/sys/kernel/yama/ptrace_scope 2>&1
+echo "--- apparmor"; sudo aa-status 2>&1 | head -12
+sudo apt-get install -y -qq strace >/dev/null 2>&1; command -v strace
+echo "--- strace exec"; timeout 25 strace -f -tt -s 80 -o /tmp/st.txt timeout 12 podman exec dbg true; echo "strace rc=$?"
+wc -l /tmp/st.txt; grep -n "exec\|conmon\|crun" /tmp/st.txt | grep -E "execve|clone|exit_group|kill|SIGCHLD" | head -30
+echo "--- tail of the podman process"; tail -40 /tmp/st.txt | cut -c1-220
+echo "--- dmesg"; sudo dmesg 2>&1 | grep -iE "apparmor|denied|audit|seccomp" | tail -15
+echo "--- cleanup"; podman rm -f dbg
 set -e
 exit 1 # debug (hosted only): end the job here, so that the probe's lines can be read
