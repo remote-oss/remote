@@ -45,7 +45,7 @@ describe('acceptance-parts (card tooling-159)', () => {
     deepStrictEqual([0, 9, 10, 14.2, 49.2].map(limitOf), [30, 30, 30, 39, 109]);
   });
 
-  it('tooling-159: a launch over the target is split by its files, the longest first into the emptiest bin, its unmeasured files in an entry of their own; the entries are packed first-fit, group by group, and genuine is left out', () => {
+  it('tooling-159: a launch over the target runs as its files in their order, cut at the target, an unmeasured file counted at its default; the entries are cut into parts in the table order, group by group, and genuine is left out', () => {
     const table: PartsTable = {
       targetMinutes: 15,
       minutes: {
@@ -63,17 +63,21 @@ describe('acceptance-parts (card tooling-159)', () => {
     deepStrictEqual(partsOfTable(LAUNCHES, table, suiteFiles), [
       {
         name: 'ssh 1/4',
-        launches: 'long:l1.test.ts,long:new.test.ts',
-        minutes: limitOf(12 + UNMEASURED_FILE_MINUTES),
+        launches: 'local,second',
+        minutes: limitOf(9 + UNMEASURED_LAUNCH_MINUTES),
+      },
+      {name: 'ssh 2/4', launches: 'long:l1.test.ts', minutes: limitOf(12)},
+      {
+        name: 'ssh 3/4',
+        launches: 'long:l2.test.ts+l3.test.ts',
+        minutes: limitOf(15),
       },
       {
-        name: 'ssh 2/4',
-        launches: 'second,long:l2.test.ts',
-        minutes: limitOf(UNMEASURED_LAUNCH_MINUTES + 10),
+        name: 'ssh 4/4',
+        launches: 'long:l4.test.ts+new.test.ts',
+        minutes: limitOf(4 + UNMEASURED_FILE_MINUTES),
       },
-      {name: 'ssh 3/4', launches: 'local', minutes: 30},
-      {name: 'ssh 4/4', launches: 'long:l3.test.ts+l4.test.ts', minutes: 30},
-      {name: 'containers 1/1', launches: 'boxes', minutes: 50},
+      {name: 'containers 1/1', launches: 'boxes', minutes: limitOf(20)},
     ]);
   });
 
@@ -89,16 +93,39 @@ describe('acceptance-parts (card tooling-159)', () => {
     deepStrictEqual(partsOfTable(LAUNCHES, table, suiteFiles), [
       {
         name: 'ssh 1/2',
-        launches: 'long',
-        minutes: limitOf(2 + 4 * UNMEASURED_FILE_MINUTES),
-      },
-      {
-        name: 'ssh 2/2',
         launches: 'local,second',
         minutes: limitOf(5 + UNMEASURED_LAUNCH_MINUTES),
       },
+      {
+        name: 'ssh 2/2',
+        launches: 'long',
+        minutes: limitOf(2 + 4 * UNMEASURED_FILE_MINUTES),
+      },
       {name: 'containers 1/1', launches: 'boxes', minutes: 30},
     ]);
+  });
+
+  it('tooling-159: launches the table keeps together share a part past the target, and the next one starts a part of its own', () => {
+    const launches: Launch[] = [
+      {label: 'pin-one', runner: 'runner', suite: 'suite-one'},
+      {label: 'pin-two', runner: 'runner', suite: 'suite-two'},
+      {label: 'loose', runner: 'runner', suite: 'suite-three'},
+    ];
+    deepStrictEqual(
+      partsOfTable(
+        launches,
+        {
+          targetMinutes: 15,
+          together: [['pin-one', 'pin-two']],
+          minutes: {'pin-one': 10, 'pin-two': 10, loose: 2},
+        },
+        suiteFiles,
+      ),
+      [
+        {name: 'ssh 1/2', launches: 'pin-one,pin-two', minutes: limitOf(20)},
+        {name: 'ssh 2/2', launches: 'loose', minutes: limitOf(2)},
+      ],
+    );
   });
 
   it('tooling-159: the host cases run in one part in the table order, past the target, and a launch of the CLI-source editor is left out', () => {

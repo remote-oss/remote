@@ -1,7 +1,9 @@
 /**
  * @fileoverview acceptance-parts: the parts every VSCodium run is made of, each about fifteen minutes of rows, from the
  * measured minutes in acceptance-parts.json. A launch longer than that is split by its test files, never inside one; the
- * rest are packed whole. The same table always gives the same parts.
+ * rest are packed whole. Everything keeps the table's order, launches and files alike, so a launch or a file still runs
+ * after the one before it unless a part ends between them; the launches the table keeps together never part. The
+ * same table always gives the same parts.
  *
  *     node tools/acceptance-parts.ts --matrix              every part, as the VSCodium job's matrix takes them
  *     node tools/acceptance-parts.ts --refresh <log>...    the table again from runs' job logs
@@ -12,6 +14,7 @@
 
 import {readdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
+import {format, resolveConfig} from 'prettier';
 import {type Launch, launchesOf, launchGroupOf} from './acceptance-launches.ts';
 import {isMainModule, REPOSITORY_ROOT} from './repository.ts';
 
@@ -28,6 +31,8 @@ export interface PartsTable {
   targetMinutes: number;
   /** Per launch label, its minutes, or per test file of it, the file's minutes. */
   minutes: Record<string, number | Record<string, number>>;
+  /** Launches that run in one part, in the table's order: each needs what the one before it leaves on the host. */
+  together?: string[][];
 }
 
 /** One job of a VSCodium run. */
@@ -46,46 +51,51 @@ export const UNMEASURED_LAUNCH_MINUTES = 5;
 /** The minutes each test file the table has not measured is counted as, in the part those files get. */
 export const UNMEASURED_FILE_MINUTES = 3;
 
-/** One entry of a part: a whole launch, or some files of one, with their minutes. */
-interface Entry {
-  entry: string;
-  group: string;
-  minutes: number;
-}
-
 /** The time limit of a part of `minutes` measured minutes. */
 export function limitOf(minutes: number): number {
   return Math.max(30, Math.ceil(minutes * 2 + 10));
 }
 
-/**
- * `items` packed into `count` buckets, the longest first, each into the bucket with the fewest minutes so far (the first such
- * bucket on a tie); every bucket keeps its items in their order in `items`.
- */
-function spread<Item>(
-  items: readonly Item[],
-  minutesOf: (item: Item) => number,
-  count: number,
-): Item[][] {
-  const buckets: Array<{total: number; members: Item[]}> = [
-    ...Array(count).keys(),
-  ].map(() => ({total: 0, members: []}));
-  const longestFirst = [...items].sort(
-    (left, right) => minutesOf(right) - minutesOf(left),
-  );
-  for (const item of longestFirst) {
-    const emptiest = buckets.reduce((best, bucket) =>
-      bucket.total < best.total ? bucket : best,
-    );
-    emptiest.total += minutesOf(item);
-    emptiest.members.push(item);
-  }
-  return buckets
-    .map(bucket => items.filter(item => bucket.members.includes(item)))
-    .filter(members => members.length > 0);
+/** One entry of a part, in the table's order: a whole launch, or some files of one, with their minutes. */
+interface Entry {
+  entry: string;
+  label: string;
+  group: string;
+  minutes: number;
 }
 
-/** The entries of one launch: the whole launch, or its measured files in buckets of the target and its unmeasured ones. */
+/**
+ * `items` in their order, cut into runs of at most `limit` minutes, an item over it alone in its run; `keepWith` says
+ * when an item must stay in the run of the one before it.
+ */
+function runsOf<Item>(
+  items: readonly Item[],
+  minutesOf: (item: Item) => number,
+  limit: number,
+  keepWith: (item: Item, before: Item) => boolean = () => false,
+): Array<{total: number; members: Item[]}> {
+  const runs: Array<{total: number; members: Item[]}> = [];
+  for (const item of items) {
+    const current = runs.at(-1);
+    const before = current?.members.at(-1);
+    if (
+      current !== undefined &&
+      before !== undefined &&
+      (current.total + minutesOf(item) <= limit || keepWith(item, before))
+    ) {
+      current.total += minutesOf(item);
+      current.members.push(item);
+    } else {
+      runs.push({total: minutesOf(item), members: [item]});
+    }
+  }
+  return runs;
+}
+
+/**
+ * The entries of one launch: the whole launch, or its test files in their order cut into runs of the target, a file
+ * the table has not measured counted as `UNMEASURED_FILE_MINUTES`.
+ */
 function entriesOf(
   launch: Launch,
   table: PartsTable,
@@ -97,6 +107,7 @@ function entriesOf(
     return [
       {
         entry: launch.label,
+        label: launch.label,
         group,
         minutes:
           typeof measured === 'object'
@@ -105,47 +116,30 @@ function entriesOf(
       },
     ];
   }
-  const files = launch.files ?? suiteFiles(launch.suite);
   const fileMinutes: Readonly<Record<string, number>> = measured;
-  const known = files.filter(file => fileMinutes[file] !== undefined);
-  const unknown = files.filter(file => fileMinutes[file] === undefined);
   function minutesOfFile(file: string): number {
-    return fileMinutes[file] ?? 0;
+    return fileMinutes[file] ?? UNMEASURED_FILE_MINUTES;
   }
-  const total = known.reduce(
-    (running, file) => running + minutesOfFile(file),
-    0,
-  );
-  if (total + unknown.length * UNMEASURED_FILE_MINUTES <= table.targetMinutes) {
-    return [
-      {
-        entry: launch.label,
-        group,
-        minutes: total + unknown.length * UNMEASURED_FILE_MINUTES,
-      },
-    ];
-  }
-  const buckets = spread(
-    known,
+  const runs = runsOf(
+    launch.files ?? suiteFiles(launch.suite),
     minutesOfFile,
-    Math.max(1, Math.ceil(total / table.targetMinutes)),
+    table.targetMinutes,
   );
-  return [
-    ...buckets.map(bucket => ({
-      entry: `${launch.label}:${bucket.join('+')}`,
-      group,
-      minutes: bucket.reduce((total, file) => total + minutesOfFile(file), 0),
-    })),
-    ...(unknown.length === 0
-      ? []
-      : [
-          {
-            entry: `${launch.label}:${unknown.join('+')}`,
-            group,
-            minutes: unknown.length * UNMEASURED_FILE_MINUTES,
-          },
-        ]),
-  ];
+  return runs.length === 1
+    ? [
+        {
+          entry: launch.label,
+          label: launch.label,
+          group,
+          minutes: runs[0]?.total ?? 0,
+        },
+      ]
+    : runs.map(stretch => ({
+        entry: `${launch.label}:${stretch.members.join('+')}`,
+        label: launch.label,
+        group,
+        minutes: stretch.total,
+      }));
 }
 
 /** The groups whose launches run in one part, in the table's order: the host cases, each of which can need the ones before it. */
@@ -163,9 +157,10 @@ function leftOut(launch: Launch): boolean {
 }
 
 /**
- * Every part of a VSCodium run, group by group in the table's order: each group's entries packed first-fit, the longest
- * first, into parts of at most the target, an entry over the target alone in its part; an ordered group's launches all
- * in one part. Named-only launches are in, as their group's selection makes them, unless the parts leave them out.
+ * Every part of a VSCodium run, group by group in the table's order: each group's entries in their order, cut into parts
+ * of at most the target, an entry over it alone in its part; an ordered group's launches all in one part, and the
+ * launches the table keeps together in the same part. Named-only launches are in, as their group's selection makes them,
+ * unless the parts leave them out.
  */
 export function partsOfTable(
   launches: readonly Launch[],
@@ -176,37 +171,25 @@ export function partsOfTable(
     .filter(launch => !leftOut(launch))
     .flatMap(launch => entriesOf(launch, table, suiteFiles));
   const groups = [...new Set(entries.map(entry => entry.group))];
+  const together = table.together ?? [];
   return groups.flatMap(group => {
-    const packed: Array<{total: number; members: Entry[]}> = [];
     const ofGroup = entries.filter(entry => entry.group === group);
     const ordered = ORDERED_GROUPS.includes(group);
-    if (ordered) {
-      packed.push({
-        total: ofGroup.reduce((total, entry) => total + entry.minutes, 0),
-        members: ofGroup,
-      });
-    }
-    const longestFirst = ordered
-      ? []
-      : [...ofGroup].sort((left, right) => right.minutes - left.minutes);
-    for (const entry of longestFirst) {
-      const room = packed.find(
-        part => part.total + entry.minutes <= table.targetMinutes,
-      );
-      if (room === undefined) {
-        packed.push({total: entry.minutes, members: [entry]});
-      } else {
-        room.total += entry.minutes;
-        room.members.push(entry);
-      }
-    }
-    return packed.map((part, index) => ({
-      name: `${group} ${String(index + 1)}/${String(packed.length)}`,
-      launches: ofGroup
-        .filter(entry => part.members.includes(entry))
-        .map(entry => entry.entry)
-        .join(','),
-      minutes: limitOf(part.total),
+    const runs = runsOf(
+      ofGroup,
+      entry => entry.minutes,
+      table.targetMinutes,
+      (entry, before) =>
+        ordered ||
+        together.some(
+          labels =>
+            labels.includes(entry.label) && labels.includes(before.label),
+        ),
+    );
+    return runs.map((stretch, index) => ({
+      name: `${group} ${String(index + 1)}/${String(runs.length)}`,
+      launches: stretch.members.map(entry => entry.entry).join(','),
+      minutes: limitOf(stretch.total),
     }));
   });
 }
@@ -272,7 +255,7 @@ export function refreshedTable(
       }
     }
   }
-  return {targetMinutes: table.targetMinutes, minutes};
+  return {...table, minutes};
 }
 
 const USAGE =
@@ -299,7 +282,13 @@ if (isMainModule(import.meta.url)) {
       table,
       commandArguments.slice(1).map(file => readFileSync(file, 'utf8')),
     );
-    writeFileSync(PARTS_TABLE, `${JSON.stringify(refreshed, null, 2)}\n`);
+    writeFileSync(
+      PARTS_TABLE,
+      await format(JSON.stringify(refreshed), {
+        ...(await resolveConfig(PARTS_TABLE)),
+        filepath: PARTS_TABLE,
+      }),
+    );
   } else {
     console.error(USAGE);
     process.exitCode = 2;

@@ -93,7 +93,7 @@ jobs:
         run: pnpm acceptance:clean
 
   # the parts with a containers launch, on GitHub's ubuntu-24.04, at most eight at once, so that one pull request's
-  # parts leave room on the organisation's 20 runners for the others' legs, genuine and ci-gate
+  # parts keep some of the organisation's 20 runners free for the others' legs, genuine and ci-gate
   run-containers:
     name: acceptance (vscodium, ${{ matrix.part.name }})
     needs: select
