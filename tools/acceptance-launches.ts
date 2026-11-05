@@ -1266,6 +1266,7 @@ export function launchesOf(root: string): Launch[] {
       ...CONTAINERS_LAUNCH,
       label: 'containers-ports',
       suite: 'containers-ports',
+      files: ['attributes.test.ts'],
       registry: true,
       // A recording xdg-open the rows write into the run's folder comes first on the editor's PATH, so that opening a
       // port in the browser opens nothing on the machine.
