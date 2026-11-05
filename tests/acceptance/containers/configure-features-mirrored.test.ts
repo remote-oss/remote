@@ -15,6 +15,7 @@ import {
 } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {redact} from 'lib-log';
 import {
   closeWindow,
   containersLog,
@@ -44,6 +45,14 @@ const SETTING = 'dev.containers.repositoryConfigurationPaths';
 const PLAIN = 'Lab Plain';
 const CONFIGURATION_PLACEHOLDER = 'Select a devcontainer.json file.';
 const MAIN = '.devcontainer/devcontainer.json';
+
+/**
+ * `text` as the log has it: the logger masks a run of 32 or more word characters, which a CI run's folder name is
+ * (`acceptance-<run>-<attempt>-<job>-<suffix>`), so a path under it is logged with that folder as `[redacted]`.
+ */
+function logged(text: string): string {
+  return redact(text, []);
+}
 
 /** The run's folder `label`, made empty. */
 function freshFolder(label: string): string {
@@ -306,7 +315,7 @@ describe('Configure Container Features on a configuration outside the repository
           [missing, root].map(each =>
             lines.some(line =>
               line.endsWith(
-                `looking for a configuration in ${path.join(each, 'github.com', 'o', name)}`,
+                `looking for a configuration in ${logged(path.join(each, 'github.com', 'o', name))}`,
               ),
             ),
           ),
@@ -315,7 +324,6 @@ describe('Configure Container Features on a configuration outside the repository
             .some(line => line.includes('does not exist')),
         ],
         [true, [true, true], false],
-        `the log after the mark:\n${containersLog().slice(mark).join('\n')}`,
       );
     } finally {
       await closeWindow(window).catch(() => undefined);
