@@ -5,7 +5,15 @@
  */
 
 /** The version of the definition; a new version has its own folder, so an edit of an older one stays. */
-const EXPLORE_DEFINITION_VERSION = '1';
+const EXPLORE_DEFINITION_VERSION = '2';
+
+/**
+ * The base of the definition: the devcontainers base-alpine image at release v0.4.17 on Alpine 3.20, pinned by
+ * digest, whatever the registry's tags say later. Its own label brings the git Feature and common-utils, which
+ * installs the libraries the server's `node` needs.
+ */
+export const EXPLORE_BASE_IMAGE =
+  'mcr.microsoft.com/devcontainers/base:0.210.5-alpine3.20@sha256:f1cb8e3d768ee56f9101c8782aac43305d48d4367555cb4c0ebb5a62830feae4';
 
 /** The variable that carries the volume's name to the CLI for one run; the definition reads it and names no volume. */
 export const EXPLORE_VOLUME_VARIABLE = 'REMOTE_OSS_INSPECT_VOLUME';
@@ -13,12 +21,12 @@ export const EXPLORE_VOLUME_VARIABLE = 'REMOTE_OSS_INSPECT_VOLUME';
 /** The workspace mount of the definition: the volume at `/volume`. */
 export const EXPLORE_WORKSPACE_MOUNT = `source=\${localEnv:${EXPLORE_VOLUME_VARIABLE}},target=/volume,type=volume`;
 
-/** The text of the definition: Alpine, as root, with the volume at `/volume` and no Docker socket. */
+/** The text of the definition: the pinned base-alpine image, as root, with the volume at `/volume` and no Docker socket. */
 export function exploreDefinitionText(): string {
   return `${JSON.stringify(
     {
       name: 'Inspect Volume',
-      image: 'alpine:3.20',
+      image: EXPLORE_BASE_IMAGE,
       remoteUser: 'root',
       workspaceMount: EXPLORE_WORKSPACE_MOUNT,
       workspaceFolder: '/volume',
