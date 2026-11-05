@@ -4,6 +4,7 @@ import {
   inWindow,
   onHost,
   terminalNames,
+  waitFor,
 } from '../windows/harness.ts';
 import {printedAfter, windowWithTerminal} from '../windows/terminal-support.ts';
 
@@ -78,6 +79,15 @@ describe('the terminal in an SSH window (card coverage-80)', function () {
           'basename "$(getent passwd harness | cut -d: -f7)"',
         )
       ).trim();
+      // A tab is named a moment after it opens: the names are read once both have one.
+      await waitFor(
+        'both terminal tabs to be named',
+        async () => {
+          const names = await terminalNames('c80-second');
+          return names.length === 2 && names.every(name => name !== '');
+        },
+        30_000,
+      );
       deepStrictEqual(
         [
           await terminalNames('c80-second'),
