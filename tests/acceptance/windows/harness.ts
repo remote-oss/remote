@@ -1993,6 +1993,26 @@ export function hostAliases(): string[] {
     .filter(word => !/[*?!]/.test(word));
 }
 
+/** The windows that are open now, by name. */
+export function openWindowNames(): string[] {
+  return windowNames().filter(isOpen);
+}
+
+/**
+ * Closes every window that is open now and isn't in `kept`, as {@link closeContained} does, so a row that failed
+ * before closing its own windows leaves none behind for the rows after it.
+ */
+export async function closeWindowsBut(
+  kept: readonly string[],
+  dismiss: (window: string) => Promise<void>,
+): Promise<void> {
+  for (const name of openWindowNames()) {
+    if (!kept.includes(name)) {
+      await closeContained(name, dismiss);
+    }
+  }
+}
+
 /** Whether window `name` is open: its agent activated more often than it deactivated. */
 export function isOpen(name: string): boolean {
   const events = windowEvents(name).map(each => each.event);
