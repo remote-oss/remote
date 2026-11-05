@@ -446,6 +446,27 @@ const FAILURE = {
   dialog: 'Could not establish connection to "refused".',
 };
 
+/** The labels of the run's configurations, in order: every runner launch of the fixture's table. */
+const CONFIGURATION_LABELS = [
+  'local',
+  'remote',
+  'reconnect',
+  'agent',
+  'agent-off',
+  'x11',
+  'x11-noxauth',
+  'failure-refused',
+  'terminal',
+  'socket-prime',
+  'socket',
+  'slow',
+  'remote-ubuntu',
+  'client-unset',
+  'ports-probe',
+  'install-probe',
+  'platform-probe',
+];
+
 /** The labels a run launches with the fixture's cases, in order: the ports cases, then containers-view last. */
 const LAUNCH_ORDER = [
   'local',
@@ -3781,7 +3802,7 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        Array.from({length: 16}, () => EXECUTABLE),
+        Array.from({length: 17}, () => EXECUTABLE),
       );
     });
 
@@ -3792,7 +3813,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        Array.from({length: 16}, () => true),
+        Array.from({length: 17}, () => true),
       );
     });
 
@@ -3812,6 +3833,7 @@ describe('acceptance', () => {
           ['x11-noxauth', 'dist-forwarding/**/*.test.cjs'],
           ['failure-refused', 'dist-failure/**/*.test.cjs'],
           ['terminal', 'dist-terminal/**/*.test.cjs'],
+          ['socket-prime', 'dist-socket-prime/**/*.test.cjs'],
           ['socket', 'dist-socket/**/*.test.cjs'],
           ['slow', 'dist-slow/**/*.test.cjs'],
           ['remote-ubuntu', 'dist-remote/**/*.test.cjs'],
@@ -4030,7 +4052,7 @@ describe('acceptance', () => {
 
     it('D-85: the slow launch loads the slow extension from the host, by its remote address', () => {
       deepStrictEqual(
-        configurations()[10]?.launchArgs.filter(argument =>
+        configurations()[11]?.launchArgs.filter(argument =>
           argument.startsWith('--extensionDevelopmentPath='),
         ),
         [
@@ -4072,24 +4094,9 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.env.REMOTE_OSS_ACCEPTANCE_LOG,
         ),
-        [
-          'local',
-          'remote',
-          'reconnect',
-          'agent',
-          'agent-off',
-          'x11',
-          'x11-noxauth',
-          'failure-refused',
-          'terminal',
-          'socket',
-          'slow',
-          'remote-ubuntu',
-          'client-unset',
-          'ports-probe',
-          'install-probe',
-          'platform-probe',
-        ].map(label => path.join('/run', `${label}-log.txt`)),
+        CONFIGURATION_LABELS.map(label =>
+          path.join('/run', `${label}-log.txt`),
+        ),
       );
     });
 
@@ -4098,24 +4105,9 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.env.REMOTE_OSS_ACCEPTANCE_WINDOWS,
         ),
-        [
-          'local',
-          'remote',
-          'reconnect',
-          'agent',
-          'agent-off',
-          'x11',
-          'x11-noxauth',
-          'failure-refused',
-          'terminal',
-          'socket',
-          'slow',
-          'remote-ubuntu',
-          'client-unset',
-          'ports-probe',
-          'install-probe',
-          'platform-probe',
-        ].map(label => path.join('/run', label, 'agent', 'pids')),
+        CONFIGURATION_LABELS.map(label =>
+          path.join('/run', label, 'agent', 'pids'),
+        ),
       );
     });
 
@@ -4126,7 +4118,7 @@ describe('acceptance', () => {
           .map(
             configuration => [configuration.extensionDevelopmentPath].flat()[0],
           ),
-        Array.from({length: 15}, () =>
+        Array.from({length: 16}, () =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );
@@ -4739,6 +4731,30 @@ describe('acceptance', () => {
       );
     });
 
+    it('tooling-168: socket makes its primer right before it, the default selection makes neither primer nor the primer alone, and !socket takes both out', () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      /** The labels a selection makes from the repository's table. */
+      function labels(selected: string[]): string[] {
+        return chosenLabels(launches, selected);
+      }
+      deepStrictEqual(
+        [
+          labels(['socket']),
+          labels(['socket-prime']),
+          labels(['terminal', 'socket']),
+          labels(['terminal', 'socket', '!socket']),
+          chosenLabels(launches, undefined).includes('socket-prime'),
+        ],
+        [
+          ['socket-prime', 'socket'],
+          ['socket-prime'],
+          ['terminal', 'socket-prime', 'socket'],
+          ['terminal'],
+          false,
+        ],
+      );
+    });
+
     it('tooling-159: <label>:<file>+… makes the plain launch that runs those files with only them, in its own order', () => {
       /** A suite run in two parts by its files, a suite run whole, and a runner launch. */
       const table: Launch[] = [
@@ -4880,6 +4896,7 @@ describe('acceptance', () => {
       workspace.write('tests/acceptance/suite-failure/window.test.ts', '');
       workspace.write('tests/acceptance/suite-terminal/window.test.ts', '');
       workspace.write('tests/acceptance/suite-socket/window.test.ts', '');
+      workspace.write('tests/acceptance/suite-socket-prime/window.test.ts', '');
       workspace.write('tests/acceptance/suite-slow/window.test.ts', '');
       workspace.write('tests/acceptance/suite-ports/window.test.ts', '');
       workspace.write('tests/acceptance/suite-platform/window.test.ts', '');
@@ -4984,6 +5001,7 @@ describe('acceptance', () => {
           'dist-reconnect',
           'dist-failure',
           'dist-terminal',
+          'dist-socket-prime',
           'dist-socket',
           'dist-slow',
           'dist-ports',
@@ -4991,7 +5009,19 @@ describe('acceptance', () => {
         ].map(folder =>
           existsSync(path.join(workspace.root, 'tests/acceptance', folder)),
         ),
-        [false, false, false, false, false, false, false, false, false, false],
+        [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+        ],
       );
     });
 
@@ -5031,6 +5061,7 @@ describe('acceptance', () => {
           'dist-reconnect',
           'dist-failure',
           'dist-terminal',
+          'dist-socket-prime',
           'dist-socket',
           'dist-slow',
           'dist-ports',
@@ -5045,7 +5076,7 @@ describe('acceptance', () => {
             ),
           ),
         ),
-        [true, true, true, true, true, true, true, true, true],
+        [true, true, true, true, true, true, true, true, true, true],
       );
     });
   });
