@@ -1319,7 +1319,19 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       postStartCommand: 'touch /tmp/c54-poststart',
     });
     try {
+      const opened = containersLog().length;
       const name = await reopened(folder);
+      // The first connect logs its own lifecycle failure after it has connected; the mark waits for it.
+      await waitFor(
+        'the lifecycle failure of the first connect in the log',
+        () =>
+          Promise.resolve(
+            containersLogSince(opened).some(line =>
+              line.startsWith('the lifecycle commands failed'),
+            ),
+          ),
+        DIALOG_MILLISECONDS,
+      );
       const mark = containersLog().length;
       await reopenInContainer(
         name,
