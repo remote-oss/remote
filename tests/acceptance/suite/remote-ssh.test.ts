@@ -81,6 +81,39 @@ async function settle(milliseconds: number): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
+/**
+ * Polls `condition` until it holds, or throws when `timeoutMs` passes: the deterministic wait for a window state a
+ * fixed settle can race, like a snippet's tab stop going live.
+ */
+async function waitUntil(
+  condition: () => boolean,
+  label: string,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (condition()) {
+      return;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`timed out waiting for ${label}`);
+    }
+    await settle(50);
+  }
+}
+
+/** Whether the editor's selection is the tab stop `stop`, as `selectionOf` reports it. */
+function atStop(
+  editor: vscode.TextEditor | undefined,
+  stop: readonly number[],
+): boolean {
+  const selection = selectionOf(editor);
+  return (
+    selection.length === stop.length &&
+    stop.every((each, index) => each === selection[index])
+  );
+}
+
 /** Closes the editors open on `file`, discarding their unsaved changes first. */
 async function closeEditorsOf(file: string): Promise<void> {
   for (const editor of [...vscode.window.visibleTextEditors]) {
@@ -311,49 +344,84 @@ describe('Remote - SSH, activated in the editor', () => {
   it('F-2203 AC-6, AC-7 (c119-template): a created user file opens with the BR-6 template, and a save writes it', async () => {
     const sshFolder = path.join(homedir(), '.ssh');
     const userFile = path.join(sshFolder, 'config');
-    rmSync(sshFolder, {recursive: true, force: true});
-    await clearDocumentOf(userFile);
-    scriptFor([
-      {
-        surface: 'filePick',
-        match: 'SSH configuration file',
-        answer: {label: userFile},
-      },
-    ]);
     await configFileSetting('');
-    const measured: unknown[] = [];
+    let measured: unknown[] = [];
     try {
       await editorSetting('insertSpaces', true, async () => {
         await editorSetting('tabSize', 4, async () => {
-          measured.push(openEditorsOf(userFile), keptTextOf(userFile));
-          await vscode.commands.executeCommand('opensshremotes.openConfigFile');
-          const editor = vscode.window.activeTextEditor;
-          measured.push([
-            editor?.document.uri.fsPath,
-            editor?.document.isDirty,
-            readFileSync(userFile, 'utf8'),
-            editor?.document.getText(),
-            selectionOf(editor),
-          ]);
-          await settle(200);
-          await vscode.commands.executeCommand('type', {text: '\t'});
-          await settle(200);
-          measured.push(selectionOf(editor));
-          await vscode.commands.executeCommand('type', {text: '\t'});
-          await settle(200);
-          measured.push(selectionOf(editor));
-          await vscode.commands.executeCommand('type', {text: '\t'});
-          await settle(200);
-          measured.push(selectionOf(editor));
-          await vscode.commands.executeCommand('workbench.action.files.save');
-          measured.push([
-            readFileSync(userFile, 'utf8'),
-            statSync(userFile).mode & 0o777,
-          ]);
+          for (let attempt = 0; attempt < 5; attempt++) {
+            rmSync(sshFolder, {recursive: true, force: true});
+            await clearDocumentOf(userFile);
+            scriptFor([
+              {
+                surface: 'filePick',
+                match: 'SSH configuration file',
+                answer: {label: userFile},
+              },
+            ]);
+            measured = [];
+            measured.push(openEditorsOf(userFile), keptTextOf(userFile));
+            try {
+              await vscode.commands.executeCommand(
+                'opensshremotes.openConfigFile',
+              );
+              const editor = vscode.window.activeTextEditor;
+              await waitUntil(
+                () => editor?.document.getText() === TEMPLATE,
+                'the template to be inserted',
+                30_000,
+              );
+              await waitUntil(
+                () => atStop(editor, [1, 5, 1, 10]),
+                'the alias stop to be selected',
+                30_000,
+              );
+              measured.push([
+                editor?.document.uri.fsPath,
+                editor?.document.isDirty,
+                readFileSync(userFile, 'utf8'),
+                editor?.document.getText(),
+                selectionOf(editor),
+              ]);
+              await vscode.commands.executeCommand('type', {text: '\t'});
+              await waitUntil(
+                () => atStop(editor, [2, 13, 2, 21]),
+                'the hostname stop to be selected',
+                5_000,
+              );
+              measured.push(selectionOf(editor));
+              await vscode.commands.executeCommand('type', {text: '\t'});
+              await waitUntil(
+                () => atStop(editor, [3, 9, 3, 13]),
+                'the user stop to be selected',
+                5_000,
+              );
+              measured.push(selectionOf(editor));
+              await vscode.commands.executeCommand('type', {text: '\t'});
+              await waitUntil(
+                () => atStop(editor, [3, 13, 3, 13]),
+                'the caret stop to be reached',
+                5_000,
+              );
+              measured.push(selectionOf(editor));
+              await vscode.commands.executeCommand(
+                'workbench.action.files.save',
+              );
+              measured.push([
+                readFileSync(userFile, 'utf8'),
+                statSync(userFile).mode & 0o777,
+              ]);
+              break;
+            } catch {
+              // A tab landed before the snippet session was live, as a literal tab: the template is gone,
+              // so the only way back is a clean re-open on the next attempt.
+              await closeEditorsOf(userFile).catch(() => undefined);
+            }
+          }
           deepStrictEqual(measured, [
             0,
             '',
-            [userFile, true, '', TEMPLATE, [1, 5, 1, 9]],
+            [userFile, true, '', TEMPLATE, [1, 5, 1, 10]],
             [2, 13, 2, 21],
             [3, 9, 3, 13],
             [3, 13, 3, 13],
