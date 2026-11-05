@@ -337,7 +337,6 @@ const AGENT_NOTMP_ACL = 'setfacl -m u:harness-notmp:r-x /tmp';
 
 /** The first part of the containers suite's test files: about half its time, from the start of the alphabet. */
 const CONTAINERS_A_FILES: readonly string[] = [
-  'compose-view.test.ts',
   'connect-reading.test.ts',
 ];
 
