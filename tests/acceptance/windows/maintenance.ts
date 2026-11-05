@@ -173,22 +173,50 @@ function countsByWindow(lines: readonly RecordLine[]): Record<string, number> {
   return counts;
 }
 
+/** The length of the connection log at the moment each record mark was taken, by that mark. */
+const logMarks = new Map<number, number>();
+
+/** The line of the connection log that says core resolved `host` again after a connection was lost. */
+function reconnectionLine(host: string): RegExp {
+  return new RegExp(
+    `Resolving ssh-remote\\+${host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}, attempt \\d+, reconnection`,
+    'u',
+  );
+}
+
 /**
- * Waits `milliseconds` for core's reconnection of `window` to host `host` after its server went. When none comes it
- * fails with what the window and the record showed, since a hosted run uploads neither.
+ * Waits `milliseconds` for core's reconnection of `window` to host `host` after its server went, and gives the time it
+ * was seen. Core's resolve is seen in the record as the progress of "Setting up SSH Host", which opens only after half a
+ * second, and in the connection log as the line that names the reconnection attempt, which a quick resolve leaves alone:
+ * either is the evidence. When none comes it fails with what the window and the record showed, since a hosted run uploads
+ * neither.
  */
 export async function waitForReconnection(
   mark: number,
   window: string,
   host: string,
   milliseconds: number,
-): Promise<void> {
+): Promise<number> {
+  const logMark = logMarks.get(mark) ?? Number.POSITIVE_INFINITY;
+  const pattern = reconnectionLine(host);
+  let seen = 0;
   try {
     await waitFor(
       `${window} to be resolved again by core’s reconnection`,
-      () => resolvedAgainSince(mark, window, host) !== undefined,
+      () => {
+        const progress = resolvedAgainSince(mark, window, host);
+        const logged = connectionLog()
+          .slice(logMark)
+          .some(line => pattern.test(line));
+        if (progress === undefined && !logged) {
+          return false;
+        }
+        seen = progress?.time ?? Date.now();
+        return true;
+      },
       milliseconds,
     );
+    return seen;
   } catch (error) {
     const state = await windowState(window).catch(() => undefined);
     throw new Error(
@@ -223,6 +251,7 @@ export async function runWith(
   alignScript(window);
   appendScript(answers.map(answer => ({...answer, window})));
   const mark = recordLines().length;
+  logMarks.set(mark, connectionLog().length);
   try {
     await inWindow(window, command);
   } catch (caught) {

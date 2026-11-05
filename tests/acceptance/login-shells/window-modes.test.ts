@@ -11,7 +11,6 @@ import {
 } from '../windows/harness.ts';
 import {
   INSTALL_MILLISECONDS,
-  resolvedAgainSince,
   waitForReconnection,
   pickHost,
   runWith,
@@ -52,9 +51,12 @@ describe('login shells in the window, by mode and by command (card coverage-49)'
           [pickHost('harness-bash')],
         );
         await serversGoneWithin(servers, 10_000);
-        await waitForReconnection(mark, window, 'harness-bash', 60_000);
-        const reconnectedAt =
-          resolvedAgainSince(mark, window, 'harness-bash')?.time ?? Infinity;
+        const reconnectedAt = await waitForReconnection(
+          mark,
+          window,
+          'harness-bash',
+          60_000,
+        );
         await reloadWindow(window);
         await connectedWithin(window, INSTALL_MILLISECONDS);
         deepStrictEqual(
