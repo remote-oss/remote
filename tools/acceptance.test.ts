@@ -83,7 +83,12 @@ import {
   type Launch,
   type RunnerLaunch,
 } from './acceptance-launches.ts';
-import {workflowParts as partsOfWorkflow} from './acceptance-select.ts';
+import {
+  PARTS_TABLE,
+  type PartsTable,
+  partsOfTable,
+  suiteFilesIn,
+} from './acceptance-parts.ts';
 import type {RunRegistry} from './acceptance-registry.ts';
 import {STOP_PROGRAM} from './acceptance-helper-stop.ts';
 import {acceptanceRunId} from './acceptance-run.ts';
@@ -524,13 +529,21 @@ const CLIENT_CASE = {
 };
 
 /** The labels of the launches `selected` chooses from `launches`, or the error text alone when it names an unknown one. */
-/** The repository's `ci.yml`, and the launch selections of its scheduled VSCodium split. */
+/** The repository's `ci.yml`, and the launch selections of the VSCodium suite's parts. */
 function workflowParts(): {workflow: string; parts: string[]} {
   const workflow = readFileSync(
     path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
     'utf8',
   );
-  return {workflow, parts: partsOfWorkflow(workflow)};
+  const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
+  return {
+    workflow,
+    parts: partsOfTable(
+      launchesOf(REPOSITORY_ROOT),
+      table,
+      suiteFilesIn(REPOSITORY_ROOT),
+    ).map(part => part.launches),
+  };
 }
 
 function chosenLabels(
@@ -4556,7 +4569,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('#1430: the scheduled split’s parts make every launch of `all` but the genuine group’s, and no launch in two parts', () => {
+    it('#1430, tooling-159: the parts make every launch of `all` but the genuine group’s', () => {
       const launches = launchesOf(REPOSITORY_ROOT);
       const {parts} = workflowParts();
       const made = parts.flatMap(part =>
@@ -4564,12 +4577,10 @@ describe('acceptance', () => {
       );
       const wanted = chosenLabels(launches, ['all', '!@genuine']);
       // a group also makes its named-only launches (containers-podman), which `all` leaves out
+      // a launch run as parts by its files is in each of them; acceptance-parts.test.ts checks each file once
       deepStrictEqual(
-        [
-          wanted.filter(label => !made.includes(label)),
-          made.length === new Set(made).size,
-        ],
-        [[], true],
+        wanted.filter(label => !made.includes(label)),
+        [],
       );
     });
 

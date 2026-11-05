@@ -9,6 +9,14 @@ import path from 'node:path';
 import * as launchTable from './acceptance-launches.ts';
 import {type Launch, launchesOf} from './acceptance-launches.ts';
 import {
+  heldTogether,
+  PARTS_TABLE,
+  type Part,
+  partsOfTable,
+  type PartsTable,
+  suiteFilesIn,
+} from './acceptance-parts.ts';
+import {
   LAUNCH_TABLE,
   labelsChangedSince,
   withHelpersAsTests,
@@ -126,69 +134,10 @@ export function launchesInput(
     : selection.labels.join(',');
 }
 
-/**
- * The parts the VSCodium job of `workflow` (ci.yml's text) runs a whole suite in, in order: its matrix's default, the
- * selection each runner makes.
- */
-export function workflowParts(workflow: string): string[] {
-  const parts = /\|\| '(\["@[^']*\])'/.exec(workflow)?.[1];
-  if (parts === undefined) {
-    throw new Error('ci.yml: the VSCodium job names no parts of the suite');
-  }
-  return JSON.parse(parts) as string[];
-}
-
-/**
- * The parts of the VSCodium job a selection needs, in the order of `parts`: a part all of whose launches are selected
- * as it is written, a part with some of them as those labels, and a part with none left out. A selected launch in no
- * part (the genuine group's, which have a job of their own) is left out too.
- */
-export function partsOf(
-  selection: Selection,
-  launches: readonly Launch[],
-  parts: readonly string[],
-): string[] {
-  const selected = new Set(selection.labels);
-  const needed: string[] = [];
-  for (const part of parts) {
-    const inPart = chosenLaunches(launches, part.split(','));
-    if (typeof inPart === 'string') {
-      throw new Error(`ci.yml's part ${part}: ${inPart}`);
-    }
-    const labels = inPart
-      .map(launch => launch.label)
-      .filter(label => selected.has(label));
-    if (labels.length > 0) {
-      needed.push(labels.length === inPart.length ? part : labels.join(','));
-    }
-  }
-  return needed;
-}
-
-/** The most launches a pull request's own acceptance job runs; a larger selection needs a dispatch or the full label. */
-export const PULL_REQUEST_LAUNCHES = 6;
-
-/**
- * The time limit of a pull request's acceptance job, whatever it runs: 360 minutes, the most a job may run on GitHub's
- * runners. One launch alone (containers-a) takes close to three hours there, so a selection of two of them outgrew
- * 180; no shared runner is held by a long job any more.
- */
-export const PULL_REQUEST_MINUTES = 360;
-
-/** One job of a pull request's acceptance run: a part of its selection. */
-export interface PullRequestPart {
-  /** The launches it runs, as the run's `--launches` takes them. */
-  launches: string;
-  /** Its time limit, in minutes. */
-  minutes: number;
-}
-
-/** What a pull request's acceptance run does for its selection: its parts, each a job of its own, run side by side. */
+/** What a pull request's acceptance run does for its change: its parts, each a job of its own, run side by side. */
 export interface PullRequestPlan {
   /** The parts; none when it runs nothing. */
-  parts: PullRequestPart[];
-  /** A notice for the pull request when the selection is over the limit and the label is absent. */
-  notice?: string;
+  parts: Part[];
 }
 
 /**
@@ -201,10 +150,12 @@ export const FILE_PART_MINUTES = 120;
 export const FILE_PARTS = 20;
 
 /**
- * The part a narrowed pull request runs beside its file parts, so a narrow selection still starts the editor: an activation (`local`),
- * a plain connect (`remote`) and a Reopen Folder Locally (`c101-reopen-locally`), about three minutes of rows.
+ * The part a narrowed pull request runs beside its file parts, so a narrow selection still starts the editor: an
+ * activation (`local`), a plain connect (`remote`) and a Reopen Folder Locally (`c101-reopen-locally`), about three
+ * minutes of rows.
  */
-export const SMOKE_PART: PullRequestPart = {
+export const SMOKE_PART: Part = {
+  name: 'smoke',
   launches: 'local,remote,containers-shutdown:reopen-locally-lines.test.ts',
   minutes: 60,
 };
@@ -213,17 +164,18 @@ export const SMOKE_PART: PullRequestPart = {
 const SUITE_TEST = /^tests\/acceptance\/([^/]+)\/([^/]+\.test\.ts)$/;
 
 /**
- * The parts of a test-only change: each changed test file of a plain launch's suite runs alone in
- * every launch that runs it, then the smoke part. Undefined when the change is not test-only, when a test file belongs
- * to a launch run in the editor, or when no launch runs it: the whole selection runs then, as before. A test file that
- * no longer exists runs nowhere; documentation and unit tests run nothing.
+ * The parts of a test-only change: each changed test file of a plain launch's suite runs alone in every launch that runs
+ * it, then the smoke part, which a change that only removes test files runs alone. Undefined when the change is not
+ * test-only, when a test file belongs to a launch run in the editor, or when no launch runs it: its launches' parts run
+ * then. Documentation and unit tests alone run nothing.
  */
 export function narrowedParts(
   changed: readonly string[],
   launches: readonly Launch[],
   exists: (file: string) => boolean,
-): PullRequestPart[] | undefined {
+): Part[] | undefined {
   const byLaunch = new Map<string, string[]>();
+  let touchesTests = false;
   for (const file of changed) {
     if (NO_LAUNCH.some(pattern => pattern.test(file))) {
       continue;
@@ -237,6 +189,7 @@ export function narrowedParts(
     ) {
       return undefined;
     }
+    touchesTests = true;
     if (!exists(file)) {
       continue;
     }
@@ -259,71 +212,76 @@ export function narrowedParts(
   const entries = [...byLaunch].map(([label, files]) => ({label, files}));
   const count = entries.reduce((total, entry) => total + entry.files.length, 0);
   const parts = entries.flatMap(({label, files}) =>
-    (count <= FILE_PARTS ? files.map(file => [file]) : [files]).map(group => ({
-      launches: `${label}:${group.join('+')}`,
-      minutes: FILE_PART_MINUTES,
-    })),
+    (count <= FILE_PARTS ? files.map(file => [file]) : [files]).map(group => {
+      const launchesOfPart = `${label}:${group.join('+')}`;
+      return {
+        name: launchesOfPart,
+        launches: launchesOfPart,
+        minutes: FILE_PART_MINUTES,
+      };
+    }),
   );
-  return parts.length === 0 ? [] : [...parts, SMOKE_PART];
+  return touchesTests ? [...parts, SMOKE_PART] : [];
 }
 
-/**
- * The plan of a pull request's acceptance job: the selected launches that are in a part of the VSCodium job (the
- * genuine group has its own job), all of them when there are at most `PULL_REQUEST_LAUNCHES` or the pull request carries
- * the full label, and none otherwise, with a notice naming them.
- */
-export function pullRequestPlan(
+/** The parts of the run's table that make at least one launch of the selection, in the table's order. */
+export function selectedParts(
   selection: Selection,
   launches: readonly Launch[],
-  parts: readonly string[],
-  full: boolean,
-): PullRequestPlan {
-  const inParts = new Set<string>();
-  for (const part of parts) {
-    const inPart = chosenLaunches(launches, part.split(','));
-    if (typeof inPart === 'string') {
-      throw new Error(`ci.yml's part ${part}: ${inPart}`);
+  tableParts: readonly Part[],
+): Part[] {
+  const selected = new Set(selection.labels);
+  return tableParts.filter(part => {
+    const made = chosenLaunches(launches, part.launches.split(','));
+    if (typeof made === 'string') {
+      throw new Error(`the part ${part.name}: ${made}`);
     }
-    for (const launch of inPart) {
-      inParts.add(launch.label);
-    }
-  }
-  const chosen = selection.labels.filter(label => inParts.has(label));
-  if (chosen.length === 0) {
-    return {parts: []};
-  }
-  if (chosen.length <= PULL_REQUEST_LAUNCHES || full) {
-    return {
-      parts: [{launches: chosen.join(','), minutes: PULL_REQUEST_MINUTES}],
-    };
-  }
-  return {
-    parts: [],
-    notice: `this change selects ${String(chosen.length)} launches, more than the ${String(PULL_REQUEST_LAUNCHES)} a pull request runs by itself: ${chosen.join(', ')}. Run them at this head with a dispatch, or with the acceptance-full label.`,
-  };
+    return made.some(launch => selected.has(launch.label));
+  });
 }
 
 /**
  * The plan of a pull request's acceptance run for its changed paths: the narrowed parts of a test-only change, unless
- * the full label asks for the whole selection; else the whole selection's plan.
+ * the full label asks for more; else every part of the table that makes a launch the change reaches, side by side. A
+ * narrowed file of a launch that runs only with others (`held`) runs in the table's part of that launch instead, so it
+ * keeps the launch before it.
  */
 export function planOfChange(
   changed: readonly string[],
   launches: readonly Launch[],
-  parts: readonly string[],
+  tableParts: readonly Part[],
   full: boolean,
   exists: (file: string) => boolean,
   measured: ReadonlyMap<string, readonly string[]> = new Map(),
+  held: (launch: Launch) => boolean = () => false,
 ): PullRequestPlan {
   const narrowed = full ? undefined : narrowedParts(changed, launches, exists);
-  return narrowed === undefined
-    ? pullRequestPlan(
+  if (narrowed === undefined) {
+    return {
+      parts: selectedParts(
         selectLaunches(changed, launches, measured),
         launches,
-        parts,
-        full,
-      )
-    : {parts: narrowed};
+        tableParts,
+      ),
+    };
+  }
+  const heldLabels = launches
+    .filter(launch => held(launch))
+    .map(launch => launch.label);
+  const kept = narrowed.filter(
+    part => !heldLabels.includes(part.launches.split(':')[0] ?? ''),
+  );
+  const ofHeld = selectedParts(
+    {
+      labels: heldLabels.filter(label =>
+        narrowed.some(part => part.launches.split(':')[0] === label),
+      ),
+      reasons: [],
+    },
+    launches,
+    tableParts,
+  );
+  return {parts: [...ofHeld, ...kept]};
 }
 
 /**
@@ -365,20 +323,17 @@ function changedFiles(base: string, head: string): string[] {
 }
 
 const SELECT_USAGE =
-  'usage: node tools/acceptance-select.ts --base <sha> --head <sha> [--parts | --pull-request [--full]]';
+  'usage: node tools/acceptance-select.ts --base <sha> --head <sha> [--pull-request [--full]]';
 
 if (isMainModule(import.meta.url)) {
   const commandArguments = process.argv.slice(2);
   const base = commandArguments[commandArguments.indexOf('--base') + 1];
   const head = commandArguments[commandArguments.indexOf('--head') + 1];
-  const byParts = commandArguments.includes('--parts');
   const forPullRequest = commandArguments.includes('--pull-request');
   const full = commandArguments.includes('--full');
-  const expected =
-    4 + (byParts ? 1 : 0) + (forPullRequest ? 1 : 0) + (full ? 1 : 0);
+  const expected = 4 + (forPullRequest ? 1 : 0) + (full ? 1 : 0);
   if (
     commandArguments.length !== expected ||
-    (byParts && forPullRequest) ||
     (full && !forPullRequest) ||
     !commandArguments.includes('--base') ||
     !commandArguments.includes('--head') ||
@@ -394,31 +349,23 @@ if (isMainModule(import.meta.url)) {
     for (const line of selection.reasons) {
       console.error(`selected ${line}`);
     }
-    const parts = workflowParts(
-      readFileSync(
-        path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
-        'utf8',
-      ),
-    );
     if (forPullRequest) {
+      const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
       console.log(
         JSON.stringify(
           planOfChange(
             changed,
             launches,
-            parts,
+            partsOfTable(launches, table, suiteFilesIn(REPOSITORY_ROOT)),
             full,
             file => existsSync(path.join(REPOSITORY_ROOT, file)),
             measured,
+            heldTogether(table),
           ),
         ),
       );
     } else {
-      console.log(
-        byParts
-          ? JSON.stringify(partsOf(selection, launches, parts))
-          : launchesInput(selection, launches),
-      );
+      console.log(launchesInput(selection, launches));
     }
   }
 }
