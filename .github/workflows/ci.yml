@@ -472,11 +472,19 @@ jobs:
           df -h / | tail -1
       - if: contains(matrix.launches, '@containers') || contains(matrix.launches, 'containers-podman')
         run: tools/install-podman
+      - if: contains(matrix.launches, 'containers-podman')
+        run: |
+          podman info --format '{{.Host.OCIRuntime.Path}} {{.Host.OCIRuntime.Version}}' | head -3
+          podman run -d --name probe-exec docker.io/library/alpine:3.22 sleep 600
+          for i in 1 2 3; do timeout 20 podman exec probe-exec true; echo "exec true rc=$?"; done
+          printf hi | timeout 20 podman exec -i probe-exec cat; echo " exec -i cat rc=$?"
+          podman rm -f probe-exec >/dev/null
       # the buildx plugin when the machine's Docker has none (the harness builds with `docker build --load`)
       - run: tools/install-buildx
       - run: tools/start-display
       # the part's launches: a group selection, or the launches a dispatch names
       - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
+        timeout-minutes: 45
         env:
           LAUNCHES: ${{ matrix.launches }}
       - if: always()
