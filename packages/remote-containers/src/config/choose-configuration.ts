@@ -121,6 +121,8 @@ export interface ConfigurationRequest {
   dockerPath: string;
   /** Whether the Git worktree's common dir is mounted, which moves the folder the window opens at (BR-12). */
   mountGitWorktreeCommonDir: boolean;
+  /** The level the CLI's read runs at: the setting as it is for this command. */
+  logLevel: 'info' | 'debug' | 'trace';
   /** The Feature settings, which the CLI's read of the configuration takes. */
   features: FeatureSettings;
   cancellation: AbortSignal;
@@ -229,7 +231,7 @@ export async function chooseConfiguration(
         mountGitWorktreeCommonDir: request.mountGitWorktreeCommonDir,
         features: request.features,
         mounts: [],
-        logLevel: 'info',
+        logLevel: request.logLevel,
       },
       undefined,
       (event: CliEvent) => {

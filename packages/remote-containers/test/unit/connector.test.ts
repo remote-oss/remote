@@ -1127,6 +1127,36 @@ describe('the container connector: the connect (card containers-08)', () => {
     ]);
   });
 
+  it('F-0104 BR-7, BR-7a, BR-8: the level of each connect is the setting as it is then: info, debug and trace as written, any other text info, and an empty, null or missing value debug, for the container request and both reads of the configuration', async () => {
+    const seen: Array<[string | undefined, string[]]> = [];
+    for (const value of [
+      undefined,
+      null,
+      '',
+      'info',
+      'debug',
+      'trace',
+      'TRACE',
+    ]) {
+      const scene = sceneOf();
+      scene.logLevel = value;
+      await connected(scene);
+      seen.push([
+        scene.prepared[0]?.logLevel,
+        scene.configurationReads.map(read => read.target.logLevel),
+      ]);
+    }
+    deepStrictEqual(seen, [
+      ['debug', ['debug', 'debug']],
+      ['debug', ['debug', 'debug']],
+      ['debug', ['debug', 'debug']],
+      ['info', ['info', 'info']],
+      ['debug', ['debug', 'debug']],
+      ['trace', ['trace', 'trace']],
+      ['info', ['info', 'info']],
+    ]);
+  });
+
   it('F-0414 3.2, 6.2, 6.3: the Feature settings reach the container request and both reads of the configuration', async () => {
     const features = {'ghcr.io/devcontainers/features/node:1': {}};
     const scene = sceneOf();

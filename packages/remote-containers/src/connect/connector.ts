@@ -107,6 +107,8 @@ import {
 import {portAttributeSettings} from '../ports/port-attributes.ts';
 import {devPortOf} from './dev-port.ts';
 import {idLabels} from '../lifecycle/labels.ts';
+import {logLevelOf} from '../logging/log-files.ts';
+
 import {takeRebuildIntent} from '../open/rebuild-intent.ts';
 import {takePausedRetry} from '../state/paused-retry.ts';
 import type {IntentMemento} from '../state/timed-store.ts';
@@ -373,6 +375,8 @@ export interface ContainerConnectorDependencies {
     legacyWorkspaceMountConsistency: unknown;
     /** The value of `dev.containers.gpuAvailability`, `undefined` when unset. */
     gpuAvailability: unknown;
+    /** The value of `dev.containers.logLevel`, which the CLI is run at; `undefined` when unset. */
+    logLevel: unknown;
     /** The user's value of `dev.containers.experimentalMountGitWorktreeCommonDir`, `undefined` when unset. */
     mountGitWorktreeCommonDir: unknown;
     /** The user's value of `dev.containers.defaultFeatures`, `undefined` when unset. */
@@ -909,7 +913,7 @@ export function containerConnectorOf(
         tools.settings.lockfile,
       ),
       mounts: [],
-      logLevel: 'info',
+      logLevel: logLevelOf(tools.settings.logLevel),
     };
   }
 
@@ -1391,7 +1395,7 @@ export function containerConnectorOf(
         folder: folder.hostPath,
         configFile,
         dockerPath,
-        logLevel: 'info',
+        logLevel: logLevelOf(settings.logLevel),
         cacheVolume: settings.cacheVolume(),
         windowsClient: dependencies.clientPlatform === 'win32',
         ...engineSettingsOf(settings),
@@ -1766,7 +1770,7 @@ export function containerConnectorOf(
       configFile: request.configFile,
       idLabels: request.idLabels,
       dockerPath: 'docker',
-      logLevel: 'info',
+      logLevel: logLevelOf(settings.logLevel),
       cacheVolume: settings.cacheVolume(),
       ...engineSettingsOf(settings),
       mountGitWorktreeCommonDir: false,
@@ -1838,7 +1842,7 @@ export function containerConnectorOf(
         configFile: definition.configFile,
         idLabels,
         dockerPath: dockerFile,
-        logLevel: 'info',
+        logLevel: logLevelOf(settings.logLevel),
         // An explored volume always has the server's volume at /vscode, whatever `dev.containers.cacheVolume` says.
         cacheVolume: true,
         windowsClient: dependencies.clientPlatform === 'win32',
@@ -1881,7 +1885,7 @@ export function containerConnectorOf(
             settings.lockfile,
           ),
           mounts: [],
-          logLevel: 'info',
+          logLevel: logLevelOf(settings.logLevel),
         },
         settings,
         pinned: target,
@@ -2007,7 +2011,7 @@ export function containerConnectorOf(
             settings.lockfile,
           ),
           mounts: [],
-          logLevel: 'info',
+          logLevel: logLevelOf(settings.logLevel),
         },
       };
     }
@@ -2196,7 +2200,7 @@ export function containerConnectorOf(
         configFileOf: attached.configFileOf,
         cliTarget: {
           dockerPath: dockerFile,
-          logLevel: 'info',
+          logLevel: logLevelOf(dependencies.settings().logLevel),
           environment,
         },
         engineCoordinates: target,
@@ -2231,7 +2235,7 @@ export function containerConnectorOf(
       containerId: container.id,
       ...(step.configFile === undefined ? {} : {configFile: step.configFile}),
       dockerPath: dockerFile,
-      logLevel: 'info',
+      logLevel: logLevelOf(dependencies.settings().logLevel),
       environment,
     };
     const runsBridge = attachedRunsBridge(

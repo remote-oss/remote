@@ -207,6 +207,8 @@ const ENGLISH = {
   'commands.Rebuildwithoutcacheandreopenincontainer.title':
     'Rebuild Without Cache and Reopen in Container',
   'commands.Settings.title': 'Settings',
+  'setting.Loglevel.description':
+    'The level the Dev Containers CLI is run at: info, debug or trace. Any other value reads as info, and an empty one as debug.',
   'setting.Executeinwsl.description':
     'Controls whether CLI commands should always be executed in WSL. The default is to only execute in WSL for workspace folders in WSL. This setting has no effect on other platforms than Windows.',
   'setting.Executeinwsldistro.markdownDescription':
@@ -1909,6 +1911,21 @@ describe('the log commands (card containers-186, F-0104)', () => {
         logCommands.includes(each.command),
       ),
       [],
+    );
+  });
+});
+
+describe('the log level setting (card containers-186, F-0104 AC-14, AC-18)', () => {
+  const entry = (
+    MANIFEST.contributes as {
+      configuration: {properties: Record<string, Record<string, unknown>>};
+    }
+  ).configuration.properties['dev.containers.logLevel'];
+
+  it('F-0104 AC-14, AC-18: dev.containers.logLevel is a string of application scope that reads debug when nothing is set', () => {
+    deepStrictEqual(
+      [entry?.type, entry?.scope, entry?.default, entry?.enum],
+      ['string', 'application', 'debug', ['info', 'debug', 'trace']],
     );
   });
 });

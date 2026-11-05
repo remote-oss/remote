@@ -132,6 +132,7 @@ async function choose(
       folder: FOLDER,
       dockerPath: DOCKER,
       mountGitWorktreeCommonDir: scene.mountGitWorktreeCommonDir,
+      logLevel: 'info',
       features: {defaultFeatures: {}, lockfile: true},
       cancellation: NEVER,
       engineCheck: scene.engineCheck,

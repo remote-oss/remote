@@ -192,6 +192,8 @@ export interface Scene {
   legacyWorkspaceMountConsistency: unknown;
   /** The value of `dev.containers.gpuAvailability`. */
   gpuAvailability: unknown;
+  /** The value of `dev.containers.logLevel`. */
+  logLevel: unknown;
   mountGitWorktreeCommonDir: unknown;
   /** The user's values of the setting for the extensions of a new container, and of its deprecated twin. */
   defaultFeatures: unknown;
@@ -408,6 +410,7 @@ export function sceneOf(
     workspaceMountConsistency: undefined,
     legacyWorkspaceMountConsistency: undefined,
     gpuAvailability: undefined,
+    logLevel: undefined,
     mountGitWorktreeCommonDir: undefined,
     defaultFeatures: undefined,
     lockfile: undefined,
@@ -696,6 +699,7 @@ export function sceneOf(
       workspaceMountConsistency: scene.workspaceMountConsistency,
       legacyWorkspaceMountConsistency: scene.legacyWorkspaceMountConsistency,
       gpuAvailability: scene.gpuAvailability,
+      logLevel: scene.logLevel,
       mountGitWorktreeCommonDir: scene.mountGitWorktreeCommonDir,
       defaultExtensions: scene.defaultExtensions,
       deprecatedDefaultExtensions: scene.deprecatedDefaultExtensions,

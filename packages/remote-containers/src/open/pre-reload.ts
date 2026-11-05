@@ -15,6 +15,7 @@ import type {Logger} from 'lib-log';
 import type {CliBridge} from '../cli/cli-bridge.ts';
 import {featureSettingsOf} from '../connect/feature-settings.ts';
 import {mountGitWorktreeCommonDirOf} from '../connect/mount-settings.ts';
+import {logLevelOf} from '../logging/log-files.ts';
 import {
   type ProblematicPorts,
   problematicFeatureRefused,
@@ -202,6 +203,8 @@ export async function beforeReload(
 export interface CommandChecksPorts {
   settings: {
     mountGitWorktreeCommonDir(): unknown;
+    /** The user's value of `dev.containers.logLevel`, `undefined` when unset. */
+    logLevel(): unknown;
     defaultFeatures(): unknown;
     lockfile(): unknown;
   };
@@ -245,6 +248,7 @@ export async function commandBeforeReload(
       mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
         ports.settings.mountGitWorktreeCommonDir(),
       ),
+      logLevel: logLevelOf(ports.settings.logLevel()),
       features: featureSettingsOf(
         ports.settings.defaultFeatures(),
         ports.settings.lockfile(),

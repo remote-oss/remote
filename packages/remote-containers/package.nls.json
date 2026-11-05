@@ -34,6 +34,7 @@
   "commands.pruneVolumes.title": "Clean Up Dev Volumes...",
   "commands.inspectVolume.title": "Explore a Volume in a Dev Container...",
   "setting.Optimisticallylaunchdocker.description": "Optimistically attempt to start docker if the daemon is not already running.",
+  "setting.Loglevel.description": "The level the Dev Containers CLI is run at: info, debug or trace. Any other value reads as info, and an empty one as debug.",
   "setting.Executeinwsl.description": "Controls whether CLI commands should always be executed in WSL. The default is to only execute in WSL for workspace folders in WSL. This setting has no effect on other platforms than Windows.",
   "setting.Executeinwsldistro.markdownDescription": "WSL distro to use when not reopening a WSL folder. The default is to use the default WSL distro (see `wsl -l`). This setting has no effect when `#dev.containers.executeInWSL#` is not enabled or on other platforms than Windows.",
   "setting.Forwardwslservices.description": "Controls whether services in WSL (SSH agent, GPG agent, X display, Wayland display) are forwarded into the container. This setting has no effect on other platforms than Windows.",

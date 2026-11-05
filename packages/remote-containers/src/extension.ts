@@ -1822,6 +1822,8 @@ export async function activate(
         settings: {
           dockerPath: () =>
             vscode.workspace.getConfiguration().get(settings.dockerPath.id),
+          logLevel: () =>
+            vscode.workspace.getConfiguration().get(settings.logLevel.id),
           mountGitWorktreeCommonDir: () =>
             vscode.workspace
               .getConfiguration()
@@ -2687,6 +2689,7 @@ export async function activate(
               configuration.inspect(settings.cacheVolume.id)?.globalValue,
               configuration.inspect(settings.cacheVolume.legacyId)?.globalValue,
             ),
+          logLevel: configuration.get(settings.logLevel.id),
           workspaceMountConsistency: configuration.inspect(
             settings.workspaceMountConsistency.id,
           )?.globalValue,

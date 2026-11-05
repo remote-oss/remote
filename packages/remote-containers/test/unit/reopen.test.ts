@@ -135,11 +135,24 @@ describe('Reopen in Container', () => {
             mountGitWorktreeCommonDir: false,
             features: {defaultFeatures: {}, lockfile: true},
             mounts: [],
-            logLevel: 'info',
+            logLevel: 'debug',
           },
         ],
       ],
     );
+  });
+
+  it('F-0104 BR-7, BR-8: the pre-reload read asks the CLI for the level the setting has at that command: trace as written, info for any other text, debug when it is empty', async () => {
+    const seen: unknown[] = [];
+    for (const value of ['trace', 'loud', '']) {
+      const state = setup();
+      state.logLevel = value;
+      await reopened(state);
+      seen.push(
+        state.targets.map(target => (target as {logLevel: string}).logLevel),
+      );
+    }
+    deepStrictEqual(seen, [['trace'], ['info'], ['debug']]);
   });
 
   it('F-0417 BR-9: the window tells the shutdown helper that it leaves, once and just before the reload; a flow that stops before the reload tells nothing', async () => {

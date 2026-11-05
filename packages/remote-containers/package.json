@@ -800,6 +800,13 @@
           "scope": "application",
           "description": "%setting.BootstrapImagePull.description%"
         },
+        "dev.containers.logLevel": {
+          "type": "string",
+          "enum": ["info", "debug", "trace"],
+          "default": "debug",
+          "scope": "application",
+          "description": "%setting.Loglevel.description%"
+        },
         "dev.containers.executeInWSL": {
           "type": "boolean",
           "default": false,

@@ -185,6 +185,7 @@ const REQUEST = {
   folder: FOLDER,
   dockerPath: '/usr/bin/docker',
   mountGitWorktreeCommonDir: false,
+  logLevel: 'info' as const,
   features: {defaultFeatures: {}, lockfile: true},
 };
 
@@ -591,6 +592,7 @@ describe('the checks an open command runs before its reload (card coverage-117)'
       return commandBeforeReload(
         {
           settings: {
+            logLevel: () => undefined,
             mountGitWorktreeCommonDir: () => false,
             defaultFeatures: () => undefined,
             lockfile: () => undefined,

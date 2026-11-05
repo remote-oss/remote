@@ -84,6 +84,8 @@ export interface Setup {
   rejects: string | undefined;
   dockerPath: unknown;
   /** What the worktree setting's user value is. */
+  /** The value of `dev.containers.logLevel`. */
+  logLevel: unknown;
   mountGitWorktreeCommonDir: unknown;
   waitOnCheck: Promise<void>;
   /** What the first reading of a configuration waits for; later readings do not wait. */
@@ -134,6 +136,7 @@ export function setup(): Setup {
     waitOnTrust: Promise.resolve(),
     rejects: undefined,
     dockerPath: 'docker',
+    logLevel: undefined,
     mountGitWorktreeCommonDir: undefined,
     waitOnCheck: Promise.resolve(),
     waitOnRead: Promise.resolve(),
@@ -291,6 +294,7 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
     },
     settings: {
       dockerPath: () => state.dockerPath,
+      logLevel: () => state.logLevel,
       mountGitWorktreeCommonDir: () => state.mountGitWorktreeCommonDir,
       defaultFeatures: () => undefined,
       lockfile: () => undefined,

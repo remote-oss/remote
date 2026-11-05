@@ -58,6 +58,8 @@ export interface ReopenPorts extends AuthoringPort, WorkspaceFolderPorts {
     dockerPath(): unknown;
     /** The user's value of `dev.containers.experimentalMountGitWorktreeCommonDir`, `undefined` when unset. */
     mountGitWorktreeCommonDir(): unknown;
+    /** The user's value of `dev.containers.logLevel`, `undefined` when unset. */
+    logLevel(): unknown;
     /** The user's value of `dev.containers.defaultFeatures`, `undefined` when unset. */
     defaultFeatures(): unknown;
     /** The user's value of `dev.containers.lockfile`, `undefined` when unset. */
