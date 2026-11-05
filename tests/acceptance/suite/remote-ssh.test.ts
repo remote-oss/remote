@@ -101,6 +101,24 @@ function openEditorsOf(file: string): number {
   ).length;
 }
 
+/**
+ * Makes the window's kept document at `file` reflect the disk again: its editors are closed, and a document that
+ * outlived them is re-read from the disk, or emptied when the file is gone, by a revert against it.
+ */
+async function syncDocumentOf(file: string): Promise<void> {
+  await closeEditorsOf(file);
+  let open: vscode.TextDocument;
+  try {
+    open = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+  } catch {
+    return;
+  }
+  await vscode.window.showTextDocument(open);
+  await vscode.commands.executeCommand(
+    'workbench.action.revertAndCloseActiveEditor',
+  );
+}
+
 /** Creates this run's signal file: a held script entry that names it answers from then on. */
 function signal(name: string): void {
   const folder = process.env.REMOTE_OSS_ACCEPTANCE_SIGNALS ?? '';
@@ -168,11 +186,11 @@ describe('Remote - SSH, activated in the editor', () => {
   it('F-2203 AC-3 (c119-open): an existing user file opens at Ln 1 Col 1, not dirty, and nothing is written', async () => {
     const sshFolder = path.join(homedir(), '.ssh');
     const userFile = path.join(sshFolder, 'config');
-    await closeEditorsOf(userFile);
     mkdirSync(sshFolder, {recursive: true});
     const before = 'existing content\n';
-    const closed = openEditorsOf(userFile);
     writeFileSync(userFile, before);
+    await syncDocumentOf(userFile);
+    const closed = openEditorsOf(userFile);
     scriptFor([
       {
         surface: 'filePick',
@@ -202,9 +220,9 @@ describe('Remote - SSH, activated in the editor', () => {
 
   it('F-2203 AC-4 (c119-again): an already open user file is revealed active with its selection, and no second tab opens', async () => {
     const userFile = path.join(homedir(), '.ssh', 'config');
-    await closeEditorsOf(userFile);
     mkdirSync(path.dirname(userFile), {recursive: true});
     writeFileSync(userFile, 'Host existing\n');
+    await syncDocumentOf(userFile);
     const closed = openEditorsOf(userFile);
     const document = await vscode.workspace.openTextDocument(userFile);
     const editor = await vscode.window.showTextDocument(document);
@@ -231,9 +249,12 @@ describe('Remote - SSH, activated in the editor', () => {
           closed,
           active?.document.uri.fsPath,
           selectionOf(active),
+          active?.document.getText(),
+          active?.document.isDirty,
+          active === editor,
           openEditorsOf(userFile),
         ],
-        [0, userFile, before, 1],
+        [0, userFile, before, 'Host existing\n', false, true, 1],
       );
     } finally {
       await configFileSetting(HARNESS_CONFIG);
@@ -243,8 +264,8 @@ describe('Remote - SSH, activated in the editor', () => {
   it('F-2203 AC-6, AC-7 (c119-template): a created user file opens with the BR-6 template, and a save writes it', async () => {
     const sshFolder = path.join(homedir(), '.ssh');
     const userFile = path.join(sshFolder, 'config');
-    await closeEditorsOf(userFile);
     rmSync(sshFolder, {recursive: true, force: true});
+    await syncDocumentOf(userFile);
     scriptFor([
       {
         surface: 'filePick',
@@ -299,8 +320,8 @@ describe('Remote - SSH, activated in the editor', () => {
   it('F-2203 AC-8 (c119-dontsave): closing the template and choosing "Don\'t Save" leaves the created empty file on disk', async () => {
     const sshFolder = path.join(homedir(), '.ssh');
     const userFile = path.join(sshFolder, 'config');
-    await closeEditorsOf(userFile);
     rmSync(sshFolder, {recursive: true, force: true});
+    await syncDocumentOf(userFile);
     scriptFor([
       {
         surface: 'filePick',
@@ -339,9 +360,9 @@ describe('Remote - SSH, activated in the editor', () => {
   it('F-2203 AC-9 (c119-empty): an existing empty file opens with no template, not dirty', async () => {
     const userFile = path.join(homedir(), '.ssh', 'config');
     mkdirSync(path.dirname(userFile), {recursive: true});
-    await closeEditorsOf(userFile);
-    const closed = openEditorsOf(userFile);
     writeFileSync(userFile, '');
+    await syncDocumentOf(userFile);
+    const closed = openEditorsOf(userFile);
     scriptFor([
       {
         surface: 'filePick',
@@ -533,9 +554,9 @@ describe('Remote - SSH, activated in the editor', () => {
 
   it('F-2203 AC-20 (c119-client-paths): in the SSH window the picker lists client paths, and the client file opens', async () => {
     const userFile = path.join(homedir(), '.ssh', 'config');
-    await closeEditorsOf(userFile);
     mkdirSync(path.dirname(userFile), {recursive: true});
     writeFileSync(userFile, 'Host existing\n');
+    await syncDocumentOf(userFile);
     const closed = openEditorsOf(userFile);
     scriptFor([
       {
@@ -707,8 +728,8 @@ describe('Remote - SSH, activated in the editor', () => {
   it('F-2203 AC-25 (c119-indent): the template indentation follows the editor settings', async () => {
     const sshFolderPath = path.join(homedir(), '.ssh');
     const userFile = path.join(sshFolderPath, 'config');
-    await closeEditorsOf(userFile);
     rmSync(sshFolderPath, {recursive: true, force: true});
+    await syncDocumentOf(userFile);
     const lineOne =
       '# Read more about SSH config files: https://linux.die.net/man/5/ssh_config';
     const measured: unknown[] = [openEditorsOf(userFile)];
@@ -733,6 +754,7 @@ describe('Remote - SSH, activated in the editor', () => {
         });
       });
       rmSync(userFile, {force: true});
+      await syncDocumentOf(userFile);
       await editorSetting('insertSpaces', true, async () => {
         await editorSetting('tabSize', 2, async () => {
           scriptFor([
@@ -767,9 +789,9 @@ describe('Remote - SSH, activated in the editor', () => {
 
   it('F-2203 AC-27 (c119-stateless): opening a file through the command writes no setting and no stored state', async () => {
     const userFile = path.join(homedir(), '.ssh', 'config');
-    await closeEditorsOf(userFile);
     mkdirSync(path.dirname(userFile), {recursive: true});
     writeFileSync(userFile, 'Host existing\n');
+    await syncDocumentOf(userFile);
     const userData = process.env.HARNESS_USER_DATA ?? '';
     const settingsFile = path.join(userData, 'User', 'settings.json');
     const extensionStorage = path.join(userData, 'globalStorage');
@@ -865,10 +887,10 @@ describe('Remote - SSH, activated in the editor', () => {
   it('F-2203 AC-31 (c119-0755): a missing user file under a 0755 .ssh is created 0600, the folder keeping 0755', async () => {
     const sshFolderPath = path.join(homedir(), '.ssh');
     const userFile = path.join(sshFolderPath, 'config');
-    await closeEditorsOf(userFile);
     rmSync(sshFolderPath, {recursive: true, force: true});
     mkdirSync(sshFolderPath);
     chmodSync(sshFolderPath, 0o755);
+    await syncDocumentOf(userFile);
     const closed = openEditorsOf(userFile);
     scriptFor([
       {
