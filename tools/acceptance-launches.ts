@@ -335,6 +335,25 @@ const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
 const SECRETS_ACCOUNTS_RESET =
   'printf "%s:%s\\n" harness-2fa "$HOST_PASSWORD" harness-expired "$HOST_PASSWORD" | chpasswd && chage -d 0 harness-expired';
 
+/**
+ * The command that ends the servers of the harness account and waits, up to ten seconds, until none is left, failing
+ * when one is: a connect that starts at once would otherwise find the old server's pid file and reuse its process.
+ */
+const END_SERVERS =
+  "pkill -f '/home/harness/[.]vscodium-server-insiders/bin/'; " +
+  'for i in $(seq 1 20); do ' +
+  "pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; " +
+  'sleep 0.5; done; exit 1';
+
+/**
+ * The host setup of a launch whose connect must start the server itself: the servers of the harness account are ended
+ * and gone, and the agent links of earlier launches removed, so the window's session is the one that starts the server.
+ */
+const NO_RUNNING_SERVER: readonly HostSetupEntry[] = [
+  {command: END_SERVERS},
+  {command: 'rm -f /tmp/vscode-ssh-auth-sock-*'},
+];
+
 /** The host setup of the agent-notmp launch: the ACL entry that keeps harness-notmp from creating links in /tmp, put back. */
 const AGENT_NOTMP_ACL = 'setfacl -m u:harness-notmp:r-x /tmp';
 
@@ -708,13 +727,7 @@ export function hostSetupOf(
 ): HostSetupEntry[] {
   const entries: HostSetupEntry[] = [{command: "pkill -f 'n[c] -lk -p'; true"}];
   if (hostCase.keepServer !== true) {
-    entries.push({
-      command:
-        "pkill -f '/home/harness/[.]vscodium-server-insiders/bin/'; " +
-        'for i in $(seq 1 20); do ' +
-        "pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; " +
-        'sleep 0.5; done; exit 1',
-    });
+    entries.push({command: END_SERVERS});
   }
   if (
     hostCase.keepServer !== true &&
@@ -752,6 +765,7 @@ function forwardingLaunch(
   label: string,
   alias: string,
   settings?: Readonly<Record<string, unknown>>,
+  hostSetup?: readonly HostSetupEntry[],
 ): Launch {
   return {
     label,
@@ -760,6 +774,7 @@ function forwardingLaunch(
     folderUri: `vscode-remote://ssh-remote+${alias}/home/harness`,
     environment: {HARNESS_FORWARDING_CASE: label},
     ...(settings === undefined ? {} : {settings}),
+    ...(hostSetup === undefined ? {} : {hostSetup}),
   };
 }
 
@@ -808,9 +823,12 @@ export function launchesOf(root: string): Launch[] {
       folderUri: REMOTE_FOLDER_URI,
     },
     forwardingLaunch('agent', 'agentfwd'),
-    forwardingLaunch('agent-off', 'agentfwd-off', {
-      'remote.SSH.enableAgentForwarding': false,
-    }),
+    forwardingLaunch(
+      'agent-off',
+      'agentfwd-off',
+      {'remote.SSH.enableAgentForwarding': false},
+      NO_RUNNING_SERVER,
+    ),
     forwardingLaunch('x11', 'x11fwd'),
     {...forwardingLaunch('x11-noxauth', 'x11fwd'), hostBase: 'debian-12'},
     ...failureCases(root).map((failure): Launch => ({
