@@ -340,10 +340,7 @@ const AGENT_NOTMP_ACL = 'setfacl -m u:harness-notmp:r-x /tmp';
 
 /** The first part of the containers suite's test files: about half its time, from the start of the alphabet. */
 const CONTAINERS_A_FILES: readonly string[] = [
-  'config-watch.test.ts',
-  'configure-features-after.test.ts',
   'configure-features-mirrored.test.ts',
-  'edit-session-dormant.test.ts',
 ];
 
 /** The second part of the containers suite's test files: the rest, from recent-entry on. */

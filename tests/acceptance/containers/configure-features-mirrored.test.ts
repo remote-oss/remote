@@ -315,7 +315,12 @@ describe('Configure Container Features on a configuration outside the repository
             .some(line => line.includes('does not exist')),
         ],
         [true, [true, true], false],
-        `the log after the mark:\n${containersLog().slice(mark).join('\n')}`,
+        JSON.stringify({
+          expected: [missing, root].map(each =>
+            path.join(each, 'github.com', 'o', name),
+          ),
+          lines,
+        }),
       );
     } finally {
       await closeWindow(window).catch(() => undefined);
