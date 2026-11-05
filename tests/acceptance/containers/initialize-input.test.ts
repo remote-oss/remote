@@ -316,17 +316,136 @@ describe('the input of the "Configuring..." terminal', function () {
     await closeWindow('postecho');
   });
 
-  it('F-0415 AC-36 (initcmd-hidden): an initializeCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
-    const {host} = answerOf('initcmdhidden');
-    const window = await openedWith('initcmdhidden', {
+  it('F-0415 AC-36 (initcmd-hidden-old-1): an initializeCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
+    const {host} = answerOf('ihold1');
+    const window = await openedWith('ihold1', {
       initializeCommand: hiddenRead(host),
     });
     deepStrictEqual(await typedHidden(window, host), {
       answer: 'answered: SECRET7\n',
       theTypedTextShows: false,
     });
-    await connectedToContainer('initcmdhidden');
-    await closeWindow('initcmdhidden');
+    await connectedToContainer('ihold1');
+    await closeWindow('ihold1');
+  });
+
+  it('F-0415 AC-36 (initcmd-hidden-new-1): an initializeCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
+    const {host} = answerOf('ihnew1');
+    const window = await openedWith('ihnew1', {
+      initializeCommand: hiddenRead(host),
+    });
+    // The prompt text is also in the Start line that announces the command, so the text alone does not say the command
+    // reads yet: keys typed before its process exists are lost. The rows wait for the process in the host's list.
+    await until('the initializeCommand to run on the host', () =>
+      spawnSync('ps', ['-eo', 'args'], {encoding: 'utf8'}).stdout.includes(
+        `printf 'code > ' && read -r -s a`,
+      ),
+    );
+    deepStrictEqual(await typedHidden(window, host), {
+      answer: 'answered: SECRET7\n',
+      theTypedTextShows: false,
+    });
+    await connectedToContainer('ihnew1');
+    await closeWindow('ihnew1');
+  });
+
+  it('F-0415 AC-36 (initcmd-hidden-old-2): an initializeCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
+    const {host} = answerOf('ihold2');
+    const window = await openedWith('ihold2', {
+      initializeCommand: hiddenRead(host),
+    });
+    deepStrictEqual(await typedHidden(window, host), {
+      answer: 'answered: SECRET7\n',
+      theTypedTextShows: false,
+    });
+    await connectedToContainer('ihold2');
+    await closeWindow('ihold2');
+  });
+
+  it('F-0415 AC-36 (initcmd-hidden-new-2): an initializeCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
+    const {host} = answerOf('ihnew2');
+    const window = await openedWith('ihnew2', {
+      initializeCommand: hiddenRead(host),
+    });
+    // The prompt text is also in the Start line that announces the command, so the text alone does not say the command
+    // reads yet: keys typed before its process exists are lost. The rows wait for the process in the host's list.
+    await until('the initializeCommand to run on the host', () =>
+      spawnSync('ps', ['-eo', 'args'], {encoding: 'utf8'}).stdout.includes(
+        `printf 'code > ' && read -r -s a`,
+      ),
+    );
+    deepStrictEqual(await typedHidden(window, host), {
+      answer: 'answered: SECRET7\n',
+      theTypedTextShows: false,
+    });
+    await connectedToContainer('ihnew2');
+    await closeWindow('ihnew2');
+  });
+
+  it('F-0415 AC-36 (initcmd-hidden-old-3): an initializeCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
+    const {host} = answerOf('ihold3');
+    const window = await openedWith('ihold3', {
+      initializeCommand: hiddenRead(host),
+    });
+    deepStrictEqual(await typedHidden(window, host), {
+      answer: 'answered: SECRET7\n',
+      theTypedTextShows: false,
+    });
+    await connectedToContainer('ihold3');
+    await closeWindow('ihold3');
+  });
+
+  it('F-0415 AC-36 (initcmd-hidden-new-3): an initializeCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
+    const {host} = answerOf('ihnew3');
+    const window = await openedWith('ihnew3', {
+      initializeCommand: hiddenRead(host),
+    });
+    // The prompt text is also in the Start line that announces the command, so the text alone does not say the command
+    // reads yet: keys typed before its process exists are lost. The rows wait for the process in the host's list.
+    await until('the initializeCommand to run on the host', () =>
+      spawnSync('ps', ['-eo', 'args'], {encoding: 'utf8'}).stdout.includes(
+        `printf 'code > ' && read -r -s a`,
+      ),
+    );
+    deepStrictEqual(await typedHidden(window, host), {
+      answer: 'answered: SECRET7\n',
+      theTypedTextShows: false,
+    });
+    await connectedToContainer('ihnew3');
+    await closeWindow('ihnew3');
+  });
+
+  it('F-0415 AC-36 (initcmd-hidden-old-4): an initializeCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
+    const {host} = answerOf('ihold4');
+    const window = await openedWith('ihold4', {
+      initializeCommand: hiddenRead(host),
+    });
+    deepStrictEqual(await typedHidden(window, host), {
+      answer: 'answered: SECRET7\n',
+      theTypedTextShows: false,
+    });
+    await connectedToContainer('ihold4');
+    await closeWindow('ihold4');
+  });
+
+  it('F-0415 AC-36 (initcmd-hidden-new-4): an initializeCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
+    const {host} = answerOf('ihnew4');
+    const window = await openedWith('ihnew4', {
+      initializeCommand: hiddenRead(host),
+    });
+    // The prompt text is also in the Start line that announces the command, so the text alone does not say the command
+    // reads yet: keys typed before its process exists are lost. The rows wait for the process in the host's list.
+    await until('the initializeCommand to run on the host', () =>
+      spawnSync('ps', ['-eo', 'args'], {encoding: 'utf8'}).stdout.includes(
+        `printf 'code > ' && read -r -s a`,
+      ),
+    );
+    deepStrictEqual(await typedHidden(window, host), {
+      answer: 'answered: SECRET7\n',
+      theTypedTextShows: false,
+    });
+    await connectedToContainer('ihnew4');
+    await closeWindow('ihnew4');
   });
 
   it('F-0415 AC-36 (postcreate-hidden): a postCreateCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
