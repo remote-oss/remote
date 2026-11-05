@@ -30,6 +30,7 @@ import {
   windowTitle,
 } from '../windows/renderer.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
+import {runTemplatesReady} from '../windows/run-templates.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -758,6 +759,7 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
   }
 
   it('F-0412 AC-13 (cache-plain): an image built with plain docker build and pushed to the run’s registry, named in build.cacheFrom, has its cache imported by the dev container’s build, with no failure', async () => {
+    await runTemplatesReady();
     const imageTag = `${variable('HARNESS_REGISTRY')}/f0412-base:1`;
     const dockerfile = `FROM ${base()}\nRUN echo c62-one > /one\nRUN echo c62-two > /two\n`;
     try {
@@ -781,6 +783,7 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
   });
 
   it('F-0412 AC-15 (cache-registry): a build.cacheFrom that names a registry-hosted image none of the build’s layers came from imports it without a failure, and the build completes', async () => {
+    await runTemplatesReady();
     const imageTag = `${variable('HARNESS_REGISTRY')}/f0412-other:1`;
     try {
       await pushed(

@@ -33,6 +33,7 @@ import {
   slowBuildFolder,
   windowLogFiles,
 } from '../windows/sampling.ts';
+import {runTemplatesReady} from '../windows/run-templates.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -189,6 +190,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
   });
 
   it('F-0408 AC-15 (c68-pull): an image that is not local is pulled inside the Starting container step, and no notification, suffix, title or editor names the pull', async () => {
+    await runTemplatesReady();
     const imageTag = `${variable('HARNESS_REGISTRY')}/c68-pull:${String(Date.now())}`;
     await execFileAsync('docker', [
       'tag',
@@ -197,6 +199,14 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
     ]);
     await execFileAsync('docker', ['push', imageTag]);
     await execFileAsync('docker', ['image', 'rm', imageTag]);
+    const localAfterRemoval = await execFileAsync('docker', [
+      'image',
+      'ls',
+      '--filter',
+      `reference=${imageTag}`,
+      '--format',
+      '{{.Repository}}:{{.Tag}}',
+    ]);
     const folder = devContainerFolder('c68-pull', {
       name: 'Remote Image',
       image: imageTag,
@@ -234,6 +244,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
           ),
         },
         {inside: true, named: []},
+        `the image was listed locally after its removal: ${JSON.stringify(localAfterRemoval.stdout)}; the positions of Starting container, the pull, the download and Container started are ${[step, pull, downloaded, started].join(', ')} in:\n${lines.join('\n')}`,
       );
       await closeWindow(name);
     } finally {
