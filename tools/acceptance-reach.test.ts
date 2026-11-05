@@ -26,6 +26,7 @@ import {
   packageReach,
   PARTS_TABLE_FILE,
   sourceGraph,
+  tableImports,
   type TableModule,
   testsOfHelper,
   withHelpersAsTests,
@@ -161,6 +162,50 @@ describe('acceptance-reach: the launch table (card tooling-169)', () => {
         ),
       ].map(text => measurableEdit(real, text)),
       [true, true, true, true, false, false, false],
+    );
+  });
+
+  it('tooling-169: an edit of an export no other source imports (hostSetupOf, only its unit tests do) is measured with the imports read; one of an export another source imports (launchGroupOf) is not', () => {
+    const real = readFileSync(
+      path.join(REPOSITORY_ROOT, 'tools', 'acceptance-launches.ts'),
+      'utf8',
+    );
+    const helperEdited = real.replace(
+      `[{command: "pkill -f 'n[c] -lk -p'; true"}]`,
+      `[{command: "pkill -f 'n[c] -lk -p' || true"}]`,
+    );
+    const importedEdited = real.replace(
+      "      return 'genuine';",
+      "      return 'containers';",
+    );
+    const imported = tableImports(REPOSITORY_ROOT);
+    deepStrictEqual(
+      [
+        helperEdited !== real && importedEdited !== real,
+        measurableEdit(real, helperEdited),
+        measurableEdit(real, helperEdited, imported),
+        measurableEdit(real, importedEdited, imported),
+      ],
+      [true, false, true, false],
+    );
+  });
+
+  it('tooling-169: a change to an export no other source imports leaves the launches to show it; read as imported, it reaches every launch', () => {
+    deepStrictEqual(
+      [
+        changedLabels(
+          tableOf([LOCAL], () => 1),
+          tableOf([LOCAL], () => 2),
+          '/repo',
+          name => name !== 'EXTRA',
+        ),
+        changedLabels(
+          tableOf([LOCAL], () => 1),
+          tableOf([LOCAL], () => 2),
+          '/repo',
+        ),
+      ],
+      [[], undefined],
     );
   });
 
@@ -566,5 +611,67 @@ describe('acceptance-reach: what a change to the parts table reaches (card tooli
       ],
       [[], undefined],
     );
+  });
+});
+
+describe('acceptance-reach: the names other sources import from the launch table (card tooling-169)', () => {
+  beforeEach(() => {
+    root = mkdtempSync(path.join(tmpdir(), 'table-imports-'));
+    write(
+      'pnpm-workspace.yaml',
+      'packages:\n  - packages/*\n  - tests/acceptance\n',
+    );
+    write(
+      'tests/acceptance/package.json',
+      JSON.stringify({name: 'acceptance'}),
+    );
+    mkdirSync(path.join(root, 'packages'));
+    write('tools/acceptance-launches.ts', 'export const alpha = 1;\n');
+    write(
+      'tools/named.ts',
+      "import {alpha, beta as gamma} from './acceptance-launches.ts';\n",
+    );
+    write(
+      'tools/again.ts',
+      "export {delta} from './acceptance-launches.ts';\nimport type {Epsilon} from './acceptance-launches.ts';\n",
+    );
+    write(
+      'tools/named.test.ts',
+      "import * as table from './acceptance-launches.ts';\n",
+    );
+  });
+
+  afterEach(() => {
+    rmSync(root, {recursive: true, force: true});
+  });
+
+  it('tooling-169: named imports and re-exports, types too, are the names; a unit test is no importer', () => {
+    const imported = tableImports(root);
+    deepStrictEqual(
+      ['alpha', 'beta', 'gamma', 'delta', 'Epsilon', 'zeta'].map(imported),
+      [true, true, false, true, true, false],
+    );
+  });
+
+  it('tooling-169: a namespace or default import, export *, a dynamic import, a require or an import of require uses every name', () => {
+    deepStrictEqual(
+      [
+        "import * as table from './acceptance-launches.ts';",
+        "import table from './acceptance-launches.ts';",
+        "export * from './acceptance-launches.ts';",
+        "const table = await import('./acceptance-launches.ts');",
+        "const table = require('./acceptance-launches.ts');",
+        "import table = require('./acceptance-launches.ts');",
+      ].map(line => {
+        write('tools/every.ts', `${line}\n`);
+        return tableImports(root)('zeta');
+      }),
+      [true, true, true, true, true, true],
+    );
+  });
+
+  it("tooling-169: a workspace the graph can't read leaves every name imported", () => {
+    write('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
+    deepStrictEqual(tableImports(root)('zeta'), true);
   });
 });
