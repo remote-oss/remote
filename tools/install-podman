@@ -1,28 +1,30 @@
 #!/usr/bin/env bash
-# install-podman: rootless Podman 5 for the containers-podman launch, as the job's own user, on a Linux CI machine.
+# install-podman: rootless Podman at the release pinned below for the containers-podman launch, as the job's own user,
+# on a Linux CI machine.
 #
-#   tools/install-podman    install Podman when the machine's is older than release 5, set rootless Podman up for the
-#                           user, and print what `podman info` reports
+#   tools/install-podman    install the pinned Podman unless the machine's is that release, set rootless Podman up for
+#                           the user, and print what `podman info` reports
 #
-# A machine whose podman is release 5 or later keeps it. Otherwise (Ubuntu 24.04 has 4.9.3) podman-static's build at
-# the version pinned below is checked against its pinned sha256, unpacked and copied into /usr/local and /etc/containers,
-# which come first on the PATH and replace the machine's configuration. Its runc is left out: one in /usr/local/bin
+# A machine whose podman is the pinned release keeps it. Otherwise (Ubuntu 24.04 has 4.9.3) podman-static's build at the
+# pinned version is checked against its pinned sha256, unpacked and copied into /usr/local and /etc/containers, which
+# come first on the PATH and replace the machine's configuration. The pin is 6.1.4: on GitHub's ubuntu-24.04 (kernel
+# 7.0.0-1017-azure) `podman exec` of a command that ends at once never returns with 5.7.1 or 5.8.8, whatever their
+# conmon, and returns with 6.1.4 (runs 41990219734, 41969557740). Its runc is left out: one in /usr/local/bin
 # would come before Docker's own. Rootless Podman then needs newuidmap and newgidmap setuid and subordinate ids for the
 # user. On Ubuntu, the job lifts the restriction on unprivileged user namespaces first (the workflow's AppArmor step).
 # A version change here is the only way the pin moves.
 set -euo pipefail
 
-PODMAN_VERSION=5.8.8
-PODMAN_SHA256_AMD64=e0e12f9de61bdb054d19a77df0e84ddd51cadfee13688e0fb607d61b6833e8cd
-PODMAN_SHA256_ARM64=816bc5b97dc62396838d825aaccd9d3eb841167a2d31968efc1e6a3e6a0a463b
+PODMAN_VERSION=6.1.4
+PODMAN_SHA256_AMD64=9dd51073fac5a1742f88cf3caff5554615cb4d67ba554d25e8807be635547af5
+PODMAN_SHA256_ARM64=c106d09d7524209ce01eb3a02a7e621e9c55ec31d0fada48439cf77aa07afdb6
 
-# the major release of the podman on the PATH, or nothing when there is none
-podman_major() {
-  podman --version 2>/dev/null | sed -n 's/^podman version \([0-9][0-9]*\)\..*/\1/p'
+# the release of the podman on the PATH, or nothing when there is none
+podman_release() {
+  podman --version 2>/dev/null | sed -n 's/^podman version \([0-9][0-9.]*\).*/\1/p'
 }
 
-major=$(podman_major)
-if [ -z "$major" ] || [ "$major" -lt 5 ]; then
+if [ "$(podman_release)" != "$PODMAN_VERSION" ]; then
   case "$(uname -m)" in
     x86_64) arch=amd64 sha256=$PODMAN_SHA256_AMD64 ;;
     aarch64 | arm64) arch=arm64 sha256=$PODMAN_SHA256_ARM64 ;;
@@ -41,9 +43,8 @@ if [ -z "$major" ] || [ "$major" -lt 5 ]; then
   rm -f "$work/podman-linux-$arch/usr/local/bin/runc"
   sudo cp -r "$work/podman-linux-$arch/usr" "$work/podman-linux-$arch/etc" /
   hash -r
-  major=$(podman_major)
-  [ "${major:-0}" -ge 5 ] || {
-    echo "install-podman: the podman on the PATH is still $(podman --version 2>&1)" >&2
+  [ "$(podman_release)" = "$PODMAN_VERSION" ] || {
+    echo "install-podman: the podman on the PATH is $(podman --version 2>&1), not $PODMAN_VERSION" >&2
     exit 1
   }
 fi
