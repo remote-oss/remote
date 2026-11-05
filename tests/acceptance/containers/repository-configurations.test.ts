@@ -204,8 +204,313 @@ describe('configurations outside the repository (card containers-161, F-0302)', 
     await setUserSetting(SETTING, undefined);
   });
 
-  it('F-0302 AC-1, AC-16, AC-31, AC-46, F-0303 AC-19 (c161-reopen): Reopen in Container on a folder with no configuration of its own, whose two remotes have one URL, builds from the mirrored file with no pick, with the folder’s mount and labels, and the mirrored file’s deletion shows no notification', async () => {
-    const name = 'c161-reopen';
+  it('F-0302 AC-1, AC-16, AC-31, AC-46, F-0303 AC-19 (c161-reopen-1): Reopen in Container on a folder with no configuration of its own, whose two remotes have one URL, builds from the mirrored file with no pick, with the folder’s mount and labels, and the mirrored file’s deletion shows no notification', async () => {
+    const name = 'c161-reopen-1';
+    const folder = repositoryWith(name, [
+      `https://github.com/o/${name}.git`,
+      `https://github.com/o/${name}.git`,
+    ]);
+    const root = freshFolder(`${name}-root`);
+    const mirrored = path.join(root, 'github.com', 'o', name);
+    const file = writeAt(
+      mirrored,
+      MAIN,
+      connectable({
+        name: 'X-${localWorkspaceFolderBasename}',
+        build: {dockerfile: 'Dockerfile', context: '..'},
+      }),
+    );
+    writeAt(
+      mirrored,
+      '.devcontainer/Dockerfile',
+      `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\nCOPY seed.txt /seed.txt\n`,
+    );
+    writeAt(mirrored, 'seed.txt', 'from the mirrored folder\n');
+    await setUserSetting(SETTING, [root]);
+    const window = await openFolderWindow(folder);
+    try {
+      await startInWindow(window, REOPEN);
+      await connectedToContainer(window, 600_000);
+      const facts = {
+        title: (await windowTitle(window)).includes(
+          `[Dev Container: X-${name}]`,
+        ),
+        configFile: await labelOf(folder, 'devcontainer.config_file'),
+        localFolder: await labelOf(folder, 'devcontainer.local_folder'),
+        seed: await textInContainer(folder, '/seed.txt'),
+        mounts: await bindMountsOf(folder),
+        pick: await quickPickFacts(window),
+      };
+      await clearNotifications(window);
+      rmSync(file);
+      const notices = await noticesAfter(window, 25);
+      deepStrictEqual(
+        [facts, notices, (await windowState(window)).remoteName],
+        [
+          {
+            title: true,
+            configFile: file,
+            localFolder: folder,
+            seed: 'from the mirrored folder\n',
+            mounts: [`${folder} -> /workspaces/${name}`],
+            pick: undefined,
+          },
+          [],
+          'dev-container',
+        ],
+      );
+    } finally {
+      await closeWindow(window).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+    }
+  });
+
+  it('F-0302 AC-1, AC-16, AC-31, AC-46, F-0303 AC-19 (c161-reopen-2): Reopen in Container on a folder with no configuration of its own, whose two remotes have one URL, builds from the mirrored file with no pick, with the folder’s mount and labels, and the mirrored file’s deletion shows no notification', async () => {
+    const name = 'c161-reopen-2';
+    const folder = repositoryWith(name, [
+      `https://github.com/o/${name}.git`,
+      `https://github.com/o/${name}.git`,
+    ]);
+    const root = freshFolder(`${name}-root`);
+    const mirrored = path.join(root, 'github.com', 'o', name);
+    const file = writeAt(
+      mirrored,
+      MAIN,
+      connectable({
+        name: 'X-${localWorkspaceFolderBasename}',
+        build: {dockerfile: 'Dockerfile', context: '..'},
+      }),
+    );
+    writeAt(
+      mirrored,
+      '.devcontainer/Dockerfile',
+      `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\nCOPY seed.txt /seed.txt\n`,
+    );
+    writeAt(mirrored, 'seed.txt', 'from the mirrored folder\n');
+    await setUserSetting(SETTING, [root]);
+    const window = await openFolderWindow(folder);
+    try {
+      await startInWindow(window, REOPEN);
+      await connectedToContainer(window, 600_000);
+      const facts = {
+        title: (await windowTitle(window)).includes(
+          `[Dev Container: X-${name}]`,
+        ),
+        configFile: await labelOf(folder, 'devcontainer.config_file'),
+        localFolder: await labelOf(folder, 'devcontainer.local_folder'),
+        seed: await textInContainer(folder, '/seed.txt'),
+        mounts: await bindMountsOf(folder),
+        pick: await quickPickFacts(window),
+      };
+      await clearNotifications(window);
+      rmSync(file);
+      const notices = await noticesAfter(window, 25);
+      deepStrictEqual(
+        [facts, notices, (await windowState(window)).remoteName],
+        [
+          {
+            title: true,
+            configFile: file,
+            localFolder: folder,
+            seed: 'from the mirrored folder\n',
+            mounts: [`${folder} -> /workspaces/${name}`],
+            pick: undefined,
+          },
+          [],
+          'dev-container',
+        ],
+      );
+    } finally {
+      await closeWindow(window).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+    }
+  });
+
+  it('F-0302 AC-1, AC-16, AC-31, AC-46, F-0303 AC-19 (c161-reopen-3): Reopen in Container on a folder with no configuration of its own, whose two remotes have one URL, builds from the mirrored file with no pick, with the folder’s mount and labels, and the mirrored file’s deletion shows no notification', async () => {
+    const name = 'c161-reopen-3';
+    const folder = repositoryWith(name, [
+      `https://github.com/o/${name}.git`,
+      `https://github.com/o/${name}.git`,
+    ]);
+    const root = freshFolder(`${name}-root`);
+    const mirrored = path.join(root, 'github.com', 'o', name);
+    const file = writeAt(
+      mirrored,
+      MAIN,
+      connectable({
+        name: 'X-${localWorkspaceFolderBasename}',
+        build: {dockerfile: 'Dockerfile', context: '..'},
+      }),
+    );
+    writeAt(
+      mirrored,
+      '.devcontainer/Dockerfile',
+      `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\nCOPY seed.txt /seed.txt\n`,
+    );
+    writeAt(mirrored, 'seed.txt', 'from the mirrored folder\n');
+    await setUserSetting(SETTING, [root]);
+    const window = await openFolderWindow(folder);
+    try {
+      await startInWindow(window, REOPEN);
+      await connectedToContainer(window, 600_000);
+      const facts = {
+        title: (await windowTitle(window)).includes(
+          `[Dev Container: X-${name}]`,
+        ),
+        configFile: await labelOf(folder, 'devcontainer.config_file'),
+        localFolder: await labelOf(folder, 'devcontainer.local_folder'),
+        seed: await textInContainer(folder, '/seed.txt'),
+        mounts: await bindMountsOf(folder),
+        pick: await quickPickFacts(window),
+      };
+      await clearNotifications(window);
+      rmSync(file);
+      const notices = await noticesAfter(window, 25);
+      deepStrictEqual(
+        [facts, notices, (await windowState(window)).remoteName],
+        [
+          {
+            title: true,
+            configFile: file,
+            localFolder: folder,
+            seed: 'from the mirrored folder\n',
+            mounts: [`${folder} -> /workspaces/${name}`],
+            pick: undefined,
+          },
+          [],
+          'dev-container',
+        ],
+      );
+    } finally {
+      await closeWindow(window).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+    }
+  });
+
+  it('F-0302 AC-1, AC-16, AC-31, AC-46, F-0303 AC-19 (c161-reopen-4): Reopen in Container on a folder with no configuration of its own, whose two remotes have one URL, builds from the mirrored file with no pick, with the folder’s mount and labels, and the mirrored file’s deletion shows no notification', async () => {
+    const name = 'c161-reopen-4';
+    const folder = repositoryWith(name, [
+      `https://github.com/o/${name}.git`,
+      `https://github.com/o/${name}.git`,
+    ]);
+    const root = freshFolder(`${name}-root`);
+    const mirrored = path.join(root, 'github.com', 'o', name);
+    const file = writeAt(
+      mirrored,
+      MAIN,
+      connectable({
+        name: 'X-${localWorkspaceFolderBasename}',
+        build: {dockerfile: 'Dockerfile', context: '..'},
+      }),
+    );
+    writeAt(
+      mirrored,
+      '.devcontainer/Dockerfile',
+      `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\nCOPY seed.txt /seed.txt\n`,
+    );
+    writeAt(mirrored, 'seed.txt', 'from the mirrored folder\n');
+    await setUserSetting(SETTING, [root]);
+    const window = await openFolderWindow(folder);
+    try {
+      await startInWindow(window, REOPEN);
+      await connectedToContainer(window, 600_000);
+      const facts = {
+        title: (await windowTitle(window)).includes(
+          `[Dev Container: X-${name}]`,
+        ),
+        configFile: await labelOf(folder, 'devcontainer.config_file'),
+        localFolder: await labelOf(folder, 'devcontainer.local_folder'),
+        seed: await textInContainer(folder, '/seed.txt'),
+        mounts: await bindMountsOf(folder),
+        pick: await quickPickFacts(window),
+      };
+      await clearNotifications(window);
+      rmSync(file);
+      const notices = await noticesAfter(window, 25);
+      deepStrictEqual(
+        [facts, notices, (await windowState(window)).remoteName],
+        [
+          {
+            title: true,
+            configFile: file,
+            localFolder: folder,
+            seed: 'from the mirrored folder\n',
+            mounts: [`${folder} -> /workspaces/${name}`],
+            pick: undefined,
+          },
+          [],
+          'dev-container',
+        ],
+      );
+    } finally {
+      await closeWindow(window).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+    }
+  });
+
+  it('F-0302 AC-1, AC-16, AC-31, AC-46, F-0303 AC-19 (c161-reopen-5): Reopen in Container on a folder with no configuration of its own, whose two remotes have one URL, builds from the mirrored file with no pick, with the folder’s mount and labels, and the mirrored file’s deletion shows no notification', async () => {
+    const name = 'c161-reopen-5';
+    const folder = repositoryWith(name, [
+      `https://github.com/o/${name}.git`,
+      `https://github.com/o/${name}.git`,
+    ]);
+    const root = freshFolder(`${name}-root`);
+    const mirrored = path.join(root, 'github.com', 'o', name);
+    const file = writeAt(
+      mirrored,
+      MAIN,
+      connectable({
+        name: 'X-${localWorkspaceFolderBasename}',
+        build: {dockerfile: 'Dockerfile', context: '..'},
+      }),
+    );
+    writeAt(
+      mirrored,
+      '.devcontainer/Dockerfile',
+      `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\nCOPY seed.txt /seed.txt\n`,
+    );
+    writeAt(mirrored, 'seed.txt', 'from the mirrored folder\n');
+    await setUserSetting(SETTING, [root]);
+    const window = await openFolderWindow(folder);
+    try {
+      await startInWindow(window, REOPEN);
+      await connectedToContainer(window, 600_000);
+      const facts = {
+        title: (await windowTitle(window)).includes(
+          `[Dev Container: X-${name}]`,
+        ),
+        configFile: await labelOf(folder, 'devcontainer.config_file'),
+        localFolder: await labelOf(folder, 'devcontainer.local_folder'),
+        seed: await textInContainer(folder, '/seed.txt'),
+        mounts: await bindMountsOf(folder),
+        pick: await quickPickFacts(window),
+      };
+      await clearNotifications(window);
+      rmSync(file);
+      const notices = await noticesAfter(window, 25);
+      deepStrictEqual(
+        [facts, notices, (await windowState(window)).remoteName],
+        [
+          {
+            title: true,
+            configFile: file,
+            localFolder: folder,
+            seed: 'from the mirrored folder\n',
+            mounts: [`${folder} -> /workspaces/${name}`],
+            pick: undefined,
+          },
+          [],
+          'dev-container',
+        ],
+      );
+    } finally {
+      await closeWindow(window).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+    }
+  });
+
+  it('F-0302 AC-1, AC-16, AC-31, AC-46, F-0303 AC-19 (c161-reopen-6): Reopen in Container on a folder with no configuration of its own, whose two remotes have one URL, builds from the mirrored file with no pick, with the folder’s mount and labels, and the mirrored file’s deletion shows no notification', async () => {
+    const name = 'c161-reopen-6';
     const folder = repositoryWith(name, [
       `https://github.com/o/${name}.git`,
       `https://github.com/o/${name}.git`,
