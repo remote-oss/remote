@@ -2070,9 +2070,9 @@ async function editorCli(): Promise<string> {
   );
 }
 
-/** The VS Code executable at the version under test, downloaded when it is missing, with one retry. */
+/** The VS Code executable at the version under test, downloaded when it is missing, with retries. */
 async function vscodeExecutable(version: string): Promise<string> {
-  return await withOneRetry(
+  return await withRetries(
     () => downloadAndUnzipVSCode(version),
     delay,
     console.log.bind(console),
@@ -2164,8 +2164,13 @@ export async function runWithRetry(
   return second.exitCode;
 }
 
-/** How long the harness waits before its one retry of a step that failed, in milliseconds. */
-export const RETRY_PAUSE_MILLISECONDS = 5000;
+/**
+ * The pauses, in milliseconds, before each retry of a download that failed: four tries in all, the pauses growing, so
+ * that a burst of the release network's errors (504s that last a minute) passes before the last try.
+ */
+export const DOWNLOAD_PAUSES_MILLISECONDS: readonly number[] = [
+  5000, 15_000, 45_000,
+];
 
 /**
  * The text of a failure for the harness's line: an Error's message; when that is empty, its cause's text; when it
@@ -2197,24 +2202,35 @@ export function failureText(caught: unknown): string {
 }
 
 /**
- * Runs `step`; when it throws, reports the failure through `report`, waits `RETRY_PAUSE_MILLISECONDS`, and runs
- * it once more. The second attempt's result or error is the outcome.
+ * Runs `step`; each time it throws while a pause of `pauses` is left, reports the failure through `report`, waits that
+ * pause and runs it again. When the last try throws too, it rejects with every try's error, in order (`errors` holds
+ * the ones before).
  */
-export async function withOneRetry<Value>(
+export async function withRetries<Value>(
   step: () => Promise<Value>,
   sleep: (milliseconds: number) => Promise<void>,
   report: (line: string) => void,
+  pauses: readonly number[] = DOWNLOAD_PAUSES_MILLISECONDS,
+  errors: readonly string[] = [],
 ): Promise<Value> {
   try {
     return await step();
   } catch (error) {
+    const failed = [...errors, failureText(error)];
+    const [pause, ...later] = pauses;
+    if (pause === undefined) {
+      throw new Error(
+        failed
+          .map((text, index) => `try ${String(index + 1)}: ${text}`)
+          .join('; '),
+        {cause: error},
+      );
+    }
     report(
-      `acceptance: ${failureText(error)}; retrying once in ${String(
-        RETRY_PAUSE_MILLISECONDS / 1000,
-      )} s`,
+      `acceptance: ${failureText(error)}; try ${String(failed.length + 1)} in ${String(pause / 1000)} s`,
     );
-    await sleep(RETRY_PAUSE_MILLISECONDS);
-    return await step();
+    await sleep(pause);
+    return await withRetries(step, sleep, report, later, failed);
   }
 }
 
@@ -2602,13 +2618,13 @@ export function editorChoiceOf(
     : undefined;
 }
 
-/** Downloads `url` into memory through `fetcher`, with one retry. */
+/** Downloads `url` into memory through `fetcher`, with retries. */
 export async function downloadWithRetry(
   url: string,
   fetcher: typeof fetch = fetch,
   pause: Sleeper = delay,
 ): Promise<Uint8Array> {
-  return withOneRetry(
+  return withRetries(
     async () => {
       const response = await fetcher(url);
       if (!response.ok) {
@@ -2625,7 +2641,7 @@ export async function downloadWithRetry(
 const REDIRECTS: readonly number[] = [301, 302, 303, 307, 308];
 
 /**
- * Downloads a private release asset from its API `address` with `token`, with one retry. The API answers with a
+ * Downloads a private release asset from its API `address` with `token`, with retries. The API answers with a
  * redirect to a signed address, which is fetched without the token. With no token, the download fails and names the
  * variable that holds it.
  */
@@ -2640,7 +2656,7 @@ export async function privateAssetDownload(
       `${address}: the CLI archives need REMOTE_OSS_CLI_ARCHIVES_TOKEN, a token that may read ${CLI_ARCHIVES_REPOSITORY}`,
     );
   }
-  return withOneRetry(
+  return withRetries(
     async () => {
       const answer = await fetcher(address, {
         headers: {

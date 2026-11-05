@@ -27,6 +27,7 @@ import {
   bundleSuite,
   FRESH_RESOLVE_WAIT_MILLISECONDS,
   type Sleeper,
+  DOWNLOAD_PAUSES_MILLISECONDS,
   downloadWithRetry,
   privateAssetDownload,
   editorChoiceOf,
@@ -50,7 +51,6 @@ import {
   installsOf,
   packagedExtensions,
   removeBundles,
-  RETRY_PAUSE_MILLISECONDS,
   runAcceptance,
   runCommand,
   runLaunches,
@@ -66,7 +66,7 @@ import {
   vscodiumConfiguration,
   vscodiumConfigurations,
   vscodiumExecutableOf,
-  withOneRetry,
+  withRetries,
   markDownloadRequests,
   writeUserSettings,
 } from './acceptance.ts';
@@ -3100,62 +3100,75 @@ describe('acceptance', () => {
     });
   });
 
-  describe('withOneRetry', () => {
+  describe('withRetries (card tooling-179)', () => {
     it('returns the step result without sleeping or reporting when the step resolves', async () => {
       const recorder = new RetryRecorder();
       const {step} = scriptedStep(['ok']);
-      const result = await withOneRetry(step, recorder.sleep, recorder.report);
+      const result = await withRetries(step, recorder.sleep, recorder.report);
       deepStrictEqual(
         [result, recorder.sleeps, recorder.lines],
         ['ok', [], []],
       );
     });
 
-    it('returns the retry result when the first attempt rejects', async () => {
+    it('tooling-179: after three failures the fourth try returns, each retry after its pause of 5, 15 and 45 s, each failure reported', async () => {
       const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), 'ok']);
-      const result = await withOneRetry(step, recorder.sleep, recorder.report);
-      strictEqual(result, 'ok');
-    });
-
-    it('sleeps the retry pause before the one retry', async () => {
-      const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), 'ok']);
-      await withOneRetry(step, recorder.sleep, recorder.report);
-      deepStrictEqual(recorder.sleeps, [RETRY_PAUSE_MILLISECONDS]);
-    });
-
-    it('reports the failure and the pause in seconds before the one retry', async () => {
-      const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), 'ok']);
-      await withOneRetry(step, recorder.sleep, recorder.report);
-      deepStrictEqual(recorder.lines, [
-        'acceptance: busy; retrying once in 5 s',
+      const {step, called} = scriptedStep([
+        new Error('504'),
+        new Error('504'),
+        new Error('busy'),
+        'ok',
       ]);
-    });
-
-    it('rejects with the second error when the retry rejects too', async () => {
-      const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), new Error('down')]);
-      await rejects(
-        withOneRetry(step, recorder.sleep, recorder.report),
-        /down/,
+      const result = await withRetries(step, recorder.sleep, recorder.report);
+      deepStrictEqual(
+        [result, called(), recorder.sleeps, recorder.lines],
+        [
+          'ok',
+          4,
+          [...DOWNLOAD_PAUSES_MILLISECONDS],
+          [
+            'acceptance: 504; try 2 in 5 s',
+            'acceptance: 504; try 3 in 15 s',
+            'acceptance: busy; try 4 in 45 s',
+          ],
+        ],
       );
     });
 
-    it('runs the step once more after a rejection, and no more', async () => {
+    it("tooling-179: when every try fails it rejects with every try's error, and tries no more", async () => {
       const recorder = new RetryRecorder();
       const {step, called} = scriptedStep([
-        new Error('busy'),
-        new Error('busy'),
+        new Error('504'),
+        new Error('504'),
+        new Error('504'),
+        new Error('down'),
+        'never',
       ]);
-      let rejected = false;
+      let message = '';
       try {
-        await withOneRetry(step, recorder.sleep, recorder.report);
-      } catch {
-        rejected = true;
+        await withRetries(step, recorder.sleep, recorder.report);
+      } catch (error) {
+        message = error instanceof Error ? error.message : '';
       }
-      deepStrictEqual([called(), rejected], [2, true]);
+      deepStrictEqual(
+        [message, called()],
+        ['try 1: 504; try 2: 504; try 3: 504; try 4: down', 4],
+      );
+    });
+
+    it('takes its pauses from the caller: none is one try', async () => {
+      const recorder = new RetryRecorder();
+      const {step, called} = scriptedStep([new Error('busy'), 'ok']);
+      let message = '';
+      try {
+        await withRetries(step, recorder.sleep, recorder.report, []);
+      } catch (error) {
+        message = error instanceof Error ? error.message : '';
+      }
+      deepStrictEqual(
+        [message, called(), recorder.sleeps],
+        ['try 1: busy', 1, []],
+      );
     });
   });
 
@@ -4318,14 +4331,17 @@ describe('acceptance', () => {
       );
     });
 
-    it('#253 Q14: a download that answers with an error status throws after its one retry', async () => {
+    it('#253 Q14, tooling-179: a download that answers with an error status throws after its four tries, with each one', async () => {
+      const failure = 'https://example.invalid/a: 404';
       await rejects(
         downloadWithRetry(
           'https://example.invalid/a',
           () => Promise.resolve(new Response('', {status: 404})),
           () => Promise.resolve(),
         ),
-        {message: 'https://example.invalid/a: 404'},
+        {
+          message: `try 1: ${failure}; try 2: ${failure}; try 3: ${failure}; try 4: ${failure}`,
+        },
       );
     });
 
@@ -4410,7 +4426,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('tooling-111: an asset the token may not read throws after its one retry, and a redirect with no address is an error', async () => {
+    it('tooling-111, tooling-179: an asset the token may not read throws after its four tries, and a redirect with no address is an error', async () => {
       const outcomes = await Promise.all(
         [
           new Response(null, {status: 404}),
@@ -4419,10 +4435,17 @@ describe('acceptance', () => {
           assetFailureOf('secret', () => Promise.resolve(answer.clone())),
         ),
       );
-      deepStrictEqual(outcomes, [
-        'https://api.example.invalid/assets/41: 404',
-        'https://api.example.invalid/assets/41: 302',
-      ]);
+      deepStrictEqual(
+        outcomes,
+        ['404', '302'].map(status =>
+          [1, 2, 3, 4]
+            .map(
+              tries =>
+                `try ${String(tries)}: https://api.example.invalid/assets/41: ${status}`,
+            )
+            .join('; '),
+        ),
+      );
     });
 
     it('tooling-111: with no token the download fails at once and names the variable', async () => {
