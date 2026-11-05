@@ -576,12 +576,23 @@ function startRequestOf(changes: Partial<StartRequest> = {}): StartRequest {
   };
 }
 
-/** A runner whose processes are counted when they are killed. */
-function countingRunner(behaviour: FakeRun, session = {}) {
+/** A runner whose processes are counted when they are killed; `onLocate` is called at each look for a local file. */
+function countingRunner(
+  behaviour: FakeRun,
+  session = {},
+  onLocate: () => void = () => undefined,
+) {
   const fake = fakeWsl(() => behaviour, session);
   const counted = {kills: 0};
   const runner = createWslRunner({
     ...fake,
+    files: {
+      ...fake.files,
+      exists: path => {
+        onLocate();
+        return fake.files.exists(path);
+      },
+    },
     spawner: async specification => {
       const handle = await fake.spawner(specification);
       return {
@@ -790,5 +801,60 @@ describe('start, the live process of a program in a distro (card containers-203,
       [endedAs(await started.process.exited), live.counted.kills],
       ['failed cancelled', 1],
     );
+  });
+});
+
+describe('a cancellation that comes while the runner is still locating wsl.exe (card wsl-01)', () => {
+  /** A runner whose first look for wsl.exe cancels `cancel`, so that the signal is aborted before the process starts. */
+  function cancellingDuringLocate(behaviour: FakeRun, cancel: AbortController) {
+    const {runner, counted} = countingRunner(behaviour, {}, () => {
+      cancel.abort();
+    });
+    return {runner, counted};
+  }
+
+  it('cw01 start: a cancel during the locate ends the process once and exited says cancelled', async () => {
+    const cancel = new AbortController();
+    const {runner, counted} = cancellingDuringLocate(
+      {kind: 'printsUntilKilled', lines: ['x']},
+      cancel,
+    );
+    const started = await runner.start(
+      startRequestOf({cancellation: cancel.signal}),
+    );
+    if (started.kind !== 'started') {
+      throw new Error('not started');
+    }
+    deepStrictEqual(
+      [endedAs(await started.process.exited), counted.kills],
+      ['failed cancelled', 1],
+    );
+  });
+
+  it('cw01 exec: a cancel during the locate is cancelled and ends the process', async () => {
+    const cancel = new AbortController();
+    const {runner, counted} = cancellingDuringLocate(
+      {kind: 'printsUntilKilled', lines: ['x']},
+      cancel,
+    );
+    const outcome = await runner.exec(
+      requestOf({cancellation: cancel.signal}),
+      () => undefined,
+    );
+    deepStrictEqual([kindOf(outcome), counted.kills], ['cancelled', 1]);
+  });
+
+  it('cw01 manage: a cancel during the locate is cancelled and ends the process', async () => {
+    const cancel = new AbortController();
+    const {runner, counted} = cancellingDuringLocate(
+      {kind: 'printsUntilKilled', lines: ['x']},
+      cancel,
+    );
+    const outcome = await runner.manage({
+      verb: 'status',
+      operands: [],
+      cancellation: cancel.signal,
+    });
+    deepStrictEqual([kindOf(outcome), counted.kills], ['cancelled', 1]);
   });
 });

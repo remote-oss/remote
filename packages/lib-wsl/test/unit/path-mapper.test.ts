@@ -77,6 +77,33 @@ describe('D3: the path mapper’s process half', () => {
     );
   });
 
+  it('cw01 toDistro: a path that is neither a drive path nor a UNC path is not translatable and starts no process, so no option can reach wslpath', async () => {
+    const {fake, mapper} = mapperOver({kind: 'exits', status: 0});
+    const answers = [];
+    for (const path of ['-x', '--help', 'relative\\x', '/mnt/c/x', '']) {
+      answers.push(await mapper.toDistro(path, 'Ubuntu', NEVER));
+    }
+    deepStrictEqual(
+      [answers.map(each => each.kind), fake.started.length],
+      [Array<string>(5).fill('notTranslatable'), 0],
+    );
+  });
+
+  it('cw01 toDistro: a UNC path that is not a share of a distro is still asked of wslpath', async () => {
+    const {fake, mapper} = mapperOver({
+      kind: 'exits',
+      stdout: utf8Output('//server/share/x\n'),
+      status: 0,
+    });
+    deepStrictEqual(
+      [
+        (await mapper.toDistro('\\\\server\\share\\x', 'Ubuntu', NEVER)).kind,
+        fake.started.length,
+      ],
+      ['mapped', 1],
+    );
+  });
+
   it('cw01 toDistro: a wslpath that prints nothing usable is not translatable', async () => {
     const {mapper} = mapperOver({kind: 'exits', status: 0});
     const mapped = await mapper.toDistro('X:\\gone', 'Ubuntu', NEVER);
