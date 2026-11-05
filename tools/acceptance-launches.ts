@@ -45,6 +45,11 @@ interface LaunchCommon {
   /** Whether the run makes the launch only when `--launches` names it. */
   namedOnly?: true;
   /**
+   * The name of the launch that this one is a part of, which runs the same suite in parts: a selection that names it
+   * makes every part, and `!<name>` takes every part out.
+   */
+  partOf?: string;
+  /**
    * The engine the launch's extension drives instead of Docker: it sets `dev.containers.dockerPath`, and the run
    * prepares that engine's storage. The run's own infrastructure (the SSH host, the registry, the download host) stays
    * on Docker.
@@ -109,11 +114,6 @@ export interface PlainLaunch extends LaunchCommon {
    * suite when absent.
    */
   files?: readonly string[];
-  /**
-   * The name of the launch that this one is a part of, which runs the same suite in parts: a selection that names it
-   * makes every part, and `!<name>` takes every part out.
-   */
-  partOf?: string;
   /**
    * Extensions of `LAUNCH_EXTENSIONS`, by id, that this launch alone installs, with their proposed API: the launch
    * gets an extensions folder of its own, `<run>/extensions-<label>`, so the other launches never see them.
@@ -770,7 +770,7 @@ function forwardingLaunch(
  * `agent-off` and `x11` run suite-forwarding on the aliases that forward the agent (the second with
  * `remote.SSH.enableAgentForwarding` false) and X11, on that same server; `x11-noxauth` runs it on the `x11fwd` alias of the Debian 12 host, which has no `xauth`; each failing connect runs suite-failure in a window on its alias, answered from its own script; `terminal` runs
  * suite-terminal with `remote.SSH.useLocalServer` off; `socket` runs suite-socket with
- * `remote.SSH.remoteServerListenOnSocket` on; `slow` runs suite-slow with an extension that takes 15 s to
+ * `remote.SSH.remoteServerListenOnSocket` on, after its primer `socket-prime`, a terminal-mode connect that leaves the port-kind server its AC-9 row is about (a part of `socket`, made only when `socket` is named); `slow` runs suite-slow with an extension that takes 15 s to
  * activate in the remote extension host, which the harness copies to the host first; each `client-…` launch runs
  * suite-client with a `remote.SSH.path` of its own and fake clients on the run's `PATH`; `windows` starts the editor plainly, with no
  * runner and no folder, and drives its windows through the window agent from a Node run; `no-proposals` does the
@@ -831,6 +831,20 @@ export function launchesOf(root: string): Launch[] {
       runner: 'runner-remote',
       suite: 'suite-terminal',
       folderUri: REMOTE_FOLDER_URI,
+      settings: {
+        'remote.SSH.useLocalServer': false,
+        'remote.SSH.remotePlatform': {harness: 'linux'},
+      },
+    },
+    {
+      // The terminal-mode connect that leaves the port-kind server the socket launch's row is about, run right before it:
+      // a selection that names `socket` makes both.
+      label: 'socket-prime',
+      runner: 'runner-remote',
+      suite: 'suite-socket-prime',
+      folderUri: REMOTE_FOLDER_URI,
+      namedOnly: true,
+      partOf: 'socket',
       settings: {
         'remote.SSH.useLocalServer': false,
         'remote.SSH.remotePlatform': {harness: 'linux'},

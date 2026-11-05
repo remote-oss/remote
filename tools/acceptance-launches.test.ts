@@ -305,6 +305,7 @@ describe('the launches of the VSCodium run', () => {
           failure => `failure-${failure.label ?? failure.alias}`,
         ),
         'terminal',
+        'socket-prime',
         'socket',
         'slow',
         'remote-ubuntu',
@@ -1017,7 +1018,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-51, connect-84, containers-101: the containers-podman launch, cli-path and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
+  it('tooling-51, connect-84, containers-101, tooling-168: socket-prime (a part of socket), the containers-podman launch, cli-path and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
     deepStrictEqual(
       launches
         .filter(
@@ -1027,6 +1028,7 @@ describe('the launches of the VSCodium run', () => {
         )
         .map(launch => launch.label),
       [
+        'socket-prime',
         'cli-path',
         'containers-podman',
         'genuine',
@@ -1227,6 +1229,7 @@ describe('the launches of the VSCodium run', () => {
         'failure-port-range-busy',
         'failure-i686',
         'terminal',
+        'socket-prime',
         'socket',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
