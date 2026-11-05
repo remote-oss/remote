@@ -129,8 +129,6 @@ export interface Scene {
   /** The configuration files discovery finds in a folder, in the picker's order. */
   candidates: Array<{file: string}>;
   connector: ContainerConnector;
-  /** How many connect attempts began their log. */
-  attemptsBegun: number;
   engineCalls: EngineCall[];
   engineFiles: string[];
   cliEnvironments: Array<Readonly<Record<string, string | undefined>>>;
@@ -371,7 +369,6 @@ export function sceneOf(
     folderExists: true,
     configurationExists: true,
     candidates: [],
-    attemptsBegun: 0,
     engineCalls: [],
     engineFiles: [],
     cliEnvironments: [],
@@ -778,9 +775,6 @@ export function sceneOf(
       return scene.declinedFails
         ? Promise.reject(new Error('the modal failed'))
         : Promise.resolve();
-    },
-    beginAttempt: () => {
-      scene.attemptsBegun += 1;
     },
     reopenLocally: hostPath => {
       scene.trustCalls.push(`reopenLocally ${hostPath}`);

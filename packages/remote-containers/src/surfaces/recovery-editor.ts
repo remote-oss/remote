@@ -35,7 +35,7 @@ export function recoveryPortsOf<Address>(
   own: Pick<
     RecoveryPorts,
     | 'keepEdit'
-    | 'writeAttemptLog'
+    | 'activationLogFile'
     | 'fileExists'
     | 'storePausedRetry'
     | 'rebuildContainer'

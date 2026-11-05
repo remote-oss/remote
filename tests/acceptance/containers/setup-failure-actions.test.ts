@@ -330,13 +330,13 @@ describe('F-0502 the failures of the resolution (card containers-43)', function 
       );
       const groups = await editorGroupLabels(name);
       const logTab = (await editorTabs(name)).find(entry =>
-        entry.label.startsWith('dev-containers-attempt-'),
+        entry.label.startsWith('remoteContainers-'),
       );
       deepStrictEqual(
         {
           remoteName: (await windowState(name)).remoteName,
           groups: groups.length,
-          logInSecond: groups[1]?.[0]?.startsWith('dev-containers-attempt-'),
+          logInSecond: groups[1]?.[0]?.startsWith('remoteContainers-'),
           logPreview: logTab?.preview,
           focused: await activeEditorOf(name),
         },
@@ -397,7 +397,7 @@ describe('F-0502 the failures of the resolution (card containers-43)', function 
           activeTab: (await editorTabs(name)).find(entry => entry.active)
             ?.label,
           placeholder: text.includes('Create File'),
-          logInSecond: groups[1]?.[0]?.startsWith('dev-containers-attempt-'),
+          logInSecond: groups[1]?.[0]?.startsWith('remoteContainers-'),
           onDisk: existsSync(configuration),
           pick: await quickPickRows(name),
           notifications: await notificationCentre(name),

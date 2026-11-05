@@ -349,7 +349,7 @@ describe('Dev Containers failure dialog and quick pick (card containers-11)', fu
         active: await activeEditorOf(name),
         first: first.map(entry => [entry.label, entry.preview]),
         second: second.map(entry => [
-          entry.label.startsWith('dev-containers-attempt-'),
+          entry.label.startsWith('remoteContainers-'),
           entry.preview,
         ]),
       },

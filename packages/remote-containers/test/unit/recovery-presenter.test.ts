@@ -92,7 +92,7 @@ function presenting(script: Script = {}) {
         script.fileExists === undefined
           ? Promise.resolve(true)
           : script.fileExists(file),
-      writeAttemptLog: () => {
+      activationLogFile: () => {
         written.push(calls.length);
         if (script.logRefusal !== undefined) {
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the row feeds a rejection that is not an Error
@@ -643,7 +643,7 @@ describe('the failure presenter C8 (card containers-11)', () => {
     );
   });
 
-  it('F-0410 5.0: a log that cannot be written is logged at warn, the dialog still shows and Edit Locally keeps the configuration alone', async () => {
+  it('F-0410 5.0: a log file that cannot be read for the dialog is logged at warn, the dialog still shows and Edit Locally keeps the configuration alone', async () => {
     const {calls, sink} = await present(containerSetupFailed(), {
       errors: [EDIT],
       logFails: true,
@@ -655,7 +655,7 @@ describe('the failure presenter C8 (card containers-11)', () => {
       ],
       [
         ['keepEdit /w /w/.devcontainer/devcontainer.json', 'openLocally /w'],
-        ['warn: the log of the attempt could not be written: disk full'],
+        ['warn: the log file could not be read for the dialog: disk full'],
       ],
     );
   });
@@ -681,14 +681,14 @@ describe('the failure presenter C8 (card containers-11)', () => {
     });
     deepStrictEqual(written, []);
   });
-  it('F-0410 5.0: a log write rejected with a text is logged by its text', async () => {
+  it('F-0410 5.0: a log file read rejected with a text is logged by its text', async () => {
     const {sink} = await present(containerSetupFailed(), {
       errors: [EDIT],
       logRefusal: 'quota',
     });
     deepStrictEqual(
       sink.lines.map(line => `${line.level}: ${line.message}`),
-      ['warn: the log of the attempt could not be written: quota'],
+      ['warn: the log file could not be read for the dialog: quota'],
     );
   });
 

@@ -55,8 +55,8 @@ export interface RecoveryPorts {
   ): PromiseLike<string | undefined>;
   /** Whether the file at `file` exists, asked of the editor's file system for the URI's own scheme. */
   fileExists(file: SerializedUri): PromiseLike<boolean>;
-  /** Writes the failed attempt's log to a file and gives its path; none when it could not be written. */
-  writeAttemptLog(): PromiseLike<string | undefined>;
+  /** The file of the activation's log, once everything logged so far has reached it; none when there is none. */
+  activationLogFile(): PromiseLike<string | undefined>;
   /** Keeps the configuration file, and the attempt's log file when there is one, for the window that opens `folder` next. */
   keepEdit(
     folder: string,
@@ -178,11 +178,11 @@ export function recoveryPresenterOf(
       }
       const folder = target();
       try {
-        attemptFile = await ports.writeAttemptLog();
+        attemptFile = await ports.activationLogFile();
       } catch (caught) {
         attemptFile = undefined;
         ports.logger.warn(
-          `the log of the attempt could not be written: ${caught instanceof Error ? caught.message : String(caught)}`,
+          `the log file could not be read for the dialog: ${caught instanceof Error ? caught.message : String(caught)}`,
         );
       }
       const dialog = failureDialogOf(failed, folder, translate, volumeWindow());

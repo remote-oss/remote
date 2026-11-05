@@ -218,8 +218,8 @@ describe('F-0301 configuration errors (card containers-50)', function () {
         (await windowState(edited.window)).remoteName,
         (await editorGroups(edited.window)).map(group =>
           group.map(entry => [
-            entry.label.startsWith('dev-containers-attempt-')
-              ? 'the attempt log'
+            entry.label.startsWith('remoteContainers-')
+              ? 'the activation log'
               : entry.label,
             entry.preview,
           ]),
@@ -236,7 +236,7 @@ describe('F-0301 configuration errors (card containers-50)', function () {
           ],
         ],
         null,
-        [[['devcontainer', true]], [['the attempt log', true]]],
+        [[['devcontainer', true]], [['the activation log', true]]],
       ],
     );
   });

@@ -1499,13 +1499,6 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
-  it('F-0410 5.0: every connect begins the log of a new attempt, as its phase begins', async () => {
-    const scene = sceneOf();
-    await connected(scene);
-    await scene.connector.connect(inputOf(PAYLOAD, {isReconnection: true}));
-    deepStrictEqual(scene.attemptsBegun, 2);
-  });
-
   it('F-0502 BR-20: a folder that no longer exists fails the connect at once with the setup failure, naming the folder, before any read, trust question or engine check', async () => {
     const scene = sceneOf();
     scene.folderExists = false;

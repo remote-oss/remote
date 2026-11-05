@@ -10,7 +10,7 @@ export function inertRecoveryPorts(
     showError: () => Promise.resolve(undefined),
     pick: () => Promise.resolve(undefined),
     fileExists: () => Promise.resolve(true),
-    writeAttemptLog: () => Promise.resolve(undefined),
+    activationLogFile: () => Promise.resolve(undefined),
     keepEdit: () => Promise.resolve(),
     openLocally: () => Promise.resolve(),
     reloadWindow: () => Promise.resolve(),

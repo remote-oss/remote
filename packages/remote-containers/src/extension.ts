@@ -232,7 +232,6 @@ import {MOUNT_PERFORMANCE_PAGE} from './surfaces/recovery-presenter.ts';
 import {cloneableRemoteOf} from './open/git-remote.ts';
 
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
-import {createAttemptLog, writeAttemptLog} from './connect/attempt-log.ts';
 import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
 import {rebuildContainer} from './open/rebuild.ts';
 import {storePausedRetry} from './state/paused-retry.ts';
@@ -821,8 +820,6 @@ export async function activate(
   const profile = profileOf(
     await readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8'),
   );
-  /** The lines of the connect attempt that is running or has failed, which a failure dialog writes to a file. */
-  const attemptLog = createAttemptLog();
   /** What the window's connection says of its target, for the commands that edit its configuration; the connector gives it once it exists. */
   const windowTarget: {
     attached: () =>
@@ -860,10 +857,9 @@ export async function activate(
   const logMirror = containersLogMirrorOf(process.env, (file, text) => {
     appendFileSync(file, text);
   });
-  /** The log lines the attempt log and the harness's file also get. */
+  /** The log lines the harness's file also gets. */
   const alsoLogged: Sink = {
     write: line => {
-      attemptLog.write(line);
       logMirror?.write(line);
     },
   };
@@ -2742,9 +2738,6 @@ export async function activate(
           detail,
         });
       },
-      beginAttempt: () => {
-        attemptLog.begin();
-      },
       reopenLocally: async hostPath => {
         await vscode.commands.executeCommand(
           'vscode.openFolder',
@@ -2849,8 +2842,10 @@ export async function activate(
       recentLabel: recentLabelPortsOf(vscode, () => os.homedir()),
       knownNames: context.globalState,
       presenter: recoveryPortsOf(vscode, {
-        writeAttemptLog: async () =>
-          writeAttemptLog(attemptLog, context.logUri.fsPath, Date.now()),
+        activationLogFile: async () => {
+          await logFile.flushed();
+          return logFilePath;
+        },
         fileExists: file =>
           Promise.resolve(
             vscode.workspace.fs.stat(
