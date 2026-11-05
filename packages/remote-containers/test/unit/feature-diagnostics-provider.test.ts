@@ -113,7 +113,7 @@ describe('the Problems panel’s Feature ids (card containers-95)', () => {
     ]);
   });
 
-  it('F-0810 (dike): a configuration under node_modules is not diagnosed, but one that is not is', async () => {
+  it('an unopened configuration under node_modules is not diagnosed, but one that is not is', async () => {
     const host = new FakeHost();
     host.disk.set('/w/devcontainer.json', BAD_TEXT);
     host.disk.set('/w/node_modules/p/devcontainer.json', BAD_TEXT);
@@ -122,6 +122,31 @@ describe('the Problems panel’s Feature ids (card containers-95)', () => {
     deepStrictEqual(messages(host), [
       [
         '/w/devcontainer.json',
+        [
+          'Absolute file paths are not allowed. Local file path must be indicated relative to the devcontainer.json.',
+        ],
+      ],
+    ]);
+  });
+
+  it('F-0810 AC-25 (c208-ac25-nodemodules-part): an opened configuration under node_modules is diagnosed from its open text, and an event for one that is not open is not', async () => {
+    const host = new FakeHost();
+    host.disk.set('/w/devcontainer.json', BAD_TEXT);
+    host.disk.set('/w/node_modules/p/devcontainer.json', GOOD_TEXT);
+    host.open.set('/w/node_modules/p/devcontainer.json', BAD_TEXT);
+    featureDiagnosticsProviderOf(host, template => template);
+    await settled();
+    host.watchers.get('/w')?.[0]?.('/w/node_modules/q/devcontainer.json');
+    await settled();
+    deepStrictEqual(messages(host), [
+      [
+        '/w/devcontainer.json',
+        [
+          'Absolute file paths are not allowed. Local file path must be indicated relative to the devcontainer.json.',
+        ],
+      ],
+      [
+        '/w/node_modules/p/devcontainer.json',
         [
           'Absolute file paths are not allowed. Local file path must be indicated relative to the devcontainer.json.',
         ],
