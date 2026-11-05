@@ -1240,6 +1240,7 @@ export function launchesOf(root: string): Launch[] {
       ...CONTAINERS_LAUNCH,
       label: 'containers-volume',
       suite: 'containers-volume',
+      workspaceTrust: true,
     },
     // The editor starts with two variables of its own, one set and one empty, which a configuration's references read.
     {
