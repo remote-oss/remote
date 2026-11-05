@@ -123,13 +123,22 @@ const ROWS: Readonly<Record<string, () => void>> = {
   },
   'agent-off': () => {
     it('F-2311 AC-10: the setting false makes no link', async () => {
+      // The terminal's own SSH_AUTH_SOCK is the server's, and which one that is depends on the session that started the
+      // server, so the row asks what the setting decides: the window's plan is none, no link was made, and the terminal
+      // is not given a link of the extension's.
       const socket = await terminalWrites(
         'echo "$SSH_AUTH_SOCK"',
         'agent-off-sock.txt',
       );
       deepStrictEqual(
-        {socket, links: await hostLinks()},
-        {socket: '', links: []},
+        {
+          links: await hostLinks(),
+          plan: forwardingLines().includes(
+            'agent forwarding: none (settingOff)',
+          ),
+          socketIsLink: /^\/tmp\/vscode-ssh-auth-sock-\d+$/.test(socket),
+        },
+        {links: [], plan: true, socketIsLink: false},
         forwardingLines(),
       );
     });
