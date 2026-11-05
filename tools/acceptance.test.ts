@@ -4733,20 +4733,20 @@ describe('acceptance', () => {
       const table: Launch[] = [
         {label: 'local', runner: 'runner', suite: 'suite-local'},
         {
-          label: 'big-a',
+          label: 'wide-a',
           kind: 'plain',
-          suite: 'big',
+          suite: 'wide',
           files: ['a.test.ts', 'b.test.ts'],
-          partOf: 'big',
+          partOf: 'wide',
         },
         {
-          label: 'big-b',
+          label: 'wide-b',
           kind: 'plain',
-          suite: 'big',
+          suite: 'wide',
           files: ['c.test.ts'],
-          partOf: 'big',
+          partOf: 'wide',
         },
-        {label: 'whole', kind: 'plain', suite: 'whole'},
+        {label: 'entire', kind: 'plain', suite: 'entire'},
       ];
       /** The label and files of each launch a selection makes, or its error text. */
       function made(...selected: string[]): unknown {
@@ -4760,28 +4760,28 @@ describe('acceptance', () => {
       }
       deepStrictEqual(
         [
-          made('big:c.test.ts+a.test.ts'),
-          made('big-a:b.test.ts', 'big-a:a.test.ts'),
-          made('whole:y.test.ts+x.test.ts', 'local'),
-          made('big-a:a.test.ts', 'big-a'),
-          made('big-b:a.test.ts'),
+          made('wide:c.test.ts+a.test.ts'),
+          made('wide-a:b.test.ts', 'wide-a:a.test.ts'),
+          made('entire:y.test.ts+x.test.ts', 'local'),
+          made('wide-a:a.test.ts', 'wide-a'),
+          made('wide-b:a.test.ts'),
           made('local:one.test.ts'),
-          made('whole:../x.test.ts'),
+          made('entire:../x.test.ts'),
         ],
         [
           [
-            ['big-a', ['a.test.ts']],
-            ['big-b', ['c.test.ts']],
+            ['wide-a', ['a.test.ts']],
+            ['wide-b', ['c.test.ts']],
           ],
-          [['big-a', ['a.test.ts', 'b.test.ts']]],
+          [['wide-a', ['a.test.ts', 'b.test.ts']]],
           [
             ['local', undefined],
-            ['whole', ['x.test.ts', 'y.test.ts']],
+            ['entire', ['x.test.ts', 'y.test.ts']],
           ],
-          [['big-a', ['a.test.ts', 'b.test.ts']]],
-          'unknown launch label(s): big-b:a.test.ts; the known ones: local, big-a, big-b, whole; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
-          'unknown launch label(s): local:one.test.ts; the known ones: local, big-a, big-b, whole; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
-          'unknown launch label(s): whole:../x.test.ts; the known ones: local, big-a, big-b, whole; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+          [['wide-a', ['a.test.ts', 'b.test.ts']]],
+          'unknown launch label(s): wide-b:a.test.ts; the known ones: local, wide-a, wide-b, entire; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+          'unknown launch label(s): local:one.test.ts; the known ones: local, wide-a, wide-b, entire; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+          'unknown launch label(s): entire:../x.test.ts; the known ones: local, wide-a, wide-b, entire; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
         ],
       );
     });
