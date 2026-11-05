@@ -258,6 +258,13 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
   it('F-2605 AC-15 (c136-kill-1): killing the terminal removes it and leaves the stored records as they were', async () => {
     await inWindow('local', CLEAR);
     await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    const pressure1 = setInterval(() => {
+      try {
+        hintRecords();
+      } catch {
+        // a locked read is part of the pressure
+      }
+    }, 2);
     await failed('c136-c1');
     try {
       await waitFor(
@@ -286,6 +293,7 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
       );
       deepStrictEqual(JSON.stringify(hintRecords()), before);
     } finally {
+      clearInterval(pressure1);
       await closeWindow('c136-c1').catch(() => undefined);
     }
   });
@@ -293,6 +301,13 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
   it('F-2605 AC-15 (c136-kill-2): killing the terminal removes it and leaves the stored records as they were', async () => {
     await inWindow('local', CLEAR);
     await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    const pressure2 = setInterval(() => {
+      try {
+        hintRecords();
+      } catch {
+        // a locked read is part of the pressure
+      }
+    }, 2);
     await failed('c136-c2');
     try {
       await waitFor(
@@ -321,6 +336,7 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
       );
       deepStrictEqual(JSON.stringify(hintRecords()), before);
     } finally {
+      clearInterval(pressure2);
       await closeWindow('c136-c2').catch(() => undefined);
     }
   });
@@ -328,6 +344,13 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
   it('F-2605 AC-15 (c136-kill-3): killing the terminal removes it and leaves the stored records as they were', async () => {
     await inWindow('local', CLEAR);
     await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    const pressure3 = setInterval(() => {
+      try {
+        hintRecords();
+      } catch {
+        // a locked read is part of the pressure
+      }
+    }, 2);
     await failed('c136-c3');
     try {
       await waitFor(
@@ -356,6 +379,7 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
       );
       deepStrictEqual(JSON.stringify(hintRecords()), before);
     } finally {
+      clearInterval(pressure3);
       await closeWindow('c136-c3').catch(() => undefined);
     }
   });
@@ -363,6 +387,13 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
   it('F-2605 AC-15 (c136-kill-4): killing the terminal removes it and leaves the stored records as they were', async () => {
     await inWindow('local', CLEAR);
     await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    const pressure4 = setInterval(() => {
+      try {
+        hintRecords();
+      } catch {
+        // a locked read is part of the pressure
+      }
+    }, 2);
     await failed('c136-c4');
     try {
       await waitFor(
@@ -391,6 +422,7 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
       );
       deepStrictEqual(JSON.stringify(hintRecords()), before);
     } finally {
+      clearInterval(pressure4);
       await closeWindow('c136-c4').catch(() => undefined);
     }
   });
