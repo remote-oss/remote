@@ -1,8 +1,9 @@
-# The VSCodium acceptance launches a pull request's change selects (main's push selection), as one part on one of
-# GitHub's ubuntu-24.04 runners. Called by ci.yml's pull request job, which runs at most six of them; with `full` (the
-# acceptance-full label, ci.yml or acceptance-full.yml) it runs the whole selection. Either has 360 minutes, the plan's
-# time limit, the most a job may run on GitHub's runners. A larger selection without `full` runs nothing and gets a
-# notice naming its launches. The run's steps are those of ci.yml's VSCodium job.
+# The VSCodium acceptance launches a pull request's change selects, as the parts of the select job's plan, each a job of
+# its own with its own time limit, run side by side. A change to test files only runs each changed file alone in the
+# launches that run it, and a smoke part beside them. Any other change runs its whole selection as one part: at most
+# six launches, or with `full` (the acceptance-full label, ci.yml or acceptance-full.yml) all of them, in 360 minutes,
+# the most a job may run on GitHub's runners; a larger selection without `full` runs nothing and gets a notice naming
+# its launches. The run's steps are those of ci.yml's VSCodium job.
 name: acceptance-launches
 
 on:
@@ -24,8 +25,7 @@ jobs:
       fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON)) || 'ubuntu-24.04' }}
     timeout-minutes: 10
     outputs:
-      launches: ${{ steps.select.outputs.launches }}
-      minutes: ${{ steps.select.outputs.minutes }}
+      parts: ${{ steps.select.outputs.parts }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -49,20 +49,23 @@ jobs:
             echo "::notice title=VSCodium launches::$notice"
             printf '%s\n' "**VSCodium launches:** $notice" >> "$GITHUB_STEP_SUMMARY"
           fi
-          echo "launches=$(printf '%s' "$plan" | jq -r '.launches')" >> "$GITHUB_OUTPUT"
-          echo "minutes=$(printf '%s' "$plan" | jq -r '.minutes')" >> "$GITHUB_OUTPUT"
+          echo "parts=$(printf '%s' "$plan" | jq -c '.parts')" >> "$GITHUB_OUTPUT"
 
   run:
-    name: acceptance (vscodium, ${{ needs.select.outputs.launches }})
+    name: acceptance (vscodium, ${{ matrix.part.launches }})
     needs: select
-    if: needs.select.outputs.launches != ''
-    # a selection with no containers launch runs on the organisation's pool when the repository variable CI_POOL_RUNS_ON
+    if: needs.select.outputs.parts != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ${{ fromJSON(needs.select.outputs.parts) }}
+    # a part with no containers launch runs on the organisation's pool when the repository variable CI_POOL_RUNS_ON
     # names its label (with X64 and ephemeral, as ci.yml's VSCodium parts); otherwise on GitHub's ubuntu-24.04
     runs-on: >-
-      ${{ vars.CI_POOL_RUNS_ON && !contains(needs.select.outputs.launches, 'containers') &&
-      !contains(needs.select.outputs.launches, 'explorer-folders') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      ${{ vars.CI_POOL_RUNS_ON && !contains(matrix.part.launches, 'containers') &&
+      !contains(matrix.part.launches, 'explorer-folders') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON)) || 'ubuntu-24.04' }}
-    timeout-minutes: ${{ fromJSON(needs.select.outputs.minutes) }}
+    timeout-minutes: ${{ matrix.part.minutes }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -76,18 +79,18 @@ jobs:
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
           fi
-      - if: contains(needs.select.outputs.launches, 'containers')
+      - if: contains(matrix.part.launches, 'containers')
         run: |
           df -h / | tail -1
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
           df -h / | tail -1
-      - if: contains(needs.select.outputs.launches, 'containers-podman')
+      - if: contains(matrix.part.launches, 'containers-podman')
         run: tools/install-podman
       # the buildx plugin when the machine's Docker has none (the harness builds with `docker build --load`)
       - run: tools/install-buildx
       - run: tools/start-display
       - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         env:
-          LAUNCHES: ${{ needs.select.outputs.launches }}
+          LAUNCHES: ${{ matrix.part.launches }}
       - if: always()
         run: pnpm acceptance:clean

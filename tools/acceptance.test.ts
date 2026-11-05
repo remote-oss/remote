@@ -4728,6 +4728,78 @@ describe('acceptance', () => {
       );
     });
 
+    it('tooling-159: <label>:<file>+… makes the plain launch that runs those files with only them, in its own order', () => {
+      /** A suite run in two parts by its files, a suite run whole, and a runner launch. */
+      const table: Launch[] = [
+        {label: 'local', runner: 'runner', suite: 'suite-local'},
+        {
+          label: 'wide-a',
+          kind: 'plain',
+          suite: 'wide',
+          files: ['a.test.ts', 'b.test.ts'],
+          partOf: 'wide',
+        },
+        {
+          label: 'wide-b',
+          kind: 'plain',
+          suite: 'wide',
+          files: ['c.test.ts'],
+          partOf: 'wide',
+        },
+        {label: 'entire', kind: 'plain', suite: 'entire'},
+      ];
+      /** The label and files of each launch a selection makes, or its error text. */
+      function made(...selected: string[]): unknown {
+        const chosen = chosenLaunches(table, selected);
+        return typeof chosen === 'string'
+          ? chosen
+          : chosen.map(launch => [
+              launch.label,
+              launch.kind === 'plain' ? launch.files : undefined,
+            ]);
+      }
+      deepStrictEqual(
+        [
+          made('wide:c.test.ts+a.test.ts'),
+          made('wide-a:b.test.ts', 'wide-a:a.test.ts'),
+          made('entire:y.test.ts+x.test.ts', 'local'),
+          made('wide-a:a.test.ts', 'wide-a'),
+          made('wide-b:a.test.ts'),
+          made('local:one.test.ts'),
+          made('entire:../x.test.ts'),
+        ],
+        [
+          [
+            ['wide-a', ['a.test.ts']],
+            ['wide-b', ['c.test.ts']],
+          ],
+          [['wide-a', ['a.test.ts', 'b.test.ts']]],
+          [
+            ['local', undefined],
+            ['entire', ['x.test.ts', 'y.test.ts']],
+          ],
+          [['wide-a', ['a.test.ts', 'b.test.ts']]],
+          'unknown launch label(s): wide-b:a.test.ts; the known ones: local, wide-a, wide-b, entire; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+          'unknown launch label(s): local:one.test.ts; the known ones: local, wide-a, wide-b, entire; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+          'unknown launch label(s): entire:../x.test.ts; the known ones: local, wide-a, wide-b, entire; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+        ],
+      );
+    });
+
+    it("tooling-159: a part of the repository's containers launch is named by a file it lists", () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      const chosen = chosenLaunches(launches, ['containers:reuse.test.ts']);
+      deepStrictEqual(
+        typeof chosen === 'string'
+          ? chosen
+          : chosen.map(launch => [
+              launch.label,
+              launch.kind === 'plain' ? launch.files : undefined,
+            ]),
+        [['containers-b', ['reuse.test.ts']]],
+      );
+    });
+
     it('tooling-53: an unknown group fails like an unknown label, listing the groups', () => {
       deepStrictEqual(
         [
