@@ -31,6 +31,9 @@ export interface PathMapper {
   >;
 }
 
+/** A Windows path `wslpath` may be asked about: it starts with a drive and a separator, or with two backslashes. */
+const MAPPABLE_PATH = /^(?:[A-Za-z]:[\\/]|\\\\)/;
+
 /** The mapper over `runner`. */
 export function createPathMapper(runner: WslRunner): PathMapper {
   return {
@@ -40,6 +43,12 @@ export function createPathMapper(runner: WslRunner): PathMapper {
         return {
           kind: 'mapped',
           mapped: {distro: share.distro, linuxPath: share.linuxPath},
+        };
+      }
+      if (!MAPPABLE_PATH.test(windowsPath)) {
+        return {
+          kind: 'notTranslatable',
+          detail: `${windowsPath} is neither a drive path nor a UNC path`,
         };
       }
       let printed = '';

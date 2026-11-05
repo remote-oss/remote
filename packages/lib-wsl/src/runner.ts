@@ -280,6 +280,9 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
         handle.kill();
       }
       cancellation.addEventListener('abort', cancel, {once: true});
+      if (cancellation.aborted) {
+        cancel();
+      }
     });
   }
 
@@ -432,10 +435,17 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
     });
     let ended = false;
     let killed = false;
+    /** Ends `wsl.exe` once; nothing after it ended or was ended. */
+    function stop(): void {
+      if (!ended && !killed) {
+        killed = true;
+        handle.kill();
+      }
+    }
     const exited = new Promise<ExecExited | RunFailed>(resolve => {
       function cancel(): void {
         resolve(failed('cancelled', 'cancelled while the program ran'));
-        live.kill();
+        stop();
       }
       handle.onExit(status => {
         ended = true;
@@ -455,6 +465,9 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
         );
       });
       cancellation.addEventListener('abort', cancel, {once: true});
+      if (cancellation.aborted) {
+        cancel();
+      }
     });
     const live: LiveProcess = {
       onOutput: listener => {
@@ -467,12 +480,7 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
       endInput: () => {
         handle.endInput();
       },
-      kill: () => {
-        if (!ended && !killed) {
-          killed = true;
-          handle.kill();
-        }
-      },
+      kill: stop,
       exited,
     };
     return {kind: 'started', process: live};
