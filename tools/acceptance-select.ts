@@ -4,7 +4,7 @@
  */
 
 import {execFileSync} from 'node:child_process';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {type Launch, launchesOf} from './acceptance-launches.ts';
 import {chosenLaunches} from './acceptance.ts';
@@ -160,14 +160,96 @@ export const PULL_REQUEST_LAUNCHES = 6;
  */
 export const PULL_REQUEST_MINUTES = 360;
 
-/** What a pull request's acceptance job does for its selection. */
-export interface PullRequestPlan {
-  /** The launches it runs, joined by commas; empty when it runs none. */
+/** One job of a pull request's acceptance run: a part of its selection. */
+export interface PullRequestPart {
+  /** The launches it runs, as the run's `--launches` takes them. */
   launches: string;
-  /** Its time limit, `PULL_REQUEST_MINUTES` for any selection. */
+  /** Its time limit, in minutes. */
   minutes: number;
+}
+
+/** What a pull request's acceptance run does for its selection: its parts, each a job of its own, run side by side. */
+export interface PullRequestPlan {
+  /** The parts; none when it runs nothing. */
+  parts: PullRequestPart[];
   /** A notice for the pull request when the selection is over the limit and the label is absent. */
   notice?: string;
+}
+
+/**
+ * The time limit of a part that runs some files of one launch: the longest file measured (49 minutes, containers-volume's
+ * explore-volume.test.ts at 847c1d9d) and its launch's setup, on the slower of the two runners.
+ */
+export const FILE_PART_MINUTES = 120;
+
+/** The most file parts a test-only change runs one file each; past it, each launch's files run as one part. */
+export const FILE_PARTS = 20;
+
+/**
+ * The part a narrowed pull request runs beside its file parts, so a narrow selection still starts the editor: an activation (`local`),
+ * a plain connect (`remote`) and a Reopen Folder Locally (`c101-reopen-locally`), about three minutes of rows.
+ */
+export const SMOKE_PART: PullRequestPart = {
+  launches: 'local,remote,containers-shutdown:reopen-locally-lines.test.ts',
+  minutes: 60,
+};
+
+/** A suite's own test file, directly in its folder: `[suite, file]`. */
+const SUITE_TEST = /^tests\/acceptance\/([^/]+)\/([^/]+\.test\.ts)$/;
+
+/**
+ * The parts of a test-only change: each changed test file of a plain launch's suite runs alone in
+ * every launch that runs it, then the smoke part. Undefined when the change is not test-only, when a test file belongs
+ * to a launch run in the editor, or when no launch runs it: the whole selection runs then, as before. A test file that
+ * no longer exists runs nowhere; documentation and unit tests run nothing.
+ */
+export function narrowedParts(
+  changed: readonly string[],
+  launches: readonly Launch[],
+  exists: (file: string) => boolean,
+): PullRequestPart[] | undefined {
+  const byLaunch = new Map<string, string[]>();
+  for (const file of changed) {
+    if (NO_LAUNCH.some(pattern => pattern.test(file))) {
+      continue;
+    }
+    const suiteTest = SUITE_TEST.exec(file);
+    const ofSuite = launches.filter(launch => launch.suite === suiteTest?.[1]);
+    if (
+      suiteTest === null ||
+      ofSuite.length === 0 ||
+      ofSuite.some(launch => launch.kind !== 'plain')
+    ) {
+      return undefined;
+    }
+    if (!exists(file)) {
+      continue;
+    }
+    const testFile = String(suiteTest[2]);
+    const running = ofSuite.filter(
+      launch =>
+        launch.kind === 'plain' &&
+        (launch.files === undefined || launch.files.includes(testFile)),
+    );
+    if (running.length === 0) {
+      return undefined;
+    }
+    for (const launch of running) {
+      byLaunch.set(launch.label, [
+        ...(byLaunch.get(launch.label) ?? []),
+        testFile,
+      ]);
+    }
+  }
+  const entries = [...byLaunch].map(([label, files]) => ({label, files}));
+  const count = entries.reduce((total, entry) => total + entry.files.length, 0);
+  const parts = entries.flatMap(({label, files}) =>
+    (count <= FILE_PARTS ? files.map(file => [file]) : [files]).map(group => ({
+      launches: `${label}:${group.join('+')}`,
+      minutes: FILE_PART_MINUTES,
+    })),
+  );
+  return parts.length === 0 ? [] : [...parts, SMOKE_PART];
 }
 
 /**
@@ -193,16 +275,34 @@ export function pullRequestPlan(
   }
   const chosen = selection.labels.filter(label => inParts.has(label));
   if (chosen.length === 0) {
-    return {launches: '', minutes: PULL_REQUEST_MINUTES};
+    return {parts: []};
   }
   if (chosen.length <= PULL_REQUEST_LAUNCHES || full) {
-    return {launches: chosen.join(','), minutes: PULL_REQUEST_MINUTES};
+    return {
+      parts: [{launches: chosen.join(','), minutes: PULL_REQUEST_MINUTES}],
+    };
   }
   return {
-    launches: '',
-    minutes: PULL_REQUEST_MINUTES,
+    parts: [],
     notice: `this change selects ${String(chosen.length)} launches, more than the ${String(PULL_REQUEST_LAUNCHES)} a pull request runs by itself: ${chosen.join(', ')}. Run them at this head with a dispatch, or with the acceptance-full label.`,
   };
+}
+
+/**
+ * The plan of a pull request's acceptance run for its changed paths: the narrowed parts of a test-only change, unless
+ * the full label asks for the whole selection; else the whole selection's plan.
+ */
+export function planOfChange(
+  changed: readonly string[],
+  launches: readonly Launch[],
+  parts: readonly string[],
+  full: boolean,
+  exists: (file: string) => boolean,
+): PullRequestPlan {
+  const narrowed = full ? undefined : narrowedParts(changed, launches, exists);
+  return narrowed === undefined
+    ? pullRequestPlan(selectLaunches(changed, launches), launches, parts, full)
+    : {parts: narrowed};
 }
 
 /** The files a change touches: `git diff --name-only <base>...<head>`, from the merge base. */
@@ -241,7 +341,8 @@ if (isMainModule(import.meta.url)) {
     process.exitCode = 2;
   } else {
     const launches = launchesOf(REPOSITORY_ROOT);
-    const selection = selectLaunches(changedFiles(base, head), launches);
+    const changed = changedFiles(base, head);
+    const selection = selectLaunches(changed, launches);
     for (const line of selection.reasons) {
       console.error(`selected ${line}`);
     }
@@ -253,7 +354,11 @@ if (isMainModule(import.meta.url)) {
     );
     if (forPullRequest) {
       console.log(
-        JSON.stringify(pullRequestPlan(selection, launches, parts, full)),
+        JSON.stringify(
+          planOfChange(changed, launches, parts, full, file =>
+            existsSync(path.join(REPOSITORY_ROOT, file)),
+          ),
+        ),
       );
     } else {
       console.log(
