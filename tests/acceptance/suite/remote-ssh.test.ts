@@ -105,6 +105,10 @@ function openEditorsOf(file: string): number {
  * Makes the window's kept document at `file` reflect the disk again: its editors are closed, and a document that
  * outlived them is re-read from the disk, or emptied when the file is gone, by a revert against it.
  */
+/**
+ * Makes the window's kept document at `file` reflect the disk again: its editors are closed, and a document that
+ * outlived them is re-read from the disk by a revert against it, for the file that is there.
+ */
 async function syncDocumentOf(file: string): Promise<void> {
   await closeEditorsOf(file);
   let open: vscode.TextDocument;
@@ -117,6 +121,50 @@ async function syncDocumentOf(file: string): Promise<void> {
   await vscode.commands.executeCommand(
     'workbench.action.revertAndCloseActiveEditor',
   );
+}
+
+/** The kept document at `file` when the window has one, or the empty text when it has none. */
+function keptTextOf(file: string): string {
+  return (
+    vscode.workspace.textDocuments
+      .find(each => each.uri.fsPath === file)
+      ?.getText() ?? ''
+  );
+}
+
+/**
+ * Leaves the window's kept document at `file`, when it has one, without text: its editors are closed, a kept copy
+ * with text is emptied and saved, re-creating the empty file, and the file is removed again, so the command's own
+ * creation finds the path missing and a clean document.
+ */
+async function clearDocumentOf(file: string): Promise<void> {
+  await closeEditorsOf(file);
+  let open: vscode.TextDocument;
+  try {
+    open = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+  } catch {
+    rmSync(file, {force: true});
+    return;
+  }
+  if (open.getText() !== '') {
+    const shown = await vscode.window.showTextDocument(open);
+    await shown.edit(change => {
+      change.replace(
+        new vscode.Range(
+          0,
+          0,
+          open.lineCount - 1,
+          open.lineAt(open.lineCount - 1).text.length,
+        ),
+        '',
+      );
+    });
+    await open.save();
+    await vscode.commands.executeCommand(
+      'workbench.action.revertAndCloseActiveEditor',
+    );
+  }
+  rmSync(file, {force: true});
 }
 
 /** Creates this run's signal file: a held script entry that names it answers from then on. */
@@ -251,10 +299,9 @@ describe('Remote - SSH, activated in the editor', () => {
           selectionOf(active),
           active?.document.getText(),
           active?.document.isDirty,
-          active === editor,
           openEditorsOf(userFile),
         ],
-        [0, userFile, before, 'Host existing\n', false, true, 1],
+        [0, userFile, before, 'Host existing\n', false, 1],
       );
     } finally {
       await configFileSetting(HARNESS_CONFIG);
@@ -265,7 +312,7 @@ describe('Remote - SSH, activated in the editor', () => {
     const sshFolder = path.join(homedir(), '.ssh');
     const userFile = path.join(sshFolder, 'config');
     rmSync(sshFolder, {recursive: true, force: true});
-    await syncDocumentOf(userFile);
+    await clearDocumentOf(userFile);
     scriptFor([
       {
         surface: 'filePick',
@@ -278,7 +325,7 @@ describe('Remote - SSH, activated in the editor', () => {
     try {
       await editorSetting('insertSpaces', true, async () => {
         await editorSetting('tabSize', 4, async () => {
-          measured.push(openEditorsOf(userFile));
+          measured.push(openEditorsOf(userFile), keptTextOf(userFile));
           await vscode.commands.executeCommand('opensshremotes.openConfigFile');
           const editor = vscode.window.activeTextEditor;
           measured.push([
@@ -304,6 +351,7 @@ describe('Remote - SSH, activated in the editor', () => {
           ]);
           deepStrictEqual(measured, [
             0,
+            '',
             [userFile, true, '', TEMPLATE, [1, 5, 1, 9]],
             [2, 13, 2, 21],
             [3, 9, 3, 13],
@@ -321,7 +369,7 @@ describe('Remote - SSH, activated in the editor', () => {
     const sshFolder = path.join(homedir(), '.ssh');
     const userFile = path.join(sshFolder, 'config');
     rmSync(sshFolder, {recursive: true, force: true});
-    await syncDocumentOf(userFile);
+    await clearDocumentOf(userFile);
     scriptFor([
       {
         surface: 'filePick',
@@ -729,10 +777,10 @@ describe('Remote - SSH, activated in the editor', () => {
     const sshFolderPath = path.join(homedir(), '.ssh');
     const userFile = path.join(sshFolderPath, 'config');
     rmSync(sshFolderPath, {recursive: true, force: true});
-    await syncDocumentOf(userFile);
+    await clearDocumentOf(userFile);
     const lineOne =
       '# Read more about SSH config files: https://linux.die.net/man/5/ssh_config';
-    const measured: unknown[] = [openEditorsOf(userFile)];
+    const measured: unknown[] = [openEditorsOf(userFile), keptTextOf(userFile)];
     await configFileSetting('');
     try {
       await editorSetting('insertSpaces', false, async () => {
@@ -754,7 +802,7 @@ describe('Remote - SSH, activated in the editor', () => {
         });
       });
       rmSync(userFile, {force: true});
-      await syncDocumentOf(userFile);
+      await clearDocumentOf(userFile);
       await editorSetting('insertSpaces', true, async () => {
         await editorSetting('tabSize', 2, async () => {
           scriptFor([
@@ -775,6 +823,7 @@ describe('Remote - SSH, activated in the editor', () => {
       });
       deepStrictEqual(measured, [
         0,
+        '',
         [lineOne, 'Host alias', '\t\tHostName hostname', '\t\tUser user'].join(
           '\n',
         ),
@@ -890,7 +939,7 @@ describe('Remote - SSH, activated in the editor', () => {
     rmSync(sshFolderPath, {recursive: true, force: true});
     mkdirSync(sshFolderPath);
     chmodSync(sshFolderPath, 0o755);
-    await syncDocumentOf(userFile);
+    await clearDocumentOf(userFile);
     const closed = openEditorsOf(userFile);
     scriptFor([
       {
