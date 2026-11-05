@@ -8,6 +8,9 @@
  * A job whose `runs-on` reads a pool variable holds, in that expression, the same-repository guard (a fork's pull
  * request takes GitHub's runner), asks for X64 and ephemeral (a fresh machine per job), and reads no secret (athena on
  * #2219).
+ *
+ * The VSCodium job and its plan run on every merge to main whatever the repository's variables say: their `if:` reads
+ * none, so no variable can turn off the post-merge run, the proof of what a pull request's narrowed parts left out.
  */
 
 import {readdirSync, readFileSync} from 'node:fs';
@@ -55,6 +58,27 @@ export function ciGateProblems(text: string): string[] {
   return problems;
 }
 
+/** The jobs of the post-merge run, whose conditions read no repository variable. */
+export const POST_MERGE_JOBS = ['vscodium-plan', 'acceptance-vscodium'];
+
+/** What is wrong with the post-merge run of the workflow text: a job missing, or a condition that reads a variable. */
+export function postMergeProblems(text: string): string[] {
+  const workflow = parseYaml(text) as {
+    jobs?: Record<string, {if?: unknown}>;
+  };
+  return POST_MERGE_JOBS.flatMap(name => {
+    const definition = workflow.jobs?.[name];
+    if (definition === undefined) {
+      return [`${WORKFLOW}: no ${name} job, which the post-merge run needs`];
+    }
+    return JSON.stringify(definition.if ?? '').includes('vars.')
+      ? [
+          `${WORKFLOW}: ${name}'s if: reads a repository variable, which could turn the post-merge run off`,
+        ]
+      : [];
+  });
+}
+
 /** What is wrong with the pool jobs of the workflow `file`: a missing guard or labels, or a secret read. */
 export function poolJobProblems(file: string, text: string): string[] {
   const workflow = parseYaml(text) as {
@@ -85,10 +109,13 @@ export function poolJobProblems(file: string, text: string): string[] {
 }
 
 if (isMainModule(import.meta.url)) {
+  const workflowText = readFileSync(
+    path.join(REPOSITORY_ROOT, WORKFLOW),
+    'utf8',
+  );
   const problems = [
-    ...ciGateProblems(
-      readFileSync(path.join(REPOSITORY_ROOT, WORKFLOW), 'utf8'),
-    ),
+    ...ciGateProblems(workflowText),
+    ...postMergeProblems(workflowText),
     ...readdirSync(path.join(REPOSITORY_ROOT, WORKFLOWS))
       .filter(file => file.endsWith('.yml'))
       .flatMap(file =>

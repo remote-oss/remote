@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   ciGateProblems,
   poolJobProblems,
+  postMergeProblems,
   SAME_REPOSITORY_GUARD,
 } from './check-ci-gate.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
@@ -142,7 +143,7 @@ describe('check-ci-gate', () => {
         [],
         [
           'changes',
-          'post-merge-select',
+          'vscodium-plan',
           'checks',
           'unit',
           'quality',
@@ -152,6 +153,40 @@ describe('check-ci-gate', () => {
           'acceptance-real-server',
           'acceptance-vscodium',
         ],
+      ],
+    );
+  });
+
+  it('tooling-159: the post-merge run holds when its jobs read no variable, and a variable in either if:, or a missing job, is named', () => {
+    function jobs(plan: string, vscodium: string): string {
+      return `jobs:\n  vscodium-plan:\n    if: "${plan}"\n  acceptance-vscodium:\n    if: "${vscodium}"\n`;
+    }
+    deepStrictEqual(
+      [
+        postMergeProblems(jobs("github.event_name == 'push'", '!cancelled()')),
+        postMergeProblems(
+          jobs(
+            "github.event_name == 'push'",
+            "!cancelled() && vars.CI_POST_MERGE_VSCODIUM != 'off'",
+          ),
+        ),
+        postMergeProblems('jobs:\n  acceptance-vscodium:\n    runs-on: x\n'),
+        postMergeProblems(
+          readFileSync(
+            path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
+            'utf8',
+          ),
+        ),
+      ],
+      [
+        [],
+        [
+          ".github/workflows/ci.yml: acceptance-vscodium's if: reads a repository variable, which could turn the post-merge run off",
+        ],
+        [
+          '.github/workflows/ci.yml: no vscodium-plan job, which the post-merge run needs',
+        ],
+        [],
       ],
     );
   });

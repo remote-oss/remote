@@ -419,12 +419,14 @@ describe('the plain editor of a launch', () => {
 });
 
 describe('the Node tests of a plain launch', () => {
-  it('D-85: they run the test files of the launch’s suite folder with mocha, without the repository’s config', () => {
+  it('D-85, tooling-159: they run the test files of the launch’s suite folder with mocha, without the repository’s config, reported with each file’s time', () => {
     const program = plainTestsOf('/repo', LAUNCH, {});
     deepStrictEqual(program.programArguments.slice(1), [
       '--no-config',
       '--extension',
       'ts',
+      '--reporter',
+      path.join('/repo', 'tools', 'acceptance-file-times.ts'),
       '--spec',
       path.join('/repo', 'tests', 'acceptance', 'windows', '*.test.ts'),
     ]);
@@ -436,7 +438,7 @@ describe('the Node tests of a plain launch', () => {
       {...LAUNCH, files: ['b.test.ts', 'a.test.ts']},
       {},
     );
-    deepStrictEqual(program.programArguments.slice(4), [
+    deepStrictEqual(program.programArguments.slice(6), [
       '--spec',
       path.join('/repo', 'tests', 'acceptance', 'windows', 'b.test.ts'),
       '--spec',
