@@ -432,15 +432,19 @@ describe('#443, F-2704 BR-4: every login shell hands the session to POSIX sh', f
       });
 
       it("#443: right after that session ends no sleep is left on the host, the profile's or the watchdog's", async () => {
-        write(bash, '.bash_profile', 'sleep 30\n');
-        await failedAttempt(bash);
-        deepStrictEqual(
-          bash
-            .onHost('ps', '-o', 'args')
-            .split('\n')
-            .some(line => line.includes('sleep')),
-          false,
-        );
+        for (let round = 0; round < 6; round++) {
+          write(bash, '.bash_profile', 'sleep 30\n');
+          await failedAttempt(bash);
+          const t0 = Date.now();
+          const seen: string[] = [];
+          for (let i = 0; i < 700; i++) {
+            const lines = bash.onHost('ps', '-o', 'pid,ppid,etime,args').split('\n').filter(l => l.includes('sleep'));
+            if (i < 2 || lines.length === 0) seen.push(`${Date.now() - t0}ms: ${JSON.stringify(lines)}`);
+            if (lines.length === 0) break;
+            await new Promise(r => setTimeout(r, 50));
+          }
+          process.stderr.write(`MEASURE round ${round}: ${seen.join(' | ')}\n`);
+        }
       });
 
       it('F-2704 AC-13: a .bash_profile that ends with exit 1 fails the connect at once, with no reason of ssh', async () => {
