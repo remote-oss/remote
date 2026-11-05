@@ -6,6 +6,8 @@ import {promisify} from 'node:util';
 import {volumeServerFolder} from 'lib-product';
 import {
   closeWindow,
+  closeWindowsBut,
+  openWindowNames,
   connectedToContainer,
   devContainerFolder,
   devContainersOf,
@@ -20,6 +22,7 @@ import {
   answerDialog,
   statusBarText,
   waitForDialog,
+  pressEscape,
 } from '../windows/renderer.ts';
 
 const execFileAsync = promisify(execFile);
@@ -178,6 +181,15 @@ async function windowOf(folder: string): Promise<string> {
 
 describe("C10's root step for the vscode volume (card containers-25)", function () {
   this.timeout(600_000);
+  // A row closes its windows at its end; one that fails before then would leave them for the rows after it.
+  let kept: string[] = [];
+  beforeEach(() => {
+    kept = openWindowNames();
+  });
+  afterEach(async () => {
+    await closeWindowsBut(kept, pressEscape);
+  });
+
   after(async () => {
     // Later launches install afresh into a volume of their own making.
     await clearVolume();

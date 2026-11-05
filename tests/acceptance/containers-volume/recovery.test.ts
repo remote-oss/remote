@@ -7,8 +7,10 @@ import {
 } from '../windows/broken-repository.ts';
 import {
   closeWindow,
+  closeWindowsBut,
   connectedToContainer,
   openEmptyWindows,
+  openWindowNames,
   readUserSettings,
   restoreUserSettings,
   startInWindow,
@@ -21,6 +23,7 @@ import {
   acceptQuickPick,
   answerDialog,
   dialogOf,
+  pressEscape,
   quickPickOf,
   quickPickRows,
   typeInQuickPick,
@@ -114,6 +117,15 @@ describe('The recovery container (card containers-160, part A)', function () {
     settingsBefore = readUserSettings();
     await removeClone(repository.url);
     await removeClone(repository.otherUrl);
+  });
+
+  // A row closes its windows at its end; one that fails before then would leave them for the rows after it.
+  let kept: string[] = [];
+  beforeEach(() => {
+    kept = openWindowNames();
+  });
+  afterEach(async () => {
+    await closeWindowsBut(kept, pressEscape);
   });
 
   after(async () => {
