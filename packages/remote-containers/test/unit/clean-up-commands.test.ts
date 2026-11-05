@@ -56,6 +56,7 @@ function hostWorld(world: World): EngineHost {
 function scene(
   overrides: Record<string, EngineRunOutcome> = {},
   dismissed = false,
+  picks: (keys: readonly number[]) => readonly number[] = keys => [...keys],
 ): {
   world: World;
   events: string[];
@@ -91,7 +92,7 @@ function scene(
       events.push(
         `pick ${placeholder}: ${items.map(item => item.label).join(',')}`,
       );
-      return Promise.resolve(dismissed ? undefined : [...items.keys()]);
+      return Promise.resolve(dismissed ? undefined : picks([...items.keys()]));
     },
     showDone: detail => {
       events.push(`done ${detail}`);
@@ -177,6 +178,30 @@ describe('the Clean Up commands over the engine (card containers-168)', () => {
     deepStrictEqual(events, [
       'log the unused volumes could not be listed: spawn docker ENOENT',
     ]);
+  });
+
+  it('coverage-117: a picker index no row holds removes nothing, and the command ends without a dialog', async () => {
+    const {world, events, commands} = scene({}, false, keys => [
+      keys.length + 3,
+    ]);
+    await commands.devContainers();
+    deepStrictEqual(
+      [events, world.commands],
+      [
+        [
+          'pick Select stopped dev containers to delete: proj',
+          'pick Select unused dev volumes to delete: v1',
+        ],
+        [
+          'ps -a -q --no-trunc',
+          'inspect --type container c1',
+          'volume ls -q',
+          'volume inspect -- v1',
+          'ps -a -q --no-trunc',
+          'inspect --type container c1',
+        ],
+      ],
+    );
   });
 
   it('F-0905 6.3: with no container and no volume the completion dialog shows at once', async () => {

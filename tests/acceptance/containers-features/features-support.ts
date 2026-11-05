@@ -11,9 +11,11 @@ import {promisify} from 'node:util';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   closeWindow,
+  connectedToContainer,
   devContainerFolder,
   devContainersOf,
   reopenInContainer,
+  reopenStarted,
   variable,
 } from '../windows/harness.ts';
 import {runTemplatesReady} from '../windows/run-templates.ts';
@@ -69,13 +71,14 @@ export interface Built {
 /**
  * Called inside a `describe`: closes the windows and removes the containers its `build` made after each row. `build`
  * writes the folder's configuration (and any local Feature through `prepare`), opens the folder in a window and runs
- * Reopen in Container.
+ * Reopen in Container; `reloaded` runs once the window has reloaded and before it connects.
  */
 export function featureBuilds(): {
   build: (
     name: string,
     configuration: Readonly<Record<string, unknown>>,
     prepare?: (folder: string) => void,
+    reloaded?: () => void,
   ) => Promise<Built>;
   closeNow: (window: string) => Promise<void>;
   reopen: (built: Built, removeContainer: boolean) => Promise<Built>;
@@ -91,14 +94,16 @@ export function featureBuilds(): {
     }
   });
   return {
-    build: async (name, configuration, prepare) => {
+    build: async (name, configuration, prepare, reloaded) => {
       await runTemplatesReady();
       const folder = devContainerFolder(name, configuration);
       folders.push(folder);
       prepare?.(folder);
       const window = await openFolderWindow(folder);
       opened.push(window);
-      await reopenInContainer(window, BUILD_MILLISECONDS);
+      await reopenStarted(window);
+      reloaded?.();
+      await connectedToContainer(window, BUILD_MILLISECONDS);
       const [containerId = ''] = await devContainersOf(folder);
       return {window, folder, containerId};
     },

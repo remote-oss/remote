@@ -16,11 +16,19 @@ const TEXTS = {
 /** What the scenario does on each step. */
 interface Scenario {
   containers?: CleanUpRow[] | Error;
-  /** The volume scans in order; the last repeats. */
-  volumes?: Array<CleanUpRow[] | Error>;
+  /** The volume scans in order; the last repeats, and a string fails with itself as the reason. */
+  volumes?: Array<CleanUpRow[] | Error | string>;
   /** The answers to the pickers in order: the targets to check, or none for Escape. */
   picks?: Array<string[] | undefined>;
   failRemoval?: 'containers' | 'volumes';
+}
+
+/** A volume scan that fails with `value` as its reason, which is no error. */
+function failsWith(value: string): Promise<CleanUpRow[]> {
+  return new Promise((resolve, reject) => {
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the row pins the no-error side
+    reject(value);
+  });
 }
 
 /** Runs `command` over a scenario and gives what it did in order, and how it ended. */
@@ -42,9 +50,13 @@ async function outcomeOf(
     scanVolumes: () => {
       steps.push('scan volumes');
       const rows = scans.length > 1 ? scans.shift() : scans[0];
-      return rows instanceof Error
-        ? Promise.reject(rows)
-        : Promise.resolve(rows ?? []);
+      if (rows instanceof Error) {
+        return Promise.reject(rows);
+      }
+      if (typeof rows === 'string') {
+        return failsWith(rows);
+      }
+      return Promise.resolve(rows ?? []);
     },
     pick: (placeholder, rows) => {
       steps.push(
@@ -265,6 +277,19 @@ describe('Clean Up Dev Volumes (card containers-168)', () => {
         steps: [
           'scan volumes',
           'log the unused volumes could not be listed: no engine',
+        ],
+        ended: 'resolved',
+      },
+    );
+  });
+
+  it('coverage-117: a listing that fails with no error is logged by its own words', async () => {
+    deepStrictEqual(
+      await outcomeOf(pruneVolumes, {volumes: ['gone for good']}),
+      {
+        steps: [
+          'scan volumes',
+          'log the unused volumes could not be listed: gone for good',
         ],
         ended: 'resolved',
       },

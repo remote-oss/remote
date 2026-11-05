@@ -129,7 +129,8 @@ async function recordsWithLog(count: number): Promise<HintRecords> {
       hintRecords()
         .at(-1)
         ?.hints.some(hint => hint.kind === 'log') ?? false,
-    60_000,
+    // The log hint is kept when the attempt has ended, which a slower runner takes longer to do.
+    180_000,
   );
   return hintRecords();
 }

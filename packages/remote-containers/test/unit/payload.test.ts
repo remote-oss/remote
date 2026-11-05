@@ -488,6 +488,17 @@ describe('the workspace file of a workspace window, at its origin (card containe
     );
   });
 
+  it('coverage-117: on win32 a workspace file that carries host separators inside its posix name escapes its mount, and names no file', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(WIN_FOLDER)),
+        'win32',
+        '/workspaces/proj/a\\b\\..\\..\\..\\x.code-workspace',
+      ),
+      {kind: 'local', folder: WIN_FOLDER.hostPath},
+    );
+  });
+
   it('F-0406 BR-11: on win32 a workspace file in a sibling folder of the mount names no file', () => {
     deepStrictEqual(
       windowOriginOf(
