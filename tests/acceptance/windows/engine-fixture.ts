@@ -4,6 +4,7 @@
  */
 
 import {execFile} from 'node:child_process';
+import {randomBytes} from 'node:crypto';
 import * as network from 'node:net';
 import {
   chmodSync,
@@ -361,6 +362,8 @@ export interface SshEngine {
   hostKeyKnown(): boolean;
   /** The name of the container that runs the daemon and sshd. */
   container: string;
+  /** The password of a password account: the one `sshEngine` was given, else one made for this host at its start. */
+  password(account: 'engine-pw' | 'engine-pw2'): string;
   stop(): Promise<void>;
 }
 
@@ -370,9 +373,10 @@ let imageBuilt: Promise<string> | undefined;
 /**
  * Starts an SSH Docker host of the run: the second engine's daemon with OpenSSH's server, in a privileged container of
  * the run, sshd published on 127.0.0.1. Its accounts are `ACCOUNT_KEYS`'s, `engine-pw` and `engine-pw2` with the
- * passwords given. It waits until `docker -H ssh://engine@…` answers through the run's client with the host's key
- * known, and creates the container only it holds. A `shared` folder is mounted at the same path, as for `secondEngine`,
- * and a `hostPort` fixes the port sshd is published on.
+ * passwords given, or random ones made at its start that `password` hands back. It waits until
+ * `docker -H ssh://engine@…` answers through the run's client with the host's key known, and creates the container only
+ * it holds. A `shared` folder is mounted at the same path, as for `secondEngine`, and a `hostPort` fixes the port sshd
+ * is published on.
  */
 export async function sshEngine(
   options: {
@@ -397,6 +401,10 @@ export async function sshEngine(
   const name = runScopedName(`c205-ssh${String(started)}`);
   const marker = runScopedName(`c205ssh${String(started)}only`);
   const runFolder = variable('HARNESS_RUN_FOLDER');
+  const passwords = {
+    'engine-pw': options.password ?? randomBytes(12).toString('hex'),
+    'engine-pw2': options.password2 ?? randomBytes(12).toString('hex'),
+  };
   /** The public part of the run's key `file`. */
   function keyOf(file: string): string {
     return readFileSync(path.join(runFolder, `${file}.pub`), 'utf8').trim();
@@ -416,9 +424,9 @@ export async function sshEngine(
     '-e',
     `ENGINE_ENC_KEY=${keyOf('id_passphrase')}`,
     '-e',
-    `ENGINE_PASSWORD=${options.password ?? 'engine-password'}`,
+    `ENGINE_PASSWORD=${passwords['engine-pw']}`,
     '-e',
-    `ENGINE_PASSWORD_2=${options.password2 ?? 'engine-password-2'}`,
+    `ENGINE_PASSWORD_2=${passwords['engine-pw2']}`,
     ...(options.shared === undefined
       ? []
       : ['-v', `${options.shared}:${options.shared}`]),
@@ -490,6 +498,7 @@ export async function sshEngine(
       knownHostsLine,
       trustHostKey,
       hostKeyKnown,
+      password: account => passwords[account],
       container: name,
       stop,
     };

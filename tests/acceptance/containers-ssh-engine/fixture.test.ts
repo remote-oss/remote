@@ -158,6 +158,49 @@ describe('the SSH Docker host and the run’s client (card tooling-123)', functi
     );
   });
 
+  it('tooling-146 (random-passwords): a host started with no passwords makes a random one for each password account, which logs in, another host makes other ones, and a given one is handed back as given', async () => {
+    const first = await sshEngine();
+    const second = await sshEngine().catch(async (error: unknown) => {
+      await first.stop();
+      throw error;
+    });
+    try {
+      const made = [
+        first.password('engine-pw'),
+        first.password('engine-pw2'),
+        second.password('engine-pw'),
+        second.password('engine-pw2'),
+      ];
+      deepStrictEqual(
+        {
+          shapes: made.map(each => /^[0-9a-f]{24}$/.test(each)),
+          distinct: new Set(made).size,
+          firstLogin: await loggedIn(
+            first,
+            'engine-pw',
+            askpass(made[0] ?? ''),
+          ),
+          secondLogin: await loggedIn(
+            second,
+            'engine-pw2',
+            askpass(made[3] ?? ''),
+          ),
+          given: engine.password('engine-pw'),
+        },
+        {
+          shapes: [true, true, true, true],
+          distinct: 4,
+          firstLogin: 'engine-pw',
+          secondLogin: 'engine-pw2',
+          given: 'pw-one',
+        },
+      );
+    } finally {
+      await first.stop();
+      await second.stop();
+    }
+  });
+
   it('tooling-123 (host-key-modes): with the host key unknown the run’s client refuses the host, and known again it logs in', async () => {
     engine.trustHostKey(false);
     const unknown = [engine.hostKeyKnown(), await loggedIn(engine, 'engine')];
