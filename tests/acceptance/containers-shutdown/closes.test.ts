@@ -47,6 +47,16 @@ describe('what a window close and a reopen do to a dev container (card coverage-
       const window = await openFolderWindow(connected.folder);
       await reopenInContainer(window);
       const seconds = (Date.now() - began) / 1000;
+      // The editor's own progress ("Activating Extensions...") shows while the new window starts, later on a slower
+      // machine, and is not a notice of the extension: the notices are read once it has gone.
+      await waitFor(
+        'the editor’s activation progress to be gone',
+        async () =>
+          !(await notificationCentre(window)).some(text =>
+            text.startsWith('Activating Extensions'),
+          ),
+        60_000,
+      );
       deepStrictEqual(
         {
           stopped: stoppedWithin(outcome, 0),
