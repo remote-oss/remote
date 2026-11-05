@@ -150,6 +150,21 @@ export function linesSince(mark: number, window: string): RecordLine[] {
 }
 
 /**
+ * Whether the connection log, since it held `logMark` lines, shows a resolve of `host` that core made as a reconnection.
+ * The progress notification of that resolve opens only after half a second, so a quick one leaves no progress line in
+ * the record: the log line is what always shows it.
+ */
+export function reconnectedSince(logMark: number, host: string): boolean {
+  return connectionLog()
+    .slice(logMark)
+    .some(line =>
+      new RegExp(
+        `^Resolving ssh-remote\\+${host}, attempt \\d+, reconnection$`,
+      ).test(line),
+    );
+}
+
+/**
  * Runs `command` in window `window` with `answers` scripted for it, and gives the mark of the record it started
  * from. The script is lined up with the window's cursor first, so an entry an earlier command left unused can't
  * answer this one.

@@ -37,6 +37,7 @@ import {
   passwordAskHosts,
   perWindowMode,
   pickHost,
+  reconnectedSince,
   platformAnswer,
   restoreConfig,
   runWith,
@@ -329,15 +330,11 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
   it('F-2412 AC-16: a window on the uninstalled host is reconnected by core, and a reload connects it', async () => {
     await closeAllButLocal();
     await openConnected('u1', INSTALL_MILLISECONDS);
-    const mark = await uninstallWith('local', [pickHost('harness')]);
+    const logMark = connectionLog().length;
+    await uninstallWith('local', [pickHost('harness')]);
     await waitFor(
       'u1 to be resolved again by core’s reconnection',
-      () =>
-        linesSince(mark, 'u1').some(
-          line =>
-            line.surface === 'progress' &&
-            line.question === 'Setting up SSH Host harness',
-        ),
+      () => reconnectedSince(logMark, 'harness'),
       40_000,
     );
     await reloadWindow('u1');
@@ -679,15 +676,11 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       await closeAllButLocal();
       await perWindowMode(true);
       await openConnected('u1', INSTALL_MILLISECONDS);
-      const mark = await uninstallWith('local', [pickHost('harness')]);
+      const logMark = connectionLog().length;
+      await uninstallWith('local', [pickHost('harness')]);
       await waitFor(
         'u1 to be resolved again by core’s reconnection',
-        () =>
-          linesSince(mark, 'u1').some(
-            line =>
-              line.surface === 'progress' &&
-              line.question === 'Setting up SSH Host harness',
-          ),
+        () => reconnectedSince(logMark, 'harness'),
         30_000,
       );
       const reload = recordLines().length;

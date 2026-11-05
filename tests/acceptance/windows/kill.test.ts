@@ -8,6 +8,7 @@ import {
   closeWindow,
   connected,
   connectedWithin,
+  connectionLog,
   hostAliases,
   hostAnswer,
   inWindow,
@@ -39,6 +40,7 @@ import {
   passwordAskHosts,
   perWindowMode,
   pickHost,
+  reconnectedSince,
   runWith,
   serverProcesses,
   serversGoneWithin,
@@ -112,8 +114,8 @@ async function shownChannel(name: string): Promise<string | null | undefined> {
 describe('Kill VS Code Server (card coverage-39)', function () {
   this.timeout(900_000);
 
-  /** The mark of the record at the first kill of the host, which the next row reads on from. */
-  let firstKill = 0;
+  /** The mark of the connection log at the first kill of the host, which the next row reads on from. */
+  let firstKillLog = 0;
 
   /** The settings file before the rows that must not change it, and after them. */
   const settingsAround: Array<[string, string]> = [];
@@ -178,8 +180,8 @@ describe('Kill VS Code Server (card coverage-39)', function () {
     const before = settingsText();
     const state = withoutActivity(await windowState('local'));
     const servers = await serverProcesses();
+    firstKillLog = connectionLog().length;
     const mark = await killWith('local', [pickHost('harness')]);
-    firstKill = mark;
     settingsAround.push([before, settingsText()]);
     const lines = linesSince(mark, 'local');
     const pick = lines.find(line => line.surface === 'hostPick');
@@ -202,15 +204,9 @@ describe('Kill VS Code Server (card coverage-39)', function () {
   });
 
   it('F-2411 AC-10: the window on the killed host stays where it is, core reconnects it, and a reload connects it', async () => {
-    const mark = firstKill;
     await waitFor(
       'x1 to be resolved again by core’s reconnection',
-      () =>
-        linesSince(mark, 'x1').some(
-          line =>
-            line.surface === 'progress' &&
-            line.question === 'Setting up SSH Host harness',
-        ),
+      () => reconnectedSince(firstKillLog, 'harness'),
       30_000,
     );
     const state = await windowState('x1');
@@ -612,16 +608,12 @@ describe('Kill VS Code Server (card coverage-39)', function () {
     await closeAllButLocal();
     await openConnected('x1');
     const servers = await serverProcesses();
+    const logMark = connectionLog().length;
     const mark = await killWith('x1', [typeHost('harness@harness')]);
     await serversGoneWithin(servers, 10_000);
     await waitFor(
       'x1 to be resolved again by core’s reconnection',
-      () =>
-        linesSince(mark, 'x1').some(
-          line =>
-            line.surface === 'progress' &&
-            line.question === 'Setting up SSH Host harness',
-        ),
+      () => reconnectedSince(logMark, 'harness'),
       30_000,
     );
     deepStrictEqual(
