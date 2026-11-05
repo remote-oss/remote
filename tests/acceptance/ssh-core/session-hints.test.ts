@@ -243,14 +243,21 @@ describe('the session record of every resolve (card connect-135)', function () {
       await closeWindow('c135-b2').catch(() => undefined);
     }
     await failingAttempt('c135-b3');
-    await waitFor(
-      'the third attempt to replace the first',
-      () =>
-        hintRecords()
-          .at(-1)
-          ?.hints.some(hint => hint.kind === 'log') ?? false,
-      60_000,
-    );
+    try {
+      await waitFor(
+        'the third attempt to replace the first',
+        () =>
+          hintRecords()
+            .at(-1)
+            ?.hints.some(hint => hint.kind === 'log') ?? false,
+        60_000,
+      );
+    } catch (caught) {
+      throw new Error(
+        `${String(caught)}\nRECORDS: ${JSON.stringify(hintRecords().map(record => ({started: record.started, hints: record.hints.map(hint => `${String(hint.kind)}:${String(hint.status)}`)})))}\nNOW: ${new Date().toISOString()}`,
+        {cause: caught},
+      );
+    }
     const last = hintRecords();
     deepStrictEqual(
       [
