@@ -6,6 +6,7 @@ import {deepStrictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import {type Launch, launchesOf} from './acceptance-launches.ts';
 import {
+  heldTogether,
   limitOf,
   PARTS_TABLE,
   type PartsTable,
@@ -144,6 +145,26 @@ describe('acceptance-parts (card tooling-159)', () => {
         suiteFiles,
       ),
       [{name: 'hosts 1/1', launches: 'case-one,case-two', minutes: 46}],
+    );
+  });
+
+  it('tooling-159: a launch the table keeps together with another, or one of an ordered group, runs only with others', () => {
+    const held = heldTogether({
+      targetMinutes: 15,
+      together: [['local', 'second']],
+      minutes: {},
+    });
+    deepStrictEqual(
+      [
+        held({label: 'local', runner: 'runner', suite: 'suite-local'}),
+        held({
+          label: 'case-one',
+          runner: 'runner-remote',
+          suite: 'suite-ports',
+        }),
+        held({label: 'long', kind: 'plain', suite: 'long'}),
+      ],
+      [true, true, false],
     );
   });
 

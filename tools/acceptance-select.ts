@@ -9,6 +9,7 @@ import path from 'node:path';
 import * as launchTable from './acceptance-launches.ts';
 import {type Launch, launchesOf} from './acceptance-launches.ts';
 import {
+  heldTogether,
   PARTS_TABLE,
   type Part,
   partsOfTable,
@@ -241,7 +242,9 @@ export function selectedParts(
 
 /**
  * The plan of a pull request's acceptance run for its changed paths: the narrowed parts of a test-only change, unless
- * the full label asks for more; else every part of the table that makes a launch the change reaches, side by side.
+ * the full label asks for more; else every part of the table that makes a launch the change reaches, side by side. A
+ * narrowed file of a launch that runs only with others (`held`) runs in the table's part of that launch instead, so it
+ * keeps the launch before it.
  */
 export function planOfChange(
   changed: readonly string[],
@@ -250,17 +253,35 @@ export function planOfChange(
   full: boolean,
   exists: (file: string) => boolean,
   measured: ReadonlyMap<string, readonly string[]> = new Map(),
+  held: (launch: Launch) => boolean = () => false,
 ): PullRequestPlan {
   const narrowed = full ? undefined : narrowedParts(changed, launches, exists);
-  return {
-    parts:
-      narrowed ??
-      selectedParts(
+  if (narrowed === undefined) {
+    return {
+      parts: selectedParts(
         selectLaunches(changed, launches, measured),
         launches,
         tableParts,
       ),
-  };
+    };
+  }
+  const heldLabels = launches
+    .filter(launch => held(launch))
+    .map(launch => launch.label);
+  const kept = narrowed.filter(
+    part => !heldLabels.includes(part.launches.split(':')[0] ?? ''),
+  );
+  const ofHeld = selectedParts(
+    {
+      labels: heldLabels.filter(label =>
+        narrowed.some(part => part.launches.split(':')[0] === label),
+      ),
+      reasons: [],
+    },
+    launches,
+    tableParts,
+  );
+  return {parts: [...ofHeld, ...kept]};
 }
 
 /**
@@ -339,6 +360,7 @@ if (isMainModule(import.meta.url)) {
             full,
             file => existsSync(path.join(REPOSITORY_ROOT, file)),
             measured,
+            heldTogether(table),
           ),
         ),
       );

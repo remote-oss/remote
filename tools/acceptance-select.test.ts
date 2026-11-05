@@ -4,7 +4,15 @@
 
 import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import path from 'node:path';
+import {readFileSync} from 'node:fs';
 import {type Launch, launchesOf} from './acceptance-launches.ts';
+import {
+  heldTogether,
+  PARTS_TABLE,
+  type PartsTable,
+  partsOfTable,
+  suiteFilesIn,
+} from './acceptance-parts.ts';
 import {
   FILE_PART_MINUTES,
   FILE_PARTS,
@@ -395,6 +403,62 @@ describe('acceptance-select: the parts of a test-only change (card tooling-159)'
         {parts: tableParts},
         {parts: []},
       ],
+    );
+  });
+
+  it('tooling-159: a narrowed file of a launch that runs only with others runs in the table part of that launch, and the smoke part beside it', () => {
+    const tableParts = [
+      {name: 'ssh 1/2', launches: 'local,whole', minutes: 30},
+      {name: 'ssh 2/2', launches: 'big-a,big-b', minutes: 30},
+    ];
+    deepStrictEqual(
+      [
+        planOfChange(
+          ['tests/acceptance/whole/w.test.ts'],
+          TABLE,
+          tableParts,
+          false,
+          () => true,
+          new Map(),
+          launch => launch.label === 'whole',
+        ),
+        planOfChange(
+          ['tests/acceptance/big/a.test.ts'],
+          TABLE,
+          tableParts,
+          false,
+          () => true,
+          new Map(),
+          launch => launch.label === 'whole',
+        ),
+      ],
+      [
+        {parts: [tableParts[0], SMOKE_PART]},
+        {parts: [filePart('big-a:a.test.ts'), SMOKE_PART]},
+      ],
+    );
+  });
+
+  it("tooling-159: in the repository's table a change to socket's test plans the part that runs terminal before socket", () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
+    const plan = planOfChange(
+      ['tests/acceptance/suite-socket/socket-mode.test.ts'],
+      launches,
+      partsOfTable(launches, table, suiteFilesIn(REPOSITORY_ROOT)),
+      false,
+      () => true,
+      new Map(),
+      heldTogether(table),
+    );
+    const labels = plan.parts.map(part => part.launches.split(','));
+    deepStrictEqual(
+      labels.map(
+        entries =>
+          entries.includes('terminal') &&
+          entries.indexOf('terminal') < entries.indexOf('socket'),
+      ),
+      [true],
     );
   });
 

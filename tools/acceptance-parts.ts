@@ -146,6 +146,16 @@ function entriesOf(
 export const ORDERED_GROUPS: readonly string[] = ['hosts'];
 
 /**
+ * Whether a launch runs only with others in one part, as the table makes it: a launch the table keeps `together` with
+ * another, or one of an ordered group.
+ */
+export function heldTogether(table: PartsTable): (launch: Launch) => boolean {
+  return launch =>
+    ORDERED_GROUPS.includes(launchGroupOf(launch)) ||
+    (table.together ?? []).some(labels => labels.includes(launch.label));
+}
+
+/**
  * Whether the parts leave a launch out: the genuine group's, which have a job of their own, and a launch that starts the
  * CLI-source editor, which needs the CLI archives' token that CI does not hold.
  */
