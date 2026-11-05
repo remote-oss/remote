@@ -3,6 +3,7 @@ import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   ciGateProblems,
+  dispatchGroupProblems,
   poolJobProblems,
   SAME_REPOSITORY_GUARD,
 } from './check-ci-gate.ts';
@@ -152,6 +153,37 @@ describe('check-ci-gate', () => {
           'acceptance-real-server',
           'acceptance-vscodium',
         ],
+      ],
+    );
+  });
+
+  it("the launch jobs' groups name the run for a dispatch; a group of the part alone is named", () => {
+    function jobsWith(group: string): string {
+      return `jobs:\n  acceptance-vscodium:\n    concurrency:\n      group: "${group}"\n  acceptance-genuine:\n    concurrency:\n      group: "y-\${{ github.run_id }}"\n`;
+    }
+    deepStrictEqual(
+      [
+        dispatchGroupProblems(
+          jobsWith(
+            "${{ github.event_name == 'push' && 'main' || format('run-{0}', github.run_id) }}-a",
+          ),
+        ),
+        dispatchGroupProblems(
+          jobsWith('acceptance-vscodium-${{ matrix.launches }}'),
+        ),
+        dispatchGroupProblems(
+          readFileSync(
+            path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
+            'utf8',
+          ),
+        ),
+      ],
+      [
+        [],
+        [
+          ".github/workflows/ci.yml: acceptance-vscodium's concurrency group doesn't name the run, so one dispatch can replace another's pending job",
+        ],
+        [],
       ],
     );
   });
