@@ -280,6 +280,37 @@ export function editorLogsFolder(): string {
   return variable('HARNESS_EDITOR_LOGS');
 }
 
+/**
+ * The end of the launch's editor logs, said when a window cannot be reached: the files of its newest session and the
+ * last lines of its `main.log`, of the first window's renderer and of its extension host. A hosted run uploads none of
+ * them.
+ */
+export function editorLogTail(): string {
+  const root = editorLogsFolder();
+  if (!existsSync(root)) {
+    return `(no editor logs at ${root})`;
+  }
+  const sessions = readdirSync(root)
+    .map(name => path.join(root, name))
+    .filter(folder => statSync(folder).isDirectory())
+    .sort((left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs);
+  const session = sessions[0];
+  if (session === undefined) {
+    return `(no session folder in ${root})`;
+  }
+  const tails = [
+    'main.log',
+    'window1/renderer.log',
+    'window1/exthost/exthost.log',
+  ].map(name => {
+    const file = path.join(session, name);
+    return existsSync(file)
+      ? `${name}: ${JSON.stringify(readFileSync(file, 'utf8').trimEnd().split('\n').slice(-12))}`
+      : `${name}: (absent)`;
+  });
+  return `${path.basename(session)}; ${tails.join('; ')}`;
+}
+
 /** The lines of the log the launch's extensions write, without their time stamps; none before the first is written. */
 export function connectionLog(): string[] {
   return logLinesOf('REMOTE_OSS_ACCEPTANCE_LOG');
