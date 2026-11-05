@@ -10,6 +10,7 @@ import {
   FILE_PART_MINUTES,
   FILE_PARTS,
   launchesInput,
+  measuredChange,
   narrowedParts,
   partsOf,
   planOfChange,
@@ -602,5 +603,28 @@ describe('acceptance-select: the parts of a test-only change (card tooling-159)'
         ['containers-shutdown', ['reopen-locally-lines.test.ts']],
       ],
     );
+  });
+});
+
+describe('acceptance-select: the measured reach (card tooling-169)', () => {
+  it('tooling-169: a path whose reach is measured reaches those launches, not every launch', () => {
+    deepStrictEqual(
+      [
+        selectLaunches(['tools/acceptance-launches.ts'], LAUNCHES).labels,
+        selectLaunches(
+          ['tools/acceptance-launches.ts'],
+          LAUNCHES,
+          new Map([['tools/acceptance-launches.ts', ['windows']]]),
+        ).labels,
+      ],
+      [EVERY, ['windows']],
+    );
+  });
+
+  it('tooling-169: a change with no changed path measures nothing', async () => {
+    deepStrictEqual(await measuredChange('HEAD', 'HEAD', LAUNCHES), {
+      changed: [],
+      measured: new Map(),
+    });
   });
 });

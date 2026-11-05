@@ -6,7 +6,13 @@
 import {execFileSync} from 'node:child_process';
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
+import * as launchTable from './acceptance-launches.ts';
 import {type Launch, launchesOf} from './acceptance-launches.ts';
+import {
+  LAUNCH_TABLE,
+  labelsChangedSince,
+  withHelpersAsTests,
+} from './acceptance-reach.ts';
 import {chosenLaunches} from './acceptance.ts';
 import {isMainModule, REPOSITORY_ROOT} from './repository.ts';
 
@@ -35,11 +41,19 @@ function extensionsOfLaunch(launch: Launch): readonly string[] {
   return launch.kind === 'plain' ? (launch.withExtensions ?? []) : [];
 }
 
-/** The labels of the launches one changed path can reach, or undefined when it reaches every launch. */
+/**
+ * The labels of the launches one changed path can reach, or undefined when it reaches every launch. `measured` holds
+ * the reach of paths measured beforehand (the launch table's changed entries, acceptance-reach.ts).
+ */
 function reachedBy(
   changed: string,
   launches: readonly Launch[],
-): string[] | undefined {
+  measured: ReadonlyMap<string, readonly string[]>,
+): readonly string[] | undefined {
+  const known = measured.get(changed);
+  if (known !== undefined) {
+    return known;
+  }
   if (NO_LAUNCH.some(pattern => pattern.test(changed))) {
     return [];
   }
@@ -74,15 +88,16 @@ function reachedBy(
 
 /**
  * The launches a change can reach, in the run's order: the union over its changed paths. A path the table does not
- * name reaches every launch; documentation and unit tests reach none.
+ * name reaches every launch, unless `measured` gives its reach; documentation and unit tests reach none.
  */
 export function selectLaunches(
   changed: readonly string[],
   launches: readonly Launch[],
+  measured: ReadonlyMap<string, readonly string[]> = new Map(),
 ): Selection {
   const reasons = new Map<string, string>();
   for (const file of changed) {
-    for (const label of reachedBy(file, launches) ??
+    for (const label of reachedBy(file, launches, measured) ??
       launches.map(launch => launch.label)) {
       if (!reasons.has(label)) {
         reasons.set(label, file);
@@ -298,11 +313,44 @@ export function planOfChange(
   parts: readonly string[],
   full: boolean,
   exists: (file: string) => boolean,
+  measured: ReadonlyMap<string, readonly string[]> = new Map(),
 ): PullRequestPlan {
   const narrowed = full ? undefined : narrowedParts(changed, launches, exists);
   return narrowed === undefined
-    ? pullRequestPlan(selectLaunches(changed, launches), launches, parts, full)
+    ? pullRequestPlan(
+        selectLaunches(changed, launches, measured),
+        launches,
+        parts,
+        full,
+      )
     : {parts: narrowed};
+}
+
+/**
+ * The changed paths of `base`...`head` as the selection reads them, and the reach measured for the launch table: each
+ * suite helper as the tests that stand for it, and a changed launch table as the launches whose entries differ.
+ */
+export async function measuredChange(
+  base: string,
+  head: string,
+  launches: readonly Launch[],
+): Promise<{
+  changed: string[];
+  measured: Map<string, readonly string[]>;
+}> {
+  const changed = withHelpersAsTests(
+    changedFiles(base, head),
+    REPOSITORY_ROOT,
+    new Set(launches.map(launch => launch.suite)),
+  );
+  const measured = new Map<string, readonly string[]>();
+  const labels = changed.includes(LAUNCH_TABLE)
+    ? await labelsChangedSince(base, launchTable, REPOSITORY_ROOT)
+    : undefined;
+  if (labels !== undefined) {
+    measured.set(LAUNCH_TABLE, labels);
+  }
+  return {changed, measured};
 }
 
 /** The files a change touches: `git diff --name-only <base>...<head>`, from the merge base. */
@@ -341,8 +389,8 @@ if (isMainModule(import.meta.url)) {
     process.exitCode = 2;
   } else {
     const launches = launchesOf(REPOSITORY_ROOT);
-    const changed = changedFiles(base, head);
-    const selection = selectLaunches(changed, launches);
+    const {changed, measured} = await measuredChange(base, head, launches);
+    const selection = selectLaunches(changed, launches, measured);
     for (const line of selection.reasons) {
       console.error(`selected ${line}`);
     }
@@ -355,8 +403,13 @@ if (isMainModule(import.meta.url)) {
     if (forPullRequest) {
       console.log(
         JSON.stringify(
-          planOfChange(changed, launches, parts, full, file =>
-            existsSync(path.join(REPOSITORY_ROOT, file)),
+          planOfChange(
+            changed,
+            launches,
+            parts,
+            full,
+            file => existsSync(path.join(REPOSITORY_ROOT, file)),
+            measured,
           ),
         ),
       );
