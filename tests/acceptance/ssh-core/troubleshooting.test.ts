@@ -4,11 +4,12 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {readFileSync, statSync, writeFileSync} from 'node:fs';
+import {readdirSync, readFileSync, statSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   appendScript,
   closeWindow,
+  editorLogsFolder,
   connectedWithin,
   connectionLog,
   inWindow,
@@ -110,6 +111,24 @@ async function lateDump(window: string, caught: unknown): Promise<never> {
       }
     },
   );
+  const sqliteLines: string[] = [];
+  try {
+    const logs = editorLogsFolder();
+    for (const file of readdirSync(logs, {recursive: true, encoding: 'utf8'})) {
+      if (!file.endsWith('.log')) {
+        continue;
+      }
+      for (const line of readFileSync(path.join(logs, file), 'utf8').split(
+        '\n',
+      )) {
+        if (/SQLITE|\[storage/.test(line)) {
+          sqliteLines.push(`${file}: ${line.slice(0, 220)}`);
+        }
+      }
+    }
+  } catch (caught) {
+    sqliteLines.push(`log scan failed: ${String(caught)}`);
+  }
   const failedAt = Date.now();
   let landedAfter = 'never within 120 s';
   for (let polled = 0; polled < 60; polled += 1) {
@@ -131,7 +150,7 @@ async function lateDump(window: string, caught: unknown): Promise<never> {
       .at(-1)
       ?.hints.some(hint => hint.kind === 'log') ?? false;
   throw new Error(
-    `DBFILES ${dbFiles.join(' ')}\nLANDED-AFTER ${landedAfter}\nLOG-HINT-AFTER-WINDOW-CLOSE ${String(afterClose)}\n${String(caught)}\nRECORDS: ${JSON.stringify(hintRecords().map(record => ({started: record.started, hints: record.hints.map(hint => String(hint.kind))})))}\nTRACE:\n${readFileSync('/tmp/hint-trace.log', 'utf8')}`,
+    `SQLITE-LOG-LINES (${String(sqliteLines.length)}):\n${sqliteLines.slice(-25).join('\n')}\nDBFILES ${dbFiles.join(' ')}\nLANDED-AFTER ${landedAfter}\nLOG-HINT-AFTER-WINDOW-CLOSE ${String(afterClose)}\n${String(caught)}\nRECORDS: ${JSON.stringify(hintRecords().map(record => ({started: record.started, hints: record.hints.map(hint => String(hint.kind))})))}\nTRACE:\n${readFileSync('/tmp/hint-trace.log', 'utf8')}`,
     {cause: caught},
   );
 }
