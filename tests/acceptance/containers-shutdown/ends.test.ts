@@ -52,6 +52,7 @@ describe('what ends a window decides when its container stops (card containers-6
 
   it('F-0417 AC-12 (e12): a command that exits 3 four seconds after the signal shows Exited (3) about 15 s after the close, and one that ignores it Exited (137) about 21 s after', async () => {
     const results = [];
+    const outcomes: string[] = [];
     for (const [label, trap, exitCode, window] of [
       ['exits', "trap 'sleep 4; exit 3' TERM", 3, {from: 13, until: 18}],
       ['ignores', "trap '' TERM", 137, {from: 19, until: 24}],
@@ -67,17 +68,23 @@ describe('what ends a window decides when its container stops (card containers-6
       try {
         const outcome = await closedAndWatched(
           {window: window2, folder, containerId},
-          label === 'exits' ? 22 : 28,
+          // The wait is long for the signal-ignoring command so that a stop that comes late shows when it came.
+          label === 'exits' ? 22 : 40,
         );
         results.push([label, stoppedWithin(outcome, exitCode, window)]);
+        outcomes.push(`${label}: ${JSON.stringify(outcome)}`);
       } finally {
         await removeContainersOf(folder);
       }
     }
-    deepStrictEqual(results, [
-      ['exits', true],
-      ['ignores', true],
-    ]);
+    deepStrictEqual(
+      results,
+      [
+        ['exits', true],
+        ['ignores', true],
+      ],
+      outcomes.join('; '),
+    );
   });
 
   it('F-0417 AC-22 (e22): a process started in the container from the host with docker exec does not keep it running', async () => {

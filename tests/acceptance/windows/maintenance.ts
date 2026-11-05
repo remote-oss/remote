@@ -33,7 +33,9 @@ import {
   variable,
   waitFor,
   writeUserSetting,
+  windowEvents,
   windowNames,
+  windowState,
 } from './harness.ts';
 
 /** The question of the host pick. */
@@ -149,6 +151,93 @@ export function linesSince(mark: number, window: string): RecordLine[] {
     .filter(line => line.window === window);
 }
 
+/** The first line of `window` since `mark` that shows core resolving the authority of SSH host `host` again. */
+function resolvedAgainSince(
+  mark: number,
+  window: string,
+  host: string,
+): RecordLine | undefined {
+  return linesSince(mark, window).find(
+    line =>
+      line.surface === 'progress' &&
+      line.question === `Setting up SSH Host ${host}`,
+  );
+}
+
+/** How many of `lines` each window has. */
+function countsByWindow(lines: readonly RecordLine[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const line of lines) {
+    counts[line.window] = (counts[line.window] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** The length of the connection log at the moment each record mark was taken, by that mark. */
+const logMarks = new Map<number, number>();
+
+/** The line of the connection log that says core resolved `host` again after a connection was lost. */
+function reconnectionLine(host: string): RegExp {
+  return new RegExp(
+    `Resolving ssh-remote\\+${host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}, attempt \\d+, reconnection`,
+    'u',
+  );
+}
+
+/**
+ * Waits `milliseconds` for core's reconnection of `window` to host `host` after its server went, and gives the time it
+ * was seen. Core's resolve is seen in the record as the progress of "Setting up SSH Host", which opens only after half a
+ * second, and in the connection log as the line that names the reconnection attempt, which a quick resolve leaves alone:
+ * either is the evidence. When none comes it fails with what the window and the record showed, since a hosted run uploads
+ * neither.
+ */
+export async function waitForReconnection(
+  mark: number,
+  window: string,
+  host: string,
+  milliseconds: number,
+): Promise<number> {
+  const logMark = logMarks.get(mark) ?? Number.POSITIVE_INFINITY;
+  const pattern = reconnectionLine(host);
+  let seen = 0;
+  try {
+    await waitFor(
+      `${window} to be resolved again by core’s reconnection`,
+      () => {
+        const progress = resolvedAgainSince(mark, window, host);
+        const logged = connectionLog()
+          .slice(logMark)
+          .some(line => pattern.test(line));
+        if (progress === undefined && !logged) {
+          return false;
+        }
+        seen = progress?.time ?? Date.now();
+        return true;
+      },
+      milliseconds,
+    );
+    return seen;
+  } catch (error) {
+    const state = await windowState(window).catch(() => undefined);
+    throw new Error(
+      `${(error as Error).message}: ${JSON.stringify({
+        remoteName: state?.remoteName,
+        open: isOpen(window),
+        lines: linesSince(mark, window)
+          .slice(-12)
+          .map(line => [line.surface, line.question, line.answer]),
+        // Where the record's lines went, if not to this window: a count of them by window.
+        sinceMark: countsByWindow(recordLines().slice(mark)),
+        events: windowEvents(window)
+          .slice(-6)
+          .map(entry => entry.event),
+        connection: connectionLog().slice(-8),
+      })}`,
+      {cause: error},
+    );
+  }
+}
+
 /**
  * Runs `command` in window `window` with `answers` scripted for it, and gives the mark of the record it started
  * from. The script is lined up with the window's cursor first, so an entry an earlier command left unused can't
@@ -162,6 +251,7 @@ export async function runWith(
   alignScript(window);
   appendScript(answers.map(answer => ({...answer, window})));
   const mark = recordLines().length;
+  logMarks.set(mark, connectionLog().length);
   try {
     await inWindow(window, command);
   } catch (caught) {
