@@ -113,6 +113,22 @@ describe('the Problems panel’s Feature ids (card containers-95)', () => {
     ]);
   });
 
+  it('F-0810 (dike): a configuration under node_modules is not diagnosed, but one that is not is', async () => {
+    const host = new FakeHost();
+    host.disk.set('/w/devcontainer.json', BAD_TEXT);
+    host.disk.set('/w/node_modules/p/devcontainer.json', BAD_TEXT);
+    featureDiagnosticsProviderOf(host, template => template);
+    await settled();
+    deepStrictEqual(messages(host), [
+      [
+        '/w/devcontainer.json',
+        [
+          'Absolute file paths are not allowed. Local file path must be indicated relative to the devcontainer.json.',
+        ],
+      ],
+    ]);
+  });
+
   it('F-0414 3.3: a diagnostic holds the key’s range, the error severity, the message and the code with the page it links to', () => {
     deepStrictEqual(
       diagnosticsOf(BAD_TEXT, template => template),

@@ -107,6 +107,11 @@ function isConfigurationFile(file: string): boolean {
   return CONFIGURATION_NAMES.has(nameOf(file));
 }
 
+/** Whether the file lies under a `node_modules` folder: the diagnostics never read or diagnose a dependency's file. */
+function underNodeModules(file: string): boolean {
+  return /(^|\/)node_modules\//.test(file);
+}
+
 /** Starts the diagnostics over `host`; the result ends them and clears the collection. */
 export function featureDiagnosticsProviderOf(
   host: DiagnosticsHost,
@@ -116,6 +121,9 @@ export function featureDiagnosticsProviderOf(
   const watchers: Registration[] = [];
 
   async function refresh(file: string): Promise<void> {
+    if (underNodeModules(file)) {
+      return;
+    }
     const text = host.openText(file) ?? (await host.readFromDisk(file));
     if (text === undefined) {
       known.delete(file);

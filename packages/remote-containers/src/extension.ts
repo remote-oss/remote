@@ -511,6 +511,8 @@ function statusProgressPortOf(): StatusProgressPort {
 
 /** Where a dev container configuration is in a window's folders: a `devcontainer.json` or `.devcontainer.json`, in any of their folders. */
 const CONFIGURATION_PATTERN = '**/{devcontainer.json,.devcontainer.json}';
+/** The dependency folders a workspace scan of configurations must skip. */
+const CONFIGURATION_EXCLUDE = '**/node_modules/**';
 
 /** The editor behind the diagnostics of the Feature ids, over the string form of each file's URI. */
 function featureDiagnosticsHost(): DiagnosticsHost {
@@ -534,7 +536,7 @@ function featureDiagnosticsHost(): DiagnosticsHost {
               vscode.Uri.parse(folder),
               CONFIGURATION_PATTERN,
             ),
-            null,
+            CONFIGURATION_EXCLUDE,
           )
         ).map(each => each.toString());
       } catch {
