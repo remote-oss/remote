@@ -705,9 +705,21 @@ export function packageReach(
 }
 
 /**
+ * The folders of the acceptance tests that no launch has as its suite and that a job of its own runs on every pull
+ * request, each with the package script that job runs: the server tests (`acceptance (server lifecycle)`) and the
+ * shared suite's (`acceptance (slice 1)`, whose VS Code run takes that suite's bundle). A folder that no job runs
+ * (containers-cli) is not one, so a change to its tests still reaches every launch.
+ */
+export const OWN_JOB_FOLDERS: ReadonlyMap<string, string> = new Map([
+  ['server', 'test:acceptance:server'],
+  ['suite', 'test:acceptance'],
+]);
+
+/**
  * The reach measured at `root`, the head, for the changed paths it can place: each path in a package's folder that is
- * not a unit test, by its package (the graph is read once, and only when such a path changed), and the parts table, by
- * the parts it makes otherwise than at `base`.
+ * not a unit test, by its package; each test of a folder of its own job, by the launch tests that import it (none
+ * when nothing does: its own job runs it); and the parts table, by the parts it makes otherwise than at `base`. The
+ * graph is read once, and only when such a path changed.
  */
 export function measuredPaths(
   changed: readonly string[],
@@ -720,9 +732,25 @@ export function measuredPaths(
       /^packages\/[^/]+\//.test(file) &&
       !NO_LAUNCH.some(pattern => pattern.test(file)),
   );
-  const graph = paths.length === 0 ? undefined : sourceGraph(root);
+  const ownTests = changed.filter(file => {
+    const folder = SUITE_TEST.exec(file)?.[1];
+    return (
+      folder !== undefined &&
+      OWN_JOB_FOLDERS.has(folder) &&
+      !launches.some(launch => launch.suite === folder)
+    );
+  });
+  const graph =
+    paths.length === 0 && ownTests.length === 0 ? undefined : sourceGraph(root);
   const reached = new Map<string, readonly string[] | undefined>();
   const measured = new Map<string, readonly string[]>();
+  for (const file of ownTests) {
+    const reach =
+      graph === undefined ? undefined : testReach(graph, file, launches);
+    if (reach !== undefined) {
+      measured.set(file, reach);
+    }
+  }
   for (const file of paths) {
     const folder = file.split('/').slice(0, 2).join('/');
     if (graph !== undefined && !reached.has(folder)) {
