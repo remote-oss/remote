@@ -1,8 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -79,6 +81,32 @@ async function settle(milliseconds: number): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
+/** Closes the editors open on `file`, discarding their unsaved changes first. */
+async function closeEditorsOf(file: string): Promise<void> {
+  for (const editor of [...vscode.window.visibleTextEditors]) {
+    if (editor.document.uri.fsPath !== file) {
+      continue;
+    }
+    await vscode.window.showTextDocument(editor.document);
+    if (editor.document.isDirty) {
+      await vscode.commands.executeCommand('workbench.action.revertFile');
+    }
+    await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+  }
+}
+
+/** Creates this run's signal file: a held script entry that names it answers from then on. */
+function signal(name: string): void {
+  const folder = process.env.REMOTE_OSS_ACCEPTANCE_SIGNALS ?? '';
+  if (folder === '') {
+    throw new Error(
+      'REMOTE_OSS_ACCEPTANCE_SIGNALS is not set; run the tests with the harness',
+    );
+  }
+  mkdirSync(folder, {recursive: true});
+  writeFileSync(path.join(folder, name), '');
+}
+
 describe('Remote - SSH, activated in the editor', () => {
   it('#140: the connect is registered: the details command the progress links to exists', async () => {
     deepStrictEqual(
@@ -134,6 +162,7 @@ describe('Remote - SSH, activated in the editor', () => {
   it('F-2203 AC-3 (c119-open): an existing user file opens at Ln 1 Col 1, not dirty, and nothing is written', async () => {
     const sshFolder = path.join(homedir(), '.ssh');
     const userFile = path.join(sshFolder, 'config');
+    await closeEditorsOf(userFile);
     mkdirSync(sshFolder, {recursive: true});
     const before = 'existing content\n';
     writeFileSync(userFile, before);
@@ -165,6 +194,7 @@ describe('Remote - SSH, activated in the editor', () => {
 
   it('F-2203 AC-4 (c119-again): an already open user file is revealed active with its selection, and no second tab opens', async () => {
     const userFile = path.join(homedir(), '.ssh', 'config');
+    await closeEditorsOf(userFile);
     mkdirSync(path.dirname(userFile), {recursive: true});
     writeFileSync(userFile, 'Host existing\n');
     const document = await vscode.workspace.openTextDocument(userFile);
@@ -205,6 +235,7 @@ describe('Remote - SSH, activated in the editor', () => {
   it('F-2203 AC-6, AC-7 (c119-template): a created user file opens with the BR-6 template, and a save writes it', async () => {
     const sshFolder = path.join(homedir(), '.ssh');
     const userFile = path.join(sshFolder, 'config');
+    await closeEditorsOf(userFile);
     rmSync(sshFolder, {recursive: true, force: true});
     scriptFor([
       {
@@ -258,6 +289,7 @@ describe('Remote - SSH, activated in the editor', () => {
   it('F-2203 AC-8 (c119-dontsave): closing the template and choosing "Don\'t Save" leaves the created empty file on disk', async () => {
     const sshFolder = path.join(homedir(), '.ssh');
     const userFile = path.join(sshFolder, 'config');
+    await closeEditorsOf(userFile);
     rmSync(sshFolder, {recursive: true, force: true});
     scriptFor([
       {
@@ -297,6 +329,7 @@ describe('Remote - SSH, activated in the editor', () => {
   it('F-2203 AC-9 (c119-empty): an existing empty file opens with no template, not dirty', async () => {
     const userFile = path.join(homedir(), '.ssh', 'config');
     mkdirSync(path.dirname(userFile), {recursive: true});
+    await closeEditorsOf(userFile);
     writeFileSync(userFile, '');
     scriptFor([
       {
@@ -441,20 +474,466 @@ describe('Remote - SSH, activated in the editor', () => {
     }
   });
 
+  it('F-2203 AC-14 (c119-settings): picking Settings creates no file and shows no notification', async () => {
+    const userFile = path.join(homedir(), '.ssh', 'config');
+    rmSync(path.dirname(userFile), {recursive: true, force: true});
+    const script = scriptFor([
+      {
+        surface: 'filePick',
+        match: 'SSH configuration file',
+        answer: {label: 'Settings'},
+      },
+    ]);
+    const before = vscode.window.activeTextEditor;
+    await configFileSetting('');
+    try {
+      await vscode.commands.executeCommand('opensshremotes.openConfigFile');
+      deepStrictEqual(
+        [
+          existsSync(userFile),
+          vscode.window.activeTextEditor,
+          script.record().filter(line => line.surface === 'notice').length,
+        ],
+        [false, before, 0],
+      );
+    } finally {
+      await configFileSetting(HARNESS_CONFIG);
+    }
+  });
+
   it('F-2203 AC-16 (c119-escape): Escape in the picker creates nothing and opens nothing', async () => {
     const sshFolder = path.join(homedir(), '.ssh');
     const userFile = path.join(sshFolder, 'config');
     rmSync(sshFolder, {recursive: true, force: true});
     const before = vscode.window.activeTextEditor;
-    scriptFor([
+    const script = scriptFor([
       {surface: 'filePick', match: 'SSH configuration file', answer: 'dismiss'},
     ]);
     await commandsAfterActivation();
     await vscode.commands.executeCommand('opensshremotes.openConfigFile');
     deepStrictEqual(
-      [existsSync(userFile), vscode.window.activeTextEditor],
-      [false, before],
+      [
+        existsSync(userFile),
+        vscode.window.activeTextEditor,
+        script.record().filter(line => line.surface === 'notice').length,
+      ],
+      [false, before, 0],
     );
+  });
+
+  it('F-2203 AC-19 (c119-explorer-row): the explorer row action opens the same picker', async () => {
+    const userFile = path.join(homedir(), '.ssh', 'config');
+    const script = scriptFor([
+      {surface: 'filePick', match: 'SSH configuration file', answer: 'dismiss'},
+    ]);
+    await configFileSetting('');
+    try {
+      await vscode.commands.executeCommand('remote-explorer.configureSsh');
+      const line = filePickLine(script.record());
+      deepStrictEqual(
+        [line?.question, line?.items],
+        [
+          'Select SSH configuration file to update',
+          [userFile, '/etc/ssh/ssh_config', 'Settings', 'Help'],
+        ],
+      );
+    } finally {
+      await configFileSetting(HARNESS_CONFIG);
+    }
+  });
+
+  it('F-2203 AC-20 (c119-client-paths): in the SSH window the picker lists client paths, and the client file opens', async () => {
+    const userFile = path.join(homedir(), '.ssh', 'config');
+    await closeEditorsOf(userFile);
+    mkdirSync(path.dirname(userFile), {recursive: true});
+    writeFileSync(userFile, 'Host existing\n');
+    scriptFor([
+      {
+        surface: 'filePick',
+        match: 'SSH configuration file',
+        answer: {label: userFile},
+      },
+    ]);
+    await configFileSetting('');
+    try {
+      await vscode.commands.executeCommand('opensshremotes.openConfigFile');
+      const editor = vscode.window.activeTextEditor;
+      deepStrictEqual(
+        [editor?.document.uri.scheme, editor?.document.uri.fsPath],
+        ['file', userFile],
+      );
+    } finally {
+      await configFileSetting(HARNESS_CONFIG);
+    }
+  });
+
+  it('F-2203 AC-21 (c119-refused-create): a user file that cannot be created refuses, creating nothing', async () => {
+    const sshFolderPath = path.join(homedir(), '.ssh');
+    const userFile = path.join(sshFolderPath, 'config');
+    rmSync(sshFolderPath, {recursive: true, force: true});
+    writeFileSync(sshFolderPath, 'a file, not a folder');
+    const script = scriptFor([
+      {
+        surface: 'filePick',
+        match: 'SSH configuration file',
+        answer: {label: userFile},
+      },
+    ]);
+    const before = vscode.window.activeTextEditor;
+    let rejected: unknown;
+    await configFileSetting('');
+    try {
+      try {
+        await vscode.commands.executeCommand('opensshremotes.openConfigFile');
+      } catch (error) {
+        rejected = error;
+      }
+      deepStrictEqual(
+        [
+          rejected !== undefined,
+          existsSync(userFile),
+          vscode.window.activeTextEditor,
+          script.record().filter(line => line.surface === 'notice').length,
+        ],
+        [true, false, before, 0],
+      );
+    } finally {
+      rmSync(sshFolderPath, {force: true});
+      await configFileSetting(HARNESS_CONFIG);
+    }
+  });
+
+  it('F-2203 AC-22 (c119-unreadable): an unreadable picked file opens nothing, and the file is unchanged', async () => {
+    const file = path.join(mkdtempSync(path.join(tmpdir(), 'c119-')), 'cfg');
+    const content = 'Host locked\n';
+    writeFileSync(file, content);
+    chmodSync(file, 0o000);
+    scriptFor([
+      {
+        surface: 'filePick',
+        match: 'SSH configuration file',
+        answer: {label: file},
+      },
+    ]);
+    const before = vscode.window.activeTextEditor;
+    let rejected: unknown;
+    await configFileSetting(file);
+    try {
+      try {
+        await vscode.commands.executeCommand('opensshremotes.openConfigFile');
+      } catch (error) {
+        rejected = error;
+      }
+      deepStrictEqual(
+        [
+          rejected !== undefined,
+          vscode.window.activeTextEditor,
+          readFileSync(file, 'utf8'),
+        ],
+        [true, before, content],
+      );
+    } finally {
+      chmodSync(file, 0o644);
+      await configFileSetting(HARNESS_CONFIG);
+    }
+  });
+
+  it('F-2203 AC-23 (c119-relative): a relative configured value creates nothing, and the command keeps refusing', async () => {
+    const value = 'relcfg/rel_config';
+    scriptFor([
+      {
+        surface: 'filePick',
+        match: 'SSH configuration file',
+        answer: {label: value},
+      },
+      {
+        surface: 'filePick',
+        match: 'SSH configuration file',
+        answer: {label: value},
+      },
+    ]);
+    const runFolder = process.env.HARNESS_RUN_FOLDER ?? tmpdir();
+    let first: unknown;
+    let second: unknown;
+    await configFileSetting(value);
+    try {
+      try {
+        await vscode.commands.executeCommand('opensshremotes.openConfigFile');
+      } catch (error) {
+        first = error;
+      }
+      try {
+        await vscode.commands.executeCommand('opensshremotes.openConfigFile');
+      } catch (error) {
+        second = error;
+      }
+      deepStrictEqual(
+        [
+          first !== undefined,
+          second !== undefined,
+          existsSync(path.join(homedir(), 'relcfg')),
+          existsSync(path.join(runFolder, 'relcfg')),
+          existsSync(path.join(process.cwd(), 'relcfg')),
+        ],
+        [true, true, false, false, false],
+      );
+    } finally {
+      await configFileSetting(HARNESS_CONFIG);
+    }
+  });
+
+  it('F-2203 AC-24 (c119-directory): a picked directory opens no editor and creates nothing', async () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'c119-24-'));
+    scriptFor([
+      {
+        surface: 'filePick',
+        match: 'SSH configuration file',
+        answer: {label: folder},
+      },
+    ]);
+    const before = vscode.window.activeTextEditor;
+    let rejected: unknown;
+    await configFileSetting(folder);
+    try {
+      try {
+        await vscode.commands.executeCommand('opensshremotes.openConfigFile');
+      } catch (error) {
+        rejected = error;
+      }
+      deepStrictEqual(
+        [
+          rejected !== undefined,
+          vscode.window.activeTextEditor,
+          readdirSync(folder),
+        ],
+        [true, before, []],
+      );
+    } finally {
+      await configFileSetting(HARNESS_CONFIG);
+    }
+  });
+
+  it('F-2203 AC-25 (c119-indent): the template indentation follows the editor settings', async () => {
+    const sshFolderPath = path.join(homedir(), '.ssh');
+    const userFile = path.join(sshFolderPath, 'config');
+    await closeEditorsOf(userFile);
+    rmSync(sshFolderPath, {recursive: true, force: true});
+    const lineOne =
+      '# Read more about SSH config files: https://linux.die.net/man/5/ssh_config';
+    const measured: string[] = [];
+    await configFileSetting('');
+    try {
+      await editorSetting('insertSpaces', false, async () => {
+        await editorSetting('tabSize', 2, async () => {
+          scriptFor([
+            {
+              surface: 'filePick',
+              match: 'SSH configuration file',
+              answer: {label: userFile},
+            },
+          ]);
+          await vscode.commands.executeCommand('opensshremotes.openConfigFile');
+          measured.push(
+            vscode.window.activeTextEditor?.document.getText() ?? '',
+          );
+          await vscode.commands.executeCommand(
+            'workbench.action.revertAndCloseActiveEditor',
+          );
+        });
+      });
+      rmSync(userFile, {force: true});
+      await editorSetting('insertSpaces', true, async () => {
+        await editorSetting('tabSize', 2, async () => {
+          scriptFor([
+            {
+              surface: 'filePick',
+              match: 'SSH configuration file',
+              answer: {label: userFile},
+            },
+          ]);
+          await vscode.commands.executeCommand('opensshremotes.openConfigFile');
+          measured.push(
+            vscode.window.activeTextEditor?.document.getText() ?? '',
+          );
+          await vscode.commands.executeCommand(
+            'workbench.action.revertAndCloseActiveEditor',
+          );
+        });
+      });
+      deepStrictEqual(measured, [
+        [lineOne, 'Host alias', '\t\tHostName hostname', '\t\tUser user'].join(
+          '\n',
+        ),
+        [lineOne, 'Host alias', '    HostName hostname', '    User user'].join(
+          '\n',
+        ),
+      ]);
+    } finally {
+      await configFileSetting(HARNESS_CONFIG);
+    }
+  });
+
+  it('F-2203 AC-27 (c119-stateless): opening a file through the command writes no setting and no stored state', async () => {
+    const userFile = path.join(homedir(), '.ssh', 'config');
+    await closeEditorsOf(userFile);
+    mkdirSync(path.dirname(userFile), {recursive: true});
+    writeFileSync(userFile, 'Host existing\n');
+    const userData = process.env.HARNESS_USER_DATA ?? '';
+    const settingsFile = path.join(userData, 'User', 'settings.json');
+    const extensionStorage = path.join(userData, 'globalStorage');
+    function snapshot(): unknown[] {
+      return [
+        existsSync(settingsFile)
+          ? readFileSync(settingsFile, 'utf8')
+          : undefined,
+        existsSync(extensionStorage)
+          ? readdirSync(extensionStorage)
+              .filter(name => name.startsWith('remote-oss'))
+              .sort()
+          : [],
+      ];
+    }
+    const before = snapshot();
+    scriptFor([
+      {
+        surface: 'filePick',
+        match: 'SSH configuration file',
+        answer: {label: userFile},
+      },
+    ]);
+    await vscode.commands.executeCommand('opensshremotes.openConfigFile');
+    await settle(500);
+    deepStrictEqual(snapshot(), before);
+  });
+
+  it('F-2203 AC-28 (c119-held): the picker stays open until its answer arrives', async () => {
+    scriptFor([
+      {
+        surface: 'filePick',
+        match: 'SSH configuration file',
+        answer: 'dismiss',
+        after: 'c119-28',
+      },
+    ]);
+    await configFileSetting('');
+    try {
+      const pending = vscode.commands.executeCommand(
+        'opensshremotes.openConfigFile',
+      );
+      const answered = await Promise.race([
+        pending.then(() => true),
+        new Promise(resolve => {
+          setTimeout(() => {
+            resolve(false);
+          }, 5000);
+        }),
+      ]);
+      signal('c119-28');
+      await pending;
+      deepStrictEqual(answered, false);
+    } finally {
+      await configFileSetting(HARNESS_CONFIG);
+    }
+  });
+
+  it('F-2203 AC-30 (c119-eacces): a file that cannot be created refuses with EACCES, creating nothing', async () => {
+    const value = '/etc/c119-30/cfg';
+    const script = scriptFor([
+      {
+        surface: 'filePick',
+        match: 'SSH configuration file',
+        answer: {label: value},
+      },
+    ]);
+    const before = vscode.window.activeTextEditor;
+    let rejected: unknown;
+    await configFileSetting(value);
+    try {
+      try {
+        await vscode.commands.executeCommand('opensshremotes.openConfigFile');
+      } catch (error) {
+        rejected = error;
+      }
+      deepStrictEqual(
+        [
+          rejected !== undefined,
+          /eacces|permission/i.test(String(rejected)),
+          existsSync('/etc/c119-30'),
+          vscode.window.activeTextEditor,
+          script.record().filter(line => line.surface === 'notice').length,
+        ],
+        [true, true, false, before, 0],
+      );
+    } finally {
+      await configFileSetting(HARNESS_CONFIG);
+    }
+  });
+
+  it('F-2203 AC-31 (c119-0755): a missing user file under a 0755 .ssh is created 0600, the folder keeping 0755', async () => {
+    const sshFolderPath = path.join(homedir(), '.ssh');
+    const userFile = path.join(sshFolderPath, 'config');
+    await closeEditorsOf(userFile);
+    rmSync(sshFolderPath, {recursive: true, force: true});
+    mkdirSync(sshFolderPath);
+    chmodSync(sshFolderPath, 0o755);
+    scriptFor([
+      {
+        surface: 'filePick',
+        match: 'SSH configuration file',
+        answer: {label: userFile},
+      },
+    ]);
+    await configFileSetting('');
+    try {
+      await vscode.commands.executeCommand('opensshremotes.openConfigFile');
+      deepStrictEqual(
+        [
+          statSync(userFile).mode & 0o777,
+          statSync(sshFolderPath).mode & 0o777,
+          readFileSync(userFile, 'utf8'),
+        ],
+        [0o600, 0o755, ''],
+      );
+    } finally {
+      await configFileSetting(HARNESS_CONFIG);
+    }
+  });
+
+  it('F-2203 AC-32 (c119-reject-message): a relative configured value is refused naming the setting and quoting the value', async () => {
+    const value = 'relcfg/rel_config';
+    const script = scriptFor([
+      {
+        surface: 'filePick',
+        match: 'SSH configuration file',
+        answer: {label: value},
+      },
+    ]);
+    const runFolder = process.env.HARNESS_RUN_FOLDER ?? tmpdir();
+    let rejected: unknown;
+    await configFileSetting(value);
+    try {
+      try {
+        await vscode.commands.executeCommand('opensshremotes.openConfigFile');
+      } catch (error) {
+        rejected = error;
+      }
+      deepStrictEqual(
+        [
+          String(rejected),
+          existsSync(path.join(homedir(), value)),
+          existsSync(path.join(runFolder, value)),
+          script.record().filter(line => line.surface === 'notice').length,
+        ],
+        [
+          `remote.SSH.configFile must be an absolute path or start with ~/: "${value}"`,
+          false,
+          false,
+          0,
+        ],
+      );
+    } finally {
+      await configFileSetting(HARNESS_CONFIG);
+    }
   });
 
   it('the help commands are served (F-2004)', async () => {
