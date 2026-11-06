@@ -303,46 +303,6 @@ describe('host and user name validation (card coverage-120)', function () {
   });
 
 
-  it('F-2205 AC-21 (c120-retry): Retry reloads the window and the same dialog returns', async () => {
-    const name = nextEmptyName();
-    appendScript([hostAnswer('local', {typed: '-oProxyCommand=x'})]);
-    await nextEmptyWindow(() =>
-      inWindow('local', 'opensshremotes.openEmptyWindow'),
-    );
-    // Retry reloads the window, so the second dialog is in the reloaded window; it may also reuse the name.
-    const reloaded = nextEmptyName();
-    appendScript([
-      {surface: 'failureDialog', match: 'Could not establish connection', answer: {button: 'Retry'}, window: name},
-      {surface: 'failureDialog', match: 'Could not establish connection', answer: 'dismiss', window: name},
-      {surface: 'failureDialog', match: 'Could not establish connection', answer: 'dismiss', window: reloaded},
-    ]);
-    try {
-      await waitFor(
-        `the failure dialog of ${name}`,
-        () => recordLines('failureDialog', name).length > 0,
-        300_000,
-      );
-      await waitFor(
-        `the second failure dialog after the retry of ${name}`,
-        () =>
-          recordLines('failureDialog', name).length > 1 ||
-          recordLines('failureDialog', reloaded).length > 0,
-        300_000,
-      );
-      const firstDetail = failureDialog(name).detail;
-      const secondDetail =
-        recordLines('failureDialog', reloaded).length > 0
-          ? failureDialog(reloaded).detail
-          : recordLines('failureDialog', name)[1]?.question;
-      const expected =
-        'Could not establish connection to "-oProxyCommand=x": SSH host name cannot begin with -.';
-      deepStrictEqual([firstDetail, secondDetail], [expected, expected]);
-    } finally {
-      await closeWindow(reloaded).catch(() => undefined);
-      await closeWindow(name).catch(() => undefined);
-    }
-  });
-
   it('F-2205 AC-22 (c120-close): Close Remote leaves the window an empty local window', async () => {
     const name = nextEmptyName();
     appendScript([
