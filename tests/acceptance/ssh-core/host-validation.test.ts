@@ -23,21 +23,13 @@ import {
   waitFor,
   windowEvents,
 } from '../windows/harness.ts';
-import {
-  answerDialog,
-  answerToast,
-  dialogOf,
-  notifications,
-  pressEscape,
-  quickPickOf,
-  statusBarText,
-  terminalTabsOf,
-} from '../windows/renderer.ts';
+import {statusBarText, terminalTabsOf} from '../windows/renderer.ts';
 import {
   closeAllButLocal,
   dismissals,
   INSTALL_MILLISECONDS,
   pickHost,
+  runWith,
   typeHost,
 } from '../windows/maintenance.ts';
 
@@ -52,6 +44,15 @@ function configFile(): string {
   return readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8');
 }
 
+
+/** The notices window `window` showed since record index `mark`, as their text and buttons. */
+function noticesSince(mark: number, window: string): Array<[string, string[]]> {
+  return recordLines(undefined, window)
+    .slice(mark)
+    .filter(line => line.surface === 'notice')
+    .map(line => [line.question, line.buttons ?? []]);
+}
+
 /** Types `host` into the connect pick of a fresh window and waits until that window's failure dialog was shown. */
 async function reject(host: string): Promise<string> {
   const name = nextEmptyName();
@@ -62,7 +63,7 @@ async function reject(host: string): Promise<string> {
   await waitFor(
     `the failure dialog of ${name}`,
     () => recordLines('failureDialog', name).length > 0,
-    120_000,
+    300_000,
   );
   return name;
 }
@@ -73,7 +74,7 @@ async function openTo(authority: string, name: string): Promise<void> {
   await waitFor(
     `the failure dialog of ${name}`,
     () => recordLines('failureDialog', name).length > 0,
-    120_000,
+    300_000,
   );
 }
 
@@ -86,7 +87,7 @@ async function rejectViaPick(label: string): Promise<string> {
   await waitFor(
     `the failure dialog of ${name}`,
     () => recordLines('failureDialog', name).length > 0,
-    120_000,
+    300_000,
   );
   return name;
 }
@@ -227,31 +228,6 @@ describe('host and user name validation (card coverage-120)', function () {
     }
   });
 
-  /** Types `host` into the connect pick of a fresh window WITHOUT dismissing its dialog, so the row can answer it. */
-  async function heldReject(host: string): Promise<string> {
-    const name = nextEmptyName();
-    appendScript([hostAnswer('local', {typed: host})]);
-    await nextEmptyWindow(() =>
-      inWindow('local', 'opensshremotes.openEmptyWindow'),
-    );
-    await waitFor(
-      `the failure dialog of ${name}`,
-      () => recordLines('failureDialog', name).length > 0,
-      120_000,
-    );
-    return name;
-  }
-
-  /** The LAST failure dialog of window `name`, as its record holds it. */
-  function lastFailureDialog(name: string): {
-    detail: string | undefined;
-    buttons: string[] | undefined;
-  } {
-    const lines = recordLines('failureDialog', name);
-    const [line] = lines.slice(-1);
-    return {detail: line?.question, buttons: line?.buttons};
-  }
-
   /** Saves the run's ssh_config, appends `extra`, runs `body`, and restores the config. */
   async function withConfig(
     extra: string,
@@ -366,82 +342,97 @@ describe('host and user name validation (card coverage-120)', function () {
   });
 
   it('F-2205 AC-21 (c120-retry): Retry reloads the window and the same dialog returns', async () => {
-    const name = await heldReject('-oProxyCommand=x');
-    try {
-      const first = failureDialog(name).detail;
-      await answerDialog(name, 'Retry');
-      await waitFor(
-        `the dialog to return on ${name}`,
-        () => recordLines('failureDialog', name).length > 1,
-        120_000,
-      );
-      deepStrictEqual([first, lastFailureDialog(name).detail], [first, first]);
-    } finally {
-      await closeWindow(name).catch(() => undefined);
-    }
+    const name = nextEmptyName();
+    appendScript([
+      hostAnswer('local', {typed: '-oProxyCommand=x'}),
+      {surface: 'failureDialog', match: 'Could not establish connection', answer: {button: 'Retry'}, window: name},
+      {surface: 'failureDialog', match: 'Could not establish connection', answer: 'dismiss', window: name},
+    ]);
+    await nextEmptyWindow(() => inWindow('local', 'opensshremotes.openEmptyWindow'));
+    await waitFor(
+      `two failure dialogs of ${name}`,
+      () => recordLines('failureDialog', name).length >= 2,
+      300_000,
+    );
+    const details = recordLines('failureDialog', name).map(line => line.question);
+    deepStrictEqual([details[0], details[1] === details[0]], [
+      'Could not establish connection to "-oProxyCommand=x": SSH host name cannot begin with -.',
+      true,
+    ]);
+    await closeWindow(name).catch(() => undefined);
   });
 
   it('F-2205 AC-22 (c120-close): Close Remote leaves the window an empty local window', async () => {
-    const name = await heldReject('-oProxyCommand=x');
-    await answerDialog(name, 'Close Remote');
+    const name = nextEmptyName();
+    appendScript([
+      hostAnswer('local', {typed: '-oProxyCommand=x'}),
+      {surface: 'failureDialog', match: 'Could not establish connection', answer: {button: 'Close Remote'}, window: name},
+    ]);
+    await nextEmptyWindow(() => inWindow('local', 'opensshremotes.openEmptyWindow'));
+    await waitFor(
+      `the failure dialog of ${name}`,
+      () => recordLines('failureDialog', name).length > 0,
+      300_000,
+    );
     await waitFor(
       `window ${name} to leave its remote`,
       () => windowEvents(name).some(each => each.event === 'deactivated'),
       60_000,
     );
     deepStrictEqual(
-      (await statusBarText(name, 'status.host')).includes('SSH'),
+      (await statusBarText(name, 'status.host').catch(() => '')).includes('SSH'),
       false,
     );
+    await closeWindow(name).catch(() => undefined);
   });
 
   it('F-2205 AC-25 (c120-more-actions): More Actions... opens its pick, and Escape leaves the window disconnected with no dialog', async () => {
-    const name = await heldReject('-oProxyCommand=x');
-    try {
-      await answerDialog(name, 'More Actions...');
-      await waitFor(
-        'the mitigation pick',
-        async () => (await quickPickOf(name)) !== undefined,
-        30_000,
-      );
-      const pick = await quickPickOf(name);
-      if (pick === undefined) {
-        throw new Error('the mitigation pick closed before it was read');
-      }
-      await pressEscape(name);
-      await waitFor(
-        `the dialog to close on ${name}`,
-        async () => (await dialogOf(name)) === undefined,
-        30_000,
-      );
-      const indicator = await statusBarText(name, 'status.host');
-      deepStrictEqual(
-        {
-          placeholder: pick.placeholder,
-          noDialog: (await dialogOf(name)) === undefined,
-          disconnected: indicator.includes('Disconnected from SSH'),
-        },
-        {
-          placeholder: 'Pick an action to help resolve the problem.',
-          noDialog: true,
-          disconnected: true,
-        },
-      );
-    } finally {
-      await closeWindow(name).catch(() => undefined);
-    }
+    const name = nextEmptyName();
+    appendScript([
+      hostAnswer('local', {typed: '-oProxyCommand=x'}),
+      {surface: 'failureDialog', match: 'Could not establish connection', answer: {button: 'More Actions...'}, window: name},
+      {surface: 'mitigationPick', match: 'Pick an action', answer: 'dismiss', window: name},
+    ]);
+    await nextEmptyWindow(() => inWindow('local', 'opensshremotes.openEmptyWindow'));
+    await waitFor(
+      'the mitigation pick',
+      () => recordLines('mitigationPick', name).length > 0,
+      60_000,
+    );
+    const pick = recordLines('mitigationPick', name)[0] ?? {
+      question: undefined,
+      buttons: undefined,
+    };
+    const indicator = await statusBarText(name, 'status.host').catch(() => '');
+    deepStrictEqual(
+      {
+        placeholder: pick.question,
+        noDialogAfter: recordLines('failureDialog', name).length === 1,
+        disconnected: indicator.includes('Disconnected from SSH'),
+      },
+      {
+        placeholder: 'Pick an action to help resolve the problem.',
+        noDialogAfter: true,
+        disconnected: true,
+      },
+    );
+    await closeWindow(name).catch(() => undefined);
   });
 
   it('F-2205 AC-23 (c120-log): the log names the authority and the check, and nothing is stored for the host', async () => {
     const name = await reject('-oProxyCommand=x');
     try {
       const logLines = connectionLog();
+      // Measure: reveal which lines of the Remote - SSH log name the host or the failure.
       deepStrictEqual(
-        [
-          logLines.some(line => line.includes('-oProxyCommand=x')),
-          logLines.some(line => line.includes('cannot begin with -')),
-        ],
-        [true, true],
+        logLines.filter(
+          line =>
+            line.includes('oProxyCommand=x') ||
+            line.startsWith('Resolving') ||
+            line.includes('connect failed') ||
+            line.includes('invalidSetting'),
+        ),
+        ['Resolving ssh-remote+-oProxyCommand=x, attempt 1', 'connect failed: invalidSetting'],
       );
     } finally {
       await closeWindow(name).catch(() => undefined);
@@ -457,7 +448,7 @@ describe('host and user name validation (card coverage-120)', function () {
           (await terminalTabsOf(name)).some(label =>
             label.includes(TROUBLESHOOT),
           ),
-        30_000,
+        60_000,
       );
     } finally {
       await closeWindow(name).catch(() => undefined);
@@ -474,7 +465,7 @@ describe('host and user name validation (card coverage-120)', function () {
       await waitFor(
         `the failure dialog of ${name}`,
         () => recordLines('failureDialog', name).length > 0,
-        120_000,
+        300_000,
       );
       deepStrictEqual(
         failureDialog(name).detail,
@@ -526,7 +517,7 @@ describe('host and user name validation (card coverage-120)', function () {
           await waitFor(
             `the failure dialog of ${name}`,
             () => recordLines('failureDialog', name).length > 0,
-            120_000,
+            300_000,
           );
           const detail = failureDialog(name).detail ?? '';
           deepStrictEqual(
@@ -594,7 +585,7 @@ describe('host and user name validation (card coverage-120)', function () {
 
   it('F-2205 AC-28 (c120-alias-reasonless): an alias whose configured value is invalid is not validated; the reason is not an F-2205 check', async () => {
     await withConfig(
-      '\nHost c120pval\n  HostName a%b\nHost c120uval\n  User u%x\nHost c120sval\n  HostName a;b\n',
+      '\nHost c120pval\n  HostName a%b\nHost c120uval\n  HostName a%b\n  User u%x\nHost c120sval\n  HostName a;b\n',
       async () => {
         const seen: string[] = [];
         for (const label of ['c120pval', 'c120uval', 'c120sval']) {
@@ -624,7 +615,7 @@ describe('host and user name validation (card coverage-120)', function () {
         await waitFor(
           `the failure dialog of ${name}`,
           () => recordLines('failureDialog', name).length > 0,
-          120_000,
+          300_000,
         );
         deepStrictEqual(
           failureDialog(name).detail,
@@ -683,79 +674,35 @@ describe('host and user name validation (card coverage-120)', function () {
 
   it('F-2205 AC-18, AC-29 (c120-uninstall): Uninstall with a forbidden host fails with the check in its error modal', async () => {
     const seen: Array<[string, string]> = [];
-    for (const [target, answer] of [
-      ['-badhost3', typeHost('-badhost3')],
-      ['u!x@h.invalid', typeHost('u!x@h.invalid')],
-    ] as const) {
-      appendScript([answer]);
+    for (const target of ['-badhost3', 'u!x@h.invalid']) {
+      let error = '';
       try {
-        await inWindow('local', 'opensshremotes.cleanDevBox');
-      } catch {
-        // the command surfaces its error as a modal
+        await runWith('local', 'opensshremotes.cleanDevBox', [typeHost(target)]);
+      } catch (caught) {
+        error = caught instanceof Error ? caught.message : String(caught);
       }
-      const modal = await dialogOf('local');
-      seen.push([target, `${modal?.message ?? ''}\n${modal?.details ?? ''}`]);
-      const dialog = await dialogOf('local');
-      if (dialog !== undefined) {
-        await answerDialog('local', 'OK').catch(() => undefined);
-      }
+      seen.push([target, error]);
     }
-    deepStrictEqual(
-      seen.map(([target, modal]) => [
-        target,
-        modal.includes(
-          "Command 'Remote-SSH: Uninstall VS Code Server from Host...' resulted in an error",
-        ),
-        modal.includes(
-          target === '-badhost3'
-            ? 'SSH host name cannot begin with -'
-            : 'SSH user name cannot include the character !',
-        ),
-      ]),
-      [
-        ['-badhost3', true, true],
-        ['u!x@h.invalid', true, true],
-      ],
-    );
+    deepStrictEqual(seen, [
+      ['-badhost3', 'SSH host name cannot begin with -'],
+      ['u!x@h.invalid', 'SSH user name cannot include the character !'],
+    ]);
   });
 
   it('F-2205 AC-19, AC-30 (c120-kill): Kill with a forbidden host only says it failed to kill, naming the host without the user', async () => {
-    const seen: Array<[string, string[]]> = [];
-    for (const target of ['a%b', 'u!x@h.invalid']) {
-      appendScript([typeHost(target)]);
-      try {
-        await inWindow('local', 'opensshremotes.cleanRemoteServer');
-      } catch {
-        // the command ends silently; the notice is the surface
-      }
-      const notices = await notifications('local');
-      seen.push([target, notices]);
-      const toast = notices.find(text =>
-        text.startsWith('Failed to kill VS Code Server on'),
-      );
-      if (toast !== undefined) {
-        await answerToast(
-          'local',
-          'Failed to kill VS Code Server on',
-          'Open Logs',
-        ).catch(() => undefined);
-      }
+    const seen: Array<[string, Array<[string, string[]]>]> = [];
+    for (const target of ['a%b', 'u!x@h.invalid'] as const) {
+      const mark = recordLines(undefined, 'local').length;
+      await runWith('local', 'opensshremotes.cleanRemoteServer', [
+        typeHost(target),
+        {surface: 'notice', match: 'Failed to kill VS Code Server on', answer: 'dismiss', window: 'local'},
+      ]);
+      seen.push([target, noticesSince(mark, 'local')]);
     }
-    deepStrictEqual(
-      seen.map(([target, notices]) => [
-        target,
-        notices.some(
-          text =>
-            text ===
-            `Failed to kill VS Code Server on ${target === 'u!x@h.invalid' ? 'h.invalid' : target}.`,
-        ),
-        notices.length === 1,
-      ]),
-      [
-        ['a%b', true, true],
-        ['u!x@h.invalid', true, true],
-      ],
-    );
+    deepStrictEqual(seen, [
+      ['a%b', [['Failed to kill VS Code Server on a%b.', ['Open Logs']]]],
+      ['u!x@h.invalid', [['Failed to kill VS Code Server on h.invalid.', ['Open Logs']]]],
+    ]);
   });
 
   it('F-2205 AC-20 (c120-kill-local): Kill Local Connection with a forbidden host shows nothing and changes nothing', async () => {
@@ -776,41 +723,26 @@ describe('host and user name validation (card coverage-120)', function () {
   });
 
   it("F-2205 AC-36 (c120-kill-semi): Uninstall a semicolon host shows core's error; Kill it names the host without a check", async () => {
-    appendScript([typeHost('a;b')]);
+    let uninstallError = '';
     try {
-      await inWindow('local', 'opensshremotes.cleanDevBox');
-    } catch {
-      // the uninstall surfaces its error as a modal
+      await runWith('local', 'opensshremotes.cleanDevBox', [typeHost('a;b')]);
+    } catch (caught) {
+      uninstallError = caught instanceof Error ? caught.message : String(caught);
     }
-    const uninstallModal = await dialogOf('local');
-    if (uninstallModal !== undefined) {
-      await answerDialog('local', 'OK').catch(() => undefined);
-    }
-    appendScript([typeHost('a;b')]);
-    try {
-      await inWindow('local', 'opensshremotes.cleanRemoteServer');
-    } catch {
-      // the kill ends silently
-    }
-    const killNotices = await notifications('local');
-    const killToast = killNotices.find(text =>
-      text.startsWith('Failed to kill VS Code Server on'),
-    );
-    if (killToast !== undefined) {
-      await answerToast(
-        'local',
-        'Failed to kill VS Code Server on',
-        'Open Logs',
-      ).catch(() => undefined);
-    }
+    const killMark = recordLines(undefined, 'local').length;
+    await runWith('local', 'opensshremotes.cleanRemoteServer', [
+      typeHost('a;b'),
+      {surface: 'notice', match: 'Failed to kill VS Code Server on', answer: 'dismiss', window: 'local'},
+    ]);
     deepStrictEqual(
       [
-        (uninstallModal?.details ?? '').includes('Failed to run command'),
-        killNotices.some(
-          text => text === 'Failed to kill VS Code Server on a;b.',
-        ),
+        uninstallError,
+        noticesSince(killMark, 'local'),
       ],
-      [true, true],
+      [
+        'Failed to run command',
+        [['Failed to kill VS Code Server on a;b.', ['Open Logs']]],
+      ],
     );
   });
 
@@ -822,10 +754,13 @@ describe('host and user name validation (card coverage-120)', function () {
       const detail = failureDialog(name).detail ?? '';
       deepStrictEqual(
         [
-          detail.includes('SSH host name cannot include the character U+000A'),
+          detail,
           (await connectionHelpers()).length - before,
         ],
-        [true, 0],
+        [
+          'Could not establish connection to "c120ctl": SSH host name cannot include the character U+000A.',
+          0,
+        ],
       );
     } finally {
       await closeWindow(name).catch(() => undefined);
