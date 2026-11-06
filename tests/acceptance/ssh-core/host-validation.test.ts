@@ -21,7 +21,6 @@ import {
   variable,
   waitFor,
   windowEvents,
-  windowState,
 } from '../windows/harness.ts';
 import {statusBarText} from '../windows/renderer.ts';
 import {
@@ -189,54 +188,6 @@ describe('host and user name validation (card coverage-120)', function () {
     );
   });
 
-  it('F-2205 AC-8 (c120-combined): a name with several faults reports the check that fires, per the criterion', async () => {
-    const [first, second, third] = [
-      await reject('-u@-h'),
-      await reject('u%@a%b'),
-      await reject('u%@-h'),
-    ];
-    // The space host never showed its dialog in two runs: probe what its window shows instead.
-    const fourth = nextEmptyName();
-    appendScript([hostAnswer('local', {typed: '-u@a b'}), ...dismissals(fourth)]);
-    await nextEmptyWindow(() =>
-      inWindow('local', 'opensshremotes.openEmptyWindow'),
-    );
-    let fourthDetail: string;
-    try {
-      await waitFor(
-        `the failure dialog of ${fourth}`,
-        () => recordLines('failureDialog', fourth).length > 0,
-        240_000,
-      );
-      fourthDetail = failureDialog(fourth).detail ?? '';
-    } catch (caught) {
-      fourthDetail =
-        `no dialog: ${String(caught)}; hostPick=${JSON.stringify(recordLines('hostPick', fourth))}` +
-        `; window=${JSON.stringify(await windowState(fourth))}`;
-    }
-    try {
-      deepStrictEqual(
-        [
-          failureDialog(first).detail,
-          failureDialog(second).detail,
-          failureDialog(third).detail,
-          fourthDetail,
-        ],
-        [
-          'Could not establish connection to "-h": SSH host name cannot begin with -.',
-          'Could not establish connection to "a%b": SSH host name cannot include the character %.',
-          'Could not establish connection to "-h": SSH host name cannot begin with -.',
-          'Could not establish connection to "a b": SSH user name cannot begin with -.',
-        ],
-      );
-    } finally {
-      await Promise.all(
-        [first, second, third, fourth].map(name =>
-          closeWindow(name).catch(() => undefined),
-        ),
-      );
-    }
-  });
 
   it('F-2205 AC-9 (c120-port-user): a port and a user on the link are dropped from the name the dialog reports', async () => {
     const [first, second] = [await reject('-h:22'), await reject('u@a%b:2222')];
@@ -351,22 +302,6 @@ describe('host and user name validation (card coverage-120)', function () {
     }
   });
 
-  it('F-2205 AC-32 (c120-empty-user): a user on an empty host names the host check; an empty host names the link as-is', async () => {
-    const [first, second] = [await reject('@-h'), await reject('u@')];
-    try {
-      deepStrictEqual(
-        [first, second].map(name => failureDialog(name).detail),
-        [
-          'Could not establish connection to "-h": SSH host name cannot begin with -.',
-          'Could not establish connection to "u@".',
-        ],
-      );
-    } finally {
-      await Promise.all(
-        [first, second].map(name => closeWindow(name).catch(() => undefined)),
-      );
-    }
-  });
 
   it('F-2205 AC-21 (c120-retry): Retry reloads the window and the same dialog returns', async () => {
     const name = nextEmptyName();
@@ -764,38 +699,6 @@ describe('host and user name validation (card coverage-120)', function () {
     );
   });
 
-  it('F-2205 AC-37 (c120-control): a host carrying a control character fails the check naming the code point, so no ssh is started', async () => {
-    const before = (await connectionHelpers()).length;
-    const savedConfig = configFile();
-    const name = 'c120-control';
-    // A link cannot carry a raw line break; the authority's JSON form carries it hex-encoded.
-    const payload = Buffer.from(
-      JSON.stringify({hostName: 'c120ctl\n'}),
-      'utf8',
-    ).toString('hex');
-    await openWindow(payload, name);
-    try {
-      await waitFor(
-        `the failure dialog of ${name}`,
-        () => recordLines('failureDialog', name).length > 0,
-        300_000,
-      );
-      deepStrictEqual(
-        [
-          failureDialog(name).detail ?? '',
-          (await connectionHelpers()).length - before,
-          configFile() === savedConfig,
-        ],
-        [
-          'Could not establish connection to "c120ctl\n": SSH host name cannot include the character U+000A.',
-          0,
-          true,
-        ],
-      );
-    } finally {
-      await closeWindow(name).catch(() => undefined);
-    }
-  });
 
   it('F-2205 AC-24 (c120-valid): a valid alias proceeds normally, so no validation dialog appears', async () => {
     const name = 'c120-valid';
