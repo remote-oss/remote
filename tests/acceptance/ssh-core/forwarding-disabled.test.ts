@@ -470,8 +470,161 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     });
   }
 
-  it('F-2604 AC-13, AC-14 (c123-mitm): with the local server off and the dynamic forward at its default, a host whose key changed fails at once with Port forwarding is disabled and F-2601’s buttons, and the hint store holds the error', async () => {
-    const found = await changedKeyFailure('c123-mitm', {
+  it('F-2604 AC-13, AC-14 (c123-mitm-1): with the local server off and the dynamic forward at its default, a host whose key changed fails at once with Port forwarding is disabled and F-2601’s buttons, and the hint store holds the error', async () => {
+    const found = await changedKeyFailure('c123-mitm-1', {
+      'remote.SSH.useLocalServer': false,
+    });
+    deepStrictEqual(
+      [found.dialog, found.waited < 60_000, found.hints],
+      [
+        [
+          'Could not establish connection to "changedkey": Port forwarding is disabled.',
+          ['Close Remote', 'Retry', 'More Actions...'],
+        ],
+        true,
+        [['MitmPortForwardingDisabled', 'Port forwarding is disabled']],
+      ],
+    );
+  });
+
+  it('F-2604 AC-13, AC-14 (c123-mitm-2): with the local server off and the dynamic forward at its default, a host whose key changed fails at once with Port forwarding is disabled and F-2601’s buttons, and the hint store holds the error', async () => {
+    const found = await changedKeyFailure('c123-mitm-2', {
+      'remote.SSH.useLocalServer': false,
+    });
+    deepStrictEqual(
+      [found.dialog, found.waited < 60_000, found.hints],
+      [
+        [
+          'Could not establish connection to "changedkey": Port forwarding is disabled.',
+          ['Close Remote', 'Retry', 'More Actions...'],
+        ],
+        true,
+        [['MitmPortForwardingDisabled', 'Port forwarding is disabled']],
+      ],
+    );
+  });
+
+  it('F-2604 AC-13, AC-14 (c123-mitm-3): with the local server off and the dynamic forward at its default, a host whose key changed fails at once with Port forwarding is disabled and F-2601’s buttons, and the hint store holds the error', async () => {
+    const found = await changedKeyFailure('c123-mitm-3', {
+      'remote.SSH.useLocalServer': false,
+    });
+    deepStrictEqual(
+      [found.dialog, found.waited < 60_000, found.hints],
+      [
+        [
+          'Could not establish connection to "changedkey": Port forwarding is disabled.',
+          ['Close Remote', 'Retry', 'More Actions...'],
+        ],
+        true,
+        [['MitmPortForwardingDisabled', 'Port forwarding is disabled']],
+      ],
+    );
+  });
+
+  it('F-2604 AC-13, AC-14 (c123-mitm-4): with the local server off and the dynamic forward at its default, a host whose key changed fails at once with Port forwarding is disabled and F-2601’s buttons, and the hint store holds the error', async () => {
+    const found = await changedKeyFailure('c123-mitm-4', {
+      'remote.SSH.useLocalServer': false,
+    });
+    deepStrictEqual(
+      [found.dialog, found.waited < 60_000, found.hints],
+      [
+        [
+          'Could not establish connection to "changedkey": Port forwarding is disabled.',
+          ['Close Remote', 'Retry', 'More Actions...'],
+        ],
+        true,
+        [['MitmPortForwardingDisabled', 'Port forwarding is disabled']],
+      ],
+    );
+  });
+
+  it('F-2604 AC-13, AC-14 (c123-mitm-5): with the local server off and the dynamic forward at its default, a host whose key changed fails at once with Port forwarding is disabled and F-2601’s buttons, and the hint store holds the error', async () => {
+    const found = await changedKeyFailure('c123-mitm-5', {
+      'remote.SSH.useLocalServer': false,
+    });
+    deepStrictEqual(
+      [found.dialog, found.waited < 60_000, found.hints],
+      [
+        [
+          'Could not establish connection to "changedkey": Port forwarding is disabled.',
+          ['Close Remote', 'Retry', 'More Actions...'],
+        ],
+        true,
+        [['MitmPortForwardingDisabled', 'Port forwarding is disabled']],
+      ],
+    );
+  });
+
+  it('F-2604 AC-13, AC-14 (c123-mitm-6): with the local server off and the dynamic forward at its default, a host whose key changed fails at once with Port forwarding is disabled and F-2601’s buttons, and the hint store holds the error', async () => {
+    const found = await changedKeyFailure('c123-mitm-6', {
+      'remote.SSH.useLocalServer': false,
+    });
+    deepStrictEqual(
+      [found.dialog, found.waited < 60_000, found.hints],
+      [
+        [
+          'Could not establish connection to "changedkey": Port forwarding is disabled.',
+          ['Close Remote', 'Retry', 'More Actions...'],
+        ],
+        true,
+        [['MitmPortForwardingDisabled', 'Port forwarding is disabled']],
+      ],
+    );
+  });
+
+  it('F-2604 AC-13, AC-14 (c123-mitm-7): with the local server off and the dynamic forward at its default, a host whose key changed fails at once with Port forwarding is disabled and F-2601’s buttons, and the hint store holds the error', async () => {
+    const found = await changedKeyFailure('c123-mitm-7', {
+      'remote.SSH.useLocalServer': false,
+    });
+    deepStrictEqual(
+      [found.dialog, found.waited < 60_000, found.hints],
+      [
+        [
+          'Could not establish connection to "changedkey": Port forwarding is disabled.',
+          ['Close Remote', 'Retry', 'More Actions...'],
+        ],
+        true,
+        [['MitmPortForwardingDisabled', 'Port forwarding is disabled']],
+      ],
+    );
+  });
+
+  it('F-2604 AC-13, AC-14 (c123-mitm-8): with the local server off and the dynamic forward at its default, a host whose key changed fails at once with Port forwarding is disabled and F-2601’s buttons, and the hint store holds the error', async () => {
+    const found = await changedKeyFailure('c123-mitm-8', {
+      'remote.SSH.useLocalServer': false,
+    });
+    deepStrictEqual(
+      [found.dialog, found.waited < 60_000, found.hints],
+      [
+        [
+          'Could not establish connection to "changedkey": Port forwarding is disabled.',
+          ['Close Remote', 'Retry', 'More Actions...'],
+        ],
+        true,
+        [['MitmPortForwardingDisabled', 'Port forwarding is disabled']],
+      ],
+    );
+  });
+
+  it('F-2604 AC-13, AC-14 (c123-mitm-9): with the local server off and the dynamic forward at its default, a host whose key changed fails at once with Port forwarding is disabled and F-2601’s buttons, and the hint store holds the error', async () => {
+    const found = await changedKeyFailure('c123-mitm-9', {
+      'remote.SSH.useLocalServer': false,
+    });
+    deepStrictEqual(
+      [found.dialog, found.waited < 60_000, found.hints],
+      [
+        [
+          'Could not establish connection to "changedkey": Port forwarding is disabled.',
+          ['Close Remote', 'Retry', 'More Actions...'],
+        ],
+        true,
+        [['MitmPortForwardingDisabled', 'Port forwarding is disabled']],
+      ],
+    );
+  });
+
+  it('F-2604 AC-13, AC-14 (c123-mitm-10): with the local server off and the dynamic forward at its default, a host whose key changed fails at once with Port forwarding is disabled and F-2601’s buttons, and the hint store holds the error', async () => {
+    const found = await changedKeyFailure('c123-mitm-10', {
       'remote.SSH.useLocalServer': false,
     });
     deepStrictEqual(

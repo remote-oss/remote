@@ -226,13 +226,13 @@ describe('the session record of every resolve (card connect-135)', function () {
     );
   });
 
-  it('F-2605 AC-16 (c135-count): every attempt, success or failure, keeps a record, and only the newest two stay, oldest first', async () => {
+  it('F-2605 AC-16 (c135-count-1): every attempt, success or failure, keeps a record, and only the newest two stay, oldest first', async () => {
     await inWindow('local', CLEAR);
     await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
     const seen: Array<{count: number; starts: string[]}> = [];
-    await failingAttempt('c135-b1');
+    await failingAttempt('c135-b1-1');
     seen.push({count: (await recordsWhen(1)).length, starts: []});
-    await openWindow('harness', 'c135-b2');
+    await openWindow('harness', 'c135-b2-1');
     try {
       const both = await recordsWithLog(2);
       seen.push({
@@ -240,9 +240,423 @@ describe('the session record of every resolve (card connect-135)', function () {
         starts: both.map(record => record.started),
       });
     } finally {
-      await closeWindow('c135-b2').catch(() => undefined);
+      await closeWindow('c135-b2-1').catch(() => undefined);
     }
-    await failingAttempt('c135-b3');
+    await failingAttempt('c135-b3-1');
+    await waitFor(
+      'the third attempt to replace the first',
+      () =>
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false,
+      60_000,
+    );
+    const last = hintRecords();
+    deepStrictEqual(
+      [
+        seen.map(entry => entry.count),
+        last.length,
+        last[0]?.started === seen[1]?.starts[1],
+        last.every(record => record.started !== '' && record.hints.length > 0),
+        (last[0]?.started ?? '') < (last[1]?.started ?? ''),
+        last.map(record => logOf(record)),
+      ],
+      [
+        [1, 2],
+        2,
+        true,
+        true,
+        true,
+        [{resolves: ['harness']}, {resolves: ['nowhere']}],
+      ],
+    );
+  });
+
+  it('F-2605 AC-16 (c135-count-2): every attempt, success or failure, keeps a record, and only the newest two stay, oldest first', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    const seen: Array<{count: number; starts: string[]}> = [];
+    await failingAttempt('c135-b1-2');
+    seen.push({count: (await recordsWhen(1)).length, starts: []});
+    await openWindow('harness', 'c135-b2-2');
+    try {
+      const both = await recordsWithLog(2);
+      seen.push({
+        count: both.length,
+        starts: both.map(record => record.started),
+      });
+    } finally {
+      await closeWindow('c135-b2-2').catch(() => undefined);
+    }
+    await failingAttempt('c135-b3-2');
+    await waitFor(
+      'the third attempt to replace the first',
+      () =>
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false,
+      60_000,
+    );
+    const last = hintRecords();
+    deepStrictEqual(
+      [
+        seen.map(entry => entry.count),
+        last.length,
+        last[0]?.started === seen[1]?.starts[1],
+        last.every(record => record.started !== '' && record.hints.length > 0),
+        (last[0]?.started ?? '') < (last[1]?.started ?? ''),
+        last.map(record => logOf(record)),
+      ],
+      [
+        [1, 2],
+        2,
+        true,
+        true,
+        true,
+        [{resolves: ['harness']}, {resolves: ['nowhere']}],
+      ],
+    );
+  });
+
+  it('F-2605 AC-16 (c135-count-3): every attempt, success or failure, keeps a record, and only the newest two stay, oldest first', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    const seen: Array<{count: number; starts: string[]}> = [];
+    await failingAttempt('c135-b1-3');
+    seen.push({count: (await recordsWhen(1)).length, starts: []});
+    await openWindow('harness', 'c135-b2-3');
+    try {
+      const both = await recordsWithLog(2);
+      seen.push({
+        count: both.length,
+        starts: both.map(record => record.started),
+      });
+    } finally {
+      await closeWindow('c135-b2-3').catch(() => undefined);
+    }
+    await failingAttempt('c135-b3-3');
+    await waitFor(
+      'the third attempt to replace the first',
+      () =>
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false,
+      60_000,
+    );
+    const last = hintRecords();
+    deepStrictEqual(
+      [
+        seen.map(entry => entry.count),
+        last.length,
+        last[0]?.started === seen[1]?.starts[1],
+        last.every(record => record.started !== '' && record.hints.length > 0),
+        (last[0]?.started ?? '') < (last[1]?.started ?? ''),
+        last.map(record => logOf(record)),
+      ],
+      [
+        [1, 2],
+        2,
+        true,
+        true,
+        true,
+        [{resolves: ['harness']}, {resolves: ['nowhere']}],
+      ],
+    );
+  });
+
+  it('F-2605 AC-16 (c135-count-4): every attempt, success or failure, keeps a record, and only the newest two stay, oldest first', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    const seen: Array<{count: number; starts: string[]}> = [];
+    await failingAttempt('c135-b1-4');
+    seen.push({count: (await recordsWhen(1)).length, starts: []});
+    await openWindow('harness', 'c135-b2-4');
+    try {
+      const both = await recordsWithLog(2);
+      seen.push({
+        count: both.length,
+        starts: both.map(record => record.started),
+      });
+    } finally {
+      await closeWindow('c135-b2-4').catch(() => undefined);
+    }
+    await failingAttempt('c135-b3-4');
+    await waitFor(
+      'the third attempt to replace the first',
+      () =>
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false,
+      60_000,
+    );
+    const last = hintRecords();
+    deepStrictEqual(
+      [
+        seen.map(entry => entry.count),
+        last.length,
+        last[0]?.started === seen[1]?.starts[1],
+        last.every(record => record.started !== '' && record.hints.length > 0),
+        (last[0]?.started ?? '') < (last[1]?.started ?? ''),
+        last.map(record => logOf(record)),
+      ],
+      [
+        [1, 2],
+        2,
+        true,
+        true,
+        true,
+        [{resolves: ['harness']}, {resolves: ['nowhere']}],
+      ],
+    );
+  });
+
+  it('F-2605 AC-16 (c135-count-5): every attempt, success or failure, keeps a record, and only the newest two stay, oldest first', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    const seen: Array<{count: number; starts: string[]}> = [];
+    await failingAttempt('c135-b1-5');
+    seen.push({count: (await recordsWhen(1)).length, starts: []});
+    await openWindow('harness', 'c135-b2-5');
+    try {
+      const both = await recordsWithLog(2);
+      seen.push({
+        count: both.length,
+        starts: both.map(record => record.started),
+      });
+    } finally {
+      await closeWindow('c135-b2-5').catch(() => undefined);
+    }
+    await failingAttempt('c135-b3-5');
+    await waitFor(
+      'the third attempt to replace the first',
+      () =>
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false,
+      60_000,
+    );
+    const last = hintRecords();
+    deepStrictEqual(
+      [
+        seen.map(entry => entry.count),
+        last.length,
+        last[0]?.started === seen[1]?.starts[1],
+        last.every(record => record.started !== '' && record.hints.length > 0),
+        (last[0]?.started ?? '') < (last[1]?.started ?? ''),
+        last.map(record => logOf(record)),
+      ],
+      [
+        [1, 2],
+        2,
+        true,
+        true,
+        true,
+        [{resolves: ['harness']}, {resolves: ['nowhere']}],
+      ],
+    );
+  });
+
+  it('F-2605 AC-16 (c135-count-6): every attempt, success or failure, keeps a record, and only the newest two stay, oldest first', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    const seen: Array<{count: number; starts: string[]}> = [];
+    await failingAttempt('c135-b1-6');
+    seen.push({count: (await recordsWhen(1)).length, starts: []});
+    await openWindow('harness', 'c135-b2-6');
+    try {
+      const both = await recordsWithLog(2);
+      seen.push({
+        count: both.length,
+        starts: both.map(record => record.started),
+      });
+    } finally {
+      await closeWindow('c135-b2-6').catch(() => undefined);
+    }
+    await failingAttempt('c135-b3-6');
+    await waitFor(
+      'the third attempt to replace the first',
+      () =>
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false,
+      60_000,
+    );
+    const last = hintRecords();
+    deepStrictEqual(
+      [
+        seen.map(entry => entry.count),
+        last.length,
+        last[0]?.started === seen[1]?.starts[1],
+        last.every(record => record.started !== '' && record.hints.length > 0),
+        (last[0]?.started ?? '') < (last[1]?.started ?? ''),
+        last.map(record => logOf(record)),
+      ],
+      [
+        [1, 2],
+        2,
+        true,
+        true,
+        true,
+        [{resolves: ['harness']}, {resolves: ['nowhere']}],
+      ],
+    );
+  });
+
+  it('F-2605 AC-16 (c135-count-7): every attempt, success or failure, keeps a record, and only the newest two stay, oldest first', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    const seen: Array<{count: number; starts: string[]}> = [];
+    await failingAttempt('c135-b1-7');
+    seen.push({count: (await recordsWhen(1)).length, starts: []});
+    await openWindow('harness', 'c135-b2-7');
+    try {
+      const both = await recordsWithLog(2);
+      seen.push({
+        count: both.length,
+        starts: both.map(record => record.started),
+      });
+    } finally {
+      await closeWindow('c135-b2-7').catch(() => undefined);
+    }
+    await failingAttempt('c135-b3-7');
+    await waitFor(
+      'the third attempt to replace the first',
+      () =>
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false,
+      60_000,
+    );
+    const last = hintRecords();
+    deepStrictEqual(
+      [
+        seen.map(entry => entry.count),
+        last.length,
+        last[0]?.started === seen[1]?.starts[1],
+        last.every(record => record.started !== '' && record.hints.length > 0),
+        (last[0]?.started ?? '') < (last[1]?.started ?? ''),
+        last.map(record => logOf(record)),
+      ],
+      [
+        [1, 2],
+        2,
+        true,
+        true,
+        true,
+        [{resolves: ['harness']}, {resolves: ['nowhere']}],
+      ],
+    );
+  });
+
+  it('F-2605 AC-16 (c135-count-8): every attempt, success or failure, keeps a record, and only the newest two stay, oldest first', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    const seen: Array<{count: number; starts: string[]}> = [];
+    await failingAttempt('c135-b1-8');
+    seen.push({count: (await recordsWhen(1)).length, starts: []});
+    await openWindow('harness', 'c135-b2-8');
+    try {
+      const both = await recordsWithLog(2);
+      seen.push({
+        count: both.length,
+        starts: both.map(record => record.started),
+      });
+    } finally {
+      await closeWindow('c135-b2-8').catch(() => undefined);
+    }
+    await failingAttempt('c135-b3-8');
+    await waitFor(
+      'the third attempt to replace the first',
+      () =>
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false,
+      60_000,
+    );
+    const last = hintRecords();
+    deepStrictEqual(
+      [
+        seen.map(entry => entry.count),
+        last.length,
+        last[0]?.started === seen[1]?.starts[1],
+        last.every(record => record.started !== '' && record.hints.length > 0),
+        (last[0]?.started ?? '') < (last[1]?.started ?? ''),
+        last.map(record => logOf(record)),
+      ],
+      [
+        [1, 2],
+        2,
+        true,
+        true,
+        true,
+        [{resolves: ['harness']}, {resolves: ['nowhere']}],
+      ],
+    );
+  });
+
+  it('F-2605 AC-16 (c135-count-9): every attempt, success or failure, keeps a record, and only the newest two stay, oldest first', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    const seen: Array<{count: number; starts: string[]}> = [];
+    await failingAttempt('c135-b1-9');
+    seen.push({count: (await recordsWhen(1)).length, starts: []});
+    await openWindow('harness', 'c135-b2-9');
+    try {
+      const both = await recordsWithLog(2);
+      seen.push({
+        count: both.length,
+        starts: both.map(record => record.started),
+      });
+    } finally {
+      await closeWindow('c135-b2-9').catch(() => undefined);
+    }
+    await failingAttempt('c135-b3-9');
+    await waitFor(
+      'the third attempt to replace the first',
+      () =>
+        hintRecords()
+          .at(-1)
+          ?.hints.some(hint => hint.kind === 'log') ?? false,
+      60_000,
+    );
+    const last = hintRecords();
+    deepStrictEqual(
+      [
+        seen.map(entry => entry.count),
+        last.length,
+        last[0]?.started === seen[1]?.starts[1],
+        last.every(record => record.started !== '' && record.hints.length > 0),
+        (last[0]?.started ?? '') < (last[1]?.started ?? ''),
+        last.map(record => logOf(record)),
+      ],
+      [
+        [1, 2],
+        2,
+        true,
+        true,
+        true,
+        [{resolves: ['harness']}, {resolves: ['nowhere']}],
+      ],
+    );
+  });
+
+  it('F-2605 AC-16 (c135-count-10): every attempt, success or failure, keeps a record, and only the newest two stay, oldest first', async () => {
+    await inWindow('local', CLEAR);
+    await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
+    const seen: Array<{count: number; starts: string[]}> = [];
+    await failingAttempt('c135-b1-10');
+    seen.push({count: (await recordsWhen(1)).length, starts: []});
+    await openWindow('harness', 'c135-b2-10');
+    try {
+      const both = await recordsWithLog(2);
+      seen.push({
+        count: both.length,
+        starts: both.map(record => record.started),
+      });
+    } finally {
+      await closeWindow('c135-b2-10').catch(() => undefined);
+    }
+    await failingAttempt('c135-b3-10');
     await waitFor(
       'the third attempt to replace the first',
       () =>
