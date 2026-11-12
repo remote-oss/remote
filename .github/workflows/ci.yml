@@ -489,11 +489,50 @@ jobs:
       - run: tools/install-buildx
       - run: tools/start-display
       # the part's launches: whole launches and some files of launches, or the launches a dispatch names
+      # probe only (#2319): Podman's state once, then every 60 s while the launch runs; every podman call has its own limit
+      - if: contains(matrix.part.launches, 'containers-podman')
+        run: |
+          t() { local s=$1; shift; timeout "$s" "$@"; echo "  -> exit $?"; }
+          echo "== $(date -u +%T) podman info"
+          t 30 podman info --format 'version {{.Version.Version}} storage {{.Store.GraphDriverName}} db {{.Host.DatabaseBackend}} cgroup {{.Host.CgroupManager}} {{.Host.CgroupsVersion}} runtime {{.Host.OCIRuntime.Name}} {{.Host.OCIRuntime.Path}} {{.Host.OCIRuntime.Version}} conmon {{.Host.Conmon.Path}}'
+          t 30 podman system locks --help >/dev/null 2>&1 && echo "system locks: available"
+          cat > "$RUNNER_TEMP/podman-sample.sh" <<'EOF'
+          t() { local s=$1; shift; timeout "$s" "$@"; echo "  -> exit $?"; }
+          while true; do
+            echo "== $(date -u +%T) processes"
+            ps -eo pid,ppid,stat,etime,wchan:32,comm | grep -E ' (podman|conmon|crun|runc|node|codium|catatonit|sleep|sh)$' | grep -v ' grep$' | head -60
+            for p in $(pgrep -x podman; pgrep -x conmon); do echo "-- pid $p $(cat /proc/$p/comm 2>/dev/null) wchan $(cat /proc/$p/wchan 2>/dev/null)"; sudo cat /proc/$p/stack 2>/dev/null | head -8; done
+            echo "== $(date -u +%T) podman system locks"; t 20 podman system locks
+            echo "== $(date -u +%T) podman ps"; t 20 podman ps -a --format '{{.ID}} {{.State}} {{.Status}} {{.Image}} {{.Names}}'
+            echo "== $(date -u +%T) shm"; ls -la /dev/shm/ 2>&1 | grep -i libpod
+            sleep 60
+          done
+          EOF
+          nohup bash "$RUNNER_TEMP/podman-sample.sh" > "$RUNNER_TEMP/podman-sample.txt" 2>&1 &
+          echo $! > "$RUNNER_TEMP/podman-sample.pid"
       - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
+        timeout-minutes: 40
         env:
           LAUNCHES: ${{ matrix.part.launches }}
+      # probe only (#2319): what the samples and the harness's logs say, before a clean-up that may hang
+      - if: always() && contains(matrix.part.launches, 'containers-podman')
+        timeout-minutes: 3
+        run: |
+          kill "$(cat "$RUNNER_TEMP/podman-sample.pid")" 2>/dev/null || true
+          echo "##### samples"; tail -c 120000 "$RUNNER_TEMP/podman-sample.txt" || true
+          for run in /tmp/acceptance-*/; do
+            [ -f "$run/log.txt" ] && { echo "##### $run log.txt"; tail -n 300 "$run/log.txt"; }
+            find "$run" -path '*containers-podman*' -name '*.log' -size +0 2>/dev/null | head -20 | while read -r f; do echo "##### $f"; tail -n 150 "$f"; done
+          done
       - if: always()
+        timeout-minutes: 5
         run: pnpm acceptance:clean
+      - if: always() && contains(matrix.part.launches, 'containers-podman')
+        timeout-minutes: 2
+        run: |
+          t() { local s=$1; shift; timeout "$s" "$@"; echo "  -> exit $?"; }
+          echo "== $(date -u +%T) after the clean-up"; ps -eo pid,ppid,stat,etime,wchan:32,comm | grep -E ' (podman|conmon|crun|node)$' | head -30
+          t 20 podman ps -a --format '{{.ID}} {{.State}} {{.Names}}'
 
   # The parts with a containers launch, on GitHub's runners, at most eight at once: a merge's 33 such parts would
   # otherwise take all of the organisation's 20 and hold the pull requests' own legs, genuine and ci-gate behind them.
