@@ -24,6 +24,35 @@ async function windowWithTerminal(folder: string): Promise<void> {
   await inWindow(folder, 'workbench.action.terminal.new');
 }
 
+/** How many prompts the shell of window `window`'s terminal has printed: lines with the prompt's ` $`, whatever follows it. */
+async function promptsOf(window: string): Promise<number> {
+  return (await terminalText(window))
+    .split('\n')
+    .filter(line => / \$(?: |$)/.test(line)).length;
+}
+
+/**
+ * Waits until the shell of the terminal of `window` has read what the terminal sent it at its start. The host's shell
+ * is BusyBox's, which asks the terminal for the cursor position at its first prompt; the terminal's reply reaches the
+ * shell later or sooner, and one that arrives while a command runs is echoed by the tty into that command's output
+ * (`^[[1;15R` at the start of a line). A command that prints nothing, and the prompt that follows it, show that the
+ * shell has been through a full cycle of reading, so the row's own command is typed after both.
+ */
+async function settledShell(window: string): Promise<void> {
+  await waitFor(
+    `the first prompt of ${window}`,
+    async () => (await promptsOf(window)) >= 1,
+    40_000,
+  );
+  const before = await promptsOf(window);
+  await typeInTerminal(window, 'true\n');
+  await waitFor(
+    `the prompt after the first command of ${window}`,
+    async () => (await promptsOf(window)) > before,
+    40_000,
+  );
+}
+
 /** Waits until the terminal of `window` has printed a line that satisfies `wanted`, and gives the lines. */
 async function linesUntil(
   window: string,
@@ -117,6 +146,7 @@ describe('the code command opens host files in the window (card coverage-80)', f
   it('F-2508 AC-26 (c80-stdin): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
     await windowWithTerminal('c80-stdin');
     try {
+      await settledShell('c80-stdin');
       await typeInTerminal(
         'c80-stdin',
         `echo piped | ${command} - ; echo DONE_$?\n`,
