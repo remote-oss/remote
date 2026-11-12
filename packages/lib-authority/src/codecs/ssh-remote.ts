@@ -16,10 +16,6 @@ const FAMILY = 'ssh-remote';
 /** Lower-case hexadecimal with even length. */
 const LOWER_HEX = /^[0-9a-f]+$/;
 
-// A blank or separator space that makes a host name malformed with reason whitespace: the ASCII blanks, the two
-// separator characters, and every space separator, U+0020 included.
-const WHITESPACE = /[\t\n\r \u2028\u2029\p{Zs}]/u;
-
 /**
  * A character that keeps an encoded text plain out: an upper-case letter in any script, or one of
  * the three separators we never leave plain.
@@ -29,31 +25,6 @@ const PLAIN_REFUSERS = /\p{Uppercase_Letter}|[/+\\]/u;
 /** A refusal, carrying the payload and the reason the contract names. */
 function refuse(payload: string, reason: string): MalformedAuthority {
   return {family: FAMILY, payload, reason};
-}
-
-/** Whether the text holds a control character: the ASCII controls and DEL, or a C1 control (U+0080 to U+009F). */
-function hasControl(text: string): boolean {
-  for (let index = 0; index < text.length; index += 1) {
-    const code = text.charCodeAt(index);
-    if (code < 0x20 || code === 0x7f || (code >= 0x80 && code <= 0x9f)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/** The host-name refusal for a piece of text, or none: whitespace before control, the reasons in that order. */
-function hostRefusal(
-  name: string,
-  payload: string,
-): MalformedAuthority | undefined {
-  if (WHITESPACE.test(name)) {
-    return refuse(payload, 'whitespace');
-  }
-  if (hasControl(name)) {
-    return refuse(payload, 'control');
-  }
-  return undefined;
 }
 
 /** The compact JSON form as it decodes from the hex. */
@@ -138,10 +109,6 @@ function decodeJson(
   if (typeof host.hostName !== 'string' || host.hostName === '') {
     return {malformed: refuse(payload, 'badJson')};
   }
-  const nameRefusal = hostRefusal(host.hostName, payload);
-  if (nameRefusal !== undefined) {
-    return {malformed: nameRefusal};
-  }
   const userValue = host.user;
   if (userValue !== undefined && typeof userValue !== 'string') {
     return {malformed: refuse(payload, 'badJson')};
@@ -160,14 +127,10 @@ function decodeJson(
   return {target, rawHostString: payload};
 }
 
-/** Decodes an ssh-remote payload: empty, or a host-name refusal, or one of the two forms. */
+/** Decodes an ssh-remote payload: the empty payload, the JSON form, or the plain host as written. */
 function decode(payload: string): DecodedOrMalformed<SshTarget> {
   if (payload === '') {
     return {malformed: refuse(payload, 'empty')};
-  }
-  const plainRefusal = hostRefusal(payload, payload);
-  if (plainRefusal !== undefined) {
-    return {malformed: plainRefusal};
   }
   const json = decodeJson(payload);
   if (json !== undefined) {

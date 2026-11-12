@@ -49,36 +49,33 @@ describe('codec rulings (card authority-01b table)', () => {
     });
   });
 
-  it('F-5901 rule 2: a non-break or ideographic space in a host name is whitespace', () => {
+  it('ruling-2325: a non-break or an ideographic space in a host name decodes as written', () => {
     deepStrictEqual(
-      ['a\u00A0b', 'a\u3000b'].map(text =>
-        reasonOf(sshRemoteCodec.decode(text)),
-      ),
-      ['whitespace', 'whitespace'],
+      ['a\u00A0b', 'a\u3000b'].map(text => targetOf(`ssh-remote+${text}`).target),
+      [{kind: 'plain', text: 'a\u00A0b'}, {kind: 'plain', text: 'a\u3000b'}],
     );
   });
 
-  it('F-5901 rule 2: the line and paragraph separators in a host name are whitespace', () => {
+  it('ruling-2325: the line and paragraph separators in a host name decode as written', () => {
     deepStrictEqual(
-      ['a\u2028b', 'a\u2029b'].map(text =>
-        reasonOf(sshRemoteCodec.decode(text)),
-      ),
-      ['whitespace', 'whitespace'],
+      ['a\u2028b', 'a\u2029b'].map(text => targetOf(`ssh-remote+${text}`).target),
+      [{kind: 'plain', text: 'a\u2028b'}, {kind: 'plain', text: 'a\u2029b'}],
     );
   });
 
-  it('F-5901 rule 2: the C1 control range in a host name is control', () => {
+  it('ruling-2325: the C1 control range in a host name decodes as written', () => {
     deepStrictEqual(
-      ['a\u0085b', 'a\u009Fb'].map(text =>
-        reasonOf(sshRemoteCodec.decode(text)),
-      ),
-      ['control', 'control'],
+      ['a\u0085b', 'a\u009Fb'].map(text => targetOf(`ssh-remote+${text}`).target),
+      [{kind: 'plain', text: 'a\u0085b'}, {kind: 'plain', text: 'a\u009Fb'}],
     );
   });
 
-  it('F-5901 rule 2: the same rule in the JSON form', () => {
+  it('ruling-2325: the same rule in the JSON form decodes as written', () => {
     const payload = hexOf('{"hostName":"a\u0085b"}');
-    strictEqual(reasonOf(decodeAuthority(`ssh-remote+${payload}`)), 'control');
+    deepStrictEqual(targetOf(`ssh-remote+${payload}`).target, {
+      kind: 'host',
+      hostName: 'a\u0085b',
+    });
   });
 
   it('F-5901 rule 3: a JSON user that is empty is absent, and encode keeps it plain', () => {

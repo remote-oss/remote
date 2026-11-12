@@ -33,7 +33,7 @@ export function encodeAuthority(decoded: DecodedTarget): string;   // `${family}
 ```
 
 Rules (ruled 2026-10-08, revised the same day against F-2301 BR-4 and F-2008 §6.2; order matters). `ssh-remote`
-payload forms: first the empty/whitespace/control checks (malformed `empty`, `whitespace`, `control`); then (1) the
+payload forms: first the empty check (malformed `empty`; whitespace and control characters are not refused, ruling-2325-codec-and-terminal); then (1) the
 JSON form: if the payload is even-length lower-case hex AND its bytes are valid UTF-8 AND `JSON.parse` yields an
 object, it IS the JSON form: `hostName` a non-empty string (else malformed `badJson`); `port`, when present, an
 integer 1–65535 or a string of digits in that range (F-2501 AC-6; `"22"` → 22), anything else malformed `badPort`;
@@ -68,8 +68,8 @@ the payload. `tunnel`: `<tunnelName>` or `<tunnelName>/<distro>`; empty name →
 | hex JSON without hostName, or hostName `""` | malformed `badJson` |
 | hex JSON `{"hostName":"::1","port":22}` | host `::1` port 22; `encode` → the same hex |
 | `'ssh-remote+'` | malformed `empty` |
-| `'ssh-remote+a b'` | malformed `whitespace` |
-| `'ssh-remote+a\u0001'` | malformed `control` |
+| `'ssh-remote+a b'` | plain `a b` |
+| `'ssh-remote+a\u0001'` | plain `a\u0001` |
 | `encode({kind:'plain', text:'a_b.invalid'})` | `'a_b.invalid'` |
 | `encode({kind:'host', hostName:'h'})` | `'h'` (plain) |
 | `encode({kind:'host', hostName:'Mixed.invalid'})`, `('Ü.invalid')`, `('a/b')`, `('a+b')`, `('a\\b')` | the hex JSON form each |
@@ -77,7 +77,7 @@ the payload. `tunnel`: `<tunnelName>` or `<tunnelName>/<distro>`; empty name →
 | `encode({kind:'host', hostName:'h', port: 22})` | hex of `{"hostName":"h","port":22}` |
 | `encode({kind:'plain', text:'UPPER-Alias'})` | hex of `{"hostName":"UPPER-Alias"}` (plain text with an upper-case letter cannot stay plain; BR-4) |
 | `label` of plain `a`, host `h`, `u@h`, `h` port 22, `u@h` port 22 | `a`, `h`, `u@h`, `h:22`, `u@h:22` |
-| property: 200 generated targets (plain texts without whitespace/control, hosts with optional user/port, mixed case) → `decode(encode(t))` | a target equal to `t` up to the plain/host collapse: a `host` without user/port that encoded plain decodes as `plain` with the same text; everything else deep-equal |
+| property: 200 generated targets (plain texts, whitespace and control characters included, hosts with optional user/port, mixed case) → `decode(encode(t))` | a target equal to `t` up to the plain/host collapse: a `host` without user/port that encoded plain decodes as `plain` with the same text; everything else deep-equal |
 | property: for each fixed form, `encode(decode(a)) === a` | holds for plain and hex authorities |
 | `'wsl+Ubuntu'` | `{distro:'Ubuntu'}`; label `Ubuntu` |
 | `'wsl+'` | `{distro:''}`; label `default distro`; `encode` gives `''` |
@@ -104,7 +104,6 @@ PR title `lib-authority: package and codecs (card authority-01)`. Reviewer: `rem
 ## 6. Open rows (stop and report)
 
 Rulings of 2026-10-08 (follow-up card authority-01b applies them to #153): a BOM-prefixed JSON payload is `badJson`;
-non-ASCII whitespace (Zs, line and paragraph separators) and C1 controls U+0080–U+009F are rejected like ASCII ones;
 an empty JSON `user` is treated as absent; `label` returns ids or raw text only (the WSL default-distro label is the
 id `wsl.defaultDistro`, resolved by the package's l10n); no import cycle: the container codec takes a `decodeOuter`
 function from the registry instead of importing it.

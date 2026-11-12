@@ -26,6 +26,8 @@ const HEX_PORT_70000 = hexOf('{"hostName":"h","port":70000}');
 const HEX_PORT_0 = hexOf('{"hostName":"h","port":0}');
 const HEX_PORT_22_DIGITS = hexOf('{"hostName":"h","port":"22"}');
 const HEX_IPV6_PORT = hexOf('{"hostName":"::1","port":22}');
+const HEX_HOST_A_SPACE_USER = hexOf('{"hostName":"a b","user":"-u"}');
+const HEX_HOST_C_NEWLINE = hexOf('{"hostName":"c\\n"}');
 const HEX_PORT_2_5 = hexOf('{"hostName":"h","port":2.5}');
 const HEX_NOT_JSON = hexOf('123456');
 const HEX_BYTES_NOT_JSON = hexOf('ab');
@@ -51,6 +53,11 @@ function seededTargets(count: number): SshTarget[] {
     'g.h.i',
     'v1',
     '::1',
+    'a b',
+    '   ',
+    'a\u0001',
+    'a\u0002b',
+    'a\u3000b',
   ];
   const hostNames = [
     'host',
@@ -61,6 +68,8 @@ function seededTargets(count: number): SshTarget[] {
     'g.h.i',
     'ip',
     'v1',
+    'a b',
+    'h\n',
   ];
   const users = ['u', 'alice', 'bob'];
   const targets: SshTarget[] = [];
@@ -217,19 +226,41 @@ describe('ssh-remote codec (card authority-01 table)', () => {
     });
   });
 
-  it("decodeAuthority('ssh-remote+a b') -> malformed whitespace", () => {
+  it("decodeAuthority('ssh-remote+a b') -> plain 'a b'", () => {
     deepStrictEqual(decodeAuthority('ssh-remote+a b'), {
-      malformed: {family: 'ssh-remote', payload: 'a b', reason: 'whitespace'},
+      family: 'ssh-remote',
+      target: {kind: 'plain', text: 'a b'},
+      rawHostString: 'a b',
+    });
+  });
+  it("decodeAuthority('ssh-remote+a\\u0001') -> plain 'a\\u0001'", () => {
+    deepStrictEqual(decodeAuthority('ssh-remote+a\u0001'), {
+      family: 'ssh-remote',
+      target: {kind: 'plain', text: 'a\u0001'},
+      rawHostString: 'a\u0001',
+    });
+  });
+  it('the hex of the JSON hostName "a b" with user "-u" decodes to a host with both', () => {
+    deepStrictEqual(decodeAuthority(`ssh-remote+${HEX_HOST_A_SPACE_USER}`), {
+      family: 'ssh-remote',
+      target: {kind: 'host', hostName: 'a b', user: '-u'},
+      rawHostString: HEX_HOST_A_SPACE_USER,
     });
   });
 
-  it("decodeAuthority('ssh-remote+a\\u0001') -> malformed control", () => {
-    deepStrictEqual(decodeAuthority('ssh-remote+a\u0001'), {
-      malformed: {
-        family: 'ssh-remote',
-        payload: 'a\u0001',
-        reason: 'control',
-      },
+  it('the hex of the JSON hostName "c" plus a newline decodes to a host of the same', () => {
+    deepStrictEqual(decodeAuthority(`ssh-remote+${HEX_HOST_C_NEWLINE}`), {
+      family: 'ssh-remote',
+      target: {kind: 'host', hostName: 'c\n'},
+      rawHostString: HEX_HOST_C_NEWLINE,
+    });
+  });
+
+  it("decodeAuthority('ssh-remote+   ') -> plain three spaces", () => {
+    deepStrictEqual(decodeAuthority('ssh-remote+   '), {
+      family: 'ssh-remote',
+      target: {kind: 'plain', text: '   '},
+      rawHostString: '   ',
     });
   });
 

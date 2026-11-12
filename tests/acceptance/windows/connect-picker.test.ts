@@ -98,6 +98,41 @@ describe('Connect to Host... on the run’s configuration file (card coverage-18
     await closeWindow(name);
   });
 
+  it('F-2301 AC-29: spaces typed in the picker open a window on ssh-remote+ and the spaces, whose dialog says the host has invalid characters, and the picking window is unchanged', async () => {
+    const before = await snapshot('local');
+    const next = nextEmptyName();
+    appendScript([
+      {
+        surface: 'hostPick',
+        match: HOST_QUESTION,
+        answer: {typed: '   '},
+        window: 'local',
+      },
+      ...failureEntries(next),
+    ]);
+    const name = await nextEmptyWindow(() =>
+      inWindow('local', 'opensshremotes.openEmptyWindow'),
+    );
+    await waitFor(
+      'the dialog of the new window',
+      () => recordLines('failureDialog', name).length > 0,
+      60_000,
+    );
+    deepStrictEqual(
+      [
+        (await windowState(name)).remoteAuthority,
+        recordLines('failureDialog', name)[0]?.question,
+        await snapshot('local'),
+      ],
+      [
+        'ssh-remote+   ',
+        'Could not establish connection to "   ": Hostname contains invalid characters.',
+        before,
+      ],
+    );
+    await closeWindow(name);
+  });
+
   it('F-2202 AC-22, F-2201 AC-17: a host added to the file while the picker is closed is in the next pick in its place, with no reload', async () => {
     const before = await snapshot('local');
     writeFileSync(
