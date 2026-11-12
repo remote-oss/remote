@@ -479,6 +479,15 @@ jobs:
           done
           echo "with Ubuntu's conmon:"; start=$(date +%s.%N); timeout 30 podman --conmon /usr/bin/conmon exec $id true </dev/null; echo "exit $? after $(echo "$(date +%s.%N) - $start" | bc) s"
           echo "exec sessions:"; podman inspect $id --format '{{.ExecIDs}} {{.State.Status}} pid {{.State.Pid}}'
+          echo "== exec --detach (5.8.8):"; start=$(date +%s.%N); session=$(timeout 30 podman exec --detach $id sh -c 'echo detached > /tmp/mark; exit 7'); echo "detach returned after $(echo "$(date +%s.%N) - $start" | bc) s, session $session"; sleep 2; timeout 15 podman exec --detach $id cat /tmp/mark >/dev/null; podman inspect $id --format '{{.ExecIDs}}' | head -c 300; echo
+          echo "== Ubuntu's podman:"; /usr/bin/podman --version
+          p49="/usr/bin/podman --root $RUNNER_TEMP/p49 --runroot $RUNNER_TEMP/p49run --tmpdir $RUNNER_TEMP/p49tmp"
+          id3=$($p49 run -d docker.io/library/alpine:3.22 sleep 600); echo "4.9 container $id3"
+          for form in "exec $id3 true" "exec $id3 echo hi"; do
+            start=$(date +%s.%N); timeout 30 $p49 $form </dev/null; code=$?; echo "4.9 podman $form: exit $code after $(echo "$(date +%s.%N) - $start" | bc) s"
+          done
+          $p49 info --format 'cgroup manager {{.Host.CgroupManager}}, runtime {{.Host.OCIRuntime.Path}}, conmon {{.Host.Conmon.Path}}, network {{.Host.NetworkBackend}}'
+          timeout 60 $p49 rm -f -t 0 $id3 >/dev/null 2>&1
           timeout 40 podman --log-level=debug exec $id true </dev/null 2>&1 | tail -40; echo "debug exec exit ${PIPESTATUS[0]}"
           ps -eo pid,ppid,stat,comm | grep -E "conmon|crun|podman|catatonit|pasta" | head -20
           if command -v runc >/dev/null; then
