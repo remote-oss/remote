@@ -493,9 +493,16 @@ jobs:
           echo "4.9 exec echo hi:"; t 30 $P exec $id3 echo hi </dev/null
           echo "== podman-static: $(podman --version)"
           id=$(timeout 120 podman run -d docker.io/library/alpine:3.22 sleep 600); echo "5.8 container $id"
-          echo "5.8 with the systemd cgroup manager:"; ids=$(timeout 120 podman --cgroup-manager=systemd run -d docker.io/library/alpine:3.22 sleep 600 2>&1 | tail -1); echo "  container: $ids"
-          echo "5.8 systemd exec true:"; t 30 podman --cgroup-manager=systemd exec $ids true </dev/null
-          echo "5.8 systemd exec echo hi:"; t 30 podman --cgroup-manager=systemd exec $ids echo hi </dev/null
+          echo "== runc with the systemd manager:"; idr=$(timeout 120 podman --runtime /usr/bin/runc --cgroup-manager=systemd run -d docker.io/library/alpine:3.22 sleep 600 2>&1 | tail -1); echo "  container: $idr"
+          echo "runc+systemd exec echo hi:"; t 30 podman --runtime /usr/bin/runc --cgroup-manager=systemd exec $idr echo hi </dev/null
+          timeout 60 podman --runtime /usr/bin/runc rm -f -t 0 $idr >/dev/null 2>&1
+          echo "== crun 1.28 built with systemd:"
+          curl -fsSL -o "$RUNNER_TEMP/crun" https://github.com/containers/crun/releases/download/1.28/crun-1.28-linux-amd64
+          echo "2aa6b7024a9c9f153895c0d11ae233d3758f54844011c3a039e3e89048d01d42  $RUNNER_TEMP/crun" | sha256sum -c -
+          sudo install -m 0755 "$RUNNER_TEMP/crun" /usr/local/bin/crun; crun --version | head -3
+          ids=$(timeout 120 podman --cgroup-manager=systemd run -d docker.io/library/alpine:3.22 sleep 600 2>&1 | tail -1); echo "  container: $ids"
+          echo "crun-systemd exec true:"; t 30 podman --cgroup-manager=systemd exec $ids true </dev/null
+          echo "crun-systemd exec echo hi:"; t 30 podman --cgroup-manager=systemd exec $ids echo hi </dev/null
           timeout 60 podman rm -f -t 0 $ids >/dev/null 2>&1
           echo "5.8 exec --detach:"; t 30 podman exec --detach $id true
           echo "5.8 exec true (attach):"; t 30 podman exec $id true </dev/null
