@@ -13,11 +13,7 @@ import {
   reopenInContainer,
   startInWindow,
 } from '../windows/harness.ts';
-import {
-  openFolderWindow,
-  removeContainers,
-  setUserSetting,
-} from '../windows/folder-windows.ts';
+import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   answerFolderDialog,
   answerToast,
@@ -333,7 +329,6 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
         editors,
       };
     }
-    await setUserSetting('workbench.startupEditor', 'none');
     /** The notification’s button, on a folder with a slow build so that S087 outlasts its half second. */
     async function viaNotification(): Promise<unknown> {
       const folder = slowBuildFolder('c68-entry-n', 'Entry N');
@@ -368,7 +363,6 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
       });
       await closeWindow(path.basename(first));
     } finally {
-      await setUserSetting('workbench.startupEditor', undefined);
       await removeContainers(first);
       await removeContainers(second);
     }

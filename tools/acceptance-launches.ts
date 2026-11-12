@@ -229,6 +229,9 @@ const CONTAINERS_LAUNCH = {
     // The folder dialog is the in-window one, which the renderer helpers can type into.
     'files.simpleDialog.enable': true,
     'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+    // A new window opens no Welcome page of its own, which would replace the preview tab of a file a row reads, later on a
+    // slower machine.
+    'workbench.startupEditor': 'none',
   },
 } as const;
 
