@@ -17,6 +17,7 @@ scenario() {
   local runner=$!
   for _ in $(seq 1 40); do [ "$(timeout 10 "${P[@]}" inspect -f '{{.State.Running}}' "repro-$name" 2>/dev/null)" = true ] && break; sleep 1; done
   echo "running: $(timeout 10 "${P[@]}" inspect -f '{{.State.Running}}' "repro-$name" 2>&1)"
+  echo "run output: $(head -c 600 "$RUNNER_TEMP/run-$name.out" 2>/dev/null)"
   echo "-- A: one short exec with a piped script, as the CLI's"
   local script='echo short-exec'
   printf '%s' "$script" | t 30 "${P[@]}" exec -i --user root "repro-$name" sh -c "eval \"\$(dd bs=1 count=${#script} 2>/dev/null)\""
@@ -49,13 +50,13 @@ scenario() {
   t 60 "${P[@]}" rm -f -t 0 "repro-$name" >/dev/null 2>&1
   sleep 2
 }
-scenario ubuntu-apt /usr/bin/podman
+echo "##### the parts"
+for b in /usr/local/bin/crun /usr/bin/crun /usr/bin/runc /usr/local/lib/podman/conmon /usr/libexec/podman/conmon /usr/bin/conmon; do
+  [ -x "$b" ] && echo "$b: $("$b" --version 2>&1 | head -1)"
+done
+scenario apt-own-parts /usr/bin/podman --runtime /usr/bin/crun --conmon /usr/bin/conmon
 scenario static podman
-mkdir -p "$HOME/.config/containers"
-printf '[engine]\nevents_logger = "none"\n' > "$HOME/.config/containers/containers.conf"
-scenario static-events-none podman
-rm -f "$HOME/.config/containers/containers.conf"
-printf '[storage]\ndriver = "vfs"\n' > "$HOME/.config/containers/storage.conf"
-scenario static-vfs podman
-rm -f "$HOME/.config/containers/storage.conf"
-scenario static-rootful sudo /usr/local/bin/podman
+scenario static-ubuntu-crun podman --runtime /usr/bin/crun
+scenario static-runc podman --runtime /usr/bin/runc
+scenario static-ubuntu-conmon podman --conmon /usr/bin/conmon
+scenario static-ubuntu-crun-conmon podman --runtime /usr/bin/crun --conmon /usr/bin/conmon
