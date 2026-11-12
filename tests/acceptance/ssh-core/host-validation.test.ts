@@ -200,7 +200,9 @@ describe('host and user name validation (card coverage-120)', function () {
         ],
       );
     } finally {
-      await Promise.all([first, second].map(closeWindow));
+      await Promise.all(
+        [first, second].map(name => closeWindow(name).catch(() => undefined)),
+      );
     }
   });
 
@@ -417,7 +419,7 @@ describe('host and user name validation (card coverage-120)', function () {
             ],
           );
         } finally {
-          await Promise.all(names.map(closeWindow));
+          await Promise.all(names.map(name => closeWindow(name).catch(() => undefined)));
         }
       },
     );
