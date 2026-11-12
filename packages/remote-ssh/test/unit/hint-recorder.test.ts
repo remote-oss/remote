@@ -407,4 +407,32 @@ describe('the hint recorder (card connect-119)', () => {
       [['AllowTcpForwardingDisabled', 'Other'], []],
     );
   });
+
+  it('F-2604 AC-5 (c2326-early-error): an error recognised before the step ends is stored when it is recognised, not when the step ends', async () => {
+    const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    recorder.begin();
+    await settled();
+    recorder.record(HINT);
+    await settled();
+    deepStrictEqual(
+      [
+        errorsOf(stored.value?.records[0]).length,
+        stored.value?.records[0]?.hints.some(hint => hint.kind === 'log'),
+      ],
+      [1, false],
+    );
+  });
+
+  it('F-2605 BR-9 (c2326-folded): the errors and the log hint added in one synchronous run are written together, after the write at begin', async () => {
+    const {recorder, stored, keys} = recording(['2026-11-02T00:00:00Z']);
+    recorder.begin();
+    recorder.record(HINT);
+    recorder.record({...HINT, status: 'Other', message: 'Error: Other'});
+    recorder.end();
+    await settled();
+    deepStrictEqual(
+      [keys.length, stored.value?.records[0]?.hints.map(hint => hint.kind)],
+      [2, ['environment', 'environment', 'error', 'error', 'log']],
+    );
+  });
 });

@@ -1,8 +1,9 @@
 /**
  * @fileoverview The recorder of the session hints: it keeps the hints of a connect in the record that connect started,
  * in the hint store of the extension's global state. A record is written when the connect begins, with its environment
- * hints, once when its resolve step ends, with the error hints and the log hint together, and once for each error
- * recognised after that. Every write is read back (remote-oss/remote#2326).
+ * hints, and again when hints are added to it; the hints added in one synchronous run, such as the errors of a resolve
+ * step and the log hint that follows them, are written together. An error is stored when it is recognised, not when the
+ * step ends, since the dialog that shows it must find it stored. Every write is read back (remote-oss/remote#2326).
  */
 
 import type {FailureHint, FailureReason, FilledString} from 'lib-authority';
@@ -109,7 +110,8 @@ export function hintRecorderOf(
   let logFrom = 0;
   let attemptErrors: SessionHint[] = [];
   let open = false;
-  let ended = false;
+  /** The records whose write is queued for the end of the synchronous run that is going on. */
+  const queued = new Set<SessionRecord>();
   /** Whether the record has been written: a record that was written and is gone was cleared or dropped. */
   let persisted = false;
   let writing: PromiseLike<void> = Promise.resolve();
@@ -118,10 +120,10 @@ export function hintRecorderOf(
    * Writes the record as it is now, once, after the writes before it. A record that was written and is no longer in
    * the store was cleared or dropped as the oldest: it does not come back with the hints that follow it.
    */
-  function write(starts: boolean): void {
+  function write(starts: boolean, record: SessionRecord): void {
     const snapshot: SessionRecord = {
-      started: current.started,
-      hints: [...current.hints],
+      started: record.started,
+      hints: [...record.hints],
     };
     writing = writing
       .then(() => {
@@ -139,6 +141,17 @@ export function hintRecorderOf(
       // A write the state refuses does not end the writes after it, and is no unhandled rejection.
       .then(undefined, () => undefined);
   }
+  /** Writes the record once the synchronous run that added hints to it is over. */
+  function writeSoon(): void {
+    const target = current;
+    if (!queued.has(target)) {
+      queued.add(target);
+      queueMicrotask(() => {
+        queued.delete(target);
+        write(false, target);
+      });
+    }
+  }
   return {
     begin: () => {
       current = {
@@ -146,11 +159,10 @@ export function hintRecorderOf(
         hints: [...environment.environmentHints()],
       };
       open = true;
-      ended = false;
       persisted = false;
       attemptErrors = [];
       logFrom = environment.logMark();
-      write(true);
+      write(true, current);
     },
     record: hint => {
       const statusNumber = statusNumberOf(hint.status);
@@ -174,21 +186,18 @@ export function hintRecorderOf(
       // connect can meet the same error from two places.
       if (!current.hints.some(each => sameError(each, entry))) {
         current.hints.push(entry);
-        if (ended) {
-          write(false);
-        }
+        writeSoon();
       }
     },
     errors: () => [...attemptErrors],
     end: () => {
       if (open) {
         open = false;
-        ended = true;
         current.hints.push({
           kind: 'log',
           text: environment.logText(logFrom),
         });
-        write(false);
+        writeSoon();
       }
     },
   };
