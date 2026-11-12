@@ -1,26 +1,24 @@
 /**
- * @fileoverview The `clearAllSessionHints` command: it deletes the hint store's key from the extension's global
- * state and writes one line to the log. It shows nothing, and it touches no other key, so an empty store behaves
- * the same.
+ * @fileoverview The `clearAllSessionHints` command: it writes an empty hint store that records the time of the clear
+ * into the extension's global state, and one line to the log. It shows nothing, and it touches no other key, so an
+ * empty store behaves the same. The time lets a record that was cleared be told from one an older copy of the store
+ * lost (remote-oss/remote#2326).
  */
 
 import type {CommandHandler} from 'lib-identifiers';
 import type {Logger} from 'lib-log';
-import {HINT_STORE_KEY} from './hint-store.ts';
+import type {ConfirmedKey} from '../state/confirmed-update.ts';
+import {clearAll, type HintStore} from './hint-store.ts';
 
-/** The global-state port the command writes through: `update` with `undefined` deletes the key. */
-export interface HintStoreState {
-  update(key: string, value: undefined): PromiseLike<void>;
-}
-
-/** The clear command over `state`, logging through `logger`. */
+/** The clear command over the hint store's `key`, with the time of `now`, logging through `logger`. */
 export function clearHintsHandler(
-  state: HintStoreState,
+  key: ConfirmedKey<HintStore>,
+  now: () => Date,
   logger: Logger,
 ): CommandHandler {
   return {
     execute: async () => {
-      await state.update(HINT_STORE_KEY, undefined);
+      await key.write(clearAll(now().toISOString()));
       logger.info('Cleared all session hints');
     },
   };
