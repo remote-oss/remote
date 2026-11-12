@@ -212,6 +212,40 @@ describe('known-reds: the exit code a launch counts with', () => {
     );
   });
 
+  it("a code that is not mocha's count of the failures keeps the launch failed, an excused row or not", () => {
+    deepStrictEqual(
+      [
+        judged(2, ended([failedRow(ENTRY.title)]), 'pull_request')[0],
+        judged(137, ended([failedRow(ENTRY.title)]), 'pull_request')[0],
+      ],
+      [2, 137],
+    );
+  });
+
+  it('a code that is the count of known failures, two of them, counts as passed', () => {
+    const lines: string[] = [];
+    let code = -1;
+    withFolder(folder => {
+      const second = {...ENTRY, title: 'F-1 AC-2 (row-b): another row'};
+      const file = outcomeFileOf(folder, 'ssh-core');
+      writeFileSync(
+        file,
+        JSON.stringify(
+          ended([failedRow(ENTRY.title), failedRow(second.title)]),
+        ),
+      );
+      code = judgedExitCode(
+        2,
+        'ssh-core',
+        file,
+        [ENTRY, second],
+        {GITHUB_EVENT_NAME: 'pull_request'},
+        line => lines.push(line),
+      );
+    });
+    deepStrictEqual([code, lines.length], [0, 2]);
+  });
+
   it('a failed launch with no failure on record keeps its code: nothing was excused', () => {
     strictEqual(judged(1, ended([]), 'pull_request')[0], 1);
   });
@@ -357,6 +391,17 @@ describe("known-reds: the list's own checks", () => {
     });
   });
 
+  it('a title that names two rows of its file is refused, since the entry would name both', () => {
+    withFolder(folder => {
+      deepStrictEqual(
+        listProblems(rootWith(folder, ['a row', 'a row']), [GOOD], SUITES),
+        [
+          'entry 1: 2 rows of suite/one.test.ts are titled a row, so the entry cannot name one',
+        ],
+      );
+    });
+  });
+
   it('a missing field, a wrong kind, a bad card, run or date, a non-plain launch, a foreign file, an unknown title and a repeat are each named', () => {
     withFolder(folder => {
       const root = rootWith(folder, ['a row']);
@@ -396,11 +441,9 @@ describe("known-reds: the list's own checks", () => {
 
   it("a row's title is read from each quoting it may be written in, with escapes undone", () => {
     deepStrictEqual(
-      [
-        ...rowTitlesOf(
-          "it('single, it\\'s', () => {});\nit(\"double\", async () => {});\nit(`back`, function () {});\nit(title, () => {});\n",
-        ),
-      ],
+      rowTitlesOf(
+        "it('single, it\\'s', () => {});\nit(\"double\", async () => {});\nit(`back`, function () {});\nit(title, () => {});\n",
+      ),
       ["single, it's", 'double', 'back'],
     );
   });

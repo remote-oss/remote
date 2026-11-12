@@ -186,7 +186,8 @@ export function judgedExitCode(
   if (environment.GITHUB_EVENT_NAME !== 'pull_request') {
     return exitCode;
   }
-  const verdict = verdictOf(label, readOutcome(outcomeFile), knownReds);
+  const outcome = readOutcome(outcomeFile);
+  const verdict = verdictOf(label, outcome, knownReds);
   if (exitCode === 0) {
     for (const line of verdictLines(label, {
       passes: true,
@@ -201,8 +202,16 @@ export function judgedExitCode(
   for (const line of verdictLines(label, verdict)) {
     report(line);
   }
-  return verdict.passes && verdict.excused.length > 0 ? 0 : exitCode;
+  // mocha exits with the number of its failures, at most 255: any other code is a failure the outcome does not hold
+  return verdict.passes &&
+    verdict.excused.length > 0 &&
+    exitCode === Math.min(outcome?.failures.length ?? 0, MOCHA_EXIT_LIMIT)
+    ? 0
+    : exitCode;
 }
+
+/** The highest exit code mocha gives: its number of failures, capped. */
+const MOCHA_EXIT_LIMIT = 255;
 
 /**
  * The judge of a run's launches: each plain launch's exit code judged against the repository's list, with the verdict's
@@ -298,10 +307,19 @@ export function listProblems(
         problems.push(
           `${place}: ${known.file} is not a file of ${known.launch}'s suite ${suite}`,
         );
-      } else if (!rowTitlesOf(readFileSync(source, 'utf8')).has(known.title)) {
-        problems.push(
-          `${place}: no row of ${known.file} is titled ${known.title}`,
-        );
+      } else {
+        const rows = rowTitlesOf(readFileSync(source, 'utf8')).filter(
+          title => title === known.title,
+        ).length;
+        if (rows === 0) {
+          problems.push(
+            `${place}: no row of ${known.file} is titled ${known.title}`,
+          );
+        } else if (rows > 1) {
+          problems.push(
+            `${place}: ${String(rows)} rows of ${known.file} are titled ${known.title}, so the entry cannot name one`,
+          );
+        }
       }
     }
     const key = `${known.launch}\u0000${known.file}\u0000${known.title}`;
@@ -313,14 +331,14 @@ export function listProblems(
   return problems;
 }
 
-/** The titles of the rows `it` declares in `source`, each written as one string literal. */
-export function rowTitlesOf(source: string): Set<string> {
-  const titles = new Set<string>();
+/** The titles of the rows `it` declares in `source`, each written as one string literal, in order and repeats kept. */
+export function rowTitlesOf(source: string): string[] {
+  const titles: string[] = [];
   for (const match of source.matchAll(
     /\bit\(\s*(?:'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\$]|\\.)*)`)\s*,/g,
   )) {
     const literal = match[1] ?? match[2] ?? match[3] ?? '';
-    titles.add(literal.replace(/\\(.)/g, '$1'));
+    titles.push(literal.replace(/\\(.)/g, '$1'));
   }
   return titles;
 }
