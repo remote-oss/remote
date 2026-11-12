@@ -84,6 +84,33 @@ async function cliStartMilliseconds(): Promise<number> {
   return performance.now() - started;
 }
 
+async function cliReadMilliseconds(folder: string): Promise<number> {
+  const program = path.join(
+    import.meta.dirname,
+    '..',
+    '..',
+    '..',
+    'packages',
+    'remote-containers',
+    'dist',
+    'devcontainers-cli',
+    'devcontainer.js',
+  );
+  const started = performance.now();
+  await execFileAsync(
+    variable('HARNESS_EDITOR_EXECUTABLE'),
+    [
+      program,
+      'read-configuration',
+      '--workspace-folder',
+      folder,
+      '--include-merged-configuration',
+    ],
+    {env: {...process.env, ELECTRON_RUN_AS_NODE: '1'}},
+  );
+  return performance.now() - started;
+}
+
 describe('F-0408 the reading step, the pull and the entry points (card coverage-68)', function () {
   this.timeout(900_000);
 
@@ -124,6 +151,14 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
         await cliStartMilliseconds(),
       ].sort((first, second) => first - second);
       const startMilliseconds = starts[1] ?? Infinity;
+      const reads = [
+        await cliReadMilliseconds(folder),
+        await cliReadMilliseconds(folder),
+        await cliReadMilliseconds(folder),
+      ].sort((first, second) => first - second);
+      console.log(
+        `F-0408 AC-14 calibration: --version ${starts.map(each => String(Math.round(each))).join(', ')} ms; read-configuration --include-merged-configuration ${reads.map(each => String(Math.round(each))).join(', ')} ms`,
+      );
       const mark = containersLog().length;
       const again = await openFolderWindow(folder);
       const sampler = sampled(
