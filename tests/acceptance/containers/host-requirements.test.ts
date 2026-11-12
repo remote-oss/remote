@@ -192,6 +192,69 @@ describe('Host requirements rows (card containers-202, F-0206)', function () {
     }
   });
 
+  it('F-0206 BR-13 (c217-hub): an image the registry gives its details for is not pulled before the dialog, which shows the file’s requirements', async () => {
+    const reference = 'alpine:3.22';
+    await execFileAsync('docker', ['image', 'rm', reference]).catch(
+      () => undefined,
+    );
+    const folder = devContainerFolder('c217-hub', {
+      name: 'C217 Hub',
+      image: reference,
+      hostRequirements: {cpus: 4096},
+    });
+    try {
+      const name = await openFolderWindow(folder);
+      const since = Math.floor(Date.now() / 1000);
+      const {dialog, running} = await dialogOfReopen(name);
+      const {stdout: pulls} = await execFileAsync('docker', [
+        'events',
+        '--since',
+        String(since),
+        '--until',
+        String(Math.floor(Date.now() / 1000) + 1),
+        '--filter',
+        'type=image',
+        '--filter',
+        'event=pull',
+        '--format',
+        '{{.Actor.ID}}',
+      ]);
+      await answerDialog(name, 'Cancel');
+      await running;
+      deepStrictEqual(
+        {
+          pulls: pulls.trim(),
+          cpus: dialog.details.endsWith('devcontainer.json: CPUs 4096'),
+          containers: await devContainersOf(folder),
+        },
+        {pulls: '', cpus: true, containers: []},
+      );
+      await closeWindow(name);
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0206 BR-13 (c217-pull-fails): an image the registry cannot give and that cannot be pulled raises no host requirements dialog', async () => {
+    const reference = `${variable('HARNESS_REGISTRY').replace('127.0.0.1', 'localhost')}/c217-missing:1`;
+    const folder = devContainerFolder('c217-pull-fails', {
+      name: 'C217 Pull Fails',
+      image: reference,
+      hostRequirements: {cpus: 4096},
+    });
+    try {
+      const name = await openFolderWindow(folder);
+      const {dialog, running} = await dialogOfReopen(name);
+      console.log(`c217-pull-fails dialog: ${JSON.stringify(dialog)}`);
+      deepStrictEqual(dialog.message === MESSAGE, false);
+      await answerDialog(name, dialog.buttons[0] ?? 'Cancel');
+      await running;
+      await closeWindow(name);
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
   it('F-0206 AC-9, AC-18, AC-35 (c202-lines): the configuration’s part lists CPUs, RAM, disk and GPU in that order, in gibibytes with one decimal', async () => {
     const folder = devContainerFolder('c202-lines', {
       name: 'C202 Lines',
