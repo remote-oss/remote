@@ -109,7 +109,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
     }
   });
 
-  it('F-0408 AC-14 (ruling-1557-tolerance): reopening a folder whose container runs connects, by the log’s Resolving Remote, and shows S087, each within 1.5 s (athena’s ruling on #1204 for the spec’s 1 s) once the machine’s own cost of starting the CLI is taken out, with no Starting container and no Starting VS Code Server in the log', async () => {
+  it('F-0408 AC-14 (reading-2300-cli-start-calibration): reopening a folder whose container runs connects, by the log’s Resolving Remote, and shows S087, each within 1.5 s (athena’s ruling on #1204 for the spec’s 1 s) once the machine’s own cost of starting the CLI is taken out, with no Starting container and no Starting VS Code Server in the log', async () => {
     const folder = devContainerFolder('c68-running', {
       name: 'Running Reuse',
       shutdownAction: 'none',
