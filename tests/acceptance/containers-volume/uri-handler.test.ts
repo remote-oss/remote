@@ -22,7 +22,7 @@ import {
   containersWith,
   dockerLines,
   removeClone,
-} from '../windows/volume-clones.ts';
+} from './volume-clones.ts';
 import {
   answerDialog,
   dialogOf,

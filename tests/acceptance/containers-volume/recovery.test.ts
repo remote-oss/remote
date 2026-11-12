@@ -33,7 +33,7 @@ import {
   containersWith,
   dockerLines,
   removeClone,
-} from '../windows/volume-clones.ts';
+} from './volume-clones.ts';
 
 const execFileAsync = promisify(execFile);
 
