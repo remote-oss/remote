@@ -1,9 +1,6 @@
 {
   "targetMinutes": 15,
-  "together": [
-    ["agent", "agent-off"],
-    ["socket-prime", "socket"]
-  ],
+  "together": [["socket-prime", "socket"]],
   "minutes": {
     "add-host": {"add-host.test.ts": 0.4},
     "agent": 0.3,
