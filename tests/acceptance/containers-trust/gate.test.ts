@@ -24,9 +24,11 @@ import {
   recentlyOpenedIn,
   reopenInContainer,
   inWindow,
+  isOpen,
   trustSettled,
   variable,
   waitFor,
+  windowNames,
   windowState,
 } from '../windows/harness.ts';
 import {
@@ -723,20 +725,25 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     await closeWindow(from);
   });
 
-  /** Declines core's dialog for a new folder with `decline`, presses OK, and gives what the window is after. */
+  /**
+   * Declines core's dialog for a new folder with `decline`, closes the S360 dialog with `finish` (OK by default), and
+   * gives what the window is after, and apart from it the discovery notification and the windows the open added.
+   */
   async function declinedOpenOf(
     key: string,
     decline: (name: string) => Promise<void>,
+    finish: (name: string) => Promise<void> = name => answerDialog(name, 'OK'),
   ) {
     const name = `c69-${key}`;
     const folder = devContainerFolder(name, {name: `C69 ${key}`});
     const from = await openFolderWindow(devContainerFolder(`${name}-from`));
+    const before = windowNames().filter(isOpen);
     await openFolderFrom(from, folder);
     await waitForDialog(name);
     await decline(name);
     const declined = await waitForDialog(name);
     const declinedText = await dialogText(name);
-    await answerDialog(name, 'OK');
+    await finish(name);
     await waitFor(
       'the window to be the local folder again',
       async () => (await windowState(name)).remoteName === null,
@@ -754,8 +761,16 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       remoteName: (await windowState(name)).remoteName,
       trusted: await trustSettled(name, false),
     };
+    const opened = {
+      discovery: (await notifications(name)).filter(text =>
+        text.startsWith(DISCOVERY),
+      ),
+      added: windowNames()
+        .filter(isOpen)
+        .filter(each => !before.includes(each)),
+    };
     await closeWindow(name);
-    return {observed, folder};
+    return {observed, opened, folder};
   }
 
   /** What {@link declinedOpenOf} gives for a decline of core's dialog, for the new folder `folder`. */
@@ -778,6 +793,21 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       answerDialog(name, 'Cancel'),
     );
     deepStrictEqual(observed, declinedOpenExpected(folder));
+  });
+
+  it('F-0106 AC-46 (c123-escape-ok): Escape on the S360 dialog ends as OK does: the window is the target folder, local and restricted, with the discovery notification, and no other window opened', async () => {
+    const {observed, opened, folder} = await declinedOpenOf(
+      'escape-ok',
+      pressEscape,
+      pressEscape,
+    );
+    deepStrictEqual(
+      [observed, opened],
+      [
+        declinedOpenExpected(folder),
+        {discovery: [DISCOVERY], added: [path.basename(folder)]},
+      ],
+    );
   });
 
   it('F-0106 AC-8a (c69-8a): opening the [Dev Container] recent entry from another window reattaches with no dialog, and the title and indicator never show a local or Restricted Mode window', async () => {
