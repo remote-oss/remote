@@ -37,7 +37,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import {hostname, tmpdir} from 'node:os';
+import {hostname} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 import path from 'node:path';
 import {
@@ -64,6 +64,7 @@ import {
   connectRunNetwork,
   loadImageIntoPodman,
   requirePodman,
+  runFolderBase,
   startHostContainer,
   sweepStaleRunObjects,
 } from './acceptance-run.ts';
@@ -1685,7 +1686,9 @@ export async function runAcceptance(
   }
   const runId = acceptanceRunId(process.env, process.pid);
   // The run id in the name lets the clean-up find the editor of a run that was killed.
-  const runFolder = mkdtempSync(path.join(tmpdir(), `acceptance-${runId}-`));
+  const runFolder = mkdtempSync(
+    path.join(runFolderBase(), `acceptance-${runId}-`),
+  );
   const started: string[] = [];
   const stops: Array<() => Promise<void>> = [];
   const startedSeconds = Date.now() / 1000;
@@ -2085,9 +2088,28 @@ export interface VscodiumTransfer {
   unpack: (archive: Uint8Array, folder: string) => void;
 }
 
-/** The command-line wrapper beside the VSCodium executable; the editor itself, started through it, does not run tests. */
-function vscodiumCliOf(executable: string): string {
-  return path.join(path.dirname(executable), 'bin', 'codium-insiders');
+/**
+ * Where a VSCodium build's command-line wrapper is, from its executable's folder, by the client's platform, as the
+ * pinned release's archives lay it out: `bin/codium-insiders` beside the executable on Linux, the batch file
+ * `bin\codium-insiders.cmd` on Windows (its extensionless sibling is a shell script), and the bundle's
+ * `Contents/Resources/app/bin` on macOS.
+ */
+const VSCODIUM_CLI_PATHS: Readonly<
+  Partial<Record<NodeJS.Platform, readonly string[]>>
+> = {
+  darwin: ['..', 'Resources', 'app', 'bin', 'codium-insiders'],
+  win32: ['bin', 'codium-insiders.cmd'],
+};
+
+/** The command-line wrapper of the VSCodium executable; the editor itself, started through it, does not run tests. */
+export function vscodiumCliOf(
+  executable: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  return path.join(
+    path.dirname(executable),
+    ...(VSCODIUM_CLI_PATHS[platform] ?? ['bin', 'codium-insiders']),
+  );
 }
 
 /**

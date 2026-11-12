@@ -65,6 +65,7 @@ import {
   VSCODIUM_RELEASE,
   vscodiumConfiguration,
   vscodiumConfigurations,
+  vscodiumCliOf,
   vscodiumExecutableOf,
   withOneRetry,
   markDownloadRequests,
@@ -100,6 +101,16 @@ const CONTAINER = 'c0ffee';
 
 /** The host's address on the run network, which the `routed` alias names. */
 const ROUTED_ADDRESS = '172.18.0.2';
+
+/** The macOS build's command-line wrapper in its archive (`unzip -Z1` of the pinned darwin release asset). */
+const MACOS_CLI = path.join(
+  'VSCodium - Insiders.app',
+  'Contents',
+  'Resources',
+  'app',
+  'bin',
+  'codium-insiders',
+);
 
 /** Runs `body` with what it prints on `console.error` collected, and gives what it returned and those lines. */
 async function withErrorLines<Result>(
@@ -4243,6 +4254,31 @@ describe('acceptance', () => {
           `vscodium-${VSCODIUM_RELEASE.tagName}-linux-x64`,
         ),
       ]);
+    });
+
+    it("#2350: each pinned build's command-line wrapper is where its release archive puts it", () => {
+      const folder = path.join(workspace.root, 'unpacked');
+      deepStrictEqual(
+        Object.fromEntries(
+          Object.entries(VSCODIUM_PLATFORMS).map(([key, build]) => [
+            key,
+            path.relative(
+              folder,
+              vscodiumCliOf(
+                path.join(folder, build.executable),
+                key.slice(0, key.lastIndexOf('-')) as NodeJS.Platform,
+              ),
+            ),
+          ]),
+        ),
+        {
+          'linux-x64': path.join('bin', 'codium-insiders'),
+          'linux-arm64': path.join('bin', 'codium-insiders'),
+          'darwin-x64': MACOS_CLI,
+          'darwin-arm64': MACOS_CLI,
+          'win32-x64': path.join('bin', 'codium-insiders.cmd'),
+        },
+      );
     });
 
     it('#253 Q14: a platform with no pinned build throws', async () => {
