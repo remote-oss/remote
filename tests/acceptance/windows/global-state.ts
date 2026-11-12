@@ -4,31 +4,20 @@
  */
 
 import path from 'node:path';
-import {DatabaseSync} from 'node:sqlite';
 import {variable} from './harness.ts';
+import {readStateDatabase} from './state-database.ts';
 
 /** The entries of the profile's global state, by key: the editor's `state.vscdb`, read between its writes. */
-async function globalState(): Promise<Map<string, string>> {
-  const file = path.join(
-    variable('HARNESS_USER_DATA'),
-    'User/globalStorage/state.vscdb',
+function globalState(): Map<string, string> {
+  const rows = readStateDatabase(
+    path.join(variable('HARNESS_USER_DATA'), 'User/globalStorage/state.vscdb'),
+    database =>
+      database.prepare('SELECT key, value FROM ItemTable').all() as Array<{
+        key: string;
+        value: string;
+      }>,
   );
-  for (let attempt = 1; ; attempt += 1) {
-    const database = new DatabaseSync(file, {readOnly: true});
-    try {
-      const rows = database
-        .prepare('SELECT key, value FROM ItemTable')
-        .all() as Array<{key: string; value: string}>;
-      return new Map(rows.map(entry => [entry.key, entry.value]));
-    } catch (caught) {
-      if (attempt === 20) {
-        throw caught;
-      }
-      await new Promise(resolve => setTimeout(resolve, 250));
-    } finally {
-      database.close();
-    }
-  }
+  return new Map(rows.map(entry => [entry.key, entry.value]));
 }
 
 /** The names whose entry differs between `before` and `after`, added, changed or removed, sorted. */
@@ -42,9 +31,9 @@ export function changedKeys(
 }
 
 /** The Remote - SSH extension's global state: the entries it stored under its own key, by name. */
-export async function extensionState(): Promise<Record<string, unknown>> {
-  const stored = (await globalState()).get('remote-oss.remote-ssh');
-  return stored === undefined
-    ? {}
-    : (JSON.parse(stored) as Record<string, unknown>);
+export function extensionState(): Promise<Record<string, unknown>> {
+  const stored = globalState().get('remote-oss.remote-ssh');
+  return Promise.resolve(
+    stored === undefined ? {} : (JSON.parse(stored) as Record<string, unknown>),
+  );
 }
