@@ -12,7 +12,6 @@ import {
   reloadingCommand,
   reopenInContainer,
   startInWindow,
-  variable,
 } from '../windows/harness.ts';
 import {
   openFolderWindow,
@@ -33,6 +32,43 @@ import {
   slowBuildFolder,
   windowLogFiles,
 } from '../windows/sampling.ts';
+
+/**
+ * The image the pull row opens: a small public Docker Hub image, pinned by the digest of its index (Node 22 on Alpine
+ * 3.22, which holds the libstdc++ the editor's server needs), in the form `repository@digest`: the CLI cannot parse a
+ * tag together with a digest and then pulls during its read. Docker Hub gives the CLI the image's details without a
+ * pull, so the pull is the one inside Starting container that F-0408 AC-15 describes; an image of the run's own
+ * registry is read by a pull during the configuration read instead (`reading-2408-pull-registry`).
+ */
+const PULLED_REPOSITORY = 'library/node';
+const PULLED_DIGEST =
+  'sha256:cd7807368cf24826297cbad5dca1a44972ccfd770647db52a8c7589eb4599ac8';
+const PULLED_IMAGE = `docker.io/${PULLED_REPOSITORY}@${PULLED_DIGEST}`;
+
+/**
+ * Reads the image's manifest from Docker Hub the way the CLI does, anonymously, and gives the status Hub answered: when
+ * it refuses (an anonymous limit on a shared runner address), the CLI cannot read the details either and pulls during
+ * its read, so the row names that cause instead of a misplaced pull.
+ */
+async function hubManifestStatus(): Promise<number> {
+  const token = (await (
+    await fetch(
+      `https://auth.docker.io/token?service=registry.docker.io&scope=repository:${PULLED_REPOSITORY}:pull`,
+    )
+  ).json()) as {token?: string};
+  const answer = await fetch(
+    `https://registry-1.docker.io/v2/${PULLED_REPOSITORY}/manifests/${PULLED_DIGEST}`,
+    {
+      method: 'HEAD',
+      headers: {
+        Authorization: `Bearer ${token.token ?? ''}`,
+        Accept:
+          'application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json',
+      },
+    },
+  );
+  return answer.status;
+}
 
 const execFileAsync = promisify(execFile);
 
@@ -189,17 +225,21 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
   });
 
   it('F-0408 AC-15 (c68-pull): an image that is not local is pulled inside the Starting container step, and no notification, suffix, title or editor names the pull', async () => {
-    const imageTag = `${variable('HARNESS_REGISTRY')}/c68-pull:${String(Date.now())}`;
     await execFileAsync('docker', [
-      'tag',
-      variable('HARNESS_DEVCONTAINER_IMAGE'),
-      imageTag,
-    ]);
-    await execFileAsync('docker', ['push', imageTag]);
-    await execFileAsync('docker', ['image', 'rm', imageTag]);
+      'image',
+      'rm',
+      '--force',
+      PULLED_IMAGE,
+    ]).catch(() => undefined);
+    const hubStatus = await hubManifestStatus();
+    if (hubStatus !== 200) {
+      throw new Error(
+        `Docker Hub answered ${String(hubStatus)} to the anonymous read of ${PULLED_IMAGE}'s manifest, so the CLI cannot read its details and pulls during the read, before Starting container`,
+      );
+    }
     const folder = devContainerFolder('c68-pull', {
       name: 'Remote Image',
-      image: imageTag,
+      image: PULLED_IMAGE,
     });
     const mark = containersLog().length;
     const name = await openFolderWindow(folder);
@@ -214,11 +254,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
       const lines = containersLogSince(mark);
       const step = lines.indexOf('Starting container');
       const started = lines.indexOf('Container started');
-      const pull = lines.findIndex(line =>
-        line.startsWith(
-          `${imageTag.slice(imageTag.lastIndexOf(':') + 1)}: Pulling from`,
-        ),
-      );
+      const pull = lines.findIndex(line => line.includes('Pulling from'));
       const downloaded = lines.findIndex(line =>
         line.startsWith('Status: Downloaded newer image'),
       );
@@ -234,13 +270,17 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
           ),
         },
         {inside: true, named: []},
+        `the positions of Starting container, the pull, the download and Container started are ${[step, pull, downloaded, started].join(', ')} in:\n${lines.join('\n')}`,
       );
       await closeWindow(name);
     } finally {
       await removeContainers(folder);
-      await execFileAsync('docker', ['image', 'rm', '--force', imageTag]).catch(
-        () => undefined,
-      );
+      await execFileAsync('docker', [
+        'image',
+        'rm',
+        '--force',
+        PULLED_IMAGE,
+      ]).catch(() => undefined);
     }
   });
 
