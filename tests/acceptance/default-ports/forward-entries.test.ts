@@ -30,6 +30,7 @@ import {
   holdOpen,
   listenOnHost,
   localPortOf,
+  REQUEST,
   showPorts,
   tunnelFor,
 } from '../windows/forward-support.ts';
@@ -431,7 +432,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
       await openWindow('harness', 'c83-a17');
       await tunnelFor('c83-a17', 8655);
       const before = await sshProcesses();
-      const held = await holdOpen(18655);
+      const held = await holdOpen(18655, REQUEST);
       const programs = await connectingPrograms(8655);
       held.release();
       await greetingOf(18655);

@@ -27,6 +27,7 @@ import {
 import {holdLocal} from './forward-support.ts';
 import {
   listenOnHost,
+  REQUEST,
   showPorts,
   tunnelFor,
 } from '../windows/forward-support.ts';
@@ -80,7 +81,7 @@ async function receiveOnLocal(
   };
 }
 
-/** Opens a SOCKS5 connection to `proxy` for `target` on the loopback and gives what the target says first. */
+/** Opens a SOCKS5 connection to `proxy` for `target` on the loopback, says the first line the target waits for, and gives what it answers. */
 function throughSocks(
   proxy: number,
   target: number,
@@ -105,6 +106,9 @@ function throughSocks(
         stage = chunk[1] === 0 ? 2 : 3;
         if (stage === 3) {
           socket.destroy();
+        } else {
+          // The listener on the host answers a first line.
+          socket.write(REQUEST);
         }
         if (chunk.length > 10) {
           received.push(chunk.subarray(10));
