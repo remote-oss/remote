@@ -112,7 +112,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
           .find(each => each !== undefined) ?? Infinity,
       );
       console.log(
-        `F-0408 AC-14: connect ${String(connectMilliseconds)} ms, S087 on screen ${String(onScreen)} ms`,
+        `F-0408 AC-14: connect ${String(connectMilliseconds)} ms, S087 on screen ${String(onScreen)} ms\n${lines.join('\n')}`,
       );
       deepStrictEqual(
         {
