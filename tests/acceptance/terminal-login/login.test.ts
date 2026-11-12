@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {setUserSetting} from '../windows/folder-windows.ts';
 import {
+  connectionLog,
   closeWindow,
   hostPassword,
   inWindow,
@@ -460,13 +461,27 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
     await setUserSetting(SHOW_TERMINAL, true);
     const name = await openPasswordWindow(label);
     await untilPrompt(name, PASSWORD_PROMPT);
+    const resolvedBefore = resolvedConnects();
     await typeInTerminal(name, `${hostPassword()}\n`);
+    // The window carries the remote's name from the start, so the connect is over once the log says it resolved.
+    await waitFor(
+      'the connect to resolve',
+      () => resolvedConnects() > resolvedBefore,
+      120_000,
+    );
     await waitFor(
       'the window to connect',
       async () => (await windowState(name)).remoteName === 'ssh-remote',
       120_000,
     );
     return name;
+  }
+
+  /** How many connects the extension's log says resolved. */
+  function resolvedConnects(): number {
+    return connectionLog().filter(line =>
+      line.startsWith('Resolved ssh-remote+'),
+    ).length;
   }
 
   /** Closes window `name` after answering the Killed notice, which the kill waits on and a window cannot close behind. */
@@ -529,6 +544,7 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
     deepStrictEqual(
       {shown, left: await tabNames(name)},
       {shown: {panel: true, focused: true}, left: ['install']},
+      `the terminals of ${name}: ${JSON.stringify(await terminalNames(name))}`,
     );
     await closeAfterKill(name);
   });
