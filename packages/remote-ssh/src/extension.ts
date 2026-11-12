@@ -219,6 +219,26 @@ export async function activate(
   context: vscode.ExtensionContext,
 ): Promise<void> {
   const manifest = context.extension.packageJSON as Manifest;
+  // Throwaway trace of every global-state write of this window.
+  {
+    const memento = context.globalState;
+    const original = memento.update.bind(memento);
+    memento.update = (key: string, value: unknown) => {
+      const expected = JSON.stringify(value)?.length;
+      appendFileSync(
+        '/tmp/hint-trace.log',
+        `${new Date().toISOString()} GLOBALSTATE pid=${String(process.pid)} window=${String(vscode.workspace.workspaceFolders?.[0]?.name)} key=${key} bytes=${String(expected)}\n`,
+      );
+      setTimeout(() => {
+        const now = JSON.stringify(memento.get(key))?.length;
+        appendFileSync(
+          '/tmp/hint-trace.log',
+          `${new Date().toISOString()} CHECK pid=${String(process.pid)} key=${key} expected=${String(expected)} now=${String(now)}${expected === now ? '' : ' REVERTED'}\n`,
+        );
+      }, 300);
+      return original(key, value);
+    };
+  }
   const host = identifierHost(vscode, manifest);
   // Made once, before the setup: the script is read once per window, and the setup's notices go through the same notice port.
   const adapters = await surfaceAdapters();
