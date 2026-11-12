@@ -5,6 +5,7 @@
  * agent's events and the host's state.
  */
 
+import {OUTCOME_VARIABLE, outcomeFileOf} from './known-reds.ts';
 import {spawn, spawnSync} from 'node:child_process';
 import {
   cpSync,
@@ -723,6 +724,8 @@ export async function runPlainLaunch(
       ? {HARNESS_EDITOR_VERSION: session.environment.HARNESS_GENUINE_VERSION}
       : {}),
     HARNESS_USER_DATA: userDataFolderOf(session.runFolder, launch),
+    // The file the launch's mocha writes its outcome to, which the pull request gate reads (tools/known-reds.ts).
+    [OUTCOME_VARIABLE]: outcomeFileOf(session.runFolder, launch.label),
     // The extensions folder the editor runs with, which a row reads by this name rather than by the launch's label.
     HARNESS_EXTENSIONS_FOLDER: extensionsFolderOf(session.runFolder, launch),
     REMOTE_OSS_ACCEPTANCE_RELAUNCH: relaunchFolderOf(
@@ -731,8 +734,9 @@ export async function runPlainLaunch(
     ),
     ...launchEnvironment,
   };
-  // A port file an earlier attempt left would name a port nobody listens on.
+  // A port file an earlier attempt left would name a port nobody listens on, and its outcome would be that attempt's.
   rmSync(debuggingPortFile(session.runFolder, launch), {force: true});
+  rmSync(outcomeFileOf(session.runFolder, launch.label), {force: true});
   const relaunchFolder = relaunchFolderOf(session.runFolder, launch.label);
   // A request an earlier attempt left would restart the editor for a row that is gone, so it counts as answered. The
   // folder itself is the row's to make and is not touched here: the run folder may be a path the harness cannot write.
