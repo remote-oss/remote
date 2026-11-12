@@ -16,7 +16,7 @@ const CHOOSER_TITLE = 'Select Folder';
 /** How long the chooser is given to take each key: it drops those that come before it has drawn the field they go to. */
 const KEY_PAUSE_MILLISECONDS = 1000;
 
-/** Waits for the chooser to take the key just sent. */
+/** Waits for the chooser to take the key it was sent. */
 function pause(): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, KEY_PAUSE_MILLISECONDS));
 }
