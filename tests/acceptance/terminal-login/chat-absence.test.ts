@@ -93,8 +93,11 @@ describe('the absence of the chat participant (card connect-137)', function () {
     }
   });
 
-  for (const value of [false, true]) {
-    it(`F-2606 AC-25: with remote.SSH.experimental.chat ${String(value)}, the clear command is listed, the dialog has no Copilot button, the chat input offers no row, and the settings file marks the key`, async () => {
+  for (const [round, value] of Array.from(
+    {length: 24},
+    (_, index) => index % 2 === 1,
+  ).entries()) {
+    it(`F-2606 AC-25 round ${String(round)}: with remote.SSH.experimental.chat ${String(value)}, the clear command is listed, the dialog has no Copilot button, the chat input offers no row, and the settings file marks the key`, async () => {
       const saved = readUserSettings();
       const name = `chat-harness-${String(value)}`;
       let opened = false;
