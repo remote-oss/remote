@@ -6,8 +6,6 @@ import {promisify} from 'node:util';
 import {volumeServerFolder} from 'lib-product';
 import {
   closeWindow,
-  closeWindowsBut,
-  openWindowNames,
   connectedToContainer,
   devContainerFolder,
   devContainersOf,
@@ -17,6 +15,7 @@ import {
   variable,
   windowState,
 } from '../windows/harness.ts';
+import {closeWindowsBut, openWindowNames} from './leftover-windows.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   answerDialog,

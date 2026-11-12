@@ -7,10 +7,8 @@ import {
 } from '../windows/broken-repository.ts';
 import {
   closeWindow,
-  closeWindowsBut,
   connectedToContainer,
   openEmptyWindows,
-  openWindowNames,
   readUserSettings,
   restoreUserSettings,
   startInWindow,
@@ -18,6 +16,7 @@ import {
   waitFor,
   windowState,
 } from '../windows/harness.ts';
+import {closeWindowsBut, openWindowNames} from './leftover-windows.ts';
 import {openMemoryWindow} from '../windows/folder-windows.ts';
 import {
   acceptQuickPick,
