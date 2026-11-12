@@ -304,6 +304,7 @@ jobs:
             DISPLAY=${DISPLAY:-:99} pnpm test:acceptance
           fi
       - if: always()
+        timeout-minutes: 10
         run: pnpm acceptance:clean
 
   # The server lifecycle (probe, install, start, lock, kill, uninstall, clean-up) against a stand-in server on the same
@@ -332,6 +333,7 @@ jobs:
       - run: pnpm acceptance:clean
       - run: pnpm test:acceptance:server
       - if: always()
+        timeout-minutes: 10
         run: pnpm acceptance:clean
 
   # The host variants (#443): the rows that depend on the host's download tool (and, later, its login shell), once per
@@ -357,6 +359,7 @@ jobs:
       - run: pnpm build
       - run: pnpm test:acceptance:variants
       - if: always()
+        timeout-minutes: 10
         run: pnpm acceptance:clean
 
   # The real VSCodium server for musl, installed and started on the same host: once by the host's own download, once
@@ -383,6 +386,7 @@ jobs:
       - run: pnpm acceptance:clean
       - run: pnpm test:acceptance:real-server
       - if: always()
+        timeout-minutes: 10
         run: pnpm acceptance:clean
 
   # A pull request from this repository runs the VSCodium launches its change selects, at most six, and a failing row
@@ -458,15 +462,18 @@ jobs:
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
           df -h / | tail -1
       - if: contains(matrix.part.launches, '@containers') || contains(matrix.part.launches, 'containers-podman')
+        timeout-minutes: 10
         run: tools/install-podman
       # the buildx plugin when the machine's Docker has none (the harness builds with `docker build --load`)
       - run: tools/install-buildx
       - run: tools/start-display
       # the part's launches: whole launches and some files of launches, or the launches a dispatch names
-      - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
+      - timeout-minutes: 60
+        run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         env:
           LAUNCHES: ${{ matrix.part.launches }}
       - if: always()
+        timeout-minutes: 10
         run: pnpm acceptance:clean
 
   # The parts with a containers launch, on GitHub's runners, at most eight at once: a merge's 33 such parts would
@@ -545,11 +552,13 @@ jobs:
             sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
           fi
       - run: tools/start-display
-      - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
+      - timeout-minutes: 60
+        run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         env:
           HARNESS_GENUINE_VERSION: ${{ matrix.version }}
           LAUNCHES: ${{ matrix.launches }}
       - if: always()
+        timeout-minutes: 10
         run: pnpm acceptance:clean
 
   # The one check the main ruleset requires (athena, 2026-10-19): it needs every job and runs whatever they did. A job
