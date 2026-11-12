@@ -228,6 +228,14 @@ export async function activate(
         '/tmp/hint-trace.log',
         `${new Date().toISOString()} GLOBALSTATE pid=${String(process.pid)} window=${String(vscode.workspace.workspaceFolders?.[0]?.name)} key=${key} bytes=${String(JSON.stringify(value)?.length)}\n`,
       );
+      const expected = JSON.stringify(value)?.length;
+      setTimeout(() => {
+        const now = JSON.stringify(memento.get(key))?.length;
+        appendFileSync(
+          '/tmp/hint-trace.log',
+          `${new Date().toISOString()} CHECK pid=${String(process.pid)} key=${key} expected=${String(expected)} now=${String(now)}${expected === now ? '' : ' REVERTED'}\n`,
+        );
+      }, 300);
       return original(key, value);
     };
   }
