@@ -50,7 +50,8 @@ At every activation, in this order, and never awaiting a `wsl.exe` process (core
   `resolvers` to fail the views probe.
 - **Ruling:** the probe gains an option `views: 'byCommand'` (default `'withList'`, so ssh and containers are
   unchanged). With it, `contribViewsRemote` is granted exactly when `targetsWsl.focus` is in the stable command list. In a
-  window activated to resolve, that read waits until the first resolve has settled, or 120 s if it hasn't; elsewhere it
+  window activated to resolve, that read waits until the first resolve has settled, or 120 s if it hasn't (the basis: F-6208 BR-9's 90 s silence watchdog ends
+  any step that stalls, so a resolve still unsettled at 120 s has failed or is still installing, and the probe reads then); elsewhere it
   runs at activation. So in such a window a views-only failure is logged after registration (`reading-2348-views-timing`);
   the `resolvers` part of the line is still written before anything is registered.
   `contribRemoteHelp` has no probe of its own and is named in the line exactly when `resolvers` is.

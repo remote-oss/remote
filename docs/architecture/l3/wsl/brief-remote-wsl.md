@@ -59,7 +59,7 @@ line.
 
 1. **The proxy is a detached helper, `ruling-2348-proxy-helper`.** F-6201 AC-29 and AC-30 need the loopback proxy to
    outlive the window that started it, so contracts.md D5's "owner window holds the listener" can't meet them. D5 becomes
-   D5h on lib-helper: one helper per user, product, outer authority and registered distro, one lease per extension host,
+   D5h on lib-helper, on the local route: one helper per user, product and registered distro, one lease per extension host,
    ending `graceAfterLastLease` (5 s, F-6201 6.9). New L2 edge `remote-wsl -> lib-helper`. It is how we meet the spec,
    not a deviation.
 2. **Every distro name that builds an authority passes `validDistroName`, `ruling-2348-distro-name`.** The wsl codec
