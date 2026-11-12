@@ -642,8 +642,13 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       await typeInTerminal(name, `printf 'term:%s\\n' "\${NULL_VAR-unset}"\n`);
       const terminal = await resultAfter(name, 'term');
       const plain = await execEnvOf(containerId, 'NULL_VAR');
+      const shown = await terminalBuffer(name);
       await closeWindow(name);
-      deepStrictEqual([task, terminal, plain], ['unset', 'unset', 'x']);
+      deepStrictEqual(
+        [task, terminal, plain],
+        ['unset', 'unset', 'x'],
+        `the terminal of ${name} shows: ${JSON.stringify(shown)}`,
+      );
     } finally {
       await cleanUp(folder);
     }
