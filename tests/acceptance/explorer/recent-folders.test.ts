@@ -39,7 +39,6 @@ import {
   foldersSettled,
   HOME,
   historyOf,
-  pathsOf,
 } from '../windows/explorer-folders.ts';
 import {reloadedWindow} from './reloaded-window.ts';
 
@@ -104,7 +103,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
     await connectedTo(windowName, alias);
     await waitFor(
       `the history of ${alias} to start with ${target}`,
-      async () => (await pathsOf(alias))[0] === target,
+      async () => (await historyOf(driver))[alias]?.[0]?.path === target,
       120_000,
     );
     await closeWindow(windowName);
@@ -171,7 +170,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
         '-c',
         `printf '%s' '{"folders":[{"path":"${folder}"}]}' > '${target}'`,
       );
-      await recordVisit('harness', folder, 'c122-ws-folder');
+      await recordVisit('harness', folder, 'c122-ws');
       await recordVisit('harness', target, 'c122-ws');
       await foldersSettled(window, 'harness', [target, folder], folder);
       await hoverRow(window, VIEW, 'x (Workspace)');
@@ -351,7 +350,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
         deepStrictEqual(
           [
             recordLines('notice', window),
-            (await historyOf()).harness?.filter(entry =>
+            (await historyOf(driver)).harness?.filter(entry =>
               entry.path.startsWith(`${HOME}/c122-remove-`),
             ) ?? [],
           ],
@@ -380,7 +379,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
         [
           host?.expanded,
           (await folderRowsOf(window, 'jumped')).length,
-          (await historyOf()).jumped,
+          (await historyOf(driver)).jumped,
         ],
         [undefined, 0, undefined],
       );

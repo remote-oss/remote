@@ -48,10 +48,10 @@ const LOCAL = 'local';
 /** The account's home on the run's SSH host. */
 export const HOME = '/home/harness';
 
-/** The history Remote - SSH keeps, read through its companion id in the local window. */
-export async function historyOf(): Promise<History> {
+/** The history Remote - SSH keeps, read through its companion id in `window`, the launch's local window by default. */
+export async function historyOf(window: string = LOCAL): Promise<History> {
   const answer = await callCommand(
-    LOCAL,
+    window,
     'remote-internal.getSshFoldersHistory',
     ENVELOPE,
   );
@@ -141,7 +141,7 @@ export async function foldersSettled(
   deepStrictEqual(
     await described(),
     paths,
-    `the rows of ${alias}; the history is ${JSON.stringify(await historyOf())}`,
+    `the rows of ${alias}; the history is ${JSON.stringify(await historyOf(window))}`,
   );
 }
 
