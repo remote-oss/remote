@@ -339,15 +339,17 @@ function sourcesUnder(root: string, folder: string): string[] {
     return [];
   }
   return readdirSync(absolute, {withFileTypes: true, recursive: true})
-    .filter(
-      entry =>
-        entry.isFile() &&
-        /\.(ts|mts|cts|js|mjs|cjs)$/.test(entry.name) &&
-        !/(^|\/)(node_modules|dist[^/]*|\.[^/]+)(\/|$)/.test(
-          path.relative(absolute, entry.parentPath),
-        ),
-    )
-    .map(entry => path.relative(root, path.join(entry.parentPath, entry.name)));
+    .filter(entry => entry.isFile())
+    .map(entry => path.relative(root, path.join(entry.parentPath, entry.name)))
+    .filter(isScriptSource);
+}
+
+/** Whether a path (relative to the root) is a source a file could import: a script outside installed packages, build outputs and hidden folders. */
+function isScriptSource(file: string): boolean {
+  return (
+    /\.(ts|mts|cts|js|mjs|cjs)$/.test(file) &&
+    !/(^|\/)(node_modules|dist[^/]*|\.[^/]+)(\/|$)/.test(path.dirname(file))
+  );
 }
 
 /** A path without its script extension. */
@@ -369,17 +371,20 @@ function isRelative(specifier: string): boolean {
   return /^\.{1,2}\//.test(specifier);
 }
 
-/** The files among `sources` that import `target`, all paths relative to `root`. */
+/** The files among `sources` whose text (`read`) imports `target` by a relative path; an index also by its folder. */
 function importersOf(
-  root: string,
   sources: readonly string[],
   target: string,
+  read: (source: string) => string,
 ): string[] {
+  const own = stem(target);
+  const names =
+    path.basename(own) === 'index' ? [own, path.dirname(own)] : [own];
   return sources.filter(source =>
-    specifiersOf(readFileSync(path.join(root, source), 'utf8')).some(
+    specifiersOf(read(source)).some(
       specifier =>
         isRelative(specifier) &&
-        stem(path.join(path.dirname(source), specifier)) === stem(target),
+        names.includes(stem(path.join(path.dirname(source), specifier))),
     ),
   );
 }
@@ -404,7 +409,9 @@ export function testsOfHelper(
       continue;
     }
     seen.add(current);
-    for (const importer of importersOf(root, sources, current)) {
+    for (const importer of importersOf(sources, current, source =>
+      readFileSync(path.join(root, source), 'utf8'),
+    )) {
       if (path.dirname(importer) !== folder) {
         return undefined;
       }
@@ -418,6 +425,75 @@ export function testsOfHelper(
   return [...tests].sort();
 }
 
+/** The output of `git` with `gitArguments` in `root`, or undefined when it fails. */
+function gitOutput(
+  root: string,
+  gitArguments: readonly string[],
+): string | undefined {
+  const done = spawnSync('git', gitArguments, {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 1 << 28,
+  });
+  return done.status === 0 ? done.stdout : undefined;
+}
+
+/**
+ * The changed paths with each source of the acceptance tests that no longer exists (deleted or moved since `base`;
+ * the diff has no renames) replaced by the sources that imported it at `base`, which then go through the selection as
+ * usual. A test file stays as it is, since its path names its suite. A path with no importer at `base`, or when `git`
+ * can't read `base`, stays as it is, and so reaches every launch. Only the sources whose text names the path's file
+ * (or, for an index, its folder) are read.
+ */
+export function withDeletedAsImporters(
+  changed: readonly string[],
+  base: string,
+  root: string,
+): string[] {
+  return [
+    ...new Set(
+      changed.flatMap(file => {
+        if (
+          !isInside(ACCEPTANCE, file) ||
+          file.endsWith('.test.ts') ||
+          existsSync(path.join(root, file))
+        ) {
+          return [file];
+        }
+        const own = path.basename(stem(file));
+        const name = own === 'index' ? path.basename(path.dirname(file)) : own;
+        const named = gitOutput(root, [
+          'grep',
+          '-l',
+          '-F',
+          '-e',
+          name,
+          base,
+          '--',
+          'tests',
+          'tools',
+          'packages',
+        ]);
+        const texts = new Map<string, string | undefined>();
+        const sources = (named ?? '')
+          .split('\n')
+          .map(line => line.slice(base.length + 1))
+          .filter(source => source !== '' && isScriptSource(source));
+        for (const source of sources) {
+          texts.set(source, gitOutput(root, ['show', `${base}:${source}`]));
+        }
+        if (named === undefined || [...texts.values()].includes(undefined)) {
+          return [file];
+        }
+        const importers = importersOf(sources, file, source =>
+          String(texts.get(source)),
+        );
+        return importers.length === 0 ? [file] : importers;
+      }),
+    ),
+  ];
+}
+
 /** A suite folder's own helper: a script directly in tests/acceptance/<suite>/ that is not a test. */
 const SUITE_HELPER =
   /^tests\/acceptance\/(?!windows\/)[^/]+\/[^/]+\.(ts|mts|cts|js|mjs|cjs)$/;
@@ -425,7 +501,8 @@ const SUITE_HELPER =
 /**
  * The changed paths with each helper of a launch's suite folder (`suites`) replaced by the tests that stand for it. A
  * helper that a file outside its folder imports, that no test imports, or that is in a folder no launch runs stays as
- * it is, and so reaches every launch. The shared windows harness is never a suite's helper.
+ * it is, and so reaches every launch. The shared windows harness is never a suite's helper. A path deleted since the
+ * base stands for its importers there (withDeletedAsImporters), before this runs.
  */
 export function withHelpersAsTests(
   changed: readonly string[],
