@@ -91,9 +91,10 @@ describe('the state database reader (card tooling-207)', function () {
         /code \d+: /.test(message),
         message.includes('"state.vscdb'),
         message.includes('journal mode'),
+        message.includes(`${String(writer.pid)}: `),
         Date.now() - started < 4000,
       ],
-      [true, true, true, true, true],
+      [true, true, true, true, true, true],
       message,
     );
   });
