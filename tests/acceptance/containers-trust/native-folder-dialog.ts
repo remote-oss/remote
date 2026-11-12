@@ -13,6 +13,14 @@ const execFileAsync = promisify(execFile);
 /** The title of the chooser's window. */
 const CHOOSER_TITLE = 'Select Folder';
 
+/** How long the chooser is given to take each key: it drops those that come before it has drawn the field they go to. */
+const KEY_PAUSE_MILLISECONDS = 1000;
+
+/** Waits for the chooser to take the key just sent. */
+function pause(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, KEY_PAUSE_MILLISECONDS));
+}
+
 /** Runs `xdotool` with `words` on the harness display and gives its output. */
 async function drive(...words: string[]): Promise<string> {
   const {stdout} = await execFileAsync('xdotool', words, {
@@ -49,9 +57,13 @@ export async function answerNativeFolderDialog(folder: string): Promise<void> {
   );
   const chooser = (await chooserWindow()) ?? '';
   await drive('windowactivate', '--sync', chooser);
+  await pause();
   await drive('key', '--clearmodifiers', 'ctrl+l');
+  await pause();
   await drive('type', '--clearmodifiers', '--delay', '60', folder);
+  await pause();
   await drive('key', '--clearmodifiers', 'Return');
+  await pause();
   await waitFor(
     'the chooser to take the folder',
     async () => {
