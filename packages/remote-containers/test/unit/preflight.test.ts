@@ -8,6 +8,7 @@ import type {
 } from '../../src/engine/engine-host.ts';
 import {
   containerRequirements,
+  imageMissingReason,
   contextEndpoint,
   contextState,
   currentContext,
@@ -704,6 +705,34 @@ describe('the queries of the host requirements check (card containers-202)', () 
         scene.argvs,
       ],
       [undefined, []],
+    );
+  });
+
+  it('F-0206 BR-13: an image the engine does not hold gives the first line of the inspect’s message, and a local image or no docker gives none', async () => {
+    const INSPECT = 'image inspect --format {{.Id}} r/i:1';
+    function reason(answers: Record<string, EngineRunOutcome>) {
+      return imageMissingReason(
+        sceneOf(answers).dependencies,
+        undefined,
+        'r/i:1',
+        NEVER_ABORTED,
+      );
+    }
+    deepStrictEqual(
+      [
+        await reason({
+          [INSPECT]: finished(1, '', 'Error: No such image: r/i:1\nmore\n'),
+        }),
+        await reason({[INSPECT]: finished(1, '', '')}),
+        await reason({[INSPECT]: finished(0, 'sha256:abc\n')}),
+        await imageMissingReason(
+          sceneOf({}, {values: ['tools/dk']}).dependencies,
+          undefined,
+          'r/i:1',
+          NEVER_ABORTED,
+        ),
+      ],
+      ['Error: No such image: r/i:1', 'exit status 1', undefined, undefined],
     );
   });
 

@@ -135,6 +135,7 @@ import {
   currentContext,
   daemonFigures,
   firstCheck,
+  imageMissingReason,
   type PreflightDependencies,
 } from './engine/preflight.ts';
 import {type AskpassRelay, openAskpassRelay} from './volumes/askpass-relay.ts';
@@ -1621,6 +1622,8 @@ export async function activate(
               identity,
               cancellation,
             ),
+          imageMissing: (base, image, cancellation) =>
+            imageMissingReason(served.preflight, base, image, cancellation),
           readText: file =>
             readFile(file, 'utf8').then(
               text => text,

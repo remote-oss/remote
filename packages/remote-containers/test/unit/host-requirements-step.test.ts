@@ -24,6 +24,8 @@ interface Scene {
   daemon: DaemonFigures | undefined;
   recorded: HostRequirements | undefined;
   text: string | undefined;
+  /** Why the image is not in the local store; none when it is local. */
+  missing: string | undefined;
   accepted: boolean;
   dialogs: Array<[string, string, string]>;
   queries: string[];
@@ -40,6 +42,10 @@ function portsOf(scene: Scene): HostRequirementsPorts {
     containerRequirements: (base, identity) => {
       scene.queries.push(`containerRequirements ${identity.configFile}`);
       return Promise.resolve(scene.recorded);
+    },
+    imageMissing: (base, image) => {
+      scene.queries.push(`imageMissing ${image}`);
+      return Promise.resolve(scene.missing);
     },
     readText: file => {
       scene.queries.push(`readText ${file}`);
@@ -59,6 +65,7 @@ function sceneOf(): Scene {
     daemon: DAEMON,
     recorded: undefined,
     text: undefined,
+    missing: undefined,
     accepted: true,
     dialogs: [],
     queries: [],
@@ -186,6 +193,58 @@ describe('the step of the host requirements (card containers-202, F-0206)', () =
           'the merged configuration gave no host requirements; the configuration file is read instead',
           'the Docker daemon does not meet the host requirements: Docker daemon: CPUs 4, RAM 16gb; devcontainer.json: RAM 64gb',
         ],
+      ],
+    );
+  });
+
+  it('F-0206 BR-13: with no merged requirements and an image the engine does not hold, the step logs why and checks nothing; a local image, and a build or Compose configuration, keep the file fallback', async () => {
+    async function outcomeOf(text: string, missing: string | undefined) {
+      const scene = sceneOf();
+      scene.text = text;
+      scene.missing = missing;
+      const accepted = await hostRequirementsAccepted(
+        portsOf(scene),
+        requestOf('merged'),
+        NEVER,
+      );
+      return [
+        accepted,
+        scene.dialogs.length,
+        scene.sink.lines.map(line => line.message).slice(0, 1),
+        scene.queries.filter(query => query.startsWith('imageMissing')),
+      ];
+    }
+    const asks = '"hostRequirements": {"cpus": 64}';
+    const fallback = [
+      'the merged configuration gave no host requirements; the configuration file is read instead',
+    ];
+    deepStrictEqual(
+      [
+        await outcomeOf(
+          `{"image": "r/i:1", ${asks}}`,
+          'Error: No such image: r/i:1',
+        ),
+        await outcomeOf(`{"image": "r/i:1", ${asks}}`, undefined),
+        await outcomeOf(`{"build": {"dockerfile": "D"}, ${asks}}`, 'gone'),
+        await outcomeOf(`{"image": "r/i:1", "build": {}, ${asks}}`, 'gone'),
+        await outcomeOf(
+          `{"image": "r/i:1", "dockerComposeFile": "c.yml", ${asks}}`,
+          'gone',
+        ),
+      ],
+      [
+        [
+          true,
+          0,
+          [
+            'the image could not be pulled before the host requirements check: Error: No such image: r/i:1',
+          ],
+          ['imageMissing r/i:1'],
+        ],
+        [true, 1, fallback, ['imageMissing r/i:1']],
+        [true, 1, fallback, []],
+        [true, 1, fallback, []],
+        [true, 1, fallback, []],
       ],
     );
   });
