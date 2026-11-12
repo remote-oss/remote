@@ -26,11 +26,18 @@ export interface ConfirmedUpdateEnvironment {
 /** How long the write waits before it reads the key back: longer than an echo of the memento takes to arrive. */
 export const READ_BACK_DELAY_MILLISECONDS = 500;
 
-/** What decides whether a value that is not the one written is put back. */
+/** What decides whether a value that is not the one written is put back, and what is put back. */
 export interface ConfirmedKeyOptions<Value> {
+  /** Whether `read` holds what the write was for; by default, whether it is the value written last. */
+  holds?: (read: Value | undefined, latest: Value) => boolean;
   /**
-   * Whether the key is still the write's own when `read` is not the value written last: a key that was cleared or
-   * replaced on purpose in the meantime is left as it is, with nothing logged. By default it is always the write's own.
+   * What is written when `read` does not hold it; by default the value written last. A key that several windows write
+   * gives `read` with the write's own part put into it, so that another window's part is not erased.
+   */
+  merge?: (read: Value | undefined, latest: Value) => Value;
+  /**
+   * Whether the key is still the write's own when `read` does not hold it: a key that was cleared or replaced on
+   * purpose in the meantime is left as it is, with nothing logged. By default it is always the write's own.
    */
   ownedWhenRead?: (read: Value | undefined, latest: Value) => boolean;
 }
@@ -61,6 +68,7 @@ export function confirmedKeyOf<Value>(
   options: ConfirmedKeyOptions<Value> = {},
 ): ConfirmedKey<Value> {
   let latest: Value | undefined;
+  const merged = options.merge ?? ((read, value: Value) => value);
   const checks = new Set<Promise<void>>();
 
   /** Reads the key after the delay, and once more after one write again; logs what is still not there. */
@@ -70,13 +78,15 @@ export function confirmedKeyOf<Value>(
       const written = textOf(latest);
       const readValue = state.get(key);
       const read = textOf(readValue);
+      const held =
+        options.holds?.(readValue, latest as Value) ?? read === written;
       if (
-        read !== written &&
+        !held &&
         options.ownedWhenRead?.(readValue, latest as Value) === false
       ) {
         return;
       }
-      if (read === written) {
+      if (held) {
         if (rewritten) {
           environment.logger.warn(
             `the global state key ${key} did not hold what was written, and holds it after a second write`,
@@ -90,7 +100,7 @@ export function confirmedKeyOf<Value>(
         );
         return;
       }
-      await state.update(key, latest as Value);
+      await state.update(key, merged(readValue, latest as Value));
     }
   }
 

@@ -3,6 +3,8 @@ import {
   addHint,
   clearAll,
   isGone,
+  storeHolds,
+  storeMerged,
   emptyHintStore,
   type HintStore,
   type SessionRecord,
@@ -231,5 +233,56 @@ describe('the hint store (card connect-04 table)', () => {
       const frozen = frozenStore(first, second);
       notStrictEqual(addHint(frozen, secondAgain), frozen);
     });
+  });
+
+  it('F-2605.BR-9 (c2326-holds): a store holds a record write when it has the newest record with the same hints, whatever else it has, and a clear write when it was cleared at that time or later', () => {
+    const own = recordAt('2026-11-02T00:00:05.000Z', [
+      {kind: 'log', text: 'l'},
+    ]);
+    const other = recordAt('2026-11-02T00:00:06.000Z', []);
+    deepStrictEqual(
+      [
+        storeHolds(storeOf(own, other), storeOf(own)),
+        storeHolds(storeOf(recordAt(own.started, [])), storeOf(own)),
+        storeHolds(emptyHintStore(), storeOf(own)),
+        storeHolds(undefined, storeOf(own)),
+        storeHolds(
+          clearAll('2026-11-02T00:00:09.000Z'),
+          clearAll('2026-11-02T00:00:09.000Z'),
+        ),
+        storeHolds(
+          clearAll('2026-11-02T00:00:10.000Z'),
+          clearAll('2026-11-02T00:00:09.000Z'),
+        ),
+        storeHolds(emptyHintStore(), clearAll('2026-11-02T00:00:09.000Z')),
+        storeHolds(clearAll('2026-11-02T00:00:09.000Z'), emptyHintStore()),
+        storeHolds(storeOf(own), clearAll('2026-11-02T00:00:09.000Z')),
+      ],
+      [true, false, false, false, true, true, false, true, false],
+    );
+  });
+
+  it('F-2605.BR-9 (c2326-merged): a record is put into what was read and what another window wrote stays; a clear is put in as its time and removes the records that began before it', () => {
+    const own = recordAt('2026-11-02T00:00:05.000Z', []);
+    const other = recordAt('2026-11-02T00:00:06.000Z', []);
+    const later = recordAt('2026-11-02T00:00:20.000Z', []);
+    deepStrictEqual(
+      [
+        storeMerged(storeOf(other), storeOf(own)).records,
+        storeMerged(undefined, storeOf(own)).records,
+        storeMerged(
+          storeOf(own, other, later),
+          clearAll('2026-11-02T00:00:10.000Z'),
+        ),
+        storeMerged(clearAll('2026-11-02T00:00:30.000Z'), storeOf(own))
+          .clearedAt,
+      ],
+      [
+        [other, own],
+        [own],
+        {records: [later], clearedAt: '2026-11-02T00:00:10.000Z'},
+        '2026-11-02T00:00:30.000Z',
+      ],
+    );
   });
 });

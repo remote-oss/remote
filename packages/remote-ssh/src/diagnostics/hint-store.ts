@@ -88,3 +88,50 @@ export function isGone(store: HintStore | undefined, started: string): boolean {
     newer.length >= RECORDS_KEPT
   );
 }
+
+/**
+ * Whether `read` holds what the write of `latest` was for. For a record: the store holds the newest record of `latest`
+ * with the same hints, whatever else it holds. For a clear: the store was cleared at that time or later.
+ */
+export function storeHolds(
+  read: HintStore | undefined,
+  latest: HintStore,
+): boolean {
+  const newest = latest.records.at(-1);
+  if (newest === undefined) {
+    return (
+      read?.clearedAt !== undefined &&
+      read.clearedAt >= (latest.clearedAt ?? '')
+    );
+  }
+  const found = read?.records.find(each => each.started === newest.started);
+  return (
+    found !== undefined && JSON.stringify(found) === JSON.stringify(newest)
+  );
+}
+
+/**
+ * `read` with the part of `latest` that was written put into it: the newest record of `latest`, or the time of its
+ * clear and the removal of the records that began before it. What another window wrote into `read` stays.
+ */
+export function storeMerged(
+  read: HintStore | undefined,
+  latest: HintStore,
+): HintStore {
+  const base = read ?? emptyHintStore();
+  const clearedAt = [base.clearedAt, latest.clearedAt]
+    .filter((each): each is string => each !== undefined)
+    .sort()
+    .at(-1);
+  const cleared = clearedAt === undefined ? {} : {clearedAt};
+  const newest = latest.records.at(-1);
+  if (newest === undefined) {
+    return {
+      records: base.records.filter(
+        each => clearedAt === undefined || each.started > clearedAt,
+      ),
+      ...cleared,
+    };
+  }
+  return {...addHint(base, newest), ...cleared};
+}

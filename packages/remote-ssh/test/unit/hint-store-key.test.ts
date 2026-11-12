@@ -1,8 +1,17 @@
 import {deepStrictEqual} from 'node:assert';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import {clearAll, type HintStore} from '../../src/diagnostics/hint-store.ts';
+import {
+  clearAll,
+  type HintStore,
+  type SessionRecord,
+} from '../../src/diagnostics/hint-store.ts';
 import {hintStoreKeyOf} from '../../src/diagnostics/hint-store-key.ts';
+
+/** A record that began at `started`, with no hint. */
+function recordAt(started: string): SessionRecord {
+  return {started, hints: []};
+}
 
 const ENVIRONMENT = {
   delay: () => Promise.resolve(),
@@ -46,5 +55,54 @@ describe('the hint store’s key over the global state (remote-oss/remote#2326)'
     await key.write(cleared);
     await key.verified();
     deepStrictEqual([writes.length, stored.value], [2, cleared]);
+  });
+
+  it('F-2605 BR-9 (c2326-two-windows): a record another window writes inside the read back is not erased by it, and a record that an older echo took out is put back beside the other window’s', async () => {
+    const disk: {value?: HintStore} = {};
+    const releases: Array<() => void> = [];
+    function windowOver(echo: boolean) {
+      let reverted = echo;
+      let waited = false;
+      return hintStoreKeyOf(
+        {
+          get: () => disk.value,
+          update: (key: string, value: HintStore) => {
+            if (reverted) {
+              reverted = false;
+            } else {
+              disk.value = value;
+            }
+            return Promise.resolve();
+          },
+        },
+        {
+          // The first read back of each window waits until both have written.
+          delay: () => {
+            if (waited) {
+              return Promise.resolve();
+            }
+            waited = true;
+            return new Promise<void>(resolve => {
+              releases.push(resolve);
+            });
+          },
+          logger: ENVIRONMENT.logger,
+        },
+      );
+    }
+    const first = recordAt('2026-11-02T00:00:01.000Z');
+    const second = recordAt('2026-11-02T00:00:02.000Z');
+    const windowA = windowOver(true);
+    const windowB = windowOver(false);
+    await windowA.write({records: [first]});
+    await windowB.write({records: [second]});
+    for (const release of releases) {
+      release();
+    }
+    await Promise.all([windowA.verified(), windowB.verified()]);
+    deepStrictEqual(disk.value?.records.map(record => record.started).sort(), [
+      first.started,
+      second.started,
+    ]);
   });
 });

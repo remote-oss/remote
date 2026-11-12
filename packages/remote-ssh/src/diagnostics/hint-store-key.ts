@@ -10,7 +10,13 @@ import {
   type ConfirmedState,
   type ConfirmedUpdateEnvironment,
 } from '../state/confirmed-update.ts';
-import {HINT_STORE_KEY, type HintStore, isGone} from './hint-store.ts';
+import {
+  HINT_STORE_KEY,
+  type HintStore,
+  isGone,
+  storeHolds,
+  storeMerged,
+} from './hint-store.ts';
 
 /** The keys already made, by the state they write to. */
 const KEYS = new WeakMap<object, ConfirmedKey<HintStore>>();
@@ -25,6 +31,10 @@ export function hintStoreKeyOf(
     return known;
   }
   const made = confirmedKeyOf(state, HINT_STORE_KEY, environment, {
+    // Another window writes records into the same store: a write is read back for its own record, and put back into
+    // what is read, so that the other window's record is not erased.
+    holds: storeHolds,
+    merge: storeMerged,
     // A store that differs from the last write is put back unless the difference is on purpose: the store was cleared
     // after the newest record began, or it holds two newer records. A missing record otherwise is an older copy's.
     ownedWhenRead: (read, latest) => {
