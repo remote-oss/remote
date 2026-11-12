@@ -147,7 +147,15 @@ jobs:
           LAUNCHES: ${{ inputs.launches }}
         run: |
           if [ -n "$LAUNCHES" ] && [ "$LAUNCHES" != all ]; then
-            parts=$(jq -cn --arg launches "$LAUNCHES" '[{name: $launches, launches: $launches, minutes: 180}]')
+            # the part's name goes into its job's name and its concurrency group, and a group too long for GitHub
+            # (somewhere past 335 characters: 479 launches characters made no job) leaves the job uncreated; a long
+            # list is named by its first 60 characters and how many entries follow
+            parts=$(jq -cn --arg launches "$LAUNCHES" '[{
+              name: (if ($launches | length) <= 100 then $launches
+                else ($launches | split(",")) as $entries
+                  | ($entries[0] | if length > 60 then .[0:60] + "…" else . end)
+                    + (if ($entries | length) > 1 then " and \($entries | length - 1) more" else "" end) end),
+              launches: $launches, minutes: 180}]')
           else
             parts=$(node tools/acceptance-parts.ts --matrix)
           fi
