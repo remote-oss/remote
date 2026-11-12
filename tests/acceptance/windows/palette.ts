@@ -17,11 +17,25 @@ export async function paletteItems(
   text: string,
 ): Promise<string[]> {
   await startInWindow(name, 'workbench.action.showCommands');
+  const seen: string[] = [];
+  const began = Date.now();
+  const sampler = setInterval(() => {
+    void focusFacts(name)
+      .then(facts => {
+        const widget = /"quick":("?[a-z]+"?|null),"items":(\d+)/.exec(facts);
+        seen.push(
+          `${String(Date.now() - began)}ms quick=${widget?.[1] ?? '?'} items=${widget?.[2] ?? '?'}`,
+        );
+      })
+      .catch(() => undefined);
+  }, 500);
   try {
     await waitForQuickPick(name, 30_000);
+    clearInterval(sampler);
   } catch (caught) {
+    clearInterval(sampler);
     throw new Error(
-      `${String(caught)}; FOCUS ${await focusFacts(name)}; windows ${JSON.stringify(windowNames())}`,
+      `${String(caught)}; FOCUS ${await focusFacts(name)}; windows ${JSON.stringify(windowNames())}; SAMPLES ${JSON.stringify([...new Set(seen.map(line => line.replace(/^\d+ms /, '')))])}`,
       {cause: caught},
     );
   }
