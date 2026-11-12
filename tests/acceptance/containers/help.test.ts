@@ -141,23 +141,23 @@ describe('the help commands (card containers-218)', function () {
     installBrowser();
     await withWindow('c218-key-feedback', {}, async (window, folder) => {
       const restore = await bindKeys([
-        {key: 'ctrl+alt+7', command: 'remote-containers.provideFeedback'},
+        {key: 'ctrl+alt+y', command: 'remote-containers.provideFeedback'},
       ]);
       try {
         const settings = readFileSync(userSettingsFile(), 'utf8');
         const before = openedUrls().length;
-        await pressControlAlt(window, '7');
+        await pressControlAlt(window, 'y');
         await new Promise(resolve => setTimeout(resolve, 5000));
         const urls = openedUrls().slice(before);
         deepStrictEqual(
           {
-            urls: urls.every(url => url === FEEDBACK) && urls.length <= 1,
+            urls,
             containers: await devContainersOf(folder),
             settings: readFileSync(userSettingsFile(), 'utf8') === settings,
             own: await shownOfOwn(window),
           },
           {
-            urls: true,
+            urls: [FEEDBACK],
             containers: [],
             settings: true,
             own: {notices: [], pick: undefined, dialog: undefined},
@@ -175,13 +175,13 @@ describe('the help commands (card containers-218)', function () {
       await connectedWindow('c218-key-started');
     const restore = await bindKeys([
       {
-        key: 'ctrl+alt+8',
+        key: 'ctrl+alt+u',
         command: 'remote-containers.getStarted',
       },
     ]);
     try {
       const settings = readFileSync(userSettingsFile(), 'utf8');
-      await pressControlAlt(name, '8');
+      await pressControlAlt(name, 'u');
       await new Promise(resolve => setTimeout(resolve, 5000));
       const urls = openedUrls();
       const notices = await notificationCentre(name);
