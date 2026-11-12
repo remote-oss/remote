@@ -45,18 +45,40 @@ const PULLED_DIGEST =
   'sha256:cd7807368cf24826297cbad5dca1a44972ccfd770647db52a8c7589eb4599ac8';
 const PULLED_IMAGE = `docker.io/${PULLED_REPOSITORY}@${PULLED_DIGEST}`;
 
+/** How long a read of Docker Hub may take before the row gives up, in milliseconds. */
+const HUB_MILLISECONDS = 30_000;
+
+/** Asks Docker Hub for `address`; a network error (a name that does not resolve, a reset, the time limit) is told as Docker Hub's, with its cause. */
+async function fromHub(
+  address: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  try {
+    return await fetch(address, {
+      ...init,
+      signal: AbortSignal.timeout(HUB_MILLISECONDS),
+    });
+  } catch (caught) {
+    throw new Error(
+      `Docker Hub could not be reached for ${address} (${String(caught)}; cause: ${String((caught as {cause?: unknown}).cause)}), so the row cannot tell whether the CLI reads ${PULLED_IMAGE}'s details without a pull`,
+      {cause: caught},
+    );
+  }
+}
+
 /**
  * Reads the image's manifest from Docker Hub the way the CLI does, anonymously, and gives the status Hub answered: when
  * it refuses (an anonymous limit on a shared runner address), the CLI cannot read the details either and pulls during
- * its read, so the row names that cause instead of a misplaced pull.
+ * its read, so the row names that cause instead of a misplaced pull. A Hub that does not answer within
+ * `HUB_MILLISECONDS`, or a network error, fails the row naming Docker Hub.
  */
 async function hubManifestStatus(): Promise<number> {
   const token = (await (
-    await fetch(
+    await fromHub(
       `https://auth.docker.io/token?service=registry.docker.io&scope=repository:${PULLED_REPOSITORY}:pull`,
     )
   ).json()) as {token?: string};
-  const answer = await fetch(
+  const answer = await fromHub(
     `https://registry-1.docker.io/v2/${PULLED_REPOSITORY}/manifests/${PULLED_DIGEST}`,
     {
       method: 'HEAD',
