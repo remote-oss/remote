@@ -5,6 +5,7 @@ import {
   onHostAs,
   readUserSettings,
   restoreUserSettings,
+  terminalNames,
   userSettings,
   waitFor,
   windowState,
@@ -53,12 +54,20 @@ function openRefusedWindow(label: string): string {
   return label;
 }
 
-/** Until the connecting window `name` has resolved to its remote, so its commands run. */
+/**
+ * Until the connecting window `name` has resolved to its remote and its login terminal has closed, so its commands
+ * run: a terminal that is still up holds the keyboard focus, and the Command Palette opened then does not stay shown.
+ */
 async function connected(name: string): Promise<void> {
   await waitFor(
     `window ${name} to connect`,
     async () => (await windowState(name)).remoteAuthority !== null,
     120_000,
+  );
+  await waitFor(
+    `the login terminal of window ${name} to close`,
+    async () => (await terminalNames(name)).length === 0,
+    60_000,
   );
 }
 
