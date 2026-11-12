@@ -242,6 +242,34 @@ async function pages(): Promise<DebugTarget[]> {
   return targets.filter(target => target.type === 'page');
 }
 
+/** Throwaway: what every page of the editor says of its focus and its quick input, to say why a palette did not show. */
+export async function focusFacts(name: string): Promise<string> {
+  const lines: string[] = [];
+  for (const page of await pages()) {
+    const address = page.webSocketDebuggerUrl;
+    if (address === undefined) {
+      lines.push(`${page.title}: no address`);
+      continue;
+    }
+    const facts = await evaluateAt<unknown>(
+      address,
+      `page ${page.title}`,
+      `(() => {
+        const widget = document.querySelector('.quick-input-widget');
+        return {
+          focus: document.hasFocus(),
+          visibility: document.visibilityState,
+          active: document.activeElement?.className ?? null,
+          quick: widget === null ? null : widget.style.display,
+          items: widget === null ? 0 : widget.querySelectorAll('.quick-input-list .monaco-list-row').length,
+        };
+      })()`,
+    ).catch((caught: unknown) => String(caught));
+    lines.push(`${page.title}: ${JSON.stringify(facts)}`);
+  }
+  return `for ${name}: ${lines.join(' | ')}`;
+}
+
 /** The number of renderer pages, one per open window: a window that reloads in place keeps its page count. */
 export async function pageCount(): Promise<number> {
   return (await pages()).length;

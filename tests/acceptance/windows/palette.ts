@@ -1,6 +1,7 @@
-import {startInWindow} from './harness.ts';
+import {startInWindow, windowNames} from './harness.ts';
 import {
   chooseQuickPickRow,
+  focusFacts,
   pressEscape,
   quickPickOf,
   typeInQuickPick,
@@ -16,7 +17,14 @@ export async function paletteItems(
   text: string,
 ): Promise<string[]> {
   await startInWindow(name, 'workbench.action.showCommands');
-  await waitForQuickPick(name, 30_000);
+  try {
+    await waitForQuickPick(name, 30_000);
+  } catch (caught) {
+    throw new Error(
+      `${String(caught)}; FOCUS ${await focusFacts(name)}; windows ${JSON.stringify(windowNames())}`,
+      {cause: caught},
+    );
+  }
   await typeInQuickPick(name, `>${text}`);
   let items: string[] = [];
   for (let reads = 0; reads < 40; reads += 1) {
