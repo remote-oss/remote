@@ -2,7 +2,13 @@
   "targetMinutes": 15,
   "together": [
     ["agent", "agent-off"],
-    ["socket-prime", "socket"]
+    ["socket-prime", "socket"],
+    ["install-install-present-prime", "install-install-present"],
+    [
+      "install-install-present-stopped-prime",
+      "install-install-present-stopped"
+    ],
+    ["install-install-repaired-prime", "install-install-repaired"]
   ],
   "minutes": {
     "add-host": {"add-host.test.ts": 0.4},
@@ -305,8 +311,11 @@
     "install-install-fresh-legacy": 0.3,
     "install-install-path": 0.3,
     "install-install-present": 0.2,
+    "install-install-present-prime": 0.2,
     "install-install-present-stopped": 0.3,
+    "install-install-present-stopped-prime": 0.3,
     "install-install-repaired": 0.2,
+    "install-install-repaired-prime": 0.2,
     "install-install-tilde-path": 0.3,
     "install-licence-update-service": 0.1,
     "install-local-404": 0.1,

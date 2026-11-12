@@ -129,9 +129,10 @@ describe('acceptance-parts (card tooling-159)', () => {
     );
   });
 
-  it('tooling-159: the host cases run in one part in the table order, past the target, and a launch of the CLI-source editor is left out', () => {
+  it('tooling-159, tooling-168: host cases pack by their minutes like any group, a primer stays with its case, and a launch of the CLI-source editor is left out', () => {
     const launches: Launch[] = [
       {label: 'case-one', runner: 'runner-remote', suite: 'suite-ports'},
+      {label: 'case-two-prime', runner: 'runner-remote', suite: 'suite-ports'},
       {label: 'case-two', runner: 'runner-remote', suite: 'suite-ports'},
       {label: 'cli-copy', kind: 'plain', suite: 'cli-copy', cliSource: true},
     ];
@@ -140,15 +141,28 @@ describe('acceptance-parts (card tooling-159)', () => {
         launches,
         {
           targetMinutes: 15,
-          minutes: {'case-one': 4, 'case-two': 14, 'cli-copy': 1},
+          together: [['case-two-prime', 'case-two']],
+          minutes: {
+            'case-one': 14,
+            'case-two-prime': 5,
+            'case-two': 10,
+            'cli-copy': 1,
+          },
         },
         suiteFiles,
       ),
-      [{name: 'hosts 1/1', launches: 'case-one,case-two', minutes: 46}],
+      [
+        {name: 'hosts 1/2', launches: 'case-one', minutes: limitOf(14)},
+        {
+          name: 'hosts 2/2',
+          launches: 'case-two-prime,case-two',
+          minutes: limitOf(15),
+        },
+      ],
     );
   });
 
-  it('tooling-159: a launch the table keeps together with another, or one of an ordered group, runs only with others', () => {
+  it('tooling-159, tooling-168: a launch the table keeps together with another runs only with others, and a host case no longer does', () => {
     const held = heldTogether({
       targetMinutes: 15,
       together: [['local', 'second']],
@@ -164,7 +178,7 @@ describe('acceptance-parts (card tooling-159)', () => {
         }),
         held({label: 'long', kind: 'plain', suite: 'long'}),
       ],
-      [true, true, false],
+      [true, false, false],
     );
   });
 
