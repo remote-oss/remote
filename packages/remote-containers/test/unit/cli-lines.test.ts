@@ -58,6 +58,37 @@ describe('the output of the dev container CLI (card containers-04)', () => {
     );
   });
 
+  it('F-0408 AC-14: an up success that includes the configuration gives it and its merge with the container, and a value that is no object is left out', () => {
+    deepStrictEqual(
+      [
+        readUpResult(
+          '{"outcome":"success","containerId":"c","remoteUser":"r","remoteWorkspaceFolder":"/w","configuration":{"name":"N"},"mergedConfiguration":{"remoteEnv":{"FIRST":"1"}}}',
+          0,
+        ),
+        readUpResult(
+          '{"outcome":"success","containerId":"c","remoteUser":"r","remoteWorkspaceFolder":"/w","configuration":"x","mergedConfiguration":[]}',
+          0,
+        ),
+      ],
+      [
+        {
+          kind: 'up',
+          containerId: 'c',
+          remoteUser: 'r',
+          remoteWorkspaceFolder: '/w',
+          configuration: {name: 'N'},
+          mergedConfiguration: {remoteEnv: {FIRST: '1'}},
+        },
+        {
+          kind: 'up',
+          containerId: 'c',
+          remoteUser: 'r',
+          remoteWorkspaceFolder: '/w',
+        },
+      ],
+    );
+  });
+
   it('C3: a field of an up success that is missing or not a string is malformed, naming the field', () => {
     deepStrictEqual(
       [

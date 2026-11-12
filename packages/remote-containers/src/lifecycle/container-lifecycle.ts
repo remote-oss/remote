@@ -99,6 +99,10 @@ export type ContainerOutcome =
       created: boolean;
       /** The Dockerfile the primary service of a Compose project builds from, absolute; none otherwise. */
       serviceDockerfile?: string;
+      /** What `up` read of the configuration, as `read-configuration` gives it; none for an outcome that did not come from `up`. */
+      configuration?: Record<string, unknown>;
+      /** What `up` read of the configuration merged with the container's metadata; none as for `configuration`. */
+      mergedConfiguration?: Record<string, unknown>;
     }
   | {kind: 'unusable'; containerId: string; status: string}
   | {kind: 'reservedMount'; property: string; target: string}
@@ -944,6 +948,12 @@ export function containerLifecycleOf(dependencies: {
       composeResolution.serviceDockerfile !== undefined
         ? {serviceDockerfile: composeResolution.serviceDockerfile}
         : {}),
+      ...(upResult.configuration === undefined
+        ? {}
+        : {configuration: upResult.configuration}),
+      ...(upResult.mergedConfiguration === undefined
+        ? {}
+        : {mergedConfiguration: upResult.mergedConfiguration}),
     };
   }
 

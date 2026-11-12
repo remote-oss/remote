@@ -1549,12 +1549,20 @@ export function containerConnectorOf(
         cancellation,
       );
     }
-    const configuration = await bridge.readConfiguration(
-      context.cliTarget,
-      prepared.containerId,
-      logCliEvent,
-      cancellation,
-    );
+    // `up` read the configuration and its merge with the container's metadata; an outcome that did not come from it is read.
+    const configuration =
+      prepared.configuration === undefined
+        ? await bridge.readConfiguration(
+            context.cliTarget,
+            prepared.containerId,
+            logCliEvent,
+            cancellation,
+          )
+        : {
+            kind: 'configuration' as const,
+            configuration: prepared.configuration,
+            mergedConfiguration: prepared.mergedConfiguration,
+          };
     const merged =
       configuration.kind === 'configuration'
         ? configuration.mergedConfiguration
