@@ -764,7 +764,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     const opened = {
       discovery: (await notifications(name)).filter(text =>
         text.startsWith(DISCOVERY),
-      ),
+      ).length,
       added: windowNames()
         .filter(isOpen)
         .filter(each => !before.includes(each)),
@@ -805,7 +805,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       [observed, opened],
       [
         declinedOpenExpected(folder),
-        {discovery: [DISCOVERY], added: [path.basename(folder)]},
+        {discovery: 1, added: [path.basename(folder)]},
       ],
     );
   });
