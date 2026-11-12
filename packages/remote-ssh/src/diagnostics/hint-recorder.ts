@@ -11,7 +11,7 @@ import {isFailureStringId, textOfId} from '../surfaces/failure-strings.ts';
 import {ownText} from '../surfaces/own-strings.ts';
 import type {Translate} from '../surfaces/strings.ts';
 import {
-  confirmedUpdate,
+  confirmedKeyOf,
   type ConfirmedUpdateEnvironment,
 } from '../state/confirmed-update.ts';
 import {
@@ -113,6 +113,7 @@ export function hintRecorderOf(
   /** Whether the record has been written: a record that was written and is gone was cleared or dropped. */
   let persisted = false;
   let writing: PromiseLike<void> = Promise.resolve();
+  const storeKey = confirmedKeyOf(state, HINT_STORE_KEY, environment);
   /**
    * Writes the record as it is now, once, after the writes before it. A record that was written and is no longer in
    * the store was cleared or dropped as the oldest: it does not come back with the hints that follow it.
@@ -131,12 +132,7 @@ export function hintRecorderOf(
         if (!held && persisted && !starts) {
           return undefined;
         }
-        return confirmedUpdate(
-          state,
-          HINT_STORE_KEY,
-          addHint(store, snapshot),
-          environment,
-        ).then(() => {
+        return storeKey.write(addHint(store, snapshot)).then(() => {
           persisted = true;
         });
       })

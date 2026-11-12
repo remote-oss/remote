@@ -6,7 +6,8 @@
 import {createHash} from 'node:crypto';
 import type {AcceptanceState} from '../surfaces/acceptance-store.ts';
 import {
-  confirmedUpdate,
+  confirmedKeyOf,
+  type ConfirmedKey,
   type ConfirmedUpdateEnvironment,
 } from '../state/confirmed-update.ts';
 
@@ -30,13 +31,18 @@ export function approvalsOf(
   state: AcceptanceState,
   environment: ConfirmedUpdateEnvironment,
 ): PreconnectApprovals {
+  const keys = new Map<string, ConfirmedKey<unknown>>();
   return {
     hashFor: expandedPath => {
       const stored = state.get(keyOf(expandedPath));
       return typeof stored === 'string' ? stored : undefined;
     },
     remember: async (expandedPath, hash) => {
-      await confirmedUpdate(state, keyOf(expandedPath), hash, environment);
+      const key = keyOf(expandedPath);
+      const confirmed =
+        keys.get(key) ?? confirmedKeyOf<unknown>(state, key, environment);
+      keys.set(key, confirmed);
+      await confirmed.write(hash);
     },
   };
 }

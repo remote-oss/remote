@@ -106,6 +106,8 @@ describe('the two forms of a pre-connection script path (card connect-87)', () =
       },
     };
     await approvalsOf(state, INSTANT).remember('s.sh', 'h1');
+    // The read back goes on in the background after the write returns.
+    await new Promise(resolve => setTimeout(resolve, 0));
     deepStrictEqual(approvalsOf(state, INSTANT).hashFor('s.sh'), 'h1');
   });
 });
