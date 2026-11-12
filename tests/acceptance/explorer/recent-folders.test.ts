@@ -116,6 +116,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
       for (const name of ['a', 'b', 'c']) {
         await recordVisit('harness', `${scope}${name}`, `c122-mru-${name}`);
       }
+      await titleAction(window, VIEW, REFRESH);
       await foldersSettled(
         window,
         'harness',
@@ -145,6 +146,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
     const target = `${HOME}/c122-row-alpha`;
     try {
       await recordVisit('harness', target, 'c122-row-alpha');
+      await titleAction(window, VIEW, REFRESH);
       await foldersSettled(window, 'harness', [target], `${HOME}/c122-row-`);
       const detail = ((await rowDetails(window, VIEW)) ?? []).find(
         each => each.label === 'c122-row-alpha',
@@ -172,6 +174,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
       );
       await recordVisit('harness', folder, 'c122-ws');
       await recordVisit('harness', target, 'c122-ws');
+      await titleAction(window, VIEW, REFRESH);
       await foldersSettled(window, 'harness', [target, folder], folder);
       await hoverRow(window, VIEW, 'x (Workspace)');
       const wsTitles = await shownRowActionTitles(
@@ -205,6 +208,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
     const target = `${HOME}/c122-buttons-alpha`;
     try {
       await recordVisit('harness', target, 'c122-buttons-alpha');
+      await titleAction(window, VIEW, REFRESH);
       await foldersSettled(
         window,
         'harness',
@@ -249,6 +253,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
     const target = `${HOME}/c122-menu-alpha`;
     try {
       await recordVisit('harness', target, 'c122-menu-alpha');
+      await titleAction(window, VIEW, REFRESH);
       await foldersSettled(window, 'harness', [target], `${HOME}/c122-menu-`);
       const folderMenu = await rowContextMenu(window, VIEW, 'c122-menu-alpha');
       const hostMenu = await rowContextMenu(window, VIEW, 'harness');
@@ -333,6 +338,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
     const target = `${HOME}/c122-remove-1`;
     try {
       await recordVisit('harness', target, 'c122-remove-1');
+      await titleAction(window, VIEW, REFRESH);
       await foldersSettled(window, 'harness', [target], `${HOME}/c122-remove-`);
       await rowMenuAction(window, VIEW, 'c122-remove-1', REMOVE);
       await foldersSettled(window, 'harness', [], `${HOME}/c122-remove-`);
@@ -369,6 +375,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
     const target = `${HOME}/c122-solo`;
     try {
       await recordVisit('jumped', target, 'c122-solo');
+      await titleAction(window, VIEW, REFRESH);
       await foldersSettled(window, 'jumped', [target]);
       await rowMenuAction(window, VIEW, 'c122-solo', REMOVE);
       const rows = (await viewRows(window, VIEW)) ?? [];
