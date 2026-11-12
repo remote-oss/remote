@@ -1,4 +1,4 @@
-import {startInWindow, windowEvents} from './harness.ts';
+import {startInWindow, terminalFacts, windowEvents} from './harness.ts';
 import {
   chooseQuickPickRow,
   pageFocusFacts,
@@ -11,6 +11,15 @@ import {
 /** How long the palette's list must read the same, in milliseconds, before it counts as settled. */
 const SETTLE_MILLISECONDS = 600;
 
+/** Reads the pages' quick input and focus every 250 ms for 3 s after `sent`, into `trail`, so that a palette that shows and goes can be told from one that never shows. */
+async function sampleQuickInput(sent: number, trail: string[]): Promise<void> {
+  for (let reads = 0; reads < 12; reads += 1) {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    const facts = await pageFocusFacts();
+    trail.push(`@${String(Date.now() - sent)} ${facts.join(' | ')}`);
+  }
+}
+
 /**
  * Opens the Command Palette of window `name` and waits for its list. When it does not show, the error says what the
  * pages' focus and quick input were and what the window's agent did with the command, so that a palette that has no
@@ -18,10 +27,14 @@ const SETTLE_MILLISECONDS = 600;
  */
 async function showedPalette(name: string): Promise<void> {
   const sent = Date.now();
+  const trail: string[] = [];
   await startInWindow(name, 'workbench.action.showCommands');
+  const sampling = sampleQuickInput(sent, trail);
   try {
     await waitForQuickPick(name, 30_000);
   } catch (caught) {
+    await sampling;
+    const terminals = await terminalFacts(name);
     const events = windowEvents(name)
       .slice(-14)
       .map(
@@ -29,7 +42,7 @@ async function showedPalette(name: string): Promise<void> {
           `${entry.event}${entry.id === undefined ? '' : `#${entry.id.slice(-4)}`}@${String(entry.time - sent)}`,
       );
     throw new Error(
-      `${String(caught)}; pages ${JSON.stringify(await pageFocusFacts())}; the agent's events (ms from the command) ${JSON.stringify(events)}`,
+      `${String(caught)}; pages ${JSON.stringify(await pageFocusFacts())}; the quick input and focus in the first seconds (ms from the command) ${JSON.stringify(trail)}; terminals ${JSON.stringify(terminals.terminals)}, active ${JSON.stringify(terminals.active)}; the agent's events (ms from the command) ${JSON.stringify(events)}`,
       {cause: caught},
     );
   }
