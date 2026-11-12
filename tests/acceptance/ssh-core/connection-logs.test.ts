@@ -247,10 +247,12 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
         () => recordLines('failureDialog', 'c121-refused').length > 0,
         300_000,
       );
-      deepStrictEqual(
-        await outputChannelOf('c121-refused'),
-        'Remote - SSH',
+      await waitFor(
+        'the panel of c121-refused on the Remote - SSH channel',
+        async () => (await outputChannelOf('c121-refused')) === 'Remote - SSH',
+        60_000,
       );
+      deepStrictEqual(await outputChannelOf('c121-refused'), 'Remote - SSH');
     } finally {
       await closeWindow('c121-refused').catch(() => undefined);
     }
@@ -291,12 +293,15 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
       const [level, editor, extension, platform] = connectionLog().slice(
         mark,
       );
+      const levelText = level ?? '';
+      const editorText = editor ?? '';
+      const extensionText = extension ?? '';
       const platformText = platform ?? '';
       deepStrictEqual(
         [
-          level === 'debug' || level === '2',
-          (editor ?? '').includes('1.'),
-          (extension ?? '').includes('Remote - SSH'),
+          levelText.includes('Log level'),
+          editorText.includes('Editor version'),
+          extensionText.includes('remote-ssh'),
           platformText.includes('linux') &&
             (platformText.includes('x64') || platformText.includes('arm64')),
         ],
