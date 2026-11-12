@@ -227,26 +227,18 @@ Rules:
 
 ### D7b background-download
 
-The mechanism is area A's V10 server-prefetch and the `prefetch` field of the policy record
-(`../transport-and-server/contracts.md`, PR #35), agreed with `remote-architect-worker-1` on 2026-10-06. D7b supplies
-the remote-wsl row: `prefetch: onProductUpdate`, setting `remote.WSL.downloadInBackground`.
+> Replaced 2026-11-12 (`ruling-2348-no-update-signal`, brief-wsl-connect §2). No extension API reports an update the
+> editor has detected, so nothing is prefetched and area A's V10 is not wired for WSL. The earlier `wire` operation, the
+> `prefetch: onProductUpdate` row, `lastUpdateCheck` and the lock file are withdrawn.
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `wire` | the policy row, the settings snapshot, the window's lifetime | V10 started or stopped as the setting changes (F-6301 6.6 steps 3, 4) | none raised |
-| `recordUse` | platform | updates `usageTime.<platform>` after a connect, for V10's 14-day window | none |
+| `announce` | the settings snapshot at activation | with `remote.WSL.downloadInBackground` on, one log line that nothing is prefetched in the background | none raised |
+| `recordUse` | platform | sets `usageTime.<platform>` when the probe maps the platform, even if the start then fails (F-6302 7.E5) | none |
 
-Behaviour as V10 defines it:
-- the setting and core's `update.mode` gate it;
-- a 30 s tick and an hourly feed check;
-- a source must resolve through P3 before any feed request;
-- `skipUnaccepted` for the licence;
-- a per-user lock file next to the kept cache;
-- silent, log lines only (F-6301 BR-13).
-
-State in global state (our id): `lastUpdateCheck` and `usageTime.<platform>`. The reference's `downloadInProgress`
-flag is replaced by V10's lock file, because global state is per profile, not per user. F-6301 BR-13 calls those keys
-internal, not a contract.
+- `usageTime.<platform>` is the one per-connect write F-6201 AC-23 names. Nothing reads it while no background download
+  exists; it stays so that the stored state is the spec's.
+- No other state: no `lastUpdateCheck`, no `downloadInProgress`, no lock file. F-6301 BR-13 calls those keys internal.
 
 ### D8 shell-handoff (`scripts/wslCode.sh`, shipped text)
 

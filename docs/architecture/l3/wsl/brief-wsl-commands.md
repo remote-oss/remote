@@ -42,6 +42,8 @@ window-advisories, D8 shell-handoff with the build-time D8g, D11's writing side,
   - Distro to Windows: D3's new `toWindows` (`wslpath -w -- <path>`), accepting only a drive form or a share form and
     rebuilding the share form, so a hostile distro can't name an arbitrary local or UNC folder.
   - A failed `wslpath` is silent (7.E6, 7.E12).
+  - Both forms run against the real `wsl.exe` in a Windows-launch row (cmd-6), so the argument form with `--` isn't
+    proven only by cmd-1's recorded fake.
 - **`wsl.noWSLPath`:** D2's pure `pathTranslationAvailable(build)` (build 17063 or later, or unknown) is read once at
   activation and set by `wsl.package`. When it is false, D12 shows STR:S047 with `{0}` = "Windows build 17063".
 - **The reload** uses the opener's new local form for a drive or UNC path (`Uri.file`), and the lifted `open-gate.ts`, so

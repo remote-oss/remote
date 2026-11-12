@@ -78,7 +78,8 @@ can't trigger (`reading-2348-quality-checks`; a spec question asks to retire the
 **Background download, `ruling-2348-no-update-signal`.** F-7902 rule 10 and AC-29 (and F-6301 BR-13, AC-19) download
 the server of an update "the editor has detected"; no extension API reports one. So nothing is fetched in the background:
 `remote.WSL.downloadInBackground` is declared and read, and one log line says nothing was prefetched. AC-29's first
-clause holds; the rest are the deviation. lib-server's V10 runtime is not built for WSL.
+clause holds; the rest are the deviation. lib-server's V10 runtime is not built for WSL, and D7b keeps only that line and
+the per-platform usage stamp of §1 (contracts.md D7b).
 
 **Telemetry:** the start passes `--disable-telemetry` (F-7902 rule 11, F-6304 BR-12); the evidence (K-3, AC-30) is the
 start command's line in the "WSL" terminal.

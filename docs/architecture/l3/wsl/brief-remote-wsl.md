@@ -37,8 +37,8 @@ have no criteria; their rules are checked through F-6001's and the manifest's ro
 | F-6204 to F-6207 | 112 | 84 | 0 | 15 | 2 | 5 | 6 |
 | F-6208, F-6301 to F-6303 | 108 | 48 | 27 | 17 | 7 | 8 | 1 |
 | F-6304, F-6401, F-6402 | 106 | 31 | 5 | 54 | 5 | 10 | 1 |
-| F-6503, F-6601, F-6602, F-6701 | 106 | 56 | 1 | 28 | 1 | 15 | 5 |
-| **All** | **697** | **387** | **50** | **155** | **25** | **49** | **31** |
+| F-6503, F-6601, F-6602, F-6701 | 106 | 57 | 1 | 28 | 1 | 14 | 5 |
+| **All** | **697** | **388** | **50** | **155** | **25** | **48** | **31** |
 
 - **What exists:** lib-wsl's D1 runner, D1a parsers, D3's pure core and D4 host channel are built, as are lib-server's
   single-script install, the kept cache, the licence gate, `wslPolicy()`, lib-authority's codecs, gate and resolver host,
@@ -123,8 +123,8 @@ it says otherwise, so remote-ssh and remote-containers keep their behaviour.
    the `wsl` launch on `windows-2025` (#2355, tooling-197: the installed Ubuntu plus pinned Alpine distros at WSL 2 and
    WSL 1, unregistered after each run); the harness terminal mirror; the request-logging fixture HTTP server that serves a
    server archive; the coverage seed (§6).
-2. **Shared libraries** of §3, each its own card, in the order lib-identifiers, lib-log, lib-host, lib-wsl, lib-authority,
-   lib-server.
+2. **Shared libraries** of §3, each its own card, in the order lib-identifiers (pkg-0), lib-log, lib-host, lib-wsl,
+   lib-authority, lib-server.
 3. **The package skeleton** (brief-wsl-package): manifest, `identifiers.json`, stand-down, proposal probe and setup
    notifications, the browser entry, the log, help and walkthrough.
 4. **The connect** (brief-wsl-connect): D6, D6w, D7, D7a, D5h, D5r, D11, `wsl.resolver-front`, `wsl.failure-ui`, F-6103.
@@ -192,7 +192,8 @@ Every remote-wsl acceptance row needs a Windows client with WSL, so the rows run
   live criterion of the 28 published specs (`todo`), adds the catalogue's acCounts and refreshes `traceability.tsv`.
   Lines that wait on F-6101, F-6202, F-6501, F-6502 or on F-6005's and F-6205's revision are tagged with the spec they
   wait on; `host:` lines carry their host.
-- **Cards:** each cluster file ends with its cut. daedalus cuts the cards from them and from the per-line list.
+- **Cards:** each cluster file ends with its cut. daedalus cuts the cards from them and from the per-line list; where the
+  list and a part's text differ, the part's text holds.
 - **Spec questions:** one batch issue on remote-oss/remote-wsl collects the questions the four files raise, each with
   the reading the cards follow meanwhile, so no card waits on an answer.
 

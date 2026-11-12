@@ -132,10 +132,11 @@ At every activation, in this order, and never awaiting a `wsl.exe` process (core
 
 | Card | Scope | Test kinds |
 |---|---|---|
-| pkg-1 | manifest, `identifiers.json`, activation skeleton (§1.1, §1.2 steps 1, 2, 4, 5), `wsl.web-entry`, R-46, the gating lint over key bindings, views and walkthroughs (remote-wsl only) | manifest, unit, acceptance-linux |
+| pkg-0 | lib-identifiers: the `coreAndExtension` setter (brief-remote-wsl §2 item 11, set only by D9b) and the gating lint's new kinds over key bindings, views and walkthroughs (remote-wsl only) | unit |
+| pkg-1 | manifest, `identifiers.json`, activation skeleton (§1.1, §1.2 steps 1, 2, 4, 5), `wsl.web-entry`, R-46 | manifest, unit, acceptance-linux |
 | pkg-2 | the views probe option in lib-authority, WSL's probe, line and three notifications (§1.3) | unit, acceptance-linux, acceptance-win |
 | pkg-3 | lib-log's terminal sink and file sink, lib-host's stream tag, `wsl.log` (§2), the lifted remote-line log | unit, acceptance-linux, acceptance-win |
 | pkg-4 | help (§3), the help module lift | unit, manifest, acceptance-linux |
 | pkg-5 | the walkthrough, its pictures and documents, `docs/remote-wsl/`, the lint (§4) | manifest, acceptance-linux, acceptance-win |
 | pkg-6 | identity, README, the no-telemetry guard, F-7904's rows (§5); F-6005's stable lines | manifest, unit |
-| pkg-7 | F-6602's rows (§6) | acceptance-win, manifest |
+| pkg-7 | F-6602's rows (§6) | unit, manifest, acceptance-win |
