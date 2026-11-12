@@ -18,11 +18,12 @@ import {
 } from '../windows/harness.ts';
 import {
   dialogOf,
+  noticesOnceSettled,
   panelBadge,
   portsRows,
   statusItem,
 } from '../windows/renderer.ts';
-import {noticesOnceSettled} from './notices-once-settled.ts';
+
 import {holdLocal} from './forward-support.ts';
 import {
   listenOnHost,
