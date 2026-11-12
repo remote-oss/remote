@@ -291,6 +291,22 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
         .sort()
         .map(destination => lastUserLine.get(destination))
         .filter(line => line !== undefined);
+      const orders = new Set<string>();
+      for (let each = 0; each < 20; each += 1) {
+        orders.add(
+          (
+            await docker(
+              'inspect',
+              '-f',
+              '{{range .Mounts}}{{.Destination}} {{end}}',
+              container,
+            )
+          ).trim(),
+        );
+      }
+      console.log(
+        `#2129: docker ${(await docker('version', '--format', '{{.Server.Version}}')).trim()}: ${String(orders.size)} orders of 20 inspects: ${JSON.stringify([...orders])}`,
+      );
       await viewed(base);
       await chosen(base, 'Remove Container');
       await waitForDialog('local', 30_000);
