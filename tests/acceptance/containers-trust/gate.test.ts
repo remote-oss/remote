@@ -56,6 +56,9 @@ import {
 import {folderWrapper, recordedCalls} from '../windows/folder-wrapper.ts';
 
 /** The question core asks of a folder, F-0106 5.0 step 2. */
+/** The button of the Workspace Trust editor that trusts the folder. */
+const TRUST_BUTTON = 'Trust';
+
 const TRUST_QUESTION = 'Do you trust the authors of the files in this folder?';
 
 /** The start of the discovery notification, which F-0301 5.0 step 2 shows in Restricted Mode as well. */
@@ -396,6 +399,64 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       [[containerId], 'exited'],
     );
     await closeWindow(name);
+  });
+
+  it('F-0106 AC-45 (c123-manage-trust): trusting the folder in the editor that Manage opens leaves the command not resumed: no connecting notification and no container, also 15 s later, and a second Reopen in Container asks nothing', async () => {
+    const folder = devContainerFolder('c123-manage-trust', {
+      name: 'C123 Manage Trust',
+    });
+    const name = await openFolderWindow(folder);
+    try {
+      const running = inWindow(name, 'remote-containers.reopenInContainer');
+      running.catch(() => undefined);
+      await waitForDialog(name, 60_000);
+      await answerDialog(name, 'Manage');
+      await waitFor(
+        'the trust editor to take the trust button',
+        async () => {
+          try {
+            await clickButton(name, TRUST_BUTTON);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        30_000,
+      );
+      await trustSettled(name, true);
+      await new Promise(resolve => setTimeout(resolve, 15_000));
+      const afterwards = {
+        trusted: await isTrusted(name),
+        restrictedItem: await hasStatusItem(name, 'status.workspaceTrust'),
+        connecting: (await notifications(name)).filter(text =>
+          text.startsWith('Connecting to Dev Container'),
+        ),
+        remoteName: (await windowState(name)).remoteName,
+        containers: await devContainersOf(folder),
+      };
+      await reopenInContainer(name);
+      deepStrictEqual(
+        [
+          afterwards,
+          await dialogOf(name),
+          (await devContainersOf(folder)).length,
+        ],
+        [
+          {
+            trusted: true,
+            restrictedItem: false,
+            connecting: [],
+            remoteName: null,
+            containers: [],
+          },
+          undefined,
+          1,
+        ],
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder);
+    }
   });
 
   /** Runs Open Folder in Container in window `name`, picks `folder`, and leaves the command running. */
