@@ -9,7 +9,7 @@ import type {ProcessHandle} from 'lib-ssh';
 import {contentHashOf} from '../preconnect/approvals.ts';
 import type {PreconnectPorts} from '../preconnect/ports.ts';
 import {expandedPath, programPath} from '../preconnect/script-path.ts';
-import {textOfId} from '../surfaces/failure-strings.ts';
+import {english, textOfId} from '../surfaces/failure-strings.ts';
 import {
   hostAlias,
   type PreconnectChoice,
@@ -44,11 +44,6 @@ const VALUE_KIND_IDS = {
 /** One piece of output as a log line: the text without one trailing line feed. */
 function lineOf(chunk: string): string {
   return chunk.endsWith('\n') ? chunk.slice(0, -1) : chunk;
-}
-
-/** A template as it is, the English text. */
-function english(template: string): string {
-  return template;
 }
 
 /** The message of whatever a port rejected with. */
