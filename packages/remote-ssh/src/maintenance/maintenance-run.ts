@@ -4,6 +4,7 @@
  * shows anything; the caller turns the result into the notice or the error the command shows.
  */
 
+import type {FailureReason} from 'lib-authority';
 import type {SshTarget} from 'lib-ssh';
 import {connectTargetOf, payloadOf} from '../connect/connect-commands.ts';
 import type {ConnectInput, ConnectSteps} from '../pipeline/steps.ts';
@@ -17,6 +18,8 @@ export interface MaintenanceRun {
   result: StepResult | 'cancelled';
   /** What went wrong, for the log; empty when the step ran. */
   cause: string;
+  /** Why the target failed its name check, when that is what ended the run: the check's own message. */
+  reason?: FailureReason;
 }
 
 /** The steps a maintenance run takes from a connect. */
@@ -69,8 +72,12 @@ const UNINSTALL_CHECKS = ['validate'] as const;
 
 const STEP_RAN: MaintenanceRun = {result: 'stepRan', cause: ''};
 
-function failed(cause: string): MaintenanceRun {
-  return {result: 'connectionFailed', cause};
+function failed(cause: string, reason?: FailureReason): MaintenanceRun {
+  return {
+    result: 'connectionFailed',
+    cause,
+    ...(reason === undefined ? {} : {reason}),
+  };
 }
 
 function stepFailed(cause: string): MaintenanceRun {
@@ -92,7 +99,10 @@ export async function runMaintenance(
   for (const check of checks) {
     const checked = steps[check](input);
     if (checked.kind === 'failed') {
-      return failed(`the target is not valid: ${checked.failure.kind}`);
+      return failed(
+        `the target is not valid: ${checked.failure.kind}`,
+        checked.failure.reason,
+      );
     }
   }
   const located = await steps.locateClient(input);
