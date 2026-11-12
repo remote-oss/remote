@@ -15,6 +15,7 @@ import {
 } from '../windows/harness.ts';
 import {
   answerDialog,
+  pressEscape,
   type ShownDialog,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -235,7 +236,7 @@ describe('Host requirements rows (card containers-202, F-0206)', function () {
     }
   });
 
-  it('F-0206 BR-13 (c217-pull-fails): an image the registry cannot give and that cannot be pulled raises no host requirements dialog', async () => {
+  it('F-0206 BR-13 (c217-pull-fails): an image the registry cannot give and that cannot be pulled raises no host requirements dialog, and the connect goes on to its own failure', async () => {
     const reference = `${variable('HARNESS_REGISTRY').replace('127.0.0.1', 'localhost')}/c217-missing:1`;
     const folder = devContainerFolder('c217-pull-fails', {
       name: 'C217 Pull Fails',
@@ -245,9 +246,23 @@ describe('Host requirements rows (card containers-202, F-0206)', function () {
     try {
       const name = await openFolderWindow(folder);
       const {dialog, running} = await dialogOfReopen(name);
-      console.log(`c217-pull-fails dialog: ${JSON.stringify(dialog)}`);
-      deepStrictEqual(dialog.message === MESSAGE, false);
-      await answerDialog(name, dialog.buttons[0] ?? 'Cancel');
+      deepStrictEqual(
+        {
+          message: dialog.message,
+          details: dialog.details,
+          buttons: [...dialog.buttons].sort(),
+        },
+        {
+          message: '',
+          details: 'An error occurred setting up the container.',
+          buttons: [
+            'Edit devcontainer.json Locally',
+            'More Actions...',
+            'Retry',
+          ],
+        },
+      );
+      await pressEscape(name);
       await running;
       await closeWindow(name);
     } finally {
