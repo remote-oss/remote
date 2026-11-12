@@ -1,4 +1,4 @@
-import {startInWindow, windowNames} from './harness.ts';
+import {startInWindow, windowEvents, windowNames} from './harness.ts';
 import {
   chooseQuickPickRow,
   focusFacts,
@@ -35,7 +35,14 @@ export async function paletteItems(
   } catch (caught) {
     clearInterval(sampler);
     throw new Error(
-      `${String(caught)}; FOCUS ${await focusFacts(name)}; windows ${JSON.stringify(windowNames())}; SAMPLES ${JSON.stringify([...new Set(seen.map(line => line.replace(/^\d+ms /, '')))])}`,
+      `${String(caught)}; FOCUS ${await focusFacts(name)}; windows ${JSON.stringify(windowNames())}; EVENTS ${JSON.stringify(
+        windowEvents(name)
+          .slice(-14)
+          .map(
+            entry =>
+              `${entry.event}${entry.id === undefined ? '' : `#${entry.id.slice(-4)}`}@${String(entry.time - began)}`,
+          ),
+      )}; SAMPLES ${JSON.stringify([...new Set(seen.map(line => line.replace(/^\d+ms /, '')))])}`,
       {cause: caught},
     );
   }
