@@ -1,11 +1,15 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
+import {mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
 import {promisify} from 'node:util';
 import {
   closeWindow,
   devContainerFolder,
   devContainersOf,
   inWindow,
+  variable,
   waitFor,
   windowState,
 } from '../windows/harness.ts';
@@ -120,6 +124,71 @@ describe('Host requirements rows (card containers-202, F-0206)', function () {
       await closeWindow(name);
     } finally {
       await removeContainers(folder);
+    }
+  });
+
+  it('F-0206 BR-13 (c217-pull-first): an image whose details its registry cannot give is pulled before the dialog shows its label’s requirements, and Cancel leaves the image pulled and no container', async () => {
+    const reference = `${variable('HARNESS_REGISTRY').replace('127.0.0.1', 'localhost')}/c217-pull-first:${String(Date.now())}`;
+    const context = await mkdtemp(path.join(tmpdir(), 'c217-'));
+    await writeFile(
+      path.join(context, 'Dockerfile'),
+      `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\nLABEL devcontainer.metadata='[{"hostRequirements":{"cpus":1024}}]'\n`,
+    );
+    await execFileAsync('docker', ['build', '--tag', reference, context]);
+    await execFileAsync('docker', ['push', reference]);
+    await execFileAsync('docker', ['image', 'rm', reference]);
+    const folder = devContainerFolder('c217-pull-first', {
+      name: 'C217 Pull First',
+      image: reference,
+    });
+    try {
+      const name = await openFolderWindow(folder);
+      const since = Math.floor(Date.now() / 1000);
+      const {dialog, running} = await dialogOfReopen(name);
+      const {stdout: pulls} = await execFileAsync('docker', [
+        'events',
+        '--since',
+        String(since),
+        '--until',
+        String(Math.floor(Date.now() / 1000) + 1),
+        '--filter',
+        'type=image',
+        '--filter',
+        'event=pull',
+        '--format',
+        '{{.Actor.ID}}',
+      ]);
+      await answerDialog(name, 'Cancel');
+      await running;
+      const local = await execFileAsync('docker', [
+        'image',
+        'inspect',
+        '--format',
+        '{{.Id}}',
+        reference,
+      ]).then(
+        () => true,
+        () => false,
+      );
+      deepStrictEqual(
+        {
+          pulledBeforeDialog: pulls.split('\n').includes(reference),
+          cpus: dialog.details.endsWith('devcontainer.json: CPUs 1024'),
+          local,
+          containers: await devContainersOf(folder),
+        },
+        {pulledBeforeDialog: true, cpus: true, local: true, containers: []},
+      );
+      await closeWindow(name);
+    } finally {
+      await removeContainers(folder);
+      await execFileAsync('docker', [
+        'image',
+        'rm',
+        '--force',
+        reference,
+      ]).catch(() => undefined);
+      await rm(context, {recursive: true, force: true});
     }
   });
 
