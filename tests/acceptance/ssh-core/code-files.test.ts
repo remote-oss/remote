@@ -114,15 +114,24 @@ describe('the code command opens host files in the window (card coverage-80)', f
     }
   });
 
-  it('F-2508 AC-26 (c80-stdin): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
-    await windowWithTerminal('c80-stdin');
+  it('c2433-host: the host shell and whether it asks the terminal for the cursor at its prompt (measurement)', async () => {
+    const facts = await onHost(
+      'sh',
+      '-c',
+      `bash --version | head -1; getent passwd harness | cut -d: -f7; echo "TERM=$TERM"; printf 'exit\\n' | script -qefc 'bash --norc -i' /dev/null 2>/dev/null | od -An -c | tr -d ' \\n' | grep -c '033\\[6n' || true`,
+    );
+    throw new Error(`HOST FACTS: ${JSON.stringify(facts)}`);
+  });
+
+  it('F-2508 AC-26 (c80-stdin-1): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-1');
     try {
       await typeInTerminal(
-        'c80-stdin',
+        'c80-stdin-1',
         `echo piped | ${command} - ; echo DONE_$?\n`,
       );
       const lines = await linesUntil(
-        'c80-stdin',
+        'c80-stdin-1',
         each =>
           each.some(line => /^DONE_\d/.test(line)) &&
           each.some(line => line.startsWith('Reading from stdin via: /')),
@@ -132,12 +141,433 @@ describe('the code command opens host files in the window (card coverage-80)', f
           lines.filter(line => line.startsWith('Reading from stdin via: /'))
             .length,
           lines.find(line => /^DONE_\d/.test(line)),
-          await notificationCentre('c80-stdin'),
+          await notificationCentre('c80-stdin-1'),
         ],
         [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
       );
     } finally {
-      await closeWindow('c80-stdin').catch(() => undefined);
+      await closeWindow('c80-stdin-1').catch(() => undefined);
+    }
+  });
+
+  it('F-2508 AC-26 (c80-stdin-2): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-2');
+    try {
+      await typeInTerminal(
+        'c80-stdin-2',
+        `echo piped | ${command} - ; echo DONE_$?\n`,
+      );
+      const lines = await linesUntil(
+        'c80-stdin-2',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
+      );
+      deepStrictEqual(
+        [
+          lines.filter(line => line.startsWith('Reading from stdin via: /'))
+            .length,
+          lines.find(line => /^DONE_\d/.test(line)),
+          await notificationCentre('c80-stdin-2'),
+        ],
+        [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
+      );
+    } finally {
+      await closeWindow('c80-stdin-2').catch(() => undefined);
+    }
+  });
+
+  it('F-2508 AC-26 (c80-stdin-3): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-3');
+    try {
+      await typeInTerminal(
+        'c80-stdin-3',
+        `echo piped | ${command} - ; echo DONE_$?\n`,
+      );
+      const lines = await linesUntil(
+        'c80-stdin-3',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
+      );
+      deepStrictEqual(
+        [
+          lines.filter(line => line.startsWith('Reading from stdin via: /'))
+            .length,
+          lines.find(line => /^DONE_\d/.test(line)),
+          await notificationCentre('c80-stdin-3'),
+        ],
+        [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
+      );
+    } finally {
+      await closeWindow('c80-stdin-3').catch(() => undefined);
+    }
+  });
+
+  it('F-2508 AC-26 (c80-stdin-4): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-4');
+    try {
+      await typeInTerminal(
+        'c80-stdin-4',
+        `echo piped | ${command} - ; echo DONE_$?\n`,
+      );
+      const lines = await linesUntil(
+        'c80-stdin-4',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
+      );
+      deepStrictEqual(
+        [
+          lines.filter(line => line.startsWith('Reading from stdin via: /'))
+            .length,
+          lines.find(line => /^DONE_\d/.test(line)),
+          await notificationCentre('c80-stdin-4'),
+        ],
+        [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
+      );
+    } finally {
+      await closeWindow('c80-stdin-4').catch(() => undefined);
+    }
+  });
+
+  it('F-2508 AC-26 (c80-stdin-5): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-5');
+    try {
+      await typeInTerminal(
+        'c80-stdin-5',
+        `echo piped | ${command} - ; echo DONE_$?\n`,
+      );
+      const lines = await linesUntil(
+        'c80-stdin-5',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
+      );
+      deepStrictEqual(
+        [
+          lines.filter(line => line.startsWith('Reading from stdin via: /'))
+            .length,
+          lines.find(line => /^DONE_\d/.test(line)),
+          await notificationCentre('c80-stdin-5'),
+        ],
+        [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
+      );
+    } finally {
+      await closeWindow('c80-stdin-5').catch(() => undefined);
+    }
+  });
+
+  it('F-2508 AC-26 (c80-stdin-6): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-6');
+    try {
+      await typeInTerminal(
+        'c80-stdin-6',
+        `echo piped | ${command} - ; echo DONE_$?\n`,
+      );
+      const lines = await linesUntil(
+        'c80-stdin-6',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
+      );
+      deepStrictEqual(
+        [
+          lines.filter(line => line.startsWith('Reading from stdin via: /'))
+            .length,
+          lines.find(line => /^DONE_\d/.test(line)),
+          await notificationCentre('c80-stdin-6'),
+        ],
+        [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
+      );
+    } finally {
+      await closeWindow('c80-stdin-6').catch(() => undefined);
+    }
+  });
+
+  it('F-2508 AC-26 (c80-stdin-7): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-7');
+    try {
+      await typeInTerminal(
+        'c80-stdin-7',
+        `echo piped | ${command} - ; echo DONE_$?\n`,
+      );
+      const lines = await linesUntil(
+        'c80-stdin-7',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
+      );
+      deepStrictEqual(
+        [
+          lines.filter(line => line.startsWith('Reading from stdin via: /'))
+            .length,
+          lines.find(line => /^DONE_\d/.test(line)),
+          await notificationCentre('c80-stdin-7'),
+        ],
+        [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
+      );
+    } finally {
+      await closeWindow('c80-stdin-7').catch(() => undefined);
+    }
+  });
+
+  it('F-2508 AC-26 (c80-stdin-8): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-8');
+    try {
+      await typeInTerminal(
+        'c80-stdin-8',
+        `echo piped | ${command} - ; echo DONE_$?\n`,
+      );
+      const lines = await linesUntil(
+        'c80-stdin-8',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
+      );
+      deepStrictEqual(
+        [
+          lines.filter(line => line.startsWith('Reading from stdin via: /'))
+            .length,
+          lines.find(line => /^DONE_\d/.test(line)),
+          await notificationCentre('c80-stdin-8'),
+        ],
+        [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
+      );
+    } finally {
+      await closeWindow('c80-stdin-8').catch(() => undefined);
+    }
+  });
+
+  it('F-2508 AC-26 (c80-stdin-9): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-9');
+    try {
+      await typeInTerminal(
+        'c80-stdin-9',
+        `echo piped | ${command} - ; echo DONE_$?\n`,
+      );
+      const lines = await linesUntil(
+        'c80-stdin-9',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
+      );
+      deepStrictEqual(
+        [
+          lines.filter(line => line.startsWith('Reading from stdin via: /'))
+            .length,
+          lines.find(line => /^DONE_\d/.test(line)),
+          await notificationCentre('c80-stdin-9'),
+        ],
+        [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
+      );
+    } finally {
+      await closeWindow('c80-stdin-9').catch(() => undefined);
+    }
+  });
+
+  it('F-2508 AC-26 (c80-stdin-10): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-10');
+    try {
+      await typeInTerminal(
+        'c80-stdin-10',
+        `echo piped | ${command} - ; echo DONE_$?\n`,
+      );
+      const lines = await linesUntil(
+        'c80-stdin-10',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
+      );
+      deepStrictEqual(
+        [
+          lines.filter(line => line.startsWith('Reading from stdin via: /'))
+            .length,
+          lines.find(line => /^DONE_\d/.test(line)),
+          await notificationCentre('c80-stdin-10'),
+        ],
+        [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
+      );
+    } finally {
+      await closeWindow('c80-stdin-10').catch(() => undefined);
+    }
+  });
+
+  it('F-2508 AC-26 (c80-stdin-11): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-11');
+    try {
+      await typeInTerminal(
+        'c80-stdin-11',
+        `echo piped | ${command} - ; echo DONE_$?\n`,
+      );
+      const lines = await linesUntil(
+        'c80-stdin-11',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
+      );
+      deepStrictEqual(
+        [
+          lines.filter(line => line.startsWith('Reading from stdin via: /'))
+            .length,
+          lines.find(line => /^DONE_\d/.test(line)),
+          await notificationCentre('c80-stdin-11'),
+        ],
+        [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
+      );
+    } finally {
+      await closeWindow('c80-stdin-11').catch(() => undefined);
+    }
+  });
+
+  it('F-2508 AC-26 (c80-stdin-12): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-12');
+    try {
+      await typeInTerminal(
+        'c80-stdin-12',
+        `echo piped | ${command} - ; echo DONE_$?\n`,
+      );
+      const lines = await linesUntil(
+        'c80-stdin-12',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
+      );
+      deepStrictEqual(
+        [
+          lines.filter(line => line.startsWith('Reading from stdin via: /'))
+            .length,
+          lines.find(line => /^DONE_\d/.test(line)),
+          await notificationCentre('c80-stdin-12'),
+        ],
+        [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
+      );
+    } finally {
+      await closeWindow('c80-stdin-12').catch(() => undefined);
+    }
+  });
+
+  it('F-2508 AC-26 (c80-stdin-13): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-13');
+    try {
+      await typeInTerminal(
+        'c80-stdin-13',
+        `echo piped | ${command} - ; echo DONE_$?\n`,
+      );
+      const lines = await linesUntil(
+        'c80-stdin-13',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
+      );
+      deepStrictEqual(
+        [
+          lines.filter(line => line.startsWith('Reading from stdin via: /'))
+            .length,
+          lines.find(line => /^DONE_\d/.test(line)),
+          await notificationCentre('c80-stdin-13'),
+        ],
+        [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
+      );
+    } finally {
+      await closeWindow('c80-stdin-13').catch(() => undefined);
+    }
+  });
+
+  it('F-2508 AC-26 (c80-stdin-14): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-14');
+    try {
+      await typeInTerminal(
+        'c80-stdin-14',
+        `echo piped | ${command} - ; echo DONE_$?\n`,
+      );
+      const lines = await linesUntil(
+        'c80-stdin-14',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
+      );
+      deepStrictEqual(
+        [
+          lines.filter(line => line.startsWith('Reading from stdin via: /'))
+            .length,
+          lines.find(line => /^DONE_\d/.test(line)),
+          await notificationCentre('c80-stdin-14'),
+        ],
+        [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
+      );
+    } finally {
+      await closeWindow('c80-stdin-14').catch(() => undefined);
+    }
+  });
+
+  it('F-2508 AC-26 (c80-stdin-15): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-15');
+    try {
+      await typeInTerminal(
+        'c80-stdin-15',
+        `echo piped | ${command} - ; echo DONE_$?\n`,
+      );
+      const lines = await linesUntil(
+        'c80-stdin-15',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
+      );
+      deepStrictEqual(
+        [
+          lines.filter(line => line.startsWith('Reading from stdin via: /'))
+            .length,
+          lines.find(line => /^DONE_\d/.test(line)),
+          await notificationCentre('c80-stdin-15'),
+        ],
+        [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
+      );
+    } finally {
+      await closeWindow('c80-stdin-15').catch(() => undefined);
+    }
+  });
+
+  it('F-2508 AC-26 (c80-stdin-16): text piped into code - prints the temp file it reads it into and returns, with no notification', async () => {
+    await windowWithTerminal('c80-stdin-16');
+    try {
+      await typeInTerminal(
+        'c80-stdin-16',
+        `echo piped | ${command} - ; echo DONE_$?\n`,
+      );
+      const lines = await linesUntil(
+        'c80-stdin-16',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
+      );
+      deepStrictEqual(
+        [
+          lines.filter(line => line.startsWith('Reading from stdin via: /'))
+            .length,
+          lines.find(line => /^DONE_\d/.test(line)),
+          await notificationCentre('c80-stdin-16'),
+        ],
+        [1, 'DONE_0', []],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-8))}`,
+      );
+    } finally {
+      await closeWindow('c80-stdin-16').catch(() => undefined);
     }
   });
 
