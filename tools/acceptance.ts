@@ -37,7 +37,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import {hostname, tmpdir} from 'node:os';
+import {hostname} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 import path from 'node:path';
 import {
@@ -64,6 +64,7 @@ import {
   connectRunNetwork,
   loadImageIntoPodman,
   requirePodman,
+  runFolderBase,
   startHostContainer,
   sweepStaleRunObjects,
 } from './acceptance-run.ts';
@@ -1685,7 +1686,9 @@ export async function runAcceptance(
   }
   const runId = acceptanceRunId(process.env, process.pid);
   // The run id in the name lets the clean-up find the editor of a run that was killed.
-  const runFolder = mkdtempSync(path.join(tmpdir(), `acceptance-${runId}-`));
+  const runFolder = mkdtempSync(
+    path.join(runFolderBase(), `acceptance-${runId}-`),
+  );
   const started: string[] = [];
   const stops: Array<() => Promise<void>> = [];
   const startedSeconds = Date.now() / 1000;
