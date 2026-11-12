@@ -510,6 +510,17 @@ jobs:
           EOF
           nohup bash "$RUNNER_TEMP/podman-sample.sh" > "$RUNNER_TEMP/podman-sample.txt" 2>&1 &
           echo $! > "$RUNNER_TEMP/podman-sample.pid"
+          # every 2 s for the launch's first 6 minutes: each podman and conmon process with its whole command line, printed
+          # when the set changes, so the first command that blocks and the ones that wait behind it are named
+          cat > "$RUNNER_TEMP/podman-fast.sh" <<'EOF'
+          previous=''
+          for i in $(seq 1 180); do
+            now=$(ps -eo pid,ppid,stat,etime,wchan:20,args --sort=start_time | grep -E '[p]odman |[c]onmon ' | cut -c1-400)
+            if [ "$now" != "$previous" ]; then echo "== $(date -u +%T.%N | cut -c1-12)"; echo "$now"; previous=$now; fi
+            sleep 2
+          done
+          EOF
+          nohup bash "$RUNNER_TEMP/podman-fast.sh" > "$RUNNER_TEMP/podman-fast.txt" 2>&1 &
       - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         timeout-minutes: 40
         env:
@@ -519,7 +530,8 @@ jobs:
         timeout-minutes: 3
         run: |
           kill "$(cat "$RUNNER_TEMP/podman-sample.pid")" 2>/dev/null || true
-          echo "##### samples"; tail -c 120000 "$RUNNER_TEMP/podman-sample.txt" || true
+          echo "##### the first 6 minutes, every 2 s"; head -c 200000 "$RUNNER_TEMP/podman-fast.txt" || true
+          echo "##### samples, the last"; tail -c 25000 "$RUNNER_TEMP/podman-sample.txt" || true
           for run in /tmp/acceptance-*/; do
             [ -f "$run/log.txt" ] && { echo "##### $run log.txt"; tail -n 300 "$run/log.txt"; }
             find "$run" -path '*containers-podman*' -name '*.log' -size +0 2>/dev/null | head -20 | while read -r f; do echo "##### $f"; tail -n 150 "$f"; done
