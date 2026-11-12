@@ -743,10 +743,12 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
       // A level left by an earlier launch is a user-scope override that changes this row's description line: clear it so the list shows the default.
       await userSettings({'remote.SSH.logLevel': undefined});
       await inWindow('local', 'workbench.action.openSettings', 'remote.SSH.logLevel');
+      // The editor may still show the override the window carried in: wait for the row to settle on the default's description.
       await waitFor(
-        'the setting on the Settings editor list',
-        async () => (await settingRow('local')) !== undefined,
-        30_000,
+        'the setting on the Settings editor list at its default',
+        async () =>
+          (await settingRow('local'))?.lines[1] === 'The log level for the extension.',
+        60_000,
       );
       const levelRow = await settingRow('local');
       const control = await settingControlOf('local');
