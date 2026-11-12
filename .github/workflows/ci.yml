@@ -493,21 +493,21 @@ jobs:
           echo "4.9 exec echo hi:"; t 30 $P exec $id3 echo hi </dev/null
           echo "== podman-static: $(podman --version)"
           id=$(timeout 120 podman run -d docker.io/library/alpine:3.22 sleep 600); echo "5.8 container $id"
-          echo "== strace of a hanging 5.8.8 exec:"
-          sudo apt-get install -y -qq strace >/dev/null 2>&1; command -v strace
-          timeout 20 strace -f -tt -o "$RUNNER_TEMP/exec.trace" podman exec $id echo hi </dev/null; echo "  -> exit $?"
-          grep -v -E "futex|nanosleep|sched_yield|rt_sig|mmap|munmap|madvise|getpid|gettid|clock_gettime" "$RUNNER_TEMP/exec.trace" | tail -45 | cut -c1-200
-          for v in 5.8.4:a58765fe8be6ab3fb79f892f1a027b4ce4a7e8eb589df1ef960c167cbde08d69 6.1.4:9dd51073fac5a1742f88cf3caff5554615cb4d67ba554d25e8807be635547af5; do
-            ver=${v%%:*}; sum=${v##*:}; echo "== podman-static $ver:"
-            timeout 120 podman system reset -f >/dev/null 2>&1
-            d=$(mktemp -d); curl -fsSL -o $d/p.tgz "https://github.com/mgoltzsche/podman-static/releases/download/v$ver/podman-linux-amd64.tar.gz"
-            echo "$sum  $d/p.tgz" | sha256sum -c - || continue
-            tar -xzf $d/p.tgz -C $d; rm -f $d/podman-linux-amd64/usr/local/bin/runc; sudo cp -r $d/podman-linux-amd64/usr $d/podman-linux-amd64/etc /; hash -r
-            podman --version; timeout 20 podman info --format 'cgroup {{.Host.CgroupManager}} runtime {{.Host.OCIRuntime.Path}} conmon {{.Host.Conmon.Path}}' 2>&1 | head -2
-            iv=$(timeout 120 podman run -d docker.io/library/alpine:3.22 sleep 600 2>&1 | tail -1); echo "  container: $iv"
-            echo "$ver exec echo hi:"; t 30 podman exec $iv echo hi </dev/null
-            timeout 60 podman rm -f -t 0 $iv >/dev/null 2>&1
-          done
+          echo "== 5.8.8: a fast command against a slow one (does the exec's speed decide it?)"
+          echo "fast (true):"; t 30 podman exec $id true </dev/null
+          echo "slow (sleep 1):"; t 30 podman exec $id sh -c 'sleep 1; echo slow' </dev/null
+          echo "slower (sleep 3):"; t 30 podman exec $id sh -c 'sleep 3; echo slower' </dev/null
+          echo "== podman-static 6.1.4, installed after ending every podman process:"
+          timeout 60 podman rm -a -f -t 0 >/dev/null 2>&1; pkill -f '/usr/local/bin/podman' ; pkill conmon; sleep 2; timeout 120 podman system reset -f >/dev/null 2>&1; pkill -f '/usr/local/bin/podman'; sleep 1
+          d=$(mktemp -d); curl -fsSL -o $d/p.tgz "https://github.com/mgoltzsche/podman-static/releases/download/v6.1.4/podman-linux-amd64.tar.gz"
+          echo "9dd51073fac5a1742f88cf3caff5554615cb4d67ba554d25e8807be635547af5  $d/p.tgz" | sha256sum -c - && tar -xzf $d/p.tgz -C $d && rm -f $d/podman-linux-amd64/usr/local/bin/runc && sudo cp -r $d/podman-linux-amd64/usr $d/podman-linux-amd64/etc / ; hash -r
+          podman --version
+          i6=$(timeout 120 podman run -d docker.io/library/alpine:3.22 sleep 600 2>&1 | tail -1); echo "  container: $i6"
+          echo "6.1.4 fast (true):"; t 30 podman exec $i6 true </dev/null
+          echo "6.1.4 echo hi:"; t 30 podman exec $i6 echo hi </dev/null
+          echo "6.1.4 slow (sleep 1):"; t 30 podman exec $i6 sh -c 'sleep 1; echo slow' </dev/null
+          timeout 60 podman rm -f -t 0 $i6 >/dev/null 2>&1
+          exit 1
           echo "5.8 exec --detach:"; t 30 podman exec --detach $id true
           echo "5.8 exec true (attach):"; t 30 podman exec $id true </dev/null
           echo "5.8 after a hung exec, inspect:"; t 20 podman inspect $id --format '{{.State.Status}}'
