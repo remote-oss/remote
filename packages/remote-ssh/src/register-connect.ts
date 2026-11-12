@@ -215,8 +215,10 @@ export async function registerConnect(
   return {
     registration: registration.kind,
     currentAlias: () => {
-      const target = resolver?.currentConnection()?.decodedTarget.target;
-      return target !== undefined && 'kind' in target ? hostAlias(target) : '';
+      const decoded = resolver?.currentConnection()?.decodedTarget;
+      return decoded !== undefined && 'kind' in decoded.target
+        ? hostAlias(decoded.target) || decoded.rawHostString
+        : '';
     },
     activeConnection: () => {
       const current = resolver?.currentConnection();
