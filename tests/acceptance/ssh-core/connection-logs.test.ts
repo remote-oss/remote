@@ -8,9 +8,24 @@ import {
   connectionLog,
   editorLogsFolder,
   hostPassword,
+  inWindow,
+  nextEmptyWindow,
   onHost,
   openWindow,
+  recordLines,
+  waitFor,
+  windowEvents,
+  windowState,
 } from '../windows/harness.ts';
+import {
+  dialogOf,
+  notifications,
+  outputChannelOf,
+  outputPanelFocused,
+  quickPickOf,
+} from '../windows/renderer.ts';
+import {closeAllButLocal} from '../windows/maintenance.ts';
+import {paletteItems, runFromPalette} from '../windows/palette.ts';
 
 /** What names a WebSocket compression in a line of a log. */
 const COMPRESSION =
@@ -118,6 +133,152 @@ describe('the logs of a connected SSH window (card connect-125, #1600)', functio
       );
     } finally {
       await closeWindow('c139');
+    }
+  });
+});
+
+
+describe('the Remote - SSH log: the command surface (card coverage-121)', function () {
+  this.timeout(300_000);
+  beforeEach(closeAllButLocal);
+
+  /** A fresh empty window for the row to act on. */
+  async function freshWindow(): Promise<string> {
+    return nextEmptyWindow(() =>
+      inWindow('local', 'workbench.action.newWindow'),
+    );
+  }
+
+  it('F-2003 AC-1 (c121-listed): "Remote-SSH: Show Log" is listed in the Command Palette, and running it shows the channel', async () => {
+    const name = await freshWindow();
+    try {
+      const listed = await paletteItems(name, 'Remote-SSH: Show Log');
+      await runFromPalette(name, 'Remote-SSH: Show Log');
+      await windowState(name);
+      deepStrictEqual(
+        {
+          listed: listed.includes('Remote-SSH: Show Log'),
+          channel: await outputChannelOf(name),
+        },
+        {listed: true, channel: 'Remote - SSH'},
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+    }
+  });
+
+  it('F-2003 AC-2 (c121-panel): Show Log opens the panel on the Output view with the channel selected and the keyboard focus in it', async () => {
+    const name = await freshWindow();
+    try {
+      await inWindow(name, 'opensshremotes.showLog');
+      await windowState(name);
+      deepStrictEqual(
+        {
+          channel: await outputChannelOf(name),
+          focused: await outputPanelFocused(name),
+        },
+        {channel: 'Remote - SSH', focused: true},
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+    }
+  });
+
+  it('F-2003 AC-4 (c121-again): with the channel already shown, Show Log again changes nothing visible and shows no notification, dialog or pick', async () => {
+    const name = await freshWindow();
+    try {
+      await inWindow(name, 'opensshremotes.showLog');
+      await windowState(name);
+      await inWindow(name, 'opensshremotes.showLog');
+      await windowState(name);
+      const state = windowEvents(name)
+        .filter(each => each.event === 'state')
+        .at(-1);
+      deepStrictEqual(
+        {
+          channel: state?.visibleOutputChannel,
+          dialog: await dialogOf(name),
+          notices: await notifications(name),
+          quickPick: await quickPickOf(name),
+        },
+        {
+          channel: 'Remote - SSH',
+          dialog: undefined,
+          notices: [],
+          quickPick: undefined,
+        },
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+    }
+  });
+
+  it('F-2003 AC-7 (c121-stays-hidden): a successful connection leaves the panel hidden', async () => {
+    await openWindow('harness', 'c121-hidden');
+    try {
+      await connectedWithin('c121-hidden', 60_000);
+      const states = windowEvents('c121-hidden').filter(
+        each => each.event === 'state',
+      );
+      deepStrictEqual(
+        [
+          states.every(
+            each =>
+              each.visibleOutputChannel === undefined ||
+              each.visibleOutputChannel === null,
+          ),
+          await outputChannelOf('c121-hidden'),
+        ],
+        [true, undefined],
+      );
+    } finally {
+      await closeWindow('c121-hidden').catch(() => undefined);
+    }
+  });
+
+  it('F-2003 AC-8 (c121-refused-panel): a refused connection with no detected issues shows the panel on the Remote - SSH channel', async () => {
+    await openWindow('refused', 'c121-refused');
+    try {
+      await waitFor(
+        'the failure dialog of c121-refused',
+        () => recordLines('failureDialog', 'c121-refused').length > 0,
+        300_000,
+      );
+      deepStrictEqual(
+        await outputChannelOf('c121-refused'),
+        'Remote - SSH',
+      );
+    } finally {
+      await closeWindow('c121-refused').catch(() => undefined);
+    }
+  });
+
+  it('F-2003 AC-25 (c121-first-lines): a fresh window\'s channel opens with the log level, the editor version, the extension\'s name and version, and the client platform and architecture', async () => {
+    const name = await freshWindow();
+    try {
+      const mark = connectionLog().length;
+      await inWindow(name, 'opensshremotes.showLog');
+      await waitFor(
+        `the opening lines of ${name}`,
+        () => connectionLog().length > mark,
+        60_000,
+      );
+      const [level, editor, extension, platform] = connectionLog().slice(
+        mark,
+      );
+      const platformText = platform ?? '';
+      deepStrictEqual(
+        [
+          level === 'debug' || level === '2',
+          (editor ?? '').includes('1.'),
+          (extension ?? '').includes('Remote - SSH'),
+          platformText.includes('linux') &&
+            (platformText.includes('x64') || platformText.includes('arm64')),
+        ],
+        [true, true, true, true],
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
     }
   });
 });
