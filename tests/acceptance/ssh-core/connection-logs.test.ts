@@ -36,6 +36,7 @@ import {
   settingControlOf,
   settingControlOptions,
   settingRow,
+  type ShownDialog,
   terminalTabsOf,
   terminalText,
 } from '../windows/renderer.ts';
@@ -334,11 +335,11 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
     }
   });
 
-  /** The last non-empty line of the active terminal of window `name`, trimmed at the end; empty when it shows none. */
+  /** The last non-empty line of the active terminal of window `name`, trimmed at the end, the reader's no-break spaces as ordinary ones; empty when it shows none. */
   async function troubleLine(name: string): Promise<string> {
     const lines = (await terminalText(name))
       .split('\n')
-      .map(line => line.trimEnd())
+      .map(line => line.trimEnd().replaceAll('\u00A0', ' '))
       .filter(line => line !== '');
     return lines.at(-1) ?? '';
   }
@@ -366,7 +367,7 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
     try {
       // The Output view shows another channel: the core pick switches it away from ours.
       await inWindow(name, 'opensshremotes.showLog');
-      await startInWindow(name, 'workbench.action.output.showOutputChannels');
+      await startInWindow(name, 'workbench.action.showOutputChannels');
       await pickOpen(name);
       const channels = (await quickPickOf(name))?.items ?? [];
       const other =
@@ -412,7 +413,7 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
   it('F-2003 AC-5 (c121-before-activation): in a fresh window the core channel pick lists no Remote - SSH, and Show Log activates the extension and shows the channel', async () => {
     const name = await freshWindow();
     try {
-      await startInWindow(name, 'workbench.action.output.showOutputChannels');
+      await startInWindow(name, 'workbench.action.showOutputChannels');
       await pickOpen(name);
       const listed = (await quickPickOf(name))?.items ?? [];
       await pressEscape(name);
@@ -447,19 +448,21 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
       ]);
       await openWindow('noforward', name);
       try {
+        function linkNotices() {
+          return recordLines('notice', name).filter(line =>
+            line.question.includes('Show log'),
+          );
+        }
         try {
           await waitFor(
-            'the forwarding refusal notification of c121-link',
-            async () =>
-              (await notifications(name)).some(each =>
-                each.includes('Show log'),
-              ),
+            'the forwarding refusal notice of c121-link',
+            () => linkNotices().some(line => line.held === true),
             180_000,
           );
         } catch (caught) {
           const events = windowEvents(name).slice(-12);
           throw new Error(
-            `${(caught as Error).message}: notifications ${JSON.stringify(await notifications(name))}, dialog ${JSON.stringify(await dialogOf(name))}, notice record ${JSON.stringify(recordLines('notice', name))}, events ${JSON.stringify(events)}`,
+            `${(caught as Error).message}: notice record ${JSON.stringify(recordLines('notice', name))}, notifications ${JSON.stringify(await notifications(name))}, dialog ${JSON.stringify(await dialogOf(name))}, events ${JSON.stringify(events)}`,
             {cause: caught},
           );
         }
@@ -470,14 +473,13 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
           {
             channel: await outputChannelOf(name),
             focused: await outputPanelFocused(name),
-            still: (await notifications(name)).some(each =>
-              each.includes('Show log'),
-            ),
+            // The held notice has no answer line until the row releases it: the notification is still open.
+            still: linkNotices().every(line => line.held === true),
           },
           {channel: 'Remote - SSH', focused: true, still: true},
         );
-        signal('c121-link-free');
       } finally {
+        signal('c121-link-free');
         await closeWindow(name).catch(() => undefined);
       }
     });
@@ -622,15 +624,24 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
           120_000,
         );
         const record = connectionLog().slice(mark);
-        deepStrictEqual(
-          {
-            reconnected: record.some(each =>
-              each.startsWith('Resolving ssh-remote+harness'),
-            ),
-            traceLines: record.some(each => each.startsWith('[ssh] debug1: ')),
-          },
-          {reconnected: true, traceLines: true},
-        );
+        try {
+          deepStrictEqual(
+            {
+              reconnected: record.some(each =>
+                each.startsWith('Resolving ssh-remote+harness'),
+              ),
+              traceLines: record.some(each =>
+                each.startsWith('[ssh] debug1: '),
+              ),
+            },
+            {reconnected: true, traceLines: true},
+          );
+        } catch (caught) {
+          throw new Error(
+            `${(caught as Error).message}: the reconnection record holds ${JSON.stringify(record.slice(0, 15))}`,
+            {cause: caught},
+          );
+        }
       } finally {
         await closeWindow('c121-live').catch(() => undefined);
       }
@@ -776,8 +787,9 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
         await waitFor(
           'the setting on the Settings editor list at its default',
           async () =>
-            (await settingRow('local'))?.lines[1] ===
-            'The log level for the extension.',
+            (await settingRow('local'))?.lines.includes(
+              'The log level for the extension.',
+            ) ?? false,
           60_000,
         );
       } catch (caught) {
@@ -793,14 +805,16 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
       deepStrictEqual(
         {
           title: (levelRow?.lines[0] ?? '').includes('Log Level'),
-          description: levelRow?.lines[1],
+          description: levelRow?.lines.includes(
+            'The log level for the extension.',
+          ),
           count: levelRow?.count,
           default: control,
           options,
         },
         {
           title: true,
-          description: 'The log level for the extension.',
+          description: true,
           count: 1,
           default: 'debug',
           options: ['debug', 'trace'],
@@ -819,7 +833,7 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
     try {
       await inWindow(name, 'opensshremotes.showLog');
       await windowState(name);
-      await startInWindow(name, 'workbench.action.output.showOutputChannels');
+      await startInWindow(name, 'workbench.action.showOutputChannels');
       await pickOpen(name);
       const items = (await quickPickOf(name))?.items ?? [];
       await pressEscape(name);
@@ -915,7 +929,12 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
 
   it('F-2003 AC-26 (c121-live-change): a log level changed in the user settings needs no reload: the next SSH operation completes with no error, at trace and at an out-of-enum value', async () => {
     const saved = readUserSettings();
-    const seen: Array<{value: string; clean: boolean}> = [];
+    const seen: Array<{
+      value: string;
+      clean: boolean;
+      dialog: ShownDialog | undefined;
+      notices: string[];
+    }> = [];
     try {
       await userSettings({'remote.SSH.logLevel': 'debug'});
       await openWindow('harness', 'c121-live26');
@@ -936,17 +955,29 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
           );
           mark = connectionLog().length;
           await connectedWithin('c121-live26', 120_000);
+          const dialog = await dialogOf('c121-live26');
+          const notices = await notifications('c121-live26');
           seen.push({
             value,
-            clean:
-              (await dialogOf('c121-live26')) === undefined &&
-              (await notifications('c121-live26')).length === 0,
+            clean: dialog === undefined && notices.length === 0,
+            dialog,
+            notices,
           });
         }
-        deepStrictEqual(seen, [
-          {value: 'trace', clean: true},
-          {value: 'off', clean: true},
-        ]);
+        try {
+          deepStrictEqual(
+            seen.map(each => ({value: each.value, clean: each.clean})),
+            [
+              {value: 'trace', clean: true},
+              {value: 'off', clean: true},
+            ],
+          );
+        } catch (caught) {
+          throw new Error(
+            `${(caught as Error).message}: ${JSON.stringify(seen)}`,
+            {cause: caught},
+          );
+        }
       } finally {
         await closeWindow('c121-live26').catch(() => undefined);
       }
