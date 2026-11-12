@@ -4,7 +4,8 @@
 #   tools/start-display    start that display when :99 has none, and name it in $GITHUB_ENV when that is set
 #
 # A machine whose :99 is already served keeps it. Otherwise Xvfb and then openbox start in the background, each
-# installed with apt-get when it is missing; both keep running until the job's processes are ended. Without a window
+# installed with apt-get when it is missing, with xdotool, which the row that answers the operating system's own
+# folder chooser types with; the two servers keep running until the job's processes are ended. Without a window
 # manager no window takes the focus, and the rows that type into a dialog, a menu or a picker are written against a
 # focused window.
 set -euo pipefail
@@ -17,6 +18,7 @@ if [ ! -S "$SOCKET" ]; then
   missing=()
   command -v Xvfb >/dev/null || missing+=(xvfb)
   command -v openbox >/dev/null || missing+=(openbox)
+  command -v xdotool >/dev/null || missing+=(xdotool)
   if [ "${#missing[@]}" -gt 0 ]; then
     echo "start-display: installing ${missing[*]}"
     # a fresh hosted runner's unattended-upgrades holds the dpkg lock at boot: wait for it, up to five minutes

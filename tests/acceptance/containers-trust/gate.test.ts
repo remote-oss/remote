@@ -24,9 +24,11 @@ import {
   recentlyOpenedIn,
   reopenInContainer,
   inWindow,
+  isOpen,
   trustSettled,
   variable,
   waitFor,
+  windowNames,
   windowState,
 } from '../windows/harness.ts';
 import {
@@ -47,10 +49,17 @@ import {
   welcomeText,
   windowTitle,
 } from '../windows/renderer.ts';
-import {VIEW} from '../windows/dev-containers-view.ts';
+import {
+  stateOf as containerStateOf,
+  VIEW,
+} from '../windows/dev-containers-view.ts';
+import {answerNativeFolderDialog} from './native-folder-dialog.ts';
 import {folderWrapper, recordedCalls} from '../windows/folder-wrapper.ts';
 
 /** The question core asks of a folder, F-0106 5.0 step 2. */
+/** The button of the Workspace Trust editor that trusts the folder. */
+const TRUST_BUTTON = 'Trust';
+
 const TRUST_QUESTION = 'Do you trust the authors of the files in this folder?';
 
 /** The start of the discovery notification, which F-0301 5.0 step 2 shows in Restricted Mode as well. */
@@ -327,6 +336,130 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       },
     );
     await closeWindow(name);
+  });
+
+  /**
+   * Reloads the connected window of a folder after Don't Trust, waits until the reload's shutdown has stopped the
+   * container, answers core's trust dialog with `answer`, and gives what the window and the container are after.
+   */
+  async function stoppedThenAnswered(key: string, answer: string) {
+    const folder = devContainerFolder(`gate-${key}`, {name: `Gate ${key}`});
+    const name = await trustedContainerWindow(folder);
+    const [containerId = ''] = await devContainersOf(folder);
+    await inWindow(name, 'workbench.trust.manage');
+    await waitFor(
+      'the trust editor of the connected window',
+      async () => (await pageText(name)).includes('You trust this folder'),
+      30_000,
+    );
+    await clickButton(name, "Don't Trust");
+    const reloaded = reloadWindow(name);
+    await waitForDialog(name);
+    await waitFor(
+      'the reload to stop the container',
+      async () => (await containerStateOf(containerId)) === 'exited',
+      120_000,
+    );
+    await answerDialog(name, answer);
+    return {name, folder, containerId, reloaded};
+  }
+
+  it('F-0106 AC-48 (c123-restart-accepted): Trust Folder & Continue after the reload stopped the container starts that same container again, without a build, and the window connects to it', async () => {
+    const {name, folder, containerId, reloaded} = await stoppedThenAnswered(
+      'restart-accepted',
+      'Trust Folder & Continue',
+    );
+    await reloaded;
+    await connectedToContainer(name);
+    deepStrictEqual(
+      [
+        await devContainersOf(folder),
+        await containerStateOf(containerId),
+        (await windowState(name)).remoteName,
+      ],
+      [[containerId], 'running', 'dev-container'],
+    );
+    await closeWindow(name);
+  });
+
+  it('F-0106 AC-48 (c123-restart-declined): declining the trust dialog after the reload stopped the container leaves that container stopped', async () => {
+    const {name, folder, containerId, reloaded} = await stoppedThenAnswered(
+      'restart-declined',
+      'Cancel',
+    );
+    await waitForDialog(name);
+    await answerDialog(name, 'OK');
+    await reloaded;
+    await waitFor(
+      `window ${name} to be a local folder again`,
+      async () => (await windowState(name)).remoteName === null,
+      60_000,
+    );
+    deepStrictEqual(
+      [await devContainersOf(folder), await containerStateOf(containerId)],
+      [[containerId], 'exited'],
+    );
+    await closeWindow(name);
+  });
+
+  it('F-0106 AC-45 (reading-2340-trust-click): trusting the folder in the editor that Manage opens leaves the command not resumed: no connecting notification and no container, also 15 s later, and a second Reopen in Container asks nothing', async () => {
+    const folder = devContainerFolder('c123-manage-trust', {
+      name: 'C123 Manage Trust',
+    });
+    const name = await openFolderWindow(folder);
+    try {
+      const running = inWindow(name, 'remote-containers.reopenInContainer');
+      running.catch(() => undefined);
+      await waitForDialog(name, 60_000);
+      await answerDialog(name, 'Manage');
+      // The criterion's trigger is Ctrl+Enter in the editor; the row clicks the editor's trust button, the same action,
+      // since a key chord needs a helper in the shared renderer (reading-2340-trust-click).
+      await waitFor(
+        'the trust editor to take the trust button',
+        async () => {
+          try {
+            await clickButton(name, TRUST_BUTTON);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        30_000,
+      );
+      await trustSettled(name, true);
+      await new Promise(resolve => setTimeout(resolve, 15_000));
+      const afterwards = {
+        trusted: await isTrusted(name),
+        restrictedItem: await hasStatusItem(name, 'status.workspaceTrust'),
+        connecting: (await notifications(name)).filter(text =>
+          text.startsWith('Connecting to Dev Container'),
+        ),
+        remoteName: (await windowState(name)).remoteName,
+        containers: await devContainersOf(folder),
+      };
+      await reopenInContainer(name);
+      deepStrictEqual(
+        [
+          afterwards,
+          await dialogOf(name),
+          (await devContainersOf(folder)).length,
+        ],
+        [
+          {
+            trusted: true,
+            restrictedItem: false,
+            connecting: [],
+            remoteName: null,
+            containers: [],
+          },
+          undefined,
+          1,
+        ],
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder);
+    }
   });
 
   /** Runs Open Folder in Container in window `name`, picks `folder`, and leaves the command running. */
@@ -625,39 +758,74 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     await closeWindow(name);
   }
 
-  it('F-0106 AC-6 (c69-6): Open Folder in Container on an untrusted folder switches the window title and the status bar to the target folder before core asks', async () => {
-    const folder = devContainerFolder('c69-switch', {name: 'C69 Switch'});
-    const from = await openFolderWindow(devContainerFolder('c69-switch-from'));
-    await openFolderFrom(from, folder);
-    await waitForDialog('c69-switch');
+  /**
+   * Opens `key`'s folder in a container from another window with `open`, and gives what the new window shows while
+   * core's trust question is open, then declines it.
+   */
+  async function switchedBeforeCore(
+    key: string,
+    open: (from: string, folder: string) => Promise<void>,
+  ) {
+    const folder = devContainerFolder(key, {name: key});
+    const from = await openFolderWindow(devContainerFolder(`${key}-from`));
+    await open(from, folder);
+    await waitForDialog(key);
     const authority = decodeURIComponent(
-      (await windowState('c69-switch')).folders[0] ?? '',
+      (await windowState(key)).folders[0] ?? '',
     );
     const encoded = /^vscode-remote:\/\/dev-container\+([0-9a-f]+)\//.exec(
       authority,
     )?.[1];
-    deepStrictEqual(
-      {
-        title: (await windowTitle('c69-switch')).includes('c69-switch'),
-        hostPath: (
-          JSON.parse(Buffer.from(encoded ?? '', 'hex').toString()) as {
-            hostPath: string;
-          }
-        ).hostPath,
-        remoteName: (await windowState('c69-switch')).remoteName,
-        indicator: await statusBarText('c69-switch', 'status.host'),
-      },
-      {
+    const shown = {
+      title: (await windowTitle(key)).includes(key),
+      hostPath: (
+        JSON.parse(Buffer.from(encoded ?? '', 'hex').toString()) as {
+          hostPath: string;
+        }
+      ).hostPath,
+      remoteName: (await windowState(key)).remoteName,
+      indicator: await statusBarText(key, 'status.host'),
+    };
+    await answerDialog(key, 'Cancel');
+    await waitForDialog(key);
+    await answerDialog(key, 'OK');
+    await closeWindow(key);
+    return {shown, folder};
+  }
+
+  it('F-0106 AC-6 (c69-6): Open Folder in Container on an untrusted folder switches the window title and the status bar to the target folder before core asks', async () => {
+    const {shown, folder} = await switchedBeforeCore(
+      'c69-switch',
+      openFolderFrom,
+    );
+    deepStrictEqual(shown, {
+      title: true,
+      hostPath: folder,
+      remoteName: 'dev-container',
+      indicator: 'Opening Remote...',
+    });
+  });
+
+  it('F-0106 AC-50 (c123-native-dialog): with the editor’s own folder dialog off, Open Folder in Container on an untrusted folder switches the window and shows Opening Remote... before core asks, as with the in-window dialog', async () => {
+    await setUserSetting('files.simpleDialog.enable', false);
+    try {
+      const {shown, folder} = await switchedBeforeCore(
+        'c123-native',
+        async (from, target) => {
+          inWindow(from, 'remote-containers.openFolder').catch(() => undefined);
+          await answerNativeFolderDialog(target);
+        },
+      );
+      deepStrictEqual(shown, {
         title: true,
         hostPath: folder,
         remoteName: 'dev-container',
         indicator: 'Opening Remote...',
-      },
-    );
-    await answerDialog('c69-switch', 'Cancel');
-    await waitForDialog('c69-switch');
-    await answerDialog('c69-switch', 'OK');
-    await closeWindow('c69-switch');
+      });
+    } finally {
+      // The launch's own value, which the row's false replaced in the user settings the launch wrote.
+      await setUserSetting('files.simpleDialog.enable', true);
+    }
   });
 
   it('F-0106 AC-6a (c69-6a): accepting core’s dialog for a folder with a configuration goes straight to Connecting to Dev Container, with no quick pick', async () => {
@@ -723,20 +891,25 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     await closeWindow(from);
   });
 
-  /** Declines core's dialog for a new folder with `decline`, presses OK, and gives what the window is after. */
+  /**
+   * Declines core's dialog for a new folder with `decline`, closes the S360 dialog with `finish` (OK by default), and
+   * gives what the window is after, and apart from it the discovery notification and the windows the open added.
+   */
   async function declinedOpenOf(
     key: string,
     decline: (name: string) => Promise<void>,
+    finish: (name: string) => Promise<void> = name => answerDialog(name, 'OK'),
   ) {
     const name = `c69-${key}`;
     const folder = devContainerFolder(name, {name: `C69 ${key}`});
     const from = await openFolderWindow(devContainerFolder(`${name}-from`));
+    const before = windowNames().filter(isOpen);
     await openFolderFrom(from, folder);
     await waitForDialog(name);
     await decline(name);
     const declined = await waitForDialog(name);
     const declinedText = await dialogText(name);
-    await answerDialog(name, 'OK');
+    await finish(name);
     await waitFor(
       'the window to be the local folder again',
       async () => (await windowState(name)).remoteName === null,
@@ -754,8 +927,16 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       remoteName: (await windowState(name)).remoteName,
       trusted: await trustSettled(name, false),
     };
+    const opened = {
+      discovery: (await notifications(name)).filter(text =>
+        text.startsWith(DISCOVERY),
+      ).length,
+      added: windowNames()
+        .filter(isOpen)
+        .filter(each => !before.includes(each)),
+    };
     await closeWindow(name);
-    return {observed, folder};
+    return {observed, opened, folder};
   }
 
   /** What {@link declinedOpenOf} gives for a decline of core's dialog, for the new folder `folder`. */
@@ -778,6 +959,21 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       answerDialog(name, 'Cancel'),
     );
     deepStrictEqual(observed, declinedOpenExpected(folder));
+  });
+
+  it('F-0106 AC-46 (c123-escape-ok): Escape on the S360 dialog ends as OK does: the window is the target folder, local and restricted, with the discovery notification, and no other window opened', async () => {
+    const {observed, opened, folder} = await declinedOpenOf(
+      'escape-ok',
+      pressEscape,
+      pressEscape,
+    );
+    deepStrictEqual(
+      [observed, opened],
+      [
+        declinedOpenExpected(folder),
+        {discovery: 1, added: [path.basename(folder)]},
+      ],
+    );
   });
 
   it('F-0106 AC-8a (c69-8a): opening the [Dev Container] recent entry from another window reattaches with no dialog, and the title and indicator never show a local or Restricted Mode window', async () => {
@@ -826,6 +1022,70 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       },
     );
     await closeWindow('c69-recent');
+  });
+
+  it('F-0106 AC-49 (c123-recent-revoked): the [Dev Container] recent entry of a folder whose trust was revoked asks core’s question while resolving, and Cancel ends in S360 with S377 and a local, restricted window, never a connected one', async () => {
+    const folder = devContainerFolder('c123-recent-revoked', {
+      name: 'C123 Recent Revoked',
+    });
+    const name = await trustedContainerWindow(folder);
+    await inWindow(name, 'workbench.trust.manage');
+    await waitFor(
+      'the trust editor of the connected window',
+      async () => (await pageText(name)).includes('You trust this folder'),
+      30_000,
+    );
+    await clickButton(name, "Don't Trust");
+    const reloaded = reloadWindow(name);
+    await waitForDialog(name);
+    await answerDialog(name, 'Cancel');
+    await waitForDialog(name);
+    await answerDialog(name, 'OK');
+    await reloaded;
+    await closeWindow(name);
+    const from = await openFolderWindow(
+      devContainerFolder('c123-recent-revoked-from'),
+    );
+    const entry = (await recentlyOpenedIn(from)).find(
+      each =>
+        each.remoteAuthority?.startsWith('dev-container+') === true &&
+        each.uri.endsWith('/workspaces/c123-recent-revoked'),
+    );
+    inWindow(from, 'acceptance.agent.openWindow', entry?.uri).catch(
+      () => undefined,
+    );
+    const asked = await waitForDialog(name);
+    const askedText = await dialogText(name);
+    await answerDialog(name, 'Cancel');
+    const declined = await waitForDialog(name);
+    const declinedText = await dialogText(name);
+    await answerDialog(name, 'OK');
+    await waitFor(
+      `window ${name} to be a local folder`,
+      async () => (await windowState(name)).remoteName === null,
+      60_000,
+    );
+    deepStrictEqual(
+      {
+        entry: entry?.label?.endsWith('[Dev Container]'),
+        asked: [asked.message, askedText?.includes(S265)],
+        declined: [
+          declined.message,
+          declinedText?.includes(S377),
+          declined.buttons,
+        ],
+        remoteName: (await windowState(name)).remoteName,
+        trusted: await trustSettled(name, false),
+      },
+      {
+        entry: true,
+        asked: [TRUST_QUESTION, true],
+        declined: [S360, true, ['OK']],
+        remoteName: null,
+        trusted: false,
+      },
+    );
+    await closeWindow(name);
   });
 
   it('F-0106 AC-28 (c69-28): with no Docker engine, Open Folder in Container shows the Docker-availability dialog before any picker', async () => {

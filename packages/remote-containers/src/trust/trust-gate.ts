@@ -36,6 +36,13 @@ export const TRUST_TEMPLATES = {
   S265: 'Opening a folder in a Dev Container may execute arbitrary code both inside and outside the container.',
   S360: 'The local folder is currently not trusted.',
   S377: 'Trust is required to build a dev container from it. The folder will now reopen locally.',
+  S124: 'Do you want to continue with attaching to a container?',
+  S125: 'Do you want to continue with checking out a pull-request in a Docker volume?',
+  S126: 'Do you want to continue with cloning a repository in a Docker volume?',
+  S127: 'Do you want to continue with creating a Dev Container?',
+  S128: 'Do you want to continue with inspecting a Docker volume?',
+  S129: 'Do you want to continue with opening a folder in a container?',
+  S130: 'Do you want to continue with reopening the folder in a container?',
 } as const;
 
 /** The text of an error. */
