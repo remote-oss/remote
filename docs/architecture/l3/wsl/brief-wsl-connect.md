@@ -19,6 +19,8 @@ These replace contracts.md D6's run list.
    notice port, its `{0}` neutralised (brief-remote-wsl §2 item 4), and a handled failure with no F-6208 dialog. Two
    registered names that differ only in case match neither (`reading-2348-case-tie`). The empty name is the default
    distro (Q2 option (a)); its window keeps the authority `wsl+`, so a recent entry follows the default.
+   **Rejoin:** if D5h already has a helper for this product, outer and registered distro and its server answers
+   `/version`, the window joins it here and returns, so a reload shows no progress (AC-8); otherwise go on.
 5. **Old builds** (F-6103, §6 below).
 6. **Probe:** phase `startingSubsystem`, then lib-server's probe over D4, which also starts a stopped distro.
 7. **Server:** D7's `ensureServer` (§2), with the phases `downloading`, `unpacking <n>%` and `installing`.
@@ -56,6 +58,9 @@ commit (F-7902 AC-8, AC-15), not by lib-server's version-and-release key. The en
 name, built from `[A-Za-z0-9._-]` only, with unit rows for `..`, `%2e%2e`, a drive letter, NUL, spaces, a query, `.tgz`
 and an unknown quality.
 
+**The partial download** keeps lib-server's name `<final>_<epoch ms>-<token>`, since the token keeps two windows'
+downloads apart, `ruling-2348-partial-name` (F-7902 AC-16 says `<final>_<epoch ms>`).
+
 **Verification:** SHA-256 when an `X-SHA256` header was sent by any hop, else the length, else none (F-7902 rule 4
 governs F-6301 BR-6, `reading-2348-verification`). **TLS** stays verified even with `http.proxyStrictSSL` false, extra CAs
 only from `NODE_EXTRA_CA_CERTS` (F-6301 BR-9, AC-9): the composition root pins the HTTP function.
@@ -86,8 +91,10 @@ start command's line in the "WSL" terminal.
 
 ## 3. Start methods and the server's environment (F-6303, F-6304, F-6601)
 
-- **Script start** (default, single script): one script over D4's stdin. It sources `server-env-setup` once, at its top,
-  then tries the client's download and falls back to wget in the distro.
+- **Script start** (default): lib-server's install and start scripts over D4's stdin. It tries the client's download
+  and falls back to wget in the distro. The start step always sources `server-env-setup`; the install step sources it
+  only when it downloads in the distro, which needs its proxy variables. So a connect reads it once unless the fallback
+  runs (`reading-2348-setup-once`, F-6303 BR-2, AC-1).
 - **Script-less start** (`remote.WSL.experimental.scriptLessStartup`, the stepwise driver): no in-distro fallback, so a
   failed client download fails the connect (F-6304 Q2 answered (a), `reading-2348-scriptless-no-fallback`; AC-11 and
   F-7902 AC-14 hold as written). Its requirements check follows the mode (AC-7, AC-24). Only its start step sources the
@@ -110,14 +117,17 @@ start command's line in the "WSL" terminal.
 
 ## 4. The proxy and the relay (D5h, D5r)
 
-- **Claim (`ruling-2348-proxy-helper`):** lib-helper's per-user registry, keyed by product, outer authority and
-  registered distro. The claim record holds the nonce and the endpoint only; the connection token is served over the
+- **Claim (`ruling-2348-proxy-helper`):** lib-helper's per-user registry, keyed by product and registered distro. D5h
+  serves the local route only; the nested route has no helper (brief-wsl-targets-and-interop §3). The claim record holds the nonce and the endpoint only; the connection token is served over the
   nonce-authenticated lease. The helper runs under the editor's own runtime, as lib-helper does for ssh.
 - **Listener:** `127.0.0.1`, one port for the helper's life, so a reload rejoins the same port (AC-8). At most 32
   relays at once; further connections are closed and logged, since each spawns a process before the server checks the
   token.
-- **End:** 5 s after the last lease, the helper stops the server through lib-server's `kill` and exits (6.9, AC-29,
-  AC-30). A helper that can't start ends the connect with `proxyFailed` (STR:S022) within 10 s.
+- **End:** 5 s after the last lease, the helper stops the server by the process id its start recorded (`serverFacts.pid`),
+  leaving `bin/` in place so nothing is reinstalled (lib-server's `kill` stops every server and deletes it), and exits
+  (6.9, AC-15, AC-29, AC-30). The stop is a fixed script run through D4 (`runScript`, so D1's `wsl.exe -d <registered>`)
+  with the pid as an argument: it sends `TERM` only if `/proc/<pid>/exe` is this server's `node`, so a reused pid is
+  never signalled, and it is bounded at 5 s. A helper that can't start ends the connect with `proxyFailed` (STR:S022) within 10 s.
 - **Relay (D5r):** each stream runs `wsl.exe -d <registered> --exec <server node> -e <fixed relay text> <port>`. The text
   is ours and fixed, with nothing interpolated; it writes a fixed readiness marker to standard error once it has
   connected, and the dial resolves only on that marker (10 s). It doesn't go through the drive mount.

@@ -23,3 +23,5 @@ Where the reimplementation departs from a published spec line on purpose. Each e
 - **The README describes the other WSL extension without naming it** (`ruling-2348-readme-voice`,
   brief-wsl-package §5). F-7904 B-3's items are said in ADR-0008's neutral voice ("another extension that provides the
   `wsl` authority").
+- **A partial download keeps a token in its name** (`ruling-2348-partial-name`, brief-wsl-connect §2). lib-server writes
+  `<final>_<epoch ms>-<token>` so two windows' downloads stay apart; F-7902 AC-16 names `<final>_<epoch ms>`.

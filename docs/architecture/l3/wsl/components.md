@@ -47,7 +47,7 @@ an injected spawner, so its tests run on a recorded fake.
 
 | Id | Component | Responsibility | Kind |
 |---|---|---|---|
-| D5h | wsl-proxy-helper (replaces D5, `ruling-2348-proxy-helper`) | A detached lib-helper helper per user, product, outer authority and registered distro: the `127.0.0.1` listener with D5r as its dialer, one lease per extension host, the connection token in memory and over the lease only, the `/version` health check, at most 32 relays, and the end 5 s after the last lease, stopping the server | process |
+| D5h | wsl-proxy-helper (replaces D5, `ruling-2348-proxy-helper`) | On the local route only (the nested route has a listener per window, `reading-2348-nested-proxy`), a detached lib-helper helper per user, product and registered distro: the `127.0.0.1` listener with D5r as its dialer, one lease per extension host, the connection token in memory and over the lease only, the `/version` health check, at most 32 relays, and the end 5 s after the last lease, stopping the server | process |
 | D5r | wsl-relay-dialer | `lib-forwarding` dialer: one D1 process per stream, running the server's own Node with a fixed inline relay text (`-e`, never through the drive mount) that pipes standard input and output to `127.0.0.1:<port>` in the distro and signals readiness on standard error | process over D1 |
 | D6 | connect-engine (with D6w, the silence watchdog decorating D4's `runScript`) | The connector behind B's `wsl` resolver front: decode result → D2 match → pre-1903 check (F-6103) → start → probe (V2) → D7 → D5 → `Connected`; or `Failed` with a WSL kind. Per-distro session table for re-resolve (F-6201 BR-5) and the server-alive check (F-6201 Q3 (b), provisional). The 90 s silence watchdog (F-6208 BR-9). Phase events in F-6201 BR-8 order. Reads the env rendezvous (D11) with B's `windowWorkspace` | process orchestration |
 | D7 | wsl-server-adapter (with D7a, the pure cache-entry namer of F-7902 rule 4) | WSL's parameters to `lib-server`: download policy `clientFirstThenHost`, cache policy `kept` (ADR-0006 decision 4), verification `headerHashThenLength`, mode `singleScript` or `stepwise` from `remote.WSL.experimental.scriptLessStartup` (F-6304), `environmentSetup` = `<serverDataFolderName>/server-env-setup` (F-6303), extra start option `--file-watcher-polling` for WSL 1 (F-6601), V8 cleanup variant per mode | pure configuration plus wiring |
@@ -78,7 +78,7 @@ an injected spawner, so its tests run on a recorded fake.
 | F-6401 | wsl#32 | D8 | D11, D7 |
 | F-6402 | wsl#33 | D6 | B `wsl.resolver-front` |
 | F-6601 | wsl#37 | D7 | V7 |
-| F-6701 | wsl#39 | D9a, D9b | D1, D4, D5h, B codec |
+| F-6701 | wsl#39 | D9a, D9b | D1, D4, D5r (a listener per window, no D5h), B codec |
 | F-7902 | wsl#41 | D7 | D7a, D6, B `wsl.failure-ui` |
 
 B owns, per its components.md and traceability.tsv (PR #26), as amended by `brief-remote-wsl.md`:
