@@ -6,7 +6,7 @@
 import {createServer, type Server} from 'node:net';
 import {onHost} from '../windows/harness.ts';
 
-/** Starts a listener on the host's loopback `port` that greets and then keeps each connection open for a while. */
+/** Starts a listener on the host's loopback `port` that answers a client's first line and then keeps each connection open for a while. */
 export async function listenHoldingOnHost(
   port: number,
   greeting: string,
@@ -15,7 +15,7 @@ export async function listenHoldingOnHost(
   await onHost(
     'sh',
     '-c',
-    `printf '#!/bin/sh\\necho ${greeting}\\nsleep 30\\n' > ${greeter} && chmod 755 ${greeter}`,
+    `printf '#!/bin/sh\\nread line\\necho ${greeting}\\nsleep 30\\n' > ${greeter} && chmod 755 ${greeter}`,
   );
   await onHost(
     'sh',

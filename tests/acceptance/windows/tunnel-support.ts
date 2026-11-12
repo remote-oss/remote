@@ -12,6 +12,7 @@ import {
   restoreUserSettings,
   userSettings,
 } from './harness.ts';
+import {REQUEST} from './forward-support.ts';
 import {password} from './maintenance.ts';
 
 /** A listening socket of the runner, with the program that holds it. */
@@ -188,10 +189,11 @@ export const GREETING = 'forwarded-8631';
 /** The script on the host that greets a connection. */
 const GREETER = '/tmp/c79-greeter.sh';
 
-/** The greeting a connection to the local `port` is given, over 127.0.0.1. */
+/** The answer a connection to the local `port` gets to its first line, over 127.0.0.1. */
 export function greetedAt(port: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const socket = connect(port, '127.0.0.1');
+    socket.write(REQUEST);
     socket.once('data', (chunk: Buffer) => {
       resolve(chunk.toString('utf8').trim());
       socket.destroy();
@@ -213,12 +215,12 @@ export function forwardedPortOf(name: string): number {
     : address.port;
 }
 
-/** Starts the listener on the host that greets each connection to its port. */
+/** Starts the listener on the host that answers the first line of each connection to its port. */
 export async function startGreeter(): Promise<void> {
   await onHost(
     'sh',
     '-c',
-    `printf '#!/bin/sh\\necho ${GREETING}\\nsleep 30\\n' > ${GREETER} && chmod 755 ${GREETER}; nohup nc -lk -p ${String(REMOTE_PORT)} -s 127.0.0.1 -e ${GREETER} >/dev/null 2>&1 &`,
+    `printf '#!/bin/sh\\nread line\\necho ${GREETING}\\nsleep 30\\n' > ${GREETER} && chmod 755 ${GREETER}; nohup nc -lk -p ${String(REMOTE_PORT)} -s 127.0.0.1 -e ${GREETER} >/dev/null 2>&1 &`,
   );
 }
 

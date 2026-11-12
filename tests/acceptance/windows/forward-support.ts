@@ -27,11 +27,21 @@ export interface Held {
 }
 
 /**
+ * What a client says first to a listener of the rows: the listener answers it. The editor's port forwarding can drop
+ * what the host sends before the forward is attached to the connection, so a listener that speaks on connect can have
+ * its first bytes cut; one that answers is read only after the connection is in use.
+ */
+export const REQUEST = 'hello\n';
+
+/** The program, for `nc -e`, that waits for the client's first line and then says `greeting`. */
+export function answering(greeting: string): string {
+  return `sh -c 'read line; echo ${greeting}'`;
+}
+
+/**
  * Connects to a local port and gives the listener's greeting, keeping the connection open. The greeting is a line: what
  * arrives is read up to its line end, as a slow tunnel can hand it over in pieces, and for five seconds at most. With a
- * `request` the connection speaks first, and the listener answers it: the editor's port forwarding can drop what the
- * host sends before the forward is attached to the connection, so a listener that writes on connect is read only when
- * what it says came after the connection was in use.
+ * `request` the connection speaks first, as `REQUEST` does.
  */
 export function holdOpen(port: number, request?: string): Promise<Held> {
   return new Promise((resolve, reject) => {
@@ -88,7 +98,7 @@ export async function connectingPrograms(
     .map(columns => columns.slice(6).join(' '));
 }
 
-/** Starts a listener on the host's loopback `port` that answers with `greeting`, outside VS Code. */
+/** Starts a listener on the host's loopback `port` that answers a client's first line with `greeting`, outside VS Code. */
 export async function listenOnHost(
   port: number,
   greeting: string,
@@ -96,7 +106,7 @@ export async function listenOnHost(
   await onHost(
     'sh',
     '-c',
-    `nc -lk -p ${String(port)} -s 127.0.0.1 -e /bin/echo ${greeting} >/dev/null 2>&1 &`,
+    `nc -lk -p ${String(port)} -s 127.0.0.1 -e ${answering(greeting)} >/dev/null 2>&1 &`,
   );
 }
 

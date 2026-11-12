@@ -1,12 +1,14 @@
 import {deepStrictEqual} from 'node:assert';
-import {connectingPrograms, holdOpen, listenersOf} from './forward-support.ts';
+import {
+  connectingPrograms,
+  holdOpen,
+  listenersOf,
+  REQUEST,
+} from './forward-support.ts';
 import {inWindow, onHost, openWindow, windowEvents} from './harness.ts';
 
 /** The port on the host that the listener answers on. */
 const REMOTE_PORT = 8613;
-
-/** What the client says first: the listener answers it, since a listener that speaks on connect can have its greeting cut by the editor's forward. */
-const REQUEST = 'hello\n';
 
 /** What the listener says to a connection. */
 const GREETING = 'forwarded-8613';
