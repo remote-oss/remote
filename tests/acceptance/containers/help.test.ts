@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import {
   closeWindow,
   devContainersOf,
@@ -150,6 +150,7 @@ describe('the help commands (card containers-218)', function () {
         await pressControlAlt(window, 'y');
         await new Promise(resolve => setTimeout(resolve, 5000));
         const urls = openedUrls().slice(before);
+        const bindingsFile = `${process.env.HARNESS_USER_DATA ?? ''}/User/keybindings.json`;
         deepStrictEqual(
           {
             urls,
@@ -163,6 +164,7 @@ describe('the help commands (card containers-218)', function () {
             settings: true,
             own: {notices: [], pick: undefined, dialog: undefined},
           },
+          `${bindingsFile}: ${existsSync(bindingsFile) ? readFileSync(bindingsFile, 'utf8') : 'missing'}`,
         );
       });
     } finally {
