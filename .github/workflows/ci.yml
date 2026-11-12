@@ -521,7 +521,12 @@ jobs:
           done
           EOF
           nohup bash "$RUNNER_TEMP/podman-fast.sh" > "$RUNNER_TEMP/podman-fast.txt" 2>&1 &
-      - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
+      # probe only (#2319): the deadlock without VSCodium, under several options, instead of the launch
+      - if: contains(matrix.part.launches, 'containers-podman')
+        timeout-minutes: 40
+        run: bash .github/podman-repro.sh
+      - if: ${{ !contains(matrix.part.launches, 'containers-podman') }}
+        run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         timeout-minutes: 40
         env:
           LAUNCHES: ${{ matrix.part.launches }}
