@@ -1500,7 +1500,7 @@ function runHostSetup(
  * each attempt of a VSCodium launch finds the run's base settings plus the launch's own, so none inherits another's.
  * A launch with host setup runs it on its own host before each attempt (the harness host, or the host of its
  * `hostBase` in `baseContainers`), and waits the helper's grace after the launch before it, so its resolve finds no
- * live helper of the run.
+ * live helper of the run. A launch whose rows fail is followed in the report by its failureReport.
  */
 export async function runLaunches(
   runFolder: string,
@@ -1539,7 +1539,20 @@ export async function runLaunches(
       await lock.take();
     }
     try {
-      exitCodes.push(await runAttempts(launch));
+      const exitCode = await runAttempts(launch);
+      exitCodes.push(exitCode);
+      if (exitCode !== 0 && launch !== undefined) {
+        for (const line of failureReport(
+          runFolder,
+          launch.label,
+          launch.hostBase === undefined
+            ? container
+            : baseContainers[launch.hostBase],
+          command,
+        )) {
+          report(line);
+        }
+      }
     } finally {
       if (locked) {
         lock.release();
@@ -1608,6 +1621,82 @@ export async function runLaunches(
       }
     }, report);
   }
+}
+
+/** How many of the last lines of a failed launch's logs the run prints. */
+export const FAILURE_LOG_LINES = 150;
+
+/** The lines of `text` without an empty one at the end, of which the last FAILURE_LOG_LINES, each indented. */
+function tailOf(text: string): {lines: string[]; count: number} {
+  const all = text.split('\n').filter(line => line !== '');
+  return {
+    lines: all.slice(-FAILURE_LOG_LINES).map(line => `  ${line}`),
+    count: all.length,
+  };
+}
+
+/** The output of one command, its standard output and error, indented; what failed when it could not run. */
+function stateOf(
+  command: CommandRunner,
+  program: string,
+  programArguments: readonly string[],
+): string[] {
+  const result = command(program, programArguments);
+  const text = `${result.stdout}${result.stderr}`;
+  return [
+    ...(result.status === 0 ? [] : [`  (exit ${String(result.status)})`]),
+    ...tailOf(text).lines,
+  ];
+}
+
+/**
+ * What a launch whose rows failed leaves for the job's log, so that a connect the resolver gave up on can be read
+ * there: the last lines of the log its extensions wrote (the Remote - SSH channel, and the Dev Containers one when
+ * there is one), then its host's listeners and processes and the last lines of the host's sshd log.
+ */
+export function failureReport(
+  runFolder: string,
+  label: string,
+  hostContainer: string | undefined,
+  command: CommandRunner,
+): string[] {
+  const files = launchFiles(runFolder, label);
+  const logs = [files.logFile, files.containersLogFile].flatMap(file => {
+    if (!existsSync(file)) {
+      return [];
+    }
+    const {lines, count} = tailOf(readFileSync(file, 'utf8'));
+    return [
+      `acceptance: ${label} failed: the last ${String(lines.length)} of the ${String(count)} lines of ${path.basename(file)}`,
+      ...lines,
+    ];
+  });
+  const host =
+    hostContainer === undefined || hostContainer === ''
+      ? [`acceptance: ${label} failed: no host container to read`]
+      : [
+          `acceptance: ${label} failed: its host's listeners and processes`,
+          ...stateOf(command, 'docker', [
+            'exec',
+            hostContainer,
+            'sh',
+            '-c',
+            'netstat -ltn 2>&1; ps -o pid,user,args 2>&1',
+          ]),
+          `acceptance: ${label} failed: the last lines of its host's sshd log`,
+          ...stateOf(command, 'docker', [
+            'logs',
+            '--tail',
+            '30',
+            hostContainer,
+          ]),
+        ];
+  return [
+    ...(logs.length === 0
+      ? [`acceptance: ${label} failed: its extensions wrote no log`]
+      : logs),
+    ...host,
+  ];
 }
 
 /**
