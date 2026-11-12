@@ -1,7 +1,12 @@
 import {deepStrictEqual} from 'node:assert';
 import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {openWindow, recordLines, windowState} from '../windows/harness.ts';
+import {
+  connectionLog,
+  openWindow,
+  recordLines,
+  windowState,
+} from '../windows/harness.ts';
 
 /** How long the user settings file may take to gain the platform after the window connects, in milliseconds. */
 const SETTINGS_WAIT_MILLISECONDS = 10_000;
@@ -18,6 +23,16 @@ function storedPlatform(): unknown {
         'remote.SSH.remotePlatform'
       ]
     : undefined;
+}
+
+/** The text of the launch's user settings file, or a word for its absence. */
+function settingsText(): string {
+  const file = path.join(
+    process.env.HARNESS_USER_DATA ?? '',
+    'User',
+    'settings.json',
+  );
+  return existsSync(file) ? readFileSync(file, 'utf8') : '(no settings file)';
 }
 
 /** Polls until the platform is stored, or the wait is over, and gives what is stored. */
@@ -47,6 +62,9 @@ describe('a terminal-mode connect that picks the platform', function () {
         await storedWithin(SETTINGS_WAIT_MILLISECONDS),
       ],
       ['ssh-remote', ['linux'], {harness: 'linux'}],
+      // When the platform is not stored, what the user settings file and the extension's log hold: the write is made
+      // after the connect, and a failure of it is only a line in the log.
+      `the settings file: ${settingsText()}; the log: ${JSON.stringify(connectionLog().slice(-20))}`,
     );
   });
 });
