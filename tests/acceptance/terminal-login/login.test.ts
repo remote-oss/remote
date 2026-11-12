@@ -81,14 +81,26 @@ function tabName(label: string): string {
   return label.startsWith('install') ? 'install' : label;
 }
 
+/** Whether window `name`'s Terminal panel lists the install tab; false while its page is being replaced. */
+async function installTabListed(name: string): Promise<boolean> {
+  try {
+    return (await terminalTabsOf(name)).some(label =>
+      label.startsWith('install'),
+    );
+  } catch (error) {
+    // Retry at the connection dialog reloads the window (its agent activates once more: run 43156874344), so a read
+    // that the reload meets ends with the protocol's "Inspected target navigated or closed": the page the read asked
+    // is gone, and the next read asks its successor.
+    if ((error as Error).message.includes('Inspected target navigated')) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 /** Waits until window `name`'s Terminal panel lists the install tab, then 2 s more, reading no terminal facts, which would focus it. */
 async function untilInstallTab(name: string): Promise<void> {
-  await waitFor(
-    'the install tab',
-    async () =>
-      (await terminalTabsOf(name)).some(label => label.startsWith('install')),
-    90_000,
-  );
+  await waitFor('the install tab', () => installTabListed(name), 90_000);
   await new Promise(resolve => setTimeout(resolve, 2000));
 }
 
