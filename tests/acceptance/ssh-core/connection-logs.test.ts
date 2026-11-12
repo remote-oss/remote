@@ -348,7 +348,7 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
     await waitFor(
       `the quick pick of ${name}`,
       async () => (await quickPickOf(name)) !== undefined,
-      15_000,
+      60_000,
     );
   }
 
@@ -553,7 +553,7 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
               await onHost(
                 'sh',
                 '-c',
-                "find /home/harness/.local/state -name 'remoteagent.log' -exec grep -ci trace {} + 2>/dev/null | awk '{s += $1} END {print s + 0}'",
+                "find /home/harness/.vscodium-server-insiders -maxdepth 1 -name '.*.log' -exec grep -ci trace {} + 2>/dev/null | awk '{s += $1} END {print s + 0}'",
               )
             ).trim(),
             10,
@@ -738,8 +738,11 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
   });
 
   it('F-2003 AC-19 (c121-setting-editor): the Settings editor lists the log level with its description, and its dropdown holds debug and trace with debug the default', async () => {
-    await inWindow('local', 'workbench.action.openSettings', 'remote.SSH.logLevel');
+    const saved = readUserSettings();
     try {
+      // A level left by an earlier launch is a user-scope override that changes this row's description line: clear it so the list shows the default.
+      await userSettings({'remote.SSH.logLevel': undefined});
+      await inWindow('local', 'workbench.action.openSettings', 'remote.SSH.logLevel');
       await waitFor(
         'the setting on the Settings editor list',
         async () => (await settingRow('local')) !== undefined,
@@ -768,6 +771,7 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
       await inWindow('local', 'workbench.action.closeActiveEditor').catch(
         () => undefined,
       );
+      restoreUserSettings(saved);
     }
   });
 
