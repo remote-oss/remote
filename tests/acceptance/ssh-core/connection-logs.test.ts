@@ -7,6 +7,7 @@ import {
   connectedWithin,
   connectionLog,
   editorLogsFolder,
+  hostAnswer,
   hostPassword,
   inWindow,
   nextEmptyWindow,
@@ -26,6 +27,7 @@ import {
 import {
   chooseQuickPickRow,
   dialogOf,
+  inputBoxOf,
   notifications,
   outputChannelOf,
   outputPanelFocused,
@@ -34,6 +36,7 @@ import {
   settingControlOf,
   settingControlOptions,
   settingRow,
+  terminalTabsOf,
   terminalText,
 } from '../windows/renderer.ts';
 import {
@@ -161,7 +164,6 @@ describe('the logs of a connected SSH window (card connect-125, #1600)', functio
     }
   });
 });
-
 
 describe('the Remote - SSH log: the command surface (card coverage-121)', function () {
   this.timeout(300_000);
@@ -302,7 +304,7 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
     }
   });
 
-  it('F-2003 AC-25 (c121-first-lines): a fresh window\'s channel opens with the log level, the editor version, the extension\'s name and version, and the client platform and architecture', async () => {
+  it("F-2003 AC-25 (c121-first-lines): a fresh window's channel opens with the log level, the editor version, the extension's name and version, and the client platform and architecture", async () => {
     const name = await freshWindow();
     try {
       const mark = connectionLog().length;
@@ -312,9 +314,7 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
         () => connectionLog().length > mark,
         60_000,
       );
-      const [level, editor, extension, platform] = connectionLog().slice(
-        mark,
-      );
+      const [level, editor, extension, platform] = connectionLog().slice(mark);
       const levelText = level ?? '';
       const editorText = editor ?? '';
       const extensionText = extension ?? '';
@@ -343,13 +343,21 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
     return lines.at(-1) ?? '';
   }
 
-  /** Waits until the quick pick of window `name` is open, whatever it lists. */
+  /** Waits until the quick pick of window `name` is open, whatever it lists; on timeout, names what the window shows. */
   async function pickOpen(name: string): Promise<void> {
-    await waitFor(
-      `the quick pick of ${name}`,
-      async () => (await quickPickOf(name)) !== undefined,
-      60_000,
-    );
+    try {
+      await waitFor(
+        `the quick pick of ${name}`,
+        async () => (await quickPickOf(name)) !== undefined,
+        60_000,
+      );
+    } catch (caught) {
+      const events = windowEvents(name).slice(-12);
+      throw new Error(
+        `${(caught as Error).message}: input ${JSON.stringify(await inputBoxOf(name))}, channel ${JSON.stringify(await outputChannelOf(name))}, panel ${JSON.stringify(await outputPanelFocused(name))}, events ${JSON.stringify(events)}`,
+        {cause: caught},
+      );
+    }
   }
 
   it('F-2003 AC-3 (c121-show-anywhere): with the Output on another channel, the Terminal tab in front, or the editor focused, Show Log brings the panel back on the Remote - SSH channel with the focus in it', async () => {
@@ -439,12 +447,22 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
       ]);
       await openWindow('noforward', name);
       try {
-        await waitFor(
-          'the forwarding refusal notification of c121-link',
-          async () =>
-            (await notifications(name)).some(each => each.includes('Show log')),
-          180_000,
-        );
+        try {
+          await waitFor(
+            'the forwarding refusal notification of c121-link',
+            async () =>
+              (await notifications(name)).some(each =>
+                each.includes('Show log'),
+              ),
+            180_000,
+          );
+        } catch (caught) {
+          const events = windowEvents(name).slice(-12);
+          throw new Error(
+            `${(caught as Error).message}: notifications ${JSON.stringify(await notifications(name))}, dialog ${JSON.stringify(await dialogOf(name))}, notice record ${JSON.stringify(recordLines('notice', name))}, events ${JSON.stringify(events)}`,
+            {cause: caught},
+          );
+        }
         // The link runs the command it names, which the row runs, as the editor does for a click.
         await inWindow(name, 'opensshremotes.showLog');
         await windowState(name);
@@ -474,28 +492,34 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
         () => recordLines('failureDialog', 'c121-trouble').length > 0,
         INSTALL_MILLISECONDS,
       );
-      await waitFor(
-        'the S125 line of c121-trouble',
-        async () => (await troubleLine('c121-trouble')) === S125_LINE,
-        60_000,
-      );
+      try {
+        await waitFor(
+          'the S125 line of c121-trouble',
+          async () => (await troubleLine('c121-trouble')) === S125_LINE,
+          60_000,
+        );
+      } catch (caught) {
+        const events = windowEvents('c121-trouble').slice(-12);
+        throw new Error(
+          `${(caught as Error).message}: terminals ${JSON.stringify(await terminalTabsOf('c121-trouble'))}, active ${JSON.stringify(await troubleLine('c121-trouble'))}, dialog ${JSON.stringify(await dialogOf('c121-trouble'))}, events ${JSON.stringify(events)}`,
+          {cause: caught},
+        );
+      }
       deepStrictEqual(await troubleLine('c121-trouble'), S125_LINE);
     } finally {
       await closeWindow('c121-trouble').catch(() => undefined);
     }
   });
 
-  it('F-2003 AC-11 (c121-full-order): a fresh connect\'s record holds the BR-6 kinds in order: the log level, the resolve start, the settings, the client search, the remote output, the listening port, the resolved authority, the rule and the analysis', async () => {
+  it("F-2003 AC-11 (c121-full-order): a fresh connect's record holds the BR-6 kinds in order: the log level, the resolve start, the settings, the client search, the remote output, the listening port, the resolved authority, the rule and the analysis", async () => {
     await freshHost();
     const mark = connectionLog().length;
     await openConnected('c121-order', INSTALL_MILLISECONDS);
     try {
       const lines = connectionLog().slice(mark);
-      const versions = lines.findIndex(each =>
-        each.includes('Editor version'),
-      );
-      const resolving = lines.findIndex(
-        each => each.startsWith('Resolving ssh-remote+harness, attempt 1'),
+      const versions = lines.findIndex(each => each.includes('Editor version'));
+      const resolving = lines.findIndex(each =>
+        each.startsWith('Resolving ssh-remote+harness, attempt 1'),
       );
       const setting = lines.findIndex(each => each.startsWith('remote.SSH.'));
       const searched = lines.findIndex(each =>
@@ -512,9 +536,7 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
         each.startsWith('Resolved ssh-remote+harness to local port '),
       );
       const separator = lines.findIndex(each => each === SEPARATOR_LINE);
-      const analysis = lines.findIndex(each =>
-        each.includes('recent session'),
-      );
+      const analysis = lines.findIndex(each => each.includes('recent session'));
       deepStrictEqual(
         [
           (lines[0] ?? '').includes('Log level'),
@@ -536,7 +558,7 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
     }
   });
 
-  it('F-2003 AC-12 (c121-trace-server): a fresh connect at trace keeps ssh\'s verbose lines, more than the same fresh connect at debug, and the host\'s remoteagent.log holds trace entries', async () => {
+  it("F-2003 AC-12 (c121-trace-server): a fresh connect at trace keeps ssh's verbose lines, more than the same fresh connect at debug, and the host's remoteagent.log holds trace entries", async () => {
     this.timeout(600_000);
     const saved = readUserSettings();
     let serverTrace = 0;
@@ -589,13 +611,14 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
         await connectedWithin('c121-live', INSTALL_MILLISECONDS);
         const mark = connectionLog().length;
         await userSettings({'remote.SSH.logLevel': 'trace'});
+        appendScript([hostAnswer('c121-live', {label: 'harness'})]);
         await inWindow('c121-live', 'opensshremotes.cleanLocalServer');
         await waitFor(
           'the reconnection of c121-live',
           () =>
-            connectionLog().slice(mark).some(each =>
-              each.includes('reconnection'),
-            ),
+            connectionLog()
+              .slice(mark)
+              .some(each => each.includes('reconnection')),
           120_000,
         );
         const record = connectionLog().slice(mark);
@@ -636,8 +659,9 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
         try {
           await connectedWithin(name, INSTALL_MILLISECONDS);
           const levelLine =
-            connectionLog().slice(mark).find(each => each.includes('Log level')) ??
-            '';
+            connectionLog()
+              .slice(mark)
+              .find(each => each.includes('Log level')) ?? '';
           seen.push({
             level: levelLine.includes('debug') && !levelLine.includes('trace'),
           });
@@ -742,14 +766,27 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
     try {
       // A level left by an earlier launch is a user-scope override that changes this row's description line: clear it so the list shows the default.
       await userSettings({'remote.SSH.logLevel': undefined});
-      await inWindow('local', 'workbench.action.openSettings', 'remote.SSH.logLevel');
-      // The editor may still show the override the window carried in: wait for the row to settle on the default's description.
-      await waitFor(
-        'the setting on the Settings editor list at its default',
-        async () =>
-          (await settingRow('local'))?.lines[1] === 'The log level for the extension.',
-        60_000,
+      await inWindow(
+        'local',
+        'workbench.action.openSettings',
+        'remote.SSH.logLevel',
       );
+      // The editor may still show the override the window carried in: wait for the row to settle on the default's description.
+      try {
+        await waitFor(
+          'the setting on the Settings editor list at its default',
+          async () =>
+            (await settingRow('local'))?.lines[1] ===
+            'The log level for the extension.',
+          60_000,
+        );
+      } catch (caught) {
+        const seen = await settingRow('local');
+        throw new Error(
+          `${(caught as Error).message}: row ${JSON.stringify(seen)}, control ${JSON.stringify(await settingControlOf('local'))}`,
+          {cause: caught},
+        );
+      }
       const levelRow = await settingRow('local');
       const control = await settingControlOf('local');
       const options = await settingControlOptions('local');
@@ -810,11 +847,19 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
           () => recordLines('failureDialog', 'c121-s125').length > 0,
           INSTALL_MILLISECONDS,
         );
-        await waitFor(
-          'the S125 line of c121-s125',
-          async () => (await troubleLine('c121-s125')) === S125_LINE,
-          60_000,
-        );
+        try {
+          await waitFor(
+            'the S125 line of c121-s125',
+            async () => (await troubleLine('c121-s125')) === S125_LINE,
+            60_000,
+          );
+        } catch (caught) {
+          const events = windowEvents('c121-s125').slice(-12);
+          throw new Error(
+            `${(caught as Error).message}: terminals ${JSON.stringify(await terminalTabsOf('c121-s125'))}, active ${JSON.stringify(await troubleLine('c121-s125'))}, dialog ${JSON.stringify(await dialogOf('c121-s125'))}, events ${JSON.stringify(events)}`,
+            {cause: caught},
+          );
+        }
         deepStrictEqual(await troubleLine('c121-s125'), S125_LINE);
       } finally {
         await closeWindow('c121-s125').catch(() => undefined);
@@ -876,9 +921,20 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
       await openWindow('harness', 'c121-live26');
       try {
         await connectedWithin('c121-live26', INSTALL_MILLISECONDS);
+        let mark = connectionLog().length;
         for (const value of ['trace', 'off'] as const) {
           await userSettings({'remote.SSH.logLevel': value});
+          appendScript([hostAnswer('c121-live26', {label: 'harness'})]);
           await inWindow('c121-live26', 'opensshremotes.cleanLocalServer');
+          await waitFor(
+            `the reconnection of c121-live26 at ${value}`,
+            () =>
+              connectionLog()
+                .slice(mark)
+                .some(each => each.includes('reconnection')),
+            120_000,
+          );
+          mark = connectionLog().length;
           await connectedWithin('c121-live26', 120_000);
           seen.push({
             value,
