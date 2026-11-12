@@ -9,6 +9,7 @@ import {
 import {
   closeWindow,
   devContainerFolder,
+  devContainersOf,
   isTrusted,
   variable,
   waitFor,
@@ -18,6 +19,7 @@ import {
   answerDialog,
   dialogOf,
   notificationCentre,
+  pressEscape,
   quickPickFacts,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -36,6 +38,21 @@ const WHERE_PLACEHOLDER =
   'Where would you like to create your container configuration?';
 
 const TRUST_SETTING = 'security.workspace.trust.enabled';
+
+/** The workspace file of a two-folder window, `key`'s: its first folder has a configuration and its second has none. */
+function multiRootWorkspace(key: string): {file: string; first: string} {
+  const folder = path.join(variable('HARNESS_RUN_FOLDER'), key);
+  rmSync(folder, {recursive: true, force: true});
+  mkdirSync(folder, {recursive: true});
+  const first = devContainerFolder(path.join(key, `${key}-a`), {name: 'A'});
+  mkdirSync(path.join(folder, `${key}-b`));
+  const file = path.join(folder, `${key}.code-workspace`);
+  writeFileSync(
+    file,
+    JSON.stringify({folders: [{path: `${key}-a`}, {path: `${key}-b`}]}),
+  );
+  return {file, first};
+}
 
 describe('the template screen in Restricted Mode (card coverage-72)', function () {
   this.timeout(600_000);
@@ -124,18 +141,7 @@ describe('the template screen in Restricted Mode (card coverage-72)', function (
   });
 
   it('F-0106 AC-44 (c104-trust-workspace): in an untrusted multi-root workspace whose member folder has a configuration, Trust Workspace & Continue closes the dialog with no reload, the same window shows the location pick, and no connecting notification appears', async () => {
-    const folder = path.join(variable('HARNESS_RUN_FOLDER'), 'c104-trust');
-    rmSync(folder, {recursive: true, force: true});
-    mkdirSync(folder, {recursive: true});
-    devContainerFolder(path.join('c104-trust', 'c104-trust-a'), {name: 'A'});
-    mkdirSync(path.join(folder, 'c104-trust-b'));
-    const file = path.join(folder, 'c104-trust.code-workspace');
-    writeFileSync(
-      file,
-      JSON.stringify({
-        folders: [{path: 'c104-trust-a'}, {path: 'c104-trust-b'}],
-      }),
-    );
+    const {file} = multiRootWorkspace('c104-trust');
     const window = await openWorkspaceWindow(file);
     try {
       const activated = activations(window);
@@ -175,6 +181,44 @@ describe('the template screen in Restricted Mode (card coverage-72)', function (
         ],
         [],
         undefined,
+      ]);
+    } finally {
+      await closeWindow(window).catch(() => undefined);
+    }
+  });
+
+  it('F-0106 AC-47 (c123-multi-root-cancel): core’s dialog of a multi-root window, answered Cancel and then Escape, leaves the window as it was: local, untrusted, no reload, no connecting notification and no container', async () => {
+    const {file, first} = multiRootWorkspace('c123-cancel');
+    const window = await openWorkspaceWindow(file);
+    try {
+      const observed: unknown[] = [];
+      for (const decline of [
+        () => answerDialog(window, 'Cancel'),
+        () => pressEscape(window),
+      ]) {
+        const activated = activations(window);
+        await startCommand(window, REOPEN);
+        await waitForDialog(window, 60_000);
+        await decline();
+        await waitFor(
+          'the dialog to close',
+          async () => (await dialogOf(window)) === undefined,
+          30_000,
+        );
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        observed.push([
+          await isTrusted(window),
+          activations(window) === activated,
+          (await windowState(window)).remoteName,
+          (await notificationCentre(window)).filter(text =>
+            text.startsWith('Connecting to Dev Container'),
+          ),
+          await devContainersOf(first),
+        ]);
+      }
+      deepStrictEqual(observed, [
+        [false, true, null, [], []],
+        [false, true, null, [], []],
       ]);
     } finally {
       await closeWindow(window).catch(() => undefined);
