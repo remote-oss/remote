@@ -707,13 +707,15 @@ export function packageReach(
 
 /**
  * The folders of the acceptance tests that no launch has as its suite and that a job of its own runs on every pull
- * request, each with the package script that job runs: the server tests (`acceptance (server lifecycle)`) and the
- * shared suite's (`acceptance (slice 1)`, whose VS Code run takes that suite's bundle). A folder that no job runs
- * (containers-cli) is not one, so a change to its tests still reaches every launch.
+ * request that changes them, each with the package script that job runs: the server tests (`acceptance (server
+ * lifecycle)`), the shared suite's (`acceptance (slice 1)`, whose VS Code run takes that suite's bundle) and the
+ * dev container CLI's (`acceptance (containers-cli)`). A folder that no job runs
+ * is not one, so a change to its tests still reaches every launch.
  */
 export const OWN_JOB_FOLDERS: ReadonlyMap<string, string> = new Map([
   ['server', 'test:acceptance:server'],
   ['suite', 'test:acceptance'],
+  ['containers-cli', 'test:acceptance:containers-cli'],
 ]);
 
 /** A workflow file, as a changed path names it. */
