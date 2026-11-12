@@ -7,6 +7,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {readFileSync, writeFileSync} from 'node:fs';
 import {
+  connectionLog,
   appendScript,
   closeWindow,
   connectionHelpers,
@@ -430,6 +431,22 @@ describe('host and user name validation (card coverage-120)', function () {
       false,
     );
     await closeWindow(name).catch(() => undefined);
+  });
+
+  it('F-2205 AC-23 (c120-log): the log names the authority and the check, and nothing is stored for the host', async () => {
+    const name = await reject('-oProxyCommand=x');
+    try {
+      const logLines = connectionLog();
+      deepStrictEqual(
+        [
+          logLines.some(line => line.includes('-oProxyCommand=x')),
+          logLines.some(line => line.includes('cannot begin with -')),
+        ],
+        [true, true],
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+    }
   });
 
   it('F-2205 AC-25 (c120-more-actions): More Actions... opens its pick, and Escape leaves the window disconnected with no dialog', async () => {
