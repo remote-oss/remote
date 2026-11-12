@@ -626,6 +626,7 @@ describe('the launches of the VSCodium run', () => {
       'window.dialogStyle': 'custom',
       'files.simpleDialog.enable': true,
       'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+      'workbench.startupEditor': 'none',
     };
     deepStrictEqual(
       launches
@@ -931,6 +932,7 @@ describe('the launches of the VSCodium run', () => {
             'window.dialogStyle': 'custom',
             'files.simpleDialog.enable': true,
             'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+            'workbench.startupEditor': 'none',
             'security.workspace.trust.startupPrompt': 'never',
           },
         ],
@@ -942,6 +944,7 @@ describe('the launches of the VSCodium run', () => {
             'window.dialogStyle': 'custom',
             'files.simpleDialog.enable': true,
             'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+            'workbench.startupEditor': 'none',
             'security.workspace.trust.startupPrompt': 'never',
           },
         ],
@@ -953,6 +956,7 @@ describe('the launches of the VSCodium run', () => {
             'window.dialogStyle': 'custom',
             'files.simpleDialog.enable': true,
             'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+            'workbench.startupEditor': 'none',
             'security.workspace.trust.startupPrompt': 'never',
           },
         ],
