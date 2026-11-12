@@ -468,6 +468,7 @@ jobs:
       - if: contains(matrix.part.launches, 'containers-podman')
         timeout-minutes: 10
         run: |
+          set +e
           podman info --format 'cgroup manager {{.Host.CgroupManager}}, cgroups {{.Host.CgroupsVersion}}, runtime {{.Host.OCIRuntime.Name}} {{.Host.OCIRuntime.Path}}, conmon {{.Host.Conmon.Path}}, network {{.Host.NetworkBackend}}, rootless {{.Host.Security.Rootless}}'
           podman info --format '{{.Host.OCIRuntime.Version}}' | head -3
           podman info --format '{{.Host.Conmon.Version}}' | head -2
@@ -476,6 +477,8 @@ jobs:
           for form in "exec $id true" "exec -i $id true" "exec $id echo hi"; do
             start=$(date +%s.%N); timeout 30 podman $form </dev/null; code=$?; echo "podman $form: exit $code after $(echo "$(date +%s.%N) - $start" | bc) s"
           done
+          echo "with Ubuntu's conmon:"; start=$(date +%s.%N); timeout 30 podman --conmon /usr/bin/conmon exec $id true </dev/null; echo "exit $? after $(echo "$(date +%s.%N) - $start" | bc) s"
+          echo "exec sessions:"; podman inspect $id --format '{{.ExecIDs}} {{.State.Status}} pid {{.State.Pid}}'
           timeout 40 podman --log-level=debug exec $id true </dev/null 2>&1 | tail -40; echo "debug exec exit ${PIPESTATUS[0]}"
           ps -eo pid,ppid,stat,comm | grep -E "conmon|crun|podman|catatonit|pasta" | head -20
           if command -v runc >/dev/null; then
