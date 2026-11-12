@@ -46,13 +46,19 @@ const TOLERANCE_MILLISECONDS = 1500;
 /** The pause between two readings of the rows that time the progress. */
 const FAST_SAMPLE_MILLISECONDS = 25;
 
-/** One reading of window `name` with the time it was taken. */
-async function timedSurface(
-  name: string,
-): Promise<{takenAt: number; indicator: string; toasts: string[]}> {
+/** One reading of window `name` with the time it was taken and how many lines the Dev Containers log had then. */
+async function timedSurface(name: string): Promise<{
+  takenAt: number;
+  logLength: number;
+  indicator: string;
+  toasts: string[];
+}> {
   const surface = await connectSurface(name);
-  return {takenAt: Date.now(), ...surface};
+  return {takenAt: Date.now(), logLength: containersLog().length, ...surface};
 }
+
+/** The banner line the bundled CLI writes when it starts, once for each of its runs. */
+const CLI_BANNER = '@devcontainers/cli ';
 
 /** The time one start of the bundled CLI takes on this machine, in milliseconds: the editor as plain Node running the CLI's `--version`. */
 async function cliStartMilliseconds(): Promise<number> {
@@ -112,6 +118,12 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
     try {
       await reopenInContainer(name);
       await closeWindow(name);
+      const starts = [
+        await cliStartMilliseconds(),
+        await cliStartMilliseconds(),
+        await cliStartMilliseconds(),
+      ].sort((first, second) => first - second);
+      const startMilliseconds = starts[1] ?? Infinity;
       const mark = containersLog().length;
       const again = await openFolderWindow(folder);
       const sampler = sampled(
@@ -130,25 +142,23 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
             (shown[0]?.takenAt ?? 0) +
             FAST_SAMPLE_MILLISECONDS;
       const lines = containersLogSince(mark);
+      const resolveEnd = lines.findIndex(line =>
+        /^Resolving Remote: \d+ ms$/.test(line),
+      );
       const connectMilliseconds = Number(
-        lines
-          .map(line => /^Resolving Remote: (\d+) ms$/.exec(line)?.[1])
-          .find(each => each !== undefined) ?? Infinity,
+        /\d+/.exec(lines[resolveEnd] ?? '')?.[0] ?? Infinity,
       );
-      const cliRuns = lines
-        .slice(lines.indexOf('Resolving Remote'))
-        .filter(line => line.startsWith('@devcontainers/cli ')).length;
-      const starts = [
-        await cliStartMilliseconds(),
-        await cliStartMilliseconds(),
-        await cliStartMilliseconds(),
-      ].sort((first, second) => first - second);
-      const startMilliseconds = starts[1] ?? Infinity;
+      function bannersFrom(from: number): number {
+        return lines
+          .slice(from, resolveEnd)
+          .filter(line => line.startsWith(CLI_BANNER)).length;
+      }
+      const cliRuns = bannersFrom(lines.indexOf('Resolving Remote'));
+      const shownRuns = bannersFrom(
+        Math.max(0, (shown[0]?.logLength ?? 0) - mark),
+      );
       const ownConnect = connectMilliseconds - cliRuns * startMilliseconds;
-      const ownShown = onScreen - cliRuns * startMilliseconds;
-      console.log(
-        `F-0408 AC-14: connect ${String(connectMilliseconds)} ms, S087 on screen ${String(onScreen)} ms, the CLI ran ${String(cliRuns)} times in the connect and one start of it takes ${String(Math.round(startMilliseconds))} ms here (${starts.map(each => String(Math.round(each))).join(', ')}), so the product's part is ${String(Math.round(ownConnect))} ms of connect and ${String(Math.round(ownShown))} ms of S087`,
-      );
+      const ownShown = onScreen - shownRuns * startMilliseconds;
       deepStrictEqual(
         {
           already: lines.some(line => line.endsWith('was already running')),
@@ -157,15 +167,21 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
               line === 'Starting container' ||
               line === 'Starting VS Code Server',
           ),
+          startsWithinThree: cliRuns <= 3,
           connectWithin: ownConnect < TOLERANCE_MILLISECONDS,
           shownWithin: ownShown < TOLERANCE_MILLISECONDS,
         },
         {
           already: true,
           steps: [],
+          startsWithinThree: true,
           connectWithin: true,
           shownWithin: true,
         },
+        `F-0408 AC-14: connect ${String(connectMilliseconds)} ms with ${String(cliRuns)} CLI starts, S087 on screen ${String(onScreen)} ms with ${String(shownRuns)} CLI starts, one start takes ${String(Math.round(startMilliseconds))} ms here (${starts.map(each => String(Math.round(each))).join(', ')}), so the product's part is ${String(Math.round(ownConnect))} ms of connect and ${String(Math.round(ownShown))} ms of S087`,
+      );
+      console.log(
+        `F-0408 AC-14: connect ${String(connectMilliseconds)} ms with ${String(cliRuns)} CLI starts, S087 ${String(onScreen)} ms with ${String(shownRuns)}, one start ${String(Math.round(startMilliseconds))} ms (${starts.map(each => String(Math.round(each))).join(', ')}), the product's part ${String(Math.round(ownConnect))} and ${String(Math.round(ownShown))} ms`,
       );
       await closeWindow(again);
     } finally {
