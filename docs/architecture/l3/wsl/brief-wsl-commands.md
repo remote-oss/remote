@@ -136,7 +136,7 @@ nothing parses paths, expands `~` or maps `C:\` (7.E8, 7.E10; R-60). AC-24 needs
 | cmd-5 | F-6203 (§2) | unit, acceptance-win |
 | cmd-6 | F-6204 (§3) | unit, acceptance-win |
 | cmd-7 | F-6205's stable lines (§4) | unit, manifest, acceptance-win |
-| cmd-8 | F-6206 (§5) | unit, acceptance-win, host: WSL 1 |
+| cmd-8 | F-6206 (§5) | unit, acceptance-win (WSL 1 included) |
 | cmd-9 | F-6207 and D12e (§6) | unit, acceptance-win |
 | cmd-10 | F-6401: `wslCode.sh`, D8g, D11's writing side (§7) | unit, acceptance-win |
 | cmd-11 | F-6402's rows (§8) | acceptance-win, host: genuine VS Code |

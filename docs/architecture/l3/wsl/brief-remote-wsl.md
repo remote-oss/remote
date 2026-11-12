@@ -91,7 +91,8 @@ line.
 9. **The out-of-context policy is `silent` for every hidden command, `reading-2348-r46-silent`** (F-6001 BR-10 allows
    it, it is what was observed, and it adds no string), except where a feature's brief names an in-context string.
 10. **The stand-down and proposal gating are F-6001 §20's**, applied to every contribution with a `when` clause (§1 of
-    brief-wsl-package). The gating lint is extended to key bindings, views and walkthroughs.
+    brief-wsl-package). The gating lint's new kinds (key bindings, views, walkthroughs) apply to remote-wsl only:
+    remote-containers' and remote-explorer's views carry no stand-down key, by their own specs.
 11. **`wslFeatureInstalled` is a shared key, `ruling-2348-shared-context-key`.** Core sets it on a Windows desktop for
     the local machine; F-6701 needs it to describe the outer host in an SSH window. lib-identifiers gains the setter
     kind `coreAndExtension`. Only D9b sets it, only in an `ssh-remote` window, to the outer host's WSL presence; nothing
@@ -107,9 +108,9 @@ it says otherwise, so remote-ssh and remote-containers keep their behaviour.
 
 | Library | Change | For |
 |---|---|---|
-| lib-product | `OVERRIDE_POLICIES['remote-wsl']` (the WSL setting and its layer); a `noValue` kind in `expand()` for a placeholder with no value (`${release}` exempt), shared with ssh and containers | F-7902 rules 3, 7; every row that installs a server |
+| lib-product | `OVERRIDE_POLICIES['remote-wsl']` (the WSL setting and its layer); an `expand()` option that makes a placeholder with no value (`${release}` exempt) a `noValue` problem, which `wslPolicy()` turns on and ssh and containers leave off (F-3902 rule 3 and F-1402 have no such case) | F-7902 rules 3, 7; every row that installs a server |
 | lib-authority | a handled `NotAvailable` that shows nothing (also for a malformed outer); WSL's phases and a bar mapping; the progress title from the connector (registered spelling, a link to `remote-wsl.showLog`); a host option that runs the presenter inside the progress, default off; an opener target that leaves the window to core, and a local form for a drive or UNC path; `ConnectInput.execServer` (this brief lands it; containers' F-1302 card builds on it); label registrations that take an explicit authority, `workspaceTooltip` and `priority`; the views probe option (`ruling-2348-views-probe`, brief-wsl-package §1); the recent-list port lifted from remote-containers' `recent-editor.ts`; `open-gate.ts` lifted from remote-containers | F-6201, F-6203, F-6204, F-6205, F-6208, F-6503, F-6701, F-6001 §20 |
-| lib-identifiers | the `coreAndExtension` setter (§2 item 11); the gating lint over key bindings, views and walkthroughs | F-6701, F-6001 AC-43 |
+| lib-identifiers | the `coreAndExtension` setter (§2 item 11); the gating lint over key bindings, views and walkthroughs, for remote-wsl only | F-6701, F-6001 AC-43 |
 | lib-log | the terminal sink as F-6002 specifies it (lines kept until the first terminal, an empty terminal after a close, `reveal` with a focus choice, colour classes, a UTC stamp), a file sink over an injected `append`, and a terminal mirror for the harness. Its existing test that pins the replay changes | F-6002 |
 | lib-host | `runScript`'s `onLine(line, stream?)`: an optional `'stdout' \| 'stderr'` tag, `reading-2348-stream-tag`. Only D4 must supply it; lib-ssh and containers may | F-6002 AC-20, AC-28, AC-29 |
 | lib-server | the stepwise driver (`transfer`, `cleanup`, `probe`, `startOrReuse` take the mode; the requirements check follows it); `X-SHA256` kept across redirect hops; a wget-only downloader option with wget's percent lines and error text as bounded facts; the Alpine `libstdc++` step before unpack; `useHostProxy` and a debug start option in `wslPolicy()`; the start words `--disable-telemetry` for WSL; the licence modal port, acceptance store and the two source dialogs lifted out of remote-ssh with the noun as a parameter. No V10 runtime for WSL (`ruling-2348-no-update-signal`) | F-6301 to F-6304, F-7902 |
@@ -119,7 +120,8 @@ it says otherwise, so remote-ssh and remote-containers keep their behaviour.
 ## 4. Build order
 
 1. **Unblockers, first:** lib-product's `remote-wsl` row; proteus's #2350 (the Windows harness spawns the editor CLI) and
-   a `wsl` launch on `windows-2025`; the harness terminal mirror; the request-logging fixture HTTP server that serves a
+   the `wsl` launch on `windows-2025` (#2355, tooling-197: the installed Ubuntu plus pinned Alpine distros at WSL 2 and
+   WSL 1, unregistered after each run); the harness terminal mirror; the request-logging fixture HTTP server that serves a
    server archive; the coverage seed (§6).
 2. **Shared libraries** of §3, each its own card, in the order lib-identifiers, lib-log, lib-host, lib-wsl, lib-authority,
    lib-server.
@@ -139,20 +141,50 @@ it says otherwise, so remote-ssh and remote-containers keep their behaviour.
 - **manifest:** the built package against `identifiers.json` and the spec's verbatim tables.
 - **acceptance-linux:** rows a Linux VSCodium launch can run (the log, help, walkthrough links, stand-down, the browser
   stand-in, the proposal probe, the nested route's Linux SSH container), on every pull request their change reaches.
-- **acceptance-win:** rows that need a Windows client with a distro, on `windows-2025`'s WSL2 Ubuntu 24.04 (§5.2).
-- **host:** rows no hosted runner can give (WSL 1 until measured, pre-1903 builds, ARM64, a machine with no WSL, a
-  Windows SSH host). These are written with their row and wait for a runner (ADR-0013, D-105).
+- **acceptance-win:** rows that need a Windows client with a distro, on `windows-2025` (§5.2): its WSL2 Ubuntu 24.04, a
+  second distro or Alpine by `wsl --import`, a WSL 1 distro, and the runner as its own Windows SSH host (admin login).
+  The rows of "WSL is not installed" run on `windows-2022`.
+- **host:** rows no hosted runner can give: a build before 1903, macOS, and a non-admin Windows SSH login (unmeasured).
+  These are written with their row and wait for a runner (ADR-0013, D-105).
 
 ### 5.2 CI: the Windows hosted runner (proteus, plan #1807 amendment 2)
 
-The text proteus posted on #2348 (comment of 2026-11-12) is pasted here unchanged once its two open measurements are in
-(a second distro by `wsl --import`, and WSL 1), by 2026-11-13 08:00 CDT. Its findings that bind the cards now:
-- `windows-2025` is a 4-vCPU, 16 GB VM with an interactive desktop, WSL 3.0.3 with WSLg, default version 2, and
-  VSCodium's win32-x64 build starts in about a second;
-- the `platform.yml` windows job installs Ubuntu 24.04 in about 30 s, and its Docker engine brings that to about 85 s;
-- the job runs no launch today: the harness spawns the editor CLI without its `.cmd` (#2350, proteus);
-- Docker on Windows runs Windows containers only; Linux containers live in the distro;
-- no pre-1903 build is obtainable; a machine with no WSL is `windows-2022`.
+Every remote-wsl acceptance row needs a Windows client with WSL, so the rows run on GitHub's `windows-2025` runner. They run through the route `platform.yml`'s `windows` job already has. These are measured facts, not plans, unless marked.
+
+- **The machine (`windows-2025`, probe 41467076289):**
+  - a VM with 4 vCPU (EPYC), 16 GB of memory, 31 GB free on C:, Windows build 10.0.26100;
+  - an interactive desktop session at 1024×768, so the editor's windows draw;
+  - WSL 3.0.3.0 with WSLg 1.0.79 and the WSL2 kernel 6.18.54.1, default version 2;
+  - VSCodium's win32-x64 build starts with its debugging port up within 1 s;
+  - Docker on Windows runs Windows containers only, so Linux containers live in the distro.
+- **How a launch runs (the `platform.yml` windows job):**
+  - The Linux side: `wsl --install Ubuntu-24.04 --no-launch --web-download` takes about 30 s. Installing the distro's own Docker engine (`docker.io`, buildx, systemd's service with a loopback TCP listener) brings it to about 85 s (run 43011699370). A hidden `wsl.exe … sleep infinity` keeps the distro running between steps.
+  - VSCodium runs on Windows through the harness's usual `test:acceptance:vscodium --launches …`. A remote-wsl window connects into that distro.
+  - The run's download host listens on Windows; the distro reaches it through the `vEthernet (WSL*)` adapter with a firewall rule for `node`.
+- **The `wsl` launch** is #2355 (tooling-197), after #2350.
+- **It runs no launch today.** The harness looks for the editor's CLI as `…\bin\codium-insiders` beside the executable, which is only the Linux layout: the Windows build has `bin\codium-insiders.cmd` (Node starts it only through `cmd.exe`), and macOS has it inside the bundle. So both platform jobs fail before the first launch, after about 3 minutes, every nightly since at least 11-05. Card #2350 (tooling-195, proteus) fixes both. The remote-wsl rows wait on it.
+- **A second distro (probe 43155251398):**
+  - `wsl --import <name> <folder> <rootfs> --version 2` of a pinned Alpine 3.24.4 minirootfs (3.7 MB, sha256 checked) takes 1.2 s, and its first start 0.5 s.
+  - It runs beside the installed Ubuntu: `wsl -l --running` lists both, and each answers a command while the other runs.
+  - A second Ubuntu by `wsl --export` (23 s, 1.2 GB) and `wsl --import` (11 s) works too. A pinned minirootfs is the cheap route.
+  - Each distro has WSLg's display: `DISPLAY=:0` and `/tmp/.X11-unix/X0`, also in the imported Alpine.
+- **WSL 1 (probe 43155251398):** available. `wsl --import … --version 1` takes 0.8 s, and `wsl --set-version <WSL 2 distro> 1` 0.4 s for the minirootfs. `uname -r` there reads `4.4.0-26100-Microsoft`, and a WSL 1 and a WSL 2 distro run side by side. So the WSL 1 rows run on `windows-2025`.
+- **A Windows SSH host (probes 43155251398, 43155800266):** `windows-2025` serves SSH to itself.
+  - The image has `OpenSSH.Server` installed; the job starts `sshd` and writes `administrators_authorized_keys`.
+  - A key login from the same machine takes 0.3 s, at the High integrity level of the runner's admin account, with `cmd` as the shell.
+  - A server run in the session's foreground serves through a local forward on that connection.
+  - A server detached through WMI (`Win32_Process Create`) outlives the session and serves through a second connection's forward.
+  - A process from `Start-Process` inside the session ends with the session.
+  - A non-admin login (a local user and its own `authorized_keys`) is not measured.
+- **What can't be had:**
+  - **No WSL installed:** `windows-2022`, measured: no virtualization, and its `wsl.exe` has no `--install`. The rows of "WSL is not installed" can run there.
+  - **Builds before 1903:** none. Both images are build 20348 or 26100.
+- **Budget per part:**
+  - About 4 minutes of setup: checkout, pnpm, the distro and its engine.
+  - Then rows to the parts table's target of about 15 minutes, with the usual limit of twice the measured minutes plus ten.
+  - The WSL VM takes up to half of the 16 GB by WSL's default, which leaves about 8 GB for Windows, VSCodium and the harness. One editor window at a time, as on Linux.
+  - Each Windows part is one job of GitHub's 20-job hosted cap, shared with the containers parts. The parts run on the nightly schedule and by dispatch, not on every pull request, until their cost is measured.
+- **The job's limit:** 6 h per job on GitHub's runners; `platform.yml` sets 240 min today.
 
 ## 6. Coverage and the cut
 

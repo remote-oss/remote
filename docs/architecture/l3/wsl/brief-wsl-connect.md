@@ -158,13 +158,13 @@ start command's line in the "WSL" terminal.
 
 | Card | Scope | Test kinds |
 |---|---|---|
-| con-1 | lib-product's `remote-wsl` row and the `noValue` expansion kind | unit |
+| con-1 | lib-product's `remote-wsl` row and `expand()`'s `noValue` option, on for WSL only | unit |
 | con-2 | lib-server's stepwise driver and the mode-dependent requirements check | unit |
 | con-3 | lib-server: `X-SHA256` across hops, wget-only with its facts, the Alpine step, `useHostProxy`, the debug option, `--disable-telemetry` for WSL, the licence and source dialogs lifted | unit |
 | con-4 | lib-authority's resolver host: handled-silent `NotAvailable`, WSL phases and bar, the title from the connector, presenter inside the progress, the progress delay | unit |
 | con-5 | D5h and D5r (§4), lib-helper's README | unit, acceptance-win |
 | con-6 | D6 and `wsl.resolver-front` (§1), D11's reading side | unit, acceptance-win |
 | con-7 | D7 and D7a: the order, cache, entry name, verification, TLS, licence, the two dialogs, platforms, quality checks, the background-download setting (§2) | unit, acceptance-win |
-| con-8 | the start methods, options, licence record and setup file (§3), F-6601 | unit, acceptance-win, host: WSL 1 |
+| con-8 | the start methods, options, licence record and setup file (§3), F-6601 | unit, acceptance-win (WSL 1 included) |
 | con-9 | `wsl.failure-ui` and D6w (§5) | unit, acceptance-win |
 | con-10 | F-6103 (§6) | unit, host: a pre-1903 build |

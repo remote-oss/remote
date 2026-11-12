@@ -68,9 +68,9 @@ R-89 and F-6701 BR-8 settle dossier question 3, so D9 is final.
   `(wslFeatureInstalled || wslFeatureInstalled)` is quoted verbatim.
 - **AC-25 (Open Recent from a local window):** if remote-ssh's nested resolve shows its own progress where the reference
   showed none, that is remote-ssh's surface, and the row records it.
-- **Hosts:** the rows need a Windows SSH host with WSL. They are `host: windows-ssh` until proteus finds whether
-  `windows-2025` can serve remote-ssh's exec server to itself; AC-4 runs on the Linux SSH container
-  (`acceptance-linux`).
+- **Hosts:** the rows need a Windows SSH host with WSL: `windows-2025` serves SSH to itself with an admin key login
+  (brief-remote-wsl §5.2), so they are `acceptance-win`; AC-4 runs on the Linux SSH container (`acceptance-linux`). A
+  non-admin login is unmeasured, so a row that needs one is `host:`.
 
 ## 4. The cut
 
@@ -79,6 +79,6 @@ R-89 and F-6701 BR-8 settle dossier question 3, so D9 is final.
 | tgt-1 | lib-authority's recent-list port | unit |
 | tgt-2 | F-6503 (§1) | unit, manifest, acceptance-win |
 | tgt-3 | lib-authority's `ConnectInput.execServer` | unit |
-| tgt-4 | D9a, D9b, the nested keys, the server over the exec server (§3) | unit, host: windows-ssh |
-| tgt-5 | F-6701's rows: clauses, commands over SSH, the end states (§3) | manifest, acceptance-linux, host: windows-ssh |
+| tgt-4 | D9a, D9b, the nested keys, the server over the exec server (§3) | unit, acceptance-win |
+| tgt-5 | F-6701's rows: clauses, commands over SSH, the end states (§3) | manifest, acceptance-linux, acceptance-win |
 | later | F-6501 and F-6502 (§2), once reviewed | |
