@@ -1,8 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
 import path from 'node:path';
-import {DatabaseSync} from 'node:sqlite';
 import {variable} from '../windows/harness.ts';
 import {settingsText} from '../windows/maintenance.ts';
+import {readStateDatabase} from '../windows/state-database.ts';
 
 /** The settings a text holds that are set: a key the harness reset holds `null`, which the editor reads as unset. */
 function setSettings(text: string): Record<string, unknown> {
@@ -31,20 +31,17 @@ function keysOf(value: unknown): string[] {
 
 /** The Remote - SSH extension's global state: the entries it stored under its own key, by name. */
 function extensionState(): Record<string, unknown> {
-  const database = new DatabaseSync(
+  return readStateDatabase(
     path.join(variable('HARNESS_USER_DATA'), 'User/globalStorage/state.vscdb'),
-    {readOnly: true},
+    database => {
+      const stored = database
+        .prepare('SELECT value FROM ItemTable WHERE key = ?')
+        .get('remote-oss.remote-ssh') as {value: string} | undefined;
+      return stored === undefined
+        ? {}
+        : (JSON.parse(stored.value) as Record<string, unknown>);
+    },
   );
-  try {
-    const stored = database
-      .prepare('SELECT value FROM ItemTable WHERE key = ?')
-      .get('remote-oss.remote-ssh') as {value: string} | undefined;
-    return stored === undefined
-      ? {}
-      : (JSON.parse(stored.value) as Record<string, unknown>);
-  } finally {
-    database.close();
-  }
 }
 
 describe('what the login-shell rows leave behind (card coverage-49)', () => {
