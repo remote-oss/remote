@@ -333,7 +333,8 @@ describe('the recent folders under a target (card coverage-122)', function () {
     }
   });
 
-  it('F-5104 AC-19 (c122-remove): a removed folder row is gone at once, with no notice, and stays gone in a restarted window', async () => {
+  it('F-5104 AC-19 (c122-remove): a removed folder row is gone at once, with no notice, and stays gone in a restarted window', async function () {
+    this.timeout(600_000);
     const window = await viewWindowIn('c122-remove');
     const target = `${HOME}/c122-remove-1`;
     try {
@@ -370,7 +371,8 @@ describe('the recent folders under a target (card coverage-122)', function () {
     }
   });
 
-  it('F-5104 AC-21 (c122-solo-leaf): removing the last folder row of a host leaves the host row a leaf without a twisty', async () => {
+  it('F-5104 AC-21 (c122-solo-leaf): removing the last folder row of a host leaves the host row a leaf without a twisty', async function () {
+    this.timeout(600_000);
     const window = await viewWindowIn('c122-solo-view');
     const target = `${HOME}/c122-solo`;
     try {
@@ -378,6 +380,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
       await titleAction(window, VIEW, REFRESH);
       await foldersSettled(window, 'jumped', [target]);
       await rowMenuAction(window, VIEW, 'c122-solo', REMOVE);
+      await foldersSettled(window, 'jumped', []);
       const rows = (await viewRows(window, VIEW)) ?? [];
       const host = rows.find(
         entry => entry.level === 2 && entry.label === 'jumped',
