@@ -10,6 +10,7 @@ import path from 'node:path';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
+  connectedWithin,
   hostAliases,
   inWindow,
   isOpen,
@@ -73,7 +74,11 @@ async function localViewWindow(name: string): Promise<string> {
   return window;
 }
 
-/** Waits until window `name` is connected to `alias`. */
+/**
+ * Waits until window `name` is connected to `alias`. The window's authority names the alias as soon as it opens, so for
+ * a window on a folder of the host the wait goes on until the window's remote side answers: the view lists the hosts
+ * only once it is connected, and the rows that read it give it a few seconds.
+ */
 async function connectedTo(name: string, alias: string): Promise<void> {
   await waitFor(
     `window ${name} to connect to ${alias}`,
@@ -81,6 +86,9 @@ async function connectedTo(name: string, alias: string): Promise<void> {
       (await windowState(name)).remoteAuthority === `ssh-remote+${alias}`,
     120_000,
   );
+  if ((await windowState(name)).folders.length > 0) {
+    await connectedWithin(name, 120_000);
+  }
 }
 
 /** The window, folders and remote of `name`, as the agent reports them. */
