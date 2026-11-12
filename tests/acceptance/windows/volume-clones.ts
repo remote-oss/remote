@@ -32,8 +32,9 @@ export function containersWith(label: string): Promise<string[]> {
 }
 
 /**
- * Removes what a clone of `repository` left: every container, in any state, that mounts one of its volumes (its dev
- * containers and its recovery container, which carries other labels), then its volumes.
+ * Removes what a clone of `repository` left: every container, in any state, that mounts one of its volumes or carries
+ * one as its recovery label (its dev containers, its recovery container and any stopped one a row made with that
+ * label), then its volumes.
  */
 export async function removeClone(repository: string): Promise<void> {
   const volumes = (await clonedVolumes(repository)).map(line =>
@@ -43,13 +44,10 @@ export async function removeClone(repository: string): Promise<void> {
     await containersWith(`vsch.local.repository=${repository}`),
   );
   for (const volume of volumes) {
-    for (const container of await dockerLines(
-      'ps',
-      '-a',
-      '-q',
-      '--filter',
-      `volume=${volume}`,
-    )) {
+    for (const container of [
+      ...(await dockerLines('ps', '-a', '-q', '--filter', `volume=${volume}`)),
+      ...(await containersWith(`vsch.local.volume=${volume}`)),
+    ]) {
       containers.add(container);
     }
   }
