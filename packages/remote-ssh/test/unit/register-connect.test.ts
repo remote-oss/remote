@@ -626,4 +626,14 @@ describe("the connect's registration", () => {
     await Promise.resolve();
     deepStrictEqual(registration.currentAlias(), 'devbox');
   });
+
+  it('F-2205 AC-32, BR-7: a link whose host part is empty names the typed text, since there is no host to name', async () => {
+    const {registration, recording} = await registered(true);
+    void recording
+      .registered()
+      ?.resolve('ssh-remote+u@', {resolveAttempt: 1})
+      .catch(() => undefined);
+    await Promise.resolve();
+    deepStrictEqual(registration.currentAlias(), 'u@');
+  });
 });
