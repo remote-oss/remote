@@ -29,7 +29,11 @@ export async function holdLocal(
   port: number,
   address = '127.0.0.1',
 ): Promise<() => Promise<void>> {
-  const holder: Server = createServer();
+  // The sockets it accepts are read to their end, so that a client that wrote to the port and left lets the holder close.
+  const holder: Server = createServer(socket => {
+    socket.on('error', () => undefined);
+    socket.resume();
+  });
   await new Promise<void>((resolve, reject) => {
     holder.once('error', reject);
     holder.listen(port, address, resolve);
