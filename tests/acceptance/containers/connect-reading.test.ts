@@ -191,6 +191,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
 
   it('F-0408 AC-15 (c68-pull): an image that is not local is pulled inside the Starting container step, and no notification, suffix, title or editor names the pull', async () => {
     await runTemplatesReady();
+    const startedAt = Math.floor(Date.now() / 1000);
     const imageTag = `${variable('HARNESS_REGISTRY')}/c68-pull:${String(Date.now())}`;
     await execFileAsync('docker', [
       'tag',
@@ -221,6 +222,17 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
     try {
       await reopenInContainer(name);
       const surfaces = (await sampler.stop()).flat();
+      const imageEvents = await execFileAsync('docker', [
+        'events',
+        '--since',
+        String(startedAt),
+        '--until',
+        String(Math.floor(Date.now() / 1000) + 1),
+        '--filter',
+        'type=image',
+        '--format',
+        '{{.Action}} {{.Actor.Attributes.name}}',
+      ]);
       const lines = containersLogSince(mark);
       const step = lines.indexOf('Starting container');
       const started = lines.indexOf('Container started');
@@ -244,7 +256,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
           ),
         },
         {inside: true, named: []},
-        `the image was listed locally after its removal: ${JSON.stringify(localAfterRemoval.stdout)}; the positions of Starting container, the pull, the download and Container started are ${[step, pull, downloaded, started].join(', ')} in:\n${lines.join('\n')}`,
+        `the image was listed locally after its removal: ${JSON.stringify(localAfterRemoval.stdout)}; the engine's image events since the row began were ${JSON.stringify(imageEvents.stdout)}; the positions of Starting container, the pull, the download and Container started are ${[step, pull, downloaded, started].join(', ')} in:\n${lines.join('\n')}`,
       );
       await closeWindow(name);
     } finally {
