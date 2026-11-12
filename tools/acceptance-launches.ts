@@ -1478,7 +1478,7 @@ export function launchesOf(root: string): Launch[] {
       languagePack: language,
     })),
     ...HOST_CASE_SUITES.flatMap(suite =>
-      hostCases(root, suite.suite).map((hostCase): Launch => ({
+      hostCases(root, suite.suite).map((hostCase, position, cases): Launch => ({
         label: hostCaseLabel(suite, hostCase),
         runner: 'runner-remote',
         suite: suite.suite,
@@ -1490,6 +1490,10 @@ export function launchesOf(root: string): Launch[] {
           ? {}
           : {settingsTail: hostCase.settingsTail}),
         environment: {[suite.caseVariable]: hostCase.label},
+        ...(suite.prefix === 'install' &&
+        position <= cases.findIndex(each => each.label === 'local-always')
+          ? {partOf: 'chain'}
+          : {}),
         ownScript: true,
         hostSetup: hostSetupOf(hostCase, suite),
       })),
