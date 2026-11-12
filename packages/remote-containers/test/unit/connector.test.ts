@@ -1248,6 +1248,27 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
+  it('F-0408 AC-14: a container whose outcome carries the configuration up read takes its merged part from it, with no read of its own', async () => {
+    const scene = sceneOf();
+    scene.defaultExtensions = ['c.d'];
+    scene.outcome = {
+      ...READY,
+      created: true,
+      configuration: {name: 'FromUp'},
+      mergedConfiguration: {customizations: {vscode: [{extensions: ['a.b']}]}},
+    };
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.configurationReads.filter(
+          read => read.containerId === READY.containerId,
+        ),
+        scene.serverRequests.map(request => request.defaultExtensions),
+      ],
+      [[], [['a.b', 'c.d']]],
+    );
+  });
+
   it('F-0505 AC-14: a reused container installs nothing, and says nothing of it', async () => {
     const scene = sceneOf();
     scene.outcome = {...READY, created: false};

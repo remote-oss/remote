@@ -83,6 +83,10 @@ export type UpResult =
       remoteWorkspaceFolder: string;
       /** The Compose project the CLI used, for a Compose configuration. */
       composeProjectName?: string;
+      /** The substituted devcontainer.json, as `read-configuration` gives it; none when `up` gave none. */
+      configuration?: Record<string, unknown>;
+      /** The configuration merged with the container's metadata; none when `up` gave none. */
+      mergedConfiguration?: Record<string, unknown>;
     }
   | CliFailure;
 
@@ -338,6 +342,12 @@ export function readUpResult(
     remoteUser,
     remoteWorkspaceFolder,
     ...(composeProjectName === undefined ? {} : {composeProjectName}),
+    ...(isFields(fields.configuration)
+      ? {configuration: fields.configuration}
+      : {}),
+    ...(isFields(fields.mergedConfiguration)
+      ? {mergedConfiguration: fields.mergedConfiguration}
+      : {}),
   };
 }
 
