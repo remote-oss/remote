@@ -233,10 +233,7 @@ describe('acceptance-select', () => {
 
   it('a path the table does not name, with others, reaches every launch', () => {
     deepStrictEqual(
-      labelsFor(
-        'packages/remote-containers/src/a.ts',
-        '.github/workflows/ci.yml',
-      ),
+      labelsFor('packages/remote-containers/src/a.ts', 'tools/build.ts'),
       EVERY,
     );
   });

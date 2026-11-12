@@ -1,7 +1,6 @@
 {
   "targetMinutes": 15,
   "together": [
-    ["agent", "agent-off"],
     ["socket-prime", "socket"],
     ["install-install-present-prime", "install-install-present"],
     [
