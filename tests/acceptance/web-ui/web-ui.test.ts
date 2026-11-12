@@ -1,6 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
 import {existsSync, readdirSync, readFileSync} from 'node:fs';
-import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
 import {
   closeWindow,
@@ -43,6 +42,7 @@ import {
   serverPortOf,
   setWebAccess,
 } from '../windows/web-ui-support.ts';
+import {readStateDatabase} from '../windows/state-database.ts';
 
 /** The label of the command in the Command Palette. */
 const COMMAND = 'Remote-SSH: Open Web UI';
@@ -126,15 +126,12 @@ function stateLength(): number | undefined {
   if (!existsSync(file)) {
     return undefined;
   }
-  const database = new DatabaseSync(file, {readOnly: true});
-  try {
+  return readStateDatabase(file, database => {
     const entry = database
       .prepare('SELECT value FROM ItemTable WHERE key = ?')
       .get('remote-oss.remote-ssh') as {value?: string} | undefined;
     return entry?.value?.length;
-  } finally {
-    database.close();
-  }
+  });
 }
 
 /** What running Open Web UI must leave as it is, on the client and on the host. */
