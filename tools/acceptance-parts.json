@@ -8,7 +8,8 @@
       "install-install-present-stopped-prime",
       "install-install-present-stopped"
     ],
-    ["install-install-repaired-prime", "install-install-repaired"]
+    ["install-install-repaired-prime", "install-install-repaired"],
+    ["ports-reuse-prime", "ports-reuse"]
   ],
   "minutes": {
     "add-host": {"add-host.test.ts": 0.4},
@@ -393,6 +394,7 @@
     "ports-range-held": 0.2,
     "ports-range-single": 0.2,
     "ports-reuse": 0.2,
+    "ports-reuse-prime": 0.3,
     "preconnect": {
       "basics.test.ts": 0.8,
       "failures.test.ts": 0.6,
