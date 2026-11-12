@@ -854,6 +854,52 @@ export function workflowReach(
 }
 
 /**
+ * The folders of the acceptance tests that hold an image the harness builds rather than tests, each with the module
+ * that builds the image from it: a change in such a folder reaches what that module reaches, the launches of the tests
+ * that import it (testReach). The SSH Docker host's image is built by the engine fixture.
+ */
+export const IMAGE_FOLDERS: ReadonlyMap<string, string> = new Map([
+  ['ssh-engine', 'tests/acceptance/windows/engine-fixture.ts'],
+]);
+
+/** The sources the graph would hold (no unit test, not the selection) whose text names `folder` as a string. */
+export function sourcesNaming(root: string, folder: string): string[] {
+  const named = new RegExp(`['"\`]${folder.replaceAll('.', '\\.')}['"\`]`);
+  return [
+    ...['packages', 'tests', 'tools'].flatMap(each => sourcesUnder(root, each)),
+    ...rootSources(root),
+  ]
+    .filter(source => !NO_LAUNCH.some(pattern => pattern.test(source)))
+    .filter(source => named.test(readFileSync(path.join(root, source), 'utf8')))
+    .sort();
+}
+
+/**
+ * What a change in the image folder `folder` reaches: what its builder reaches, or undefined, every launch, when the
+ * folder has no builder, when another source names the folder too (it may build or read it as well), or when the
+ * builder's reach can't be placed.
+ */
+function imageFolderReach(
+  graph: SourceGraph | undefined,
+  folder: string,
+  launches: readonly Launch[],
+  root: string,
+): string[] | undefined {
+  const builder = IMAGE_FOLDERS.get(folder);
+  return graph === undefined ||
+    builder === undefined ||
+    sourcesNaming(root, folder).join() !== builder
+    ? undefined
+    : testReach(graph, builder, launches);
+}
+
+/** The image folder a changed path lies in, if any. */
+function imageFolderOf(file: string): string | undefined {
+  const folder = /^tests\/acceptance\/([^/]+)\//.exec(file)?.[1];
+  return folder !== undefined && IMAGE_FOLDERS.has(folder) ? folder : undefined;
+}
+
+/**
  * The reach measured at `root`, the head, for the changed paths it can place: each path in a package's folder that is
  * not a unit test, by its package; each test of a folder of its own job, by the launch tests that import it (none
  * when nothing does: its own job runs it); the parts table, by the parts it makes otherwise than at `base`; and each
@@ -878,10 +924,24 @@ export function measuredPaths(
       !launches.some(launch => launch.suite === folder)
     );
   });
+  const imageFiles = changed.filter(file => imageFolderOf(file) !== undefined);
   const graph =
-    paths.length === 0 && ownTests.length === 0 ? undefined : sourceGraph(root);
+    paths.length === 0 && ownTests.length === 0 && imageFiles.length === 0
+      ? undefined
+      : sourceGraph(root);
   const reached = new Map<string, readonly string[] | undefined>();
   const measured = new Map<string, readonly string[]>();
+  for (const file of imageFiles) {
+    const reach = imageFolderReach(
+      graph,
+      String(imageFolderOf(file)),
+      launches,
+      root,
+    );
+    if (reach !== undefined) {
+      measured.set(file, reach);
+    }
+  }
   for (const file of ownTests) {
     const reach =
       graph === undefined ? undefined : testReach(graph, file, launches);
