@@ -1342,6 +1342,9 @@ export async function activate(
               {modal: true, detail},
               {title: button, isCloseAffordance: true},
             ),
+          showError: message => {
+            void vscode.window.showErrorMessage(message);
+          },
           configFiles: (image, name) =>
             attachConfigFilesOf(context.globalStorageUri.fsPath, image, name),
           exists: file =>

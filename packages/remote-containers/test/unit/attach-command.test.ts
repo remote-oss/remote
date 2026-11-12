@@ -291,6 +291,7 @@ describe('the attach command (card containers-162, brief-attach §2)', () => {
     opened: Array<[string, string | undefined]>;
     labels: Array<[DecodedTarget, string]>;
     modals: Array<[string, string, string]>;
+    errors: string[];
     refused: boolean;
     recorded: string[];
   }
@@ -311,6 +312,7 @@ describe('the attach command (card containers-162, brief-attach §2)', () => {
       opened: [],
       labels: [],
       modals: [],
+      errors: [],
       refused: false,
       recorded: [],
     };
@@ -350,6 +352,10 @@ describe('the attach command (card containers-162, brief-attach §2)', () => {
         scene.events.push('modal');
         scene.modals.push([message, detail, button]);
         return Promise.resolve();
+      },
+      showError: message => {
+        scene.events.push('error');
+        scene.errors.push(message);
       },
       configFiles: (image, name) => ({
         name: `/s/names/${name}.json`,
@@ -466,13 +472,19 @@ describe('the attach command (card containers-162, brief-attach §2)', () => {
     deepStrictEqual(scene.opened.length, 1);
   });
 
-  it('F-0603 BR-5 (c), 7.E5 route A, AC-18: a row’s container that is gone shows S034 in a modal and opens nothing', async () => {
+  it('F-0603 BR-5 (c), 7.E5 route A, AC-18: a row’s container that is gone shows S053 as an error notification, with no dialog, and opens nothing', async () => {
     const scene = sceneOf([]);
     scene.engine = engineOf([], []).engine;
     await attach(scene, {}, undefined, fullId('a'));
     deepStrictEqual(
-      [scene.opened, scene.modals],
-      [[], [['', 'An error occurred setting up the container.', 'OK']]],
+      [scene.opened, scene.modals, scene.errors],
+      [
+        [],
+        [],
+        [
+          `Cannot attach to the container with name/id ${fullId('a')}, it no longer exists.`,
+        ],
+      ],
     );
   });
 
@@ -482,7 +494,10 @@ describe('the attach command (card containers-162, brief-attach §2)', () => {
       inspection: {kind: 'failed', detail: 'no docker'},
     }).engine;
     await attach(scene, {}, undefined, fullId('a'));
-    deepStrictEqual([scene.opened, scene.modals.length], [[], 1]);
+    deepStrictEqual(
+      [scene.opened, scene.modals.length, scene.errors.length],
+      [[], 0, 1],
+    );
   });
 
   it('F-0603 7.E8, BR-5: the warning and the checks come before the row is asked about, and a refusal of either ends the command', async () => {

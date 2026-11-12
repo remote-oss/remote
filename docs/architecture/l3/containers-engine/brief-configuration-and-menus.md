@@ -1,6 +1,7 @@
 # Brief: configuration semantics, machine settings and the partner menus
 
 Owner: athena (architect). Plan: #1807's release-2 families. Specs, all `spec:reviewed`:
+
 - remote-oss/remote-containers#58 (F-0304 Variable substitution);
 - F-0305 Property support matrix;
 - F-0306 Image metadata merging;
@@ -14,14 +15,14 @@ extensions; the generated Copilot instructions), `brief-attach.md` (C12), `brief
 
 ## 1. What a survey found (2026-11-04)
 
-| Family | Built, needs a row or a `core` tag | A gap of ours | Waits on another feature or a host |
-|---|---|---|---|
-| F-0304 | 53 | 2 | 12 (attach; `host: windows`) |
-| F-0305 | 24 | 1 | 3 (F-0506; attach) |
-| F-0306 | 33 | 0 | 16 (F-0506; F-0206; attach; `host: windows`) |
-| F-0506 | 0 | 15 | 0 |
-| F-0507 | 27 | 2 (the activation event; a spec conflict) | 8 (attach; F-1302; Kubernetes; Apple; `host: windows`) |
-| F-0603 | 1 | 18 | 5 (F-0806; F-1302; `host: windows`) |
+| Family | Built, needs a row or a `core` tag | A gap of ours                             | Waits on another feature or a host                     |
+| ------ | ---------------------------------- | ----------------------------------------- | ------------------------------------------------------ |
+| F-0304 | 53                                 | 2                                         | 12 (attach; `host: windows`)                           |
+| F-0305 | 24                                 | 1                                         | 3 (F-0506; attach)                                     |
+| F-0306 | 33                                 | 0                                         | 16 (F-0506; F-0206; attach; `host: windows`)           |
+| F-0506 | 0                                  | 15                                        | 0                                                      |
+| F-0507 | 27                                 | 2 (the activation event; a spec conflict) | 8 (attach; F-1302; Kubernetes; Apple; `host: windows`) |
+| F-0603 | 1                                  | 18                                        | 5 (F-0806; F-1302; `host: windows`)                    |
 
 - **Most of F-0304, F-0305 and F-0306** is the dev container CLI's own work, which we delegate (ADR-0005), and it's
   correct.
@@ -57,6 +58,7 @@ extensions; the generated Copilot instructions), `brief-attach.md` (C12), `brief
    - **Rows:** the bash-only row is replaced by a row on `dash` and one for the array form.
 
 **ADR-0009's amendment** (in this PR):
+
 - deviation 1 is now the spawn environment;
 - deviation 2 is now the pre-pass;
 - the pre-pass serves only deviations 2 and 7, plus the volume host's workspace values.
@@ -140,14 +142,15 @@ extensions; the generated Copilot instructions), `brief-attach.md` (C12), `brief
   - **`cloneInVolumeFromViewlet`** is declared but never registered (AC-8).
 
   All of them are menu contributions only: we build no tree, and the partner may be absent (F-1404).
+
 - **The row argument** (BR-5) is one pure function for both commands:
   - **A usable row:** the partner's element for a container or a volume, in our extension host. The command targets
     its container id or volume name with no picker, and a selection argument is ignored.
   - **No argument** (a keybinding), or an unusable one (a handle from another extension host, a redrawn row): the
     command is exactly its palette twin. That's `attachToRunningContainer`, with F-0601's warning and S316's
     picker, or `inspectVolume`, with S319's picker, in the same window.
-  - **A row whose container is gone** when the attach runs: S034 shows, where the reference was silent (7.E5's
-    required behaviour).
+  - **A row whose container is gone** when the attach runs: S053 shows as an error notification (no dialog, AC-18),
+    where the reference was silent (7.E5's required behaviour).
   - **Validation:** the id or name is validated before it reaches Docker, and F-0201's Docker check runs first
     (7.E8).
 - **The flows** are the existing ones:
@@ -169,16 +172,17 @@ extensions; the generated Copilot instructions), `brief-attach.md` (C12), `brief
 
 ## 7. The cut and the cards
 
-| Lines | Where |
-|---|---|
-| the built lines (about 140) and the `core` ones (about 30) | rows and tags (card 5) |
-| F-0304 AC-14, AC-27 | card 1 |
-| F-0305 AC-13 | card 2 |
-| F-0506 (15), and the settings clauses of F-0305 and F-0306 | card 3 |
-| F-0507's activation event and AC-24; F-0603 (18) | card 4 |
+| Lines                                                               | Where                                           |
+| ------------------------------------------------------------------- | ----------------------------------------------- |
+| the built lines (about 140) and the `core` ones (about 30)          | rows and tags (card 5)                          |
+| F-0304 AC-14, AC-27                                                 | card 1                                          |
+| F-0305 AC-13                                                        | card 2                                          |
+| F-0506 (15), and the settings clauses of F-0305 and F-0306          | card 3                                          |
+| F-0507's activation event and AC-24; F-0603 (18)                    | card 4                                          |
 | attach, F-0206, F-0806, F-1302, Kubernetes, Apple and Windows lines | their features' cards, as their briefs cut them |
 
 **Suggested cards** (daedalus):
+
 1. **The CLI bridge corrections:** §2, with ADR-0009 as amended here.
 2. **S219.**
 3. **Machine settings and MCP:** §4, every family.
@@ -186,5 +190,6 @@ extensions; the generated Copilot instructions), `brief-attach.md` (C12), `brief
 5. **Rows and tags.**
 
 **Spec questions for metis** (with this brief's PR):
+
 - F-0507 AC-24 with F-0409 AC-24;
 - F-0603's element properties.

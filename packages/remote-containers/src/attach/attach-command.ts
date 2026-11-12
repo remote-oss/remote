@@ -12,6 +12,7 @@ import type {Logger} from 'lib-log';
 import type {PinnedEngine} from '../engine/effective-engine.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
+import {failureText} from '../surfaces/failure-strings.ts';
 import {
   applicableConfigOf,
   type AttachConfigFiles,
@@ -29,7 +30,6 @@ import {type AttachedTarget, attachedPayloadOf} from './payload.ts';
 /** The English templates of the dialogs this command shows. */
 const COMMAND_TEMPLATES = {
   S365: 'There are no running containers to attach to.',
-  S034: 'An error occurred setting up the container.',
   S143: 'Docker returned an error.',
   confirm: 'OK',
 } as const;
@@ -59,6 +59,8 @@ export interface AttachPorts {
     detail: string,
     button: string,
   ): PromiseLike<unknown>;
+  /** Shows a non-modal error notification. */
+  showError(message: string): void;
   /** The files that may apply to a container with this image and name. */
   configFiles(image: string, name: string): AttachConfigFiles;
   exists(file: string): Promise<boolean>;
@@ -135,7 +137,7 @@ async function pickedItem(
 
 /**
  * The item of the container `containerId` a row stands for, whatever its state: a container that is not running is
- * attached to as well, and its own window says so. A container that is gone is told in a dialog, and gives none.
+ * attached to as well, and its own window says so. A container that is gone is told in an error notification, with no dialog, and gives none.
  */
 async function rowItem(
   ports: AttachPorts,
@@ -153,11 +155,7 @@ async function rowItem(
       : undefined;
   if (found === undefined) {
     ports.logger.warn(`the container of the row is gone: ${containerId}`);
-    await ports.showModal(
-      '',
-      ports.translate(COMMAND_TEMPLATES.S034),
-      ports.translate(COMMAND_TEMPLATES.confirm),
-    );
+    ports.showError(failureText('S053', [containerId], ports.translate));
     return undefined;
   }
   return itemOf(found);
