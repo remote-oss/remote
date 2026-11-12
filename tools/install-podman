@@ -2,32 +2,49 @@
 # install-podman: rootless Podman at the release pinned below for the containers-podman launch, as the job's own user,
 # on a Linux CI machine.
 #
-#   tools/install-podman    install the pinned Podman unless the machine's is that release, set rootless Podman up for
+#   tools/install-podman    install the pinned Podman unless the machine's is that build, set rootless Podman up for
 #                           the user, and print what `podman info` reports
 #
-# A machine whose podman is the pinned release keeps it. Otherwise (Ubuntu 24.04 has 4.9.3) podman-static's build at the
-# pinned version is checked against its pinned sha256, unpacked and copied into /usr/local and /etc/containers, which
-# come first on the PATH and replace the machine's configuration. The pin is 6.1.4: on GitHub's ubuntu-24.04 (kernel
-# 7.0.0-1017-azure) `podman exec` of a command that ends at once never returns with 5.7.1 or 5.8.8, whatever their
-# conmon, and returns with 6.1.4 (runs 41990219734, 41969557740). Its runc is left out: one in /usr/local/bin
-# would come before Docker's own. Rootless Podman then needs newuidmap and newgidmap setuid and subordinate ids for the
-# user. On Ubuntu, the job lifts the restriction on unprivileged user namespaces first (the workflow's AppArmor step).
-# A version change here is the only way the pin moves.
+# A machine whose podman is the pinned release, dynamically linked, keeps it. Otherwise (Ubuntu 24.04 has 4.9.3):
+# 1. podman-static's archive at the pinned version is checked against its pinned sha256, unpacked and copied into
+#    /usr/local and /etc/containers, which come first on the PATH and replace the machine's configuration. It brings the
+#    helpers Podman runs: conmon, crun, netavark and pasta. Its runc is left out: one in /usr/local/bin would come before
+#    Docker's own.
+# 2. The archive's own podman is replaced by one built from Podman's source at the pinned commit, with the Go release
+#    pinned by its sha256, as the job's user. The archive's statically linked podman leaves concurrent `podman exec`
+#    calls on one container waiting for good (and with them `podman ps`) on GitHub's ubuntu-24.04, while the same release
+#    built from source returns every one, with the same helpers (runs 43270350609 and 43275901558). The dev container
+#    CLI makes such calls at every connect.
+# Rootless Podman then needs newuidmap and newgidmap setuid and subordinate ids for the user. On Ubuntu, the job lifts
+# the restriction on unprivileged user namespaces first (the workflow's AppArmor step). A pin change here is the only way
+# the installed Podman moves.
 set -euo pipefail
 
 PODMAN_VERSION=6.1.4
 PODMAN_SHA256_AMD64=9dd51073fac5a1742f88cf3caff5554615cb4d67ba554d25e8807be635547af5
 PODMAN_SHA256_ARM64=c106d09d7524209ce01eb3a02a7e621e9c55ec31d0fada48439cf77aa07afdb6
+# the commit the v6.1.4 tag of containers/podman points at
+PODMAN_COMMIT=464c15fec06f0074c916f9eff87c4806869c2833
+GO_VERSION=go1.27.4
+GO_SHA256_AMD64=7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840
+GO_SHA256_ARM64=3392582988a273a87ab5043ee1b2c9c17a2c3c00580bf9326c47a2e0aaaeac92
 
 # the release of the podman on the PATH, or nothing when there is none
 podman_release() {
   podman --version 2>/dev/null | sed -n 's/^podman version \([0-9][0-9.]*\).*/\1/p'
 }
 
-if [ "$(podman_release)" != "$PODMAN_VERSION" ]; then
+# whether the podman on the PATH is the pinned release and dynamically linked, as the source build is: its ELF names a
+# program interpreter, which readelf reads without running it
+pinned_build_installed() {
+  [ "$(podman_release)" = "$PODMAN_VERSION" ] &&
+    readelf --program-headers "$(command -v podman)" 2>/dev/null | grep -q 'Requesting program interpreter'
+}
+
+if ! pinned_build_installed; then
   case "$(uname -m)" in
-    x86_64) arch=amd64 sha256=$PODMAN_SHA256_AMD64 ;;
-    aarch64 | arm64) arch=arm64 sha256=$PODMAN_SHA256_ARM64 ;;
+    x86_64) arch=amd64 sha256=$PODMAN_SHA256_AMD64 go_sha256=$GO_SHA256_AMD64 ;;
+    aarch64 | arm64) arch=arm64 sha256=$PODMAN_SHA256_ARM64 go_sha256=$GO_SHA256_ARM64 ;;
     *)
       echo "install-podman: no pinned Podman for $(uname -m)" >&2
       exit 1
@@ -38,18 +55,49 @@ if [ "$(podman_release)" != "$PODMAN_VERSION" ]; then
   archive="$work/podman-linux-$arch.tar.gz"
   curl -fsSL -o "$archive" \
     "https://github.com/mgoltzsche/podman-static/releases/download/v$PODMAN_VERSION/podman-linux-$arch.tar.gz"
-  echo "$sha256  $archive" | sha256sum -c - >/dev/null
+  echo "$sha256  $archive" | sha256sum -c - >/dev/null || {
+    echo "install-podman: podman-static $PODMAN_VERSION ($arch) does not match its pinned sha256 $sha256" >&2
+    exit 1
+  }
   tar -xzf "$archive" -C "$work"
   rm -f "$work/podman-linux-$arch/usr/local/bin/runc"
   sudo cp -r "$work/podman-linux-$arch/usr" "$work/podman-linux-$arch/etc" /
-  # the archive's crun, not the machine's: Ubuntu 24.04's /usr/bin/crun, which podman finds first, refuses the runtime
-  # spec Podman 6 writes ("crun: unknown version specified")
+  # the archive's helpers, not the machine's: Ubuntu 24.04's /usr/bin/crun, which podman finds first, refuses the
+  # runtime spec Podman 6 writes ("crun: unknown version specified"), and a podman built from source searches its own
+  # list of folders for conmon and the network helpers, where Ubuntu's own come first
   sudo mkdir -p /etc/containers/containers.conf.d
-  printf '[engine.runtimes]\ncrun = ["/usr/local/bin/crun"]\n' |
+  printf '[engine]\nconmon_path = ["/usr/local/lib/podman/conmon"]\nhelper_binaries_dir = ["/usr/local/lib/podman", "/usr/local/bin"]\n\n[engine.runtimes]\ncrun = ["/usr/local/bin/crun"]\n' |
     sudo tee /etc/containers/containers.conf.d/50-install-podman-crun.conf >/dev/null
+
+  # the podman binary itself, from source
+  go_archive="$work/$GO_VERSION.linux-$arch.tar.gz"
+  curl -fsSL -o "$go_archive" "https://go.dev/dl/$GO_VERSION.linux-$arch.tar.gz"
+  echo "$go_sha256  $go_archive" | sha256sum -c - >/dev/null || {
+    echo "install-podman: $GO_VERSION ($arch) does not match its pinned sha256 $go_sha256" >&2
+    exit 1
+  }
+  tar -xzf "$go_archive" -C "$work"
+  sudo DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y -qq \
+    libseccomp-dev libgpgme-dev pkg-config >/dev/null
+  source_folder="$work/podman-source"
+  git init -q "$source_folder"
+  git -C "$source_folder" fetch -q --depth 1 https://github.com/containers/podman "$PODMAN_COMMIT"
+  git -C "$source_folder" checkout -q FETCH_HEAD
+  [ "$(git -C "$source_folder" rev-parse HEAD)" = "$PODMAN_COMMIT" ] || {
+    echo "install-podman: Podman's source is $(git -C "$source_folder" rev-parse HEAD), not the pinned $PODMAN_COMMIT" >&2
+    exit 1
+  }
+  # the pinned Go and the source's own vendored modules only: a toolchain switch or a module outside vendor/ fails
+  if ! PATH="$work/go/bin:$PATH" GOTOOLCHAIN=local GOFLAGS=-mod=vendor GOPROXY=off make -C "$source_folder" podman \
+    BUILDTAGS='seccomp exclude_graphdriver_btrfs containers_image_openpgp' >"$work/podman-build.log" 2>&1; then
+    tail -n 30 "$work/podman-build.log" >&2
+    echo "install-podman: Podman $PODMAN_COMMIT did not build with $GO_VERSION" >&2
+    exit 1
+  fi
+  sudo install -m 0755 "$source_folder/bin/podman" /usr/local/bin/podman
   hash -r
-  [ "$(podman_release)" = "$PODMAN_VERSION" ] || {
-    echo "install-podman: the podman on the PATH is $(podman --version 2>&1), not $PODMAN_VERSION" >&2
+  pinned_build_installed || {
+    echo "install-podman: the podman on the PATH is $(podman --version 2>&1), not $PODMAN_VERSION built from $PODMAN_COMMIT" >&2
     exit 1
   }
 fi
@@ -69,9 +117,19 @@ if ! out=$(podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDrive
   printf '%s' "$out" | grep -q 'boot ID differs from cached boot ID' || exit 1
   rm -rf "/tmp/storage-run-$(id -u)/containers" "/tmp/storage-run-$(id -u)/libpod/tmp"
 fi
-podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}} {{.Host.OCIRuntime.Path}}'
-runtime=$(podman info --format '{{.Host.OCIRuntime.Path}}')
-[ "$runtime" = /usr/local/bin/crun ] || {
-  echo "install-podman: Podman $PODMAN_VERSION runs $runtime, not the archive's /usr/local/bin/crun" >&2
-  exit 1
+podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}} {{.Host.OCIRuntime.Path}} {{.Host.Conmon.Path}} {{.Host.NetworkBackendInfo.Path}}'
+# the helpers Podman runs are the archive's, under /usr/local
+require_helper() {
+  local found
+  found=$(podman info --format "$2")
+  case "$found" in
+    "$3"*) ;;
+    *)
+      echo "install-podman: Podman $PODMAN_VERSION runs $found as its $1, not the archive's $3" >&2
+      exit 1
+      ;;
+  esac
 }
+require_helper runtime '{{.Host.OCIRuntime.Path}}' /usr/local/bin/crun
+require_helper conmon '{{.Host.Conmon.Path}}' /usr/local/lib/podman/conmon
+require_helper 'network backend' '{{.Host.NetworkBackendInfo.Path}}' /usr/local/lib/podman/netavark
