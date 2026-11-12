@@ -57,9 +57,13 @@ ssh-diagnostics (`components.md`).
 - **How the store is written** (`ruling-2326-shared-records`). The store stays in the extension's global state (BR-8). An
   extension's global state is one object that every window rewrites whole, so a burst of writes can be overwritten by
   the echo of an older one (#2326).
-  - **Three kinds of write:** at the start of the resolve step, the record with its time and environment hints (§6
-    step 2, so an attempt whose step never ends still has one, BR-9, AC-16); once when the step ends, the error hints
-    and the log hint in one update; and once for each error recognised after the summary check (7.E2 b, AC-12).
+  - **When the store is written:**
+    - at the start of the resolve step: the record with its time and environment hints (§6 step 2), so an attempt
+      whose step never ends still has one (BR-9, AC-16);
+    - when an error is recognised: its hints, stored then and not deferred to the step's end, because F-2604 AC-5
+      needs the hint in the store when its dialog shows. The writes of one synchronous run, such as an error and its
+      log hint, are folded into one update;
+    - once for each error recognised after the summary check (7.E2 b, AC-12).
   - **Each write is read back** after a fixed delay (500 ms): if the value isn't the one written, it is written once
     more and read back once more, and then an error line names the key. No unbounded loop. The pre-connection
     confirmation (F-2108 BR-8) is written the same way.
