@@ -1452,22 +1452,44 @@ function liveProcessIdOf(name: string): number | undefined {
   }
 }
 
-/** Has window `name` run the agent's `command`, which reports one `event`, and gives that report. */
-async function reported(
+/** The last report each (window, event) has in hand, as a promise that never rejects: the next one for it starts after this one ends. */
+const REPORTS_IN_HAND = new Map<string, Promise<undefined>>();
+
+/**
+ * Has window `name` run the agent's `command`, which reports one `event`, and gives that report. Reports of one event of
+ * one window are asked one at a time, since a report is told from its predecessors by their count: callers that ask at
+ * once would each take the answer of another.
+ */
+function reported(
   name: string,
   event: AgentEvent['event'],
   command: string,
   ...parameters: unknown[]
 ): Promise<AgentEvent | undefined> {
-  const before = countOf(name, event);
-  await inWindow(name, command, ...parameters);
-  await waitUntil(
-    `window ${name} to report its ${event}`,
-    () => countOf(name, event) > before,
+  const key = `${name}\u0000${event}`;
+  async function askOnce(): Promise<AgentEvent | undefined> {
+    const before = countOf(name, event);
+    await inWindow(name, command, ...parameters);
+    await waitUntil(
+      `window ${name} to report its ${event}`,
+      () => countOf(name, event) > before,
+    );
+    return windowEvents(name)
+      .filter(each => each.event === event)
+      .at(-1);
+  }
+  const answer = (REPORTS_IN_HAND.get(key) ?? Promise.resolve()).then(askOnce);
+  const settled = answer.then(
+    () => undefined,
+    () => undefined,
   );
-  return windowEvents(name)
-    .filter(each => each.event === event)
-    .at(-1);
+  REPORTS_IN_HAND.set(key, settled);
+  void settled.then(() => {
+    if (REPORTS_IN_HAND.get(key) === settled) {
+      REPORTS_IN_HAND.delete(key);
+    }
+  });
+  return answer;
 }
 
 /**
