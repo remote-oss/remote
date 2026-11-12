@@ -242,6 +242,37 @@ async function pages(): Promise<DebugTarget[]> {
   return targets.filter(target => target.type === 'page');
 }
 
+/**
+ * What every renderer page says of its focus and its quick input, for the error of a palette that did not show: the
+ * page that has the focus, the element that holds it, and whether the quick input is displayed and has items.
+ */
+export async function pageFocusFacts(): Promise<string[]> {
+  const lines: string[] = [];
+  for (const page of await pages()) {
+    const address = page.webSocketDebuggerUrl;
+    if (address === undefined) {
+      lines.push(`${page.title}: no address`);
+      continue;
+    }
+    const facts = await evaluateAt<unknown>(
+      address,
+      `page ${page.title}`,
+      `(() => {
+        const widget = document.querySelector('.quick-input-widget');
+        return {
+          focus: document.hasFocus(),
+          visibility: document.visibilityState,
+          active: document.activeElement?.className ?? null,
+          quick: widget === null ? null : widget.style.display,
+          items: widget === null ? 0 : widget.querySelectorAll('.quick-input-list .monaco-list-row').length,
+        };
+      })()`,
+    ).catch((caught: unknown) => String(caught));
+    lines.push(`${page.title}: ${JSON.stringify(facts)}`);
+  }
+  return lines;
+}
+
 /** The number of renderer pages, one per open window: a window that reloads in place keeps its page count. */
 export async function pageCount(): Promise<number> {
   return (await pages()).length;
