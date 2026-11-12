@@ -481,7 +481,7 @@ jobs:
         run: tools/install-podman
       # probe only (#2319): Ubuntu's podman first (a store of its own), then podman-static 5.8.8; every command bounded
       - if: contains(matrix.part.launches, 'containers-podman')
-        timeout-minutes: 12
+        timeout-minutes: 20
         run: |
           set +e
           t() { local s=$(date +%s.%N); timeout "$@"; local c=$?; echo "  -> exit $c after $(echo "$(date +%s.%N) - $s" | bc) s"; }
@@ -493,15 +493,21 @@ jobs:
           echo "4.9 exec echo hi:"; t 30 $P exec $id3 echo hi </dev/null
           echo "== podman-static: $(podman --version)"
           id=$(timeout 120 podman run -d docker.io/library/alpine:3.22 sleep 600); echo "5.8 container $id"
-          echo "NOTIFY_SOCKET=${NOTIFY_SOCKET:-unset}; listen fds: ${LISTEN_FDS:-unset}"
-          echo "== no network (pasta out of the picture):"; idn=$(timeout 120 podman run -d --network=none docker.io/library/alpine:3.22 sleep 600 2>&1 | tail -1); echo "  container: $idn"
-          echo "no-network exec echo hi:"; t 30 podman exec $idn echo hi </dev/null
-          timeout 60 podman rm -f -t 0 $idn >/dev/null 2>&1
-          echo "== exec with NOTIFY_SOCKET unset:"; t 30 env -u NOTIFY_SOCKET podman exec $id echo hi </dev/null
-          echo "== Ubuntu's conmon + systemd + runc:"; idu=$(timeout 120 podman --conmon /usr/bin/conmon --runtime /usr/bin/runc --cgroup-manager=systemd run -d docker.io/library/alpine:3.22 sleep 600 2>&1 | tail -1); echo "  container: $idu"
-          echo "ubuntu-conmon exec echo hi:"; t 30 podman --conmon /usr/bin/conmon --runtime /usr/bin/runc --cgroup-manager=systemd exec $idu echo hi </dev/null
-          timeout 60 podman --runtime /usr/bin/runc rm -f -t 0 $idu >/dev/null 2>&1
-          echo "== the network backends: $(podman info --format '{{.Host.NetworkBackend}} pasta={{.Host.Pasta.Executable}} slirp={{.Host.Slirp4NetNS.Executable}}' 2>&1)"
+          echo "== strace of a hanging 5.8.8 exec:"
+          sudo apt-get install -y -qq strace >/dev/null 2>&1; command -v strace
+          timeout 20 strace -f -tt -o "$RUNNER_TEMP/exec.trace" podman exec $id echo hi </dev/null; echo "  -> exit $?"
+          grep -v -E "futex|nanosleep|sched_yield|rt_sig|mmap|munmap|madvise|getpid|gettid|clock_gettime" "$RUNNER_TEMP/exec.trace" | tail -45 | cut -c1-200
+          for v in 5.8.4:a58765fe8be6ab3fb79f892f1a027b4ce4a7e8eb589df1ef960c167cbde08d69 6.1.4:9dd51073fac5a1742f88cf3caff5554615cb4d67ba554d25e8807be635547af5; do
+            ver=${v%%:*}; sum=${v##*:}; echo "== podman-static $ver:"
+            timeout 120 podman system reset -f >/dev/null 2>&1
+            d=$(mktemp -d); curl -fsSL -o $d/p.tgz "https://github.com/mgoltzsche/podman-static/releases/download/v$ver/podman-linux-amd64.tar.gz"
+            echo "$sum  $d/p.tgz" | sha256sum -c - || continue
+            tar -xzf $d/p.tgz -C $d; rm -f $d/podman-linux-amd64/usr/local/bin/runc; sudo cp -r $d/podman-linux-amd64/usr $d/podman-linux-amd64/etc /; hash -r
+            podman --version; timeout 20 podman info --format 'cgroup {{.Host.CgroupManager}} runtime {{.Host.OCIRuntime.Path}} conmon {{.Host.Conmon.Path}}' 2>&1 | head -2
+            iv=$(timeout 120 podman run -d docker.io/library/alpine:3.22 sleep 600 2>&1 | tail -1); echo "  container: $iv"
+            echo "$ver exec echo hi:"; t 30 podman exec $iv echo hi </dev/null
+            timeout 60 podman rm -f -t 0 $iv >/dev/null 2>&1
+          done
           echo "5.8 exec --detach:"; t 30 podman exec --detach $id true
           echo "5.8 exec true (attach):"; t 30 podman exec $id true </dev/null
           echo "5.8 after a hung exec, inspect:"; t 20 podman inspect $id --format '{{.State.Status}}'
