@@ -64,7 +64,9 @@ ssh-diagnostics (`components.md`).
     more and read back once more, and then an error line names the key. No unbounded loop. The pre-connection
     confirmation (F-2108 BR-8) is written the same way.
   - **A clear wins:** a record the store no longer holds, cleared or dropped, isn't written again by its attempt's later
-    writes (AC-22).
+    writes (AC-22). The read-back's one rewrite follows the same rule. It rewrites only while the store still holds
+    the attempt's record with another value, which is an older window's echo. A record gone at the read-back was
+    cleared, and rewriting it would undo the clear.
 
 ## 3. The summary check and the terminal (BR-1 to BR-7, BR-13; 5.0, 6.7, 6.8, section 11)
 
