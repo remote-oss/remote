@@ -194,6 +194,7 @@ describe('F-0502 the resolution of a dev container window (card containers-43)',
       await reloadWindow(name);
       await connectedToContainer(name);
       const lines = logSince(logMark);
+      console.log(`c43 oncreate diag: resolved ${String(resolvedMilliseconds(lines))} ms`);
       const state = {
         labels: await labelsOf(containerId, folder),
         underTwoSeconds: resolvedMilliseconds(lines) < 2000,
