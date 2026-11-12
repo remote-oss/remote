@@ -64,6 +64,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
     await writeHomeFile('harness-bash', '.bash_profile', 'read answer\n');
     const mark = connectionLog().length;
     const failed = await failedOn('harness-bash', 'to-ac11-read', 60_000);
+    console.log(`1221 diag: milliseconds ${String(failed.dialog.milliseconds)}, since connect started ${String(failed.dialog.sinceConnectStarted)}`);
     deepStrictEqual(
       {
         question: failed.dialog.question,
