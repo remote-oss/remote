@@ -151,13 +151,31 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
         await cliStartMilliseconds(),
       ].sort((first, second) => first - second);
       const startMilliseconds = starts[1] ?? Infinity;
-      const reads = [
-        await cliReadMilliseconds(folder),
-        await cliReadMilliseconds(folder),
-        await cliReadMilliseconds(folder),
-      ].sort((first, second) => first - second);
+      const nodeStarts = [] as number[];
+      for (let round = 0; round < 3; round += 1) {
+        const begun = performance.now();
+        await execFileAsync(
+          variable('HARNESS_EDITOR_EXECUTABLE'),
+          ['-e', '0'],
+          {
+            env: {...process.env, ELECTRON_RUN_AS_NODE: '1'},
+          },
+        );
+        nodeStarts.push(performance.now() - begun);
+      }
+      const systemNodeStarts = [] as number[];
+      for (let round = 0; round < 3; round += 1) {
+        const begun = performance.now();
+        await execFileAsync(process.execPath, ['-e', '0']);
+        systemNodeStarts.push(performance.now() - begun);
+      }
+      const dockerBegun = performance.now();
+      await execFileAsync('docker', ['version']);
+      const dockerMilliseconds = performance.now() - dockerBegun;
+      const median = (values: number[]): number =>
+        [...values].sort((first, second) => first - second)[1] ?? Infinity;
       console.log(
-        `F-0408 AC-14 calibration: --version ${starts.map(each => String(Math.round(each))).join(', ')} ms; read-configuration --include-merged-configuration ${reads.map(each => String(Math.round(each))).join(', ')} ms`,
+        `F-0408 AC-14 machine: editor-as-node -e 0 ${nodeStarts.map(each => String(Math.round(each))).join(', ')} ms (median ${String(Math.round(median(nodeStarts)))}); system node -e 0 ${systemNodeStarts.map(each => String(Math.round(each))).join(', ')} ms; docker version ${String(Math.round(dockerMilliseconds))} ms; ref (editor node median + docker version) ${String(Math.round(median(nodeStarts) + dockerMilliseconds))} ms; --version CLI start ${starts.map(each => String(Math.round(each))).join(', ')} ms`,
       );
       const mark = containersLog().length;
       const again = await openFolderWindow(folder);
