@@ -1,6 +1,6 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
 import * as vscode from 'vscode';
-import {onHost, recordLines} from '../suite/harness.ts';
+import {connectionLog, onHost, recordLines} from '../suite/harness.ts';
 import casesFile from './cases.json' with {type: 'json'};
 import {
   archiveCopiesLeft,
@@ -83,11 +83,17 @@ function inOrder(texts: readonly string[], wanted: readonly string[]): boolean {
 }
 
 describe(`the install case "${installCase?.label ?? 'unknown'}" of the VSCodium run`, () => {
+  const label = installCase?.label ?? '';
+  after(function () {
+    process.stderr.write(
+      `DIAG ${label}: record ${JSON.stringify(recordLines())}\nDIAG ${label}: log ${JSON.stringify(connectionLog().slice(-120))}\n`,
+    );
+  });
+
   it('contracts harness: the window is one of the install cases', () => {
     strictEqual(installCase === undefined, false);
   });
 
-  const label = installCase?.label ?? '';
   const cite = installCase?.cite ?? 'F-2403';
 
   if (installCase?.outcome === 'connected') {
