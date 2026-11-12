@@ -35,7 +35,7 @@ function sqliteSaid(caught: unknown): string {
 }
 
 /** The files beside the database, and its journal mode when that can be read: what the failure of a read names. */
-function aroundDatabase(file: string): string {
+export function aroundDatabase(file: string): string {
   let files: string[] = [];
   try {
     files = readdirSync(path.dirname(file)).filter(name =>

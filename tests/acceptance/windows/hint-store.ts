@@ -5,7 +5,7 @@
 
 import path from 'node:path';
 import {variable} from './harness.ts';
-import {readStateDatabase} from './state-database.ts';
+import {aroundDatabase, readStateDatabase} from './state-database.ts';
 
 /** The records of the hint store: when each connect started, and the hints it kept. */
 export type HintRecords = Array<{
@@ -24,6 +24,9 @@ export type HintRecords = Array<{
 
 /** The records of the hint store the extension keeps in its global state; none before it writes one. */
 export function hintRecords(): HintRecords {
+  console.log(
+    `#2420: ${aroundDatabase(path.join(variable('HARNESS_USER_DATA'), 'User/globalStorage/state.vscdb'))}`,
+  );
   return readStateDatabase(
     path.join(variable('HARNESS_USER_DATA'), 'User/globalStorage/state.vscdb'),
     database => {
