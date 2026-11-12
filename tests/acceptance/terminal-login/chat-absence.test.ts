@@ -64,11 +64,18 @@ async function connected(name: string): Promise<void> {
     async () => (await windowState(name)).remoteAuthority !== null,
     120_000,
   );
-  await waitFor(
-    `the login terminal of window ${name} to close`,
-    async () => (await terminalNames(name)).length === 0,
-    60_000,
-  );
+  try {
+    await waitFor(
+      `the login terminal of window ${name} to close`,
+      async () => (await terminalNames(name)).length === 0,
+      60_000,
+    );
+  } catch (caught) {
+    throw new Error(
+      `${String(caught)}; its terminals ${JSON.stringify(await terminalNames(name))}`,
+      {cause: caught},
+    );
+  }
 }
 
 /**
