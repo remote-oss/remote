@@ -4,6 +4,7 @@
  * touches `vscode`, and only for its types: the editor is a value it is given.
  */
 
+import {appendFileSync} from 'node:fs';
 import type * as vscode from 'vscode';
 import {type LoginTerminals, type TerminalEnd, TerminalStream} from 'lib-ssh';
 
@@ -49,6 +50,12 @@ export function loginTerminalsOf(
         dataSubscription.dispose();
         closeSubscription.dispose();
       });
+      const traced = (what: string): void => {
+        appendFileSync(
+          '/tmp/login-terminal-shows.log',
+          `${String(Date.now())} ${what} ${name} pid${String(process.pid)}\n`,
+        );
+      };
       const created = editor.window.createTerminal({
         name,
         shellPath: invocation.program,
@@ -59,7 +66,9 @@ export function loginTerminalsOf(
         hideFromUser: !reveal,
       });
       target.terminal = created;
+      traced(`create reveal=${String(reveal)}`);
       if (reveal) {
+        traced('show-at-create');
         created.show(false);
       }
       let disposed = false;
@@ -74,6 +83,7 @@ export function loginTerminalsOf(
           created.sendText(text, false);
         },
         reveal: () => {
+          traced('show-reveal');
           created.show(false);
         },
         dispose: () => {

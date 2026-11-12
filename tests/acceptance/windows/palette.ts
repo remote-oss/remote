@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import {startInWindow, terminalFacts, windowEvents} from './harness.ts';
 import {
   chooseQuickPickRow,
@@ -37,6 +38,18 @@ async function showedPalette(name: string): Promise<void> {
   } catch (caught) {
     await sampling;
     const terminals = await terminalFacts(name);
+    let shows: string[] = [];
+    try {
+      shows = readFileSync('/tmp/login-terminal-shows.log', 'utf8')
+        .trim()
+        .split('\n')
+        .map(line => {
+          const [time, ...rest] = line.split(' ');
+          return `@${String(Number(time) - sent)} ${rest.join(' ')}`;
+        });
+    } catch {
+      shows = ['no log'];
+    }
     const events = windowEvents(name)
       .slice(-14)
       .map(
@@ -44,7 +57,7 @@ async function showedPalette(name: string): Promise<void> {
           `${entry.event}${entry.id === undefined ? '' : `#${entry.id.slice(-4)}`}@${String(entry.time - sent)}`,
       );
     throw new Error(
-      `${String(caught)}; pages ${JSON.stringify(await pageFocusFacts())}; the quick input and focus in the first seconds (ms from the command) ${JSON.stringify(trail)}; terminals ${JSON.stringify(terminals.terminals)}, active ${JSON.stringify(terminals.active)}; the agent's events (ms from the command) ${JSON.stringify(events)}`,
+      `${String(caught)}; pages ${JSON.stringify(await pageFocusFacts())}; the quick input and focus in the first seconds (ms from the command) ${JSON.stringify(trail)}; show calls (ms from the command) ${JSON.stringify(shows)}; terminals ${JSON.stringify(terminals.terminals)}, active ${JSON.stringify(terminals.active)}; the agent's events (ms from the command) ${JSON.stringify(events)}`,
       {cause: caught},
     );
   }
