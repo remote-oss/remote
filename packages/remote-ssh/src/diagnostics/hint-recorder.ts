@@ -132,9 +132,11 @@ export function hintRecorderOf(
         if (persisted && !starts && isGone(store, snapshot.started)) {
           return undefined;
         }
-        return storeKey.write(addHint(store, snapshot)).then(() => {
-          persisted = true;
-        });
+        return storeKey
+          .write(addHint(store, snapshot), snapshot.started)
+          .then(() => {
+            persisted = true;
+          });
       })
       // A write the state refuses does not end the writes after it, and is no unhandled rejection.
       .then(undefined, () => undefined);

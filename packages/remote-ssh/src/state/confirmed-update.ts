@@ -28,24 +28,34 @@ export const READ_BACK_DELAY_MILLISECONDS = 500;
 
 /** What decides whether a value that is not the one written is put back, and what is put back. */
 export interface ConfirmedKeyOptions<Value> {
-  /** Whether `read` holds what the write was for; by default, whether it is the value written last. */
-  holds?: (read: Value | undefined, latest: Value) => boolean;
+  /**
+   * Whether `read` holds what the write was for; by default, whether it is the value written last. `own` names the
+   * part of the value the write was for, when the writer gave one.
+   */
+  holds?: (read: Value | undefined, latest: Value, own?: string) => boolean;
   /**
    * What is written when `read` does not hold it; by default the value written last. A key that several windows write
    * gives `read` with the write's own part put into it, so that another window's part is not erased.
    */
-  merge?: (read: Value | undefined, latest: Value) => Value;
+  merge?: (read: Value | undefined, latest: Value, own?: string) => Value;
   /**
    * Whether the key is still the write's own when `read` does not hold it: a key that was cleared or replaced on
    * purpose in the meantime is left as it is, with nothing logged. By default it is always the write's own.
    */
-  ownedWhenRead?: (read: Value | undefined, latest: Value) => boolean;
+  ownedWhenRead?: (
+    read: Value | undefined,
+    latest: Value,
+    own?: string,
+  ) => boolean;
 }
 
 /** One key of the state, written and read back. */
 export interface ConfirmedKey<Value> {
-  /** Writes `value` and returns once the state took it; the read back goes on in the background. */
-  write(value: Value): Promise<void>;
+  /**
+   * Writes `value` and returns once the state took it; the read back goes on in the background. `own` names the part
+   * of the value that this write is for, which the read back looks for.
+   */
+  write(value: Value, own?: string): Promise<void>;
   /** Resolves when every read back that is going on has ended. */
   verified(): Promise<void>;
 }
@@ -68,6 +78,7 @@ export function confirmedKeyOf<Value>(
   options: ConfirmedKeyOptions<Value> = {},
 ): ConfirmedKey<Value> {
   let latest: Value | undefined;
+  let latestOwn: string | undefined;
   const merged = options.merge ?? ((read, value: Value) => value);
   const checks = new Set<Promise<void>>();
 
@@ -79,10 +90,11 @@ export function confirmedKeyOf<Value>(
       const readValue = state.get(key);
       const read = textOf(readValue);
       const held =
-        options.holds?.(readValue, latest as Value) ?? read === written;
+        options.holds?.(readValue, latest as Value, latestOwn) ??
+        read === written;
       if (
         !held &&
-        options.ownedWhenRead?.(readValue, latest as Value) === false
+        options.ownedWhenRead?.(readValue, latest as Value, latestOwn) === false
       ) {
         return;
       }
@@ -100,13 +112,14 @@ export function confirmedKeyOf<Value>(
         );
         return;
       }
-      await state.update(key, merged(readValue, latest as Value));
+      await state.update(key, merged(readValue, latest as Value, latestOwn));
     }
   }
 
   return {
-    write: async value => {
+    write: async (value, own) => {
       latest = value;
+      latestOwn = own;
       await state.update(key, value);
       const pending = check()
         .catch(() => undefined)

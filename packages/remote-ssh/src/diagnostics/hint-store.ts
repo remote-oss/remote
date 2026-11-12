@@ -90,33 +90,36 @@ export function isGone(store: HintStore | undefined, started: string): boolean {
 }
 
 /**
- * Whether `read` holds what the write of `latest` was for. For a record: the store holds the newest record of `latest`
- * with the same hints, whatever else it holds. For a clear: the store was cleared at that time or later.
+ * Whether `read` holds what the write of `latest` was for. For the record `own` (the one that began at that time): the
+ * store holds it with the same hints, whatever else it holds. For a clear, which has no record of its own: the store was
+ * cleared at that time or later.
  */
 export function storeHolds(
   read: HintStore | undefined,
   latest: HintStore,
+  own?: string,
 ): boolean {
-  const newest = latest.records.at(-1);
-  if (newest === undefined) {
+  if (own === undefined) {
     return (
       read?.clearedAt !== undefined &&
       read.clearedAt >= (latest.clearedAt ?? '')
     );
   }
-  const found = read?.records.find(each => each.started === newest.started);
+  const written = latest.records.find(each => each.started === own);
+  const found = read?.records.find(each => each.started === own);
   return (
-    found !== undefined && JSON.stringify(found) === JSON.stringify(newest)
+    found !== undefined && JSON.stringify(found) === JSON.stringify(written)
   );
 }
 
 /**
- * `read` with the part of `latest` that was written put into it: the newest record of `latest`, or the time of its
- * clear and the removal of the records that began before it. What another window wrote into `read` stays.
+ * `read` with the part of `latest` that was written put into it: the record `own`, or for a clear the time of the clear
+ * and the removal of the records that began before it. What another window wrote into `read` stays.
  */
 export function storeMerged(
   read: HintStore | undefined,
   latest: HintStore,
+  own?: string,
 ): HintStore {
   const base = read ?? emptyHintStore();
   const clearedAt = [base.clearedAt, latest.clearedAt]
@@ -124,8 +127,8 @@ export function storeMerged(
     .sort()
     .at(-1);
   const cleared = clearedAt === undefined ? {} : {clearedAt};
-  const newest = latest.records.at(-1);
-  if (newest === undefined) {
+  const record = latest.records.find(each => each.started === own);
+  if (record === undefined) {
     return {
       records: base.records.filter(
         each => clearedAt === undefined || each.started > clearedAt,
@@ -133,5 +136,5 @@ export function storeMerged(
       ...cleared,
     };
   }
-  return {...addHint(base, newest), ...cleared};
+  return {...addHint(base, record), ...cleared};
 }

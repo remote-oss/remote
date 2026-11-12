@@ -39,6 +39,43 @@ function stateOf(reverts: boolean[]) {
   };
 }
 
+/**
+ * One window's hint store key over a shared `disk`. Its next write is reverted when `reverts.next` is set; its first read
+ * back waits until the gate in `releases` is released, and the ones after it do not wait.
+ */
+function windowOver(
+  disk: {value?: HintStore},
+  reverts: {next: boolean},
+  releases: Array<() => void>,
+) {
+  let waited = false;
+  return hintStoreKeyOf(
+    {
+      get: () => disk.value,
+      update: (key: string, value: HintStore) => {
+        if (reverts.next) {
+          reverts.next = false;
+        } else {
+          disk.value = value;
+        }
+        return Promise.resolve();
+      },
+    },
+    {
+      delay: () => {
+        if (waited) {
+          return Promise.resolve();
+        }
+        waited = true;
+        return new Promise<void>(resolve => {
+          releases.push(resolve);
+        });
+      },
+      logger: ENVIRONMENT.logger,
+    },
+  );
+}
+
 describe('the hint store’s key over the global state (remote-oss/remote#2326)', () => {
   it('F-2605 BR-9 (c2326-one-key): the recorder and the clear command of a window share one key, so the read back of one never undoes the write of the other', () => {
     const {state} = stateOf([]);
@@ -60,42 +97,12 @@ describe('the hint store’s key over the global state (remote-oss/remote#2326)'
   it('F-2605 BR-9 (c2326-two-windows): a record another window writes inside the read back is not erased by it, and a record that an older echo took out is put back beside the other window’s', async () => {
     const disk: {value?: HintStore} = {};
     const releases: Array<() => void> = [];
-    function windowOver(echo: boolean) {
-      let reverted = echo;
-      let waited = false;
-      return hintStoreKeyOf(
-        {
-          get: () => disk.value,
-          update: (key: string, value: HintStore) => {
-            if (reverted) {
-              reverted = false;
-            } else {
-              disk.value = value;
-            }
-            return Promise.resolve();
-          },
-        },
-        {
-          // The first read back of each window waits until both have written.
-          delay: () => {
-            if (waited) {
-              return Promise.resolve();
-            }
-            waited = true;
-            return new Promise<void>(resolve => {
-              releases.push(resolve);
-            });
-          },
-          logger: ENVIRONMENT.logger,
-        },
-      );
-    }
+    const windowA = windowOver(disk, {next: true}, releases);
+    const windowB = windowOver(disk, {next: false}, releases);
     const first = recordAt('2026-11-02T00:00:01.000Z');
     const second = recordAt('2026-11-02T00:00:02.000Z');
-    const windowA = windowOver(true);
-    const windowB = windowOver(false);
-    await windowA.write({records: [first]});
-    await windowB.write({records: [second]});
+    await windowA.write({records: [first]}, first.started);
+    await windowB.write({records: [second]}, second.started);
     for (const release of releases) {
       release();
     }
@@ -104,5 +111,20 @@ describe('the hint store’s key over the global state (remote-oss/remote#2326)'
       first.started,
       second.started,
     ]);
+  });
+
+  it('F-2605 BR-9 (c2326-own-not-last): when two windows overlap and the first writes again, the read back looks for the first window’s own record, restores it after an older echo, and keeps the other window’s', async () => {
+    const first = recordAt('2026-11-02T00:00:01.000Z');
+    const second = recordAt('2026-11-02T00:00:02.000Z');
+    const grown = {...first, hints: [{kind: 'log' as const, text: 'the log'}]};
+    // Both records are stored, the other window's after the first's.
+    const disk: {value?: HintStore} = {value: {records: [first, second]}};
+    const releases: Array<() => void> = [];
+    const reverts = {next: true};
+    const key = windowOver(disk, reverts, releases);
+    await key.write({records: [grown, second]}, first.started);
+    releases.shift()?.();
+    await key.verified();
+    deepStrictEqual(disk.value?.records, [grown, second]);
   });
 });

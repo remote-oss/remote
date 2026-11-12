@@ -235,51 +235,70 @@ describe('the hint store (card connect-04 table)', () => {
     });
   });
 
-  it('F-2605.BR-9 (c2326-holds): a store holds a record write when it has the newest record with the same hints, whatever else it has, and a clear write when it was cleared at that time or later', () => {
+  it('F-2605.BR-9 (c2326-holds): a store holds a record write when it has that record with the same hints, whatever else it has and wherever it stands, and a clear write when it was cleared at that time or later', () => {
     const own = recordAt('2026-11-02T00:00:05.000Z', [
       {kind: 'log', text: 'l'},
     ]);
+    const older = recordAt(own.started, []);
     const other = recordAt('2026-11-02T00:00:06.000Z', []);
+    const cleared = '2026-11-02T00:00:09.000Z';
     deepStrictEqual(
       [
-        storeHolds(storeOf(own, other), storeOf(own)),
-        storeHolds(storeOf(recordAt(own.started, [])), storeOf(own)),
-        storeHolds(emptyHintStore(), storeOf(own)),
-        storeHolds(undefined, storeOf(own)),
-        storeHolds(
-          clearAll('2026-11-02T00:00:09.000Z'),
-          clearAll('2026-11-02T00:00:09.000Z'),
-        ),
-        storeHolds(
-          clearAll('2026-11-02T00:00:10.000Z'),
-          clearAll('2026-11-02T00:00:09.000Z'),
-        ),
-        storeHolds(emptyHintStore(), clearAll('2026-11-02T00:00:09.000Z')),
-        storeHolds(clearAll('2026-11-02T00:00:09.000Z'), emptyHintStore()),
-        storeHolds(storeOf(own), clearAll('2026-11-02T00:00:09.000Z')),
+        storeHolds(storeOf(own, other), storeOf(own), own.started),
+        storeHolds(storeOf(own, other), storeOf(own, other), own.started),
+        storeHolds(storeOf(older, other), storeOf(own, other), own.started),
+        storeHolds(storeOf(own, other), storeOf(own, other), other.started),
+        storeHolds(storeOf(other), storeOf(own, other), own.started),
+        storeHolds(emptyHintStore(), storeOf(own), own.started),
+        storeHolds(undefined, storeOf(own), own.started),
+        storeHolds(clearAll(cleared), clearAll(cleared)),
+        storeHolds(clearAll('2026-11-02T00:00:10.000Z'), clearAll(cleared)),
+        storeHolds(emptyHintStore(), clearAll(cleared)),
+        storeHolds(clearAll(cleared), emptyHintStore()),
+        storeHolds(storeOf(own), clearAll(cleared)),
       ],
-      [true, false, false, false, true, true, false, true, false],
+      [
+        true,
+        true,
+        false,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+      ],
     );
   });
 
-  it('F-2605.BR-9 (c2326-merged): a record is put into what was read and what another window wrote stays; a clear is put in as its time and removes the records that began before it', () => {
+  it('F-2605.BR-9 (c2326-merged): the own record is put into what was read in place and what another window wrote stays; a clear is put in as its time and removes the records that began before it', () => {
     const own = recordAt('2026-11-02T00:00:05.000Z', []);
+    const grown = recordAt(own.started, [{kind: 'log', text: 'l'}]);
     const other = recordAt('2026-11-02T00:00:06.000Z', []);
     const later = recordAt('2026-11-02T00:00:20.000Z', []);
     deepStrictEqual(
       [
-        storeMerged(storeOf(other), storeOf(own)).records,
-        storeMerged(undefined, storeOf(own)).records,
+        storeMerged(storeOf(other), storeOf(own), own.started).records,
+        storeMerged(undefined, storeOf(own), own.started).records,
+        storeMerged(storeOf(own, other), storeOf(grown, other), own.started)
+          .records,
         storeMerged(
           storeOf(own, other, later),
           clearAll('2026-11-02T00:00:10.000Z'),
         ),
-        storeMerged(clearAll('2026-11-02T00:00:30.000Z'), storeOf(own))
-          .clearedAt,
+        storeMerged(
+          clearAll('2026-11-02T00:00:30.000Z'),
+          storeOf(own),
+          own.started,
+        ).clearedAt,
       ],
       [
         [other, own],
         [own],
+        [grown, other],
         {records: [later], clearedAt: '2026-11-02T00:00:10.000Z'},
         '2026-11-02T00:00:30.000Z',
       ],

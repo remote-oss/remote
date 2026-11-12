@@ -37,13 +37,8 @@ export function hintStoreKeyOf(
     merge: storeMerged,
     // A store that differs from the last write is put back unless the difference is on purpose: the store was cleared
     // after the newest record began, or it holds two newer records. A missing record otherwise is an older copy's.
-    ownedWhenRead: (read, latest) => {
-      const newest = latest.records.at(-1);
-      if (newest === undefined) {
-        return true;
-      }
-      return !isGone(read, newest.started);
-    },
+    ownedWhenRead: (read, latest, own) =>
+      own === undefined || !isGone(read, own),
   });
   KEYS.set(state, made);
   return made;
