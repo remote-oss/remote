@@ -4,6 +4,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
+import {execFileSync} from 'node:child_process';
 import {
   mkdirSync,
   mkdtempSync,
@@ -42,10 +43,12 @@ import {
   tableImports,
   type TableModule,
   testsOfHelper,
+  withDeletedAsImporters,
   withHelpersAsTests,
   workflowEditReach,
   workflowReach,
 } from './acceptance-reach.ts';
+import {selectLaunches} from './acceptance-select.ts';
 import {acceptanceConfiguration} from './acceptance.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 
@@ -1002,6 +1005,131 @@ describe('acceptance-reach: the image folders (card tooling-188)', () => {
           .map(launch => launch.label)
           .sort(),
         false,
+      ],
+    );
+  });
+});
+
+describe('acceptance-reach: a source deleted or moved since the base (card tooling-191)', () => {
+  const ALPHA: Launch[] = [
+    {label: 'alpha-one', kind: 'plain', suite: 'alpha'},
+    {label: 'beta-one', kind: 'plain', suite: 'beta'},
+  ];
+  let base = '';
+  /** Runs git in the fixture repository and gives its output. */
+  function gitOf(...gitArguments: string[]): string {
+    return execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=rows',
+        '-c',
+        'user.email=rows@example.invalid',
+        '-c',
+        'commit.gpgsign=false',
+        ...gitArguments,
+      ],
+      {cwd: root, encoding: 'utf8'},
+    );
+  }
+
+  beforeEach(() => {
+    root = mkdtempSync(path.join(tmpdir(), 'deleted-sources-'));
+    gitOf('init', '-q');
+    write('tests/acceptance/windows/clones.ts', 'export const one = 1;\n');
+    write(
+      'tests/acceptance/alpha/a.test.ts',
+      "import {one} from '../windows/clones.ts';\n",
+    );
+    write('tests/acceptance/alpha/b.test.ts', 'const none = 0;\n');
+    write('tests/acceptance/windows/lonely.ts', 'export const two = 2;\n');
+    write('tests/acceptance/windows/shared.ts', 'export const three = 3;\n');
+    write(
+      'tests/acceptance/windows/harness.ts',
+      "export {three} from './shared.ts';\n",
+    );
+    write('tests/acceptance/windows/dir/index.ts', 'export const four = 4;\n');
+    write(
+      'tests/acceptance/beta/c.test.ts',
+      "import {four} from '../windows/dir';\n",
+    );
+    write('tests/acceptance/alpha/gone.test.ts', 'const gone = 0;\n');
+    gitOf('add', '-A');
+    gitOf('commit', '-q', '-m', 'base');
+    base = gitOf('rev-parse', 'HEAD').trim();
+    write('tests/acceptance/alpha/clones.ts', 'export const one = 1;\n');
+    write(
+      'tests/acceptance/alpha/a.test.ts',
+      "import {one} from './clones.ts';\n",
+    );
+    write('tests/acceptance/windows/harness.ts', 'export const three = 3;\n');
+    write('tests/acceptance/beta/c.test.ts', 'export const four = 4;\n');
+    for (const gone of [
+      'tests/acceptance/windows/clones.ts',
+      'tests/acceptance/windows/lonely.ts',
+      'tests/acceptance/windows/shared.ts',
+      'tests/acceptance/windows/dir/index.ts',
+      'tests/acceptance/alpha/gone.test.ts',
+    ]) {
+      rmSync(path.join(root, gone));
+    }
+    gitOf('add', '-A');
+    gitOf('commit', '-q', '-m', 'head');
+  });
+
+  afterEach(() => {
+    rmSync(root, {recursive: true, force: true});
+  });
+
+  it("tooling-191: a helper moved out of the windows harness into its suite stands for its importers at the base, and the change reaches that suite's launches only", () => {
+    const changed = withHelpersAsTests(
+      withDeletedAsImporters(
+        [
+          'tests/acceptance/windows/clones.ts',
+          'tests/acceptance/alpha/clones.ts',
+          'tests/acceptance/alpha/a.test.ts',
+        ],
+        base,
+        root,
+      ),
+      root,
+      new Set(['alpha', 'beta']),
+    );
+    deepStrictEqual(
+      [changed, selectLaunches(changed, ALPHA).labels],
+      [['tests/acceptance/alpha/a.test.ts'], ['alpha-one']],
+    );
+  });
+
+  it("tooling-191: a deleted helper nothing imported, a deleted test, a path that still exists, and any path when the base cannot be read stay as they are; one a windows file imported gives that file, and an index gives its folder's importers", () => {
+    deepStrictEqual(
+      [
+        withDeletedAsImporters(
+          [
+            'tests/acceptance/windows/lonely.ts',
+            'tests/acceptance/alpha/gone.test.ts',
+            'tests/acceptance/alpha/b.test.ts',
+            'tests/acceptance/windows/shared.ts',
+            'tests/acceptance/windows/dir/index.ts',
+          ],
+          base,
+          root,
+        ),
+        withDeletedAsImporters(
+          ['tests/acceptance/windows/clones.ts'],
+          'no-such-commit',
+          root,
+        ),
+      ],
+      [
+        [
+          'tests/acceptance/windows/lonely.ts',
+          'tests/acceptance/alpha/gone.test.ts',
+          'tests/acceptance/alpha/b.test.ts',
+          'tests/acceptance/windows/harness.ts',
+          'tests/acceptance/beta/c.test.ts',
+        ],
+        ['tests/acceptance/windows/clones.ts'],
       ],
     );
   });

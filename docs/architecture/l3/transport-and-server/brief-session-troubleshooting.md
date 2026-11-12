@@ -54,6 +54,23 @@ ssh-diagnostics (`components.md`).
   the record. The acceptance rows read the store only through that documentation. The key and the field names are
   ours.
 - **Nothing in the store leaves the machine** (BR-11, R-28).
+- **How the store is written** (`ruling-2326-shared-records`). The store stays in the extension's global state (BR-8). An
+  extension's global state is one object that every window rewrites whole, so a burst of writes can be overwritten by
+  the echo of an older one (#2326).
+  - **Three kinds of write:** at the start of the resolve step, the record with its time and environment hints (§6
+    step 2, so an attempt whose step never ends still has one, BR-9, AC-16); once when the step ends, the error hints
+    and the log hint in one update; and once for each error recognised after the summary check (7.E2 b, AC-12).
+  - **Each write is read back** after a fixed delay (500 ms): if the value isn't the one written, it is written once
+    more and read back once more, and then an error line names the key. No unbounded loop. The pre-connection
+    confirmation (F-2108 BR-8) is written the same way.
+  - **A clear wins, a revert doesn't:** a missing record is either cleared, dropped or reverted (an older window's echo
+    that predates the begin write), and only the store tells them apart.
+    - A Clear writes its clear time into the store, and that write is read back like any other.
+    - A record the store no longer holds is not written again when the store's clear time is after the attempt's
+      start (the clear wins, AC-22). Nor is it written again when the store already holds two newer records (the
+      newest-two rule dropped it).
+    - Any other missing record is a revert, and it's written again under the same bound of one rewrite (BR-9, AC-16).
+      The rule is the same for the read-back's rewrite and for the attempt's later writes.
 
 ## 3. The summary check and the terminal (BR-1 to BR-7, BR-13; 5.0, 6.7, 6.8, section 11)
 
