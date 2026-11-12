@@ -119,6 +119,14 @@
       "card": "#2156",
       "slice": "containers release 2",
       "decision": "F-0207 BR-14 (2026-11-04): contributed; its effect belongs to the relays' cards (F-1003, F-1007, F-1008)"
+    },
+    {
+      "package": "lib-log",
+      "kind": "module",
+      "key": "src/sinks/acceptance-terminal.ts",
+      "card": "#2361",
+      "slice": "wsl release 2",
+      "decision": "the harness's terminal mirror (brief-remote-wsl §4 item 1): test-only until pkg-3 (#2367) wires remote-wsl's composition root"
     }
   ]
 }

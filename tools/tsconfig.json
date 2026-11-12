@@ -13,7 +13,8 @@
     "../eslint.config.ts",
     "../prettier.config.ts",
     "../tests/acceptance/window-agent/src/window-name.ts",
-    "../tests/acceptance/windows/quick-pick-reads.ts"
+    "../tests/acceptance/windows/quick-pick-reads.ts",
+    "../tests/acceptance/windows/terminal-mirror.ts"
   ],
   "exclude": ["**/fixtures"]
 }
