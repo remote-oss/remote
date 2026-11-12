@@ -53,7 +53,7 @@ surveys; this brief holds where the two differ.
 
 ## 2. Cross-cutting rulings
 
-Each line is binding for the cards. A `ruling-` label marks a decision of ours; the six that depart from a spec line are
+Each line is binding for the cards. A `ruling-` label marks a decision of ours; the seven that depart from a spec line are
 listed in `release-notes.md`'s Deviations (new in this folder). A `reading-` label is our reading of an open or unclear
 line.
 
@@ -67,7 +67,8 @@ line.
    `Ubuntu@ssh-remote+host` would nest an authority. D2 gains a pure `validDistroName` (no `@`, `/`, `\`, no control
    character, not empty; non-ASCII allowed, unlike `install.ts`'s install-line rule), and every builder of a `wsl+`
    authority (D12, D10, the targets view, D8's script) refuses a name that fails it. Only `matchDistro`'s registered
-   spelling ever reaches `wsl.exe -d`, as one argument with no shell.
+   spelling ever reaches `wsl.exe -d`, as one argument with no shell. The empty payload `wsl+` is the one exemption: it
+   means the default distro, which D6 resolves through D2 before any `wsl.exe -d`.
 3. **The payload rule holds for WSL as for containers.** A `wsl+<distro>[@<outer>]` authority, a recent entry, a share
    path, a `code` invocation or a link only selects a code path. `wsl` never passes `isTrusted` (B contracts), and no
    payload field, setting or remembered answer skips F-6103's "Change Default" question, the licence dialog, or
@@ -95,8 +96,9 @@ line.
     remote-containers' and remote-explorer's views carry no stand-down key, by their own specs.
 11. **`wslFeatureInstalled` is a shared key, `ruling-2348-shared-context-key`.** Core sets it on a Windows desktop for
     the local machine; F-6701 needs it to describe the outer host in an SSH window. lib-identifiers gains the setter
-    kind `coreAndExtension`. Only D9b sets it, only in an `ssh-remote` window, to the outer host's WSL presence; nothing
-    else may write it.
+    kind `coreAndExtension`. Only D9b sets it, in any window whose WSL host is an `ssh-remote` outer (an
+    `ssh-remote+<h>` window or a `wsl+<d>@ssh-remote+<h>` window), to the outer host's WSL presence; nothing else may
+    write it.
 12. **The Windows build used by D2's rules (F-6103's 1903 floor, F-6204's 17063 path rule, F-6203's share host) comes
     from one source**, `os.release()` in the composition root (ADR-0013). Its test seam is the harness's existing
     acceptance switch; no setting, inherited environment or payload can reach it.

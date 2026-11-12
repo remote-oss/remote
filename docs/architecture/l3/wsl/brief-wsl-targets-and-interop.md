@@ -19,8 +19,8 @@ exec-spawner and D9b outer-context (D9, no longer provisional).
 - **The handlers** accept only a node of the current model; a string or a missing argument does nothing (BR-11, AC-19),
   and the out-of-context policy is `silent`. "Remove" changes core's list for every window of the user, so it runs only
   on the user's own action.
-- **Texts:** labels and tooltips are plain strings with `$(` escaped; STR:S004's `{0}` is the stored path, escaped as
-  brief-remote-wsl §2 item 4 says. The icon is the `folder-active` codicon. The menu groups are quoted verbatim
+- **Texts:** labels and tooltips are plain strings with `$(` escaped; STR:S004's `{0}` is the row's label, as F-6503 says,
+  escaped as brief-remote-wsl §2 item 4 says. The icon is the `folder-active` codicon. The menu groups are quoted verbatim
   (`2_folder@`, `inline@1`, `inline@2`).
 - **A deleted folder (AC-26), `reading-2348-deleted-folder`:** the extension doesn't stat folders (R-60), so the row goes
   only when core has removed the entry; a spec question asks which was meant.
@@ -54,9 +54,13 @@ R-89 and F-6701 BR-8 settle dossier question 3, so D9 is final.
   downloads into its own kept cache (lib-server's cache root for the client's platform), and the stepwise driver streams
   the archive over the exec server; nothing downloads in the remote distro. F-7902's dialogs are the same (BR-8, AC-34,
   AC-35).
-- **The proxy:** D5h runs on the client, keyed with the outer authority, and every relay is a `wsl.exe` spawned on the
-  outer host through the exec server; the relay cap of brief-wsl-connect §4 applies. D6's session table and D11's record
-  are keyed with the outer authority too.
+- **The proxy, `reading-2348-nested-proxy`:** no helper on this route, since the exec server belongs to the window's
+  extension host and a detached helper can't use it. Each window's extension host holds its own listener for the
+  window's life, and every relay is a `wsl.exe` spawned on the outer host through its exec server, under brief-wsl-connect
+  §4's relay cap. Windows don't share a port, closing one leaves the others connected, and the server ends by its own
+  auto-shutdown. D6's session table and D11's record are keyed with the outer authority.
+- **AC-19's message** ("Your workspace is on the Linux filesystem and cannot be reopened in Windows.") is a string id
+  of ours with that text verbatim (R-27).
 - **No exec server** (remote-ssh's direct mode, or no CLI for the host): `wslFeatureInstalled` stays false and the reason
   goes to the log; in a nested window core ends the chain with remote-ssh's message.
 - **A lost connection (Q3, AC-22, 7.E2), `reading-2348-nested-reconnect`:** core's own "cannot reconnect" surface with no
