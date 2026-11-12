@@ -129,15 +129,7 @@ describe('the extension in the core flows of an SSH window (card connect-125)', 
         'the program to print in the Debug Console',
         async () => (await pageText(folder)).includes(`c125-ran-on-${host}`),
         90_000,
-      ).catch(async (caught: unknown) => {
-        // What the window shows when the wait ends tells a program that did not start (a pick, a dialog) from one whose
-        // output did not reach the console.
-        const shown = await pageText(folder).catch(() => '(unreadable)');
-        throw new Error(
-          `${String(caught)}; the window shows (its last 1500 characters): ${JSON.stringify(shown.slice(-1500))}`,
-          {cause: caught},
-        );
-      });
+      );
       await new Promise(resolve => setTimeout(resolve, 5000));
       await inWindow(folder, 'workbench.action.debug.stop').catch(
         () => undefined,
