@@ -367,6 +367,12 @@ describe('Remote - SSH, activated in the editor', () => {
               );
               const editor = vscode.window.activeTextEditor;
               await waitUntil(
+                () => (editor?.document.getText() ?? '').length > 0,
+                'the file to hold text',
+                30_000,
+              );
+              measured.push(editor?.document.getText());
+              await waitUntil(
                 () => editor?.document.getText() === TEMPLATE,
                 'the template to be inserted',
                 30_000,
@@ -379,21 +385,27 @@ describe('Remote - SSH, activated in the editor', () => {
                 editor?.document.getText(),
                 selectionOf(editor),
               ]);
-              await vscode.commands.executeCommand('type', {text: '\t'});
+              await vscode.commands.executeCommand(
+                'jumpToNextSnippetPlaceholder',
+              );
               await waitUntil(
                 () => atStop(editor, [2, 13, 2, 21]),
                 'the hostname stop to be selected',
                 5_000,
               );
               measured.push(selectionOf(editor));
-              await vscode.commands.executeCommand('type', {text: '\t'});
+              await vscode.commands.executeCommand(
+                'jumpToNextSnippetPlaceholder',
+              );
               await waitUntil(
                 () => atStop(editor, [3, 9, 3, 13]),
                 'the user stop to be selected',
                 5_000,
               );
               measured.push(selectionOf(editor));
-              await vscode.commands.executeCommand('type', {text: '\t'});
+              await vscode.commands.executeCommand(
+                'jumpToNextSnippetPlaceholder',
+              );
               await waitUntil(
                 () => atStop(editor, [3, 13, 3, 13]),
                 'the caret stop to be reached',
@@ -409,14 +421,15 @@ describe('Remote - SSH, activated in the editor', () => {
               ]);
               break;
             } catch {
-              // A tab landed before the snippet session was live, as a literal tab: the template is gone,
-              // so the only way back is a clean re-open on the next attempt.
+              // The snippet session was not live, so the jump did nothing and a stop never
+              // selected: the only way back is a clean re-open on the next attempt.
               await closeEditorsOf(userFile).catch(() => undefined);
             }
           }
           deepStrictEqual(measured, [
             0,
             '',
+            TEMPLATE,
             [userFile, true, '', TEMPLATE, [1, 5, 1, 9]],
             [2, 13, 2, 21],
             [3, 9, 3, 13],
