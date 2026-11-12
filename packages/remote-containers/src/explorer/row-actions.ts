@@ -84,10 +84,28 @@ export function containerRowOf(argument: unknown): TargetRow | undefined {
     : undefined;
 }
 
-/** The mounts one container of `docker inspect`'s array has, in order, that count towards "the last container". */
+/** Where a mount of `docker inspect` is mounted in the container; empty when it says nothing. */
+function destinationOf(mount: unknown): string {
+  const destination = recordOf(mount)?.Destination;
+  return typeof destination === 'string' ? destination : '';
+}
+
+/**
+ * The mounts one container of `docker inspect`'s array has that count towards "the last container", in mount order: by
+ * the path they are mounted at, the order the engine sets them up in (the shorter, parent paths first). The engine's own
+ * list is not in an order that holds from one call to the next on every version (an older one lists its mount table in
+ * the order of a map), so the order is made here.
+ */
 function mountsOf(inspected: unknown): Mount[] {
   const mounts = recordOf(inspected)?.Mounts;
-  return (Array.isArray(mounts) ? (mounts as unknown[]) : []).flatMap(each => {
+  const ordered = (Array.isArray(mounts) ? (mounts as unknown[]) : []).toSorted(
+    (first, second) => {
+      const here = destinationOf(first);
+      const there = destinationOf(second);
+      return here === there ? 0 : here < there ? -1 : 1;
+    },
+  );
+  return ordered.flatMap(each => {
     const mount = recordOf(each);
     if (mount?.Type === 'volume' && typeof mount.Name === 'string') {
       return mount.Name === SHARED_VOLUME || ANONYMOUS_VOLUME.test(mount.Name)
