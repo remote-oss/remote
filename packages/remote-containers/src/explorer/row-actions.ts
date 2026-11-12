@@ -92,9 +92,9 @@ function destinationOf(mount: unknown): string {
 
 /**
  * The mounts one container of `docker inspect`'s array has that count towards "the last container", in mount order: by
- * the path they are mounted at, the order the engine sets them up in (the shorter, parent paths first). The engine's own
- * list is not in an order that holds from one call to the next on every version (an older one lists its mount table in
- * the order of a map), so the order is made here.
+ * the path they are mounted at, compared as plain strings (a path sorts before the paths below it, and siblings by
+ * their names; the depth of a path is not looked at). That is the order a current engine lists its mounts in. An older
+ * engine lists them in the order of a map, which differs from one call to the next, so the order is made here.
  */
 function mountsOf(inspected: unknown): Mount[] {
   const mounts = recordOf(inspected)?.Mounts;
