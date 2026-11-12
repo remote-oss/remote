@@ -986,6 +986,70 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     await closeWindow('c69-recent');
   });
 
+  it('F-0106 AC-49 (c123-recent-revoked): the [Dev Container] recent entry of a folder whose trust was revoked asks core’s question while resolving, and Cancel ends in S360 with S377 and a local, restricted window, never a connected one', async () => {
+    const folder = devContainerFolder('c123-recent-revoked', {
+      name: 'C123 Recent Revoked',
+    });
+    const name = await trustedContainerWindow(folder);
+    await inWindow(name, 'workbench.trust.manage');
+    await waitFor(
+      'the trust editor of the connected window',
+      async () => (await pageText(name)).includes('You trust this folder'),
+      30_000,
+    );
+    await clickButton(name, "Don't Trust");
+    const reloaded = reloadWindow(name);
+    await waitForDialog(name);
+    await answerDialog(name, 'Cancel');
+    await waitForDialog(name);
+    await answerDialog(name, 'OK');
+    await reloaded;
+    await closeWindow(name);
+    const from = await openFolderWindow(
+      devContainerFolder('c123-recent-revoked-from'),
+    );
+    const entry = (await recentlyOpenedIn(from)).find(
+      each =>
+        each.remoteAuthority?.startsWith('dev-container+') === true &&
+        each.uri.endsWith('/workspaces/c123-recent-revoked'),
+    );
+    inWindow(from, 'acceptance.agent.openWindow', entry?.uri).catch(
+      () => undefined,
+    );
+    const asked = await waitForDialog(name);
+    const askedText = await dialogText(name);
+    await answerDialog(name, 'Cancel');
+    const declined = await waitForDialog(name);
+    const declinedText = await dialogText(name);
+    await answerDialog(name, 'OK');
+    await waitFor(
+      `window ${name} to be a local folder`,
+      async () => (await windowState(name)).remoteName === null,
+      60_000,
+    );
+    deepStrictEqual(
+      {
+        entry: entry?.label?.endsWith('[Dev Container]'),
+        asked: [asked.message, askedText?.includes(S265)],
+        declined: [
+          declined.message,
+          declinedText?.includes(S377),
+          declined.buttons,
+        ],
+        remoteName: (await windowState(name)).remoteName,
+        trusted: await trustSettled(name, false),
+      },
+      {
+        entry: true,
+        asked: [TRUST_QUESTION, true],
+        declined: [S360, true, ['OK']],
+        remoteName: null,
+        trusted: false,
+      },
+    );
+    await closeWindow(name);
+  });
+
   it('F-0106 AC-28 (c69-28): with no Docker engine, Open Folder in Container shows the Docker-availability dialog before any picker', async () => {
     const bogus = inRun('c69-no-docker');
     await setUserSetting('dev.containers.dockerPath', bogus);
