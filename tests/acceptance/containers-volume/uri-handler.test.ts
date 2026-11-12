@@ -5,11 +5,13 @@
 
 import {deepStrictEqual} from 'node:assert';
 import {
+  closeContained,
   closeWindow,
   connectedToContainer,
   containersLog,
   containersLogSince,
   inWindow,
+  isOpen,
   nextEmptyWindow,
   openEmptyWindows,
   openLink,
@@ -20,11 +22,12 @@ import {
   containersWith,
   dockerLines,
   removeClone,
-} from '../windows/volume-clones.ts';
+} from './volume-clones.ts';
 import {
   answerDialog,
   dialogOf,
   notifications,
+  pressEscape,
   quickPickOf,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -123,8 +126,38 @@ async function dialogAfterQuiet(): Promise<
   return dialogOf('local');
 }
 
+/** Leaves the local window open but clean for the next row: cancels a dialog it still shows with Escape, and answers a one-button dialog it leaves by a button with no side effect. */
+async function dismissOnLocal(): Promise<void> {
+  if ((await dialogOf('local').catch(() => undefined)) === undefined) {
+    return;
+  }
+  await pressEscape('local').catch(() => undefined);
+  const left = await dialogOf('local').catch(() => undefined);
+  if (left === undefined) {
+    return;
+  }
+  const label = left.buttons.includes('OK')
+    ? 'OK'
+    : left.buttons.includes('Cancel')
+      ? 'Cancel'
+      : undefined;
+  if (label !== undefined) {
+    await answerDialog('local', label).catch(() => undefined);
+  }
+}
+
 describe('the "Open in Dev Containers" link (card containers-154)', function () {
   this.timeout(2_400_000);
+  // The rows open windows and dialogs of their own; a row that fails mid-way leaves them behind, and a second window titled [] makes the local one unnameable. Close the extras and clear the local window's dialog so the next row starts clean.
+  afterEach(async () => {
+    for (const name of openEmptyWindows()) {
+      await closeContained(name, pressEscape).catch(() => undefined);
+    }
+    if (isOpen(FOLDER)) {
+      await closeContained(FOLDER, pressEscape).catch(() => undefined);
+    }
+    await dismissOnLocal();
+  });
 
   it('F-0706 AC-1, AC-8 (c154-path): a path other than cloneInVolume, by one letter’s case too, shows nothing and logs nothing', async () => {
     // The first link wakes the extension, which logs its own start; the rows' marks come after it.

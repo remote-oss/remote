@@ -31,20 +31,30 @@ export function containersWith(label: string): Promise<string[]> {
   return dockerLines('ps', '-a', '-q', '--filter', `label=${label}`);
 }
 
-/** Removes what a clone of `repository` left: its dev containers, then its volumes. */
+/**
+ * Removes what a clone of `repository` left: every container, in any state, that mounts one of its volumes or carries
+ * one as its recovery label (its dev containers, its recovery container and any stopped one a row made with that
+ * label), then its volumes.
+ */
 export async function removeClone(repository: string): Promise<void> {
-  const containers = await containersWith(
-    `vsch.local.repository=${repository}`,
+  const volumes = (await clonedVolumes(repository)).map(line =>
+    String(line.split(' ')[0]),
   );
-  if (containers.length > 0) {
+  const containers = new Set(
+    await containersWith(`vsch.local.repository=${repository}`),
+  );
+  for (const volume of volumes) {
+    for (const container of [
+      ...(await dockerLines('ps', '-a', '-q', '--filter', `volume=${volume}`)),
+      ...(await containersWith(`vsch.local.volume=${volume}`)),
+    ]) {
+      containers.add(container);
+    }
+  }
+  if (containers.size > 0) {
     await execFileAsync('docker', ['rm', '-f', ...containers]);
   }
-  for (const line of await clonedVolumes(repository)) {
-    await execFileAsync('docker', [
-      'volume',
-      'rm',
-      '-f',
-      String(line.split(' ')[0]),
-    ]);
+  for (const volume of volumes) {
+    await execFileAsync('docker', ['volume', 'rm', '-f', volume]);
   }
 }
