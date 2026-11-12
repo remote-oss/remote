@@ -464,37 +464,26 @@ jobs:
       - if: contains(matrix.part.launches, '@containers') || contains(matrix.part.launches, 'containers-podman')
         timeout-minutes: 10
         run: tools/install-podman
-      # probe only (#2319): does a rootless `podman exec` return here, with crun and with runc? Ends the job before the launch.
+      # probe only (#2319): Ubuntu's podman first (a store of its own), then podman-static 5.8.8; every command bounded
       - if: contains(matrix.part.launches, 'containers-podman')
-        timeout-minutes: 10
+        timeout-minutes: 12
         run: |
           set +e
-          podman info --format 'cgroup manager {{.Host.CgroupManager}}, cgroups {{.Host.CgroupsVersion}}, runtime {{.Host.OCIRuntime.Name}} {{.Host.OCIRuntime.Path}}, conmon {{.Host.Conmon.Path}}, network {{.Host.NetworkBackend}}, rootless {{.Host.Security.Rootless}}'
-          podman info --format '{{.Host.OCIRuntime.Version}}' | head -3
-          podman info --format '{{.Host.Conmon.Version}}' | head -2
-          command -v runc crun conmon pasta || true
-          id=$(podman run -d docker.io/library/alpine:3.22 sleep 600); echo "crun container $id"
-          for form in "exec $id true" "exec -i $id true" "exec $id echo hi"; do
-            start=$(date +%s.%N); timeout 30 podman $form </dev/null; code=$?; echo "podman $form: exit $code after $(echo "$(date +%s.%N) - $start" | bc) s"
-          done
-          echo "with Ubuntu's conmon:"; start=$(date +%s.%N); timeout 30 podman --conmon /usr/bin/conmon exec $id true </dev/null; echo "exit $? after $(echo "$(date +%s.%N) - $start" | bc) s"
-          echo "exec sessions:"; podman inspect $id --format '{{.ExecIDs}} {{.State.Status}} pid {{.State.Pid}}'
-          echo "== exec --detach (5.8.8):"; start=$(date +%s.%N); session=$(timeout 30 podman exec --detach $id sh -c 'echo detached > /tmp/mark; exit 7'); echo "detach returned after $(echo "$(date +%s.%N) - $start" | bc) s, session $session"; sleep 2; timeout 15 podman exec --detach $id cat /tmp/mark >/dev/null; podman inspect $id --format '{{.ExecIDs}}' | head -c 300; echo
-          echo "== Ubuntu's podman:"; /usr/bin/podman --version
-          p49="/usr/bin/podman --root $RUNNER_TEMP/p49 --runroot $RUNNER_TEMP/p49run --tmpdir $RUNNER_TEMP/p49tmp"
-          id3=$($p49 run -d docker.io/library/alpine:3.22 sleep 600); echo "4.9 container $id3"
-          for form in "exec $id3 true" "exec $id3 echo hi"; do
-            start=$(date +%s.%N); timeout 30 $p49 $form </dev/null; code=$?; echo "4.9 podman $form: exit $code after $(echo "$(date +%s.%N) - $start" | bc) s"
-          done
-          $p49 info --format 'cgroup manager {{.Host.CgroupManager}}, runtime {{.Host.OCIRuntime.Path}}, conmon {{.Host.Conmon.Path}}, network {{.Host.NetworkBackend}}'
-          timeout 60 $p49 rm -f -t 0 $id3 >/dev/null 2>&1
-          timeout 40 podman --log-level=debug exec $id true </dev/null 2>&1 | tail -40; echo "debug exec exit ${PIPESTATUS[0]}"
-          ps -eo pid,ppid,stat,comm | grep -E "conmon|crun|podman|catatonit|pasta" | head -20
-          if command -v runc >/dev/null; then
-            id2=$(podman --runtime "$(command -v runc)" run -d docker.io/library/alpine:3.22 sleep 600); echo "runc container $id2"
-            start=$(date +%s.%N); timeout 30 podman --runtime "$(command -v runc)" exec $id2 true </dev/null; code=$?; echo "runc exec: exit $code after $(echo "$(date +%s.%N) - $start" | bc) s"
-          fi
-          timeout 60 podman rm -f -t 0 $id ${id2:-} >/dev/null 2>&1; echo "removed: exit $?"
+          t() { local s=$(date +%s.%N); timeout "$@"; local c=$?; echo "  -> exit $c after $(echo "$(date +%s.%N) - $s" | bc) s"; }
+          echo "== Ubuntu's podman: $(/usr/bin/podman --version)"
+          P="/usr/bin/podman --root $RUNNER_TEMP/p49 --runroot $RUNNER_TEMP/p49run --tmpdir $RUNNER_TEMP/p49tmp"
+          id3=$(timeout 120 $P run -d docker.io/library/alpine:3.22 sleep 600); echo "4.9 container $id3"
+          timeout 20 $P info --format 'cgroup manager {{.Host.CgroupManager}}, runtime {{.Host.OCIRuntime.Path}} {{.Host.OCIRuntime.Version}}, conmon {{.Host.Conmon.Path}}, network {{.Host.NetworkBackend}}' | head -3
+          echo "4.9 exec true:"; t 30 $P exec $id3 true </dev/null
+          echo "4.9 exec echo hi:"; t 30 $P exec $id3 echo hi </dev/null
+          echo "== podman-static: $(podman --version)"
+          id=$(timeout 120 podman run -d docker.io/library/alpine:3.22 sleep 600); echo "5.8 container $id"
+          echo "5.8 exec --detach:"; t 30 podman exec --detach $id true
+          echo "5.8 exec true (attach):"; t 30 podman exec $id true </dev/null
+          echo "5.8 after a hung exec, inspect:"; t 20 podman inspect $id --format '{{.State.Status}}'
+          echo "5.8 exec with --tty:"; t 30 script -qec "podman exec -t $id true" /dev/null
+          echo "5.8 stat of the exits dir:"; ls -la /run/user/1001/libpod/tmp/exits 2>&1 | tail -5; ls -la /run/user/1001/libpod/tmp/socket 2>&1 | head -5
+          timeout 60 podman rm -f -t 0 $id >/dev/null 2>&1; timeout 60 $P rm -f -t 0 $id3 >/dev/null 2>&1
           exit 1
       # the buildx plugin when the machine's Docker has none (the harness builds with `docker build --load`)
       - run: tools/install-buildx
