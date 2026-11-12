@@ -4,9 +4,26 @@
  */
 
 import {execFileSync} from 'node:child_process';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
+import * as launchTable from './acceptance-launches.ts';
 import {type Launch, launchesOf} from './acceptance-launches.ts';
+import {
+  heldTogether,
+  PARTS_TABLE,
+  type Part,
+  partsOfTable,
+  type PartsTable,
+  suiteFilesIn,
+} from './acceptance-parts.ts';
+import {
+  LAUNCH_TABLE,
+  labelsChangedSince,
+  measuredPaths,
+  NO_LAUNCH,
+  SUITE_TEST,
+  withHelpersAsTests,
+} from './acceptance-reach.ts';
 import {chosenLaunches} from './acceptance.ts';
 import {isMainModule, REPOSITORY_ROOT} from './repository.ts';
 
@@ -16,40 +33,22 @@ export interface Selection {
   reasons: string[];
 }
 
-/** Paths no launch can reach: documentation and unit tests. A closed list: any other path runs more, never less. */
-const NO_LAUNCH = [
-  /^docs\//,
-  /\.md$/,
-  /^packages\/[^/]+\/test\/unit\//,
-  /^tools\/.*\.test\.ts$/,
-];
-
-/** The packages whose launches carry their extension, by the extension's id. */
-const PACKAGE_EXTENSIONS: ReadonlyMap<string, string> = new Map([
-  ['remote-containers', 'remote-oss.remote-containers'],
-  ['remote-explorer', 'remote-oss.remote-explorer'],
-]);
-
-/** The extension ids a launch installs (plain launches name them in `withExtensions`; runner launches install none). */
-function extensionsOfLaunch(launch: Launch): readonly string[] {
-  return launch.kind === 'plain' ? (launch.withExtensions ?? []) : [];
-}
-
-/** The labels of the launches one changed path can reach, or undefined when it reaches every launch. */
+/**
+ * The labels of the launches one changed path can reach, or undefined when it reaches every launch. `measured` holds
+ * the reach of paths measured beforehand (the launch table's changed entries and the packages' paths,
+ * acceptance-reach.ts); a package's path that is not measured reaches every launch.
+ */
 function reachedBy(
   changed: string,
   launches: readonly Launch[],
-): string[] | undefined {
+  measured: ReadonlyMap<string, readonly string[]>,
+): readonly string[] | undefined {
+  const known = measured.get(changed);
+  if (known !== undefined) {
+    return known;
+  }
   if (NO_LAUNCH.some(pattern => pattern.test(changed))) {
     return [];
-  }
-  const packageName = /^packages\/([^/]+)\//.exec(changed)?.[1];
-  const extension =
-    packageName === undefined ? undefined : PACKAGE_EXTENSIONS.get(packageName);
-  if (extension !== undefined) {
-    return launches
-      .filter(launch => extensionsOfLaunch(launch).includes(extension))
-      .map(launch => launch.label);
   }
   // only a suite's own tests map to it: other files in a suite folder can be the harness several suites import
   // (tests/acceptance/windows/renderer.ts), so they reach every launch
@@ -74,15 +73,16 @@ function reachedBy(
 
 /**
  * The launches a change can reach, in the run's order: the union over its changed paths. A path the table does not
- * name reaches every launch; documentation and unit tests reach none.
+ * name reaches every launch, unless `measured` gives its reach; documentation and unit tests reach none.
  */
 export function selectLaunches(
   changed: readonly string[],
   launches: readonly Launch[],
+  measured: ReadonlyMap<string, readonly string[]> = new Map(),
 ): Selection {
   const reasons = new Map<string, string>();
   for (const file of changed) {
-    for (const label of reachedBy(file, launches) ??
+    for (const label of reachedBy(file, launches, measured) ??
       launches.map(launch => launch.label)) {
       if (!reasons.has(label)) {
         reasons.set(label, file);
@@ -111,98 +111,180 @@ export function launchesInput(
     : selection.labels.join(',');
 }
 
-/**
- * The parts the VSCodium job of `workflow` (ci.yml's text) runs a whole suite in, in order: its matrix's default, the
- * selection each runner makes.
- */
-export function workflowParts(workflow: string): string[] {
-  const parts = /\|\| '(\["@[^']*\])'/.exec(workflow)?.[1];
-  if (parts === undefined) {
-    throw new Error('ci.yml: the VSCodium job names no parts of the suite');
-  }
-  return JSON.parse(parts) as string[];
-}
-
-/**
- * The parts of the VSCodium job a selection needs, in the order of `parts`: a part all of whose launches are selected
- * as it is written, a part with some of them as those labels, and a part with none left out. A selected launch in no
- * part (the genuine group's, which have a job of their own) is left out too.
- */
-export function partsOf(
-  selection: Selection,
-  launches: readonly Launch[],
-  parts: readonly string[],
-): string[] {
-  const selected = new Set(selection.labels);
-  const needed: string[] = [];
-  for (const part of parts) {
-    const inPart = chosenLaunches(launches, part.split(','));
-    if (typeof inPart === 'string') {
-      throw new Error(`ci.yml's part ${part}: ${inPart}`);
-    }
-    const labels = inPart
-      .map(launch => launch.label)
-      .filter(label => selected.has(label));
-    if (labels.length > 0) {
-      needed.push(labels.length === inPart.length ? part : labels.join(','));
-    }
-  }
-  return needed;
-}
-
-/** The most launches a pull request's own acceptance job runs; a larger selection needs a dispatch or the full label. */
-export const PULL_REQUEST_LAUNCHES = 6;
-
-/**
- * The time limit of a pull request's acceptance job, whatever it runs: 360 minutes, the most a job may run on GitHub's
- * runners. One launch alone (containers-a) takes close to three hours there, so a selection of two of them outgrew
- * 180; no shared runner is held by a long job any more.
- */
-export const PULL_REQUEST_MINUTES = 360;
-
-/** What a pull request's acceptance job does for its selection. */
+/** What a pull request's acceptance run does for its change: its parts, each a job of its own, run side by side. */
 export interface PullRequestPlan {
-  /** The launches it runs, joined by commas; empty when it runs none. */
-  launches: string;
-  /** Its time limit, `PULL_REQUEST_MINUTES` for any selection. */
-  minutes: number;
-  /** A notice for the pull request when the selection is over the limit and the label is absent. */
-  notice?: string;
+  /** The parts; none when it runs nothing. */
+  parts: Part[];
 }
 
 /**
- * The plan of a pull request's acceptance job: the selected launches that are in a part of the VSCodium job (the
- * genuine group has its own job), all of them when there are at most `PULL_REQUEST_LAUNCHES` or the pull request carries
- * the full label, and none otherwise, with a notice naming them.
+ * The time limit of a part that runs some files of one launch: the longest file measured (49 minutes, containers-volume's
+ * explore-volume.test.ts at 847c1d9d) and its launch's setup, on the slower of the two runners.
  */
-export function pullRequestPlan(
+export const FILE_PART_MINUTES = 120;
+
+/** The most file parts a test-only change runs one file each; past it, each launch's files run as one part. */
+export const FILE_PARTS = 20;
+
+/**
+ * The part a narrowed pull request runs beside its file parts, so a narrow selection still starts the editor: an
+ * activation (`local`), a plain connect (`remote`) and a Reopen Folder Locally (`c101-reopen-locally`), about three
+ * minutes of rows.
+ */
+export const SMOKE_PART: Part = {
+  name: 'smoke',
+  launches: 'local,remote,containers-shutdown:reopen-locally-lines.test.ts',
+  minutes: 60,
+};
+
+/**
+ * The parts of a test-only change: each changed test file of a plain launch's suite runs alone in every launch that runs
+ * it, then the smoke part, which a change that only removes test files runs alone. Undefined when the change is not
+ * test-only, when a test file belongs to a launch run in the editor, or when no launch runs it: its launches' parts run
+ * then. Documentation and unit tests alone run nothing.
+ */
+export function narrowedParts(
+  changed: readonly string[],
+  launches: readonly Launch[],
+  exists: (file: string) => boolean,
+): Part[] | undefined {
+  const byLaunch = new Map<string, string[]>();
+  let touchesTests = false;
+  for (const file of changed) {
+    if (NO_LAUNCH.some(pattern => pattern.test(file))) {
+      continue;
+    }
+    const suiteTest = SUITE_TEST.exec(file);
+    const ofSuite = launches.filter(launch => launch.suite === suiteTest?.[1]);
+    if (
+      suiteTest === null ||
+      ofSuite.length === 0 ||
+      ofSuite.some(launch => launch.kind !== 'plain')
+    ) {
+      return undefined;
+    }
+    touchesTests = true;
+    if (!exists(file)) {
+      continue;
+    }
+    const testFile = String(suiteTest[2]);
+    const running = ofSuite.filter(
+      launch =>
+        launch.kind === 'plain' &&
+        (launch.files === undefined || launch.files.includes(testFile)),
+    );
+    if (running.length === 0) {
+      return undefined;
+    }
+    for (const launch of running) {
+      byLaunch.set(launch.label, [
+        ...(byLaunch.get(launch.label) ?? []),
+        testFile,
+      ]);
+    }
+  }
+  const entries = [...byLaunch].map(([label, files]) => ({label, files}));
+  const count = entries.reduce((total, entry) => total + entry.files.length, 0);
+  const parts = entries.flatMap(({label, files}) =>
+    (count <= FILE_PARTS ? files.map(file => [file]) : [files]).map(group => {
+      const launchesOfPart = `${label}:${group.join('+')}`;
+      return {
+        name: launchesOfPart,
+        launches: launchesOfPart,
+        minutes: FILE_PART_MINUTES,
+      };
+    }),
+  );
+  return touchesTests ? [...parts, SMOKE_PART] : [];
+}
+
+/** The parts of the run's table that make at least one launch of the selection, in the table's order. */
+export function selectedParts(
   selection: Selection,
   launches: readonly Launch[],
-  parts: readonly string[],
+  tableParts: readonly Part[],
+): Part[] {
+  const selected = new Set(selection.labels);
+  return tableParts.filter(part => {
+    const made = chosenLaunches(launches, part.launches.split(','));
+    if (typeof made === 'string') {
+      throw new Error(`the part ${part.name}: ${made}`);
+    }
+    return made.some(launch => selected.has(launch.label));
+  });
+}
+
+/**
+ * The plan of a pull request's acceptance run for its changed paths: the narrowed parts of a test-only change, unless
+ * the full label asks for more; else every part of the table that makes a launch the change reaches, side by side. A
+ * narrowed file of a launch that runs only with others (`held`) runs in the table's part of that launch instead, so it
+ * keeps the launch before it.
+ */
+export function planOfChange(
+  changed: readonly string[],
+  launches: readonly Launch[],
+  tableParts: readonly Part[],
   full: boolean,
+  exists: (file: string) => boolean,
+  measured: ReadonlyMap<string, readonly string[]> = new Map(),
+  held: (launch: Launch) => boolean = () => false,
 ): PullRequestPlan {
-  const inParts = new Set<string>();
-  for (const part of parts) {
-    const inPart = chosenLaunches(launches, part.split(','));
-    if (typeof inPart === 'string') {
-      throw new Error(`ci.yml's part ${part}: ${inPart}`);
-    }
-    for (const launch of inPart) {
-      inParts.add(launch.label);
-    }
+  const narrowed = full ? undefined : narrowedParts(changed, launches, exists);
+  if (narrowed === undefined) {
+    return {
+      parts: selectedParts(
+        selectLaunches(changed, launches, measured),
+        launches,
+        tableParts,
+      ),
+    };
   }
-  const chosen = selection.labels.filter(label => inParts.has(label));
-  if (chosen.length === 0) {
-    return {launches: '', minutes: PULL_REQUEST_MINUTES};
+  const heldLabels = launches
+    .filter(launch => held(launch))
+    .map(launch => launch.label);
+  const kept = narrowed.filter(
+    part => !heldLabels.includes(part.launches.split(':')[0] ?? ''),
+  );
+  const ofHeld = selectedParts(
+    {
+      labels: heldLabels.filter(label =>
+        narrowed.some(part => part.launches.split(':')[0] === label),
+      ),
+      reasons: [],
+    },
+    launches,
+    tableParts,
+  );
+  return {parts: [...ofHeld, ...kept]};
+}
+
+/**
+ * The changed paths of `base`...`head` as the selection reads them, and the reach measured for the two tables and the
+ * packages: each suite helper as the tests that stand for it, a changed launch table as the launches whose entries
+ * differ, a changed parts table as the launches of the parts it makes otherwise, and a package's path as the launches
+ * its package reaches (packageReach), read at the head.
+ */
+export async function measuredChange(
+  base: string,
+  head: string,
+  launches: readonly Launch[],
+): Promise<{
+  changed: string[];
+  measured: Map<string, readonly string[]>;
+}> {
+  const changed = withHelpersAsTests(
+    changedFiles(base, head),
+    REPOSITORY_ROOT,
+    new Set(launches.map(launch => launch.suite)),
+  );
+  const measured = measuredPaths(changed, base, launches, REPOSITORY_ROOT);
+  const labels = changed.includes(LAUNCH_TABLE)
+    ? await labelsChangedSince(base, launchTable, REPOSITORY_ROOT)
+    : undefined;
+  if (labels !== undefined) {
+    measured.set(LAUNCH_TABLE, labels);
   }
-  if (chosen.length <= PULL_REQUEST_LAUNCHES || full) {
-    return {launches: chosen.join(','), minutes: PULL_REQUEST_MINUTES};
-  }
-  return {
-    launches: '',
-    minutes: PULL_REQUEST_MINUTES,
-    notice: `this change selects ${String(chosen.length)} launches, more than the ${String(PULL_REQUEST_LAUNCHES)} a pull request runs by itself: ${chosen.join(', ')}. Run them at this head with a dispatch, or with the acceptance-full label.`,
-  };
+  return {changed, measured};
 }
 
 /** The files a change touches: `git diff --name-only <base>...<head>`, from the merge base. */
@@ -217,20 +299,17 @@ function changedFiles(base: string, head: string): string[] {
 }
 
 const SELECT_USAGE =
-  'usage: node tools/acceptance-select.ts --base <sha> --head <sha> [--parts | --pull-request [--full]]';
+  'usage: node tools/acceptance-select.ts --base <sha> --head <sha> [--pull-request [--full]]';
 
 if (isMainModule(import.meta.url)) {
   const commandArguments = process.argv.slice(2);
   const base = commandArguments[commandArguments.indexOf('--base') + 1];
   const head = commandArguments[commandArguments.indexOf('--head') + 1];
-  const byParts = commandArguments.includes('--parts');
   const forPullRequest = commandArguments.includes('--pull-request');
   const full = commandArguments.includes('--full');
-  const expected =
-    4 + (byParts ? 1 : 0) + (forPullRequest ? 1 : 0) + (full ? 1 : 0);
+  const expected = 4 + (forPullRequest ? 1 : 0) + (full ? 1 : 0);
   if (
     commandArguments.length !== expected ||
-    (byParts && forPullRequest) ||
     (full && !forPullRequest) ||
     !commandArguments.includes('--base') ||
     !commandArguments.includes('--head') ||
@@ -241,26 +320,28 @@ if (isMainModule(import.meta.url)) {
     process.exitCode = 2;
   } else {
     const launches = launchesOf(REPOSITORY_ROOT);
-    const selection = selectLaunches(changedFiles(base, head), launches);
+    const {changed, measured} = await measuredChange(base, head, launches);
+    const selection = selectLaunches(changed, launches, measured);
     for (const line of selection.reasons) {
       console.error(`selected ${line}`);
     }
-    const parts = workflowParts(
-      readFileSync(
-        path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
-        'utf8',
-      ),
-    );
     if (forPullRequest) {
+      const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
       console.log(
-        JSON.stringify(pullRequestPlan(selection, launches, parts, full)),
+        JSON.stringify(
+          planOfChange(
+            changed,
+            launches,
+            partsOfTable(launches, table, suiteFilesIn(REPOSITORY_ROOT)),
+            full,
+            file => existsSync(path.join(REPOSITORY_ROOT, file)),
+            measured,
+            heldTogether(table),
+          ),
+        ),
       );
     } else {
-      console.log(
-        byParts
-          ? JSON.stringify(partsOf(selection, launches, parts))
-          : launchesInput(selection, launches),
-      );
+      console.log(launchesInput(selection, launches));
     }
   }
 }

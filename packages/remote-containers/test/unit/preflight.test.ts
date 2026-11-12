@@ -7,9 +7,11 @@ import type {
   EngineRunOutcome,
 } from '../../src/engine/engine-host.ts';
 import {
+  containerRequirements,
   contextEndpoint,
   contextState,
   currentContext,
+  daemonFigures,
   type EngineDialogPort,
   firstCheck,
   type PreflightDependencies,
@@ -431,6 +433,18 @@ describe('the first check', () => {
       'warn: dk was not found; PATH: /usr/bin:/bin',
     ]);
   });
+
+  it('coverage-117: a spawn that fails with no system code is logged as failed, with no path line', async () => {
+    const scene = sceneOf(
+      {'--version': {kind: 'failed', detail: 'spawn dk'}},
+      {values: ['dk']},
+    );
+    await firstCheck(scene.dependencies, undefined, NEVER_ABORTED);
+    deepStrictEqual(
+      [scene.lines, scene.dialogs],
+      [['debug: docker: --version → failed (0 ms)'], [ERROR_DIALOG]],
+    );
+  });
 });
 
 describe('the second check', () => {
@@ -647,6 +661,94 @@ describe('the first check, when Docker Desktop is started (card containers-200)'
         scene.dialogs,
       ],
       ['stopped', []],
+    );
+  });
+});
+
+describe('the queries of the host requirements check (card containers-202)', () => {
+  const INFO = 'info --format {{json .}}';
+  const LISTED =
+    'ps -a -q --filter label=devcontainer.local_folder=/w/p --filter label=devcontainer.config_file=/w/p/.devcontainer/devcontainer.json';
+  const LABEL =
+    'inspect --format {{index .Config.Labels "devcontainer.metadata"}} abc123';
+  const IDENTITY = {
+    folder: '/w/p',
+    configFile: '/w/p/.devcontainer/devcontainer.json',
+  };
+
+  it('F-0206 BR-1, BR-2: the daemon’s figures are read from docker info, and none when it fails or prints no figures', async () => {
+    function figures(answer: EngineRunOutcome) {
+      return daemonFigures(
+        sceneOf({[INFO]: answer}).dependencies,
+        undefined,
+        NEVER_ABORTED,
+      );
+    }
+    deepStrictEqual(
+      [
+        await figures(
+          finished(0, '{"NCPU":8,"MemTotal":1000,"Runtimes":{"nvidia":{}}}'),
+        ),
+        await figures(finished(1, '', 'down')),
+        await figures(finished(0, 'not json')),
+      ],
+      [{cpus: 8, memory: 1000, nvidia: true}, undefined, undefined],
+    );
+  });
+
+  it('F-0206 BR-1: the figures of a docker that is not found are none, and nothing is run', async () => {
+    const scene = sceneOf({}, {values: ['tools/dk']});
+    deepStrictEqual(
+      [
+        await daemonFigures(scene.dependencies, undefined, NEVER_ABORTED),
+        scene.argvs,
+      ],
+      [undefined, []],
+    );
+  });
+
+  it('F-0206 BR-18, AC-36: the container made for the folder and the configuration gives the requirements its label records', async () => {
+    const scene = sceneOf({
+      [LISTED]: finished(0, 'abc123\n'),
+      [LABEL]: finished(
+        0,
+        '[{"hostRequirements":{"cpus":16}},{"id":"feature"}]\n',
+      ),
+    });
+    deepStrictEqual(
+      await containerRequirements(
+        scene.dependencies,
+        undefined,
+        IDENTITY,
+        NEVER_ABORTED,
+      ),
+      {cpus: 16, needsGpu: false},
+    );
+  });
+
+  it('F-0206 BR-18, AC-36: with no container, an empty label, a failing list or a failing inspect there are no requirements', async () => {
+    function requirements(answers: Record<string, EngineRunOutcome>) {
+      return containerRequirements(
+        sceneOf(answers).dependencies,
+        undefined,
+        IDENTITY,
+        NEVER_ABORTED,
+      );
+    }
+    deepStrictEqual(
+      [
+        await requirements({[LISTED]: finished(0, '\n')}),
+        await requirements({
+          [LISTED]: finished(0, 'abc123\n'),
+          [LABEL]: finished(0, '\n'),
+        }),
+        await requirements({[LISTED]: finished(1, '', 'down')}),
+        await requirements({
+          [LISTED]: finished(0, 'abc123\n'),
+          [LABEL]: finished(1, '', 'gone'),
+        }),
+      ],
+      [undefined, undefined, undefined, undefined],
     );
   });
 });

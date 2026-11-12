@@ -45,6 +45,11 @@ interface LaunchCommon {
   /** Whether the run makes the launch only when `--launches` names it. */
   namedOnly?: true;
   /**
+   * The name of the launch that this one is a part of, which runs the same suite in parts: a selection that names it
+   * makes every part, and `!<name>` takes every part out.
+   */
+  partOf?: string;
+  /**
    * The engine the launch's extension drives instead of Docker: it sets `dev.containers.dockerPath`, and the run
    * prepares that engine's storage. The run's own infrastructure (the SSH host, the registry, the download host) stays
    * on Docker.
@@ -109,11 +114,6 @@ export interface PlainLaunch extends LaunchCommon {
    * suite when absent.
    */
   files?: readonly string[];
-  /**
-   * The name of the launch that this one is a part of, which runs the same suite in parts: a selection that names it
-   * makes every part, and `!<name>` takes every part out.
-   */
-  partOf?: string;
   /**
    * Extensions of `LAUNCH_EXTENSIONS`, by id, that this launch alone installs, with their proposed API: the launch
    * gets an extensions folder of its own, `<run>/extensions-<label>`, so the other launches never see them.
@@ -213,6 +213,9 @@ export const ENGINE_HOST_ADDRESS = 'tcp://127.0.0.1:23760';
 
 /** The context that the editor of `containers-env-host` has as `DOCKER_CONTEXT`, which its rows make. */
 export const ENGINE_HOST_CONTEXT = 'c133-env-conflict';
+
+/** The address that the editor of `containers-ssh-env-host` has as `DOCKER_HOST`: the SSH Docker host its row publishes there. */
+export const SSH_ENGINE_HOST_ADDRESS = 'ssh://engine@127.0.0.1:23722';
 
 /** The context that the editor of `containers-env-ctx` has as `DOCKER_CONTEXT`, which its row makes. */
 export const ENGINE_CONTEXT_NAME = 'c133-env-dead';
@@ -332,6 +335,25 @@ const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
 const SECRETS_ACCOUNTS_RESET =
   'printf "%s:%s\\n" harness-2fa "$HOST_PASSWORD" harness-expired "$HOST_PASSWORD" | chpasswd && chage -d 0 harness-expired';
 
+/**
+ * The command that ends the servers of the harness account and waits, up to ten seconds, until none is left, failing
+ * when one is: a connect that starts at once would otherwise find the old server's pid file and reuse its process.
+ */
+const END_SERVERS =
+  "pkill -f '/home/harness/[.]vscodium-server-insiders/bin/'; " +
+  'for i in $(seq 1 20); do ' +
+  "pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; " +
+  'sleep 0.5; done; exit 1';
+
+/**
+ * The host setup of a launch whose connect must start the server itself: the servers of the harness account are ended
+ * and gone, and the agent links of earlier launches removed, so the window's session is the one that starts the server.
+ */
+const NO_RUNNING_SERVER: readonly HostSetupEntry[] = [
+  {command: END_SERVERS},
+  {command: 'rm -f /tmp/vscode-ssh-auth-sock-*'},
+];
+
 /** The host setup of the agent-notmp launch: the ACL entry that keeps harness-notmp from creating links in /tmp, put back. */
 const AGENT_NOTMP_ACL = 'setfacl -m u:harness-notmp:r-x /tmp';
 
@@ -375,12 +397,14 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'created-container.test.ts',
   'details.test.ts',
   'dev-port.test.ts',
+  'docker-availability.test.ts',
   'docker-context.test.ts',
   'dockerfile.test.ts',
   'edit-session-dormant.test.ts',
   'extensions.test.ts',
   'gate.test.ts',
   'glibc-server.test.ts',
+  'host-requirements.test.ts',
   'image-build.test.ts',
   'initialize-input.test.ts',
   'launch.test.ts',
@@ -703,13 +727,7 @@ export function hostSetupOf(
 ): HostSetupEntry[] {
   const entries: HostSetupEntry[] = [{command: "pkill -f 'n[c] -lk -p'; true"}];
   if (hostCase.keepServer !== true) {
-    entries.push({
-      command:
-        "pkill -f '/home/harness/[.]vscodium-server-insiders/bin/'; " +
-        'for i in $(seq 1 20); do ' +
-        "pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; " +
-        'sleep 0.5; done; exit 1',
-    });
+    entries.push({command: END_SERVERS});
   }
   if (
     hostCase.keepServer !== true &&
@@ -747,6 +765,7 @@ function forwardingLaunch(
   label: string,
   alias: string,
   settings?: Readonly<Record<string, unknown>>,
+  hostSetup?: readonly HostSetupEntry[],
 ): Launch {
   return {
     label,
@@ -755,6 +774,7 @@ function forwardingLaunch(
     folderUri: `vscode-remote://ssh-remote+${alias}/home/harness`,
     environment: {HARNESS_FORWARDING_CASE: label},
     ...(settings === undefined ? {} : {settings}),
+    ...(hostSetup === undefined ? {} : {hostSetup}),
   };
 }
 
@@ -765,7 +785,7 @@ function forwardingLaunch(
  * `agent-off` and `x11` run suite-forwarding on the aliases that forward the agent (the second with
  * `remote.SSH.enableAgentForwarding` false) and X11, on that same server; `x11-noxauth` runs it on the `x11fwd` alias of the Debian 12 host, which has no `xauth`; each failing connect runs suite-failure in a window on its alias, answered from its own script; `terminal` runs
  * suite-terminal with `remote.SSH.useLocalServer` off; `socket` runs suite-socket with
- * `remote.SSH.remoteServerListenOnSocket` on; `slow` runs suite-slow with an extension that takes 15 s to
+ * `remote.SSH.remoteServerListenOnSocket` on, after its primer `socket-prime`, a terminal-mode connect that leaves the port-kind server its AC-9 row is about (a part of `socket`, made only when `socket` is named); `slow` runs suite-slow with an extension that takes 15 s to
  * activate in the remote extension host, which the harness copies to the host first; each `client-…` launch runs
  * suite-client with a `remote.SSH.path` of its own and fake clients on the run's `PATH`; `windows` starts the editor plainly, with no
  * runner and no folder, and drives its windows through the window agent from a Node run; `no-proposals` does the
@@ -803,9 +823,12 @@ export function launchesOf(root: string): Launch[] {
       folderUri: REMOTE_FOLDER_URI,
     },
     forwardingLaunch('agent', 'agentfwd'),
-    forwardingLaunch('agent-off', 'agentfwd-off', {
-      'remote.SSH.enableAgentForwarding': false,
-    }),
+    forwardingLaunch(
+      'agent-off',
+      'agentfwd-off',
+      {'remote.SSH.enableAgentForwarding': false},
+      NO_RUNNING_SERVER,
+    ),
     forwardingLaunch('x11', 'x11fwd'),
     {...forwardingLaunch('x11-noxauth', 'x11fwd'), hostBase: 'debian-12'},
     ...failureCases(root).map((failure): Launch => ({
@@ -826,6 +849,20 @@ export function launchesOf(root: string): Launch[] {
       runner: 'runner-remote',
       suite: 'suite-terminal',
       folderUri: REMOTE_FOLDER_URI,
+      settings: {
+        'remote.SSH.useLocalServer': false,
+        'remote.SSH.remotePlatform': {harness: 'linux'},
+      },
+    },
+    {
+      // The terminal-mode connect that leaves the port-kind server the socket launch's row is about, run right before it:
+      // a selection that names `socket` makes both.
+      label: 'socket-prime',
+      runner: 'runner-remote',
+      suite: 'suite-socket-prime',
+      folderUri: REMOTE_FOLDER_URI,
+      namedOnly: true,
+      partOf: 'socket',
       settings: {
         'remote.SSH.useLocalServer': false,
         'remote.SSH.remotePlatform': {harness: 'linux'},
@@ -1241,7 +1278,12 @@ export function launchesOf(root: string): Launch[] {
       ...CONTAINERS_LAUNCH,
       label: 'containers-config',
       suite: 'containers-config',
-      environment: {C112_SET: 'from-host', C112_EMPTY: ''},
+      // The harness's echo relay is on only here, so the relay host runs only for this launch's connects.
+      environment: {
+        C112_SET: 'from-host',
+        C112_EMPTY: '',
+        REMOTE_OSS_ACCEPTANCE_RELAY_ECHO: '1',
+      },
     },
     {
       ...CONTAINERS_LAUNCH,
@@ -1352,6 +1394,40 @@ export function launchesOf(root: string): Launch[] {
       environment: {
         DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
         DOCKER_CONTEXT: ENGINE_CONTEXT_NAME,
+      },
+    },
+    // A Docker daemon reached over SSH (tooling-123): a Docker configuration of its own for the contexts its rows make,
+    // and the run's own `ssh` first on the editor's PATH, which reads the run's ssh_config and known hosts file, never the
+    // account's ~/.ssh. The rows start the host and write that `ssh` (tests/acceptance/windows/engine-fixture.ts).
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-ssh-engine',
+      suite: 'containers-ssh-engine',
+      environment: {
+        DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
+        PATH: `${RUN_FOLDER_TOKEN}/ssh-engine-bin:${RUN_PATH_TOKEN}`,
+      },
+    },
+    // The same with the SSH Docker host's address as the editor's DOCKER_HOST, which its row publishes there.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-ssh-env-host',
+      suite: 'containers-ssh-env-host',
+      environment: {
+        DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
+        DOCKER_HOST: SSH_ENGINE_HOST_ADDRESS,
+        PATH: `${RUN_FOLDER_TOKEN}/ssh-engine-bin:${RUN_PATH_TOKEN}`,
+      },
+    },
+    // The same with the editor's PATH holding `docker` alone and no `ssh`: the engine settings' PATH is ignored, so only
+    // the editor's own PATH can lack `ssh`.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-ssh-noclient',
+      suite: 'containers-ssh-noclient',
+      environment: {
+        DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
+        PATH: `${RUN_FOLDER_TOKEN}/docker-only-bin`,
       },
     },
     // The pack from its VSIX beside its two members, installed in that order, with no gallery to reach.

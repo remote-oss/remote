@@ -1,17 +1,36 @@
 /**
- * @fileoverview check-ci-gate: ci.yml's ci-gate job needs every other job of the workflow (athena on #1076).
+ * @fileoverview check-ci-gate: ci.yml's ci-gate job needs every other job of the workflow (athena on #1076), and every
+ * job that can run on the organisation's pool keeps a fork's pull request off it.
  *
  * The main ruleset requires only `ci-gate`, which passes when every job it needs passed or was skipped. A job the gate
  * doesn't need could fail and still leave the gate green, so a job added later must join the gate's `needs`.
+ *
+ * A job whose `runs-on` reads a pool variable holds, in that expression, the same-repository guard (a fork's pull
+ * request takes GitHub's runner), asks for X64 and ephemeral (a fresh machine per job), and reads no secret (athena on
+ * #2219).
+ *
+ * The VSCodium job and its plan run on every merge to main whatever the repository's variables say: their `if:` reads
+ * none, so no variable can turn off the post-merge run, the proof of what a pull request's narrowed parts left out.
+ *
+ * The launch jobs give a dispatch concurrency groups of its own run (`github.run_id`): a group that names only the part
+ * lets one dispatch replace another's pending part.
  */
 
-import {readFileSync} from 'node:fs';
+import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {parse as parseYaml} from 'yaml';
 import {isMainModule, REPOSITORY_ROOT} from './repository.ts';
 
-const WORKFLOW = '.github/workflows/ci.yml';
+const WORKFLOWS = '.github/workflows';
+const WORKFLOW = `${WORKFLOWS}/ci.yml`;
 const GATE = 'ci-gate';
+/** The repository variables that send a job to the organisation's pool. */
+const POOL_VARIABLES = ['vars.CI_POOL_RUNS_ON', 'vars.CI_CHECKS_RUNS_ON'];
+/** The guard a pool `runs-on` holds, so that a fork's pull request takes GitHub's runner. */
+export const SAME_REPOSITORY_GUARD =
+  "(github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)";
+/** The labels a pool `runs-on` asks for besides the pool's own. */
+const POOL_LABELS = '"X64","ephemeral"';
 
 /** What is wrong with the workflow text's gate: a job it doesn't need, a need that names no job, or no gate. */
 export function ciGateProblems(text: string): string[] {
@@ -42,10 +61,132 @@ export function ciGateProblems(text: string): string[] {
   return problems;
 }
 
+/** The jobs of the post-merge run, whose conditions read no repository variable. */
+export const POST_MERGE_JOBS = [
+  'vscodium-plan',
+  'acceptance-vscodium',
+  'acceptance-vscodium-containers',
+];
+
+/** What is wrong with the post-merge run of the workflow text: a job missing, or a condition that reads a variable. */
+export function postMergeProblems(text: string): string[] {
+  const workflow = parseYaml(text) as {
+    jobs?: Record<string, {if?: unknown}>;
+  };
+  return POST_MERGE_JOBS.flatMap(name => {
+    const definition = workflow.jobs?.[name];
+    if (definition === undefined) {
+      return [`${WORKFLOW}: no ${name} job, which the post-merge run needs`];
+    }
+    return JSON.stringify(definition.if ?? '').includes('vars.')
+      ? [
+          `${WORKFLOW}: ${name}'s if: reads a repository variable, which could turn the post-merge run off`,
+        ]
+      : [];
+  });
+}
+
+/** The launch jobs whose concurrency groups name the run for a dispatch. */
+export const DISPATCH_GROUP_JOBS = [
+  'acceptance-vscodium',
+  'acceptance-vscodium-containers',
+  'acceptance-genuine',
+];
+
+/**
+ * The alternative a `workflow_dispatch` takes in a group: the last top-level `||` operand of the group's first
+ * expression, the fallback after the schedule's and the push's; the whole text when it holds no expression.
+ */
+export function dispatchFallbackOf(group: string): string {
+  const expression = /\$\{\{([\s\S]*?)\}\}/.exec(group)?.[1] ?? group;
+  const operands: string[] = [];
+  let depth = 0;
+  let quoted = false;
+  let start = 0;
+  for (let index = 0; index < expression.length; index += 1) {
+    const character = expression[index];
+    if (character === "'") {
+      quoted = !quoted;
+    } else if (!quoted && character === '(') {
+      depth += 1;
+    } else if (!quoted && character === ')') {
+      depth -= 1;
+    } else if (!quoted && depth === 0 && expression.startsWith('||', index)) {
+      operands.push(expression.slice(start, index));
+      start = index + 2;
+      index += 1;
+    }
+  }
+  operands.push(expression.slice(start));
+  return (operands.at(-1) ?? '').trim();
+}
+
+/**
+ * What is wrong with the launch jobs' groups in the workflow text: a group whose dispatch fallback doesn't name the
+ * run, which a dispatch of another run can share.
+ */
+export function dispatchGroupProblems(text: string): string[] {
+  const workflow = parseYaml(text) as {
+    jobs?: Record<string, {concurrency?: {group?: unknown}}>;
+  };
+  return DISPATCH_GROUP_JOBS.flatMap(name => {
+    const group = workflow.jobs?.[name]?.concurrency?.group;
+    return typeof group === 'string' &&
+      dispatchFallbackOf(group).includes('github.run_id')
+      ? []
+      : [
+          `${WORKFLOW}: ${name}'s concurrency group doesn't name the run for a dispatch, so one dispatch can replace another's pending job`,
+        ];
+  });
+}
+
+/** What is wrong with the pool jobs of the workflow `file`: a missing guard or labels, or a secret read. */
+export function poolJobProblems(file: string, text: string): string[] {
+  const workflow = parseYaml(text) as {
+    jobs?: Record<string, Record<string, unknown>>;
+  };
+  const problems: string[] = [];
+  for (const [name, definition] of Object.entries(workflow.jobs ?? {})) {
+    const runsOn = JSON.stringify(definition['runs-on'] ?? '');
+    if (!POOL_VARIABLES.some(variable => runsOn.includes(variable))) {
+      continue;
+    }
+    const expression = String(definition['runs-on']);
+    if (!expression.includes(SAME_REPOSITORY_GUARD)) {
+      problems.push(
+        `${file}: ${name} can run on the pool, and its runs-on lacks the same-repository guard`,
+      );
+    }
+    if (!expression.includes(POOL_LABELS)) {
+      problems.push(
+        `${file}: ${name} can run on the pool without asking for X64 and ephemeral`,
+      );
+    }
+    if (JSON.stringify(definition).includes('secrets.')) {
+      problems.push(`${file}: ${name} can run on the pool and reads a secret`);
+    }
+  }
+  return problems;
+}
+
 if (isMainModule(import.meta.url)) {
-  const problems = ciGateProblems(
-    readFileSync(path.join(REPOSITORY_ROOT, WORKFLOW), 'utf8'),
+  const workflowText = readFileSync(
+    path.join(REPOSITORY_ROOT, WORKFLOW),
+    'utf8',
   );
+  const problems = [
+    ...ciGateProblems(workflowText),
+    ...postMergeProblems(workflowText),
+    ...dispatchGroupProblems(workflowText),
+    ...readdirSync(path.join(REPOSITORY_ROOT, WORKFLOWS))
+      .filter(file => file.endsWith('.yml'))
+      .flatMap(file =>
+        poolJobProblems(
+          `${WORKFLOWS}/${file}`,
+          readFileSync(path.join(REPOSITORY_ROOT, WORKFLOWS, file), 'utf8'),
+        ),
+      ),
+  ];
   for (const problem of problems) {
     console.error(`check-ci-gate: ${problem}`);
   }

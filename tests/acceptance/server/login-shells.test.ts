@@ -22,6 +22,9 @@ import {
   placeStandInArchive,
 } from './support.ts';
 
+/** How long the host is given to tear an ended session down, in milliseconds: the sleeps of the session are gone by then. */
+const SESSION_TEARDOWN_MILLISECONDS = 2000;
+
 /** The connect timeout the session is opened with, as the host's own value. */
 const CONNECT_SECONDS = 5;
 
@@ -365,6 +368,25 @@ describe('#443, F-2704 BR-4: every login shell hands the session to POSIX sh', f
         );
       }
 
+      /**
+       * The `sleep` processes on the host once the sshd has torn the ended session down, which takes a moment after the
+       * client has returned: polled until none is left, or for `SESSION_TEARDOWN_MILLISECONDS`. Two seconds is far under
+       * the 7 s of the watchdog and the 30 s of the profile, so a sleep that outlives the session still shows.
+       */
+      async function sleepsLeft(host: RunningHost): Promise<string[]> {
+        const deadline = Date.now() + SESSION_TEARDOWN_MILLISECONDS;
+        for (;;) {
+          const sleeping = host
+            .onHost('ps', '-o', 'pid,ppid,args')
+            .split('\n')
+            .filter(line => line.includes('sleep'));
+          if (sleeping.length === 0 || Date.now() >= deadline) {
+            return sleeping;
+          }
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+      }
+
       /** The attempt to open a session, with the time it took, and the host's leftovers cleaned up. */
       async function failedAttempt(host: RunningHost, seconds?: number) {
         const started = Date.now();
@@ -434,13 +456,7 @@ describe('#443, F-2704 BR-4: every login shell hands the session to POSIX sh', f
       it("#443: right after that session ends no sleep is left on the host, the profile's or the watchdog's", async () => {
         write(bash, '.bash_profile', 'sleep 30\n');
         await failedAttempt(bash);
-        deepStrictEqual(
-          bash
-            .onHost('ps', '-o', 'args')
-            .split('\n')
-            .some(line => line.includes('sleep')),
-          false,
-        );
+        deepStrictEqual(await sleepsLeft(bash), []);
       });
 
       it('F-2704 AC-13: a .bash_profile that ends with exit 1 fails the connect at once, with no reason of ssh', async () => {

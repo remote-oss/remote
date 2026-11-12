@@ -25,6 +25,7 @@ import {
   closedAndWatched,
   connectedWindow,
   eventsSince,
+  helperDetails,
   helperProcesses,
   lifecycleEvents,
   removeContainersOf,
@@ -143,9 +144,14 @@ describe('more of what ends a window decides when its container stops (card cont
       await closeWindow(connected.window);
       await execFileAsync('docker', ['rm', '--force', connected.containerId]);
       await new Promise(resolve => setTimeout(resolve, 32_000));
+      const left = await helperProcesses();
+      // When a helper is still there, say what it is and how long it has run, and how much longer it stays.
+      const details =
+        left.length === 0 ? '' : await helperDetails(left, 90_000);
       deepStrictEqual(
-        [await devContainersOf(connected.folder), await helperProcesses()],
+        [await devContainersOf(connected.folder), left],
         [[], []],
+        details,
       );
     } finally {
       await removeContainersOf(connected.folder);

@@ -13,6 +13,7 @@ import {inWindow, windowNames} from '../windows/harness.ts';
 import {
   dialogOf,
   editorTabs,
+  notifications,
   paletteRows,
   pressControlAlt,
   pressEscape,
@@ -32,7 +33,7 @@ function userFileText(): string | undefined {
 describe('the SSH group commands with Remote - SSH absent (card coverage-102, part 2)', function () {
   this.timeout(120_000);
 
-  it('F-5102 AC-27, AC-28, F-5002 AC-12 (absent): the view has no SSH row, no host row and no group action, and the keys of configureSsh and add write no file, open no window and show no dialog, and the window stays usable', async () => {
+  it('F-5102 AC-27, AC-28, F-5002 AC-12, F-5902 AC-17 (absent): the view has no SSH row, no host row and no group action, and the keys of configureSsh and add write no file, open no window and show no dialog and no "not found" notification, and the window stays usable', async () => {
     const restore = await bindKeys([
       {key: 'ctrl+alt+j', command: 'remote-explorer.configureSsh'},
       {key: 'ctrl+alt+k', command: 'remote-explorer.add'},
@@ -62,6 +63,9 @@ describe('the SSH group commands with Remote - SSH absent (card coverage-102, pa
           tabs: await editorTabs(LOCAL),
           dialog: await dialogOf(LOCAL),
           pick: await quickPickFacts(LOCAL),
+          notFound: (await notifications(LOCAL)).some(text =>
+            text.includes('not found'),
+          ),
           usable: (await paletteRows(LOCAL, 'Focus on Remotes')).length > 0,
         });
       }
@@ -71,6 +75,7 @@ describe('the SSH group commands with Remote - SSH absent (card coverage-102, pa
         tabs,
         dialog: undefined,
         pick: undefined,
+        notFound: false,
         usable: true,
       };
       deepStrictEqual([keysReach, rows, after], [true, [], [state, state]]);

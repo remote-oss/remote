@@ -59,7 +59,13 @@ export function serializedUriOf(uri: UriParts): SerializedUri {
 }
 
 /** The engine members a payload's `settings` may name, in their fixed order. */
-const ENGINE_MEMBERS = ['context', 'host', 'certPath', 'tlsVerify'] as const;
+const ENGINE_MEMBERS = [
+  'context',
+  'host',
+  'certPath',
+  'tlsVerify',
+  'wslDistro',
+] as const;
 
 /** A payload's `settings` member for an engine, or nothing when it is the default. */
 export function pinnedSettingsOf(
@@ -137,10 +143,12 @@ function folderOf(parsed: unknown): DevContainerFolder | PayloadMalformed {
   const record = recordOf(parsed);
   const engine = engineOf(record?.settings);
   const configFile = configFileOf(record?.configFile);
+  // `devcontainer open --config` writes no `localDocker`: a payload without it is a local engine.
+  const localDocker = record?.localDocker ?? false;
   if (
     typeof record?.hostPath !== 'string' ||
     record.hostPath === '' ||
-    typeof record.localDocker !== 'boolean' ||
+    typeof localDocker !== 'boolean' ||
     engine === false ||
     configFile === undefined
   ) {
@@ -149,7 +157,7 @@ function folderOf(parsed: unknown): DevContainerFolder | PayloadMalformed {
   return {
     kind: 'folder',
     hostPath: record.hostPath,
-    localDocker: record.localDocker,
+    localDocker,
     ...engine,
     configFile,
   };

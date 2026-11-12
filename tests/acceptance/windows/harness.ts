@@ -1029,9 +1029,13 @@ export function withLogTail(message: string, lines: readonly string[]): string {
   return tail.length === 0 ? message : `${message}\n${tail.join('\n')}`;
 }
 
+/** What the remote indicator reads while a window resolves its remote: core's text for the state before the connection is made. */
+const RESOLVING_INDICATOR = 'Opening Remote...';
+
 /**
  * Resolves once window `name` is connected to its container: it reads its workspace folder through the container's file
- * system. When the wait times out, its error also carries the last lines of the Dev Containers log written since the wait
+ * system, and its remote indicator has left the resolving state, which it does after the folder is readable. When the
+ * wait times out, its error also carries the last lines of the Dev Containers log written since the wait
  * began, so that a hang shows the step it stopped at.
  */
 export async function connectedToContainer(
@@ -1045,7 +1049,14 @@ export async function connectedToContainer(
       async () => {
         try {
           await inWindow(name, 'acceptance.agent.statFolder');
-          return (await windowState(name)).remoteName === 'dev-container';
+          if ((await windowState(name)).remoteName !== 'dev-container') {
+            return false;
+          }
+          // The renderer module imports this one, so it is loaded when it is needed.
+          const {statusBarText} = await import('./renderer.ts');
+          return (
+            (await statusBarText(name, 'status.host')) !== RESOLVING_INDICATOR
+          );
         } catch {
           return false;
         }
@@ -1425,6 +1436,11 @@ function withdrawUnaccepted(name: string, commandId: string): void {
       `${JSON.stringify({id: commandId, withdrawn: true})}\n`,
     );
   }
+}
+
+/** Moves window `name`'s focus to its editor group, away from an open quick input, as a click elsewhere in the window does. */
+export async function moveFocusAway(name: string): Promise<void> {
+  await inWindow(name, 'workbench.action.focusActiveEditorGroup');
 }
 
 /** The process id of window `name`'s live extension host, or undefined when it has none. */

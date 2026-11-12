@@ -227,11 +227,12 @@ describe('Configure Container Features: in a dev container window and with two m
       deepStrictEqual(
         [
           palette.includes('Dev Containers: Configure Container Features...'),
-          menu.slice(0, 3),
+          menu.slice(0, 4),
         ],
         [
           true,
           [
+            'Attach to Running Container...',
             'Configure Container Features...',
             'Rebuild Container',
             'Reopen Folder Locally',

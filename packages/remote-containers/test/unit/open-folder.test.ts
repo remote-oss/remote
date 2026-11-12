@@ -183,6 +183,19 @@ describe('Open Folder in Container', () => {
     );
   });
 
+  it('coverage-117: a container window that names no authority opens the dialog at home, and a cancel says so', async () => {
+    const state = setup();
+    state.remoteName = 'dev-container';
+    state.folders = [];
+    const {handler, dialog, sink} = commandOf(state);
+    dialog.answer = undefined;
+    await handler();
+    deepStrictEqual(
+      [dialog.starts, state.commands, linesOf(sink)],
+      [['/home/u'], [], ['info: Open Folder in Container was cancelled']],
+    );
+  });
+
   it('F-0403 6.1: a folder of another scheme does nothing', async () => {
     const state = setup();
     const {handler, dialog, sink} = commandOf(state);
@@ -341,6 +354,36 @@ describe('Open Folder in Container', () => {
       ],
       [['/w/p'], 2, ['info: Open Folder in Container is already running']],
     );
+  });
+
+  it('F-0206 AC-31, AC-42, BR-17: Open Folder reads the file and not the merged configuration, shows the dialog while the calling window is unchanged, and goes on when the user continues', async () => {
+    const state = setup();
+    state.daemon = {cpus: 4, memory: 16 * 1024 ** 3, nvidia: false};
+    state.configText = '{ "image": "x", "hostRequirements": { "cpus": 64 } }';
+    const {handler} = commandOf(state);
+    await handler();
+    deepStrictEqual(
+      [
+        state.mergedReads,
+        state.requirementDialogs.map(dialog => dialog[1]),
+        state.commands.map(each => each.command),
+      ],
+      [
+        [false],
+        ['Docker daemon: CPUs 4, RAM 16gb\ndevcontainer.json: CPUs 64'],
+        ['vscode.openFolder'],
+      ],
+    );
+  });
+
+  it('F-0206 AC-31, 6.2: Cancel on the dialog leaves the calling window as it was: nothing opens', async () => {
+    const state = setup();
+    state.daemon = {cpus: 4, memory: 16 * 1024 ** 3, nvidia: false};
+    state.configText = '{ "hostRequirements": { "memory": "64gb" } }';
+    state.requirementsAccepted = false;
+    const {handler} = commandOf(state);
+    await handler();
+    deepStrictEqual([state.requirementDialogs.length, state.commands], [1, []]);
   });
 
   it('F-0101 AC-15: without resolvers the command calls nothing but setupAgain, before the engine check', async () => {

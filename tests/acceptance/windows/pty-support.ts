@@ -115,7 +115,8 @@ export async function ptyConnect(
   );
   const end = Date.now() + watchMilliseconds;
   while (Date.now() < end) {
-    for (const argv of runSshArguments()) {
+    // `ssh -G` only prints the host entry's options, for as long as it takes; it is no connection and has no session.
+    for (const argv of runSshArguments().filter(each => !each.includes('-G'))) {
       commands.add(argv.join(' '));
     }
     for (const session of await hostSessions()) {

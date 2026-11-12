@@ -68,6 +68,8 @@ export interface ContainerRequest {
   cacheVolume: boolean;
   /** The consistency of the workspace mount (`dev.containers.workspaceMountConsistency`), as written. */
   workspaceMountConsistency: string;
+  /** `dev.containers.gpuAvailability`, as written. */
+  gpuAvailability: string;
   /** Whether the Git worktree's common dir is mounted (`dev.containers.experimentalMountGitWorktreeCommonDir`). */
   mountGitWorktreeCommonDir: boolean;
   /** The Feature settings: the default Features and the lockfile. */
@@ -141,6 +143,15 @@ export interface ContainerLifecycle {
     onCliEvent: (event: CliEvent) => void,
     cancellation: AbortSignal,
   ): Promise<ContainerOutcome>;
+  /**
+   * Takes a running container that `prepare` did not make as the ready one, with the target its runs are told and where
+   * their events go.
+   */
+  adopt(
+    containerId: string,
+    target: CliTarget,
+    onCliEvent: (event: CliEvent) => void,
+  ): void;
   /**
    * Runs the blocking lifecycle commands of the container `prepare` made ready, up to the one `waitFor` names, with
    * `remoteEnvironment` added; the failure carries the container for the failure's pick. With no ready container,
@@ -876,6 +887,7 @@ export function containerLifecycleOf(dependencies: {
         removeExistingContainer: rebuilding && !composeRebuild,
         buildNoCache: request.rebuild?.buildNoCache ?? false,
         workspaceMountConsistency: request.workspaceMountConsistency,
+        gpuAvailability: request.gpuAvailability,
       },
       relayEvent,
       cancellation,
@@ -937,6 +949,9 @@ export function containerLifecycleOf(dependencies: {
 
   return {
     prepare,
+    adopt: (containerId, target, onCliEvent) => {
+      ready = {target, containerId, onCliEvent};
+    },
     runBlocking,
     startBackground,
     stopBackground: () => {

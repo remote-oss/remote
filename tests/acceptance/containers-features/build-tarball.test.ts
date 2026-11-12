@@ -31,10 +31,18 @@ describe('a Feature fetched as a tarball (card tooling-92)', function () {
   this.timeout(1_800_000);
   const {build} = featureBuilds();
 
-  it('tooling-92 (tarball-build): a configuration that names the tarball address builds and connects, the Feature ran in the container, the lockfile holds an integrity for the address, and the download host answered two requests of the CLI for the tarball', async () => {
+  it('tooling-92 (tarball-build): a configuration that names the tarball address builds and connects, the Feature ran in the container, the lockfile holds an integrity for the address, and the download host answered the CLI two requests for the tarball before the reload, for the merged read, and two after it, for the build', async () => {
     const address = variable('HARNESS_FEATURE_TARBALL_URL');
     const before = tarballRequests().length;
-    const built = await build('c92-smoke', {features: {[address]: {}}});
+    let atReload = before;
+    const built = await build(
+      'c92-smoke',
+      {features: {[address]: {}}},
+      undefined,
+      () => {
+        atReload = tarballRequests().length;
+      },
+    );
     const {stdout} = await execFileAsync('docker', [
       'exec',
       built.containerId,
@@ -42,16 +50,24 @@ describe('a Feature fetched as a tarball (card tooling-92)', function () {
       '/c92-tarball',
     ]);
     const entry = lockfileOf(built.folder)?.features[address];
+    const agents = tarballRequests().map(line =>
+      line.slice(line.lastIndexOf(' ') + 1),
+    );
     deepStrictEqual(
       [
         stdout.trim(),
         typeof entry?.integrity,
         String(entry?.integrity).length > 0,
-        tarballRequests()
-          .slice(before)
-          .map(line => line.slice(line.lastIndexOf(' ') + 1)),
+        agents.slice(before, atReload),
+        agents.slice(atReload),
       ],
-      ['tarball', 'string', true, ['devcontainer', 'devcontainer']],
+      [
+        'tarball',
+        'string',
+        true,
+        ['devcontainer', 'devcontainer'],
+        ['devcontainer', 'devcontainer'],
+      ],
     );
   });
 

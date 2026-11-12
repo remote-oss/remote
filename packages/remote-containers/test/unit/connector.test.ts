@@ -27,6 +27,7 @@ import {
 import {noEngineProgramOf} from '../../src/connect/connector.ts';
 import {REBUILD_INTENTS_KEY} from '../../src/open/rebuild-intent.ts';
 import type {CliEvent} from '../../src/cli/cli-lines.ts';
+import type {RelayKind} from '../../src/relays/relay-host.ts';
 import {storePausedRetry} from '../../src/state/paused-retry.ts';
 
 function tick(): Promise<unknown> {
@@ -1145,6 +1146,19 @@ describe('the container connector: the connect (card containers-08)', () => {
           {defaultFeatures: features, lockfile: false},
         ],
       ],
+    );
+  });
+
+  it('F-0206 BR-5, BR-16: the GPU availability is read at each connect and goes to the lifecycle as written, detect when unset', async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    scene.gpuAvailability = 'none';
+    await connected(scene);
+    scene.gpuAvailability = 'sometimes';
+    await connected(scene);
+    deepStrictEqual(
+      scene.prepared.map(request => request.gpuAvailability),
+      ['detect', 'none', 'sometimes'],
     );
   });
 
@@ -2651,6 +2665,26 @@ describe('the container connector: the remote environment (card containers-45)',
     );
   });
 
+  it('brief-personalization §1 step 5 (#2086): the relay variables sit between the probe and remoteEnv in the extension host’s environment', async () => {
+    const scene = sceneOf();
+    scene.configuration = withMergedConfiguration({
+      remoteEnv: {ALPHA: 'remote'},
+    });
+    scene.relayHostStart = {
+      kind: 'started',
+      host: {
+        variables: {ALPHA: 'relay', BRAVO: 'relay', ECHO_SOCK: '/tmp/e.sock'},
+        dispose: () => undefined,
+      },
+    };
+    const result = await connected(scene);
+    deepStrictEqual(result.extensionHostEnv, {
+      ALPHA: 'remote',
+      BRAVO: 'relay',
+      ECHO_SOCK: '/tmp/e.sock',
+    });
+  });
+
   it('F-0416 BR-11b: a probe that fails, exits 1, prints no end marker or never answers is dropped, once each with its reason, and the connect goes on', async () => {
     const results: unknown[] = [];
     const probes: Array<{probe: Scene['probe']; expires: boolean}> = [
@@ -2954,11 +2988,12 @@ describe('the container connector: the extensions cache after the start (#1810)'
     );
   });
 
-  it('brief-personalization §1 steps 2 to 6: the server files, then the blocking commands with the relay variables, then the start; the background only once connected', async () => {
+  it('brief-personalization §1 steps 2 to 6: the server files, then phase E’s relay host, then the blocking commands with the relay variables, then the start; the background only once connected', async () => {
     const scene = sceneOf();
     await connected(scene);
     deepStrictEqual(scene.lifecycleRuns, [
       'server files',
+      'relay host',
       'blocking {}',
       'server start',
       'background {}',
@@ -2978,7 +3013,92 @@ describe('the container connector: the extensions cache after the start (#1810)'
     const result = await scene.connector.connect(inputOf(PAYLOAD));
     deepStrictEqual(
       [failedKind(result), scene.lifecycleRuns],
-      ['containerSetupFailed', ['server files', 'blocking {}']],
+      ['containerSetupFailed', ['server files', 'relay host', 'blocking {}']],
+    );
+  });
+
+  it('brief-personalization §1 step 3 (#2086): phase E starts the relay host for the connect’s kinds, as the remote user, on the server’s node and data folder', async () => {
+    const scene = sceneOf();
+    const echo: RelayKind = {
+      kind: 'echo',
+      variable: 'ECHO_SOCK',
+      connect: () => Promise.reject(new Error('unused')),
+    };
+    scene.relayKinds = [echo];
+    await connected(scene);
+    const request = scene.relayHostRequests[0];
+    deepStrictEqual(
+      [
+        request?.kinds,
+        request?.containerId,
+        request?.remoteUser,
+        request?.nodePath,
+        request?.dataFolder,
+      ],
+      [
+        [echo],
+        'c1c1c1c1c1c1c1c1',
+        'node',
+        '/home/node/.server/bin/abc/node',
+        '/home/node/.server',
+      ],
+    );
+  });
+
+  it('brief-personalization §1 steps 4 and 6 (#2086): the relay variables reach the blocking run and the background', async () => {
+    const scene = sceneOf();
+    scene.relayHostStart = {
+      kind: 'started',
+      host: {variables: {ECHO_SOCK: '/tmp/e.sock'}, dispose: () => undefined},
+    };
+    await connected(scene);
+    deepStrictEqual(scene.lifecycleRuns, [
+      'server files',
+      'relay host',
+      'blocking {"ECHO_SOCK":"/tmp/e.sock"}',
+      'server start',
+      'background {"ECHO_SOCK":"/tmp/e.sock"}',
+    ]);
+  });
+
+  it('brief-personalization §2 (#2086): a relay host that does not start is logged at warn, and the connect goes on with no relay variables', async () => {
+    const scene = sceneOf();
+    scene.relayHostStart = {kind: 'failed', detail: 'no node'};
+    const result = await connected(scene);
+    deepStrictEqual(
+      [
+        scene.sink.lines
+          .filter(line => line.level === 'warn')
+          .map(line => line.message),
+        scene.lifecycleRuns[2],
+        result.extensionHostEnv,
+      ],
+      [
+        ['the relay host did not start: no node'],
+        'blocking {}',
+        {ALPHA: 'probe', BRAVO: 'probe'},
+      ],
+    );
+  });
+
+  it('brief-personalization §2 (#2086): the relay host lives as long as the connection: a connect that fails after phase E ends it, a held one keeps it until it is given back', async () => {
+    const failing = sceneOf();
+    failing.blockingResult = {
+      kind: 'lifecycleFailed',
+      hook: 'onCreateCommand',
+      part: undefined,
+      message: 'exit 1',
+      containerId: 'c1',
+      foundContainerId: 'c1',
+    };
+    await failing.connector.connect(inputOf(PAYLOAD));
+    const held = sceneOf();
+    await connected(held);
+    const whileHeld = held.relayHostsEnded;
+    held.connector.cancel();
+    deepStrictEqual(
+      [failing.relayHostsEnded, whileHeld, held.relayHostsEnded],
+      [1, 0, 1],
     );
   });
 });

@@ -41,6 +41,7 @@
         "suite-install/*.test.ts",
         "suite-terminal/*.test.ts",
         "suite-socket/*.test.ts",
+        "suite-socket-prime/*.test.ts",
         "suite-client/*.test.ts",
         "suite-slow/*.test.ts",
         "slow-remote/src/extension.ts",
@@ -83,6 +84,9 @@
         "containers-context/*.test.ts",
         "containers-env-host/*.test.ts",
         "containers-env-ctx/*.test.ts",
+        "containers-ssh-engine/*.test.ts",
+        "containers-ssh-env-host/*.test.ts",
+        "containers-ssh-noclient/*.test.ts",
         "containers-index/*.test.ts",
         "containers-volume/*.test.ts",
         "containers-config/*.test.ts",
@@ -137,6 +141,8 @@
     // The editor calls an extension's activate().
     "packages/*/src/extension.ts": ["exports"],
     "packages/*/src/web-extension.ts": ["exports"],
+    // Mocha loads a reporter by its path and takes the module's value.
+    "tools/acceptance-file-times.ts": ["exports"],
   },
   // System tools the tests and checks run, which no package provides.
   "ignoreBinaries": ["pwsh", "shellcheck", "ssh-add", "ssh-agent", "ss"],

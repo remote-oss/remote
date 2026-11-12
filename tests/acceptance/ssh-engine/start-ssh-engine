@@ -1,0 +1,16 @@
+#!/bin/sh
+# Makes this container's host keys, installs the run's key for engine (ENGINE_KEY) and its passphrase key for
+# engine-enc (ENGINE_ENC_KEY), sets the passwords of engine-pw (ENGINE_PASSWORD) and engine-pw2 (ENGINE_PASSWORD_2) and
+# forgets them, starts sshd, then runs the image's own daemon entry point in the foreground.
+set -eu
+ssh-keygen -A >/dev/null
+printf '%s\n' "$ENGINE_KEY" > /etc/ssh/keys/engine
+printf '%s\n' "$ENGINE_ENC_KEY" > /etc/ssh/keys/engine-enc
+chmod 644 /etc/ssh/keys/engine /etc/ssh/keys/engine-enc
+chpasswd <<PASSWORDS
+engine-pw:$ENGINE_PASSWORD
+engine-pw2:$ENGINE_PASSWORD_2
+PASSWORDS
+unset ENGINE_PASSWORD ENGINE_PASSWORD_2
+/usr/sbin/sshd
+exec dockerd-entrypoint.sh

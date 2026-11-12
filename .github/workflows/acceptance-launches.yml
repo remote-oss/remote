@@ -1,8 +1,9 @@
-# The VSCodium acceptance launches a pull request's change selects (main's push selection), as one part on one of
-# GitHub's ubuntu-24.04 runners. Called by ci.yml's pull request job, which runs at most six of them; with `full` (the
-# acceptance-full label, ci.yml or acceptance-full.yml) it runs the whole selection. Either has 360 minutes, the plan's
-# time limit, the most a job may run on GitHub's runners. A larger selection without `full` runs nothing and gets a
-# notice naming its launches. The run's steps are those of ci.yml's VSCodium job.
+# The VSCodium acceptance launches a pull request's change selects, as the parts of the select job's plan, each a job of
+# its own with its own time limit, run side by side. A change to test files only runs each changed file alone in the
+# launches that run it, and a smoke part beside them. Any other change, or `full` (the acceptance-full label, ci.yml or
+# acceptance-full.yml), runs every part of the VSCodium suite's table that makes a launch it reaches, about fifteen
+# minutes of rows each. The parts with a containers launch run on GitHub's runners, eight at once at most; the others
+# on the pool when it is set. The run's steps are those of ci.yml's VSCodium job.
 name: acceptance-launches
 
 on:
@@ -19,11 +20,13 @@ permissions:
 jobs:
   select:
     # a git diff and the launch table only
-    runs-on: ubuntu-24.04
+    runs-on: >-
+      ${{ vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON)) || 'ubuntu-24.04' }}
     timeout-minutes: 10
     outputs:
-      launches: ${{ steps.select.outputs.launches }}
-      minutes: ${{ steps.select.outputs.minutes }}
+      parts: ${{ steps.select.outputs.parts }}
+      containers-parts: ${{ steps.select.outputs.containers-parts }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -42,21 +45,25 @@ jobs:
         run: |
           plan=$(node tools/acceptance-select.ts --base "$BASE" --head "$HEAD" --pull-request $([ "$FULL" = true ] && echo --full))
           echo "plan: $plan"
-          notice=$(printf '%s' "$plan" | jq -r '.notice // empty')
-          if [ -n "$notice" ]; then
-            echo "::notice title=VSCodium launches::$notice"
-            printf '%s\n' "**VSCodium launches:** $notice" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo "launches=$(printf '%s' "$plan" | jq -r '.launches')" >> "$GITHUB_OUTPUT"
-          echo "minutes=$(printf '%s' "$plan" | jq -r '.minutes')" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "**VSCodium parts:** $(printf '%s' "$plan" | jq -r '[.parts[].name] | join(", ") | if . == "" then "none" else . end')" >> "$GITHUB_STEP_SUMMARY"
+          echo "parts=$(printf '%s' "$plan" | jq -c '[.parts[] | select(.launches | contains("containers") | not)]')" >> "$GITHUB_OUTPUT"
+          echo "containers-parts=$(printf '%s' "$plan" | jq -c '[.parts[] | select(.launches | contains("containers"))]')" >> "$GITHUB_OUTPUT"
 
   run:
-    name: acceptance (vscodium, ${{ needs.select.outputs.launches }})
+    name: acceptance (vscodium, ${{ matrix.part.name }})
     needs: select
-    if: needs.select.outputs.launches != ''
-    runs-on: ubuntu-24.04
-    timeout-minutes: ${{ fromJSON(needs.select.outputs.minutes) }}
-    steps:
+    if: needs.select.outputs.parts != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ${{ fromJSON(needs.select.outputs.parts) }}
+    # the parts with no containers launch, on the organisation's pool when the repository variable CI_POOL_RUNS_ON names
+    # its label (with X64 and ephemeral, as ci.yml's VSCodium parts); otherwise on GitHub's ubuntu-24.04
+    runs-on: >-
+      ${{ vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON)) || 'ubuntu-24.04' }}
+    timeout-minutes: ${{ matrix.part.minutes }}
+    steps: &launch-steps
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -64,21 +71,40 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # the containerd image store, the one Docker 29 uses by default and the image-build rows are written against
+      - run: tools/docker-containerd-store
       - run: pnpm acceptance:clean
       - run: |
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
           fi
-      - if: contains(needs.select.outputs.launches, 'containers')
+      - if: contains(matrix.part.launches, 'containers')
         run: |
           df -h / | tail -1
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
           df -h / | tail -1
-      - if: contains(needs.select.outputs.launches, 'containers-podman')
+      - if: contains(matrix.part.launches, 'containers-podman')
         run: tools/install-podman
+      # the buildx plugin when the machine's Docker has none (the harness builds with `docker build --load`)
+      - run: tools/install-buildx
       - run: tools/start-display
       - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         env:
-          LAUNCHES: ${{ needs.select.outputs.launches }}
+          LAUNCHES: ${{ matrix.part.launches }}
       - if: always()
         run: pnpm acceptance:clean
+
+  # the parts with a containers launch, on GitHub's ubuntu-24.04, at most eight at once, so that one pull request's
+  # parts keep some of the organisation's 20 runners free for the others' legs, genuine and ci-gate
+  run-containers:
+    name: acceptance (vscodium, ${{ matrix.part.name }})
+    needs: select
+    if: needs.select.outputs.containers-parts != '[]'
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        part: ${{ fromJSON(needs.select.outputs.containers-parts) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ matrix.part.minutes }}
+    steps: *launch-steps

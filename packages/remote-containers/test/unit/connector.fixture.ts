@@ -41,6 +41,11 @@ import type {
   ContainerStep,
 } from '../../src/lifecycle/container-lifecycle.ts';
 import {storeRebuildIntent} from '../../src/open/rebuild-intent.ts';
+import type {
+  RelayHostRequest,
+  RelayHostStart,
+  RelayKind,
+} from '../../src/relays/relay-host.ts';
 import {fakeEngine, type ProcessScript, type SpawnPlan} from './fake-engine.ts';
 
 /** The extension's global storage folder of the fixture: nothing is ever created in it. */
@@ -157,6 +162,13 @@ export interface Scene {
   lifecycleRuns: string[];
   /** What the blocking run gives; done by default. */
   blockingResult: Awaited<ReturnType<ContainerLifecycle['runBlocking']>>;
+  /** The relay kinds the connector sets up; none by default. */
+  relayKinds: RelayKind[];
+  /** The relay host requests, and how starting one ends: started with no variables by default. */
+  relayHostRequests: RelayHostRequest[];
+  relayHostStart: RelayHostStart;
+  /** How many times a started relay host was ended. */
+  relayHostsEnded: number;
   revealed: number;
   /** What the shutdown helper was told, in order, and how many configuration reads had started at each message. */
   shutdownSent: ShutdownRequest[];
@@ -190,6 +202,8 @@ export interface Scene {
   /** The user's values of the workspace mount's consistency, of its deprecated twin and of the worktree setting. */
   workspaceMountConsistency: unknown;
   legacyWorkspaceMountConsistency: unknown;
+  /** The value of `dev.containers.gpuAvailability`. */
+  gpuAvailability: unknown;
   mountGitWorktreeCommonDir: unknown;
   /** The user's values of the setting for the extensions of a new container, and of its deprecated twin. */
   defaultFeatures: unknown;
@@ -381,6 +395,13 @@ export function sceneOf(
     stopped: 0,
     lifecycleRuns: [],
     blockingResult: {kind: 'done'},
+    relayKinds: [],
+    relayHostRequests: [],
+    relayHostStart: {
+      kind: 'started',
+      host: {variables: {}, dispose: () => undefined},
+    },
+    relayHostsEnded: 0,
     revealed: 0,
     shutdownSent: [],
     readsAtShutdown: [],
@@ -405,6 +426,7 @@ export function sceneOf(
     cacheVolumeInspect: undefined,
     workspaceMountConsistency: undefined,
     legacyWorkspaceMountConsistency: undefined,
+    gpuAvailability: undefined,
     mountGitWorktreeCommonDir: undefined,
     defaultFeatures: undefined,
     lockfile: undefined,
@@ -563,6 +585,10 @@ export function sceneOf(
       scene.setUps.push(target.containerId);
       return Promise.resolve(scene.setUpResult);
     },
+    runAttachedUserCommands: () =>
+      Promise.reject(
+        new Error('the connector fixture runs through the lifecycle'),
+      ),
     applyTemplate: () =>
       Promise.reject(new Error('the connector never applies a template')),
     outdated: () =>
@@ -582,6 +608,9 @@ export function sceneOf(
       return typeof scene.outcome === 'function'
         ? scene.outcome()
         : scene.outcome;
+    },
+    adopt: containerId => {
+      scene.lifecycleRuns.push(`adopt ${containerId}`);
     },
     runBlocking: remoteEnvironment => {
       scene.lifecycleRuns.push(`blocking ${JSON.stringify(remoteEnvironment)}`);
@@ -685,6 +714,7 @@ export function sceneOf(
         ),
       workspaceMountConsistency: scene.workspaceMountConsistency,
       legacyWorkspaceMountConsistency: scene.legacyWorkspaceMountConsistency,
+      gpuAvailability: scene.gpuAvailability,
       mountGitWorktreeCommonDir: scene.mountGitWorktreeCommonDir,
       defaultExtensions: scene.defaultExtensions,
       deprecatedDefaultExtensions: scene.deprecatedDefaultExtensions,
@@ -765,6 +795,25 @@ export function sceneOf(
       scene.trustCalls.push(`reopenLocally ${hostPath}`);
       return Promise.resolve();
     },
+    relayKinds: () => scene.relayKinds,
+    startRelayHost: request => {
+      scene.relayHostRequests.push(request);
+      scene.lifecycleRuns.push('relay host');
+      const start = scene.relayHostStart;
+      return Promise.resolve(
+        start.kind === 'failed'
+          ? start
+          : {
+              kind: 'started',
+              host: {
+                variables: start.host.variables,
+                dispose: () => {
+                  scene.relayHostsEnded += 1;
+                },
+              },
+            },
+      );
+    },
     runServer: async request => {
       scene.serverRequests.push(request);
       // As the steps do: the install phase before the files, the start's phase only when the server is launched.
@@ -775,7 +824,10 @@ export function sceneOf(
         request.onDownloadPercent(percent);
       }
       scene.lifecycleRuns.push('server files');
-      const beforeStart = await request.beforeStart?.();
+      const beforeStart = await request.beforeStart?.({
+        nodePath: '/home/node/.server/bin/abc/node',
+        dataFolder: '/home/node/.server',
+      });
       if (beforeStart !== undefined) {
         return {kind: 'failed', failure: beforeStart};
       }

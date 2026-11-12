@@ -194,6 +194,33 @@ export async function helperProcesses(): Promise<string[]> {
   }
 }
 
+/**
+ * What the helpers `processIds` are, read from `ps`, and how many more seconds they stay, up to `milliseconds`: said
+ * when a row finds one that should be gone.
+ */
+export async function helperDetails(
+  processIds: readonly string[],
+  milliseconds: number,
+): Promise<string> {
+  const listing = await execFileAsync('ps', [
+    '-o',
+    'pid,ppid,etimes,args',
+    '-p',
+    processIds.join(','),
+  ]).then(
+    ({stdout}) => stdout.trim(),
+    (caught: unknown) => String(caught),
+  );
+  const from = Date.now();
+  let remaining = await helperProcesses();
+  while (remaining.length > 0 && Date.now() - from < milliseconds) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    remaining = await helperProcesses();
+  }
+  const stayed = Math.round((Date.now() - from) / 1000);
+  return `${listing}; ${remaining.length === 0 ? `gone after ${String(stayed)} s more` : `still there ${String(stayed)} s more`}`;
+}
+
 /** The parent process id of `processId`, read from `/proc`; 0 for none. */
 function parentOf(processId: string): string {
   try {

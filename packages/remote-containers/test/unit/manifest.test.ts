@@ -207,6 +207,12 @@ const ENGLISH = {
   'commands.Rebuildwithoutcacheandreopenincontainer.title':
     'Rebuild Without Cache and Reopen in Container',
   'commands.Settings.title': 'Settings',
+  'setting.Executeinwsl.description':
+    'Controls whether CLI commands should always be executed in WSL. The default is to only execute in WSL for workspace folders in WSL. This setting has no effect on other platforms than Windows.',
+  'setting.Executeinwsldistro.markdownDescription':
+    'WSL distro to use when not reopening a WSL folder. The default is to use the default WSL distro (see `wsl -l`). This setting has no effect when `#dev.containers.executeInWSL#` is not enabled or on other platforms than Windows.',
+  'setting.Forwardwslservices.description':
+    'Controls whether services in WSL (SSH agent, GPG agent, X display, Wayland display) are forwarded into the container. This setting has no effect on other platforms than Windows.',
   'setting.Dockerpath.description':
     'Docker (or Podman or WSLc) executable name or path.',
   'setting.ServerDownloadBaseUrl.description':
@@ -240,6 +246,13 @@ const ENGLISH = {
     "Use 'dev.containers.workspaceMountConsistency' instead.",
   'setting.WorkspaceMountConsistency.markdownDeprecationMessage':
     'Use `#dev.containers.workspaceMountConsistency#` instead.',
+  'setting.GpuAvailability.description':
+    'Availability of GPUs when a dev container requires any.',
+  'setting.GpuAvailability.all':
+    'All GPUs are available. This expects the host to have a GPU.',
+  'setting.GpuAvailability.detect':
+    'Availability should be detected automatically.',
+  'setting.GpuAvailability.none': 'No GPUs are available.',
   'setting.MountGitWorktreeCommonDir.description':
     'Mount the Git worktree common dir for Git operations to work in the container. This requires the worktree to be created with relative paths (`git worktree add --relative-paths`).',
   'setting.DefaultFeatures.description':
@@ -796,6 +809,47 @@ describe('the manifest', () => {
     );
   });
 
+  it('F-0206 3.2: the GPU availability setting is contributed with machine scope, the three values and the default detect, and its English texts are the spec’s', () => {
+    const properties = (
+      MANIFEST.contributes as {
+        configuration: {properties: Record<string, unknown>};
+      }
+    ).configuration.properties;
+    deepStrictEqual(
+      [
+        properties['dev.containers.gpuAvailability'],
+        (
+          [
+            'setting.GpuAvailability.description',
+            'setting.GpuAvailability.all',
+            'setting.GpuAvailability.detect',
+            'setting.GpuAvailability.none',
+          ] as const
+        ).map(key => ENGLISH[key]),
+      ],
+      [
+        {
+          type: 'string',
+          default: 'detect',
+          scope: 'machine',
+          enum: ['all', 'detect', 'none'],
+          enumDescriptions: [
+            '%setting.GpuAvailability.all%',
+            '%setting.GpuAvailability.detect%',
+            '%setting.GpuAvailability.none%',
+          ],
+          description: '%setting.GpuAvailability.description%',
+        },
+        [
+          'Availability of GPUs when a dev container requires any.',
+          'All GPUs are available. This expects the host to have a GPU.',
+          'Availability should be detected automatically.',
+          'No GPUs are available.',
+        ],
+      ],
+    );
+  });
+
   it('F-0414 3.2: the two Feature settings are contributed with their shapes, and their English texts are the reference’s', () => {
     const properties = (
       MANIFEST.contributes as {
@@ -1172,12 +1226,44 @@ describe('the manifest', () => {
       }
     ).menus;
     return Object.fromEntries(
-      Object.entries(menus).map(([name, entries]) => [
-        name,
-        entries.filter(entry => commands.includes(entry.command)),
-      ]),
+      Object.entries(menus)
+        .filter(([name]) => name !== 'extension/context')
+        .map(([name, entries]) => [
+          name,
+          entries.filter(entry => commands.includes(entry.command)),
+        ]),
     );
   }
+
+  it('F-0809 AC-1, AC-2, AC-3, AC-34 (c207-manifest): Add to devcontainer.json is in the Extensions view menu of rows that are not built in, in a group of its own between Copy and Settings, and is hidden from the palette', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: Array<Record<string, unknown>>;
+      menus: Record<string, Array<Record<string, unknown>>>;
+    };
+    const command = 'remote-containers.addExtensionToConfig';
+    deepStrictEqual(
+      [
+        contributes.commands.find(entry => entry.command === command),
+        readJson('package.nls.json')['commands.addExtensionToConfig.title'],
+        contributes.menus.commandPalette?.find(
+          entry => entry.command === command,
+        ),
+        contributes.menus['extension/context'],
+      ],
+      [
+        {command, title: '%commands.addExtensionToConfig.title%'},
+        'Add to devcontainer.json',
+        {command, when: 'false'},
+        [
+          {
+            command,
+            group: '1_devcontainer@1',
+            when: '!isBuiltinExtension && !remote-containers:standingDown',
+          },
+        ],
+      ],
+    );
+  });
 
   it('F-0401 AC-5: the palette and the remote indicator list the command with the local clause of the reference, which has no workspace-trust term, so Restricted Mode lists it (PRE-7, AC-21)', () => {
     deepStrictEqual(menusOf(['remote-containers.reopenInContainer']), {
@@ -1809,6 +1895,54 @@ describe('where Switch Container is offered (F-0407 AC-1)', () => {
         },
         false,
       ],
+    );
+  });
+});
+
+describe('the WSL settings (card containers-203, F-0207 AC-1, AC-2)', () => {
+  const properties = (
+    MANIFEST.contributes as {
+      configuration: {properties: Record<string, Record<string, unknown>>};
+    }
+  ).configuration.properties;
+  const wslKeys = Object.keys(properties).filter(key => key.includes('WSL'));
+
+  it('F-0207 AC-1: the three settings come in this order, each of application scope, with the texts the nls table holds', () => {
+    deepStrictEqual(
+      wslKeys.map(key => [
+        key,
+        properties[key]?.scope,
+        properties[key]?.description ?? properties[key]?.markdownDescription,
+      ]),
+      [
+        [
+          'dev.containers.executeInWSL',
+          'application',
+          '%setting.Executeinwsl.description%',
+        ],
+        [
+          'dev.containers.executeInWSLDistro',
+          'application',
+          '%setting.Executeinwsldistro.markdownDescription%',
+        ],
+        [
+          'dev.containers.forwardWSLServices',
+          'application',
+          '%setting.Forwardwslservices.description%',
+        ],
+      ],
+    );
+  });
+
+  it('F-0207 AC-2: executeInWSL is off, forwardWSLServices is on, and the distro declares no default so core reads it as empty', () => {
+    deepStrictEqual(
+      [
+        wslKeys.map(key => properties[key]?.type),
+        properties['dev.containers.executeInWSL']?.default,
+        properties['dev.containers.forwardWSLServices']?.default,
+        'default' in (properties['dev.containers.executeInWSLDistro'] ?? {}),
+      ],
+      [['boolean', 'string', 'boolean'], false, true, false],
     );
   });
 });

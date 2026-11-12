@@ -158,12 +158,11 @@ nowhere (BR-3; 3.2's rule). The spec requires that, so it isn't a switch beyond 
   - **The result:** if these are unmet, the dialog shows now, before the trust dialog.
   - **Not here:** no CLI run, and so no Feature fetch, no registry lookup and no Compose parse (F-0106; F-0201
     AC-55). A row shows that nothing builds, pulls or runs a lifecycle command before trust.
-- **Stage 2, after trust,** for every entry point of BR-15. It's the only stage for Reopen and the rebuild commands.
+- **Stage 2, after trust,** for Reopen and the rebuild commands only. Open Folder and Open Workspace ask for trust only in the window they open (F-0106), so they have no stage 2.
   - **What it reads:** the CLI's merged requirements (below).
   - **The result:** if they're unmet and this open hasn't shown the dialog yet, the dialog shows now.
 - **`(ruling-2146-trust-first)`, BR-13 with BR-17:**
-  - **The case:** for Open Folder and Open Workspace, a requirement that only the image's label records shows its
-    dialog after the trust dialog, not before it.
+  - **The case:** for Open Folder and Open Workspace, a requirement that only the image's label records isn't shown.
   - **Why:** the merged read fetches the Features and the image label that an untrusted configuration names.
   - **The paperwork:** a Deviations entry in `release-1-notes.md`, and the question goes to metis.
 - **The merged requirements** come from the CLI's own merge (BR-13), not ours. C3's

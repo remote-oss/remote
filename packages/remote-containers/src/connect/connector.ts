@@ -22,7 +22,8 @@ import {
   devContainerTargetOf,
   folderTargetOf,
 } from '../authority/payload.ts';
-import type {CliTarget} from '../cli/cli-arguments.ts';
+import type {AttachedCliTarget, CliTarget} from '../cli/cli-arguments.ts';
+import {attachedReadyTarget, attachedRunsBridge} from './attached-bridge.ts';
 import type {VolumeWorkspace} from '../cli/override-pre-pass.ts';
 import {
   bootstrapRemoveArguments,
@@ -148,6 +149,7 @@ import {
   mountGitWorktreeCommonDirOf,
   workspaceMountConsistencyOf,
 } from './mount-settings.ts';
+import {gpuAvailabilityOf} from './gpu-availability.ts';
 import {featureSettingsOf} from './feature-settings.ts';
 import {
   type ContainerState,
@@ -155,10 +157,17 @@ import {
   reconnectionOutcomeOf,
 } from './reconnection.ts';
 import type {
+  ServerFiles,
   ServerRequest,
   ServerResult,
   StartedContainerServer,
 } from './server-steps.ts';
+import type {
+  RelayHost,
+  RelayHostRequest,
+  RelayHostStart,
+  RelayKind,
+} from '../relays/relay-host.ts';
 import type {WindowIdentity} from './window-identity.ts';
 import {reasonOf} from './extension-cache.ts';
 import {isComposeConfiguration} from '../config/configuration-text.ts';
@@ -171,7 +180,17 @@ import {
 } from '../ports/static-forwards.ts';
 
 /** The relay variables the lifecycle commands and the extension host get; the relays add theirs. */
-const RELAY_ENVIRONMENT: Readonly<Record<string, string>> = {};
+/** The relay host one connect started, if any: held while the connect runs, then by the connection. */
+interface RelayLease {
+  host?: RelayHost;
+}
+
+/** The variables of the relays a connect set up: none when it started no relay host. */
+function relayVariablesOf(
+  relays: RelayLease,
+): Readonly<Record<string, string>> {
+  return relays.host?.variables ?? {};
+}
 /** The CLI's levels for an info, a warning and an error event. */
 const CLI_INFO_LEVEL = 3;
 const CLI_WARNING_LEVEL = 4;
@@ -309,6 +328,21 @@ interface AttachedConnectDependencies extends PickGate {
   configFileOf: (container: ListedContainer) => Promise<string | undefined>;
 }
 
+/** The settings the CLI's `up` takes: the workspace mount's consistency and the GPU availability, as the settings have them. */
+function engineSettingsOf(settings: {
+  workspaceMountConsistency: unknown;
+  legacyWorkspaceMountConsistency: unknown;
+  gpuAvailability: unknown;
+}): {workspaceMountConsistency: string; gpuAvailability: string} {
+  return {
+    workspaceMountConsistency: workspaceMountConsistencyOf(
+      settings.workspaceMountConsistency,
+      settings.legacyWorkspaceMountConsistency,
+    ),
+    gpuAvailability: gpuAvailabilityOf(settings.gpuAvailability),
+  };
+}
+
 /** What a connect to a Kubernetes pod needs beyond a folder's. */
 interface PodConnectDependencies extends PickGate {
   /** `kubectl` as an engine with the login shell's environment. */
@@ -354,6 +388,8 @@ export interface ContainerConnectorDependencies {
     workspaceMountConsistency: unknown;
     /** The user's value of the deprecated `remote.containers.workspaceMountConsistency`, `undefined` when unset. */
     legacyWorkspaceMountConsistency: unknown;
+    /** The value of `dev.containers.gpuAvailability`, `undefined` when unset. */
+    gpuAvailability: unknown;
     /** The user's value of `dev.containers.experimentalMountGitWorktreeCommonDir`, `undefined` when unset. */
     mountGitWorktreeCommonDir: unknown;
     /** The user's value of `dev.containers.defaultFeatures`, `undefined` when unset. */
@@ -368,6 +404,10 @@ export interface ContainerConnectorDependencies {
   /** What the second check needs besides the engine and the program. */
   preflight: Omit<PreflightDependencies, 'engineFor' | 'dockerPath'>;
   editorEnvironment: Readonly<Record<string, string | undefined>>;
+  /** The relay kinds a connect sets up: none until a personalization asks for one, the harness's own when it's on. */
+  relayKinds(): readonly RelayKind[];
+  /** Starts a connection's relay host (`relays/relay-host.ts`). */
+  startRelayHost(request: RelayHostRequest): Promise<RelayHostStart>;
   /** The server's steps over the channel, which the lib-server composition provides. */
   runServer(
     request: ServerRequest,
@@ -490,8 +530,15 @@ interface ChannelTarget {
   name: string | undefined;
   /** Whether the window explores a volume, which its label says instead of a configuration's name. */
   explored: boolean;
-  /** Runs once the server's files are in place and before it starts: the blocking commands; a failure ends the connect. */
-  beforeStart: () => Promise<Failed | undefined>;
+  /** Where phase E runs the connection's relay host, as the remote user; none for a target `docker exec` can't reach. */
+  relayHost?: {engine: EngineHost; containerId: string};
+  /**
+   * Runs once the server's files are in place, phase E has run and before the server starts: the blocking commands, with
+   * the relay variables; a failure ends the connect.
+   */
+  beforeStart: (
+    relays: Readonly<Record<string, string>>,
+  ) => Promise<Failed | undefined>;
   /** Opens the relay of the server's port; `onConnectionClosed` is told each time a relayed connection ends. */
   openRelay: (
     server: StartedContainerServer,
@@ -512,8 +559,8 @@ interface ChannelTarget {
     | 'created'
     | 'serviceDockerfile'
   >;
-  /** Runs once the connection is held: the background lifecycle commands. */
-  afterConnect: () => void;
+  /** Runs once the connection is held: the background lifecycle commands, with the relay variables. */
+  afterConnect: (relays: Readonly<Record<string, string>>) => void;
 }
 
 /** The connection the window holds. */
@@ -1036,6 +1083,7 @@ export function containerConnectorOf(
   function registerConnection(
     identity: ContainerIdentity,
     engine: EngineCoordinates,
+    owning = true,
   ): string {
     if (shutdownConnection !== undefined) {
       return shutdownConnection;
@@ -1047,6 +1095,7 @@ export function containerConnectorOf(
       connectionId,
       identity,
       engine,
+      ...(owning ? {} : {owning: false as const}),
     });
     return connectionId;
   }
@@ -1373,10 +1422,7 @@ export function containerConnectorOf(
         logLevel: 'info',
         cacheVolume: settings.cacheVolume(),
         windowsClient: dependencies.clientPlatform === 'win32',
-        workspaceMountConsistency: workspaceMountConsistencyOf(
-          settings.workspaceMountConsistency,
-          settings.legacyWorkspaceMountConsistency,
-        ),
+        ...engineSettingsOf(settings),
         mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
           settings.mountGitWorktreeCommonDir,
         ),
@@ -1468,17 +1514,15 @@ export function containerConnectorOf(
   }
 
   /**
-   * The steps between the server's files and its start: the early personalization (none yet) and the blocking lifecycle
-   * commands, under "Starting server". A failure of the commands is the connect's, as `up`'s was.
+   * The blocking lifecycle commands, with the relay variables, under "Starting server". A failure of the commands is the
+   * connect's, as `up`'s was.
    */
   async function blockingHooks(
+    relays: Readonly<Record<string, string>>,
     cancellation: AbortSignal,
   ): Promise<Failed | undefined> {
     phases.tell({name: 'startingServer'});
-    const blocking = await lifecycle?.runBlocking(
-      RELAY_ENVIRONMENT,
-      cancellation,
-    );
+    const blocking = await lifecycle?.runBlocking(relays, cancellation);
     return blocking === undefined || blocking.kind === 'done'
       ? undefined
       : failureOf(blocking, []);
@@ -1546,7 +1590,8 @@ export function containerConnectorOf(
         pinned: context.pinned,
         name,
         explored: context.explored === true,
-        beforeStart: () => blockingHooks(cancellation),
+        relayHost: {engine, containerId: prepared.containerId},
+        beforeStart: relays => blockingHooks(relays, cancellation),
         openRelay: (server, onConnectionClosed) =>
           dependencies.openRelay({
             engine,
@@ -1589,10 +1634,8 @@ export function containerConnectorOf(
           created: prepared.created,
           serviceDockerfile: prepared.serviceDockerfile,
         },
-        afterConnect: () => {
-          lifecycle?.startBackground(RELAY_ENVIRONMENT, () =>
-            Promise.resolve(),
-          );
+        afterConnect: relays => {
+          lifecycle?.startBackground(relays, () => Promise.resolve());
         },
       },
       cancellation,
@@ -1600,11 +1643,54 @@ export function containerConnectorOf(
   }
 
   /**
-   * The last part of every connect, once there is a channel into the target: the server's files and start, the
-   * environment, the relay of its port, and the connection the window holds.
+   * Phase E: the connection's relay host, for the kinds this connect sets up. One that doesn't start is logged, and the
+   * connect goes on without its relays.
+   */
+  async function earlyPersonalization(
+    tail: ChannelTarget,
+    files: ServerFiles,
+    relays: RelayLease,
+    cancellation: AbortSignal,
+  ): Promise<void> {
+    if (tail.relayHost === undefined) {
+      return;
+    }
+    const started = await dependencies.startRelayHost({
+      ...tail.relayHost,
+      channel: tail.channel,
+      remoteUser: tail.remoteUser,
+      nodePath: files.nodePath,
+      dataFolder: files.dataFolder,
+      kinds: dependencies.relayKinds(),
+      cancellation,
+    });
+    if (started.kind === 'failed') {
+      logger.warn(`the relay host did not start: ${started.detail}`);
+      return;
+    }
+    relays.host = started.host;
+  }
+
+  /**
+   * The last part of every connect, once there is a channel into the target. A connect that doesn't end in a connection
+   * ends the relay host it started.
    */
   async function connectChannel(
     tail: ChannelTarget,
+    cancellation: AbortSignal,
+  ): Promise<Connected | Failed> {
+    const relays: RelayLease = {};
+    const result = await connectWithRelays(tail, relays, cancellation);
+    if (!('connectionToken' in result)) {
+      relays.host?.dispose();
+    }
+    return result;
+  }
+
+  /** The server's files, phase E and the start, the environment, the relay of its port, and the connection the window holds. */
+  async function connectWithRelays(
+    tail: ChannelTarget,
+    relays: RelayLease,
     cancellation: AbortSignal,
   ): Promise<Connected | Failed> {
     const {channel, merged, settings} = tail;
@@ -1623,9 +1709,10 @@ export function containerConnectorOf(
         devPort: devPortOf(merged),
         machineSettings: portAttributeSettings(merged),
         created: tail.created,
-        beforeStart: async () => {
+        beforeStart: async files => {
           startingServerTold = true;
-          return tail.beforeStart();
+          await earlyPersonalization(tail, files, relays, cancellation);
+          return tail.beforeStart(relayVariablesOf(relays));
         },
         onPhase: phase => {
           // The blocking commands run under "Starting server" already; the server's own start doesn't say it again.
@@ -1686,7 +1773,7 @@ export function containerConnectorOf(
       connectionToken: server.connectionToken,
       extensionHostEnv: extensionHostEnvironmentOf(
         probed,
-        RELAY_ENVIRONMENT,
+        relayVariablesOf(relays),
         remoteEnvironment.entries,
       ),
       environmentTunnels: tunnels,
@@ -1728,7 +1815,14 @@ export function containerConnectorOf(
         lost.tell();
       }
     });
-    tail.afterConnect();
+    connection.lifetime.signal.addEventListener(
+      'abort',
+      () => {
+        relays.host?.dispose();
+      },
+      {once: true},
+    );
+    tail.afterConnect(relayVariablesOf(relays));
     return connected;
   }
 
@@ -1750,10 +1844,7 @@ export function containerConnectorOf(
       dockerPath: 'docker',
       logLevel: 'info',
       cacheVolume: settings.cacheVolume(),
-      workspaceMountConsistency: workspaceMountConsistencyOf(
-        settings.workspaceMountConsistency,
-        settings.legacyWorkspaceMountConsistency,
-      ),
+      ...engineSettingsOf(settings),
       mountGitWorktreeCommonDir: false,
       features: featureSettingsOf(
         settings.defaultFeatures,
@@ -1827,10 +1918,7 @@ export function containerConnectorOf(
         // An explored volume always has the server's volume at /vscode, whatever `dev.containers.cacheVolume` says.
         cacheVolume: true,
         windowsClient: dependencies.clientPlatform === 'win32',
-        workspaceMountConsistency: workspaceMountConsistencyOf(
-          settings.workspaceMountConsistency,
-          settings.legacyWorkspaceMountConsistency,
-        ),
+        ...engineSettingsOf(settings),
         mountGitWorktreeCommonDir: false,
         features: featureSettingsOf(
           settings.defaultFeatures,
@@ -2204,6 +2292,34 @@ export function containerConnectorOf(
       return step.failure;
     }
     const {container, mergedConfiguration: merged} = step;
+    const connectionId = registerConnection(
+      {containerName: container.name},
+      {dockerPath: dockerFile, environment},
+      false,
+    );
+    void dependencies.shutdown.send({
+      type: 'container',
+      connectionId,
+      containerId: container.id,
+      action: 'none',
+    });
+    const runsOn: AttachedCliTarget = {
+      containerId: container.id,
+      ...(step.configFile === undefined ? {} : {configFile: step.configFile}),
+      dockerPath: dockerFile,
+      logLevel: 'info',
+      environment,
+    };
+    const runsBridge = attachedRunsBridge(
+      dependencies.cliFor({...dependencies.editorEnvironment, ...environment}),
+      runsOn,
+    );
+    lifecycle = dependencies.lifecycleFor(
+      engine,
+      runsBridge,
+      dependencies.lifecyclePresenter,
+    );
+    lifecycle.adopt(container.id, attachedReadyTarget(runsOn), logCliEvent);
     const remoteUser = await attachedUserOf(
       engine,
       container.id,
@@ -2232,7 +2348,8 @@ export function containerConnectorOf(
         pinned: target,
         name: undefined,
         explored: false,
-        beforeStart: () => Promise.resolve(undefined),
+        relayHost: {engine, containerId: container.id},
+        beforeStart: relays => blockingHooks(relays, cancellation),
         openRelay: (server, onConnectionClosed) =>
           dependencies.openRelay({
             engine,
@@ -2254,7 +2371,9 @@ export function containerConnectorOf(
           created: false,
           serviceDockerfile: undefined,
         },
-        afterConnect: () => undefined,
+        afterConnect: relays => {
+          lifecycle?.startBackground(relays, () => Promise.resolve());
+        },
       },
       cancellation,
     );
@@ -2420,13 +2539,17 @@ export function containerConnectorOf(
           attachedTarget !== undefined &&
           !('malformed' in attachedTarget)
         ) {
-          return await connectAttached(
+          const result = await connectAttached(
             dependencies.attached,
             target.payload,
             attachedTarget,
             controller,
             input,
           );
+          if (!('connectionToken' in result)) {
+            await leaveShutdown();
+          }
+          return result;
         }
         if (dependencies.pods !== undefined) {
           const podTarget = k8sTargetOf(target.payload);

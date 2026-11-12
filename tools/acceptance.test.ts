@@ -83,7 +83,12 @@ import {
   type Launch,
   type RunnerLaunch,
 } from './acceptance-launches.ts';
-import {workflowParts as partsOfWorkflow} from './acceptance-select.ts';
+import {
+  PARTS_TABLE,
+  type PartsTable,
+  partsOfTable,
+  suiteFilesIn,
+} from './acceptance-parts.ts';
 import type {RunRegistry} from './acceptance-registry.ts';
 import {STOP_PROGRAM} from './acceptance-helper-stop.ts';
 import {acceptanceRunId} from './acceptance-run.ts';
@@ -441,6 +446,27 @@ const FAILURE = {
   dialog: 'Could not establish connection to "refused".',
 };
 
+/** The labels of the run's configurations, in order: every runner launch of the fixture's table. */
+const CONFIGURATION_LABELS = [
+  'local',
+  'remote',
+  'reconnect',
+  'agent',
+  'agent-off',
+  'x11',
+  'x11-noxauth',
+  'failure-refused',
+  'terminal',
+  'socket-prime',
+  'socket',
+  'slow',
+  'remote-ubuntu',
+  'client-unset',
+  'ports-probe',
+  'install-probe',
+  'platform-probe',
+];
+
 /** The labels a run launches with the fixture's cases, in order: the ports cases, then containers-view last. */
 const LAUNCH_ORDER = [
   'local',
@@ -501,6 +527,9 @@ const LAUNCH_ORDER = [
   'containers-context',
   'containers-env-host',
   'containers-env-ctx',
+  'containers-ssh-engine',
+  'containers-ssh-env-host',
+  'containers-ssh-noclient',
   'extensionpack',
   'extensionpack-german',
   'extensionpack-partial',
@@ -521,13 +550,21 @@ const CLIENT_CASE = {
 };
 
 /** The labels of the launches `selected` chooses from `launches`, or the error text alone when it names an unknown one. */
-/** The repository's `ci.yml`, and the launch selections of its scheduled VSCodium split. */
+/** The repository's `ci.yml`, and the launch selections of the VSCodium suite's parts. */
 function workflowParts(): {workflow: string; parts: string[]} {
   const workflow = readFileSync(
     path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
     'utf8',
   );
-  return {workflow, parts: partsOfWorkflow(workflow)};
+  const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
+  return {
+    workflow,
+    parts: partsOfTable(
+      launchesOf(REPOSITORY_ROOT),
+      table,
+      suiteFilesIn(REPOSITORY_ROOT),
+    ).map(part => part.launches),
+  };
 }
 
 function chosenLabels(
@@ -1622,6 +1659,9 @@ describe('acceptance', () => {
             'containers-context',
             'containers-env-host',
             'containers-env-ctx',
+            'containers-ssh-engine',
+            'containers-ssh-env-host',
+            'containers-ssh-noclient',
           ].map(containersOnly),
           ...['extensionpack', 'extensionpack-german'].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
@@ -3686,11 +3726,11 @@ describe('acceptance', () => {
       );
     });
 
-    it('coverage-11, tooling-34: the run waits for the helper of the launch before to end: the grace before the slow launch, the secrets and agent-notmp launches and each host-case launch, 5 s before a client-search launch', async () => {
+    it('coverage-11, tooling-34: the run waits for the helper of the launch before to end: the grace before the agent-off and slow launches, the secrets and agent-notmp launches and each host-case launch, 5 s before a client-search launch', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
       deepStrictEqual(
         harness.sleeps,
-        [3000, 5000, 3000, 3000, 3000, 3000, 3000],
+        [3000, 3000, 5000, 3000, 3000, 3000, 3000, 3000],
       );
     });
 
@@ -3762,7 +3802,7 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        Array.from({length: 16}, () => EXECUTABLE),
+        Array.from({length: 17}, () => EXECUTABLE),
       );
     });
 
@@ -3773,7 +3813,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        Array.from({length: 16}, () => true),
+        Array.from({length: 17}, () => true),
       );
     });
 
@@ -3793,6 +3833,7 @@ describe('acceptance', () => {
           ['x11-noxauth', 'dist-forwarding/**/*.test.cjs'],
           ['failure-refused', 'dist-failure/**/*.test.cjs'],
           ['terminal', 'dist-terminal/**/*.test.cjs'],
+          ['socket-prime', 'dist-socket-prime/**/*.test.cjs'],
           ['socket', 'dist-socket/**/*.test.cjs'],
           ['slow', 'dist-slow/**/*.test.cjs'],
           ['remote-ubuntu', 'dist-remote/**/*.test.cjs'],
@@ -4011,7 +4052,7 @@ describe('acceptance', () => {
 
     it('D-85: the slow launch loads the slow extension from the host, by its remote address', () => {
       deepStrictEqual(
-        configurations()[10]?.launchArgs.filter(argument =>
+        configurations()[11]?.launchArgs.filter(argument =>
           argument.startsWith('--extensionDevelopmentPath='),
         ),
         [
@@ -4053,24 +4094,9 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.env.REMOTE_OSS_ACCEPTANCE_LOG,
         ),
-        [
-          'local',
-          'remote',
-          'reconnect',
-          'agent',
-          'agent-off',
-          'x11',
-          'x11-noxauth',
-          'failure-refused',
-          'terminal',
-          'socket',
-          'slow',
-          'remote-ubuntu',
-          'client-unset',
-          'ports-probe',
-          'install-probe',
-          'platform-probe',
-        ].map(label => path.join('/run', `${label}-log.txt`)),
+        CONFIGURATION_LABELS.map(label =>
+          path.join('/run', `${label}-log.txt`),
+        ),
       );
     });
 
@@ -4079,24 +4105,9 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.env.REMOTE_OSS_ACCEPTANCE_WINDOWS,
         ),
-        [
-          'local',
-          'remote',
-          'reconnect',
-          'agent',
-          'agent-off',
-          'x11',
-          'x11-noxauth',
-          'failure-refused',
-          'terminal',
-          'socket',
-          'slow',
-          'remote-ubuntu',
-          'client-unset',
-          'ports-probe',
-          'install-probe',
-          'platform-probe',
-        ].map(label => path.join('/run', label, 'agent', 'pids')),
+        CONFIGURATION_LABELS.map(label =>
+          path.join('/run', label, 'agent', 'pids'),
+        ),
       );
     });
 
@@ -4107,7 +4118,7 @@ describe('acceptance', () => {
           .map(
             configuration => [configuration.extensionDevelopmentPath].flat()[0],
           ),
-        Array.from({length: 15}, () =>
+        Array.from({length: 16}, () =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );
@@ -4550,7 +4561,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('#1430: the scheduled split’s parts make every launch of `all` but the genuine group’s, and no launch in two parts', () => {
+    it('#1430, tooling-159: the parts make every launch of `all` but the genuine group’s', () => {
       const launches = launchesOf(REPOSITORY_ROOT);
       const {parts} = workflowParts();
       const made = parts.flatMap(part =>
@@ -4558,12 +4569,10 @@ describe('acceptance', () => {
       );
       const wanted = chosenLabels(launches, ['all', '!@genuine']);
       // a group also makes its named-only launches (containers-podman), which `all` leaves out
+      // a launch run as parts by its files is in each of them; acceptance-parts.test.ts checks each file once
       deepStrictEqual(
-        [
-          wanted.filter(label => !made.includes(label)),
-          made.length === new Set(made).size,
-        ],
-        [[], true],
+        wanted.filter(label => !made.includes(label)),
+        [],
       );
     });
 
@@ -4722,6 +4731,102 @@ describe('acceptance', () => {
       );
     });
 
+    it('tooling-168: socket makes its primer right before it, the default selection makes neither primer nor the primer alone, and !socket takes both out', () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      /** The labels a selection makes from the repository's table. */
+      function labels(selected: string[]): string[] {
+        return chosenLabels(launches, selected);
+      }
+      deepStrictEqual(
+        [
+          labels(['socket']),
+          labels(['socket-prime']),
+          labels(['terminal', 'socket']),
+          labels(['terminal', 'socket', '!socket']),
+          chosenLabels(launches, undefined).includes('socket-prime'),
+        ],
+        [
+          ['socket-prime', 'socket'],
+          ['socket-prime'],
+          ['terminal', 'socket-prime', 'socket'],
+          ['terminal'],
+          false,
+        ],
+      );
+    });
+
+    it('tooling-159: <label>:<file>+… makes the plain launch that runs those files with only them, in its own order', () => {
+      /** A suite run in two parts by its files, a suite run whole, and a runner launch. */
+      const table: Launch[] = [
+        {label: 'local', runner: 'runner', suite: 'suite-local'},
+        {
+          label: 'wide-a',
+          kind: 'plain',
+          suite: 'wide',
+          files: ['a.test.ts', 'b.test.ts'],
+          partOf: 'wide',
+        },
+        {
+          label: 'wide-b',
+          kind: 'plain',
+          suite: 'wide',
+          files: ['c.test.ts'],
+          partOf: 'wide',
+        },
+        {label: 'entire', kind: 'plain', suite: 'entire'},
+      ];
+      /** The label and files of each launch a selection makes, or its error text. */
+      function made(...selected: string[]): unknown {
+        const chosen = chosenLaunches(table, selected);
+        return typeof chosen === 'string'
+          ? chosen
+          : chosen.map(launch => [
+              launch.label,
+              launch.kind === 'plain' ? launch.files : undefined,
+            ]);
+      }
+      deepStrictEqual(
+        [
+          made('wide:c.test.ts+a.test.ts'),
+          made('wide-a:b.test.ts', 'wide-a:a.test.ts'),
+          made('entire:y.test.ts+x.test.ts', 'local'),
+          made('wide-a:a.test.ts', 'wide-a'),
+          made('wide-b:a.test.ts'),
+          made('local:one.test.ts'),
+          made('entire:../x.test.ts'),
+        ],
+        [
+          [
+            ['wide-a', ['a.test.ts']],
+            ['wide-b', ['c.test.ts']],
+          ],
+          [['wide-a', ['a.test.ts', 'b.test.ts']]],
+          [
+            ['local', undefined],
+            ['entire', ['x.test.ts', 'y.test.ts']],
+          ],
+          [['wide-a', ['a.test.ts', 'b.test.ts']]],
+          'unknown launch label(s): wide-b:a.test.ts; the known ones: local, wide-a, wide-b, entire; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+          'unknown launch label(s): local:one.test.ts; the known ones: local, wide-a, wide-b, entire; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+          'unknown launch label(s): entire:../x.test.ts; the known ones: local, wide-a, wide-b, entire; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+        ],
+      );
+    });
+
+    it("tooling-159: a part of the repository's containers launch is named by a file it lists", () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      const chosen = chosenLaunches(launches, ['containers:reuse.test.ts']);
+      deepStrictEqual(
+        typeof chosen === 'string'
+          ? chosen
+          : chosen.map(launch => [
+              launch.label,
+              launch.kind === 'plain' ? launch.files : undefined,
+            ]),
+        [['containers-b', ['reuse.test.ts']]],
+      );
+    });
+
     it('tooling-53: an unknown group fails like an unknown label, listing the groups', () => {
       deepStrictEqual(
         [
@@ -4791,6 +4896,7 @@ describe('acceptance', () => {
       workspace.write('tests/acceptance/suite-failure/window.test.ts', '');
       workspace.write('tests/acceptance/suite-terminal/window.test.ts', '');
       workspace.write('tests/acceptance/suite-socket/window.test.ts', '');
+      workspace.write('tests/acceptance/suite-socket-prime/window.test.ts', '');
       workspace.write('tests/acceptance/suite-slow/window.test.ts', '');
       workspace.write('tests/acceptance/suite-ports/window.test.ts', '');
       workspace.write('tests/acceptance/suite-platform/window.test.ts', '');
@@ -4895,6 +5001,7 @@ describe('acceptance', () => {
           'dist-reconnect',
           'dist-failure',
           'dist-terminal',
+          'dist-socket-prime',
           'dist-socket',
           'dist-slow',
           'dist-ports',
@@ -4902,7 +5009,19 @@ describe('acceptance', () => {
         ].map(folder =>
           existsSync(path.join(workspace.root, 'tests/acceptance', folder)),
         ),
-        [false, false, false, false, false, false, false, false, false, false],
+        [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+        ],
       );
     });
 
@@ -4942,6 +5061,7 @@ describe('acceptance', () => {
           'dist-reconnect',
           'dist-failure',
           'dist-terminal',
+          'dist-socket-prime',
           'dist-socket',
           'dist-slow',
           'dist-ports',
@@ -4956,7 +5076,7 @@ describe('acceptance', () => {
             ),
           ),
         ),
-        [true, true, true, true, true, true, true, true, true],
+        [true, true, true, true, true, true, true, true, true, true],
       );
     });
   });

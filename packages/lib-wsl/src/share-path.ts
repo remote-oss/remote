@@ -48,6 +48,13 @@ export function isWindowsMountShape(linuxPath: string): boolean {
   return MOUNT_PATTERN.test(linuxPath);
 }
 
+/** The Windows path of a Linux path under a drive's mount: `/mnt/c/a/b` is `c:\a\b`; none for any other path. */
+export function mountToWindows(linuxPath: string): string | undefined {
+  return isWindowsMountShape(linuxPath)
+    ? `${linuxPath.slice(5, 6)}:\\${linuxPath.slice(7).replaceAll('/', '\\')}`
+    : undefined;
+}
+
 /** The path in the output of `wslpath`, without its one line end; `unusable` when it is empty or has more lines. */
 export function parseWslpathOutput(text: string): WslpathResult {
   const path = text.replace(/\r?\n$/, '');

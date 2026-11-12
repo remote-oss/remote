@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# install-shellcheck: ShellCheck at the version pinned below, for `pnpm lint:shell`. GPL-3.0, used as a tool only.
+#
+#   tools/install-shellcheck    install it, or nothing when it is already there, and print its version
+#
+# The release archive is checked against its pinned sha256 before it is unpacked; the sums are the ones GitHub lists
+# for the release's assets. shellcheck goes into ~/.local/lib/shellcheck-<version> and is linked as
+# ~/.local/bin/shellcheck, which must come first on the PATH (CI adds it), so a copy the machine has of its own is not
+# the one that runs. No root is needed, on Linux x86_64 and aarch64, with curl, tar, gzip and sha256sum. A version
+# change here is the only way the pins move.
+set -euo pipefail
+
+SHELLCHECK_VERSION=0.11.0
+SHELLCHECK_SHA256_X86_64=b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6
+SHELLCHECK_SHA256_AARCH64=68a8133197a50beb8803f8d42f9908d1af1c5540d4bb05fdfca8c1fa47decefc
+
+case "$(uname -m)" in
+  x86_64) arch=x86_64 sha256=$SHELLCHECK_SHA256_X86_64 ;;
+  aarch64 | arm64) arch=aarch64 sha256=$SHELLCHECK_SHA256_AARCH64 ;;
+  *)
+    echo "install-shellcheck: no pinned ShellCheck for $(uname -m)" >&2
+    exit 1
+    ;;
+esac
+for program in curl tar gzip sha256sum; do
+  command -v "$program" >/dev/null || {
+    echo "install-shellcheck: $program is needed and not installed" >&2
+    exit 1
+  }
+done
+
+prefix="$HOME/.local/lib/shellcheck-$SHELLCHECK_VERSION"
+bin="$HOME/.local/bin"
+
+if [ ! -x "$prefix/shellcheck" ]; then
+  work=$(mktemp -d)
+  trap 'rm -rf "$work"' EXIT
+  url="https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION/shellcheck-v$SHELLCHECK_VERSION.linux.$arch.tar.gz"
+  # A refused or failed request (a 403 or 5xx from the release host) is tried again, five times in all.
+  curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 -o "$work/shellcheck.tar.gz" "$url" || {
+    echo "install-shellcheck: $url could not be downloaded" >&2
+    exit 1
+  }
+  echo "$sha256  $work/shellcheck.tar.gz" | sha256sum --check --quiet - || {
+    echo "install-shellcheck: $url does not match its pinned sha256" >&2
+    exit 1
+  }
+  # Unpacked beside its final place and moved there whole, so an interrupted run never leaves a partial copy.
+  rm -rf "$prefix.partial"
+  mkdir -p "$prefix.partial"
+  tar -xzf "$work/shellcheck.tar.gz" -C "$prefix.partial" --strip-components=1
+  chmod 755 "$prefix.partial/shellcheck"
+  mv "$prefix.partial" "$prefix"
+fi
+mkdir -p "$bin"
+ln -sfn "$prefix/shellcheck" "$bin/shellcheck"
+"$bin/shellcheck" --version | sed -n 's/^version: /shellcheck /p'

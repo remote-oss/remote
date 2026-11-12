@@ -26,6 +26,38 @@ process's stdin and stdout. The relay script (shipped as text, written into the 
 the server, owned by the remote user, mode 0644) connects to `127.0.0.1:<port>` and pipes both ways; it exits when either
 side ends. `{kind: 'socket'}` is refused in release 1.
 
+**The relay host (C16; brief-personalization §2, #2086):** `startRelayHost(dependencies, request)` in
+`relays/relay-host.ts`, called in the connect's phase E (§2 step 5) with the connect's kinds. With no kind it runs
+nothing and gives no variables. Otherwise it writes `relay-host.js` into the server's data folder through this channel
+(as the relay script is, mode 0644, under a name that follows its text) and runs `docker exec -i --user <remote user>
+<containerId> <node> <relay-host.js> <kind>=<socket path> …`, one socket per kind at `/tmp/remote-oss-<kind>-<random>.sock`,
+each created mode 0600. The connect waits for its `ready` frame, at most 10 s (R-79); one that ends, isn't ready in time
+or is cancelled first fails the start, which C10 logs, and the connect goes on with no relays. Its process lives as long
+as the window's connection, and a connect that fails after phase E ends it.
+
+- **Frames** (ours, R-27), on the exec's standard streams both ways: a type byte, a stream number (32-bit,
+  big-endian), a payload length (32-bit, big-endian), then the payload.
+
+  | Type | Byte | Stream | Payload |
+  |---|---|---|---|
+  | `open` | 1 | the new stream, from 1 | the kind's name, not empty |
+  | `data` | 2 | an open stream | the bytes, at most 64 KiB |
+  | `close` | 3 | an open stream | empty |
+  | `ready` | 4 | 0 | empty; sent once, when every socket listens |
+
+  Only the relay host opens streams: each connection accepted on a socket is a new number and an `open` of its socket's
+  kind. Either side may send `data` and `close`.
+- **The extension's checks** (the frames are untrusted): a payload over 64 KiB, an unknown type, a payload or stream
+  its type doesn't allow, an `open` of a kind this connection didn't set up, or an `open` of a stream number in use ends
+  the relay host, every stream closed, with one log line. An `open` beyond 64 open streams is closed at once, with one
+  log line. Backpressure holds both ways: a host end that wants no more pauses the exec's output until it drains.
+- **Host ends:** a stream's host end connects when its `open` arrives, bounded at 10 s, after which the stream closes;
+  the bytes before it connects wait, with the exec's output paused. Payloads are never logged; the log names kinds and
+  paths only (R-26).
+- **Kinds:** each personalization card adds its own, with its variable. The harness's `echo` (its host end writes back
+  what it reads, variable `REMOTE_OSS_RELAY_ECHO_SOCK`) exists only while `REMOTE_OSS_ACCEPTANCE=1` and
+  `REMOTE_OSS_ACCEPTANCE_RELAY_ECHO=1`.
+
 ## 2. C10 container connector (a lib-authority `Connector`)
 
 `containerConnectorOf(dependencies): Connector` for the `dev-container` family only.
@@ -92,7 +124,7 @@ environment setting is taken. A host wins over a context, and a context brings i
 joins only when nothing else picks the engine. C3, C11, C15 and the shutdown helper spawn with the coordinate and never
 read the settings; a connected window's engine comes from its payload. C2 raises an engine-change event, with no payload, when the effective engine of a local window changes: the current context or its endpoint, when no setting or variable names the engine; C15 is its only listener.
 
-**The shutdown protocol's Compose member (F-0417; containers-144, #1912).** A window tells the shutdown helper about its connection with `register` (the folder, the configuration file and the engine coordinates), then `container` (the container and what its end owes it). A Compose configuration adds a third message, `compose`: `{connectionId, project, service, scope}`, the project name and scope that C7's resolve computed. C7 sends it before `up`, so a window still starting its services already counts. An image configuration sends no `compose`. When a Compose connection ends the helper waits 10 s and runs `docker ps` filtered by `com.docker.compose.project=<project>` with the service label in the format, then `docker kill` for each running container of the connection's scope that no other live connection uses (a connection uses a container when it is connected to it, or when it is a live connection of the same project and engine whose scope names the service; an action of `none` still counts). When another live connection is connected to the closing connection's primary service's container (an attach window, or a window on the same primary service), the close kills nothing of its scope and counts its running services as skipped (athena's ruling reading-1912-primary-in-use, amending brief-compose §6.2). A live connection for the same folder and configuration on the same engine counts as holding the project even before it has said which one, so a reloading window is not stopped under. At the last close of the project it also kills the running containers of the services that earlier closes of the project left running. It calls Compose never and creates nothing; a failure is one log line and is not retried.
+**The shutdown protocol's Compose member (F-0417; containers-144, #1912).** A window tells the shutdown helper about its connection with `register` (the folder, the configuration file and the engine coordinates), then `container` (the container and what its end owes it). An attached window registers with the container's name as its identity (`{containerName}`) and `owning: false`: it counts as a live user of its container in another connection's check, and its own end stops nothing (containers-163, #2030). A Compose configuration adds a third message, `compose`: `{connectionId, project, service, scope}`, the project name and scope that C7's resolve computed. C7 sends it before `up`, so a window still starting its services already counts. An image configuration sends no `compose`. When a Compose connection ends the helper waits 10 s and runs `docker ps` filtered by `com.docker.compose.project=<project>` with the service label in the format, then `docker kill` for each running container of the connection's scope that no other live connection uses (a connection uses a container when it is connected to it, or when it is a live connection of the same project and engine whose scope names the service; an action of `none` still counts). When another live connection is connected to the closing connection's primary service's container (an attach window, or a window on the same primary service), the close kills nothing of its scope and counts its running services as skipped (athena's ruling reading-1912-primary-in-use, amending brief-compose §6.2). A live connection for the same folder and configuration on the same engine counts as holding the project even before it has said which one, so a reloading window is not stopped under. At the last close of the project it also kills the running containers of the services that earlier closes of the project left running. It calls Compose never and creates nothing; a failure is one log line and is not retried.
 
 ## 3. The `dev-container` payload (F-0501 BR-2a)
 
@@ -100,7 +132,8 @@ lib-authority's `containerCodec('dev-container', …)` carries the payload as an
 its content:
 - **The text:** lowercase hex of the UTF-8 JSON `{"hostPath": <folder>, "localDocker": false, "configFile": {"$mid": 1,
   "fsPath", "external", "path", "scheme"}}`, with `"settings": {"context": <name>}` when a non-default Docker context
-  is current. Field order and spelling are F-0501's. The same member also holds `"host"`, `"certPath"` and
+  is current. Field order and spelling are F-0501's. A payload without `localDocker` reads as `false`: that's the form
+  `devcontainer open --config` writes (F-1201 BR-17). The same member also holds `"host"`, `"certPath"` and
   `"tlsVerify"` (in that order, after `"context"`) when the effective engine of §2 names a host: the window is pinned
   to the engine it was opened on, and a reload, a rebuild and the window's title use it whatever the settings say then
   (F-0205 BR-19; containers-133, #1811).

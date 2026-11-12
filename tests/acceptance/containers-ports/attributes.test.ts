@@ -45,7 +45,13 @@ describe('the port attributes of the configuration (card containers-73)', functi
         [String(port)]: {label: 'Application', onAutoForward: 'notify'},
       },
     });
-    const before = await portColumn(window, 1);
+    await showPorts(window);
+    // The view lists the port before it has applied the label, so the row is read once it carries it.
+    const before = portsOf(
+      await rowsWhen(window, shown =>
+        portsOf(shown).includes(`Application (${String(port)})`),
+      ),
+    ).sort();
     const [containerId = ''] = await devContainersOf(folderOf('c73-ac2'));
     const stop = await listenIn(containerId, port);
     try {

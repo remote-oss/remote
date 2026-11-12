@@ -153,27 +153,7 @@ function labelsFromExplorer(): string[] {
     'trust-terminal',
     'web-ui',
     'web-ui-trust',
-    'containers-a',
-    'containers-b',
-    'containers-standdown',
-    'containers-no-proposals',
-    'containers-trust',
-    'containers-nodocker',
-    'containers-volume',
-    'containers-config',
-    'containers-explorer',
-    'containers-ports',
-    'containers-features',
-    'containers-shutdown',
-    'containers-index-broken',
-    'containers-index-down',
-    'containers-killed-23',
-    'containers-killed-35',
-    'containers-killed-43',
-    'containers-podman',
-    'containers-context',
-    'containers-env-host',
-    'containers-env-ctx',
+    ...CONTAINERS_LAUNCHES,
     'extensionpack',
     'extensionpack-german',
     'extensionpack-partial',
@@ -189,6 +169,34 @@ function labelsFromExplorer(): string[] {
     'containers-view',
   ];
 }
+
+/** The containers launches from containers-a on, in the run's order. */
+const CONTAINERS_LAUNCHES = [
+  'containers-a',
+  'containers-b',
+  'containers-standdown',
+  'containers-no-proposals',
+  'containers-trust',
+  'containers-nodocker',
+  'containers-volume',
+  'containers-config',
+  'containers-explorer',
+  'containers-ports',
+  'containers-features',
+  'containers-shutdown',
+  'containers-index-broken',
+  'containers-index-down',
+  'containers-killed-23',
+  'containers-killed-35',
+  'containers-killed-43',
+  'containers-podman',
+  'containers-context',
+  'containers-env-host',
+  'containers-env-ctx',
+  'containers-ssh-engine',
+  'containers-ssh-env-host',
+  'containers-ssh-noclient',
+];
 
 describe('the launches of the VSCodium run', () => {
   it('tooling-53: every launch has one group from the table, and every group has a launch', () => {
@@ -297,6 +305,7 @@ describe('the launches of the VSCodium run', () => {
           failure => `failure-${failure.label ?? failure.alias}`,
         ),
         'terminal',
+        'socket-prime',
         'socket',
         'slow',
         'remote-ubuntu',
@@ -557,6 +566,16 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
+        ...[
+          'containers-ssh-engine',
+          'containers-ssh-env-host',
+          'containers-ssh-noclient',
+        ].map(label => [
+          label,
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ]),
         ...['extensionpack', 'extensionpack-german'].map(label => [
           label,
           [
@@ -752,6 +771,11 @@ describe('the launches of the VSCodium run', () => {
           undefined,
           undefined,
         ],
+        ...[
+          'containers-ssh-engine',
+          'containers-ssh-env-host',
+          'containers-ssh-noclient',
+        ].map(label => [label, label, shared, undefined, undefined]),
         ['containers-view', 'containers-view', shared, undefined, undefined],
       ],
     );
@@ -826,27 +850,7 @@ describe('the launches of the VSCodium run', () => {
       launches.filter(needsDevContainerImage).map(launch => launch.label),
       [
         'ssh-containers',
-        'containers-a',
-        'containers-b',
-        'containers-standdown',
-        'containers-no-proposals',
-        'containers-trust',
-        'containers-nodocker',
-        'containers-volume',
-        'containers-config',
-        'containers-explorer',
-        'containers-ports',
-        'containers-features',
-        'containers-shutdown',
-        'containers-index-broken',
-        'containers-index-down',
-        'containers-killed-23',
-        'containers-killed-35',
-        'containers-killed-43',
-        'containers-podman',
-        'containers-context',
-        'containers-env-host',
-        'containers-env-ctx',
+        ...CONTAINERS_LAUNCHES,
         'extensionpack',
         'extensionpack-german',
         'extensionpack-lp-de',
@@ -1014,7 +1018,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-51, connect-84, containers-101: the containers-podman launch, cli-path and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
+  it('tooling-51, connect-84, containers-101, tooling-168: socket-prime (a part of socket), the containers-podman launch, cli-path and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
     deepStrictEqual(
       launches
         .filter(
@@ -1024,6 +1028,7 @@ describe('the launches of the VSCodium run', () => {
         )
         .map(launch => launch.label),
       [
+        'socket-prime',
         'cli-path',
         'containers-podman',
         'genuine',
@@ -1212,6 +1217,27 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
+  it('tooling-168: of the forwarding launches only agent-off has a host setup: it ends the servers of the account, waits until none is left, and removes the agent links', () => {
+    deepStrictEqual(
+      ['agent', 'agent-off', 'x11', 'x11-noxauth'].map(label => {
+        const launch = launchLabelled(launches, label);
+        return launch.kind === undefined ? launch.hostSetup : 'not a runner';
+      }),
+      [
+        undefined,
+        [
+          {
+            command:
+              "pkill -f '/home/harness/[.]vscodium-server-insiders/bin/'; for i in $(seq 1 20); do pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; sleep 0.5; done; exit 1",
+          },
+          {command: 'rm -f /tmp/vscode-ssh-auth-sock-*'},
+        ],
+        undefined,
+        undefined,
+      ],
+    );
+  });
+
   it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, login-shells, agent-notmp, default-ports, the explorer, trust and containers launches and every ports case', () => {
     deepStrictEqual(
       launches
@@ -1224,6 +1250,7 @@ describe('the launches of the VSCodium run', () => {
         'failure-port-range-busy',
         'failure-i686',
         'terminal',
+        'socket-prime',
         'socket',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
@@ -1906,7 +1933,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-72, containers-70, containers-80, tooling-92: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, containers-features also trusts the run’s download host certificate, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context and containers-trust give the Docker configuration of their own, containers-config sets a host variable and an empty one for the references of coverage-112, containers-nodocker also a PATH with no docker, and no other containers launch sets an environment', () => {
+  it('containers-72, containers-70, containers-80, tooling-92: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, containers-features also trusts the run’s download host certificate, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context and containers-trust give the Docker configuration of their own, containers-config sets a host variable and an empty one for the references of coverage-112 and turns the harness’s echo relay on, containers-nodocker also a PATH with no docker, containers-ssh-engine also the run’s ssh first on its PATH, containers-ssh-env-host that and the SSH host’s address as DOCKER_HOST, and containers-ssh-noclient a PATH of docker alone, and no other containers launch sets an environment', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -1926,7 +1953,14 @@ describe('the platform cases (card coverage-12)', () => {
             PATH: '<run>/nodocker-bin',
           },
         ],
-        ['containers-config', {C112_SET: 'from-host', C112_EMPTY: ''}],
+        [
+          'containers-config',
+          {
+            C112_SET: 'from-host',
+            C112_EMPTY: '',
+            REMOTE_OSS_ACCEPTANCE_RELAY_ECHO: '1',
+          },
+        ],
         ['containers-ports', {PATH: '<run>/xdg-bin:<path>'}],
         [
           'containers-features',
@@ -1968,6 +2002,28 @@ describe('the platform cases (card coverage-12)', () => {
           {
             DOCKER_CONFIG: '<run>/docker-config',
             DOCKER_CONTEXT: 'c133-env-dead',
+          },
+        ],
+        [
+          'containers-ssh-engine',
+          {
+            DOCKER_CONFIG: '<run>/docker-config',
+            PATH: '<run>/ssh-engine-bin:<path>',
+          },
+        ],
+        [
+          'containers-ssh-env-host',
+          {
+            DOCKER_CONFIG: '<run>/docker-config',
+            DOCKER_HOST: 'ssh://engine@127.0.0.1:23722',
+            PATH: '<run>/ssh-engine-bin:<path>',
+          },
+        ],
+        [
+          'containers-ssh-noclient',
+          {
+            DOCKER_CONFIG: '<run>/docker-config',
+            PATH: '<run>/docker-only-bin',
           },
         ],
       ],
