@@ -541,11 +541,18 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
     };
     await typeInTerminal(name, `${hostPassword()}\n`);
     await untilKillTab(name, false);
-    deepStrictEqual(
-      {shown, left: await tabNames(name)},
-      {shown: {panel: true, focused: true}, left: ['install']},
-      `the terminals of ${name}: ${JSON.stringify(await terminalNames(name))}`,
-    );
+    const found = {shown, left: await tabNames(name)};
+    try {
+      deepStrictEqual(found, {
+        shown: {panel: true, focused: true},
+        left: ['install'],
+      });
+    } catch (caught) {
+      throw new Error(
+        `${String(caught)}; the terminals of ${name}: ${JSON.stringify(await terminalNames(name))}`,
+        {cause: caught},
+      );
+    }
     await closeAfterKill(name);
   });
 
