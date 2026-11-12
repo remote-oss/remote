@@ -215,10 +215,12 @@
     },
     "containers-volume": {
       "clone.test.ts": 1.9,
-      "explore-volume.test.ts": 49.3,
       "recovery.test.ts": 18.4,
       "uri-handler.test.ts": 5.2,
       "volume.test.ts": 2.9
+    },
+    "containers-volume-trust": {
+      "explore-volume.test.ts": 3.0
     },
     "default-ports": {
       "forward-entries.test.ts": 3,
