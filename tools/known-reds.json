@@ -298,15 +298,6 @@
   },
   {
     "launch": "preconnect",
-    "file": "preconnect/failures.test.ts",
-    "title": "F-2108 AC-23 (retry-remembered): after Don't Ask Again on a failing script, Retry runs it with no dialog",
-    "card": 2435,
-    "owner": "iris",
-    "evidence": 42218054216,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "preconnect",
     "file": "preconnect/other.test.ts",
     "title": "F-2108 AC-35 (deleted): a confirmed script that was deleted fails with the read's detail and no dialog, and its entry stays",
     "card": 2232,
