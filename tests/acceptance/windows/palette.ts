@@ -15,7 +15,9 @@ const SETTLE_MILLISECONDS = 600;
 async function sampleQuickInput(sent: number, trail: string[]): Promise<void> {
   for (let reads = 0; reads < 12; reads += 1) {
     await new Promise(resolve => setTimeout(resolve, 250));
-    const facts = await pageFocusFacts();
+    const facts = await pageFocusFacts().catch((caught: unknown) => [
+      String(caught),
+    ]);
     trail.push(`@${String(Date.now() - sent)} ${facts.join(' | ')}`);
   }
 }
