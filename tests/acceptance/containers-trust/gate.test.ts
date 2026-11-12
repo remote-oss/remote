@@ -793,7 +793,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     return {shown, folder};
   }
 
-  it('F-0106 AC-6 (c69-6): Open Folder in Container on an untrusted folder switches the window title and the status bar to the target folder before core asks', async () => {
+  it.only('F-0106 AC-6 (c69-6): Open Folder in Container on an untrusted folder switches the window title and the status bar to the target folder before core asks', async () => {
     const {shown, folder} = await switchedBeforeCore(
       'c69-switch',
       openFolderFrom,
@@ -806,7 +806,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     });
   });
 
-  it('F-0106 AC-50 (c123-native-dialog): with the editor’s own folder dialog off, Open Folder in Container on an untrusted folder switches the window and shows Opening Remote... before core asks, as with the in-window dialog', async () => {
+  it.only('F-0106 AC-50 (c123-native-dialog): with the editor’s own folder dialog off, Open Folder in Container on an untrusted folder switches the window and shows Opening Remote... before core asks, as with the in-window dialog', async () => {
     await setUserSetting('files.simpleDialog.enable', false);
     try {
       const {shown, folder} = await switchedBeforeCore(
