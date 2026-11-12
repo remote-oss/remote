@@ -118,7 +118,7 @@ describe('the code command opens host files in the window (card coverage-80)', f
     const facts = await onHost(
       'sh',
       '-c',
-      `bash --version | head -1; getent passwd harness | cut -d: -f7; echo "TERM=$TERM"; printf 'exit\\n' | script -qefc 'bash --norc -i' /dev/null 2>/dev/null | od -An -c | tr -d ' \\n' | grep -c '033\\[6n' || true`,
+      `ls -l /bin/sh; command -v script || echo noscript; busybox 2>&1 | head -1; for shell in "sh -i" "ash -i" "bash --norc -i"; do printf "%s: " "$shell"; printf 'exit\\n' | script -qefc "$shell" /dev/null 2>&1 | od -An -c | tr -d ' \\n' | grep -o '033\\[6n' | head -1 | sed 's/^$/none/' ; echo; done`,
     );
     throw new Error(`HOST FACTS: ${JSON.stringify(facts)}`);
   });
