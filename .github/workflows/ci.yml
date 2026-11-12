@@ -100,7 +100,6 @@ jobs:
     timeout-minutes: 5
     outputs:
       docs-only: ${{ steps.diff.outputs.docs-only }}
-      containers-cli: ${{ steps.diff.outputs.containers-cli }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -114,13 +113,6 @@ jobs:
             echo docs-only=true >> "$GITHUB_OUTPUT"
           else
             echo docs-only=false >> "$GITHUB_OUTPUT"
-          fi
-          # the containers-cli suite, its sources under test and the CLI's version
-          if printf '%s\n' "$files" | grep -qE \
-            '^(tests/acceptance/containers-cli/|packages/remote-containers/src/(cli|cli-bin)/|packages/remote-containers/package\.json$)'; then
-            echo containers-cli=true >> "$GITHUB_OUTPUT"
-          else
-            echo containers-cli=false >> "$GITHUB_OUTPUT"
           fi
 
   # After a merge to main: the parts of the VSCodium job that the merged change can reach (acceptance-select over the
@@ -394,8 +386,9 @@ jobs:
         run: pnpm acceptance:clean
 
   # The dev container CLI the package ships, its bridge and its launcher, against the runner's own Docker: the suite in
-  # tests/acceptance/containers-cli (no editor). A pull request runs it when its diff reaches that suite, the CLI code
-  # it drives or the package's CLI version; a dispatch that runs checks, and the tag of a release, always do.
+  # tests/acceptance/containers-cli (no editor). It runs when acceptance (server lifecycle) does: every pull request from
+  # this repository that is not a draft and not docs only, a dispatch that runs checks, and the tag of a release. A
+  # list of the paths that reach the suite would miss what its sources import (athena on #2333).
   acceptance-containers-cli:
     name: acceptance (containers-cli)
     needs: changes
@@ -403,7 +396,7 @@ jobs:
       !cancelled() && !inputs.launches-only && needs.changes.result != 'failure' && github.event_name != 'schedule' &&
       !(github.event_name == 'push' && github.ref_type == 'branch') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
-      needs.changes.outputs.containers-cli == 'true'))
+      needs.changes.outputs.docs-only != 'true'))
     runs-on: ubuntu-24.04
     timeout-minutes: 15 # the suite takes seconds once built; a fresh runner also builds and pulls one image
     steps:
