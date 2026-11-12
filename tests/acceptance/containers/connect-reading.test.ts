@@ -212,6 +212,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
       await reopenInContainer(name);
       const surfaces = (await sampler.stop()).flat();
       const lines = containersLogSince(mark);
+      console.log(`c68-pull log: ${JSON.stringify(lines)}`);
       const step = lines.indexOf('Starting container');
       const started = lines.indexOf('Container started');
       const pull = lines.findIndex(line =>
