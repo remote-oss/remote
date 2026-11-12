@@ -402,12 +402,34 @@ async function evaluateAt<Value>(
   }
 }
 
-/** Evaluates `expression` in window `name`'s page and returns its value; a thrown error fails with its text. */
+/**
+ * Evaluates `expression` in window `name`'s page and returns its value; a thrown error fails with its text. A read that
+ * a reload of the window meets (Retry at a connection dialog reloads it) ends with the protocol's "Inspected target
+ * navigated or closed", since the page it asked is gone: it asks the page that replaces it, for as long as a wait lasts.
+ */
 async function evaluate<Value>(
   name: string,
   expression: string,
 ): Promise<Value> {
-  return evaluateAt(await pageOf(name), `window ${name}`, expression);
+  const deadline = Date.now() + WAIT_MILLISECONDS;
+  for (;;) {
+    try {
+      return await evaluateAt<Value>(
+        await pageOf(name),
+        `window ${name}`,
+        expression,
+      );
+    } catch (caught) {
+      if (
+        !(caught instanceof Error) ||
+        !caught.message.includes('Inspected target navigated or closed') ||
+        Date.now() > deadline
+      ) {
+        throw caught;
+      }
+      await new Promise(resolve => setTimeout(resolve, POLL_MILLISECONDS));
+    }
+  }
 }
 
 /** How many terminals' text areas window `name`'s page holds and the titles of its terminal tabs. */
@@ -2379,6 +2401,54 @@ export async function centreNotifications(
 })()`,
       )) ?? undefined,
   );
+}
+
+/** Whether a notice is the editor's own startup progress: it shows while a window starts, later on a slower machine, and is the notice of no extension. */
+function isActivationProgress(text: string): boolean {
+  return text.startsWith('Activating Extensions');
+}
+
+/**
+ * The notifications of window `name` in the notification centre once the editor's own progress, "Activating
+ * Extensions...", is gone, for a row that asserts that no notice shows. Fails naming the progress and listing the notices
+ * still shown. A read that expects a notice keeps `notificationCentre`.
+ */
+export async function noticesOnceSettled(
+  name: string,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<string[]> {
+  let shown: string[] = [];
+  await settled(
+    () =>
+      `the editor’s activation progress in window ${name} to be gone (notices shown: ${JSON.stringify(shown)})`,
+    async () => {
+      shown = await notificationCentre(name);
+      return shown.some(isActivationProgress) ? undefined : true;
+    },
+    milliseconds,
+  );
+  return shown;
+}
+
+/**
+ * The toasts of window `name` once the editor's own progress has gone, for a row that asserts that no toast shows. It
+ * reads the toasts only: reading the notification centre opens it, which hides the toasts the row reads next.
+ */
+export async function toastsOnceSettled(
+  name: string,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<string[]> {
+  let shown: string[] = [];
+  await settled(
+    () =>
+      `the editor’s activation progress in window ${name} to be gone (toasts shown: ${JSON.stringify(shown)})`,
+    async () => {
+      shown = await notifications(name);
+      return shown.some(isActivationProgress) ? undefined : true;
+    },
+    milliseconds,
+  );
+  return shown;
 }
 
 /** The text of each notification of window `name`, newest first, read in the notification centre. */

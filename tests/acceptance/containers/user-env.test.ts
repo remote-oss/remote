@@ -20,6 +20,7 @@ import {
   dialogOf,
   notifications,
   terminalText,
+  toastsOnceSettled,
   typeInTerminal,
 } from '../windows/renderer.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
@@ -661,7 +662,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       const name = await reopened(folder);
       const atConnect = {
         dialog: await dialogOf(name),
-        notices: await notifications(name),
+        notices: await toastsOnceSettled(name),
       };
       await inWindow(name, 'workbench.action.terminal.new');
       await waitFor(

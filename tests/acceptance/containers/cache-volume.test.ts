@@ -43,6 +43,7 @@ import {
   notifications,
   problemsOf,
   statusBarText,
+  toastsOnceSettled,
   waitForDialog,
   windowTitle,
 } from '../windows/renderer.ts';
@@ -1143,7 +1144,7 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
         {
           installed: await installedExtension(containerId, OFFLINE_EXTENSION),
           fewSeconds: seconds <= 10,
-          notices: (await notifications(name)).filter(text =>
+          notices: (await toastsOnceSettled(name)).filter(text =>
             text.toLowerCase().includes('extension'),
           ),
           dialog: await dialogOf(name),

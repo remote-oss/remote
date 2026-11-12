@@ -19,9 +19,9 @@ import {
 } from '../windows/harness.ts';
 import {
   dialogOf,
-  notificationCentre,
-  portRowActions,
+  noticesOnceSettled,
   portRowAction,
+  portRowActions,
   portsColumns,
   portsRows,
 } from '../windows/renderer.ts';
@@ -72,7 +72,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
           greeting: await greetingOf(local),
           held: await greetingOf(18641),
           dialog: await dialogOf('c83-a4'),
-          notices: await notificationCentre('c83-a4'),
+          notices: await noticesOnceSettled('c83-a4'),
         },
         {
           higher: true,
@@ -102,7 +102,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
           high: local >= 1024,
           greeting: await greetingOf(local),
           dialog: await dialogOf('c83-a5'),
-          notices: await notificationCentre('c83-a5'),
+          notices: await noticesOnceSettled('c83-a5'),
         },
         {high: true, greeting: 'c83-8642', dialog: undefined, notices: []},
       );
@@ -233,7 +233,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
             entry.port.includes('8646'),
           ),
           dialog: await dialogOf('c83-a16'),
-          notices: await notificationCentre('c83-a16'),
+          notices: await noticesOnceSettled('c83-a16'),
         },
         {used: undefined, listed: true, dialog: undefined, notices: []},
       );
@@ -372,7 +372,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
           visibilityItem: actions.menu.includes('Change Port Visibility'),
           visibilityColumn: columns.some(title => /visib/i.test(title)),
           dialog: await dialogOf('c83-a19'),
-          notices: await notificationCentre('c83-a19'),
+          notices: await noticesOnceSettled('c83-a19'),
         },
         {
           visibilityItem: false,
@@ -445,7 +445,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
             programs.every(name => name.includes('node')),
           ],
           dialog: await dialogOf('c83-a17'),
-          notices: await notificationCentre('c83-a17'),
+          notices: await noticesOnceSettled('c83-a17'),
         },
         {
           greeting: 'c83-8655',

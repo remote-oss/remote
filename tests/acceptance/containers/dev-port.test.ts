@@ -13,7 +13,7 @@ import {
 } from '../windows/harness.ts';
 import {
   dialogOf,
-  notificationCentre,
+  noticesOnceSettled,
   problemsOf,
   statusItem,
   waitForDialog,
@@ -143,7 +143,7 @@ describe('the server listens on the configuration’s devPort (card containers-1
           hostListens: await hostListens(port),
           published: await publishedPorts(containerId),
           dialog: await dialogOf(name),
-          notices: await notificationCentre(name),
+          notices: await noticesOnceSettled(name),
           problems: messages.sort(),
         },
         {
@@ -191,8 +191,8 @@ describe('the server listens on the configuration’s devPort (card containers-1
           ),
           dialogs: [await dialogOf(first.name), await dialogOf(second.name)],
           notices: [
-            await notificationCentre(first.name),
-            await notificationCentre(second.name),
+            await noticesOnceSettled(first.name),
+            await noticesOnceSettled(second.name),
           ],
         },
         {
