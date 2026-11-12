@@ -236,9 +236,12 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
       const serverBefore = await serverProcessIds();
       await reloadWindow('c125-reload');
       await connectedWithin('c125-reload', 60_000);
+      // A revived terminal is listed before it is named, so the wait is for the names, not the count.
       await waitFor(
-        'the terminals to be revived',
-        async () => (await terminalNames('c125-reload')).length === 2,
+        'the terminals to be revived under their names',
+        async () =>
+          JSON.stringify(await terminalNames('c125-reload')) ===
+          JSON.stringify(before),
         60_000,
       );
       deepStrictEqual(
