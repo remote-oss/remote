@@ -434,7 +434,7 @@ describe('host and user name validation (card coverage-120)', function () {
   });
 
   it.only('F-2205 AC-23 (c120-log): the log names the authority and the check, and nothing is stored for the host', async () => {
-    const name = await reject('-oProxyCommand=x');
+    const name = await reject('-hx');
     try {
       const logLines = connectionLog();
       deepStrictEqual(
