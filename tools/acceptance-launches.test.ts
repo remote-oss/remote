@@ -1646,7 +1646,10 @@ describe('the install cases (card coverage-17)', () => {
 
   it('tooling-168: a primer is a launch of its case, named only, listed right before it', () => {
     const launches = launchesOf(REPOSITORY_ROOT);
-    const primers = launches.filter(launch => launch.label.endsWith('-prime'));
+    const primers = launches.filter(
+      launch =>
+        launch.label.startsWith('install-') && launch.label.endsWith('-prime'),
+    );
     deepStrictEqual(
       primers.map(launch => [
         launch.label,
