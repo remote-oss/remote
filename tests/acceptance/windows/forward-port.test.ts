@@ -69,6 +69,18 @@ describe('a port forwarded in a connected window (card connect-34)', function ()
     );
   });
 
+  it('DIAG repeats: the answer of 60 connections through the forward', async () => {
+    const seen: Record<string, number> = {};
+    for (let round = 0; round < 60; round++) {
+      const held = await holdOpen(localPortOf('f1'), REQUEST);
+      held.release();
+      seen[held.greeting] = (seen[held.greeting] ?? 0) + 1;
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    process.stderr.write(`DIAG answers ${JSON.stringify(seen)}\n`);
+    deepStrictEqual(seen, {[GREETING]: 60});
+  });
+
   it('F-2507 AC-18 (host-side): the connection to the port is opened by the VS Code Server, not by sshd', async () => {
     const held = await holdOpen(localPortOf('f1'), REQUEST);
     const programs = await connectingPrograms(REMOTE_PORT);
