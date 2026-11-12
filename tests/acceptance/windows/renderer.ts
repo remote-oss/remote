@@ -31,6 +31,8 @@ interface DebugTarget {
   id: string;
   type: string;
   title: string;
+  /** The page's address: a window's workbench page, whose path and query tell the window apart. */
+  url?: string;
   webSocketDebuggerUrl?: string;
 }
 
@@ -299,11 +301,20 @@ export async function pageOf(
   milliseconds = WAIT_MILLISECONDS,
 ): Promise<string> {
   let titles: string[] = [];
+  let seen: DebugTarget[] = [];
   const started = Date.now();
   return settled(
-    () => `one page of window ${name} among ${JSON.stringify(titles)}`,
+    () =>
+      `one page of window ${name} among ${JSON.stringify(titles)} (the pages: ${JSON.stringify(
+        seen.map(page => ({
+          id: page.id,
+          title: page.title,
+          url: page.url?.slice(-60),
+        })),
+      )}; the page each window remembers: ${JSON.stringify(Object.fromEntries(REMEMBERED_PAGES))})`,
     async () => {
       const found = await pages();
+      seen = found;
       titles = found.map(page => page.title);
       const named = pageTitleByName(name, titles);
       if (named !== undefined) {
