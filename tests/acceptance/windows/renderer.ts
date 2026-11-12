@@ -780,8 +780,45 @@ export async function rowAction(
 }
 
 /**
- * The titles of the inline actions of the one row labelled `rowLabel` in view `viewName` of window `name`, in the order
- * shown. It waits for the row to be drawn, so a row that is not drawn yet, or is mid-render, is found.
+ * The tooltip the editor draws for the row `rowLabel` of view `viewName` of window `name`, read while the mouse rests
+ * on the row; the mouse is moved away again. It waits for the row to be drawn, so a row that is not drawn yet, or is
+ * mid-render, is found; it fails naming the row when it never is.
+ */
+export async function rowTooltip(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+): Promise<string> {
+  await hoverRow(name, viewName, rowLabel);
+  const point = await settled(
+    () =>
+      `the row ${JSON.stringify(rowLabel)} of ${viewName} in window ${name}`,
+    () => rowPoint(name, viewName, rowLabel).then(point => point ?? undefined),
+  );
+  await dispatchInput(await pageOf(name), name, [
+    {
+      method: 'Input.dispatchMouseEvent',
+      params: {type: 'mouseMoved', ...point},
+    },
+  ]);
+  const deadline = Date.now() + 4_000;
+  let text = '';
+  while (text === '' && Date.now() < deadline) {
+    text = await evaluate<string>(
+      name,
+      "document.querySelector('.monaco-hover .monaco-hover-content')?.textContent ?? ''",
+    );
+    if (text === '') {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  }
+  await hoverRow(name, viewName, undefined);
+  return text;
+}
+
+/**
+ * The titles of the inline actions of the one row labelled `rowLabel` in view `viewName` of window `name`, in the
+ * order shown. It waits for the row to be drawn, so a row that is not drawn yet, or is mid-render, is found.
  */
 export async function rowActionTitles(
   name: string,
