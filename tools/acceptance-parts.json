@@ -76,6 +76,7 @@
       "extensions.test.ts": 2.6,
       "gate.test.ts": 3,
       "glibc-server.test.ts": 0.3,
+      "help.test.ts": 3,
       "image-build.test.ts": 3.3,
       "initialize-input.test.ts": 3.5,
       "launch.test.ts": 0,
