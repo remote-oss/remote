@@ -75,6 +75,10 @@
   "commands.attachToRunningContainer.title": "Attach to Running Container...",
   "commands.attachToK8sContainer.title": "Attach to Running Kubernetes Container...",
   "commands.attachToK8sContainerFromViewlet.title": "Attach Visual Studio Code",
+  "commands.getHelp.title": "Help",
+  "commands.getStarted.title": "Get Started with Dev Containers",
+  "commands.reportIssue.title": "Report Issue...",
+  "commands.provideFeedback.title": "Provide Feedback",
   "commands.openRepositoryFromRemoteHubWithEditSession.title": "Clone Repository in a Container Volume",
   "commands.openRepositoryFromGitWithEditSession.title": "Clone Repository in a Container Volume",
   "continueEditSession.qualifiedName": "Continue Working in Container Volume"

@@ -165,7 +165,9 @@ import {configurationAdded} from './volumes/volume-configuration.ts';
 import {containerCliHost} from './cli/container-cli-host.ts';
 import {harnessRelayKindsOf} from './relays/echo-relay.ts';
 import {startRelayHost} from './relays/relay-host.ts';
+import {failureText} from './surfaces/failure-strings.ts';
 import {ownText} from './surfaces/own-strings.ts';
+import {helpHandlers, ISSUE_REPORTER_COMMAND} from './help/help-commands.ts';
 import {cloneText} from './volumes/clone-strings.ts';
 import {linkRequestOf} from './volumes/clone-link.ts';
 import type {ClonePromptSurface} from './volumes/git-prompts.ts';
@@ -2204,6 +2206,17 @@ export async function activate(
               cancellation: new AbortController().signal,
             }),
         },
+        ...helpHandlers(
+          {
+            openExternal: address =>
+              vscode.env.openExternal(vscode.Uri.parse(address)),
+            openIssueReporter: report =>
+              vscode.commands.executeCommand(ISSUE_REPORTER_COMMAND, report),
+          },
+          context.extension.id,
+          failureText('S188', [], translate),
+          served.logger,
+        ),
         attachToK8sContainer: {execute: () => kubernetes.fromPalette()},
         attachToK8sContainerFromViewlet: {
           execute: (argument?: unknown) => kubernetes.fromViewlet(argument),

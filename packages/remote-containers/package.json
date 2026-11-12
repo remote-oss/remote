@@ -261,6 +261,26 @@
         "title": "%commands.openRepositoryFromGitWithEditSession.title%",
         "category": "Dev Containers",
         "icon": "$(repo-clone)"
+      },
+      {
+        "command": "remote-containers.getHelp",
+        "title": "%commands.getHelp.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.getStarted",
+        "title": "%commands.getStarted.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.reportIssue",
+        "title": "%commands.reportIssue.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.provideFeedback",
+        "title": "%commands.provideFeedback.title%",
+        "category": "Dev Containers"
       }
     ],
     "menus": {
@@ -404,6 +424,22 @@
         {
           "command": "remote-containers.openRepositoryFromGitWithEditSession",
           "when": "false"
+        },
+        {
+          "command": "remote-containers.getHelp",
+          "when": "!remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.getStarted",
+          "when": "((remoteName == '' && !virtualWorkspace) || remoteName == wsl || remoteName == ssh-remote || remoteName == tunnel) && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.reportIssue",
+          "when": "!remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.provideFeedback",
+          "when": "(remoteName == dev-container || remoteName == attached-container || remoteName == exec || remoteName == k8s-container || remoteName == apple-container) && !remote-containers:standingDown"
         }
       ],
       "view/title": [
@@ -819,7 +855,19 @@
         "qualifiedName": "%continueEditSession.qualifiedName%",
         "when": "git.state == initialized && gitOpenRepositoryCount != 0 && remoteName =~ /(codespaces*.*|tunnel)/ && false && !remote-containers:standingDown"
       }
-    ]
+    ],
+    "remoteHelp": {
+      "remoteName": [
+        "dev-container",
+        "attached-container",
+        "exec",
+        "k8s-container",
+        "apple-container"
+      ],
+      "getStarted": "https://github.com/remote-oss/remote/blob/main/docs/remote-containers/README.md",
+      "documentation": "https://github.com/remote-oss/remote/tree/main/docs/remote-containers",
+      "issues": "https://github.com/remote-oss/remote/issues?q=is%3Aissue%20label%3Aext%3Aremote-containers"
+    }
   },
   "dependencies": {
     "@devcontainers/cli": "0.89.0",

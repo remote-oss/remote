@@ -896,6 +896,7 @@ describe('the manifest', () => {
           'viewsWelcome',
           'configuration',
           'continueEditSession',
+          'remoteHelp',
         ],
       ],
     );
@@ -1627,7 +1628,7 @@ describe('the manifest', () => {
   it('F-1406.5: package.nls.json holds the card’s keys with their texts, every key package.json uses is one of them, and every key it holds is used', () => {
     const table = readJson('package.nls.json');
     const used = new Set(
-      [...JSON.stringify(MANIFEST).matchAll(/%([^%"]+)%/g)].map(
+      [...JSON.stringify(MANIFEST).matchAll(/"%([^%"]+)%"/g)].map(
         match => match[1],
       ),
     );
@@ -1878,6 +1879,103 @@ describe('the WSL settings (card containers-203, F-0207 AC-1, AC-2)', () => {
         'default' in (properties['dev.containers.executeInWSLDistro'] ?? {}),
       ],
       [['boolean', 'string', 'boolean'], false, true, false],
+    );
+  });
+  it('F-0105 §3.1: the four help commands are in the category Dev Containers, and the palette lists Help and Report Issue everywhere, Get Started where the extension is not in a container, and Provide Feedback only in a container window', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: Array<{command: string; title: string; category: string}>;
+      menus: {commandPalette: Array<{command: string; when: string}>};
+    };
+    const names = [
+      'remote-containers.getHelp',
+      'remote-containers.getStarted',
+      'remote-containers.reportIssue',
+      'remote-containers.provideFeedback',
+    ];
+    deepStrictEqual(
+      [
+        contributes.commands.filter(entry => names.includes(entry.command)),
+        contributes.menus.commandPalette.filter(entry =>
+          names.includes(entry.command),
+        ),
+      ],
+      [
+        [
+          {
+            command: 'remote-containers.getHelp',
+            title: '%commands.getHelp.title%',
+            category: 'Dev Containers',
+          },
+          {
+            command: 'remote-containers.getStarted',
+            title: '%commands.getStarted.title%',
+            category: 'Dev Containers',
+          },
+          {
+            command: 'remote-containers.reportIssue',
+            title: '%commands.reportIssue.title%',
+            category: 'Dev Containers',
+          },
+          {
+            command: 'remote-containers.provideFeedback',
+            title: '%commands.provideFeedback.title%',
+            category: 'Dev Containers',
+          },
+        ],
+        [
+          {
+            command: 'remote-containers.getHelp',
+            when: '!remote-containers:standingDown',
+          },
+          {
+            command: 'remote-containers.getStarted',
+            when: "((remoteName == '' && !virtualWorkspace) || remoteName == wsl || remoteName == ssh-remote || remoteName == tunnel) && !remote-containers:standingDown",
+          },
+          {
+            command: 'remote-containers.reportIssue',
+            when: '!remote-containers:standingDown',
+          },
+          {
+            command: 'remote-containers.provideFeedback',
+            when: '(remoteName == dev-container || remoteName == attached-container || remoteName == exec || remoteName == k8s-container || remoteName == apple-container) && !remote-containers:standingDown',
+          },
+        ],
+      ],
+    );
+  });
+
+  it('F-0105 AC-26: remoteHelp names the documentation, getStarted and issues addresses, all https and none of Microsoft’s, and no reportIssue or feedback field; the proposal is enabled', () => {
+    const help = (
+      MANIFEST.contributes as {remoteHelp: Record<string, string | string[]>}
+    ).remoteHelp;
+    const addresses = ['documentation', 'getStarted', 'issues'].map(
+      name => new URL(String(help[name])),
+    );
+    deepStrictEqual(
+      [
+        Object.keys(help).sort(),
+        help.remoteName,
+        addresses.map(address => address.protocol),
+        addresses.map(address =>
+          /(^|\.)(aka\.ms|microsoft\.com)$/.test(address.hostname),
+        ),
+        (MANIFEST.enabledApiProposals as string[]).includes(
+          'contribRemoteHelp',
+        ),
+      ],
+      [
+        ['documentation', 'getStarted', 'issues', 'remoteName'],
+        [
+          'dev-container',
+          'attached-container',
+          'exec',
+          'k8s-container',
+          'apple-container',
+        ],
+        ['https:', 'https:', 'https:'],
+        [false, false, false],
+        true,
+      ],
     );
   });
 });

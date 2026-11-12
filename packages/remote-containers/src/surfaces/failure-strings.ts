@@ -27,6 +27,7 @@ export const FAILURE_TEMPLATES = {
   S159: 'Edit devcontainer.json in Recovery Container',
   S163: 'Empty feature id',
   S176: 'Failed to checkout the repository {0}.',
+  S188: 'For bug reports please include the complete log output. (In the VS Code window: `F1` > `Dev Containers: Show Container Log`.)',
   S193: 'Git clone failed. {0}',
   S218: 'Learn More',
   S220: 'Legacy feature not supported. Please check https://containers.dev/features for replacements.',
