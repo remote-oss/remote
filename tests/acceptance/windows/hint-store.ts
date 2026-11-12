@@ -3,6 +3,7 @@
  * row of a launch whose editor writes it to disk.
  */
 
+import {readdirSync, statSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
 import {variable} from './harness.ts';
@@ -50,7 +51,20 @@ export function hintRecords(): HintRecords {
       return store?.records ?? [];
     } catch (caught) {
       if (attempt === 20) {
-        throw caught;
+        const folder = path.join(
+          variable('HARNESS_USER_DATA'),
+          'User/globalStorage',
+        );
+        const listing = readdirSync(folder)
+          .filter(name => name.startsWith('state.vscdb'))
+          .map(name => {
+            const info = statSync(path.join(folder, name));
+            return `${name}:${String(info.size)}@${info.mtime.toISOString()}`;
+          });
+        throw new Error(
+          `${String(caught)}; files: ${listing.join(' ')}; now ${new Date().toISOString()}`,
+          {cause: caught},
+        );
       }
       pause(250);
     } finally {
