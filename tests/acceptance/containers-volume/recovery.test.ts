@@ -61,8 +61,8 @@ const RECOVERY = 'Edit devcontainer.json in Recovery Container';
  * Types `source` into the clone command of a new memory-folder window, giving the warning its Got It when it shows; the
  * window's failure dialog is then the next thing to wait for.
  */
-async function startClone(source: string, opened?: string): Promise<void> {
-  const local = opened ?? (await openMemoryWindow());
+async function startClone(source: string): Promise<void> {
+  const local = await openMemoryWindow();
   await startInWindow(local, 'remote-containers.openRepositoryInUniqueVolume');
   await waitFor(
     'the clone warning or the source pick',
@@ -78,16 +78,17 @@ async function startClone(source: string, opened?: string): Promise<void> {
   await acceptQuickPick(local);
 }
 
-/** Clones `source` until its build fails, then asks the dialog for the recovery container and waits for the window. */
-async function reachRecovery(
-  source: string,
-  folder: string,
-  opened?: string,
-): Promise<void> {
-  await startClone(source, opened);
-  await waitForDialog(folder, 900_000);
+/** Asks the failure dialog of the clone window `folder` for the recovery container and waits for the window. */
+async function recover(folder: string): Promise<void> {
   await answerDialog(folder, RECOVERY);
   await connectedToContainer(folder, 900_000);
+}
+
+/** Clones `source` until its build fails, then recovers its window `folder`. */
+async function reachRecovery(source: string, folder: string): Promise<void> {
+  await startClone(source);
+  await waitForDialog(folder, 900_000);
+  await recover(folder);
 }
 
 /** The recovery containers of the volume, in any state, as ids. */
@@ -331,14 +332,16 @@ describe('The recovery container (card containers-160, part A)', function () {
   it('F-0410 AC-16 (concurrency): two windows recovering two volumes at once each get a container that mounts only its own volume', async () => {
     await removeClone(repository.url);
     await removeClone(repository.otherUrl);
-    // Two windows opened at once could both take the same new window, so they open one after the other; the clones and
-    // the recovery containers then run at the same time.
-    const first = await openMemoryWindow();
-    const second = await openMemoryWindow();
-    await Promise.all([
-      reachRecovery(repository.url, FIRST, first),
-      reachRecovery(repository.otherUrl, SECOND, second),
-    ]);
+    // The editor reuses a window already open on the in-memory folder, so each clone runs up to its dialog, which leaves
+    // that folder, before the next window opens; the two recoveries then run at the same time.
+    for (const [source, folder] of [
+      [repository.url, FIRST],
+      [repository.otherUrl, SECOND],
+    ] as const) {
+      await startClone(source);
+      await waitForDialog(folder, 900_000);
+    }
+    await Promise.all([FIRST, SECOND].map(recover));
     const mounts = await Promise.all(
       [repository.url, repository.otherUrl].map(async source => {
         const volume = await volumeOf(source);
