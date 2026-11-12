@@ -28,6 +28,7 @@ import {
   labelsOfChangedParts,
   labelsOfTableSince,
   CI_WORKFLOW,
+  IMAGE_FOLDERS,
   LAUNCH_MARKER,
   MAIN_ONLY_LAUNCH_JOBS,
   measuredPaths,
@@ -37,6 +38,7 @@ import {
   PR_LAUNCH_JOBS,
   PR_LAUNCH_WORKFLOW,
   sourceGraph,
+  sourcesNaming,
   tableImports,
   type TableModule,
   testsOfHelper,
@@ -510,6 +512,30 @@ describe('acceptance-reach: what a change to a package reaches (card tooling-169
     );
   });
 
+  it('tooling-188: an image folder reaches what its builder reaches; another source naming the folder, or no builder naming it, leaves it unmeasured', () => {
+    const changed = ['tests/acceptance/ssh-engine/Dockerfile'];
+    write('tests/acceptance/ssh-engine/Dockerfile', 'FROM scratch\n');
+    const unnamed = [...measuredPaths(changed, 'HEAD', PACKAGE_LAUNCHES, root)];
+    write(
+      'tests/acceptance/windows/engine-fixture.ts',
+      "export const folder = 'ssh-engine';\n",
+    );
+    write(
+      'tests/acceptance/alpha/e.test.ts',
+      "import {folder} from '../windows/engine-fixture.ts';\n",
+    );
+    const built = [...measuredPaths(changed, 'HEAD', PACKAGE_LAUNCHES, root)];
+    write('tools/also.ts', "const folder = 'ssh-engine';\n");
+    deepStrictEqual(
+      [
+        unnamed,
+        built,
+        [...measuredPaths(changed, 'HEAD', PACKAGE_LAUNCHES, root)],
+      ],
+      [[], [['tests/acceptance/ssh-engine/Dockerfile', ['alpha-one']]], []],
+    );
+  });
+
   it('tooling-169: a library that only unit tests use reaches every launch, since the imports show no launch, as does one that nothing uses; a unit test adds nothing', () => {
     deepStrictEqual(reachOf('lib-unused', 'lib-unit'), [
       undefined,
@@ -936,6 +962,43 @@ describe("acceptance-reach: what a workflow file's change reaches (card tooling-
         ],
       ],
       [[], undefined, [[CI_WORKFLOW, []]]],
+    );
+  });
+});
+
+describe('acceptance-reach: the image folders (card tooling-188)', () => {
+  it("tooling-188: in the repository only the engine fixture names the SSH engine's folder, and a change there reaches the launches of the tests that import the fixture, not every launch", () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    const builder = String(IMAGE_FOLDERS.get('ssh-engine'));
+    const graph = sourceGraph(REPOSITORY_ROOT);
+    const importers = [
+      ...(graph?.importers.get(builder.replace(/\.ts$/, '')) ?? []),
+    ];
+    const reach =
+      measuredPaths(
+        ['tests/acceptance/ssh-engine/Dockerfile'],
+        'HEAD',
+        launches,
+        REPOSITORY_ROOT,
+      ).get('tests/acceptance/ssh-engine/Dockerfile') ?? [];
+    deepStrictEqual(
+      [
+        sourcesNaming(REPOSITORY_ROOT, 'ssh-engine'),
+        [...reach].sort(),
+        reach.includes('local'),
+      ],
+      [
+        [builder],
+        launches
+          .filter(launch =>
+            importers.some(importer =>
+              importer.startsWith(`tests/acceptance/${launch.suite}/`),
+            ),
+          )
+          .map(launch => launch.label)
+          .sort(),
+        false,
+      ],
     );
   });
 });
