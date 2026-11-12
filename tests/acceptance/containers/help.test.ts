@@ -1,5 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
-import {closeWindow} from '../windows/harness.ts';
+import {readFileSync} from 'node:fs';
+import {
+  closeWindow,
+  devContainersOf,
+  userSettingsFile,
+} from '../windows/harness.ts';
+import {bindKeys} from '../windows/explorer-folders.ts';
 import {withWindow} from '../windows/authoring-support.ts';
 import {connectedWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
@@ -8,6 +14,7 @@ import {
   notificationCentre,
   paletteRows,
   paletteRun,
+  pressControlAlt,
   quickPickOf,
   rememberPage,
 } from '../windows/renderer.ts';
@@ -126,6 +133,83 @@ describe('the help commands (card containers-218)', function () {
         },
       );
     } finally {
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder);
+    }
+  });
+  it('F-0105 AC-20 (c218-key-feedback): in a local window a keybinding with no condition on Provide Feedback opens at most our feedback page, makes no container and writes no setting, and the window shows nothing of its own', async () => {
+    installBrowser();
+    await withWindow('c218-key-feedback', {}, async (window, folder) => {
+      const restore = await bindKeys([
+        {key: 'ctrl+alt+7', command: 'remote-containers.provideFeedback'},
+      ]);
+      try {
+        const settings = readFileSync(userSettingsFile(), 'utf8');
+        const before = openedUrls().length;
+        await pressControlAlt(window, '7');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        const urls = openedUrls().slice(before);
+        deepStrictEqual(
+          {
+            urls: urls.every(url => url === FEEDBACK) && urls.length <= 1,
+            containers: await devContainersOf(folder),
+            settings: readFileSync(userSettingsFile(), 'utf8') === settings,
+            own: await shownOfOwn(window),
+          },
+          {
+            urls: true,
+            containers: [],
+            settings: true,
+            own: {notices: [], pick: undefined, dialog: undefined},
+          },
+        );
+      } finally {
+        restore();
+      }
+    });
+  });
+
+  it('F-0105 AC-23 (c218-key-started): in a dev container window a keybinding with no condition on Get Started opens our page with nothing else, or the editor says the command is not possible here, and the container and the settings are as they were', async () => {
+    installBrowser();
+    const {name, folder, containerId} =
+      await connectedWindow('c218-key-started');
+    const restore = await bindKeys([
+      {
+        key: 'ctrl+alt+8',
+        command: 'remote-containers.getStarted',
+      },
+    ]);
+    try {
+      const settings = readFileSync(userSettingsFile(), 'utf8');
+      await pressControlAlt(name, '8');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      const urls = openedUrls();
+      const notices = await notificationCentre(name);
+      const outcome =
+        urls.length === 1 && urls[0] === GET_STARTED && notices.length === 0
+          ? 'opened'
+          : urls.length === 0 &&
+              notices.length === 1 &&
+              (notices[0] ?? '').includes(
+                'is not possible in the current context',
+              )
+            ? 'refused'
+            : {urls, notices};
+      deepStrictEqual(
+        {
+          outcome: outcome === 'opened' || outcome === 'refused',
+          containers: await devContainersOf(folder),
+          settings: readFileSync(userSettingsFile(), 'utf8') === settings,
+        },
+        {
+          outcome: true,
+          containers: [containerId],
+          settings: true,
+        },
+        JSON.stringify(outcome),
+      );
+    } finally {
+      restore();
       await closeWindow(name).catch(() => undefined);
       await removeContainers(folder);
     }
