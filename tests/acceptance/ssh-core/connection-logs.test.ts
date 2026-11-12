@@ -13,6 +13,9 @@ import {
   onHost,
   openWindow,
   recordLines,
+  readUserSettings,
+  restoreUserSettings,
+  userSettings,
   waitFor,
   windowEvents,
   windowState,
@@ -250,6 +253,28 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
       );
     } finally {
       await closeWindow('c121-refused').catch(() => undefined);
+    }
+  });
+
+  it('F-2003 AC-15 (c121-out-of-enum): a log level outside the enum connects, and the extension shows no error notification or dialog', async () => {
+    const saved = readUserSettings();
+    try {
+      await userSettings({'remote.SSH.logLevel': 'info'});
+      await openWindow('harness', 'c121-enum');
+      try {
+        await connectedWithin('c121-enum', 60_000);
+        deepStrictEqual(
+          {
+            dialog: await dialogOf('c121-enum'),
+            notices: await notifications('c121-enum'),
+          },
+          {dialog: undefined, notices: []},
+        );
+      } finally {
+        await closeWindow('c121-enum').catch(() => undefined);
+      }
+    } finally {
+      restoreUserSettings(saved);
     }
   });
 
