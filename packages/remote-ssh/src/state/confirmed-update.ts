@@ -26,6 +26,15 @@ export interface ConfirmedUpdateEnvironment {
 /** How long the write waits before it reads the key back: longer than an echo of the memento takes to arrive. */
 export const READ_BACK_DELAY_MILLISECONDS = 500;
 
+/** What decides whether a value that is not the one written is put back. */
+export interface ConfirmedKeyOptions<Value> {
+  /**
+   * Whether the key is still the write's own when `read` is not the value written last: a key that was cleared or
+   * replaced on purpose in the meantime is left as it is, with nothing logged. By default it is always the write's own.
+   */
+  ownedWhenRead?: (read: Value | undefined, latest: Value) => boolean;
+}
+
 /** One key of the state, written and read back. */
 export interface ConfirmedKey<Value> {
   /** Writes `value` and returns once the state took it; the read back goes on in the background. */
@@ -49,6 +58,7 @@ export function confirmedKeyOf<Value>(
   state: ConfirmedState<Value>,
   key: string,
   environment: ConfirmedUpdateEnvironment,
+  options: ConfirmedKeyOptions<Value> = {},
 ): ConfirmedKey<Value> {
   let latest: Value | undefined;
   const checks = new Set<Promise<void>>();
@@ -58,7 +68,14 @@ export function confirmedKeyOf<Value>(
     for (const rewritten of [false, true]) {
       await environment.delay(READ_BACK_DELAY_MILLISECONDS);
       const written = textOf(latest);
-      const read = textOf(state.get(key));
+      const readValue = state.get(key);
+      const read = textOf(readValue);
+      if (
+        read !== written &&
+        options.ownedWhenRead?.(readValue, latest as Value) === false
+      ) {
+        return;
+      }
       if (read === written) {
         if (rewritten) {
           environment.logger.warn(

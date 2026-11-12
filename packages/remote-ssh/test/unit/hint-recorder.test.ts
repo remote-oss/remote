@@ -49,6 +49,28 @@ function recording(times: string[], marks: number[] = []) {
   return {recorder, stored, keys};
 }
 
+/** A recorder over `update`, which keeps what it chooses in `stored`; `delay` is the wait before a read back. */
+function recorderWith(
+  stored: {value?: HintStore},
+  update: (key: string, value: HintStore) => PromiseLike<void>,
+  delay: () => PromiseLike<void> = () => Promise.resolve(),
+  logText = () => '',
+) {
+  return hintRecorderOf(
+    {get: () => stored.value, update},
+    {
+      translate: template => template,
+      documentation: () => 'https://docs.example/ssh',
+      now: () => new Date('2026-11-02T00:00:00Z'),
+      environmentHints: () => ENVIRONMENT,
+      logMark: () => 0,
+      logText,
+      delay,
+      logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
+    },
+  );
+}
+
 /** One attempt: it begins, records `hints` and ends in one synchronous run. */
 function attempt(
   recorder: ReturnType<typeof recording>['recorder'],
@@ -435,6 +457,51 @@ describe('the hint recorder (card connect-119)', () => {
     deepStrictEqual(
       [keys.length, stored.value?.records[0]?.hints.map(hint => hint.kind)],
       [2, ['environment', 'environment', 'error', 'error', 'log']],
+    );
+  });
+
+  it('F-2605.AC-22 (c2326-clear-in-window): a clear between the write and its read back is not undone: the record does not come back', async () => {
+    const stored: {value?: HintStore} = {};
+    const gate: {release: () => void} = {release: () => undefined};
+    const recorder = recorderWith(
+      stored,
+      (key, value) => {
+        stored.value = value;
+        return Promise.resolve();
+      },
+      () =>
+        new Promise<void>(resolve => {
+          gate.release = resolve;
+        }),
+    );
+    recorder.begin();
+    await settled();
+    delete stored.value;
+    gate.release();
+    await settled();
+    deepStrictEqual(Object.keys(stored), []);
+  });
+
+  it('F-2605 BR-9 (c2326-reverted-write): a write that the state reverts to the older record is written again, so the log hint is stored', async () => {
+    const stored: {value?: HintStore} = {};
+    let updates = 0;
+    const recorder = recorderWith(
+      stored,
+      (key, value) => {
+        updates += 1;
+        if (updates !== 2) {
+          stored.value = value;
+        }
+        return Promise.resolve();
+      },
+      undefined,
+      () => 'the log',
+    );
+    attempt(recorder, [HINT]);
+    await settled();
+    deepStrictEqual(
+      stored.value?.records[0]?.hints.map(hint => hint.kind),
+      ['environment', 'environment', 'error', 'log'],
     );
   });
 });

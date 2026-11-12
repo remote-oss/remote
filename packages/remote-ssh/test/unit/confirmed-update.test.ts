@@ -128,4 +128,20 @@ describe('the write of a record that is read back (remote-oss/remote#2326)', () 
     await timerDelay(1);
     deepStrictEqual(typeof timerDelay(1).then, 'function');
   });
+
+  it('F-2605 AC-22 (c2326-cleared): a key that is no longer the write’s own is left as it is: nothing is written again and nothing is logged', async () => {
+    const {state, environment, calls, sink} = scene([false]);
+    const key = confirmedKeyOf(state, 'key', environment, {
+      ownedWhenRead: () => false,
+    });
+    await key.write('value');
+    await key.verified();
+    deepStrictEqual(
+      [
+        calls.filter(call => call.startsWith('write')).length,
+        sink.lines.length,
+      ],
+      [1, 0],
+    );
+  });
 });

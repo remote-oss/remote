@@ -115,7 +115,17 @@ export function hintRecorderOf(
   /** Whether the record has been written: a record that was written and is gone was cleared or dropped. */
   let persisted = false;
   let writing: PromiseLike<void> = Promise.resolve();
-  const storeKey = confirmedKeyOf(state, HINT_STORE_KEY, environment);
+  // A store that no longer holds the record of the write was cleared, or the record was dropped as the oldest: the read
+  // back leaves it so, and does not bring the record back.
+  const storeKey = confirmedKeyOf(state, HINT_STORE_KEY, environment, {
+    ownedWhenRead: (read, latest) => {
+      const newest = latest.records.at(-1);
+      return (
+        newest !== undefined &&
+        (read?.records.some(each => each.started === newest.started) ?? false)
+      );
+    },
+  });
   /**
    * Writes the record as it is now, once, after the writes before it. A record that was written and is no longer in
    * the store was cleared or dropped as the oldest: it does not come back with the hints that follow it.
