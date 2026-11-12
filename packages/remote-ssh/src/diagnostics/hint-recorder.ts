@@ -1,6 +1,8 @@
 /**
- * @fileoverview The recorder of the session hints: it keeps each hint of a connect in the record that connect started,
- * in the hint store of the extension's global state.
+ * @fileoverview The recorder of the session hints: it keeps the hints of a connect in the record that connect started,
+ * in the hint store of the extension's global state. A record is written when the connect begins, with its environment
+ * hints, once when its resolve step ends, with the error hints and the log hint together, and once for each error
+ * recognised after that. Every write is read back (remote-oss/remote#2326).
  */
 
 import type {FailureHint, FailureReason, FilledString} from 'lib-authority';
@@ -9,11 +11,16 @@ import {isFailureStringId, textOfId} from '../surfaces/failure-strings.ts';
 import {ownText} from '../surfaces/own-strings.ts';
 import type {Translate} from '../surfaces/strings.ts';
 import {
+  confirmedUpdate,
+  type ConfirmedUpdateEnvironment,
+} from '../state/confirmed-update.ts';
+import {
   addHint,
   emptyHintStore,
   HINT_STORE_KEY,
   type HintStore,
   type SessionHint,
+  type SessionRecord,
 } from './hint-store.ts';
 
 /** The global-state port the recorder reads and writes through. */
@@ -23,7 +30,7 @@ export interface HintRecorderState {
 }
 
 /** What the recorder needs besides the state. */
-export interface HintRecorderEnvironment {
+export interface HintRecorderEnvironment extends ConfirmedUpdateEnvironment {
   translate: Translate;
   /** The address of the documentation the hints point to. */
   documentation: () => string;
@@ -95,47 +102,59 @@ export function hintRecorderOf(
   state: HintRecorderState,
   environment: HintRecorderEnvironment,
 ): HintRecorder {
-  let started = environment.now().toISOString();
-  let begun = false;
+  let current: SessionRecord = {
+    started: environment.now().toISOString(),
+    hints: [],
+  };
   let logFrom = 0;
   let attemptErrors: SessionHint[] = [];
   let open = false;
+  let ended = false;
+  /** Whether the record has been written: a record that was written and is gone was cleared or dropped. */
+  let persisted = false;
   let writing: PromiseLike<void> = Promise.resolve();
   /**
-   * Adds `hints` after those the record that started at `mine` already holds. An error hint the record already holds,
-   * the same status, message and details, is not added again: one connect can meet the same error from two places.
-   * A record that was begun and is gone, cleared or dropped as the oldest, does not come back with the hints that
-   * follow it.
+   * Writes the record as it is now, once, after the writes before it. A record that was written and is no longer in
+   * the store was cleared or dropped as the oldest: it does not come back with the hints that follow it.
    */
-  function append(mine: string, hints: SessionHint[], starts: boolean): void {
-    const gone = begun && !starts;
-    writing = writing.then(() => {
-      const store = state.get(HINT_STORE_KEY) ?? emptyHintStore();
-      const existing = store.records.find(each => each.started === mine);
-      if (existing === undefined && gone) {
-        return undefined;
-      }
-      const kept = existing?.hints ?? [];
-      const fresh = hints.filter(
-        hint =>
-          hint.kind !== 'error' || !kept.some(each => sameError(each, hint)),
-      );
-      return state.update(
-        HINT_STORE_KEY,
-        addHint(store, {started: mine, hints: [...kept, ...fresh]}),
-      );
-    });
-    // A write the state refuses does not end the writes after it, and is no unhandled rejection.
-    writing = writing.then(undefined, () => undefined);
+  function write(starts: boolean): void {
+    const snapshot: SessionRecord = {
+      started: current.started,
+      hints: [...current.hints],
+    };
+    writing = writing
+      .then(() => {
+        const store = state.get(HINT_STORE_KEY) ?? emptyHintStore();
+        const held = store.records.some(
+          each => each.started === snapshot.started,
+        );
+        if (!held && persisted && !starts) {
+          return undefined;
+        }
+        return confirmedUpdate(
+          state,
+          HINT_STORE_KEY,
+          addHint(store, snapshot),
+          environment,
+        ).then(() => {
+          persisted = true;
+        });
+      })
+      // A write the state refuses does not end the writes after it, and is no unhandled rejection.
+      .then(undefined, () => undefined);
   }
   return {
     begin: () => {
-      started = environment.now().toISOString();
-      begun = true;
+      current = {
+        started: environment.now().toISOString(),
+        hints: [...environment.environmentHints()],
+      };
       open = true;
+      ended = false;
+      persisted = false;
       attemptErrors = [];
       logFrom = environment.logMark();
-      append(started, [...environment.environmentHints()], true);
+      write(true);
     },
     record: hint => {
       const statusNumber = statusNumberOf(hint.status);
@@ -155,17 +174,25 @@ export function hintRecorderOf(
       if (!attemptErrors.some(each => sameError(each, entry))) {
         attemptErrors.push(entry);
       }
-      append(started, [entry], false);
+      // An error hint the record already holds, the same status, message and details, is not added again: one
+      // connect can meet the same error from two places.
+      if (!current.hints.some(each => sameError(each, entry))) {
+        current.hints.push(entry);
+        if (ended) {
+          write(false);
+        }
+      }
     },
     errors: () => [...attemptErrors],
     end: () => {
       if (open) {
         open = false;
-        append(
-          started,
-          [{kind: 'log', text: environment.logText(logFrom)}],
-          false,
-        );
+        ended = true;
+        current.hints.push({
+          kind: 'log',
+          text: environment.logText(logFrom),
+        });
+        write(false);
       }
     },
   };

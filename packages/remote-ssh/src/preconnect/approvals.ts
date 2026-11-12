@@ -5,6 +5,10 @@
 
 import {createHash} from 'node:crypto';
 import type {AcceptanceState} from '../surfaces/acceptance-store.ts';
+import {
+  confirmedUpdate,
+  type ConfirmedUpdateEnvironment,
+} from '../state/confirmed-update.ts';
 
 /** What the step reads and writes of the record. */
 export interface PreconnectApprovals {
@@ -18,15 +22,21 @@ function keyOf(expandedPath: string): string {
   return `preconnectScriptConfirmed:${Buffer.from(expandedPath, 'utf8').toString('base64')}`;
 }
 
-/** The record over the editor's state memento; nothing ever removes an entry. */
-export function approvalsOf(state: AcceptanceState): PreconnectApprovals {
+/**
+ * The record over the editor's state memento; nothing ever removes an entry. A confirmation is read back after it is
+ * written, since another window must see it.
+ */
+export function approvalsOf(
+  state: AcceptanceState,
+  environment: ConfirmedUpdateEnvironment,
+): PreconnectApprovals {
   return {
     hashFor: expandedPath => {
       const stored = state.get(keyOf(expandedPath));
       return typeof stored === 'string' ? stored : undefined;
     },
     remember: async (expandedPath, hash) => {
-      await state.update(keyOf(expandedPath), hash);
+      await confirmedUpdate(state, keyOf(expandedPath), hash, environment);
     },
   };
 }

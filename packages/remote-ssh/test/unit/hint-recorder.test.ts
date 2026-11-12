@@ -1,5 +1,7 @@
 import type {DiagnosticStringId} from 'lib-ssh';
 import {deepStrictEqual} from 'node:assert';
+import {createLogger} from 'lib-log';
+import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {FailureHint} from 'lib-ssh';
 import {hintRecorderOf} from '../../src/diagnostics/hint-recorder.ts';
 import type {HintStore} from '../../src/diagnostics/hint-store.ts';
@@ -40,9 +42,16 @@ function recording(times: string[], marks: number[] = []) {
       environmentHints: () => ENVIRONMENT,
       logMark: () => marks.shift() ?? 0,
       logText: from => `from ${String(from)}: the log\nlines`,
+      delay: () => Promise.resolve(),
+      logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
     },
   );
   return {recorder, stored, keys};
+}
+
+/** The error hints of a record. */
+function errorsOf(record: HintStore['records'][number] | undefined) {
+  return record?.hints.filter(hint => hint.kind === 'error') ?? [];
 }
 
 /** Lets the writes the recorder chained finish. */
@@ -55,9 +64,11 @@ function settled(): Promise<void> {
 describe('the hint recorder (card connect-119)', () => {
   it('F-2604 AC-3: the entry holds the message, the two mitigations in order and the documentation address', async () => {
     const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    recorder.begin();
     recorder.record(HINT);
+    recorder.end();
     await settled();
-    deepStrictEqual(stored.value?.records[0]?.hints, [
+    deepStrictEqual(errorsOf(stored.value?.records[0]), [
       {
         kind: 'error',
         status: 'AllowTcpForwardingDisabled',
@@ -75,18 +86,22 @@ describe('the hint recorder (card connect-119)', () => {
 
   it('F-2604 AC-22: the hints are written under the key the clear command deletes', async () => {
     const {recorder, keys} = recording(['2026-11-02T00:00:00Z']);
+    recorder.begin();
     recorder.record(HINT);
+    recorder.end();
     await settled();
-    deepStrictEqual(keys, ['remote.ssh.hints']);
+    deepStrictEqual([...new Set(keys)], ['remote.ssh.hints']);
   });
 
   it('F-2604 AC-22: two hints of one connect share one record', async () => {
     const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    recorder.begin();
     recorder.record(HINT);
     recorder.record({...HINT, status: 'Other', message: 'Error: Other'});
+    recorder.end();
     await settled();
     deepStrictEqual(
-      [stored.value?.records.length, stored.value?.records[0]?.hints.length],
+      [stored.value?.records.length, errorsOf(stored.value?.records[0]).length],
       [1, 2],
     );
   });
@@ -94,11 +109,15 @@ describe('the hint recorder (card connect-119)', () => {
   it('F-2604 AC-21: a hint after begin goes to a new record', async () => {
     const {recorder, stored} = recording([
       '2026-11-02T00:00:00Z',
+      '2026-11-02T00:00:00Z',
       '2026-11-02T00:01:00Z',
     ]);
-    recorder.record(HINT);
     recorder.begin();
     recorder.record(HINT);
+    recorder.end();
+    recorder.begin();
+    recorder.record(HINT);
+    recorder.end();
     await settled();
     deepStrictEqual(
       stored.value?.records.map(record => record.started),
@@ -108,15 +127,12 @@ describe('the hint recorder (card connect-119)', () => {
 
   it('F-2604 AC-21: a message that is a text is kept as it is', async () => {
     const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    recorder.begin();
     recorder.record({...HINT, message: 'Error: Other', mitigations: []});
+    recorder.end();
     await settled();
-    deepStrictEqual(
-      [
-        stored.value?.records[0]?.hints[0]?.kind === 'error' &&
-          stored.value.records[0].hints[0].message,
-      ],
-      ['Error: Other'],
-    );
+    const [hint] = errorsOf(stored.value?.records[0]);
+    deepStrictEqual(hint?.kind === 'error' && hint.message, 'Error: Other');
   });
 
   it('F-2604 AC-22: a write the state refuses does not stop the hint recorded after it', async () => {
@@ -143,10 +159,13 @@ describe('the hint recorder (card connect-119)', () => {
         environmentHints: () => [],
         logMark: () => 0,
         logText: () => '',
+        delay: () => Promise.resolve(),
+        logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
       },
     );
+    recorder.begin();
     recorder.record(HINT);
-    recorder.record(HINT);
+    recorder.end();
     await settled();
     deepStrictEqual([stored.value?.records.length, attempts.length], [1, 2]);
   });
@@ -154,11 +173,15 @@ describe('the hint recorder (card connect-119)', () => {
   it('F-2405 AC-20: the details of a hint, a text or a string of the table, are kept as text', async () => {
     const {recorder, stored} = recording([
       '2026-11-02T00:00:00Z',
+      '2026-11-02T00:00:00Z',
       '2026-11-02T00:01:00Z',
     ]);
+    recorder.begin();
     recorder.record({...HINT, details: {text: '194'}});
+    recorder.end();
     recorder.begin();
     recorder.record({...HINT, details: {id: 'S116'}});
+    recorder.end();
     await settled();
     deepStrictEqual(
       stored.value?.records.map(record => {
@@ -177,6 +200,7 @@ describe('the hint recorder (card connect-119)', () => {
 
   it('connect-121: a message, a mitigation and details each come from the failure table or ours, and an id in neither table is kept as the id, with no throw', async () => {
     const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    recorder.begin();
     recorder.record({
       ...HINT,
       message: {id: 'S094', values: []},
@@ -186,8 +210,9 @@ describe('the hint recorder (card connect-119)', () => {
       ],
       details: {id: UNKNOWN},
     });
+    recorder.end();
     await settled();
-    const [hint] = stored.value?.records[0]?.hints ?? [];
+    const [hint] = errorsOf(stored.value?.records[0]);
     deepStrictEqual(
       hint?.kind === 'error'
         ? [hint.message, hint.mitigations, hint.details]
@@ -205,16 +230,19 @@ describe('the hint recorder (card connect-119)', () => {
 
   it('F-2604 AC-14: the details of the man-in-the-middle hint, S107 of the failure table, are kept as its text', async () => {
     const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    recorder.begin();
     recorder.record({
       ...HINT,
       status: 'MitmPortForwardingDisabled',
       details: {id: 'S107'},
     });
+    recorder.end();
     await settled();
     deepStrictEqual(
-      stored.value?.records.map(record =>
-        record.hints[0]?.kind === 'error' ? record.hints[0].details : undefined,
-      ),
+      stored.value?.records.map(record => {
+        const [error] = errorsOf(record);
+        return error?.kind === 'error' ? error.details : undefined;
+      }),
       ['Port forwarding is disabled'],
     );
   });
@@ -302,6 +330,7 @@ describe('the hint recorder (card connect-119)', () => {
     await settled();
     recorder.record(HINT);
     recorder.record({...HINT, message: {id: 'S116', values: []}});
+    recorder.end();
     await settled();
     deepStrictEqual(
       stored.value?.records[0]?.hints.filter(hint => hint.kind === 'error')
