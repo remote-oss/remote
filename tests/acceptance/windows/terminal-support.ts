@@ -13,6 +13,27 @@ async function promptsOf(window: string): Promise<number> {
     .filter(line => /(?:^| )\$(?: |$)/.test(line)).length;
 }
 
+/** The last lines window `window`'s terminal shows, for the failure of a wait to name; a terminal that cannot be read says so. */
+async function terminalTail(window: string): Promise<string[]> {
+  return (await terminalText(window).catch(() => '(unreadable)'))
+    .split('\n')
+    .slice(-15);
+}
+
+/** A wait on window `window`'s terminal whose failure also shows what the terminal showed: a terminal that never started and a prompt the match missed read differently. */
+async function waitForTerminal(
+  window: string,
+  description: string,
+  check: () => Promise<boolean>,
+): Promise<void> {
+  await waitFor(description, check, 40_000).catch(async (caught: unknown) => {
+    throw new Error(
+      `${String(caught)}; the terminal shows: ${JSON.stringify(await terminalTail(window))}`,
+      {cause: caught},
+    );
+  });
+}
+
 /**
  * Waits until the shell of the terminal of `window` has read what the terminal sent it at its start. The host's shell
  * is BusyBox's, which asks the terminal for the cursor position at its first prompt; the terminal's reply reaches the
@@ -25,17 +46,17 @@ async function settledShell(window: string): Promise<void> {
   if ((await promptsOf(window)) >= 2) {
     return;
   }
-  await waitFor(
+  await waitForTerminal(
+    window,
     `the first prompt of ${window}`,
     async () => (await promptsOf(window)) >= 1,
-    40_000,
   );
   const before = await promptsOf(window);
   await typeInTerminal(window, 'true\n');
-  await waitFor(
+  await waitForTerminal(
+    window,
     `the prompt after the first command of ${window}`,
     async () => (await promptsOf(window)) > before,
-    40_000,
   );
 }
 
@@ -48,7 +69,8 @@ export async function printedAfter(
   await settledShell(window);
   await typeInTerminal(window, `echo "${label}:${expression}"\n`);
   let found = '';
-  await waitFor(
+  await waitForTerminal(
+    window,
     `the line ${label}: in window ${window}`,
     async () => {
       const lines = (await terminalText(window)).split('\n');
@@ -58,13 +80,7 @@ export async function printedAfter(
       found = printed?.slice(label.length + 1) ?? '';
       return printed !== undefined;
     },
-    40_000,
-  ).catch(async (caught: unknown) => {
-    throw new Error(
-      `${String(caught)}; the terminal shows: ${JSON.stringify((await terminalText(window).catch(() => '(unreadable)')).split('\n').slice(-15))}`,
-      {cause: caught},
-    );
-  });
+  );
   return found;
 }
 
