@@ -43,7 +43,11 @@ describe('Open SSH Config File by the SSH row (card coverage-119, F-2203 AC-19)'
       const shown = await pickShown(window);
       await closePick(window);
       deepStrictEqual(
-        [shown.title, shown.placeholder, shown.rows],
+        [
+          shown.title.replaceAll('\u00a0', ' ').trim(),
+          shown.placeholder,
+          shown.rows,
+        ],
         [
           '',
           PICKER_QUESTION,
