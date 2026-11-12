@@ -401,7 +401,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     await closeWindow(name);
   });
 
-  it('F-0106 AC-45 (c123-manage-trust): trusting the folder in the editor that Manage opens leaves the command not resumed: no connecting notification and no container, also 15 s later, and a second Reopen in Container asks nothing', async () => {
+  it('F-0106 AC-45 (reading-2340-trust-click): trusting the folder in the editor that Manage opens leaves the command not resumed: no connecting notification and no container, also 15 s later, and a second Reopen in Container asks nothing', async () => {
     const folder = devContainerFolder('c123-manage-trust', {
       name: 'C123 Manage Trust',
     });
@@ -411,6 +411,8 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       running.catch(() => undefined);
       await waitForDialog(name, 60_000);
       await answerDialog(name, 'Manage');
+      // The criterion's trigger is Ctrl+Enter in the editor; the row clicks the editor's trust button, the same action,
+      // since a key chord needs a helper in the shared renderer (reading-2340-trust-click).
       await waitFor(
         'the trust editor to take the trust button',
         async () => {
