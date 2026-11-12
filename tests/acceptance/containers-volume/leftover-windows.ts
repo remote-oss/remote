@@ -9,13 +9,19 @@ export function openWindowNames(): string[] {
   return windowNames().filter(isOpen);
 }
 
-/** Closes every window that is open now and isn't in `kept`, as {@link closeContained} does. */
+/**
+ * The launch's own window, which every row runs its harness commands through. It is never a row's leftover, even when
+ * a row began before its agent had reported that it activated.
+ */
+const LAUNCH_WINDOW = 'local';
+
+/** Closes every window that is open now and isn't in `kept` or the launch's own, as {@link closeContained} does. */
 export async function closeWindowsBut(
   kept: readonly string[],
   dismiss: (window: string) => Promise<void>,
 ): Promise<void> {
   for (const name of openWindowNames()) {
-    if (!kept.includes(name)) {
+    if (name !== LAUNCH_WINDOW && !kept.includes(name)) {
       await closeContained(name, dismiss);
     }
   }
