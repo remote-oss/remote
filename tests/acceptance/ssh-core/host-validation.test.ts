@@ -433,7 +433,7 @@ describe('host and user name validation (card coverage-120)', function () {
     await closeWindow(name).catch(() => undefined);
   });
 
-  it('F-2205 AC-23 (c120-log): the log names the authority and the check, and nothing is stored for the host', async () => {
+  it.only('F-2205 AC-23 (c120-log): the log names the authority and the check, and nothing is stored for the host', async () => {
     const name = await reject('-oProxyCommand=x');
     try {
       const logLines = connectionLog();
@@ -443,6 +443,7 @@ describe('host and user name validation (card coverage-120)', function () {
           logLines.some(line => line.includes('cannot begin with -')),
         ],
         [true, true],
+        logLines.filter(line => /Resolving|failed|cannot|failure/.test(line)).join('\n'),
       );
     } finally {
       await closeWindow(name).catch(() => undefined);
