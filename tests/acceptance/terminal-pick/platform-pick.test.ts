@@ -55,12 +55,15 @@ describe('a terminal-mode connect that picks the platform', function () {
       }),
     );
     await openWindow('harness', 'tp1');
+    const connected = Date.now();
+    const remoteName = (await windowState('tp1')).remoteName;
+    const answers = recordLines('platformPick').map(line => line.answer);
+    const stored = await storedWithin(SETTINGS_WAIT_MILLISECONDS);
+    console.log(
+      `#664: the platform was stored ${String(Date.now() - connected)} ms after the window connected`,
+    );
     deepStrictEqual(
-      [
-        (await windowState('tp1')).remoteName,
-        recordLines('platformPick').map(line => line.answer),
-        await storedWithin(SETTINGS_WAIT_MILLISECONDS),
-      ],
+      [remoteName, answers, stored],
       ['ssh-remote', ['linux'], {harness: 'linux'}],
       // When the platform is not stored, what the user settings file and the extension's log hold: the write is made
       // after the connect, and a failure of it is only a line in the log.
