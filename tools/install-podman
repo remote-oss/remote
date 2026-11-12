@@ -34,9 +34,11 @@ podman_release() {
   podman --version 2>/dev/null | sed -n 's/^podman version \([0-9][0-9.]*\).*/\1/p'
 }
 
-# whether the podman on the PATH is the pinned release and dynamically linked, as the source build is
+# whether the podman on the PATH is the pinned release and dynamically linked, as the source build is: its ELF names a
+# program interpreter, which readelf reads without running it
 pinned_build_installed() {
-  [ "$(podman_release)" = "$PODMAN_VERSION" ] && ldd "$(command -v podman)" >/dev/null 2>&1
+  [ "$(podman_release)" = "$PODMAN_VERSION" ] &&
+    readelf --program-headers "$(command -v podman)" 2>/dev/null | grep -q 'Requesting program interpreter'
 }
 
 if ! pinned_build_installed; then
@@ -60,10 +62,11 @@ if ! pinned_build_installed; then
   tar -xzf "$archive" -C "$work"
   rm -f "$work/podman-linux-$arch/usr/local/bin/runc"
   sudo cp -r "$work/podman-linux-$arch/usr" "$work/podman-linux-$arch/etc" /
-  # the archive's crun, not the machine's: Ubuntu 24.04's /usr/bin/crun, which podman finds first, refuses the runtime
-  # spec Podman 6 writes ("crun: unknown version specified")
+  # the archive's helpers, not the machine's: Ubuntu 24.04's /usr/bin/crun, which podman finds first, refuses the
+  # runtime spec Podman 6 writes ("crun: unknown version specified"), and a podman built from source searches its own
+  # list of folders for conmon and the network helpers, where Ubuntu's own come first
   sudo mkdir -p /etc/containers/containers.conf.d
-  printf '[engine.runtimes]\ncrun = ["/usr/local/bin/crun"]\n' |
+  printf '[engine]\nconmon_path = ["/usr/local/lib/podman/conmon"]\nhelper_binaries_dir = ["/usr/local/lib/podman", "/usr/local/bin"]\n\n[engine.runtimes]\ncrun = ["/usr/local/bin/crun"]\n' |
     sudo tee /etc/containers/containers.conf.d/50-install-podman-crun.conf >/dev/null
 
   # the podman binary itself, from source
@@ -84,7 +87,8 @@ if ! pinned_build_installed; then
     echo "install-podman: Podman's source is $(git -C "$source_folder" rev-parse HEAD), not the pinned $PODMAN_COMMIT" >&2
     exit 1
   }
-  if ! PATH="$work/go/bin:$PATH" make -C "$source_folder" podman \
+  # the pinned Go and the source's own vendored modules only: a toolchain switch or a module outside vendor/ fails
+  if ! PATH="$work/go/bin:$PATH" GOTOOLCHAIN=local GOFLAGS=-mod=vendor GOPROXY=off make -C "$source_folder" podman \
     BUILDTAGS='seccomp exclude_graphdriver_btrfs containers_image_openpgp' >"$work/podman-build.log" 2>&1; then
     tail -n 30 "$work/podman-build.log" >&2
     echo "install-podman: Podman $PODMAN_COMMIT did not build with $GO_VERSION" >&2
@@ -113,9 +117,19 @@ if ! out=$(podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDrive
   printf '%s' "$out" | grep -q 'boot ID differs from cached boot ID' || exit 1
   rm -rf "/tmp/storage-run-$(id -u)/containers" "/tmp/storage-run-$(id -u)/libpod/tmp"
 fi
-podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}} {{.Host.OCIRuntime.Path}}'
-runtime=$(podman info --format '{{.Host.OCIRuntime.Path}}')
-[ "$runtime" = /usr/local/bin/crun ] || {
-  echo "install-podman: Podman $PODMAN_VERSION runs $runtime, not the archive's /usr/local/bin/crun" >&2
-  exit 1
+podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}} {{.Host.OCIRuntime.Path}} {{.Host.Conmon.Path}} {{.Host.NetworkBackendInfo.Path}}'
+# the helpers Podman runs are the archive's, under /usr/local
+require_helper() {
+  local found
+  found=$(podman info --format "$2")
+  case "$found" in
+    "$3"*) ;;
+    *)
+      echo "install-podman: Podman $PODMAN_VERSION runs $found as its $1, not the archive's $3" >&2
+      exit 1
+      ;;
+  esac
 }
+require_helper runtime '{{.Host.OCIRuntime.Path}}' /usr/local/bin/crun
+require_helper conmon '{{.Host.Conmon.Path}}' /usr/local/lib/podman/conmon
+require_helper 'network backend' '{{.Host.NetworkBackendInfo.Path}}' /usr/local/lib/podman/netavark
