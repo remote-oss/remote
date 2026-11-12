@@ -47,7 +47,7 @@ async function registered(
   seen: Seen;
   registration: Awaited<ReturnType<typeof registerConnect>>;
   recording: ReturnType<typeof recordingResolverEditor>;
-  state: Array<[string, undefined]>;
+  state: Array<[string, unknown]>;
   sink: MemorySink;
 }> {
   const seen: Seen = {
@@ -73,7 +73,7 @@ async function registered(
         seen.revealed += 1;
       },
     );
-  const state: Array<[string, undefined]> = [];
+  const state: Array<[string, unknown]> = [];
   const sink = new MemorySink();
   const logger = createLogger(sink, {minimumLevel: (): Level => 'info'});
   const machine = nodeMachineOf(
@@ -162,6 +162,7 @@ async function registered(
       },
       translate: template => template,
       globalState: {
+        get: () => undefined,
         update: (key, value) => {
           state.push([key, value]);
           return Promise.resolve();

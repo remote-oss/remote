@@ -11,15 +11,14 @@ import {type EnvironmentHint, statusNumberOf} from 'lib-ssh';
 import {isFailureStringId, textOfId} from '../surfaces/failure-strings.ts';
 import {ownText} from '../surfaces/own-strings.ts';
 import type {Translate} from '../surfaces/strings.ts';
-import {
-  confirmedKeyOf,
-  type ConfirmedUpdateEnvironment,
-} from '../state/confirmed-update.ts';
+import type {ConfirmedUpdateEnvironment} from '../state/confirmed-update.ts';
+import {hintStoreKeyOf} from './hint-store-key.ts';
 import {
   addHint,
   emptyHintStore,
   HINT_STORE_KEY,
   type HintStore,
+  isGone,
   type SessionHint,
   type SessionRecord,
 } from './hint-store.ts';
@@ -112,20 +111,10 @@ export function hintRecorderOf(
   let open = false;
   /** The records whose write is queued for the end of the synchronous run that is going on. */
   const queued = new Set<SessionRecord>();
-  /** Whether the record has been written: a record that was written and is gone was cleared or dropped. */
+  /** Whether the record has been written: one that was written and is gone on purpose does not come back. */
   let persisted = false;
   let writing: PromiseLike<void> = Promise.resolve();
-  // A store that no longer holds the record of the write was cleared, or the record was dropped as the oldest: the read
-  // back leaves it so, and does not bring the record back.
-  const storeKey = confirmedKeyOf(state, HINT_STORE_KEY, environment, {
-    ownedWhenRead: (read, latest) => {
-      const newest = latest.records.at(-1);
-      return (
-        newest !== undefined &&
-        (read?.records.some(each => each.started === newest.started) ?? false)
-      );
-    },
-  });
+  const storeKey = hintStoreKeyOf(state, environment);
   /**
    * Writes the record as it is now, once, after the writes before it. A record that was written and is no longer in
    * the store was cleared or dropped as the oldest: it does not come back with the hints that follow it.
@@ -138,10 +127,9 @@ export function hintRecorderOf(
     writing = writing
       .then(() => {
         const store = state.get(HINT_STORE_KEY) ?? emptyHintStore();
-        const held = store.records.some(
-          each => each.started === snapshot.started,
-        );
-        if (!held && persisted && !starts) {
+        // A record that was written and is gone on purpose (cleared, or dropped as the oldest) does not come back with
+        // the hints that follow it; one that an older copy of the store lost is written again.
+        if (persisted && !starts && isGone(store, snapshot.started)) {
           return undefined;
         }
         return storeKey.write(addHint(store, snapshot)).then(() => {

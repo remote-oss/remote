@@ -2,6 +2,7 @@ import {deepStrictEqual, notStrictEqual} from 'node:assert';
 import {
   addHint,
   clearAll,
+  isGone,
   emptyHintStore,
   type HintStore,
   type SessionRecord,
@@ -138,40 +139,56 @@ describe('the hint store (card connect-04 table)', () => {
     deepStrictEqual(storeOf(recordAt('t', hints)).records[0]?.hints, hints);
   });
 
-  it('F-2605.BR-12 / F-2605.AC-20: clearing removes both records', () => {
-    deepStrictEqual(clearAll(storeOf(first, second)), {records: []});
+  it('F-2605.BR-12 / F-2605.AC-20: a cleared store has no record and says when it was cleared', () => {
+    deepStrictEqual(clearAll('2026-11-02T00:00:09.000Z'), {
+      records: [],
+      clearedAt: '2026-11-02T00:00:09.000Z',
+    });
   });
 
-  it('F-2605.AC-21: clearing an empty store gives an empty store', () => {
-    deepStrictEqual(clearAll(emptyHintStore()), {records: []});
+  it('F-2605.AC-22 (c2326-cleared-at): a record added to a cleared store keeps the time of the clear', () => {
+    deepStrictEqual(addHint(clearAll('2026-11-02T00:00:09.000Z'), first), {
+      records: [first],
+      clearedAt: '2026-11-02T00:00:09.000Z',
+    });
   });
 
-  it('F-2605.BR-12: clearing twice gives an empty store both times', () => {
-    const once = clearAll(storeOf(first));
-    deepStrictEqual([once, clearAll(once)], [{records: []}, {records: []}]);
-  });
-
-  it('F-2605.6.6: clearing a frozen store returns a new store', () => {
-    const frozen = frozenStore(first, second);
-    notStrictEqual(clearAll(frozen), frozen);
-  });
-
-  it('F-2605.6.6: clearing a frozen store leaves its records alone', () => {
-    const frozen = frozenStore(first, second);
-    clearAll(frozen);
-    deepStrictEqual(frozen.records, [first, second]);
+  it('F-2605.AC-22 (c2326-is-gone): a record is gone on purpose when the store was cleared after it began or holds two newer records, and a record missing otherwise is lost', () => {
+    const early = recordAt('2026-11-02T00:00:01.000Z', []);
+    const cleared = {...clearAll('2026-11-02T00:00:09.000Z')};
+    const newer = storeOf(
+      recordAt('2026-11-02T00:00:05.000Z', []),
+      recordAt('2026-11-02T00:00:06.000Z', []),
+    );
+    deepStrictEqual(
+      [
+        isGone(cleared, early.started),
+        isGone(newer, early.started),
+        isGone(
+          storeOf(recordAt('2026-11-02T00:00:05.000Z', [])),
+          early.started,
+        ),
+        isGone(emptyHintStore(), early.started),
+        isGone(undefined, early.started),
+        isGone(clearAll('2026-11-02T00:00:00.000Z'), early.started),
+      ],
+      [true, true, false, false, false, false],
+    );
   });
 
   it('F-2605.AC-22: a record added after clearing is the only one', () => {
-    deepStrictEqual(addHint(clearAll(storeOf(first, second)), first).records, [
-      first,
-    ]);
+    deepStrictEqual(
+      addHint(clearAll('2026-11-02T00:00:09.000Z'), first).records,
+      [first],
+    );
   });
 
   it('F-2605.AC-16: records added after clearing start a new window of two', () => {
     deepStrictEqual(
-      [third, fourth, first].reduce(addHint, clearAll(storeOf(first, second)))
-        .records,
+      [third, fourth, first].reduce(
+        addHint,
+        clearAll('2026-11-02T00:00:09.000Z'),
+      ).records,
       [fourth, first],
     );
   });

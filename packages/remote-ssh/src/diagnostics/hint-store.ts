@@ -30,9 +30,11 @@ export interface SessionRecord {
   hints: SessionHint[];
 }
 
-/** The records kept, oldest first. */
+/** The records kept, oldest first, and the time of the last clear, which tells a record that was cleared from one that was lost. */
 export interface HintStore {
   records: SessionRecord[];
+  /** The ISO time the store was last cleared; none before the first clear. */
+  clearedAt?: string;
 }
 
 /** How many records the store keeps. */
@@ -48,19 +50,41 @@ export function emptyHintStore(): HintStore {
  * same time as one in the store takes its place.
  */
 export function addHint(store: HintStore, record: SessionRecord): HintStore {
+  const cleared =
+    store.clearedAt === undefined ? {} : {clearedAt: store.clearedAt};
   const same = store.records.findIndex(
     stored => stored.started === record.started,
   );
   return same === -1
-    ? {records: [...store.records, record].slice(-RECORDS_KEPT)}
+    ? {
+        records: [...store.records, record].slice(-RECORDS_KEPT),
+        ...cleared,
+      }
     : {
         records: store.records.map((stored, index) =>
           index === same ? record : stored,
         ),
+        ...cleared,
       };
 }
 
-/** A store with no record, whatever `store` held. */
-export function clearAll(store: HintStore): HintStore {
-  return {records: store.records.slice(store.records.length)};
+/** A store with no record that says it was cleared at the ISO time `clearedAt`. */
+export function clearAll(clearedAt: string): HintStore {
+  return {records: [], clearedAt};
+}
+
+/**
+ * Whether the record that started at `started` is gone on purpose from `store`: the store was cleared after the record
+ * began, or it already holds the two newer records the newest-two rule keeps. A record that is missing otherwise was
+ * lost to an older copy of the store.
+ */
+export function isGone(store: HintStore | undefined, started: string): boolean {
+  if (store === undefined) {
+    return false;
+  }
+  const newer = store.records.filter(each => each.started > started);
+  return (
+    (store.clearedAt !== undefined && store.clearedAt > started) ||
+    newer.length >= RECORDS_KEPT
+  );
 }

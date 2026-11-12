@@ -71,6 +71,29 @@ function recorderWith(
   );
 }
 
+/** The records `stored` holds now, read afresh so that an earlier assignment does not narrow the type. */
+function heldRecords(stored: {value?: HintStore}): HintStore['records'] {
+  return stored.value?.records ?? [];
+}
+
+/** A recorder whose read backs wait until `gate.release()`, over a state that keeps every write. */
+function gatedRecorder() {
+  const stored: {value?: HintStore} = {};
+  const gate: {release: () => void} = {release: () => undefined};
+  const recorder = recorderWith(
+    stored,
+    (key, value) => {
+      stored.value = value;
+      return Promise.resolve();
+    },
+    () =>
+      new Promise<void>(resolve => {
+        gate.release = resolve;
+      }),
+  );
+  return {stored, gate, recorder};
+}
+
 /** One attempt: it begins, records `hints` and ends in one synchronous run. */
 function attempt(
   recorder: ReturnType<typeof recording>['recorder'],
@@ -367,11 +390,11 @@ describe('the hint recorder (card connect-119)', () => {
     const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
     recorder.begin();
     await settled();
-    delete stored.value;
+    stored.value = {records: [], clearedAt: '2026-11-02T00:00:30.000Z'};
     recorder.record(HINT);
     recorder.end();
     await settled();
-    deepStrictEqual(Object.keys(stored), []);
+    deepStrictEqual(heldRecords(stored), []);
   });
 
   it('F-2605.AC-22: a resolve that begins after a clear starts a record again', async () => {
@@ -461,25 +484,13 @@ describe('the hint recorder (card connect-119)', () => {
   });
 
   it('F-2605.AC-22 (c2326-clear-in-window): a clear between the write and its read back is not undone: the record does not come back', async () => {
-    const stored: {value?: HintStore} = {};
-    const gate: {release: () => void} = {release: () => undefined};
-    const recorder = recorderWith(
-      stored,
-      (key, value) => {
-        stored.value = value;
-        return Promise.resolve();
-      },
-      () =>
-        new Promise<void>(resolve => {
-          gate.release = resolve;
-        }),
-    );
+    const {stored, gate, recorder} = gatedRecorder();
     recorder.begin();
     await settled();
-    delete stored.value;
+    stored.value = {records: [], clearedAt: '2026-11-02T00:00:30.000Z'};
     gate.release();
     await settled();
-    deepStrictEqual(Object.keys(stored), []);
+    deepStrictEqual(stored.value.records, []);
   });
 
   it('F-2605 BR-9 (c2326-reverted-write): a write that the state reverts to the older record is written again, so the log hint is stored', async () => {
@@ -503,5 +514,15 @@ describe('the hint recorder (card connect-119)', () => {
       stored.value?.records[0]?.hints.map(hint => hint.kind),
       ['environment', 'environment', 'error', 'log'],
     );
+  });
+
+  it('F-2605 BR-9 (c2326-lost-record): a record that an older copy of the store lost, with no clear after it began, is written again at the read back', async () => {
+    const {stored, gate, recorder} = gatedRecorder();
+    recorder.begin();
+    await settled();
+    delete stored.value;
+    gate.release();
+    await settled();
+    deepStrictEqual(heldRecords(stored).length, 1);
   });
 });
