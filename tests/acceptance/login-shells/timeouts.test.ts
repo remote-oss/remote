@@ -68,7 +68,9 @@ describe('login shells that do not finish or end early: the connect fails or wai
       {
         question: failed.dialog.question,
         buttons: failed.dialog.buttons,
-        quick: failed.dialog.milliseconds < 5000,
+        // From the start of the connect, as the other rows of this file time theirs: the window's own start before it is not
+        // the connect's.
+        quick: failed.dialog.sinceConnectStarted < 5000,
         logged: logSince(mark).some(line =>
           line.includes(
             'the SSH session ended before the host reported its platform',
@@ -81,6 +83,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
         quick: true,
         logged: true,
       },
+      `the dialog came ${String(failed.dialog.milliseconds)} ms after the window was asked for and ${String(failed.dialog.sinceConnectStarted)} ms after the connect started`,
     );
   });
 
