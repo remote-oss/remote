@@ -51,7 +51,8 @@ window-advisories, D8 shell-handoff with the build-time D8g, D11's writing side,
 - **An unregistered distro** (7.E13, AC-36): the window reloads if the name passes `validDistroName`; otherwise there is
   no reload and one log line.
 - **An untitled workspace, `ruling-2348-untitled-workspace`** (Q3, 7.E8, AC-30, AC-31): the command refuses before the
-  picker with an information message of ours. Core's "save your workspace?" prompt runs as the window unloads, after
+  picker with an information message of ours, "Save the workspace to a file before reopening it in WSL." (a new
+  string id, R-27). Core's "save your workspace?" prompt runs as the window unloads, after
   our command has passed its target, so the saved path never comes back to us and option (a) has no hook. The card
   verifies that against core first; if core does return the path, it takes option (a) instead.
 - **Out of context:** `silent` for both commands, also for Reopen in WSL inside a WSL window (7.E5 isn't reproduced).
@@ -98,8 +99,9 @@ window-advisories, D8 shell-handoff with the build-time D8g, D11's writing side,
   `VSCODE_WSL_EXTENSION_ID=remote-oss.remote-wsl`; the stock launcher never does (7.E5). The rows run on VSCodium with
   that variable passed through `WSLENV`.
 - **The argument form** is decided by the launchers' fixed leading arguments (from [oss] `code.sh` and VSCodium's
-  patch), never by the shape of a user argument; the card documents the environment flag that settles the case where
-  they can't be told apart.
+  patch), never by the shape of a user argument. Where they can't be told apart, the environment flag
+  `REMOTE_OSS_WSL_LAUNCHER_FORM` settles it; it is an invented identifier, registered in `identifiers.json`. The
+  script's own failures exit 15 to 22, each with its failure line, as cmd-10's table lists.
 - **The source, `reading-2348-shell-source`:** the launcher's arguments are the only channel into the script, so only
   lib-product's built-in table, keyed by the application name, is available there (BR-8's first two sources can't
   reach it). The install half is generated at build time by D8g (`tools/`) from lib-server's POSIX functions and that
