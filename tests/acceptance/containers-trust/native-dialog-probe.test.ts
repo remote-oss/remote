@@ -44,7 +44,7 @@ describe('a probe of the native folder dialog (card tooling-209)', function () {
         ),
       );
       const typed = shell(
-        `id=$(xdotool search --onlyvisible --name 'Select Folder' 2>/dev/null | tail -1); echo "chooser=$id"; xdotool windowactivate --sync $id; echo "activate=$?"; sleep 1; echo "focused=$(xdotool getwindowfocus getwindowname)"; xdotool key --clearmodifiers ctrl+l; echo "ctrl+l=$?"; sleep 1; xdotool type --clearmodifiers --delay 60 '${target}'; echo "type=$?"; sleep 1; xdotool key --clearmodifiers Return; echo "return=$?"; sleep 2; echo "still=$(xdotool search --onlyvisible --name 'Select Folder' 2>/dev/null | tail -1)"`,
+        `id=$(xdotool search --onlyvisible --name 'Select Folder' 2>/dev/null | tail -1); echo "chooser=$id"; xdotool windowactivate --sync $id; echo "activate=$?"; sleep 1; echo "focused=$(xdotool getwindowfocus getwindowname)"; xdotool key --clearmodifiers ctrl+l; echo "ctrl+l=$?"; sleep 1; xdotool type --clearmodifiers --delay 60 '${target}'; echo "type=$?"; sleep 1; xdotool key --clearmodifiers Return; echo "return=$?"; sleep 2; echo "still1=$(xdotool search --onlyvisible --name 'Select Folder' 2>/dev/null | tail -1)"; xdotool key --clearmodifiers Return; echo "return2=$?"; sleep 2; echo "still2=$(xdotool search --onlyvisible --name 'Select Folder' 2>/dev/null | tail -1)"; xdotool key --clearmodifiers alt+o; echo "alt-o=$?"; sleep 2; echo "still3=$(xdotool search --onlyvisible --name 'Select Folder' 2>/dev/null | tail -1)"`,
       );
       console.log('PROBE typed:', typed);
       await new Promise(resolve => setTimeout(resolve, 8000));
