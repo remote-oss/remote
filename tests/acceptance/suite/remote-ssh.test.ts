@@ -377,7 +377,11 @@ describe('Remote - SSH, activated in the editor', () => {
                 'the template to be inserted',
                 30_000,
               );
-              await settle(200);
+              await waitUntil(
+                () => atStop(editor, [1, 5, 1, 10]),
+                'the alias stop to be selected',
+                10_000,
+              );
               measured.push([
                 editor?.document.uri.fsPath,
                 editor?.document.isDirty,
@@ -430,7 +434,7 @@ describe('Remote - SSH, activated in the editor', () => {
             0,
             '',
             TEMPLATE,
-            [userFile, true, '', TEMPLATE, [1, 5, 1, 9]],
+            [userFile, true, '', TEMPLATE, [1, 5, 1, 10]],
             [2, 13, 2, 21],
             [3, 9, 3, 13],
             [3, 13, 3, 13],
