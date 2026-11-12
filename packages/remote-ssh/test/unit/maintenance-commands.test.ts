@@ -623,4 +623,27 @@ describe('Uninstall on the own host (F-2412 6.1)', () => {
       [['uninstall dev'], false],
     );
   });
+
+  it('F-2205 AC-18, AC-29 (f2205-message): an uninstall whose target fails its name check ends in the error with the check’s message, and one that fails for another reason keeps the generic detail', async () => {
+    const named = setup({
+      outcome: {
+        result: 'connectionFailed',
+        cause: 'the target is not valid: invalidSetting',
+        reason: {id: 'S119', values: ['-']},
+      },
+    });
+    const unnamed = setup({outcome: FAILED});
+    const messages = await Promise.all(
+      [named, unnamed].map(scenario =>
+        scenario.uninstall().then(
+          () => 'it ended',
+          (caught: unknown) => (caught as Error).message,
+        ),
+      ),
+    );
+    deepStrictEqual(messages, [
+      'SSH host name cannot begin with -',
+      'Failed to run command',
+    ]);
+  });
 });
