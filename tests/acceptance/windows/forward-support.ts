@@ -28,11 +28,17 @@ export interface Held {
 
 /**
  * Connects to a local port and gives the listener's greeting, keeping the connection open. The greeting is a line: what
- * arrives is read up to its line end, as a slow tunnel can hand it over in pieces, and for five seconds at most.
+ * arrives is read up to its line end, as a slow tunnel can hand it over in pieces, and for five seconds at most. With a
+ * `request` the connection speaks first, and the listener answers it: the editor's port forwarding can drop what the
+ * host sends before the forward is attached to the connection, so a listener that writes on connect is read only when
+ * what it says came after the connection was in use.
  */
-export function holdOpen(port: number): Promise<Held> {
+export function holdOpen(port: number, request?: string): Promise<Held> {
   return new Promise((resolve, reject) => {
     const socket = connect(port, '127.0.0.1');
+    if (request !== undefined) {
+      socket.write(request);
+    }
     const received: Buffer[] = [];
     function held(): void {
       clearTimeout(limit);
