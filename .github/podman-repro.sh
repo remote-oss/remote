@@ -50,13 +50,19 @@ scenario() {
   t 60 "${P[@]}" rm -f -t 0 "repro-$name" >/dev/null 2>&1
   sleep 2
 }
-echo "##### the parts"
-for b in /usr/local/bin/crun /usr/bin/crun /usr/bin/runc /usr/local/lib/podman/conmon /usr/libexec/podman/conmon /usr/bin/conmon; do
-  [ -x "$b" ] && echo "$b: $("$b" --version 2>&1 | head -1)"
-done
-scenario apt-own-parts /usr/bin/podman --runtime /usr/bin/crun --conmon /usr/bin/conmon
+echo "##### building podman v6.1.4 from source (a dynamic build, beside the static archive's)"
+GOVERSION=$(curl -fsSL 'https://go.dev/VERSION?m=text' | head -1)
+echo "go: $GOVERSION"
+curl -fsSL "https://go.dev/dl/$GOVERSION.linux-amd64.tar.gz" | tar -xz -C "$RUNNER_TEMP"
+export PATH="$RUNNER_TEMP/go/bin:$PATH"
+sudo apt-get install -y -qq libseccomp-dev libgpgme-dev pkg-config >/dev/null 2>&1
+git clone -q --depth 1 -b v6.1.4 https://github.com/containers/podman "$RUNNER_TEMP/podman-src"
+( cd "$RUNNER_TEMP/podman-src" && timeout 900 make podman BUILDTAGS="seccomp exclude_graphdriver_btrfs containers_image_openpgp" >"$RUNNER_TEMP/podman-build.log" 2>&1 )
+echo "build exit $?"; tail -5 "$RUNNER_TEMP/podman-build.log"
+SOURCE_PODMAN="$RUNNER_TEMP/podman-src/bin/podman"
+"$SOURCE_PODMAN" --version
+file "$SOURCE_PODMAN" "$(command -v podman)" | cut -c1-200
 scenario static podman
-scenario static-ubuntu-crun podman --runtime /usr/bin/crun
-scenario static-runc podman --runtime /usr/bin/runc
-scenario static-ubuntu-conmon podman --conmon /usr/bin/conmon
-scenario static-ubuntu-crun-conmon podman --runtime /usr/bin/crun --conmon /usr/bin/conmon
+scenario source-built "$SOURCE_PODMAN"
+scenario source-built-again "$SOURCE_PODMAN"
+scenario static-again podman
