@@ -63,10 +63,14 @@ ssh-diagnostics (`components.md`).
   - **Each write is read back** after a fixed delay (500 ms): if the value isn't the one written, it is written once
     more and read back once more, and then an error line names the key. No unbounded loop. The pre-connection
     confirmation (F-2108 BR-8) is written the same way.
-  - **A clear wins:** a record the store no longer holds, cleared or dropped, isn't written again by its attempt's later
-    writes (AC-22). The read-back's one rewrite follows the same rule. It rewrites only while the store still holds
-    the attempt's record with another value, which is an older window's echo. A record gone at the read-back was
-    cleared, and rewriting it would undo the clear.
+  - **A clear wins, a revert doesn't:** a missing record is either cleared, dropped or reverted (an older window's echo
+    that predates the begin write), and only the store tells them apart.
+    - A Clear writes its clear time into the store, and that write is read back like any other.
+    - A record the store no longer holds is not written again when the store's clear time is after the attempt's
+      start (the clear wins, AC-22). Nor is it written again when the store already holds two newer records (the
+      newest-two rule dropped it).
+    - Any other missing record is a revert, and it's written again under the same bound of one rewrite (BR-9, AC-16).
+      The rule is the same for the read-back's rewrite and for the attempt's later writes.
 
 ## 3. The summary check and the terminal (BR-1 to BR-7, BR-13; 5.0, 6.7, 6.8, section 11)
 
