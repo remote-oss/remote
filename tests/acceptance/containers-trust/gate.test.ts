@@ -823,7 +823,8 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
         indicator: 'Opening Remote...',
       });
     } finally {
-      await setUserSetting('files.simpleDialog.enable', undefined);
+      // The launch's own value, which the row's false replaced in the user settings the launch wrote.
+      await setUserSetting('files.simpleDialog.enable', true);
     }
   });
 
