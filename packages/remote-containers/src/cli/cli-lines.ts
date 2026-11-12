@@ -7,7 +7,7 @@
 export type DaemonRefusal = 'invalidMount' | 'portAllocated';
 
 const INVALID_MOUNT =
-  /^(?:docker: )?Error response from daemon: invalid mount config for type "bind": /u;
+  /^(?:docker: )?Error response from daemon: invalid mount config for type "[^"]*": (?:bind source path does not exist: |field Source must not be empty$)/u;
 const PORT_ALLOCATED =
   /^(?:docker: )?Error response from daemon: .*: (?:Bind for \S+ failed: port is already allocated|failed to bind host port for \S+: address already in use)$/u;
 

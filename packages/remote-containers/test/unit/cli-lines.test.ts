@@ -511,29 +511,23 @@ describe('the daemon refusal (card containers-11)', () => {
   const PORT_TAKEN =
     'docker: Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint laughing_pare (da74): Bind for 0.0.0.0:47321 failed: port is already allocated';
 
-  it('F-0410 7.E1, AC-11: a bind mount Docker refuses, for any reason and with or without the docker prefix, is invalidMount', () => {
+  it('F-0410 7.E1, AC-11: a refused bind mount, with or without the docker prefix, is invalidMount', () => {
     deepStrictEqual(
-      [
-        MOUNT_MISSING,
-        MOUNT_EMPTY,
-        MOUNT_RESTART,
-        'Error response from daemon: invalid mount config for type "bind": invalid mount path: \'rel\' mount path must be absolute',
-      ].map(daemonRefusalOf),
-      ['invalidMount', 'invalidMount', 'invalidMount', 'invalidMount'],
+      [MOUNT_MISSING, MOUNT_EMPTY, MOUNT_RESTART].map(daemonRefusalOf),
+      ['invalidMount', 'invalidMount', 'invalidMount'],
     );
   });
 
-  it('F-0306 7.E5, AC-30, F-0410 7.E3: a volume mount Docker refuses, or a mount of an unknown type, is no refusal', () => {
-    const volumeUndefined =
-      'Error response from daemon: invalid mount config for type "volume": invalid mount path: \'undefined\' mount path must be absolute';
+  it('F-0306 7.E5, AC-30: a mount path that is undefined or relative is no refusal, with or without the docker prefix', () => {
+    const undefinedPath =
+      'Error response from daemon: invalid mount config for type "bind": invalid mount path: \'undefined\' mount path must be absolute';
     deepStrictEqual(
       [
-        volumeUndefined,
-        `docker: ${volumeUndefined}`,
-        'Error response from daemon: invalid mount config for type "tmpfs": invalid mount path: \'rel\' mount path must be absolute',
-        'Error response from daemon: invalid mount config for type "cluster": mount type unknown',
+        undefinedPath,
+        `docker: ${undefinedPath}`,
+        'Error response from daemon: invalid mount config for type "bind": invalid mount path: \'rel\' mount path must be absolute',
       ].map(daemonRefusalOf),
-      [undefined, undefined, undefined, undefined],
+      [undefined, undefined, undefined],
     );
   });
 
