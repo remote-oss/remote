@@ -339,15 +339,17 @@ function sourcesUnder(root: string, folder: string): string[] {
     return [];
   }
   return readdirSync(absolute, {withFileTypes: true, recursive: true})
-    .filter(
-      entry =>
-        entry.isFile() &&
-        /\.(ts|mts|cts|js|mjs|cjs)$/.test(entry.name) &&
-        !/(^|\/)(node_modules|dist[^/]*|\.[^/]+)(\/|$)/.test(
-          path.relative(absolute, entry.parentPath),
-        ),
-    )
-    .map(entry => path.relative(root, path.join(entry.parentPath, entry.name)));
+    .filter(entry => entry.isFile())
+    .map(entry => path.relative(root, path.join(entry.parentPath, entry.name)))
+    .filter(isScriptSource);
+}
+
+/** Whether a path (relative to the root) is a source a file could import: a script outside installed packages, build outputs and hidden folders. */
+function isScriptSource(file: string): boolean {
+  return (
+    /\.(ts|mts|cts|js|mjs|cjs)$/.test(file) &&
+    !/(^|\/)(node_modules|dist[^/]*|\.[^/]+)(\/|$)/.test(path.dirname(file))
+  );
 }
 
 /** A path without its script extension. */
@@ -369,17 +371,20 @@ function isRelative(specifier: string): boolean {
   return /^\.{1,2}\//.test(specifier);
 }
 
-/** The files among `sources` that import `target`, all paths relative to `root`. */
+/** The files among `sources` whose text (`read`) imports `target` by a relative path; an index also by its folder. */
 function importersOf(
-  root: string,
   sources: readonly string[],
   target: string,
+  read: (source: string) => string,
 ): string[] {
+  const own = stem(target);
+  const names =
+    path.basename(own) === 'index' ? [own, path.dirname(own)] : [own];
   return sources.filter(source =>
-    specifiersOf(readFileSync(path.join(root, source), 'utf8')).some(
+    specifiersOf(read(source)).some(
       specifier =>
         isRelative(specifier) &&
-        stem(path.join(path.dirname(source), specifier)) === stem(target),
+        names.includes(stem(path.join(path.dirname(source), specifier))),
     ),
   );
 }
@@ -404,7 +409,9 @@ export function testsOfHelper(
       continue;
     }
     seen.add(current);
-    for (const importer of importersOf(root, sources, current)) {
+    for (const importer of importersOf(sources, current, source =>
+      readFileSync(path.join(root, source), 'utf8'),
+    )) {
       if (path.dirname(importer) !== folder) {
         return undefined;
       }
@@ -418,6 +425,75 @@ export function testsOfHelper(
   return [...tests].sort();
 }
 
+/** The output of `git` with `gitArguments` in `root`, or undefined when it fails. */
+function gitOutput(
+  root: string,
+  gitArguments: readonly string[],
+): string | undefined {
+  const done = spawnSync('git', gitArguments, {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 1 << 28,
+  });
+  return done.status === 0 ? done.stdout : undefined;
+}
+
+/**
+ * The changed paths with each source of the acceptance tests that no longer exists (deleted or moved since `base`;
+ * the diff has no renames) replaced by the sources that imported it at `base`, which then go through the selection as
+ * usual. A test file stays as it is, since its path names its suite. A path with no importer at `base`, or when `git`
+ * can't read `base`, stays as it is, and so reaches every launch. Only the sources whose text names the path's file
+ * (or, for an index, its folder) are read.
+ */
+export function withDeletedAsImporters(
+  changed: readonly string[],
+  base: string,
+  root: string,
+): string[] {
+  return [
+    ...new Set(
+      changed.flatMap(file => {
+        if (
+          !isInside(ACCEPTANCE, file) ||
+          file.endsWith('.test.ts') ||
+          existsSync(path.join(root, file))
+        ) {
+          return [file];
+        }
+        const own = path.basename(stem(file));
+        const name = own === 'index' ? path.basename(path.dirname(file)) : own;
+        const named = gitOutput(root, [
+          'grep',
+          '-l',
+          '-F',
+          '-e',
+          name,
+          base,
+          '--',
+          'tests',
+          'tools',
+          'packages',
+        ]);
+        const texts = new Map<string, string | undefined>();
+        const sources = (named ?? '')
+          .split('\n')
+          .map(line => line.slice(base.length + 1))
+          .filter(source => source !== '' && isScriptSource(source));
+        for (const source of sources) {
+          texts.set(source, gitOutput(root, ['show', `${base}:${source}`]));
+        }
+        if (named === undefined || [...texts.values()].includes(undefined)) {
+          return [file];
+        }
+        const importers = importersOf(sources, file, source =>
+          String(texts.get(source)),
+        );
+        return importers.length === 0 ? [file] : importers;
+      }),
+    ),
+  ];
+}
+
 /** A suite folder's own helper: a script directly in tests/acceptance/<suite>/ that is not a test. */
 const SUITE_HELPER =
   /^tests\/acceptance\/(?!windows\/)[^/]+\/[^/]+\.(ts|mts|cts|js|mjs|cjs)$/;
@@ -425,7 +501,8 @@ const SUITE_HELPER =
 /**
  * The changed paths with each helper of a launch's suite folder (`suites`) replaced by the tests that stand for it. A
  * helper that a file outside its folder imports, that no test imports, or that is in a folder no launch runs stays as
- * it is, and so reaches every launch. The shared windows harness is never a suite's helper.
+ * it is, and so reaches every launch. The shared windows harness is never a suite's helper. A path deleted since the
+ * base stands for its importers there (withDeletedAsImporters), before this runs.
  */
 export function withHelpersAsTests(
   changed: readonly string[],
@@ -707,13 +784,15 @@ export function packageReach(
 
 /**
  * The folders of the acceptance tests that no launch has as its suite and that a job of its own runs on every pull
- * request, each with the package script that job runs: the server tests (`acceptance (server lifecycle)`) and the
- * shared suite's (`acceptance (slice 1)`, whose VS Code run takes that suite's bundle). A folder that no job runs
- * (containers-cli) is not one, so a change to its tests still reaches every launch.
+ * request that changes them, each with the package script that job runs: the server tests (`acceptance (server
+ * lifecycle)`), the shared suite's (`acceptance (slice 1)`, whose VS Code run takes that suite's bundle) and the
+ * dev container CLI's (`acceptance (containers-cli)`). A folder that no job runs
+ * is not one, so a change to its tests still reaches every launch.
  */
 export const OWN_JOB_FOLDERS: ReadonlyMap<string, string> = new Map([
   ['server', 'test:acceptance:server'],
   ['suite', 'test:acceptance'],
+  ['containers-cli', 'test:acceptance:containers-cli'],
 ]);
 
 /** A workflow file, as a changed path names it. */
@@ -852,6 +931,52 @@ export function workflowReach(
 }
 
 /**
+ * The folders of the acceptance tests that hold an image the harness builds rather than tests, each with the module
+ * that builds the image from it: a change in such a folder reaches what that module reaches, the launches of the tests
+ * that import it (testReach). The SSH Docker host's image is built by the engine fixture.
+ */
+export const IMAGE_FOLDERS: ReadonlyMap<string, string> = new Map([
+  ['ssh-engine', 'tests/acceptance/windows/engine-fixture.ts'],
+]);
+
+/** The sources the graph would hold (no unit test, not the selection) whose text names `folder` as a string. */
+export function sourcesNaming(root: string, folder: string): string[] {
+  const named = new RegExp(`['"\`]${folder.replaceAll('.', '\\.')}['"\`]`);
+  return [
+    ...['packages', 'tests', 'tools'].flatMap(each => sourcesUnder(root, each)),
+    ...rootSources(root),
+  ]
+    .filter(source => !NO_LAUNCH.some(pattern => pattern.test(source)))
+    .filter(source => named.test(readFileSync(path.join(root, source), 'utf8')))
+    .sort();
+}
+
+/**
+ * What a change in the image folder `folder` reaches: what its builder reaches, or undefined, every launch, when the
+ * folder has no builder, when another source names the folder too (it may build or read it as well), or when the
+ * builder's reach can't be placed.
+ */
+function imageFolderReach(
+  graph: SourceGraph | undefined,
+  folder: string,
+  launches: readonly Launch[],
+  root: string,
+): string[] | undefined {
+  const builder = IMAGE_FOLDERS.get(folder);
+  return graph === undefined ||
+    builder === undefined ||
+    sourcesNaming(root, folder).join() !== builder
+    ? undefined
+    : testReach(graph, builder, launches);
+}
+
+/** The image folder a changed path lies in, if any. */
+function imageFolderOf(file: string): string | undefined {
+  const folder = /^tests\/acceptance\/([^/]+)\//.exec(file)?.[1];
+  return folder !== undefined && IMAGE_FOLDERS.has(folder) ? folder : undefined;
+}
+
+/**
  * The reach measured at `root`, the head, for the changed paths it can place: each path in a package's folder that is
  * not a unit test, by its package; each test of a folder of its own job, by the launch tests that import it (none
  * when nothing does: its own job runs it); the parts table, by the parts it makes otherwise than at `base`; and each
@@ -876,10 +1001,24 @@ export function measuredPaths(
       !launches.some(launch => launch.suite === folder)
     );
   });
+  const imageFiles = changed.filter(file => imageFolderOf(file) !== undefined);
   const graph =
-    paths.length === 0 && ownTests.length === 0 ? undefined : sourceGraph(root);
+    paths.length === 0 && ownTests.length === 0 && imageFiles.length === 0
+      ? undefined
+      : sourceGraph(root);
   const reached = new Map<string, readonly string[] | undefined>();
   const measured = new Map<string, readonly string[]>();
+  for (const file of imageFiles) {
+    const reach = imageFolderReach(
+      graph,
+      String(imageFolderOf(file)),
+      launches,
+      root,
+    );
+    if (reach !== undefined) {
+      measured.set(file, reach);
+    }
+  }
   for (const file of ownTests) {
     const reach =
       graph === undefined ? undefined : testReach(graph, file, launches);

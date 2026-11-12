@@ -441,6 +441,21 @@ describe('Configure Container Features: its file (card containers-150, part B)',
     );
   }
 
+  /**
+   * Whether the JSON file `file` has Features: false while it holds no JSON yet, which a write in progress leaves it, so
+   * that only a wait asks it; any other failure to read it is the row's.
+   */
+  function holdsFeatures(file: string): boolean {
+    try {
+      return featureNames(file).length > 0;
+    } catch (caught) {
+      if (caught instanceof SyntaxError) {
+        return false;
+      }
+      throw caught;
+    }
+  }
+
   it('F-0807 AC-9, AC-13, AC-38 (c150-dotfile): with a root dotfile as the only configuration the pick opens at once with Finish and no Back, Finish rewrites the dotfile in place, creates no .devcontainer, and opens it as a preview', async () => {
     const folder = folderWith('c150-dotfile', {
       '.devcontainer.json': '{\n    "image": "x"\n}\n',
@@ -454,7 +469,7 @@ describe('Configure Container Features: its file (card containers-150, part B)',
       await pressQuickPickTitleButton(window, 'Finish');
       await waitFor(
         'the dotfile to gain the Feature',
-        () => featureNames(path.join(folder, '.devcontainer.json')).length > 0,
+        () => holdsFeatures(path.join(folder, '.devcontainer.json')),
         60_000,
       );
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -502,7 +517,7 @@ describe('Configure Container Features: its file (card containers-150, part B)',
       const nested = path.join(folder, '.devcontainer/a/devcontainer.json');
       await waitFor(
         'the nested file to gain the Feature',
-        () => featureNames(nested).length > 0,
+        () => holdsFeatures(nested),
         60_000,
       );
       deepStrictEqual(
@@ -537,7 +552,7 @@ describe('Configure Container Features: its file (card containers-150, part B)',
       await pressQuickPickTitleButton(window, 'Finish');
       await waitFor(
         'the stored file to gain the Feature',
-        () => featureNames(stored).length > 0,
+        () => holdsFeatures(stored),
         60_000,
       );
       deepStrictEqual(

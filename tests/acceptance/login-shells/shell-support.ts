@@ -208,3 +208,23 @@ export async function windowFace(
     toasts: (await connectSurface(window)).toasts,
   };
 }
+
+/** How long a new terminal's name is given to settle, in milliseconds: it is named after it opens. */
+const TERMINAL_NAME_MILLISECONDS = 15_000;
+
+/**
+ * The names of window `window`'s terminals once one of them is named exactly `shell`, or as they are when the wait for
+ * it ends: a new terminal is named after it opens, later on a slower machine, so a read right after it opens can miss it.
+ */
+export async function terminalsNamed(
+  window: string,
+  shell: string,
+): Promise<string[]> {
+  const deadline = Date.now() + TERMINAL_NAME_MILLISECONDS;
+  let names = await terminalNames(window);
+  while (!names.includes(shell) && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    names = await terminalNames(window);
+  }
+  return names;
+}

@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -246,6 +247,12 @@ describe('F-0503 server install (card containers-41)', function () {
     }
   });
 
+  /** Empties the download folder, so the next install finds no archive in the cache. */
+  function emptyCache(): void {
+    rmSync(downloadFolder, {recursive: true, force: true});
+    mkdirSync(downloadFolder, {recursive: true});
+  }
+
   /** Where the client keeps the archive of the commit for `tree`'s platform, relative to the download folder. */
   function archiveOf(tree: string): string {
     const product = editorProduct();
@@ -297,6 +304,7 @@ describe('F-0503 server install (card containers-41)', function () {
 
   it('F-0503 AC-2, AC-4, AC-5 (s2): a volume miss with an empty cache downloads the archive into the cache, shows Installing server then Starting server, and links the home to the new tree', async () => {
     await removeTree();
+    emptyCache();
     const before = requestCount();
     const first = await connect(folderOf('c41-miss'));
     const tree = await treeOfImage();
@@ -319,6 +327,7 @@ describe('F-0503 server install (card containers-41)', function () {
   });
 
   it('F-0503 AC-3 (s3): a volume miss with the archive in the cache downloads nothing, and Installing server still shows', async () => {
+    await removeTree();
     await connect(folderOf('c41-cached-prepare'));
     await removeContainers(folderOf('c41-cached-prepare'));
     const tree = await treeOfImage();

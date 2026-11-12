@@ -7,9 +7,9 @@ import {
   openWindow,
   runProcessTask,
   terminalNamed,
-  terminalNames,
 } from '../windows/harness.ts';
 import {INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
+import {terminalsNamed} from './shell-support.ts';
 
 /** One account per login shell, side by side on one host (card tooling-55). */
 describe('one account per login shell (card tooling-55)', function () {
@@ -29,10 +29,12 @@ describe('one account per login shell (card tooling-55)', function () {
         .split('\n')
         .includes('HOME=/home/harness-bash');
       await inWindow('ls-bash', 'workbench.action.terminal.new');
-      const shellTerminal = (await terminalNames('ls-bash')).includes('bash');
+      const terminals = await terminalsNamed('ls-bash', 'bash');
+      const shellTerminal = terminals.includes('bash');
       deepStrictEqual(
         {exitCode, homeLine, shellTerminal},
         {exitCode: 0, homeLine: true, shellTerminal: true},
+        `the terminals: ${JSON.stringify(terminals)}`,
       );
     } finally {
       await closeWindow('ls-bash');
@@ -51,10 +53,12 @@ describe('one account per login shell (card tooling-55)', function () {
         .split('\n')
         .includes('HOME=/home/harness-zsh');
       await inWindow('ls-zsh', 'workbench.action.terminal.new');
-      const shellTerminal = (await terminalNames('ls-zsh')).includes('zsh');
+      const terminals = await terminalsNamed('ls-zsh', 'zsh');
+      const shellTerminal = terminals.includes('zsh');
       deepStrictEqual(
         {exitCode, homeLine, shellTerminal},
         {exitCode: 0, homeLine: true, shellTerminal: true},
+        `the terminals: ${JSON.stringify(terminals)}`,
       );
     } finally {
       await closeWindow('ls-zsh');
@@ -75,10 +79,12 @@ describe('one account per login shell (card tooling-55)', function () {
         .split('\n')
         .includes('HOME=/home/harness-dash');
       await inWindow('ls-dash', 'workbench.action.terminal.new');
-      const shellTerminal = (await terminalNames('ls-dash')).includes('sh');
+      const terminals = await terminalsNamed('ls-dash', 'sh');
+      const shellTerminal = terminals.includes('sh');
       deepStrictEqual(
         {exitCode, homeLine, shellTerminal},
         {exitCode: 0, homeLine: true, shellTerminal: true},
+        `the terminals: ${JSON.stringify(terminals)}`,
       );
     } finally {
       await closeWindow('ls-dash');
@@ -97,10 +103,12 @@ describe('one account per login shell (card tooling-55)', function () {
         .split('\n')
         .includes('HOME=/home/harness-ksh');
       await inWindow('ls-ksh', 'workbench.action.terminal.new');
-      const shellTerminal = (await terminalNames('ls-ksh')).includes('ksh');
+      const terminals = await terminalsNamed('ls-ksh', 'ksh');
+      const shellTerminal = terminals.includes('ksh');
       deepStrictEqual(
         {exitCode, homeLine, shellTerminal},
         {exitCode: 0, homeLine: true, shellTerminal: true},
+        `the terminals: ${JSON.stringify(terminals)}`,
       );
     } finally {
       await closeWindow('ls-ksh');

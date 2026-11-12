@@ -21,6 +21,7 @@ import {
   labelsChangedSince,
   measuredPaths,
   NO_LAUNCH,
+  withDeletedAsImporters,
   SUITE_TEST,
   withHelpersAsTests,
 } from './acceptance-reach.ts';
@@ -262,7 +263,8 @@ export function planOfChange(
  * The changed paths of `base`...`head` as the selection reads them, and the reach measured for the two tables and the
  * packages: each suite helper as the tests that stand for it, a changed launch table as the launches whose entries
  * differ, a changed parts table as the launches of the parts it makes otherwise, and a package's path as the launches
- * its package reaches (packageReach), read at the head.
+ * its package reaches (packageReach), read at the head. A path deleted since `base` stands for its importers there
+ * (withDeletedAsImporters).
  */
 export async function measuredChange(
   base: string,
@@ -273,7 +275,7 @@ export async function measuredChange(
   measured: Map<string, readonly string[]>;
 }> {
   const changed = withHelpersAsTests(
-    changedFiles(base, head),
+    withDeletedAsImporters(changedFiles(base, head), base, REPOSITORY_ROOT),
     REPOSITORY_ROOT,
     new Set(launches.map(launch => launch.suite)),
   );

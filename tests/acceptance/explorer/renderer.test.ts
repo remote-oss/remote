@@ -3,6 +3,7 @@ import {mkdirSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {inWindow, variable, windowEvents} from '../windows/harness.ts';
+import {reloadedWindow} from './reloaded-window.ts';
 import {pageOf, rowAction, titleAction, viewRows} from '../windows/renderer.ts';
 
 /** The folder of the smoke window, in the run's folder, with two files the file explorer lists. */
@@ -30,9 +31,8 @@ describe('the renderer helpers, on core’s file explorer (card tooling-30)', fu
     mkdirSync(folder, {recursive: true});
     writeFileSync(path.join(folder, 'a.txt'), 'a');
     writeFileSync(path.join(folder, 'b.txt'), 'b');
-    // The gate rows run before this one and reload `local` onto `empty-2`.
     await inWindow(
-      'empty-2',
+      await reloadedWindow(),
       'acceptance.agent.openWindow',
       pathToFileURL(folder).href,
     );

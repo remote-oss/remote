@@ -95,7 +95,7 @@ describe('the dev container CLI through the bridge, on local Docker (card contai
         name: 'c3-${localEnv:C3_EMPTY:dflt}',
         image: 'alpine:3.22',
         postCreateCommand: 'echo created > /tmp/c3-created',
-        initializeCommand: `echo "[\${containerEnv:PATH}]" > ${initializeProbe}`,
+        initializeCommand: `printf '%s' '\${containerEnv:PATH}' > ${initializeProbe}`,
       }),
     );
   });
@@ -229,7 +229,10 @@ describe('the dev container CLI through the bridge, on local Docker (card contai
     );
   });
 
-  it('C3: containerEnv in initializeCommand is empty, as the CLI gives it', () => {
-    deepStrictEqual(readFileSync(initializeProbe, 'utf8').trim(), '[]');
+  it('C3: the CLI passes `${containerEnv:…}` in `initializeCommand` through unsubstituted (ADR-0009 deviation 2’s premise)', () => {
+    deepStrictEqual(
+      readFileSync(initializeProbe, 'utf8'),
+      '${containerEnv:PATH}',
+    );
   });
 });
