@@ -139,11 +139,12 @@ describe('the help commands (card containers-218)', function () {
   });
   it('F-0105 AC-20 (c218-key-feedback): in a local window a keybinding with no condition on Provide Feedback opens at most our feedback page, makes no container and writes no setting, and the window shows nothing of its own', async () => {
     installBrowser();
-    await withWindow('c218-key-feedback', {}, async (window, folder) => {
-      const restore = await bindKeys([
-        {key: 'ctrl+alt+y', command: 'remote-containers.provideFeedback'},
-      ]);
-      try {
+    // The key is bound before the window opens, as the other key rows do: the window reads the bindings as it starts.
+    const restore = await bindKeys([
+      {key: 'ctrl+alt+y', command: 'remote-containers.provideFeedback'},
+    ]);
+    try {
+      await withWindow('c218-key-feedback', {}, async (window, folder) => {
         const settings = readFileSync(userSettingsFile(), 'utf8');
         const before = openedUrls().length;
         await pressControlAlt(window, 'y');
@@ -163,55 +164,51 @@ describe('the help commands (card containers-218)', function () {
             own: {notices: [], pick: undefined, dialog: undefined},
           },
         );
-      } finally {
-        restore();
-      }
-    });
+      });
+    } finally {
+      restore();
+    }
   });
 
   it('F-0105 AC-23 (c218-key-started): in a dev container window a keybinding with no condition on Get Started opens our page with nothing else, or the editor says the command is not possible here, and the container and the settings are as they were', async () => {
     installBrowser();
-    const {name, folder, containerId} =
-      await connectedWindow('c218-key-started');
     const restore = await bindKeys([
-      {
-        key: 'ctrl+alt+u',
-        command: 'remote-containers.getStarted',
-      },
+      {key: 'ctrl+alt+u', command: 'remote-containers.getStarted'},
     ]);
     try {
-      const settings = readFileSync(userSettingsFile(), 'utf8');
-      await pressControlAlt(name, 'u');
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      const urls = openedUrls();
-      const notices = await notificationCentre(name);
-      const outcome =
-        urls.length === 1 && urls[0] === GET_STARTED && notices.length === 0
-          ? 'opened'
-          : urls.length === 0 &&
-              notices.length === 1 &&
-              (notices[0] ?? '').includes(
-                'is not possible in the current context',
-              )
-            ? 'refused'
-            : {urls, notices};
-      deepStrictEqual(
-        {
-          outcome: outcome === 'opened' || outcome === 'refused',
-          containers: await devContainersOf(folder),
-          settings: readFileSync(userSettingsFile(), 'utf8') === settings,
-        },
-        {
-          outcome: true,
-          containers: [containerId],
-          settings: true,
-        },
-        JSON.stringify(outcome),
-      );
+      const {name, folder, containerId} =
+        await connectedWindow('c218-key-started');
+      try {
+        const settings = readFileSync(userSettingsFile(), 'utf8');
+        await pressControlAlt(name, 'u');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        const urls = openedUrls();
+        const notices = await notificationCentre(name);
+        const outcome =
+          urls.length === 1 && urls[0] === GET_STARTED && notices.length === 0
+            ? 'opened'
+            : urls.length === 0 &&
+                notices.length === 1 &&
+                (notices[0] ?? '').includes(
+                  'is not possible in the current context',
+                )
+              ? 'refused'
+              : {urls, notices};
+        deepStrictEqual(
+          {
+            outcome: outcome === 'opened' || outcome === 'refused',
+            containers: await devContainersOf(folder),
+            settings: readFileSync(userSettingsFile(), 'utf8') === settings,
+          },
+          {outcome: true, containers: [containerId], settings: true},
+          JSON.stringify(outcome),
+        );
+      } finally {
+        await closeWindow(name).catch(() => undefined);
+        await removeContainers(folder);
+      }
     } finally {
       restore();
-      await closeWindow(name).catch(() => undefined);
-      await removeContainers(folder);
     }
   });
 });
