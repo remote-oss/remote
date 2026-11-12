@@ -11,6 +11,7 @@ import {
 import {
   answerInputBox,
   chooseQuickPickItem,
+  pageOf,
   pressEscape,
   quickPickOf,
   quickPickTitle,
@@ -33,6 +34,9 @@ function knownHosts(): string {
  */
 async function startedOnStranger(): Promise<{ending: Promise<string>}> {
   writeFileSync(knownHosts(), '');
+  // The command holds the window's agent until the row answers it, and the page of a window that has none of its own
+  // is found by asking the agent for its state: so the page is found first, and the reads that follow reuse it.
+  await pageOf('local');
   const ending = inWindow('local', 'opensshremotes.cleanDevBox').then(
     () => 'done',
     (caught: unknown) => String(caught),
