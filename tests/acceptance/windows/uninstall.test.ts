@@ -32,6 +32,7 @@ import {
   HOST_QUESTION,
   INSTALL_MILLISECONDS,
   linesSince,
+  waitForReconnection,
   openConnected,
   password,
   passwordAskHosts,
@@ -330,16 +331,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
     await closeAllButLocal();
     await openConnected('u1', INSTALL_MILLISECONDS);
     const mark = await uninstallWith('local', [pickHost('harness')]);
-    await waitFor(
-      'u1 to be resolved again by core’s reconnection',
-      () =>
-        linesSince(mark, 'u1').some(
-          line =>
-            line.surface === 'progress' &&
-            line.question === 'Setting up SSH Host harness',
-        ),
-      40_000,
-    );
+    await waitForReconnection(mark, 'u1', 'harness', 40_000);
     await reloadWindow('u1');
     await connectedWithin('u1', INSTALL_MILLISECONDS);
   });
@@ -680,16 +672,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       await perWindowMode(true);
       await openConnected('u1', INSTALL_MILLISECONDS);
       const mark = await uninstallWith('local', [pickHost('harness')]);
-      await waitFor(
-        'u1 to be resolved again by core’s reconnection',
-        () =>
-          linesSince(mark, 'u1').some(
-            line =>
-              line.surface === 'progress' &&
-              line.question === 'Setting up SSH Host harness',
-          ),
-        30_000,
-      );
+      await waitForReconnection(mark, 'u1', 'harness', 30_000);
       const reload = recordLines().length;
       await reloadWindow('u1');
       await connectedWithin('u1', INSTALL_MILLISECONDS);

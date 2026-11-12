@@ -11,6 +11,9 @@ import {
   rememberPage,
 } from '../windows/renderer.ts';
 
+/** What the rows of the two commands of F-0707 say; the entry that clones a repository in a container volume is another feature's and is offered. */
+const CONTINUE_ROW = 'Continue Working in Container Volume';
+
 /** The two commands of F-0707, which are registered and offered nowhere. */
 const COMMANDS = [
   'remote-containers.openRepositoryFromGitWithEditSession',
@@ -27,16 +30,13 @@ describe('the edit-session entries are dormant (card containers-156)', function 
       const before = containersLog().length;
       const indicator = await indicatorMenu(window);
       const registered = (
-        await commandsOf(window, 'remote-containers.openRepository')
+        await commandsOf(window, 'remote-containers.openRepositoryFrom')
       ).sort();
       const palette = await paletteRows(
         window,
         'Dev Containers: Clone Repository in a Container Volume',
       );
-      const continuing = await paletteRows(
-        window,
-        'Continue Working in Container Volume',
-      );
+      const continuing = await paletteRows(window, CONTINUE_ROW);
       const ownPalette = await paletteRows(
         window,
         'Add Dev Container Configuration',
@@ -48,13 +48,9 @@ describe('the edit-session entries are dormant (card containers-156)', function 
             indicator.includes(ADD_ITEM),
           ],
           registered,
-          palette: palette.filter(entry => entry.includes('Container Volume')),
-          continuing: continuing.filter(entry =>
-            entry.includes('Container Volume'),
-          ),
-          indicator: indicator.filter(entry =>
-            entry.includes('Container Volume'),
-          ),
+          palette: palette.filter(entry => entry.includes(CONTINUE_ROW)),
+          continuing: continuing.filter(entry => entry.includes(CONTINUE_ROW)),
+          indicator: indicator.filter(entry => entry.includes(CONTINUE_ROW)),
           notices: await notificationCentre(window),
           lines: containersLog()
             .slice(before)

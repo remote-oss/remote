@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {holdOpen, connectingPrograms} from './forward-support.ts';
+import {connectingPrograms, holdOpen, listenersOf} from './forward-support.ts';
 import {inWindow, onHost, openWindow, windowEvents} from './harness.ts';
 
 /** The port on the host that the listener answers on. */
@@ -51,9 +51,19 @@ describe('a port forwarded in a connected window (card connect-34)', function ()
   });
 
   it("F-2507 AC-18: a port forwarded in a connected window reaches the host's port", async () => {
-    const held = await holdOpen(localPortOf('f1'));
+    const port = localPortOf('f1');
+    const held = await holdOpen(port);
     held.release();
-    deepStrictEqual(held.greeting, GREETING);
+    // What listens on the port on each side, said only when the greeting is not the listener's.
+    const listeners =
+      held.greeting === GREETING
+        ? ''
+        : `; here: ${await listenersOf(port)}; on the host: ${await onHost('sh', '-c', `(ss -ltnp || netstat -ltnp) 2>&1 | grep ':${String(REMOTE_PORT)} ' || true`)}`;
+    deepStrictEqual(
+      held.greeting,
+      GREETING,
+      `the forward's local port was ${String(port)}${listeners}`,
+    );
   });
 
   it('F-2507 AC-18 (host-side): the connection to the port is opened by the VS Code Server, not by sshd', async () => {

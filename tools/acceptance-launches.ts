@@ -335,6 +335,25 @@ const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
 const SECRETS_ACCOUNTS_RESET =
   'printf "%s:%s\\n" harness-2fa "$HOST_PASSWORD" harness-expired "$HOST_PASSWORD" | chpasswd && chage -d 0 harness-expired';
 
+/**
+ * The command that ends the servers of the harness account and waits, up to ten seconds, until none is left, failing
+ * when one is: a connect that starts at once would otherwise find the old server's pid file and reuse its process.
+ */
+const END_SERVERS =
+  "pkill -f '/home/harness/[.]vscodium-server-insiders/bin/'; " +
+  'for i in $(seq 1 20); do ' +
+  "pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; " +
+  'sleep 0.5; done; exit 1';
+
+/**
+ * The host setup of a launch whose connect must start the server itself: the servers of the harness account are ended
+ * and gone, and the agent links of earlier launches removed, so the window's session is the one that starts the server.
+ */
+const NO_RUNNING_SERVER: readonly HostSetupEntry[] = [
+  {command: END_SERVERS},
+  {command: 'rm -f /tmp/vscode-ssh-auth-sock-*'},
+];
+
 /** The host setup of the agent-notmp launch: the ACL entry that keeps harness-notmp from creating links in /tmp, put back. */
 const AGENT_NOTMP_ACL = 'setfacl -m u:harness-notmp:r-x /tmp';
 
@@ -731,13 +750,7 @@ export function hostSetupOf(
 ): HostSetupEntry[] {
   const entries: HostSetupEntry[] = [{command: "pkill -f 'n[c] -lk -p'; true"}];
   if (hostCase.keepServer !== true) {
-    entries.push({
-      command:
-        "pkill -f '/home/harness/[.]vscodium-server-insiders/bin/'; " +
-        'for i in $(seq 1 20); do ' +
-        "pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; " +
-        'sleep 0.5; done; exit 1',
-    });
+    entries.push({command: END_SERVERS});
   }
   if (
     hostCase.keepServer !== true &&
@@ -775,6 +788,7 @@ function forwardingLaunch(
   label: string,
   alias: string,
   settings?: Readonly<Record<string, unknown>>,
+  hostSetup?: readonly HostSetupEntry[],
 ): Launch {
   return {
     label,
@@ -783,6 +797,7 @@ function forwardingLaunch(
     folderUri: `vscode-remote://ssh-remote+${alias}/home/harness`,
     environment: {HARNESS_FORWARDING_CASE: label},
     ...(settings === undefined ? {} : {settings}),
+    ...(hostSetup === undefined ? {} : {hostSetup}),
   };
 }
 
@@ -793,7 +808,7 @@ function forwardingLaunch(
  * `agent-off` and `x11` run suite-forwarding on the aliases that forward the agent (the second with
  * `remote.SSH.enableAgentForwarding` false) and X11, on that same server; `x11-noxauth` runs it on the `x11fwd` alias of the Debian 12 host, which has no `xauth`; each failing connect runs suite-failure in a window on its alias, answered from its own script; `terminal` runs
  * suite-terminal with `remote.SSH.useLocalServer` off; `socket` runs suite-socket with
- * `remote.SSH.remoteServerListenOnSocket` on; `slow` runs suite-slow with an extension that takes 15 s to
+ * `remote.SSH.remoteServerListenOnSocket` on, after its primer `socket-prime`, a terminal-mode connect that leaves the port-kind server its AC-9 row is about (a part of `socket`, made only when `socket` is named); `slow` runs suite-slow with an extension that takes 15 s to
  * activate in the remote extension host, which the harness copies to the host first; each `client-…` launch runs
  * suite-client with a `remote.SSH.path` of its own and fake clients on the run's `PATH`; `windows` starts the editor plainly, with no
  * runner and no folder, and drives its windows through the window agent from a Node run; `no-proposals` does the
@@ -831,9 +846,12 @@ export function launchesOf(root: string): Launch[] {
       folderUri: REMOTE_FOLDER_URI,
     },
     forwardingLaunch('agent', 'agentfwd'),
-    forwardingLaunch('agent-off', 'agentfwd-off', {
-      'remote.SSH.enableAgentForwarding': false,
-    }),
+    forwardingLaunch(
+      'agent-off',
+      'agentfwd-off',
+      {'remote.SSH.enableAgentForwarding': false},
+      NO_RUNNING_SERVER,
+    ),
     forwardingLaunch('x11', 'x11fwd'),
     {...forwardingLaunch('x11-noxauth', 'x11fwd'), hostBase: 'debian-12'},
     ...failureCases(root).map((failure): Launch => ({
@@ -854,6 +872,20 @@ export function launchesOf(root: string): Launch[] {
       runner: 'runner-remote',
       suite: 'suite-terminal',
       folderUri: REMOTE_FOLDER_URI,
+      settings: {
+        'remote.SSH.useLocalServer': false,
+        'remote.SSH.remotePlatform': {harness: 'linux'},
+      },
+    },
+    {
+      // The terminal-mode connect that leaves the port-kind server the socket launch's row is about, run right before it:
+      // a selection that names `socket` makes both.
+      label: 'socket-prime',
+      runner: 'runner-remote',
+      suite: 'suite-socket-prime',
+      folderUri: REMOTE_FOLDER_URI,
+      namedOnly: true,
+      partOf: 'socket',
       settings: {
         'remote.SSH.useLocalServer': false,
         'remote.SSH.remotePlatform': {harness: 'linux'},

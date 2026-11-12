@@ -399,7 +399,10 @@ export function plainEditorOf(
   };
 }
 
-/** The Node mocha run of a launch with no runner: the test files of its suite folder it lists, else every one, without the repository's config. */
+/**
+ * The Node mocha run of a launch with no runner: the test files of its suite folder it lists, else every one, without the
+ * repository's config, reported by mocha's default reporter that also prints each file's time (tools/acceptance-file-times.ts).
+ */
 export function plainTestsOf(
   root: string,
   launch: Launch,
@@ -412,6 +415,8 @@ export function plainTestsOf(
       '--no-config',
       '--extension',
       'ts',
+      '--reporter',
+      path.join(root, 'tools', 'acceptance-file-times.ts'),
       ...(launch.kind === 'plain' && launch.files !== undefined
         ? launch.files
         : ['*.test.ts']

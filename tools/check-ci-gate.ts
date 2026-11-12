@@ -8,6 +8,12 @@
  * A job whose `runs-on` reads a pool variable holds, in that expression, the same-repository guard (a fork's pull
  * request takes GitHub's runner), asks for X64 and ephemeral (a fresh machine per job), and reads no secret (athena on
  * #2219).
+ *
+ * The VSCodium job and its plan run on every merge to main whatever the repository's variables say: their `if:` reads
+ * none, so no variable can turn off the post-merge run, the proof of what a pull request's narrowed parts left out.
+ *
+ * The launch jobs give a dispatch concurrency groups of its own run (`github.run_id`): a group that names only the part
+ * lets one dispatch replace another's pending part.
  */
 
 import {readdirSync, readFileSync} from 'node:fs';
@@ -55,6 +61,85 @@ export function ciGateProblems(text: string): string[] {
   return problems;
 }
 
+/** The jobs of the post-merge run, whose conditions read no repository variable. */
+export const POST_MERGE_JOBS = [
+  'vscodium-plan',
+  'acceptance-vscodium',
+  'acceptance-vscodium-containers',
+];
+
+/** What is wrong with the post-merge run of the workflow text: a job missing, or a condition that reads a variable. */
+export function postMergeProblems(text: string): string[] {
+  const workflow = parseYaml(text) as {
+    jobs?: Record<string, {if?: unknown}>;
+  };
+  return POST_MERGE_JOBS.flatMap(name => {
+    const definition = workflow.jobs?.[name];
+    if (definition === undefined) {
+      return [`${WORKFLOW}: no ${name} job, which the post-merge run needs`];
+    }
+    return JSON.stringify(definition.if ?? '').includes('vars.')
+      ? [
+          `${WORKFLOW}: ${name}'s if: reads a repository variable, which could turn the post-merge run off`,
+        ]
+      : [];
+  });
+}
+
+/** The launch jobs whose concurrency groups name the run for a dispatch. */
+export const DISPATCH_GROUP_JOBS = [
+  'acceptance-vscodium',
+  'acceptance-vscodium-containers',
+  'acceptance-genuine',
+];
+
+/**
+ * The alternative a `workflow_dispatch` takes in a group: the last top-level `||` operand of the group's first
+ * expression, the fallback after the schedule's and the push's; the whole text when it holds no expression.
+ */
+export function dispatchFallbackOf(group: string): string {
+  const expression = /\$\{\{([\s\S]*?)\}\}/.exec(group)?.[1] ?? group;
+  const operands: string[] = [];
+  let depth = 0;
+  let quoted = false;
+  let start = 0;
+  for (let index = 0; index < expression.length; index += 1) {
+    const character = expression[index];
+    if (character === "'") {
+      quoted = !quoted;
+    } else if (!quoted && character === '(') {
+      depth += 1;
+    } else if (!quoted && character === ')') {
+      depth -= 1;
+    } else if (!quoted && depth === 0 && expression.startsWith('||', index)) {
+      operands.push(expression.slice(start, index));
+      start = index + 2;
+      index += 1;
+    }
+  }
+  operands.push(expression.slice(start));
+  return (operands.at(-1) ?? '').trim();
+}
+
+/**
+ * What is wrong with the launch jobs' groups in the workflow text: a group whose dispatch fallback doesn't name the
+ * run, which a dispatch of another run can share.
+ */
+export function dispatchGroupProblems(text: string): string[] {
+  const workflow = parseYaml(text) as {
+    jobs?: Record<string, {concurrency?: {group?: unknown}}>;
+  };
+  return DISPATCH_GROUP_JOBS.flatMap(name => {
+    const group = workflow.jobs?.[name]?.concurrency?.group;
+    return typeof group === 'string' &&
+      dispatchFallbackOf(group).includes('github.run_id')
+      ? []
+      : [
+          `${WORKFLOW}: ${name}'s concurrency group doesn't name the run for a dispatch, so one dispatch can replace another's pending job`,
+        ];
+  });
+}
+
 /** What is wrong with the pool jobs of the workflow `file`: a missing guard or labels, or a secret read. */
 export function poolJobProblems(file: string, text: string): string[] {
   const workflow = parseYaml(text) as {
@@ -85,10 +170,14 @@ export function poolJobProblems(file: string, text: string): string[] {
 }
 
 if (isMainModule(import.meta.url)) {
+  const workflowText = readFileSync(
+    path.join(REPOSITORY_ROOT, WORKFLOW),
+    'utf8',
+  );
   const problems = [
-    ...ciGateProblems(
-      readFileSync(path.join(REPOSITORY_ROOT, WORKFLOW), 'utf8'),
-    ),
+    ...ciGateProblems(workflowText),
+    ...postMergeProblems(workflowText),
+    ...dispatchGroupProblems(workflowText),
     ...readdirSync(path.join(REPOSITORY_ROOT, WORKFLOWS))
       .filter(file => file.endsWith('.yml'))
       .flatMap(file =>

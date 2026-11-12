@@ -3,7 +3,10 @@ import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   ciGateProblems,
+  dispatchFallbackOf,
+  dispatchGroupProblems,
   poolJobProblems,
+  postMergeProblems,
   SAME_REPOSITORY_GUARD,
 } from './check-ci-gate.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
@@ -142,7 +145,7 @@ describe('check-ci-gate', () => {
         [],
         [
           'changes',
-          'post-merge-select',
+          'vscodium-plan',
           'checks',
           'unit',
           'quality',
@@ -153,6 +156,87 @@ describe('check-ci-gate', () => {
           'acceptance-vscodium',
         ],
       ],
+    );
+  });
+
+  it('tooling-159: the post-merge run holds when its jobs read no variable, and a variable in either if:, or a missing job, is named', () => {
+    function jobs(plan: string, vscodium: string): string {
+      return `jobs:\n  vscodium-plan:\n    if: "${plan}"\n  acceptance-vscodium:\n    if: "${vscodium}"\n  acceptance-vscodium-containers:\n    if: "${vscodium}"\n`;
+    }
+    deepStrictEqual(
+      [
+        postMergeProblems(jobs("github.event_name == 'push'", '!cancelled()')),
+        postMergeProblems(
+          jobs(
+            "github.event_name == 'push'",
+            "!cancelled() && vars.CI_POST_MERGE_VSCODIUM != 'off'",
+          ),
+        ),
+        postMergeProblems('jobs:\n  acceptance-vscodium:\n    runs-on: x\n'),
+        postMergeProblems(
+          readFileSync(
+            path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
+            'utf8',
+          ),
+        ),
+      ],
+      [
+        [],
+        [
+          ".github/workflows/ci.yml: acceptance-vscodium's if: reads a repository variable, which could turn the post-merge run off",
+          ".github/workflows/ci.yml: acceptance-vscodium-containers's if: reads a repository variable, which could turn the post-merge run off",
+        ],
+        [
+          '.github/workflows/ci.yml: no vscodium-plan job, which the post-merge run needs',
+          '.github/workflows/ci.yml: no acceptance-vscodium-containers job, which the post-merge run needs',
+        ],
+        [],
+      ],
+    );
+  });
+
+  it("tooling-159: a dispatch's fallback is the group expression's last top-level || operand, the text when there is no expression", () => {
+    deepStrictEqual(
+      [
+        dispatchFallbackOf(
+          "${{ github.event_name == 'schedule' && 'a' || (github.event_name == 'push' && format('b-{0}', github.ref)) || format('c-{0}', github.run_id) }}-${{ matrix.part.name }}",
+        ),
+        dispatchFallbackOf("${{ 'x || y' }}"),
+        dispatchFallbackOf('fixed-group'),
+      ],
+      ["format('c-{0}', github.run_id)", "'x || y'", 'fixed-group'],
+    );
+  });
+
+  it("tooling-159: the launch jobs' groups name the run in the dispatch fallback; a group of the part alone, or with the run only in the push branch, is named", () => {
+    function jobsWith(group: string): string {
+      return `jobs:\n  acceptance-vscodium:\n    concurrency:\n      group: "${group}"\n  acceptance-vscodium-containers:\n    concurrency:\n      group: "\${{ format('x-{0}', github.run_id) }}"\n  acceptance-genuine:\n    concurrency:\n      group: "\${{ format('y-{0}', github.run_id) }}"\n`;
+    }
+    const problem =
+      ".github/workflows/ci.yml: acceptance-vscodium's concurrency group doesn't name the run for a dispatch, so one dispatch can replace another's pending job";
+    deepStrictEqual(
+      [
+        dispatchGroupProblems(
+          jobsWith(
+            "${{ github.event_name == 'push' && 'main' || format('run-{0}', github.run_id) }}-a",
+          ),
+        ),
+        dispatchGroupProblems(
+          jobsWith('acceptance-vscodium-${{ matrix.part.name }}'),
+        ),
+        dispatchGroupProblems(
+          jobsWith(
+            "${{ github.event_name == 'push' && format('v-{0}', github.run_id) || 'acceptance-vscodium' }}-a",
+          ),
+        ),
+        dispatchGroupProblems(
+          readFileSync(
+            path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
+            'utf8',
+          ),
+        ),
+      ],
+      [[], [problem], [problem], []],
     );
   });
 });

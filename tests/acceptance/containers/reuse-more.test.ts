@@ -330,6 +330,12 @@ describe('F-0409 the container of a folder: stops, removals, failures and worksp
           ),
         30_000,
       );
+      // Core draws the missing file's placeholder after the tab is active, so the row waits for it before reading.
+      await waitFor(
+        `window ${name} to draw the missing file's placeholder`,
+        async () => /file was not found/i.test(await pageText(name)),
+        30_000,
+      );
       deepStrictEqual(
         [
           existsSync(configuration),

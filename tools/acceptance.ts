@@ -2408,7 +2408,14 @@ export function editorExecutableOf(
 /** What a run prints when its arguments are not understood. */
 export const USAGE =
   'usage: node tools/acceptance.ts [--editor vscode|vscodium [--launches all|none|<entry>,...]], an entry being a ' +
-  'label, all, @<group> or !<label>|!@<group>';
+  'label, all, @<group>, !<label>|!@<group> or <label>:<file>[+<file>...]';
+
+/**
+ * An entry that names some test files of a plain launch, `<label>:<file>[+<file>...]`: the launch runs those files
+ * alone, a pull request's part of one test-only change.
+ */
+const FILES_ENTRY =
+  /^([a-z][a-z0-9-]*):([\w.-]+\.test\.ts(?:\+[\w.-]+\.test\.ts)*)$/;
 
 /** The launches one entry of a selection names: a label, `all`, or `@<group>`; none for an unknown name. */
 function launchesNamed(
@@ -2432,10 +2439,27 @@ function launchesNamed(
 }
 
 /**
+ * The plain launches `label` names that run `file`: the launch of that label, or the parts of the launch of that name,
+ * whose own files list it, or that run every file of their suite.
+ */
+function launchesRunning(
+  launches: readonly Launch[],
+  label: string,
+  file: string,
+): Launch[] {
+  return (launchesNamed(launches, label) ?? []).filter(
+    launch =>
+      launch.kind === 'plain' &&
+      (launch.files === undefined || launch.files.includes(file)),
+  );
+}
+
+/**
  * The launches a run makes, in the run's order: every one that is not `namedOnly` when `selected` is undefined, else
  * what its entries name, each in turn. An entry is a label, `all`, or `@<group>` (every launch of the group, a
- * `namedOnly` one included), and `!` before one takes out what the entries before it put in. An entry that names
- * nothing known gives an error text naming the known labels and groups.
+ * `namedOnly` one included), and `!` before one takes out what the entries before it put in. `<label>:<file>+…` makes
+ * the plain launch that runs those files with only them, in its own order, unless an entry names the whole launch. An
+ * entry that names nothing known gives an error text naming the known labels and groups.
  */
 export function chosenLaunches(
   launches: readonly Launch[],
@@ -2445,8 +2469,28 @@ export function chosenLaunches(
     return launches.filter(launch => launch.namedOnly !== true);
   }
   const chosen = new Set<Launch>();
+  const someFiles = new Map<Launch, Set<string>>();
   const unknown: string[] = [];
   for (const entry of selected) {
+    const filesEntry = FILES_ENTRY.exec(entry);
+    if (filesEntry !== null) {
+      const [, label, names] = filesEntry;
+      const running = String(names)
+        .split('+')
+        .map(
+          file =>
+            [file, launchesRunning(launches, String(label), file)] as const,
+        );
+      if (running.some(([, found]) => found.length === 0)) {
+        unknown.push(entry);
+      }
+      for (const [file, found] of running) {
+        for (const launch of found) {
+          someFiles.set(launch, (someFiles.get(launch) ?? new Set()).add(file));
+        }
+      }
+      continue;
+    }
     const removing = entry.startsWith('!');
     const name = removing ? entry.slice(1) : entry;
     const named = launchesNamed(launches, name);
@@ -2467,7 +2511,20 @@ export function chosenLaunches(
     const groups = LAUNCH_GROUPS.map(group => `@${group}`);
     return `unknown launch label(s): ${unknown.join(', ')}; the known ones: ${known.join(', ')}; the groups: ${groups.join(', ')}`;
   }
-  return launches.filter(launch => chosen.has(launch));
+  return launches.flatMap((launch): Launch[] => {
+    const files = someFiles.get(launch);
+    if (chosen.has(launch) || files === undefined || launch.kind !== 'plain') {
+      return chosen.has(launch) ? [launch] : [];
+    }
+    return [
+      {
+        ...launch,
+        files: (launch.files ?? [...files].sort()).filter(file =>
+          files.has(file),
+        ),
+      },
+    ];
+  });
 }
 
 /** The line a selected run prints: the launches it makes, with their groups, and the ones it skips. */

@@ -47,21 +47,30 @@ describe('F-2106: pseudo-terminal allocation', function () {
   it('F-2106 AC-2 (c86-off-force): with the setting off, a RequestTTY force in the host entry allocates no terminal in the shared, the terminal and the second-ssh modes', async () => {
     await keepingSettings(async () => {
       const seen: Array<ReturnType<typeof summary>> = [];
+      const commands: string[] = [];
       for (const settings of [
         {},
         {'remote.SSH.useLocalServer': false},
         {'remote.SSH.useExecServer': false},
       ]) {
         await closeAllButLocal();
-        seen.push(
-          summary(await ptyConnect('c86-off-force', 'pty-force', settings)),
+        const connect = await ptyConnect(
+          'c86-off-force',
+          'pty-force',
+          settings,
         );
+        seen.push(summary(connect));
+        commands.push(connect.commands.join(' | '));
       }
-      deepStrictEqual(seen, [
-        [true, [true], ['notty']],
-        [true, [true], ['notty']],
-        [true, [true], ['notty']],
-      ]);
+      deepStrictEqual(
+        seen,
+        [
+          [true, [true], ['notty']],
+          [true, [true], ['notty']],
+          [true, [true], ['notty']],
+        ],
+        `the ssh commands seen: ${commands.join(' || ')}`,
+      );
     });
   });
 

@@ -306,6 +306,7 @@ describe('the launches of the VSCodium run', () => {
           failure => `failure-${failure.label ?? failure.alias}`,
         ),
         'terminal',
+        'socket-prime',
         'socket',
         'slow',
         'remote-ubuntu',
@@ -1018,7 +1019,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-51, connect-84, containers-101: the containers-podman launch, cli-path, the three install primers and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
+  it('tooling-51, connect-84, containers-101, tooling-168: socket-prime (a part of socket), the containers-podman launch, cli-path, the three install primers and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
     deepStrictEqual(
       launches
         .filter(
@@ -1028,6 +1029,7 @@ describe('the launches of the VSCodium run', () => {
         )
         .map(launch => launch.label),
       [
+        'socket-prime',
         'cli-path',
         'containers-podman',
         'install-install-present-prime',
@@ -1219,6 +1221,27 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
+  it('tooling-168: of the forwarding launches only agent-off has a host setup: it ends the servers of the account, waits until none is left, and removes the agent links', () => {
+    deepStrictEqual(
+      ['agent', 'agent-off', 'x11', 'x11-noxauth'].map(label => {
+        const launch = launchLabelled(launches, label);
+        return launch.kind === undefined ? launch.hostSetup : 'not a runner';
+      }),
+      [
+        undefined,
+        [
+          {
+            command:
+              "pkill -f '/home/harness/[.]vscodium-server-insiders/bin/'; for i in $(seq 1 20); do pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; sleep 0.5; done; exit 1",
+          },
+          {command: 'rm -f /tmp/vscode-ssh-auth-sock-*'},
+        ],
+        undefined,
+        undefined,
+      ],
+    );
+  });
+
   it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, login-shells, agent-notmp, default-ports, the explorer, trust and containers launches and every ports case', () => {
     deepStrictEqual(
       launches
@@ -1231,6 +1254,7 @@ describe('the launches of the VSCodium run', () => {
         'failure-port-range-busy',
         'failure-i686',
         'terminal',
+        'socket-prime',
         'socket',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
