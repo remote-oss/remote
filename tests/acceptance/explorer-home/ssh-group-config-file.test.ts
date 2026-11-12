@@ -25,7 +25,8 @@ import {rowAction} from '../windows/renderer.ts';
 /** The picker of F-2203 AC-2: its question and its items, the user file first. */
 const PICKER_QUESTION = 'Select SSH configuration file to update';
 const SYSTEM_FILE = '/etc/ssh/ssh_config';
-const PICKER_ITEMS_AFTER_FILES = ['Settings', 'Help'];
+const SETTINGS_ITEM = 'Settings | specify a custom configuration file';
+const HELP_ITEM = 'Help | about SSH configuration files';
 
 describe('Open SSH Config File by the SSH row (card coverage-119, F-2203 AC-19)', function () {
   this.timeout(300_000);
@@ -46,7 +47,7 @@ describe('Open SSH Config File by the SSH row (card coverage-119, F-2203 AC-19)'
         [
           '',
           PICKER_QUESTION,
-          [userFile, SYSTEM_FILE, ...PICKER_ITEMS_AFTER_FILES],
+          [userFile, SYSTEM_FILE, SETTINGS_ITEM, HELP_ITEM],
         ],
       );
     } finally {
