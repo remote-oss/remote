@@ -469,9 +469,19 @@ jobs:
       - run: tools/start-display
       # the part's launches: whole launches and some files of launches, or the launches a dispatch names
       - timeout-minutes: 60
-        run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
+        run: |
+          # probe only: Podman's containers and their processes every 30 s while the launch runs
+          if command -v podman >/dev/null; then
+            ( while sleep 30; do
+                echo "== $(date -u +%T)"; podman ps -a --format '{{.ID}} {{.Status}} {{.Image}} {{.Names}}'
+                for c in $(podman ps -q); do echo "-- $c"; podman exec "$c" ps -o pid,user,args 2>&1 | head -40; podman exec "$c" sh -c 'netstat -ltn 2>&1 || ss -ltn 2>&1' | head -15; done
+              done ) > "$RUNNER_TEMP/podman-state.txt" 2>&1 &
+          fi
+          pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         env:
           LAUNCHES: ${{ matrix.part.launches }}
+      - if: failure()
+        run: tail -c 60000 "$RUNNER_TEMP/podman-state.txt" || true
       - if: always()
         timeout-minutes: 10
         run: pnpm acceptance:clean
