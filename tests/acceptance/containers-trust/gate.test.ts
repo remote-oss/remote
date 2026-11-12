@@ -49,7 +49,10 @@ import {
   welcomeText,
   windowTitle,
 } from '../windows/renderer.ts';
-import {VIEW} from '../windows/dev-containers-view.ts';
+import {
+  stateOf as containerStateOf,
+  VIEW,
+} from '../windows/dev-containers-view.ts';
 import {folderWrapper, recordedCalls} from '../windows/folder-wrapper.ts';
 
 /** The question core asks of a folder, F-0106 5.0 step 2. */
@@ -327,6 +330,70 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
         containers: [containerId],
         folders: [`file://${folder}`],
       },
+    );
+    await closeWindow(name);
+  });
+
+  /**
+   * Reloads the connected window of a folder after Don't Trust, waits until the reload's shutdown has stopped the
+   * container, answers core's trust dialog with `answer`, and gives what the window and the container are after.
+   */
+  async function stoppedThenAnswered(key: string, answer: string) {
+    const folder = devContainerFolder(`gate-${key}`, {name: `Gate ${key}`});
+    const name = await trustedContainerWindow(folder);
+    const [containerId = ''] = await devContainersOf(folder);
+    await inWindow(name, 'workbench.trust.manage');
+    await waitFor(
+      'the trust editor of the connected window',
+      async () => (await pageText(name)).includes('You trust this folder'),
+      30_000,
+    );
+    await clickButton(name, "Don't Trust");
+    const reloaded = reloadWindow(name);
+    await waitForDialog(name);
+    await waitFor(
+      'the reload to stop the container',
+      async () => (await containerStateOf(containerId)) === 'exited',
+      120_000,
+    );
+    await answerDialog(name, answer);
+    return {name, folder, containerId, reloaded};
+  }
+
+  it('F-0106 AC-48 (c123-restart-accepted): Trust Folder & Continue after the reload stopped the container starts that same container again, without a build, and the window connects to it', async () => {
+    const {name, folder, containerId, reloaded} = await stoppedThenAnswered(
+      'restart-accepted',
+      'Trust Folder & Continue',
+    );
+    await reloaded;
+    await connectedToContainer(name);
+    deepStrictEqual(
+      [
+        await devContainersOf(folder),
+        await containerStateOf(containerId),
+        (await windowState(name)).remoteName,
+      ],
+      [[containerId], 'running', 'dev-container'],
+    );
+    await closeWindow(name);
+  });
+
+  it('F-0106 AC-48 (c123-restart-declined): declining the trust dialog after the reload stopped the container leaves that container stopped', async () => {
+    const {name, folder, containerId, reloaded} = await stoppedThenAnswered(
+      'restart-declined',
+      'Cancel',
+    );
+    await waitForDialog(name);
+    await answerDialog(name, 'OK');
+    await reloaded;
+    await waitFor(
+      `window ${name} to be a local folder again`,
+      async () => (await windowState(name)).remoteName === null,
+      60_000,
+    );
+    deepStrictEqual(
+      [await devContainersOf(folder), await containerStateOf(containerId)],
+      [[containerId], 'exited'],
     );
     await closeWindow(name);
   });
