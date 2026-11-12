@@ -144,15 +144,6 @@
     "added": "2026-11-12"
   },
   {
-    "launch": "containers-ports",
-    "file": "containers-ports/attributes.test.ts",
-    "title": "F-1101 AC-12 (rebuild): a changed attribute is not in effect after a reload, and is after a rebuild",
-    "card": 2450,
-    "owner": "daedalus",
-    "evidence": 42367771624,
-    "added": "2026-11-12"
-  },
-  {
     "launch": "containers-view",
     "file": "containers-view/targets-row-actions.test.ts",
     "title": "F-0902 AC-24 (last-user): the Remove confirmation adds S373 for each volume and folder no other container uses, in mount order, not for one another container mounts and not for the vscode volume",
