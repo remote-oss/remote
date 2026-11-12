@@ -5,10 +5,14 @@ import {
   connectionLog,
   openWindow,
   recordLines,
+  waitFor,
   windowState,
 } from '../windows/harness.ts';
 
-/** How long the user settings file may take to gain the platform after the window connects, in milliseconds. */
+/** How long the connect may take to resolve after the window opens, in milliseconds. */
+const CONNECT_WAIT_MILLISECONDS = 120_000;
+
+/** How long the user settings file may take to gain the platform after the connect resolves, in milliseconds. */
 const SETTINGS_WAIT_MILLISECONDS = 10_000;
 
 /** The `remote.SSH.remotePlatform` entry of the launch's user settings, or nothing while it is not written. */
@@ -55,13 +59,18 @@ describe('a terminal-mode connect that picks the platform', function () {
       }),
     );
     await openWindow('harness', 'tp1');
-    const connected = Date.now();
+    // The window carries the remote's name from the start; the platform is stored when the connect has resolved.
+    await waitFor(
+      'the connect to resolve',
+      () =>
+        connectionLog().some(line =>
+          line.startsWith('Resolved ssh-remote+harness to local port'),
+        ),
+      CONNECT_WAIT_MILLISECONDS,
+    );
     const remoteName = (await windowState('tp1')).remoteName;
     const answers = recordLines('platformPick').map(line => line.answer);
     const stored = await storedWithin(SETTINGS_WAIT_MILLISECONDS);
-    console.log(
-      `#664: the platform was stored ${String(Date.now() - connected)} ms after the window connected`,
-    );
     deepStrictEqual(
       [remoteName, answers, stored],
       ['ssh-remote', ['linux'], {harness: 'linux'}],
