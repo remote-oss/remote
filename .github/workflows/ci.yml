@@ -461,6 +461,21 @@ jobs:
           df -h / | tail -1
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
           df -h / | tail -1
+      # probe only (#2319): Ubuntu's own podman, before tools/install-podman writes any configuration
+      - if: contains(matrix.part.launches, 'containers-podman')
+        timeout-minutes: 6
+        continue-on-error: true
+        run: |
+          set +e
+          t() { local s=$(date +%s.%N); timeout "$@"; local c=$?; echo "  -> exit $c after $(echo "$(date +%s.%N) - $s" | bc) s"; }
+          echo "== clean Ubuntu podman: $(podman --version) at $(command -v podman); conmon $(command -v conmon); crun $(command -v crun) $(crun --version 2>&1 | head -1)"
+          ls /etc/containers/containers.conf.d 2>&1 | head -3
+          timeout 20 podman info --format 'cgroup manager {{.Host.CgroupManager}}, runtime {{.Host.OCIRuntime.Path}}, conmon {{.Host.Conmon.Path}}, network {{.Host.NetworkBackend}}' 2>&1 | head -3
+          id=$(timeout 120 podman run -d docker.io/library/alpine:3.22 sleep 600 2>&1 | tail -1); echo "container: $id"
+          echo "exec true:"; t 30 podman exec $id true </dev/null
+          echo "exec echo hi:"; t 30 podman exec $id echo hi </dev/null
+          ls -la /run/user/1001/libpod/tmp/exits 2>&1 | head -5
+          timeout 60 podman rm -f -t 0 $id >/dev/null 2>&1; timeout 60 podman system reset -f >/dev/null 2>&1; echo "reset done"
       - if: contains(matrix.part.launches, '@containers') || contains(matrix.part.launches, 'containers-podman')
         timeout-minutes: 10
         run: tools/install-podman
