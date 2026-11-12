@@ -933,7 +933,9 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
       value: string;
       clean: boolean;
       dialog: ShownDialog | undefined;
-      notices: string[];
+      domNotices: string[];
+      failureDialogs: number;
+      notices: number;
     }> = [];
     try {
       await userSettings({'remote.SSH.logLevel': 'debug'});
@@ -955,12 +957,21 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
           );
           mark = connectionLog().length;
           await connectedWithin('c121-live26', 120_000);
+          // The core's "Setting up" progress notice is part of a reconnection's UI; an error is a dialog, a failure dialog or an extension notice.
           const dialog = await dialogOf('c121-live26');
-          const notices = await notifications('c121-live26');
+          const domNotices = await notifications('c121-live26');
+          const failureDialogs = recordLines(
+            'failureDialog',
+            'c121-live26',
+          ).length;
+          const notices = recordLines('notice', 'c121-live26').length;
           seen.push({
             value,
-            clean: dialog === undefined && notices.length === 0,
+            clean:
+              dialog === undefined && failureDialogs === 0 && notices === 0,
             dialog,
+            domNotices,
+            failureDialogs,
             notices,
           });
         }
