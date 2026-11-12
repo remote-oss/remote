@@ -18,6 +18,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
+import {createSerialAsks} from './serial-asks.ts';
 import {
   cutNetwork,
   cutRoute as cutRouteOf,
@@ -1452,13 +1453,14 @@ function liveProcessIdOf(name: string): number | undefined {
   }
 }
 
-/** The last report each (window, event) has in hand, as a promise that never rejects: the next one for it starts after this one ends. */
-const REPORTS_IN_HAND = new Map<string, Promise<undefined>>();
+/** The asks for the agent's reports: those of one event of one window are made one at a time. */
+const serialReports = createSerialAsks();
 
 /**
  * Has window `name` run the agent's `command`, which reports one `event`, and gives that report. Reports of one event of
  * one window are asked one at a time, since a report is told from its predecessors by their count: callers that ask at
- * once would each take the answer of another.
+ * once would each take the answer of another. An ask that waited longer than `WAIT_MILLISECONDS` behind the others does
+ * not start.
  */
 function reported(
   name: string,
@@ -1466,30 +1468,21 @@ function reported(
   command: string,
   ...parameters: unknown[]
 ): Promise<AgentEvent | undefined> {
-  const key = `${name}\u0000${event}`;
-  async function askOnce(): Promise<AgentEvent | undefined> {
-    const before = countOf(name, event);
-    await inWindow(name, command, ...parameters);
-    await waitUntil(
-      `window ${name} to report its ${event}`,
-      () => countOf(name, event) > before,
-    );
-    return windowEvents(name)
-      .filter(each => each.event === event)
-      .at(-1);
-  }
-  const answer = (REPORTS_IN_HAND.get(key) ?? Promise.resolve()).then(askOnce);
-  const settled = answer.then(
-    () => undefined,
-    () => undefined,
+  return serialReports(
+    `window ${name} reports of ${event}`,
+    WAIT_MILLISECONDS,
+    async () => {
+      const before = countOf(name, event);
+      await inWindow(name, command, ...parameters);
+      await waitUntil(
+        `window ${name} to report its ${event}`,
+        () => countOf(name, event) > before,
+      );
+      return windowEvents(name)
+        .filter(each => each.event === event)
+        .at(-1);
+    },
   );
-  REPORTS_IN_HAND.set(key, settled);
-  void settled.then(() => {
-    if (REPORTS_IN_HAND.get(key) === settled) {
-      REPORTS_IN_HAND.delete(key);
-    }
-  });
-  return answer;
 }
 
 /**
