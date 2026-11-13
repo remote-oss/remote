@@ -169,4 +169,23 @@ describe('the state database reader (card tooling-207)', function () {
       message,
     );
   });
+
+  it('tooling-207: a check that throws nothing (null, undefined) ends the wait with that throw, not with a TypeError of the wait’s own', async () => {
+    const thrown: unknown[] = [];
+    for (const value of [null, undefined]) {
+      try {
+        await waitFor(
+          'a check that throws',
+          () => {
+            // eslint-disable-next-line @typescript-eslint/only-throw-error -- the row is about what a check may throw
+            throw value;
+          },
+          200,
+        );
+      } catch (caught) {
+        thrown.push(caught);
+      }
+    }
+    deepStrictEqual(thrown, [null, undefined]);
+  });
 });

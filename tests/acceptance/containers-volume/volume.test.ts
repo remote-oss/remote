@@ -15,11 +15,13 @@ import {
   variable,
   windowState,
 } from '../windows/harness.ts';
+import {closeWindowsBut, openWindowNames} from './leftover-windows.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   answerDialog,
   statusBarText,
   waitForDialog,
+  pressEscape,
 } from '../windows/renderer.ts';
 
 const execFileAsync = promisify(execFile);
@@ -97,7 +99,7 @@ async function clearVolume(): Promise<void> {
 /** The owner, mode and path of each server folder on the volume, to the commit folder's depth, in path order. */
 async function serverFolders(): Promise<string[]> {
   const listing = await onVolume(
-    "find /vscode -mindepth 1 -maxdepth 4 -path '/vscode/*-server*' -type d -exec stat -c '%U %a %n' {} \\;",
+    "find /vscode -mindepth 1 -maxdepth 4 -path '/vscode/*-server*' -type d -exec stat -c '%U %a %n %u' {} \\;",
   );
   return listing
     .split('\n')
@@ -178,6 +180,15 @@ async function windowOf(folder: string): Promise<string> {
 
 describe("C10's root step for the vscode volume (card containers-25)", function () {
   this.timeout(600_000);
+  // A row closes its windows at its end; one that fails before then would leave them for the rows after it.
+  let kept: string[] = [];
+  beforeEach(() => {
+    kept = openWindowNames();
+  });
+  afterEach(async () => {
+    await closeWindowsBut(kept, pressEscape);
+  });
+
   after(async () => {
     // Later launches install afresh into a volume of their own making.
     await clearVolume();
@@ -197,14 +208,23 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
       `containers-25 V1: the server folders: ${JSON.stringify(folders)}`,
     );
     const serverFolder = serverFolderOf();
+    const containers = await devContainersOf(folder);
+    // The CLI gives the remote user the host user's uid on Linux, so the owner is read as the uid the container has.
+    const remoteUid = await docker(
+      'exec',
+      String(containers[0]),
+      'id',
+      '-u',
+      'node',
+    );
     deepStrictEqual(
       {
         remoteName: state.remoteName,
-        containers: (await devContainersOf(folder)).length,
+        containers: containers.length,
         shared: folders.slice(0, 3).map(line => line.split(' ').slice(0, 2)),
         names: folders.slice(0, 2).map(line => line.split(' ')[2]),
         depths: folders.map(line => line.split(' ')[2]?.split('/').length),
-        commitOwner: folders[3]?.split(' ')[0],
+        commitOwner: folders[3]?.split(' ')[3],
         commitMode: folders[3]?.split(' ')[1],
       },
       {
@@ -217,7 +237,7 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
         ],
         names: [serverFolder, `${serverFolder}/bin`],
         depths: [3, 4, 5, 6],
-        commitOwner: 'node',
+        commitOwner: remoteUid,
         commitMode: '755',
       },
     );

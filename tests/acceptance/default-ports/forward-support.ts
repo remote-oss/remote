@@ -6,7 +6,7 @@
 import {createServer, type Server} from 'node:net';
 import {onHost} from '../windows/harness.ts';
 
-/** Starts a listener on the host's loopback `port` that greets and then keeps each connection open for a while. */
+/** Starts a listener on the host's loopback `port` that answers a client's first line and then keeps each connection open for a while. */
 export async function listenHoldingOnHost(
   port: number,
   greeting: string,
@@ -15,7 +15,7 @@ export async function listenHoldingOnHost(
   await onHost(
     'sh',
     '-c',
-    `printf '#!/bin/sh\\necho ${greeting}\\nsleep 30\\n' > ${greeter} && chmod 755 ${greeter}`,
+    `printf '#!/bin/sh\\nread line\\necho ${greeting}\\nsleep 30\\n' > ${greeter} && chmod 755 ${greeter}`,
   );
   await onHost(
     'sh',
@@ -29,7 +29,11 @@ export async function holdLocal(
   port: number,
   address = '127.0.0.1',
 ): Promise<() => Promise<void>> {
-  const holder: Server = createServer();
+  // The sockets it accepts are read to their end, so that a client that wrote to the port and left lets the holder close.
+  const holder: Server = createServer(socket => {
+    socket.on('error', () => undefined);
+    socket.resume();
+  });
   await new Promise<void>((resolve, reject) => {
     holder.once('error', reject);
     holder.listen(port, address, resolve);

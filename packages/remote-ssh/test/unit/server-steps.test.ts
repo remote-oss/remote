@@ -32,7 +32,15 @@ const INPUT: ConnectInput = {
 
 const NEVER_CANCELLED = new AbortController().signal;
 
-/** The failure the target check gives the validate step, for a row to compare. */
+/** The check message each target string id gives, in English, as the log names it. */
+const TARGET_MESSAGES = {
+  S119: 'SSH host name cannot begin with',
+  S120: 'SSH host name cannot include the character',
+  S121: 'SSH user name cannot begin with',
+  S122: 'SSH user name cannot include the character',
+} as const;
+
+/** The failure the target check gives the validate step, for a row to compare: the reason for the dialog and the check message for the log. */
 function targetFailure(
   stringId: 'S119' | 'S120' | 'S121' | 'S122',
   character: string,
@@ -42,6 +50,7 @@ function targetFailure(
     failure: {
       kind: 'invalidSetting',
       reason: {id: stringId, values: [character]},
+      logDetail: `${TARGET_MESSAGES[stringId]} ${character}`,
     },
   };
 }

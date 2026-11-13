@@ -3,13 +3,15 @@
  * with it and the harness variables. The VS Code run has one configuration; the VSCodium run has two, a local window
  * and a remote one, which test-cli picks by label.
  */
+import {fileURLToPath} from 'node:url';
 import {defineConfig} from '@vscode/test-cli';
 import {
   acceptanceConfiguration,
   vscodiumConfigurations,
 } from '../../tools/acceptance.ts';
 
-const root = new URL('../..', import.meta.url).pathname;
+// a path of this machine's own form: a URL's pathname on Windows is `/D:/…`, which joins into `D:\D:\…`
+const root = fileURLToPath(new URL('../..', import.meta.url));
 
 /** The configurations of the run's editor. */
 export default defineConfig(

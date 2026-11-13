@@ -13,7 +13,7 @@ import {
   windowState,
 } from '../windows/harness.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
-import {notificationCentre} from '../windows/renderer.ts';
+import {noticesOnceSettled} from '../windows/renderer.ts';
 import {
   closedAndWatched,
   connectedWindow,
@@ -47,16 +47,6 @@ describe('what a window close and a reopen do to a dev container (card coverage-
       const window = await openFolderWindow(connected.folder);
       await reopenInContainer(window);
       const seconds = (Date.now() - began) / 1000;
-      // The editor's own progress ("Activating Extensions...") shows while the new window starts, later on a slower
-      // machine, and is not a notice of the extension: the notices are read once it has gone.
-      await waitFor(
-        'the editor’s activation progress to be gone',
-        async () =>
-          !(await notificationCentre(window)).some(text =>
-            text.startsWith('Activating Extensions'),
-          ),
-        60_000,
-      );
       deepStrictEqual(
         {
           stopped: stoppedWithin(outcome, 0),
@@ -68,7 +58,7 @@ describe('what a window close and a reopen do to a dev container (card coverage-
           built: containersLog()
             .slice(mark)
             .filter(line => /build|creating container/i.test(line)),
-          notices: (await notificationCentre(window)).filter(
+          notices: (await noticesOnceSettled(window)).filter(
             text => !text.startsWith('Setting up'),
           ),
           seconds: seconds < 60,

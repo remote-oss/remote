@@ -166,6 +166,11 @@ export const SERVER_SOURCE_TEMPLATES = {
   openSetting: 'Open Setting',
 } as const;
 
+/** A template as it is, the English text: what the log says, which is not translated. */
+export function english(template: string): string {
+  return template;
+}
+
 /** The text of a string id with its values, in the display language. */
 export function textOfId(
   stringId: FailureStringId,

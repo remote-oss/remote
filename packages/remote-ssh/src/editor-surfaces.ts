@@ -42,6 +42,7 @@ import {
 } from './surfaces/mitigation-picker.ts';
 import type {Logger} from 'lib-log';
 import {approvalsOf} from './preconnect/approvals.ts';
+import {timerDelay} from './state/confirmed-update.ts';
 import type {NoticePort} from './surfaces/notice.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import type {PromptEditor} from './surfaces/prompt-surface.ts';
@@ -203,6 +204,8 @@ export function editorSurfacesOf(
       environmentHints: context.environmentHints,
       logMark: context.logMark,
       logText: context.logText,
+      delay: timerDelay,
+      logger: context.logger,
     }),
     troubleshooting: troubleshootingOf(context.troubleshooting),
     licenceModal: licenceModalOf(
@@ -212,7 +215,10 @@ export function editorSurfacesOf(
     ),
     acceptances,
     preconnectDialog: preconnectDialogOf(adapters.preconnectDialog, translate),
-    preconnectApprovals: approvalsOf(context.acceptanceState),
+    preconnectApprovals: approvalsOf(context.acceptanceState, {
+      delay: timerDelay,
+      logger: context.logger,
+    }),
     presenter: failurePresenterOf(
       adapters.failureDialog,
       {
