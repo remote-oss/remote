@@ -23,6 +23,26 @@ describe('logger (card log-01 table)', () => {
     ]);
   });
 
+  it('wsl-10: each of the five methods passes the stream it is given to its line, and a call without one adds none', () => {
+    const sink = new MemorySink();
+    const logger = createLogger(sink, {minimumLevel: () => 'trace'});
+    logger.trace('a', 'stdout');
+    logger.debug('b', 'stderr');
+    logger.info('c', 'stdout');
+    logger.warn('d', 'stderr');
+    logger.error('e');
+    deepStrictEqual(
+      sink.lines.map(line => line.stream),
+      ['stdout', 'stderr', 'stdout', 'stderr', undefined],
+    );
+  });
+
+  it('wsl-10: a line without a stream has no stream key at all', () => {
+    const sink = new MemorySink();
+    createLogger(sink, {minimumLevel: () => 'info'}).info('plain');
+    deepStrictEqual('stream' in (sink.lines[0] ?? {}), false);
+  });
+
   it('minimum getter returns error then trace between two info calls -> first call not written, second written', () => {
     const sink = new MemorySink();
     let minimum: Level = 'error';
