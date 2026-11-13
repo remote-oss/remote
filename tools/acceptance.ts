@@ -1543,8 +1543,7 @@ export async function runLaunches(
     }
     try {
       const exitCode = await runAttempts(launch);
-      const judged =
-        launch === undefined ? exitCode : judge(exitCode, launch);
+      const judged = launch === undefined ? exitCode : judge(exitCode, launch);
       exitCodes.push(judged);
       if (judged !== 0 && launch !== undefined) {
         for (const line of failureReport(
