@@ -16,7 +16,6 @@ import {
 } from '../windows/harness.ts';
 import {closePick, pickShown} from '../windows/explorer-home.ts';
 import {
-  answerInputBox,
   chooseQuickPickItem,
   dialogOf,
   extensionPackTabOf,
@@ -25,7 +24,6 @@ import {
   languageModeOf,
   lineTokensOf,
   notifications,
-  quickPickFacts,
   suggestionsOf,
   typeInFocus,
 } from '../windows/renderer.ts';
@@ -187,11 +185,12 @@ describe('the extension and both companions enabled (card #2499)', function () {
         120_000,
       );
       found.authority = (await windowState(remote)).remoteAuthority;
-      await startInWindow(remote, 'workbench.action.files.openFile');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      found.dialog = await quickPickFacts(remote);
-      await answerInputBox(remote, '/home/harness/.remote/config');
-      await new Promise(resolve => setTimeout(resolve, 4000));
+      await inWindow(
+        remote,
+        'acceptance.agent.openUri',
+        'vscode-remote://ssh-remote+harness/home/harness/.ssh/config',
+      );
+      await new Promise(resolve => setTimeout(resolve, 5000));
       found.dialogAfter = await dialogOf(remote);
       found.mode = await languageModeOf(remote);
       found.tokens = await lineTokensOf(remote, 'Host');
