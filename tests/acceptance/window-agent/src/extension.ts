@@ -190,13 +190,14 @@ function activeTabOf(
   return {uri: current.input.uri.toString(), preview: current.isPreview};
 }
 
-/** The editor commands that copy the active terminal's whole buffer to the clipboard, in order. */
-const COPY_STEPS = [
+/** The editor commands that select the active terminal's whole buffer, in order. */
+const SELECT_STEPS = [
   'workbench.action.terminal.focus',
   'workbench.action.terminal.selectAll',
-  'workbench.action.terminal.copySelection',
-  'workbench.action.terminal.clearSelection',
 ];
+
+/** The command that takes the selection away again. */
+const CLEAR_STEP = 'workbench.action.terminal.clearSelection';
 
 /** How long a copy step may take before the read gives up and names it. */
 const COPY_STEP_MILLISECONDS = 10_000;
@@ -541,14 +542,7 @@ export function activate(context: vscode.ExtensionContext): void {
           });
           return;
         }
-        // The clipboard is the machine's, shared by every window: a copy that selects nothing leaves what an earlier
-        // window or read put there, so a text of this window's own is put first and read back as nothing.
-        const nothing = `acceptance-agent-nothing-${String(Date.now())}-${String(Math.random())}`;
-        await settledWithin(
-          Promise.resolve(vscode.env.clipboard.writeText(nothing)),
-          COPY_STEP_MILLISECONDS,
-        );
-        for (const step of COPY_STEPS) {
+        for (const step of SELECT_STEPS) {
           const finished = await settledWithin(
             vscode.commands.executeCommand(step),
             COPY_STEP_MILLISECONDS,
@@ -564,26 +558,21 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
           }
         }
-        let copied: string | undefined;
-        const read = await settledWithin(
-          Promise.resolve(vscode.env.clipboard.readText()).then(text => {
-            copied = text;
-          }),
+        // The selection is a proposed API (terminalSelection) the agent's manifest enables; its types are not part of this
+        // project. Reading it asks nothing of the clipboard, which the machine shares between windows, and makes no copy
+        // for core to complain about when nothing is selected.
+        const selected = (
+          vscode.window.activeTerminal as {selection?: string} | undefined
+        )?.selection;
+        await settledWithin(
+          vscode.commands.executeCommand(CLEAR_STEP),
           COPY_STEP_MILLISECONDS,
         );
-        if (read && copied === nothing) {
-          // The copy selected nothing, and core told the user so in a toast of its own: the read made it, so the read takes it away.
-          await settledWithin(
-            vscode.commands.executeCommand('notifications.hideToasts'),
-            COPY_STEP_MILLISECONDS,
-          );
-        }
         report(agentFolder, name, {
           event: 'terminalBuffer',
-          text: read ? (copied === nothing ? '' : (copied ?? '')) : null,
+          text: selected ?? '',
           terminals,
           active,
-          ...(read ? {} : {stuck: 'clipboard.readText'}),
         });
       },
     ),
