@@ -1833,7 +1833,7 @@ export async function waitFor(
     } catch (caught) {
       // A check that throws an error carrying `notYet` says it cannot tell yet (a read that found a writer in the middle of
       // its write): that is the check not holding, not the wait ending.
-      if ((caught as {notYet?: unknown}).notYet !== true) {
+      if ((caught as {notYet?: unknown} | null)?.notYet !== true) {
         throw caught;
       }
       notYet = (caught as Error).message;
