@@ -81,51 +81,6 @@
     "added": "2026-11-12"
   },
   {
-    "launch": "containers-podman",
-    "file": "containers-podman/podman.test.ts",
-    "title": "F-0201 AC-4 (podman-storage): with dockerPath podman, Reopen creates the container and the vscode volume in Podman’s storage only, with the three labels, and the window connects",
-    "card": 2319,
-    "owner": "proteus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-podman",
-    "file": "containers-podman/podman.test.ts",
-    "title": "podman smoke: Rebuild Container makes a new container and keeps the vscode volume",
-    "card": 2319,
-    "owner": "proteus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-podman",
-    "file": "containers-podman/podman.test.ts",
-    "title": "podman smoke: a Dockerfile’s RUN step has run in the container",
-    "card": 2319,
-    "owner": "proteus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-podman",
-    "file": "containers-podman/podman.test.ts",
-    "title": "podman smoke: a folder with a Dockerfile opens in a container",
-    "card": 2319,
-    "owner": "proteus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-podman",
-    "file": "containers-podman/podman.test.ts",
-    "title": "podman smoke: a reload connects to the same container, and the vscode volume that is there is not reported as a failure",
-    "card": 2319,
-    "owner": "proteus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
     "launch": "containers-volume",
     "file": "containers-volume/clone.test.ts",
     "title": "F-0701 AC-10, AC-33 (c151-no-branch-part): a branch that doesn’t exist fails with S193 and git’s text, leaves its volume an empty folder, and Close Remote leaves an empty local window",
