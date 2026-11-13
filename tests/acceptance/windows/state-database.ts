@@ -137,6 +137,15 @@ function stampOf(file: string): string {
 class WriterBusy extends Error {}
 
 /**
+ * The failure of a read whose every attempt found a writer between its first write and its commit: that is not an
+ * answer but a "not yet", so it carries `notYet`, which a wait (`waitFor`) takes as its check not holding yet and
+ * goes on to its own bound, instead of ending at the read's.
+ */
+class StateNotYet extends Error {
+  readonly notYet = true;
+}
+
+/**
  * Runs `read` on a connection to the state database `file` that takes no lock, and gives its result. Without a lock a
  * read is sound only while no writer is between its first write and its commit: the database file changes only at the
  * commit, after the writer's rollback journal exists. So an attempt reads only when the journal is absent before and
@@ -152,6 +161,12 @@ export function readStateDatabase<Result>(
   const journal = `${file}-journal`;
   const deadline = Date.now() + milliseconds;
   for (let attempt = 1; ; attempt += 1) {
+    if (existsSync(`${file}-wal`)) {
+      // Not a wait: a lock-free connection ignores the write-ahead log and would read what is stale without a word.
+      throw new Error(
+        `the state database ${file} has a write-ahead log (${file}-wal): this reader takes no lock and would read it stale, so it reads a rollback-journal database only`,
+      );
+    }
     try {
       if (existsSync(journal)) {
         throw new WriterBusy('a writer’s journal is present');
@@ -170,7 +185,8 @@ export function readStateDatabase<Result>(
       return result;
     } catch (caught) {
       if (Date.now() >= deadline) {
-        throw new Error(
+        const Failure = caught instanceof WriterBusy ? StateNotYet : Error;
+        throw new Failure(
           `the state database ${file} could not be read in ${String(milliseconds)} ms (${String(attempt)} attempts): ${sqliteSaid(caught)}; ${aroundDatabase(file)}`,
           {cause: caught},
         );

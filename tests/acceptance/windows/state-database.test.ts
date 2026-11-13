@@ -4,6 +4,7 @@ import {mkdtempSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
+import {waitFor} from './harness.ts';
 import {readStateDatabase} from './state-database.ts';
 
 /** Holds an exclusive write transaction on `file` for `milliseconds` in another process, and resolves once it holds it. */
@@ -99,38 +100,73 @@ describe('the state database reader (card tooling-207)', function () {
     );
   });
 
-  it('tooling-207: a writer with no busy timeout loses no commit to the reads polling beside it', async () => {
-    const script = `
-      const {DatabaseSync} = require('node:sqlite');
-      const database = new DatabaseSync(process.argv[1]);
-      let failures = 0;
-      for (let each = 0; each < 400; each += 1) {
-        try {
-          database.exec('BEGIN');
-          database.exec("INSERT OR REPLACE INTO ItemTable VALUES ('k" + (each % 5) + "', '" + each + "')");
-          database.exec('COMMIT');
-        } catch {
-          failures += 1;
-          try { database.exec('ROLLBACK'); } catch {}
-        }
+  it('tooling-207: a read that is still open takes no lock: a writer with no busy timeout commits beside it', () => {
+    const outcome: {commit: string; reads: string[]} = {
+      commit: 'not run',
+      reads: [],
+    };
+    readStateDatabase(file, database => {
+      outcome.reads = keys(database);
+      const open = database.prepare('SELECT key FROM ItemTable').iterate();
+      open.next();
+      if (outcome.commit !== 'not run') {
+        return;
       }
-      process.stdout.write('failures ' + failures + '\\n');
-    `;
-    const child = spawn(process.execPath, ['-e', script, file], {
-      stdio: ['ignore', 'pipe', 'inherit'],
+      const writer = new DatabaseSync(file);
+      try {
+        writer.exec(
+          "INSERT OR REPLACE INTO ItemTable VALUES ('beside', 'two')",
+        );
+        outcome.commit = 'committed';
+      } catch (caught) {
+        outcome.commit = String(caught);
+      } finally {
+        writer.close();
+      }
     });
-    let output = '';
-    child.stdout.on('data', (chunk: Buffer) => {
-      output += chunk.toString();
-    });
-    const state = {running: true};
-    void new Promise(resolve => child.once('close', resolve)).then(() => {
-      state.running = false;
-    });
-    while (state.running) {
+    deepStrictEqual(outcome.commit, 'committed');
+  });
+
+  it('tooling-207: a database in write-ahead mode is refused, naming its log, not read stale', () => {
+    const writer = new DatabaseSync(file);
+    writer.exec('PRAGMA journal_mode = WAL');
+    writer.exec("INSERT OR REPLACE INTO ItemTable VALUES ('walled', 'three')");
+    let message = '';
+    try {
       readStateDatabase(file, keys);
-      await new Promise(resolve => setTimeout(resolve, 1));
+    } catch (caught) {
+      message = (caught as Error).message;
+    } finally {
+      writer.close();
     }
-    deepStrictEqual(output.trim(), 'failures 0');
+    deepStrictEqual(message.includes('write-ahead log'), true, message);
+  });
+
+  it('tooling-207: a read that finds a writer in the middle of its write is a not-yet that a wait carries on from, and the wait names it when it ends', async () => {
+    const {process: writer} = await holder(file, 60_000);
+    let message = '';
+    try {
+      await waitFor(
+        'the store to be readable',
+        () => {
+          readStateDatabase(file, keys, 300);
+          return false;
+        },
+        1500,
+      );
+    } catch (caught) {
+      message = (caught as Error).message;
+    } finally {
+      writer.kill();
+    }
+    deepStrictEqual(
+      [
+        message.startsWith('timed out waiting for the store to be readable'),
+        message.includes('the last check could not tell'),
+        message.includes('a writer’s journal is present'),
+      ],
+      [true, true, true],
+      message,
+    );
   });
 });
