@@ -1,6 +1,6 @@
 /**
  * @fileoverview D3, the path mapper's process half: a Windows path on a distro's share is read without a process
- * (`shareToDistro`), and a path on a drive is answer of `wslpath -u` in the target distro, which honours that distro's
+ * (`shareToDistro`), and a path on a drive is asked of `wslpath -u` in the target distro, which honours that distro's
  * automount root.
  */
 
@@ -27,7 +27,7 @@ export interface NotTranslatable {
 
 /** The mapper of Windows paths to paths in a distro. */
 export interface PathMapper {
-  /** The distro and Linux path of `windowsPath`; a drive path is answer of `wslpath -u` in `distro`. */
+  /** The distro and Linux path of `windowsPath`; a drive path is asked of `wslpath -u` in `distro`. */
   toDistro(
     windowsPath: string,
     distro: string,
