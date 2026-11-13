@@ -278,16 +278,9 @@ export async function pageCount(): Promise<number> {
   return (await pages()).length;
 }
 
-/**
- * The one title among `titles` that window `name`'s folder name gives, `[<name>]` or `[<name> [...`, `[]` for `local`;
- * none when no title or more than one fits. It needs nothing from the window's agent, so it finds the page of a window
- * whose agent is busy, for example with a command that waits on a modal dialog.
- */
-export function pageTitleByName(
-  name: string,
-  titles: readonly string[],
-): string | undefined {
-  const matching = titles.filter(title =>
+/** The titles among `titles` that window `name`'s folder name gives: `[<name>]` or `[<name> [...`, `[]` for `local`. */
+function titlesOfName(name: string, titles: readonly string[]): string[] {
+  return titles.filter(title =>
     name === 'local'
       ? title === '[]'
       : title === `[${name}]` ||
@@ -295,7 +288,41 @@ export function pageTitleByName(
         // The window of the in-memory folder memfs:/ is titled by the folder's name, which is its root.
         (name === 'memfs' && title === '[/]'),
   );
+}
+
+/**
+ * The one title among `titles` that window `name`'s folder name gives; none when no title or more than one fits. It
+ * needs nothing from the window's agent, so it finds the page of a window whose agent is busy, for example with a
+ * command that waits on a modal dialog.
+ */
+export function pageTitleByName(
+  name: string,
+  titles: readonly string[],
+): string | undefined {
+  const matching = titlesOfName(name, titles);
   return matching.length === 1 ? matching[0] : undefined;
+}
+
+/**
+ * Waits until no page carries window `name`'s title, so that a window opened under the same name afterwards is the only
+ * page that name gives; it fails naming the titles left. A closed window's agent reports before its page is gone.
+ */
+export async function waitForPageGone(
+  name: string,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<void> {
+  let left: string[] = [];
+  await settled(
+    () => `the page of window ${name} to be gone among ${JSON.stringify(left)}`,
+    async () => {
+      left = titlesOfName(
+        name,
+        (await pages()).map(page => page.title),
+      );
+      return left.length === 0 ? true : undefined;
+    },
+    milliseconds,
+  );
 }
 
 /**
@@ -2869,11 +2896,11 @@ export async function waitForDialog(
                 `page ${page.title}`,
                 DIALOG_EXPRESSION,
               );
-        return `${page.title}: ${open?.message ?? 'none'}`;
+        return `${page.title} (page ${page.id}): ${open?.message ?? 'none'}`;
       }),
     );
     throw new Error(
-      `${caught instanceof Error ? caught.message : String(caught)}; open dialogs: ${shown.join('; ')}`,
+      `${caught instanceof Error ? caught.message : String(caught)}; open dialogs: ${shown.join('; ')}; the page remembered for ${name}: ${REMEMBERED_PAGES.get(name) ?? 'none'}`,
       {cause: caught},
     );
   }
