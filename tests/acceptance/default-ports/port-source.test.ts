@@ -21,6 +21,7 @@ import {
   notifications,
   statusItem,
 } from '../windows/renderer.ts';
+import {answering} from '../windows/forward-support.ts';
 import {greetingOf} from './greeting.ts';
 
 /** The setting whose default an SSH window takes from the resolver. */
@@ -37,7 +38,7 @@ async function listenOnHost(port: number, greeting: string): Promise<void> {
   await onHost(
     'sh',
     '-c',
-    `nc -lk -p ${String(port)} -s 127.0.0.1 -e /bin/echo ${greeting} >/dev/null 2>&1 &`,
+    `nc -lk -p ${String(port)} -s 127.0.0.1 -e ${answering(greeting)} >/dev/null 2>&1 &`,
   );
 }
 
@@ -127,7 +128,7 @@ describe('the port source of an SSH window (card connect-81)', function () {
       await tunnelFor('ps3', DEFAULT_PORT, 30_000);
       await inWindow('ps3', 'workbench.action.terminal.new');
       await inWindow('ps3', 'workbench.action.terminal.sendSequence', {
-        text: "printf 'Serving on http://127.0.0.1:%s\\n' 8642; nc -lk -p 8642 -s 127.0.0.1 -e /bin/echo ps-8642\r",
+        text: "printf 'Serving on http://127.0.0.1:%s\\n' 8642; nc -lk -p 8642 -s 127.0.0.1 -e sh -c 'read line; echo ps-8642'\r",
       });
       const tunnel = await tunnelFor('ps3', 8642, 10_000);
       const message = 'Your application running on port 8642 is available.';

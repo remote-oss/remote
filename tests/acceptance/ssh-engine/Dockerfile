@@ -7,10 +7,12 @@
 # - engine-refused: no key accepted and no password method;
 # - engine-tries: no key accepted, and two tries at most (MaxAuthTries 2).
 # The client's docker CLI runs `docker system dial-stdio` here, so docker is linked where sshd's PATH finds it.
+# The image's own OpenSSH client is upgraded with the server: Alpine's index holds only the newest revision of a
+# package, and a server of a newer revision than the client the image ships can't be installed beside it.
 ARG ENGINE_IMAGE
 FROM ${ENGINE_IMAGE}
 
-RUN apk add --no-cache openssh-server shadow \
+RUN apk add --no-cache --upgrade openssh-client-default openssh-server shadow \
   && ln -s /usr/local/bin/docker /usr/bin/docker \
   && (getent group docker >/dev/null || addgroup -S docker) \
   && for account in engine engine-pw engine-pw2 engine-enc engine-refused engine-tries; do \

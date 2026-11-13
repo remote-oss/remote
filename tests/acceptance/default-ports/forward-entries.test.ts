@@ -4,7 +4,9 @@ import {existsSync, readFileSync} from 'node:fs';
 import {promisify} from 'node:util';
 import {
   closeWindow,
+  connectedWithin,
   connectionLog,
+  type ForwardedTunnel,
   inWindow,
   nextEmptyWindow,
   onHost,
@@ -19,9 +21,9 @@ import {
 } from '../windows/harness.ts';
 import {
   dialogOf,
-  notificationCentre,
-  portRowActions,
+  noticesOnceSettled,
   portRowAction,
+  portRowActions,
   portsColumns,
   portsRows,
 } from '../windows/renderer.ts';
@@ -30,6 +32,7 @@ import {
   holdOpen,
   listenOnHost,
   localPortOf,
+  REQUEST,
   showPorts,
   tunnelFor,
 } from '../windows/forward-support.ts';
@@ -41,6 +44,24 @@ const execFileAsync = promisify(execFile);
 
 /** The setting the rows change. */
 const ENTRIES = 'remote.SSH.defaultForwardedPorts';
+
+/** How long a window on the host may take to connect, in milliseconds: measured at 2.7 to 5.0 s, and 11.6 s for the first window of a launch (run 43283863441). */
+const CONNECT_MILLISECONDS = 30_000;
+
+/**
+ * Opens a window on the host in a folder `name` and waits for what its entries forward: first until the window's
+ * remote side answers, then until the tunnel of remote `port` is there (measured at 0.8 to 2.3 s after the connect).
+ * The window's authority names the host as soon as it opens, so a wait for the tunnel alone counts the connect
+ * against the forward's own seconds, and its failure cannot say which of the two did not happen.
+ */
+async function openedForwarding(
+  name: string,
+  port: number,
+): Promise<ForwardedTunnel> {
+  await openWindow('harness', name);
+  await connectedWithin(name, CONNECT_MILLISECONDS);
+  return tunnelFor(name, port);
+}
 
 describe('the default forwarded ports of an SSH window (card coverage-83)', function () {
   this.timeout(300_000);
@@ -63,8 +84,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
       [ENTRIES]: [{name: 'held', remotePort: 8641, localPort: 18641}],
     });
     try {
-      await openWindow('harness', 'c83-a4');
-      const tunnel = await tunnelFor('c83-a4', 8641);
+      const tunnel = await openedForwarding('c83-a4', 8641);
       const local = localPortOf(tunnel);
       deepStrictEqual(
         {
@@ -72,7 +92,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
           greeting: await greetingOf(local),
           held: await greetingOf(18641),
           dialog: await dialogOf('c83-a4'),
-          notices: await notificationCentre('c83-a4'),
+          notices: await noticesOnceSettled('c83-a4'),
         },
         {
           higher: true,
@@ -94,15 +114,14 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
       [ENTRIES]: [{name: 'low', remotePort: 8642, localPort: 81}],
     });
     try {
-      await openWindow('harness', 'c83-a5');
-      const tunnel = await tunnelFor('c83-a5', 8642);
+      const tunnel = await openedForwarding('c83-a5', 8642);
       const local = localPortOf(tunnel);
       deepStrictEqual(
         {
           high: local >= 1024,
           greeting: await greetingOf(local),
           dialog: await dialogOf('c83-a5'),
-          notices: await notificationCentre('c83-a5'),
+          notices: await noticesOnceSettled('c83-a5'),
         },
         {high: true, greeting: 'c83-8642', dialog: undefined, notices: []},
       );
@@ -117,8 +136,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
       [ENTRIES]: [{name: 'stop', remotePort: 8643, localPort: 18643}],
     });
     try {
-      await openWindow('harness', 'c83-a9');
-      await tunnelFor('c83-a9', 8643);
+      await openedForwarding('c83-a9', 8643);
       await showPorts('c83-a9');
       await waitFor(
         'the row',
@@ -185,8 +203,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
       [ENTRIES]: [{name: 'old', remotePort: 8644, localPort: 18644}],
     });
     try {
-      await openWindow('harness', 'c83-a10');
-      await tunnelFor('c83-a10', 8644);
+      await openedForwarding('c83-a10', 8644);
       await userSettings({
         [ENTRIES]: [{name: 'new', remotePort: 8645, localPort: 18645}],
       });
@@ -221,8 +238,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
       [ENTRIES]: [{name: 'quiet', remotePort: 8646, localPort: 18646}],
     });
     try {
-      await openWindow('harness', 'c83-a16');
-      await tunnelFor('c83-a16', 8646);
+      await openedForwarding('c83-a16', 8646);
       await showPorts('c83-a16');
       const used = await greetingOf(18646);
       await new Promise(resolve => setTimeout(resolve, 3000));
@@ -233,7 +249,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
             entry.port.includes('8646'),
           ),
           dialog: await dialogOf('c83-a16'),
-          notices: await notificationCentre('c83-a16'),
+          notices: await noticesOnceSettled('c83-a16'),
         },
         {used: undefined, listed: true, dialog: undefined, notices: []},
       );
@@ -254,8 +270,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
       `mkdir -p /home/harness/c83-a11/.vscode && printf '%s' '{"${ENTRIES}":[{"remotePort":8648,"localPort":18648}]}' > /home/harness/c83-a11/.vscode/settings.json`,
     );
     try {
-      await openWindow('harness', 'c83-a11');
-      await tunnelFor('c83-a11', 8648);
+      await openedForwarding('c83-a11', 8648);
       await new Promise(resolve => setTimeout(resolve, 8000));
       deepStrictEqual(
         {
@@ -286,8 +301,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
       `mkdir -p ${DATA_FOLDER}/data/Machine && printf '%s' '{"${ENTRIES}":[{"remotePort":8650,"localPort":18650}]}' > ${machine}`,
     );
     try {
-      await openWindow('harness', 'c83-a12');
-      await tunnelFor('c83-a12', 8650);
+      await openedForwarding('c83-a12', 8650);
       await new Promise(resolve => setTimeout(resolve, 8000));
       deepStrictEqual(
         {
@@ -320,8 +334,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
     });
     let second: string | undefined;
     try {
-      await openWindow('harness', 'c83-a29');
-      await tunnelFor('c83-a29', 8652);
+      await openedForwarding('c83-a29', 8652);
       second = await nextEmptyWindow(() =>
         inWindow('c83-a29', 'opensshremotes.openEmptyWindowOnCurrentHost'),
       );
@@ -349,8 +362,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
       [ENTRIES]: [{name: 'menu', remotePort: 8653, localPort: 18653}],
     });
     try {
-      await openWindow('harness', 'c83-a19');
-      await tunnelFor('c83-a19', 8653);
+      await openedForwarding('c83-a19', 8653);
       await showPorts('c83-a19');
       await waitFor(
         'the row',
@@ -372,7 +384,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
           visibilityItem: actions.menu.includes('Change Port Visibility'),
           visibilityColumn: columns.some(title => /visib/i.test(title)),
           dialog: await dialogOf('c83-a19'),
-          notices: await notificationCentre('c83-a19'),
+          notices: await noticesOnceSettled('c83-a19'),
         },
         {
           visibilityItem: false,
@@ -392,8 +404,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
       [ENTRIES]: [{name: 'reload', remotePort: 8654, localPort: 18654}],
     });
     try {
-      await openWindow('harness', 'c83-a8');
-      await tunnelFor('c83-a8', 8654);
+      await openedForwarding('c83-a8', 8654);
       const mark = connectionLog().length;
       await reloadWindow('c83-a8');
       function resolved(): boolean {
@@ -428,10 +439,9 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
       ).stdout;
     }
     try {
-      await openWindow('harness', 'c83-a17');
-      await tunnelFor('c83-a17', 8655);
+      await openedForwarding('c83-a17', 8655);
       const before = await sshProcesses();
-      const held = await holdOpen(18655);
+      const held = await holdOpen(18655, REQUEST);
       const programs = await connectingPrograms(8655);
       held.release();
       await greetingOf(18655);
@@ -445,7 +455,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
             programs.every(name => name.includes('node')),
           ],
           dialog: await dialogOf('c83-a17'),
-          notices: await notificationCentre('c83-a17'),
+          notices: await noticesOnceSettled('c83-a17'),
         },
         {
           greeting: 'c83-8655',
@@ -475,8 +485,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
       `cat ${machine} 2>/dev/null; true`,
     );
     try {
-      await openWindow('harness', 'c83-a32');
-      await tunnelFor('c83-a32', 8656);
+      await openedForwarding('c83-a32', 8656);
       await showPorts('c83-a32');
       await waitFor(
         'the row',

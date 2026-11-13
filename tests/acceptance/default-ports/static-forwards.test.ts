@@ -18,14 +18,16 @@ import {
 } from '../windows/harness.ts';
 import {
   dialogOf,
-  notificationCentre,
+  noticesOnceSettled,
   panelBadge,
   portsRows,
   statusItem,
 } from '../windows/renderer.ts';
+
 import {holdLocal} from './forward-support.ts';
 import {
   listenOnHost,
+  REQUEST,
   showPorts,
   tunnelFor,
 } from '../windows/forward-support.ts';
@@ -79,7 +81,7 @@ async function receiveOnLocal(
   };
 }
 
-/** Opens a SOCKS5 connection to `proxy` for `target` on the loopback and gives what the target says first. */
+/** Opens a SOCKS5 connection to `proxy` for `target` on the loopback, says the first line the target waits for, and gives what it answers. */
 function throughSocks(
   proxy: number,
   target: number,
@@ -104,6 +106,9 @@ function throughSocks(
         stage = chunk[1] === 0 ? 2 : 3;
         if (stage === 3) {
           socket.destroy();
+        } else {
+          // The listener on the host answers a first line.
+          socket.write(REQUEST);
         }
         if (chunk.length > 10) {
           received.push(chunk.subarray(10));
@@ -156,7 +161,7 @@ describe('the static forwards of the ssh configuration (card coverage-83)', func
       deepStrictEqual(
         {
           dialog: await dialogOf('c83-s25'),
-          notices: await notificationCentre('c83-s25'),
+          notices: await noticesOnceSettled('c83-s25'),
         },
         {dialog: undefined, notices: []},
       );
@@ -357,7 +362,7 @@ describe('the static forwards of the ssh configuration (card coverage-83)', func
             entry => entry.port,
           ),
           dialog: await dialogOf('c83-s39'),
-          notices: await notificationCentre('c83-s39'),
+          notices: await noticesOnceSettled('c83-s39'),
         },
         {reached: 'c83-ping', rows: [], dialog: undefined, notices: []},
       );
@@ -391,7 +396,7 @@ describe('the static forwards of the ssh configuration (card coverage-83)', func
             entry => entry.port,
           ),
           dialog: await dialogOf('c83-s40'),
-          notices: await notificationCentre('c83-s40'),
+          notices: await noticesOnceSettled('c83-s40'),
         },
         {
           holder: 'ssh',
@@ -477,7 +482,7 @@ describe('the static forwards of the ssh configuration (card coverage-83)', func
       return {
         granted: answer === '0500',
         dialog: await dialogOf(window),
-        notices: await notificationCentre(window),
+        notices: await noticesOnceSettled(window),
       };
     } finally {
       await release();

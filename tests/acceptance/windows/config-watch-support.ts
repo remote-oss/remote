@@ -5,12 +5,12 @@
 
 import {execFile} from 'node:child_process';
 import {existsSync, readdirSync, readFileSync, writeFileSync} from 'node:fs';
-import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {inWindow, reopenInContainer, variable, waitFor} from './harness.ts';
 import {openFolderWindow} from './folder-windows.ts';
 import {notificationCentre, statusBarText, toastFacts} from './renderer.ts';
+import {readStateDatabase} from './state-database.ts';
 
 /** The words of the notification for the files `names`. */
 export function changed(names: string): string {
@@ -135,8 +135,7 @@ export function storedHashes(
     ) {
       continue;
     }
-    const connection = new DatabaseSync(database, {readOnly: true});
-    try {
+    return readStateDatabase(database, connection => {
       const found = connection
         .prepare('SELECT value FROM ItemTable WHERE key = ?')
         .get(STATE_KEY) as {value: string} | undefined;
@@ -150,9 +149,7 @@ export function storedHashes(
         | {configurationState?: {contentHashes?: Record<string, string>}}
         | undefined;
       return stored?.configurationState?.contentHashes;
-    } finally {
-      connection.close();
-    }
+    });
   }
   return undefined;
 }

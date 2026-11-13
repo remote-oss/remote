@@ -33,6 +33,7 @@ import {
   newPassword,
   requirePodman,
   RUN_LABEL,
+  runFolderBase,
   runNetworkOf,
   startHostContainer,
   sweepStaleRunObjects,
@@ -103,6 +104,17 @@ function scriptedCommands(): ScriptedCommands & CommandRunner {
 
   return Object.assign(command, {calls, passes, fails, callsOf});
 }
+
+describe('runFolderBase (card tooling-195)', () => {
+  it("#2350: the run's folder is made in /tmp on macOS, whose own temporary folder is too long for the editor's socket, and in the temporary folder elsewhere", () => {
+    deepStrictEqual(
+      (['darwin', 'linux', 'win32'] as const).map(platform =>
+        runFolderBase(platform),
+      ),
+      ['/tmp', tmpdir(), tmpdir()],
+    );
+  });
+});
 
 describe('acceptanceRunId (card tooling-10)', () => {
   it('gives the run id, the attempt and the job in CI', () => {

@@ -1,0 +1,164 @@
+[
+  {
+    "launch": "containers-a",
+    "file": "containers/connect-reading.test.ts",
+    "title": "F-0408 AC-14 (ruling-1557-tolerance): reopening a folder whose container runs connects, by the log’s Resolving Remote, and shows S087, each within 1.5 s (athena’s ruling on #1204 for the spec’s 1 s), with no Starting container and no Starting VS Code Server in the log",
+    "card": 2414,
+    "owner": "daedalus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-a",
+    "file": "containers/open-folder-virtual.test.ts",
+    "title": "F-0403 AC-28 (c71-untitled): in an untitled workspace core asks whether to save the workspace configuration before the window changes; Cancel leaves the window and creates nothing, and Don’t Save reloads the same window into one container",
+    "card": 2432,
+    "owner": "themis",
+    "evidence": 42218054216,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/resolve-reload.test.ts",
+    "title": "F-0502 AC-13 (c43-oncreate-once): a container stopped and started again, then reconnected by a reload, does not run its onCreateCommand again",
+    "card": 2449,
+    "owner": "dike",
+    "evidence": 42476121959,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/resolve-reload.test.ts",
+    "title": "F-0502 AC-31 (c43-reload): Reload Window reuses the running server on the same port within 2 s, logs the container as already running, and reconnects under the same title and indicator",
+    "card": 2449,
+    "owner": "dike",
+    "evidence": 42476121959,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/user-env.test.ts",
+    "title": "F-0416 AC-27 (c74-task-probe): a shell task prints neither probe variable for none, only the interactive one for interactiveShell, only the login one for loginShell, and both by default",
+    "card": 2429,
+    "owner": "hestia",
+    "evidence": 42367771624,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/user-env.test.ts",
+    "title": "F-0416 AC-44 (c74-null-remote-env): a remoteEnv null unsets an image variable in a task and in the terminal, and a plain docker exec still has it",
+    "card": 2429,
+    "owner": "hestia",
+    "evidence": 42820396583,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "default-ports",
+    "file": "default-ports/port-source.test.ts",
+    "title": "F-2507 AC-43 (own-ports-process): with the user value process, nothing is forwarded for 60 s after a connect, a reload, and a close and reconnect",
+    "card": 2254,
+    "owner": "themis",
+    "evidence": 41922676078,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "preconnect",
+    "file": "preconnect/other.test.ts",
+    "title": "F-2108 AC-35 (deleted): a confirmed script that was deleted fails with the read's detail and no dialog, and its entry stays",
+    "card": 2232,
+    "owner": "dike",
+    "evidence": 42218054216,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "preconnect",
+    "file": "preconnect/remembered.test.ts",
+    "title": "F-2108 AC-13, AC-14 (changed): changed contents ask again with the message that says so; Allow keeps asking and Don't Ask Again stops it",
+    "card": 2232,
+    "owner": "dike",
+    "evidence": 42624951292,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "preconnect",
+    "file": "preconnect/basics.test.ts",
+    "title": "F-2108 AC-11, AC-12 (remember): Don't Ask Again runs it, and another window to another alias runs it with no dialog, the settings file unchanged",
+    "card": 2232,
+    "owner": "dike",
+    "evidence": 42820396583,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "ssh-core",
+    "file": "ssh-core/session-hints.test.ts",
+    "title": "F-2605 AC-17 (c135-record): a failed attempt keeps 25 environment hints in order, its error hint with a number, and the log hint",
+    "card": 2326,
+    "owner": "iris",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "preconnect",
+    "file": "preconnect/remembered.test.ts",
+    "title": "F-2108 AC-39 (touched): a confirmed script whose modification time changed, with the same contents, runs with no dialog",
+    "card": 2232,
+    "owner": "dike",
+    "evidence": 43018061687,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "default-ports",
+    "file": "default-ports/port-source.test.ts",
+    "title": "F-2507 AC-43 (own-ports-output): with the default source, nothing is forwarded for 60 s after a connect, a reload, and a close and reconnect",
+    "card": 2254,
+    "owner": "themis",
+    "evidence": 42367771624,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "preconnect",
+    "file": "preconnect/failures.test.ts",
+    "title": "F-2108 AC-23 (retry-remembered): after Don't Ask Again on a failing script, Retry runs it with no dialog",
+    "card": 2458,
+    "owner": "dike",
+    "evidence": 42218054216,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "windows",
+    "file": "windows/maintenance.test.ts",
+    "title": "F-2102 AC-18: the Add New row of the Kill Local picker asks for a connection command and changes nothing of the window’s connection",
+    "card": 2466,
+    "owner": "themis",
+    "evidence": 43356589144,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "explorer-folders",
+    "file": "explorer-folders/folders-4-many.test.ts",
+    "title": "F-2503 AC-21 (many-folders): 122 different folders opened one after another on one host are all listed, most recent first, none dropped",
+    "card": 2467,
+    "owner": "hestia",
+    "evidence": 43356589144,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "containers-a",
+    "file": "containers/authoring-where.test.ts",
+    "title": "F-0405 AC-32 (c101-no-source-rebuild-with): remote-containers.rebuildAndReopenInContainer on a configuration with no container source and a stopped container shows the modal warning, Cancel changes nothing and Use Template opens the template screen, and the container keeps its id and state",
+    "card": 2403,
+    "owner": "dike",
+    "evidence": 43356589144,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/volume.test.ts",
+    "title": "F-0419 AC-36 (s36): two windows that start Reopen in Container together make one vscode volume, both connect with no dialog, and the platform has one commit folder",
+    "card": 2469,
+    "owner": "daedalus",
+    "evidence": 43369951852,
+    "added": "2026-11-13"
+  }
+]

@@ -1,8 +1,8 @@
 # C4 level 3: area D components (the WSL engine)
 
-- Status: first version for the lead's review (deliverable 2). Rows that depend on drafts still pending (F-6101,
-  F-6202, F-6501, F-6502, the decisions F-7902 to F-7904) are marked **provisional**.
-- Date: 2026-10-06
+- Status: final for the reviewed specs (amended 2026-11-12 by `brief-remote-wsl.md`, #2348). Rows that depend on specs
+  still pending (F-6101, F-6202, F-6501, F-6502) are marked **provisional**.
+- Date: 2026-10-06, amended 2026-11-12
 - Author: `remote-architect-worker-4`; lead: `remote-architect`
 - Built on:
   - the area D dossier as merged (PR #25);
@@ -25,7 +25,8 @@ an injected spawner, so its tests run on a recorded fake.
   for `ssh` (ADR-0004's pattern carried over).
 - A spawner is injected into D1: the local one (Node's child process), or one over an outer remote's exec facility
   for the nested route (D9). Nothing above D1 knows which spawner it has.
-- The `remote-wsl` engine components see `lib-wsl`, `lib-server`, `lib-product`, `lib-forwarding` and `lib-log`. They
+- The `remote-wsl` engine components see `lib-wsl`, `lib-server`, `lib-product`, `lib-forwarding`, `lib-helper` (D5h,
+  2026-11-12) and `lib-log`. They
   reach the editor only through B's connector interface and through narrow UI ports the package wires. B's
   resolver, window and indicator APIs are never touched.
 - Remote-side text (L2 §2): the relay script of D5 and `scripts/wslCode.sh` of D8 ship in the VSIX as text, next to
@@ -35,26 +36,28 @@ an injected spawner, so its tests run on a recorded fake.
 
 | Id | Component | Responsibility | Kind |
 |---|---|---|---|
-| D1 | wsl-runner | Locate `wsl.exe`. Build argument lists for the verbs (`--status`, `--version`, `--list --verbose`, `--list --online`, `--install -d`, `--set-default`, `-d <d> --cd <dir> --exec <prog>`). Spawn through the injected spawner. Decode: UTF-16LE for management verbs, UTF-8 for programs in a distro. Classify exit status and output into the closed kinds of the contract. Never retries | process |
-| D1a | wsl-output-parser | Parse the outputs of `--status`, `--version` and `--list --verbose`/`--online` into records; tolerate the column and marker variants the specs list | pure |
-| D2 | distro-inventory | WSL presence and version; the Windows build (`os.release()`'s third part, F-6103 §16); distros with state, version and default flag; case-insensitive matching returning the registered spelling; the empty name as the default distro; `docker-desktop*` filtering; the online catalogue sorted as F-6102 BR-2; set-default (the pre-1903 route through `wslconfig.exe`); install command line; a change event on refresh | process over D1 |
-| D3 | path-mapper | Windows→distro and distro→Windows translation, the `\\wsl.localhost\` and `\\wsl$\` forms, `vscode-remote://wsl+<d>/…` URIs, the `/mnt/<letter>/` shape test. Drive paths go through `wslpath` in the target distro (automount root honoured); share paths are pure | pure core plus one D1 call |
-| D4 | wsl-host-channel | `lib-host` H1 over D1: `runScript` (lib-host's prelude, `sh -c <preludeCommand(n)>`, with input text or a streamed file), `copyToHost` (`cat >`), `clientPathOnHost` (D3's translation of the local file, or none when automount is off), `identity`, `platformHint` | process over D1 |
+| D1 | wsl-runner (built; the `wslconfig.exe /setdefault` route of F-6103 is added) | Locate `wsl.exe`. Build argument lists for the verbs (`--status`, `--version`, `--list --verbose`, `--list --online`, `--install -d`, `--set-default`, `-d <d> --cd <dir> --exec <prog>`). Spawn through the injected spawner. Decode: UTF-16LE for management verbs, UTF-8 for programs in a distro. Classify exit status and output into the closed kinds of the contract. Never retries | process |
+| D1a | wsl-output-parser (built) | Parse the outputs of `--status`, `--version` and `--list --verbose`/`--online` into records; tolerate the column and marker variants the specs list | pure |
+| D2 | distro-inventory (pure parts built; process half, `validDistroName` and `pathTranslationAvailable` added) | WSL presence and version; the Windows build (`os.release()`'s third part, F-6103 §16); distros with state, version and default flag; case-insensitive matching returning the registered spelling; the empty name as the default distro; `docker-desktop*` filtering; the online catalogue sorted as F-6102 BR-2; set-default (the pre-1903 route through `wslconfig.exe`); install command line; a change event on refresh | process over D1 |
+| D3 | path-mapper (pure core and `toDistro` built; `toWindows`, the pre-check, `--` before paths and the share host as a parameter added) | Windows→distro and distro→Windows translation, the `\\wsl.localhost\` and `\\wsl$\` forms, `vscode-remote://wsl+<d>/…` URIs, the `/mnt/<letter>/` shape test. Drive paths go through `wslpath` in the target distro (automount root honoured); share paths are pure | pure core plus one D1 call |
+| D4 | wsl-host-channel (built; `onLine` gains the stream tag) | `lib-host` H1 over D1: `runScript` (lib-host's prelude, `sh -c <preludeCommand(n)>`, with input text or a streamed file), `copyToHost` (`cat >`), `clientPathOnHost` (D3's translation of the local file, or none when automount is off), `identity`, `platformHint` | process over D1 |
 | D4f | wsl-fake | The recorded spawner fake for D1 and the H1 contract suite run against D4 (A's shared channel tests) | test fixture |
 
 ## remote-wsl, engine part
 
 | Id | Component | Responsibility | Kind |
 |---|---|---|---|
-| D5 | distro-proxy | Own-or-join for one distro: the per-user rendezvous record, the `/version` health check, ownership by the first window, takeover when the owner is gone, end on Close Remote Connection. The owner opens W2 with D5r's dialer | process |
-| D5r | wsl-relay-dialer | `lib-forwarding` dialer: one D1 process per stream, running the server's own Node runtime with `relay.js` (shipped text) that pipes standard input and output to `127.0.0.1:<port>` in the distro | process over D1 |
-| D6 | connect-engine | The connector behind B's `wsl` resolver front: decode result → D2 match → pre-1903 check (F-6103) → start → probe (V2) → D7 → D5 → `Connected`; or `Failed` with a WSL kind. Per-distro session table for re-resolve (F-6201 BR-5) and the server-alive check (F-6201 Q3 (b), provisional). The 90 s silence watchdog (F-6208 BR-9). Phase events in F-6201 BR-8 order. Reads the env rendezvous (D11) with B's `windowWorkspace` | process orchestration |
-| D7 | wsl-server-adapter | WSL's parameters to `lib-server`: download policy `clientFirstThenHost`, cache policy `kept` (ADR-0006 decision 4), verification `headerHashThenLength`, mode `singleScript` or `stepwise` from `remote.WSL.experimental.scriptLessStartup` (F-6304), `environmentSetup` = `<serverDataFolderName>/server-env-setup` (F-6303), extra start option `--file-watcher-polling` for WSL 1 (F-6601), V8 cleanup variant per mode | pure configuration plus wiring |
-| D7b | background-download | Wires A's V10 server-prefetch (PR #35) with the remote-wsl `prefetch` row and `remote.WSL.downloadInBackground`; records platform use (F-6301 BR-13) | wiring |
-| D8 | shell-handoff | `scripts/wslCode.sh` (shipped text): accepts the stock launcher's five leading arguments and VSCodium's six ([oss] `resources/win32/bin/code.sh`, VSCodium `00-remote-use-open-ext.patch`); ensures the server with in-distro `wget` (F-6401 BR-8); writes the env record for D11; runs the server CLI in its WSL mode ([oss] `src/vs/server/node/server.cli.ts`) | remote-side text |
-| D9 | nested-route | For `wsl+<d>@<outer>`: obtains the outer remote's exec facility from B's resolver host and builds D1 with the remote spawner; everything above D1 is unchanged. **Provisional** on the register's answer to dossier question 3 | process |
+| D5h | wsl-proxy-helper (replaces D5, `ruling-2348-proxy-helper`) | On the local route only (the nested route has a listener per window, `reading-2348-nested-proxy`), a detached lib-helper helper per user, product and registered distro: the `127.0.0.1` listener with D5r as its dialer, one lease per extension host, the connection token in memory and over the lease only, the `/version` health check, at most 32 relays, and the end 5 s after the last lease, stopping the server | process |
+| D5r | wsl-relay-dialer | `lib-forwarding` dialer: one D1 process per stream, running the server's own Node with a fixed inline relay text (`-e`, never through the drive mount) that pipes standard input and output to `127.0.0.1:<port>` in the distro and signals readiness on standard error | process over D1 |
+| D6 | connect-engine (with D6w, the silence watchdog decorating D4's `runScript`) | The connector behind B's `wsl` resolver front: decode result → D2 match → pre-1903 check (F-6103) → start → probe (V2) → D7 → D5 → `Connected`; or `Failed` with a WSL kind. Per-distro session table for re-resolve (F-6201 BR-5) and the server-alive check (F-6201 Q3 (b), provisional). The 90 s silence watchdog (F-6208 BR-9). Phase events in F-6201 BR-8 order. Reads the env rendezvous (D11) with B's `windowWorkspace` | process orchestration |
+| D7 | wsl-server-adapter (with D7a, the pure cache-entry namer of F-7902 rule 4) | WSL's parameters to `lib-server`: download policy `clientFirstThenHost`, cache policy `kept` (ADR-0006 decision 4), verification `headerHashThenLength`, mode `singleScript` or `stepwise` from `remote.WSL.experimental.scriptLessStartup` (F-6304), `environmentSetup` = `<serverDataFolderName>/server-env-setup` (F-6303), extra start option `--file-watcher-polling` for WSL 1 (F-6601), V8 cleanup variant per mode | pure configuration plus wiring |
+| D7b | background-download (no prefetch, `ruling-2348-no-update-signal`) | Reads `remote.WSL.downloadInBackground` and, when it is on, writes the one log line that nothing is prefetched; writes the per-platform usage stamp when the probe maps the platform (F-6201 AC-23, F-6302 7.E5). No V10 wiring | wiring |
+| D8 | shell-handoff (with D8g, the build-time generator of the script's install half) | `scripts/wslCode.sh` (shipped text): accepts the stock launcher's five leading arguments and VSCodium's six ([oss] `resources/win32/bin/code.sh`, VSCodium `00-remote-use-open-ext.patch`); ensures the server with in-distro `wget` (F-6401 BR-8); writes the env record for D11; runs the server CLI in its WSL mode ([oss] `src/vs/server/node/server.cli.ts`) | remote-side text |
+| D9a | exec-spawner | lib-wsl's spawner, files and session ports over the outer host's exec server; everything above D1 is unchanged | process |
+| D9b | outer-context | Decodes the window's outer authority (`ssh-remote` only), gets the exec server at each use, follows its loss, and sets `wslFeatureInstalled` for the outer host | process |
 | D10 | window-advisories | At window start: WSL 2 on `/mnt/<letter>/…`, WSL 1, a local window on a `\\wsl` share (F-6206 R1–R3); keeps the three flags; hands B the condition to render | process over D2 and D3 |
 | D11 | env-rendezvous | The per-window shell environment of F-6303 6.1: a per-user store keyed by distro and folder or workspace path, written by D8 through the distro, read once by D6, expiring; with `remote.WSL.useShellEnvironment` read when the request is handled (F-6303 BR-11) | process |
+| D12e | explorer-launcher | The one place that starts `explorer.exe /select,` for F-6207, with its path rule | process |
 | D12 | wsl-commands | The engine side of the commands whose features D owns: Reopen Folder in WSL/Windows (F-6204), Open Folder in WSL (F-6203), Reveal in File Explorer via `explorer.exe /select,` (F-6207), Add a Distro (F-6102 engine), `remote-wsl.reopenFromRecommendation` (F-6206). Each computes its target with D2/D3 and hands B's window opener or a UI port the result | thin, editor-facing through ports |
 
 ## Feature ownership (one owner each; contributors in the matrix)
@@ -65,30 +68,32 @@ an injected spawner, so its tests run on a recorded fake.
 | F-6102 | wsl#18 | D12 | D2, B `wsl.targets-view` |
 | F-6103 | wsl#19 | D2 | D6 |
 | F-6203 | wsl#22 | D12 | D3, B window opener |
-| F-6204 | wsl#23 | D3 | D12, B window opener |
+| F-6204 | wsl#23 | D12 | D3, D2, B window opener |
 | F-6206 | wsl#25 | D10 | D3, D12, B `wsl.package` (renders the three advisories) |
-| F-6207 | wsl#26 | D12 | D3 |
-| F-6301 | wsl#28 | D7 | V3, V4, V9, D4 |
+| F-6207 | wsl#26 | D12 | D12e, D3 |
+| F-6301 | wsl#28 | D7 | D7a, V3, V4, V9, D4 |
 | F-6302 | wsl#29 | D7 | V1, V2 |
 | F-6303 | wsl#30 | D7 | V1, D11, D8 |
-| F-6304 | wsl#31 | D7 | V1, V7, V8, D5 |
+| F-6304 | wsl#31 | D7 | V1, V7, V8, D5h |
 | F-6401 | wsl#32 | D8 | D11, D7 |
 | F-6402 | wsl#33 | D6 | B `wsl.resolver-front` |
 | F-6601 | wsl#37 | D7 | V7 |
-| F-6701 | wsl#39 | D9 | D1, D4, D5, B codec |
+| F-6701 | wsl#39 | D9a, D9b | D1, D4, D5r (a listener per window, no D5h), B codec |
+| F-7902 | wsl#41 | D7 | D7a, D6, B `wsl.failure-ui` |
 
-B owns, per its components.md and traceability.tsv (PR #26):
-- `wsl.package`: F-6001, F-6003, F-6004, F-6005, F-6602 (a documented no-op, AC-19) and F-7901;
+B owns, per its components.md and traceability.tsv (PR #26), as amended by `brief-remote-wsl.md`:
+- `wsl.package`: F-6001, F-6003, F-6004, F-6005, F-6602 (real rows: AC-18, AC-19, AC-24, AC-25), F-7901, F-7903 and
+  F-7904;
+- `wsl.web-entry` (new): the browser bundle of F-6001 (R-87);
+- `wsl.log` (new): F-6002;
 - `wsl.resolver-front`: F-6201;
-- `wsl.window-surfaces`: F-6205;
+- `wsl.window-surfaces`: F-6205 (the per-distro formatters, plural);
 - `wsl.failure-ui`: F-6208;
 - `wsl.targets-view`: F-6503, and F-6501/F-6502 when drafted.
 
 D contributes to those rows as B's matrix lists. This matrix carries only D's rows, so no feature appears twice.
-F-6002 is the lead's (`lib-log`).
 
-## First coding candidates
+## Build order
 
-The pure components come first: D1a, D3's pure core, D7's configuration, and D2's matching. After them, D1 and D4 on
-the fake, with A's H1 contract suite. D5, D6 and D11 need B's resolver host and A's revised `lib-server` (V1 stepwise
-mode, V3 download policy, V4 verification, V9 kept cache), so they follow those.
+`brief-remote-wsl.md` §4 (2026-11-12) replaces the first coding candidates: the unblockers, the shared libraries, the
+package skeleton, the connect, the commands and surfaces, then the targets view and the nested route.

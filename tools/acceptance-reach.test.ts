@@ -4,6 +4,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
+import {execFileSync} from 'node:child_process';
 import {
   mkdirSync,
   mkdtempSync,
@@ -28,6 +29,7 @@ import {
   labelsOfChangedParts,
   labelsOfTableSince,
   CI_WORKFLOW,
+  IMAGE_FOLDERS,
   LAUNCH_MARKER,
   MAIN_ONLY_LAUNCH_JOBS,
   measuredPaths,
@@ -37,13 +39,16 @@ import {
   PR_LAUNCH_JOBS,
   PR_LAUNCH_WORKFLOW,
   sourceGraph,
+  sourcesNaming,
   tableImports,
   type TableModule,
   testsOfHelper,
+  withDeletedAsImporters,
   withHelpersAsTests,
   workflowEditReach,
   workflowReach,
 } from './acceptance-reach.ts';
+import {selectLaunches} from './acceptance-select.ts';
 import {acceptanceConfiguration} from './acceptance.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 
@@ -510,6 +515,30 @@ describe('acceptance-reach: what a change to a package reaches (card tooling-169
     );
   });
 
+  it('tooling-188: an image folder reaches what its builder reaches; another source naming the folder, or no builder naming it, leaves it unmeasured', () => {
+    const changed = ['tests/acceptance/ssh-engine/Dockerfile'];
+    write('tests/acceptance/ssh-engine/Dockerfile', 'FROM scratch\n');
+    const unnamed = [...measuredPaths(changed, 'HEAD', PACKAGE_LAUNCHES, root)];
+    write(
+      'tests/acceptance/windows/engine-fixture.ts',
+      "export const folder = 'ssh-engine';\n",
+    );
+    write(
+      'tests/acceptance/alpha/e.test.ts',
+      "import {folder} from '../windows/engine-fixture.ts';\n",
+    );
+    const built = [...measuredPaths(changed, 'HEAD', PACKAGE_LAUNCHES, root)];
+    write('tools/also.ts', "const folder = 'ssh-engine';\n");
+    deepStrictEqual(
+      [
+        unnamed,
+        built,
+        [...measuredPaths(changed, 'HEAD', PACKAGE_LAUNCHES, root)],
+      ],
+      [[], [['tests/acceptance/ssh-engine/Dockerfile', ['alpha-one']]], []],
+    );
+  });
+
   it('tooling-169: a library that only unit tests use reaches every launch, since the imports show no launch, as does one that nothing uses; a unit test adds nothing', () => {
     deepStrictEqual(reachOf('lib-unused', 'lib-unit'), [
       undefined,
@@ -707,7 +736,7 @@ describe('acceptance-reach: the names other sources import from the launch table
 });
 
 describe('acceptance-reach: the tests of a folder its own job runs (card tooling-169)', () => {
-  it('tooling-169: in the repository a server or shared-suite test reaches no launch; a containers-cli test (no job runs it), a server helper and a folder of no job are not measured', () => {
+  it('tooling-169, tooling-143: in the repository a server, shared-suite or containers-cli test reaches no launch; a server helper and a folder of no job are not measured', () => {
     deepStrictEqual(
       [
         ...measuredPaths(
@@ -726,11 +755,12 @@ describe('acceptance-reach: the tests of a folder its own job runs (card tooling
       [
         ['tests/acceptance/server/login-shells.test.ts', []],
         ['tests/acceptance/suite/host.test.ts', []],
+        ['tests/acceptance/containers-cli/cli-bridge.test.ts', []],
       ],
     );
   });
 
-  it("tooling-169: each folder's script is in package.json and a CI job runs it, the server script on the server folder and the slice's run on the shared suite's bundle", () => {
+  it("tooling-169: each folder's script is in package.json and a CI job runs it, the server and containers-cli scripts on their folders and the slice's run on the shared suite's bundle", () => {
     const scripts = (
       JSON.parse(
         readFileSync(path.join(REPOSITORY_ROOT, 'package.json'), 'utf8'),
@@ -746,8 +776,10 @@ describe('acceptance-reach: the tests of a folder its own job runs (card tooling
           folder,
           new RegExp(`pnpm ${script}(?![\\w:-])`).test(workflow),
         ]),
-        scripts[String(OWN_JOB_FOLDERS.get('server'))]?.includes(
-          "'tests/acceptance/server/*.test.ts'",
+        ['server', 'containers-cli'].map(folder =>
+          scripts[String(OWN_JOB_FOLDERS.get(folder))]?.includes(
+            `'tests/acceptance/${folder}/*.test.ts'`,
+          ),
         ),
         acceptanceConfiguration(REPOSITORY_ROOT, {}).files ===
           `${bundleFolderOf('suite')}/**/*.test.cjs`,
@@ -756,8 +788,9 @@ describe('acceptance-reach: the tests of a folder its own job runs (card tooling
         [
           ['server', true],
           ['suite', true],
+          ['containers-cli', true],
         ],
-        true,
+        [true, true],
         true,
       ],
     );
@@ -936,6 +969,168 @@ describe("acceptance-reach: what a workflow file's change reaches (card tooling-
         ],
       ],
       [[], undefined, [[CI_WORKFLOW, []]]],
+    );
+  });
+});
+
+describe('acceptance-reach: the image folders (card tooling-188)', () => {
+  it("tooling-188: in the repository only the engine fixture names the SSH engine's folder, and a change there reaches the launches of the tests that import the fixture, not every launch", () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    const builder = String(IMAGE_FOLDERS.get('ssh-engine'));
+    const graph = sourceGraph(REPOSITORY_ROOT);
+    const importers = [
+      ...(graph?.importers.get(builder.replace(/\.ts$/, '')) ?? []),
+    ];
+    const reach =
+      measuredPaths(
+        ['tests/acceptance/ssh-engine/Dockerfile'],
+        'HEAD',
+        launches,
+        REPOSITORY_ROOT,
+      ).get('tests/acceptance/ssh-engine/Dockerfile') ?? [];
+    deepStrictEqual(
+      [
+        sourcesNaming(REPOSITORY_ROOT, 'ssh-engine'),
+        [...reach].sort(),
+        reach.includes('local'),
+      ],
+      [
+        [builder],
+        launches
+          .filter(launch =>
+            importers.some(importer =>
+              importer.startsWith(`tests/acceptance/${launch.suite}/`),
+            ),
+          )
+          .map(launch => launch.label)
+          .sort(),
+        false,
+      ],
+    );
+  });
+});
+
+describe('acceptance-reach: a source deleted or moved since the base (card tooling-191)', () => {
+  const ALPHA: Launch[] = [
+    {label: 'alpha-one', kind: 'plain', suite: 'alpha'},
+    {label: 'beta-one', kind: 'plain', suite: 'beta'},
+  ];
+  let base = '';
+  /** Runs git in the fixture repository and gives its output. */
+  function gitOf(...gitArguments: string[]): string {
+    return execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=rows',
+        '-c',
+        'user.email=rows@example.invalid',
+        '-c',
+        'commit.gpgsign=false',
+        ...gitArguments,
+      ],
+      {cwd: root, encoding: 'utf8'},
+    );
+  }
+
+  beforeEach(() => {
+    root = mkdtempSync(path.join(tmpdir(), 'deleted-sources-'));
+    gitOf('init', '-q');
+    write('tests/acceptance/windows/clones.ts', 'export const one = 1;\n');
+    write(
+      'tests/acceptance/alpha/a.test.ts',
+      "import {one} from '../windows/clones.ts';\n",
+    );
+    write('tests/acceptance/alpha/b.test.ts', 'const none = 0;\n');
+    write('tests/acceptance/windows/lonely.ts', 'export const two = 2;\n');
+    write('tests/acceptance/windows/shared.ts', 'export const three = 3;\n');
+    write(
+      'tests/acceptance/windows/harness.ts',
+      "export {three} from './shared.ts';\n",
+    );
+    write('tests/acceptance/windows/dir/index.ts', 'export const four = 4;\n');
+    write(
+      'tests/acceptance/beta/c.test.ts',
+      "import {four} from '../windows/dir';\n",
+    );
+    write('tests/acceptance/alpha/gone.test.ts', 'const gone = 0;\n');
+    gitOf('add', '-A');
+    gitOf('commit', '-q', '-m', 'base');
+    base = gitOf('rev-parse', 'HEAD').trim();
+    write('tests/acceptance/alpha/clones.ts', 'export const one = 1;\n');
+    write(
+      'tests/acceptance/alpha/a.test.ts',
+      "import {one} from './clones.ts';\n",
+    );
+    write('tests/acceptance/windows/harness.ts', 'export const three = 3;\n');
+    write('tests/acceptance/beta/c.test.ts', 'export const four = 4;\n');
+    for (const gone of [
+      'tests/acceptance/windows/clones.ts',
+      'tests/acceptance/windows/lonely.ts',
+      'tests/acceptance/windows/shared.ts',
+      'tests/acceptance/windows/dir/index.ts',
+      'tests/acceptance/alpha/gone.test.ts',
+    ]) {
+      rmSync(path.join(root, gone));
+    }
+    gitOf('add', '-A');
+    gitOf('commit', '-q', '-m', 'head');
+  });
+
+  afterEach(() => {
+    rmSync(root, {recursive: true, force: true});
+  });
+
+  it("tooling-191: a helper moved out of the windows harness into its suite stands for its importers at the base, and the change reaches that suite's launches only", () => {
+    const changed = withHelpersAsTests(
+      withDeletedAsImporters(
+        [
+          'tests/acceptance/windows/clones.ts',
+          'tests/acceptance/alpha/clones.ts',
+          'tests/acceptance/alpha/a.test.ts',
+        ],
+        base,
+        root,
+      ),
+      root,
+      new Set(['alpha', 'beta']),
+    );
+    deepStrictEqual(
+      [changed, selectLaunches(changed, ALPHA).labels],
+      [['tests/acceptance/alpha/a.test.ts'], ['alpha-one']],
+    );
+  });
+
+  it("tooling-191: a deleted helper nothing imported, a deleted test, a path that still exists, and any path when the base cannot be read stay as they are; one a windows file imported gives that file, and an index gives its folder's importers", () => {
+    deepStrictEqual(
+      [
+        withDeletedAsImporters(
+          [
+            'tests/acceptance/windows/lonely.ts',
+            'tests/acceptance/alpha/gone.test.ts',
+            'tests/acceptance/alpha/b.test.ts',
+            'tests/acceptance/windows/shared.ts',
+            'tests/acceptance/windows/dir/index.ts',
+          ],
+          base,
+          root,
+        ),
+        withDeletedAsImporters(
+          ['tests/acceptance/windows/clones.ts'],
+          'no-such-commit',
+          root,
+        ),
+      ],
+      [
+        [
+          'tests/acceptance/windows/lonely.ts',
+          'tests/acceptance/alpha/gone.test.ts',
+          'tests/acceptance/alpha/b.test.ts',
+          'tests/acceptance/windows/harness.ts',
+          'tests/acceptance/beta/c.test.ts',
+        ],
+        ['tests/acceptance/windows/clones.ts'],
+      ],
     );
   });
 });

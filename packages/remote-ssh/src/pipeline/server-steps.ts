@@ -59,6 +59,7 @@ import {
   type ServerBounds,
   serverNamesOf,
 } from './parameters.ts';
+import {english, textOfId} from '../surfaces/failure-strings.ts';
 import type {ConnectSteps} from './steps.ts';
 import {proxyProblem, type ProxyProblem} from './proxy-check.ts';
 
@@ -282,6 +283,7 @@ export function createServerSteps(
           failure: {
             kind: 'invalidSetting',
             reason: {id: problem.reason, values: [problem.character]},
+            logDetail: textOfId(problem.reason, english, [problem.character]),
           },
         };
       }
