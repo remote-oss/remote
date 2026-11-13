@@ -188,6 +188,7 @@ export async function startStandIn(
       {...engine, method: incoming.method, path: incoming.url, headers},
       answer => {
         outgoing.writeHead(Number(answer.statusCode), answer.rawHeaders);
+        outgoing.flushHeaders();
         pipeline(answer, outgoing, () => undefined);
       },
     );

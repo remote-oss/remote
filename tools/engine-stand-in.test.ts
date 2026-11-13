@@ -298,6 +298,46 @@ describe('the engine stand-in in front of a WSL engine (card #2511)', () => {
     );
   });
 
+  it('#2511: response headers reach the client as soon as the engine sends them, before any of the body, as a container wait needs', async () => {
+    await closed(engine.server);
+    const held: ServerResponse[] = [];
+    engine = await fakeEngine((asked, response) => {
+      response.writeHead(200, {'content-type': 'application/json'});
+      response.flushHeaders();
+      held.push(response);
+    });
+    const waiting = await startStandIn(
+      {host: '127.0.0.1', port: engine.port},
+      {report: line => lines.push(line), longPathOf},
+    );
+    try {
+      const headed = await new Promise<IncomingMessage>((resolve, reject) => {
+        const sent = request(
+          new URL(
+            '/containers/abc/wait',
+            waiting.address.replace('tcp:', 'http:'),
+          ),
+          {method: 'POST'},
+          resolve,
+        );
+        sent.on('error', reject);
+        sent.end();
+      });
+      const bodyHeld = held.length;
+      held[0]?.end('{"StatusCode":0}');
+      deepStrictEqual(
+        {
+          status: headed.statusCode,
+          bodyHeld,
+          body: (await buffer(headed)).toString('utf8'),
+        },
+        {status: 200, bodyHeld: 1, body: '{"StatusCode":0}'},
+      );
+    } finally {
+      await waiting.close();
+    }
+  });
+
   it('#2511: an engine that is not there answers 502 with the reason, and the log says so', async () => {
     const port = engine.port;
     await closed(engine.server);
