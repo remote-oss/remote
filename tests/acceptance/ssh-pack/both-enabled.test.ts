@@ -5,6 +5,7 @@ import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
   inWindow,
+  onHostAs,
   readUserSettings,
   restoreUserSettings,
   startInWindow,
@@ -183,6 +184,19 @@ describe('the extension and both companions enabled (card #2499)', function () {
         120_000,
       );
       found.authority = (await windowState(remote)).remoteAuthority;
+      found.hostFile = await onHostAs(
+        'harness',
+        'sh',
+        '-c',
+        'ls -la /home/harness/.ssh; cat /home/harness/.ssh/config',
+      );
+      await inWindow(
+        remote,
+        'acceptance.agent.openFile',
+        'pack-probe.txt',
+      ).catch((caught: unknown) => {
+        found.probeFailure = String(caught);
+      });
       await waitFor(
         'the remote config file to open',
         async () => {
