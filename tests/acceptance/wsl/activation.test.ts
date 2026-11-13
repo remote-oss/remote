@@ -1,7 +1,12 @@
 import {deepStrictEqual} from 'node:assert';
 import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {closeWindow, commandsOf, variable} from '../windows/harness.ts';
+import {
+  closeWindow,
+  commandsOf,
+  variable,
+  waitFor,
+} from '../windows/harness.ts';
 import {
   openFolderWindow,
   openMemoryWindow,
@@ -55,17 +60,32 @@ function bindKeys(): () => void {
   };
 }
 
+/** The extension's commands in window `name` once it has activated, waiting up to 30 s for its startup activation. */
+async function activeCommands(name: string): Promise<string[]> {
+  let registered: string[] = [];
+  await waitFor(
+    `WSL to activate in window ${name}`,
+    async () => {
+      registered = await commandsOf(name, 'remote-wsl.');
+      return registered.length > 0;
+    },
+    30_000,
+  ).catch(() => undefined);
+  return registered;
+}
+
 describe('WSL on a Linux desktop (card #2365)', function () {
   this.timeout(300_000);
 
   it('F-6001 AC-12 (w08-linux-surface): in a Linux folder window the extension is active, the palette lists only Reopen Folder in WSL and Show Log, and neither the remote indicator nor a view shows WSL', async () => {
     const name = await openFolderWindow(runFolder('w08-linux-surface'));
-    const registered = await commandsOf(name, 'remote-wsl.');
+    const registered = await activeCommands(name);
+    // The menu is read before any palette, so that no palette row is left to be read as a menu row.
+    const menu = await indicatorMenu(name);
     const palette = await wslPaletteEntries(name);
     const views = (await paletteItems(name, 'WSL Targets')).filter(item =>
       item.includes('WSL Targets'),
     );
-    const menu = await indicatorMenu(name);
     console.log(
       `w08-linux-surface: ${JSON.stringify({registered: registered.length, palette, views, menu})}`,
     );
@@ -144,7 +164,7 @@ describe('WSL on a Linux desktop (card #2365)', function () {
 
   it('F-6001 AC-16 (w08-linux-virtual): in a purely virtual workspace the extension is active, and the palette has Show Log but not Reopen Folder in WSL', async () => {
     const name = await openMemoryWindow();
-    const registered = await commandsOf(name, 'remote-wsl.');
+    const registered = await activeCommands(name);
     const palette = await wslPaletteEntries(name);
     console.log(`w08-linux-virtual: ${JSON.stringify(palette)}`);
     await closeWindow(name);
