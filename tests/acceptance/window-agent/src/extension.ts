@@ -571,6 +571,13 @@ export function activate(context: vscode.ExtensionContext): void {
           }),
           COPY_STEP_MILLISECONDS,
         );
+        if (read && copied === nothing) {
+          // The copy selected nothing, and core told the user so in a toast of its own: the read made it, so the read takes it away.
+          await settledWithin(
+            vscode.commands.executeCommand('notifications.hideToasts'),
+            COPY_STEP_MILLISECONDS,
+          );
+        }
         report(agentFolder, name, {
           event: 'terminalBuffer',
           text: read ? (copied === nothing ? '' : (copied ?? '')) : null,
