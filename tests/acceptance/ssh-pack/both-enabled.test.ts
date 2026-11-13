@@ -171,7 +171,7 @@ describe('the extension and both companions enabled (card #2499)', function () {
     const found: Record<string, unknown> = {};
     let remote = '';
     try {
-      remote = 'pack-ssh';
+      remote = 'harness';
       void inWindow(
         'local',
         'acceptance.agent.openWindow',
