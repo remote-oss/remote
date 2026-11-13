@@ -1,4 +1,5 @@
 import type {LogLine, Sink} from '../logger.ts';
+import {escapeControls} from '../escape-controls.ts';
 import type {EditorLogPort} from './editor-port.ts';
 
 /**
@@ -28,7 +29,7 @@ export function createChannelSink(
   return {
     write(line: LogLine): void {
       channel ??= port.createOutputChannel(channelName);
-      channel.appendLine(render(line));
+      channel.appendLine(escapeControls(render(line)));
     },
     dispose(): void {
       if (channel !== undefined) {

@@ -1,12 +1,14 @@
 /**
  * @fileoverview The extension's log: one output channel per window, created at activation, with the effective log
  * level, the editor version, the extension and the client platform as its first lines. Every line starts with the
- * local time. The level is read for each line, so a change in the settings applies to the next operation.
+ * local time. Control characters in a line are written as their code points, except line breaks and tabs. The level
+ * is read for each line, so a change in the settings applies to the next operation.
  */
 
 import {
   type ChannelPort,
   createLogger,
+  escapeControls,
   type Level,
   type Logger,
   type LogLine,
@@ -75,7 +77,7 @@ export function openLogChannel(
   const logger = createLogger(
     {
       write: line => {
-        const text = formatted(line);
+        const text = escapeControls(formatted(line));
         written.push(text);
         channel.appendLine(text);
       },

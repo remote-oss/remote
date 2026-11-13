@@ -136,6 +136,25 @@ describe('the log channel', () => {
     );
   });
 
+  it('writes a control character of a line as its code point, in the channel and in its text', () => {
+    const {port, channel} = recordingPort();
+    const logChannel = openLogChannel(
+      port,
+      ENVIRONMENT,
+      () => 'debug',
+      () => localTime(9, 5, 7, 42),
+    );
+    const mark = logChannel.mark();
+    logChannel.logger.info('host a\u009bb\u0007');
+    deepStrictEqual(
+      [channel.lines.at(-1), logChannel.text(mark)],
+      [
+        '[09:05:07.042] host a\\u{9b}b\\u{7}',
+        '[09:05:07.042] host a\\u{9b}b\\u{7}',
+      ],
+    );
+  });
+
   it('ends the channel when it is disposed', () => {
     const {port, channel} = recordingPort();
     openLogChannel(
