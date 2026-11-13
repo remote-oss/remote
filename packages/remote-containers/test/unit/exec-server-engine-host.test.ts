@@ -10,16 +10,28 @@ import type {
 } from 'lib-server';
 import {execServerEngineHost} from '../../src/engine/exec-server-engine-host.ts';
 
-/** A host stream the test feeds, then ends. */
+/** The script the host runs `docker` under, so that it reports its process id first. */
+const REPORTING_SCRIPT = 'printf "%s\\n" "$$"; exec "$@"';
+
+/** The process id the fake host's shell reports. */
+const PROCESS_ID = 4242;
+
+/** The exit status of a process the fake host kills. */
+const KILLED_STATUS = 137;
+
+/** A host stream the test feeds, then ends, or ends with a rejection. */
 function hostStream(): {
   stream: ExecReadStream;
   send(text: string): void;
   end(): void;
+  fail(): void;
 } {
   let listener: ((data: Uint8Array) => void) | undefined;
   let ended: (() => void) | undefined;
-  const onEnd = new Promise<void>(resolve => {
+  let failed: ((reason: Error) => void) | undefined;
+  const onEnd = new Promise<void>((resolve, reject) => {
     ended = resolve;
+    failed = reject;
   });
   return {
     stream: {
@@ -37,10 +49,24 @@ function hostStream(): {
     end: () => {
       ended?.();
     },
+    fail: () => {
+      failed?.(new Error('the stream broke'));
+    },
   };
 }
 
-/** What the fake host was asked, and how its one command answers once its input ends. */
+/** How the fake host's one command behaves. */
+interface Behaviour {
+  status?: number;
+  complaint?: string;
+  refuse?: boolean;
+  firstLines?: readonly string[];
+  ignoresInput?: boolean;
+  killFails?: boolean;
+  closesAtOnce?: boolean;
+}
+
+/** What the fake host was asked, and what reached its command. */
 interface Scene {
   asked: Array<{
     command: string;
@@ -49,15 +75,30 @@ interface Scene {
   }>;
   input: string[];
   inputEnded: boolean;
-  server: Pick<ExecServer, 'spawn'>;
+  killed: number[];
+  server: Pick<ExecServer, 'spawn' | 'kill'>;
 }
 
-/** A host whose command echoes its input on stdout, writes `complaint` on stderr, and exits `status` when its input ends. */
-function sceneOf(status: number, complaint = '', refuse = false): Scene {
+/**
+ * A host whose command first sends `firstLines` (by default its process id's line), then, when its input ends, echoes
+ * it on stdout, writes `complaint` on stderr and exits `status`; one that `ignoresInput` runs until it is killed.
+ */
+function sceneOf(behaviour: Behaviour = {}): Scene {
+  const {
+    status = 0,
+    complaint = '',
+    refuse = false,
+    firstLines = [`${String(PROCESS_ID)}\n`],
+    ignoresInput = false,
+    killFails = false,
+    closesAtOnce = false,
+  } = behaviour;
+  let finish: ((exitStatus: number) => void) | undefined;
   const scene: Scene = {
     asked: [],
     input: [],
     inputEnded: false,
+    killed: [],
     server: {
       spawn: (command, argv, options) => {
         if (refuse) {
@@ -70,6 +111,13 @@ function sceneOf(status: number, complaint = '', refuse = false): Scene {
         const onExit = new Promise<{status: number}>(resolve => {
           exited = resolve;
         });
+        finish = exitStatus => {
+          stdout.send(scene.input.join(''));
+          stderr.send(complaint);
+          stdout.end();
+          stderr.end();
+          exited?.({status: exitStatus});
+        };
         const spawned: ExecSpawnedCommand = {
           stdin: {
             write: data => {
@@ -77,29 +125,48 @@ function sceneOf(status: number, complaint = '', refuse = false): Scene {
             },
             end: () => {
               scene.inputEnded = true;
-              stdout.send(scene.input.join(''));
-              stderr.send(complaint);
-              stdout.end();
-              stderr.end();
-              exited?.({status});
+              if (!ignoresInput) {
+                finish?.(status);
+              }
             },
           },
           stdout: stdout.stream,
           stderr: stderr.stream,
           onExit,
         };
+        setImmediate(() => {
+          for (const line of firstLines) {
+            stdout.send(line);
+          }
+          if (closesAtOnce) {
+            finish?.(status);
+          }
+        });
         return Promise.resolve(spawned);
+      },
+      kill: processId => {
+        scene.killed.push(processId);
+        if (killFails) {
+          return Promise.reject(new Error('no such process'));
+        }
+        finish?.(KILLED_STATUS);
+        return Promise.resolve();
       },
     },
   };
   return scene;
 }
 
+/** Lets the timers and promises that are due run. */
+function settled(): Promise<void> {
+  return new Promise(resolve => setImmediate(resolve));
+}
+
 const NEVER = new AbortController().signal;
 
 describe('the Docker CLI on the exec server’s host (card containers-174)', () => {
-  it('a run passes the engine’s variables in the spawn’s environment, never in the arguments, and gives back what it printed', async () => {
-    const scene = sceneOf(3, 'warning');
+  it('a run starts docker under the reporting shell with the engine’s variables in the environment, never in the arguments, and gives back what it printed without the process id', async () => {
+    const scene = sceneOf({status: 3, complaint: 'warning'});
     const outcome = await execServerEngineHost(scene.server, 'docker').run(
       ['ps', '-q'],
       {kind: 'text', text: 'given'},
@@ -114,13 +181,28 @@ describe('the Docker CLI on the exec server’s host (card containers-174)', () 
         {kind: 'ran', status: 3, stdout: 'given', stderr: 'warning'},
         [
           {
-            command: 'docker',
-            argv: ['ps', '-q'],
+            command: 'sh',
+            argv: ['-c', REPORTING_SCRIPT, 'sh', 'docker', 'ps', '-q'],
             options: {env: {DOCKER_HOST: 'unix:///run/docker.sock'}},
           },
         ],
       ],
     );
+  });
+
+  it('a process id split across messages is read whole, and what follows it on the same message is output', async () => {
+    const scene = sceneOf({firstLines: ['42', '42\nfirst ']});
+    const outcome = await execServerEngineHost(scene.server, 'docker').run(
+      ['version'],
+      {kind: 'text', text: 'second'},
+      {cancellation: NEVER},
+    );
+    deepStrictEqual(outcome, {
+      kind: 'ran',
+      status: 0,
+      stdout: 'first second',
+      stderr: '',
+    });
   });
 
   it('a local file is streamed as the input, no input ends it at once, and a refused spawn fails with its reason', async () => {
@@ -129,16 +211,16 @@ describe('the Docker CLI on the exec server’s host (card containers-174)', () 
       const file = path.join(folder, 'context.tar');
       writeFileSync(file, 'bytes of a file');
       const fromFile = await execServerEngineHost(
-        sceneOf(0).server,
+        sceneOf().server,
         'docker',
       ).run(['load'], {kind: 'file', localFile: file}, {cancellation: NEVER});
-      const none = await execServerEngineHost(sceneOf(0).server, 'docker').run(
+      const none = await execServerEngineHost(sceneOf().server, 'docker').run(
         ['version'],
         {kind: 'none'},
         {cancellation: NEVER},
       );
       const refused = await execServerEngineHost(
-        sceneOf(0, '', true).server,
+        sceneOf({refuse: true}).server,
         'docker',
       ).run(['version'], {kind: 'none'}, {cancellation: NEVER});
       deepStrictEqual(
@@ -155,69 +237,134 @@ describe('the Docker CLI on the exec server’s host (card containers-174)', () 
   });
 
   it('a spawn refused with something that is no error fails with its text', async () => {
-    const refused = await execServerEngineHost(
-      {spawn: () => Promise.reject(new Error('unused'))},
-      'docker',
-    ).run(['version'], {kind: 'none'}, {cancellation: NEVER});
     const textual = await execServerEngineHost(
       {
         spawn: () =>
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the exec server may reject with a bare text
           Promise.reject('no exec server'),
+        kill: () => Promise.resolve(),
       },
       'docker',
     ).run(['version'], {kind: 'none'}, {cancellation: NEVER});
+    deepStrictEqual(textual, {kind: 'failed', detail: 'no exec server'});
+  });
+
+  it('a first line that is no process id, one too long to be one, and output that ends before one fail the spawn, end its input and kill nothing', async () => {
+    const scenes = [
+      sceneOf({firstLines: ['not a pid\n']}),
+      sceneOf({firstLines: ['9'.repeat(40)]}),
+      sceneOf({firstLines: [], closesAtOnce: true, status: 127}),
+    ];
+    const outcomes = await Promise.all(
+      scenes.map(scene =>
+        execServerEngineHost(scene.server, 'docker').run(
+          ['version'],
+          {kind: 'none'},
+          {cancellation: NEVER},
+        ),
+      ),
+    );
     deepStrictEqual(
-      [refused, textual],
-      [
-        {kind: 'failed', detail: 'unused'},
-        {kind: 'failed', detail: 'no exec server'},
-      ],
+      {
+        outcomes,
+        inputEnded: scenes.map(scene => scene.inputEnded),
+        killed: scenes.map(scene => scene.killed),
+      },
+      {
+        outcomes: [
+          {
+            kind: 'failed',
+            detail: 'the command on the host did not report its process id',
+          },
+          {
+            kind: 'failed',
+            detail: 'the command on the host did not report its process id',
+          },
+          {
+            kind: 'failed',
+            detail: 'the command on the host did not report its process id',
+          },
+        ],
+        inputEnded: [true, true, true],
+        killed: [[], [], []],
+      },
     );
   });
 
-  it('a cancelled spawn and a kill end the process’s input, the only stop the exec server offers', async () => {
-    const cancelled = sceneOf(0);
+  it('a long-running command that ignores the end of its input, such as docker events, stops when its run is cancelled, killed by its process id', async () => {
+    const scene = sceneOf({ignoresInput: true});
     const controller = new AbortController();
-    const spawned = await execServerEngineHost(
-      cancelled.server,
-      'docker',
-    ).spawn(['exec', '-i', 'c1', 'sh'], {cancellation: controller.signal});
+    const running = execServerEngineHost(scene.server, 'docker').run(
+      ['events'],
+      {kind: 'none'},
+      {cancellation: controller.signal},
+    );
+    await settled();
+    await settled();
     controller.abort();
-    await new Promise(resolve => setImmediate(resolve));
-    const killed = sceneOf(0);
-    const second = await execServerEngineHost(killed.server, 'docker').spawn(
+    const outcome = await running;
+    deepStrictEqual(
+      {outcome, killed: scene.killed, inputEnded: scene.inputEnded},
+      {
+        outcome: {kind: 'ran', status: KILLED_STATUS, stdout: '', stderr: ''},
+        killed: [PROCESS_ID],
+        inputEnded: true,
+      },
+    );
+  });
+
+  it('a kill and a spawn cancelled before it starts end the input and kill the process by its id, and a kill the host refuses is let go', async () => {
+    const killed = sceneOf({ignoresInput: true});
+    const spawned = await execServerEngineHost(killed.server, 'docker').spawn(
       ['logs', '-f', 'c1'],
       {cancellation: NEVER},
     );
-    if (second.kind === 'spawned') {
-      second.process.kill();
+    if (spawned.kind === 'spawned') {
+      spawned.process.kill();
     }
-    await new Promise(resolve => setImmediate(resolve));
-    const early = sceneOf(0);
+    const early = sceneOf({ignoresInput: true});
     const aborted = new AbortController();
     aborted.abort();
     await execServerEngineHost(early.server, 'docker').spawn(['version'], {
       cancellation: aborted.signal,
     });
-    await new Promise(resolve => setImmediate(resolve));
+    const refusing = sceneOf({ignoresInput: true, killFails: true});
+    const refused = await execServerEngineHost(refusing.server, 'docker').spawn(
+      ['attach', 'c1'],
+      {cancellation: NEVER},
+    );
+    if (refused.kind === 'spawned') {
+      refused.process.kill();
+    }
+    await settled();
     deepStrictEqual(
-      [spawned.kind, cancelled.inputEnded, killed.inputEnded, early.inputEnded],
-      ['spawned', true, true, true],
+      [killed, early, refusing].map(scene => [scene.inputEnded, scene.killed]),
+      [
+        [true, [PROCESS_ID]],
+        [true, [PROCESS_ID]],
+        [true, [PROCESS_ID]],
+      ],
     );
   });
 
-  it('a process whose exit never comes back, because the connection went, ends with no status', async () => {
-    const stream = hostStream();
-    stream.end();
-    const server: Pick<ExecServer, 'spawn'> = {
-      spawn: () =>
-        Promise.resolve({
+  it('a process whose exit never comes back, because the connection went, ends with no status, and a stream whose end rejects still ends', async () => {
+    const stdout = hostStream();
+    const stderr = hostStream();
+    const server: Pick<ExecServer, 'spawn' | 'kill'> = {
+      spawn: () => {
+        setImmediate(() => {
+          stdout.send(`${String(PROCESS_ID)}\n`);
+          stdout.end();
+          stderr.fail();
+        });
+        return Promise.resolve({
           stdin: {write: () => undefined, end: () => undefined},
-          stdout: stream.stream,
-          stderr: stream.stream,
+          stdout: stdout.stream,
+          stderr: stderr.stream,
           onExit: Promise.reject(new Error('closed')),
-        }),
+        });
+      },
+      kill: () => Promise.resolve(),
     };
     deepStrictEqual(
       await execServerEngineHost(server, 'docker').run(
