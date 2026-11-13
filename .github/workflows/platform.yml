@@ -61,6 +61,12 @@ jobs:
           . "$env:RUNNER_TEMP\probe.ps1"
           Probe 'wslpath -u' @('-d', 'Ubuntu-24.04', '--', 'wslpath', '-u', '--', 'C:\Users')
           Probe 'wslpath -w' @('-d', 'Ubuntu-24.04', '--', 'wslpath', '-w', '--', '/home')
+      - name: (4b) wslpath with -- through --exec, so no shell reads the arguments
+        run: |
+          . "$env:RUNNER_TEMP\probe.ps1"
+          Probe 'exec wslpath -u' @('-d', 'Ubuntu-24.04', '--exec', 'wslpath', '-u', '--', 'C:\Users')
+          Probe 'exec wslpath -w' @('-d', 'Ubuntu-24.04', '--exec', 'wslpath', '-w', '--', '/home')
+          Probe 'exec wslpath -u, a path with a space' @('-d', 'Ubuntu-24.04', '--exec', 'wslpath', '-u', '--', '"C:\Program Files"')
 
   windows-2022:
     runs-on: windows-2022
