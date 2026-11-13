@@ -1,6 +1,15 @@
 {
   "targetMinutes": 15,
-  "together": [["socket-prime", "socket"]],
+  "together": [
+    ["socket-prime", "socket"],
+    ["install-install-present-prime", "install-install-present"],
+    [
+      "install-install-present-stopped-prime",
+      "install-install-present-stopped"
+    ],
+    ["install-install-repaired-prime", "install-install-repaired"],
+    ["ports-reuse-prime", "ports-reuse"]
+  ],
   "minutes": {
     "add-host": {"add-host.test.ts": 0.4},
     "agent": 0.3,
@@ -307,8 +316,11 @@
     "install-install-fresh-legacy": 0.3,
     "install-install-path": 0.3,
     "install-install-present": 0.2,
+    "install-install-present-prime": 0.2,
     "install-install-present-stopped": 0.3,
+    "install-install-present-stopped-prime": 0.3,
     "install-install-repaired": 0.2,
+    "install-install-repaired-prime": 0.2,
     "install-install-tilde-path": 0.3,
     "install-licence-update-service": 0.1,
     "install-local-404": 0.1,
@@ -386,6 +398,7 @@
     "ports-range-held": 0.2,
     "ports-range-single": 0.2,
     "ports-reuse": 0.2,
+    "ports-reuse-prime": 0.3,
     "preconnect": {
       "basics.test.ts": 0.8,
       "failures.test.ts": 0.6,
