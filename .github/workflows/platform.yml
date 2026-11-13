@@ -2,8 +2,9 @@
 # never on a pull request, so no fork's code reaches a hosted runner from here, and with no secret.
 #
 # - windows-2025: the Windows client. WSL2 gives the Linux side: an Ubuntu 24.04 distro whose Docker engine runs the
-#   SSH hosts and the dev containers, reached from Windows over WSL2's localhost forwarding (the Windows engine of the
-#   image runs Windows containers only). VSCodium answers on its debugging port there.
+#   SSH hosts and the dev containers (the Windows engine of the image runs Windows containers only). The Docker CLI
+#   reaches that engine at the distro's own address; the hosts' and containers' published ports are reached over
+#   WSL2's localhost forwarding. VSCodium answers on its debugging port there.
 # - macos-15-intel: the macOS client, with colima's Docker for linux/x86_64 (about 10 minutes to start).
 #
 # Each job runs `node tools/acceptance.ts --editor vscodium` for its launch list and leaves the run's summary in the job
