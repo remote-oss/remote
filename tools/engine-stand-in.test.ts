@@ -30,6 +30,29 @@ function longPathOf(source: string): string {
   return source.replace('RUNNER~1', 'runneradmin');
 }
 
+/** A container create with a drive-like bind source and mount source, beside sources that are never rewritten. */
+function createBody(bindSource: string, mountSource: string): object {
+  return {
+    Image: 'alpine',
+    HostConfig: {
+      Binds: [
+        `${bindSource}:/workspaces/run:ro`,
+        '/home/runner/run:/workspaces/posix',
+        'vscode:/vscode',
+        'c:/vscode',
+        7,
+      ],
+      Mounts: [
+        {Type: 'bind', Source: mountSource, Target: '/workspaces/c202'},
+        {Type: 'volume', Source: 'vscode', Target: '/vscode'},
+        {Type: 'bind', Source: '/home/runner/run', Target: '/posix'},
+        {Type: 'bind', Target: '/no-source'},
+        null,
+      ],
+    },
+  };
+}
+
 /** What the fake engine was asked. */
 interface Asked {
   method: string;
@@ -147,31 +170,15 @@ describe('the engine stand-in in front of a WSL engine (card #2511)', () => {
   });
 
   it('#2511: Binds and bind Mounts on a drive are rewritten with their options kept; POSIX sources, volumes and a one-letter volume name are not', () => {
-    const body = {
-      Image: 'alpine',
-      HostConfig: {
-        Binds: [
-          'C:\\Users\\RUNNER~1\\Temp\\run:/workspaces/run:ro',
-          '/home/runner/run:/workspaces/posix',
-          'vscode:/vscode',
-          'c:/vscode',
-          7,
-        ],
-        Mounts: [
-          {
-            Type: 'bind',
-            Source: 'c:\\Users\\RUNNER~1\\Temp\\c202',
-            Target: '/workspaces/c202',
-          },
-          {Type: 'volume', Source: 'vscode', Target: '/vscode'},
-          {Type: 'bind', Source: '/home/runner/run', Target: '/posix'},
-          {Type: 'bind', Target: '/no-source'},
-          null,
-        ],
-      },
-    };
     const reading = rewriteCreate(
-      Buffer.from(JSON.stringify(body)),
+      Buffer.from(
+        JSON.stringify(
+          createBody(
+            'C:\\Users\\RUNNER~1\\Temp\\run',
+            'c:\\Users\\RUNNER~1\\Temp\\c202',
+          ),
+        ),
+      ),
       longPathOf,
     );
     deepStrictEqual(
@@ -182,29 +189,10 @@ describe('the engine stand-in in front of a WSL engine (card #2511)', () => {
           }
         : reading,
       {
-        parsed: {
-          Image: 'alpine',
-          HostConfig: {
-            Binds: [
-              '/mnt/c/Users/runneradmin/Temp/run:/workspaces/run:ro',
-              '/home/runner/run:/workspaces/posix',
-              'vscode:/vscode',
-              'c:/vscode',
-              7,
-            ],
-            Mounts: [
-              {
-                Type: 'bind',
-                Source: '/mnt/c/Users/runneradmin/Temp/c202',
-                Target: '/workspaces/c202',
-              },
-              {Type: 'volume', Source: 'vscode', Target: '/vscode'},
-              {Type: 'bind', Source: '/home/runner/run', Target: '/posix'},
-              {Type: 'bind', Target: '/no-source'},
-              null,
-            ],
-          },
-        },
+        parsed: createBody(
+          '/mnt/c/Users/runneradmin/Temp/run',
+          '/mnt/c/Users/runneradmin/Temp/c202',
+        ),
         rewrites: [
           'HostConfig.Binds[0] C:\\Users\\RUNNER~1\\Temp\\run -> /mnt/c/Users/runneradmin/Temp/run',
           'HostConfig.Mounts[0].Source c:\\Users\\RUNNER~1\\Temp\\c202 -> /mnt/c/Users/runneradmin/Temp/c202',
