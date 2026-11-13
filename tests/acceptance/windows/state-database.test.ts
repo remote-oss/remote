@@ -133,4 +133,31 @@ describe('the state database reader (card tooling-207)', function () {
     }
     deepStrictEqual(output.trim(), 'failures 0');
   });
+
+  it('tooling-207: a read that is still open takes no lock: a writer with no busy timeout commits beside it', () => {
+    const outcome: {commit: string; reads: string[]} = {
+      commit: 'not run',
+      reads: [],
+    };
+    readStateDatabase(file, database => {
+      outcome.reads = keys(database);
+      const open = database.prepare('SELECT key FROM ItemTable').iterate();
+      open.next();
+      if (outcome.commit !== 'not run') {
+        return;
+      }
+      const writer = new DatabaseSync(file);
+      try {
+        writer.exec(
+          "INSERT OR REPLACE INTO ItemTable VALUES ('beside', 'two')",
+        );
+        outcome.commit = 'committed';
+      } catch (caught) {
+        outcome.commit = String(caught);
+      } finally {
+        writer.close();
+      }
+    });
+    deepStrictEqual(outcome.commit, 'committed');
+  });
 });
