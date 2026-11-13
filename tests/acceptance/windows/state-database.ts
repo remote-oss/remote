@@ -3,15 +3,19 @@
  * hint store and of the global state share it.
  */
 
-import {readdirSync, readFileSync, readlinkSync, statSync} from 'node:fs';
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  statSync,
+} from 'node:fs';
 import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {DatabaseSync} from 'node:sqlite';
 
-/** How long a read may take in all, in milliseconds: the editor holds the database for a moment while it writes. */
+/** How long a read may take in all, in milliseconds: the editor's writer keeps its journal for a moment while it writes. */
 const STATE_READ_MILLISECONDS = 5000;
-
-/** How long SQLite itself waits for a lock inside one attempt, in milliseconds. */
-const BUSY_MILLISECONDS = 1000;
 
 /** The pause between two attempts, in milliseconds. */
 const PAUSE_MILLISECONDS = 100;
@@ -95,7 +99,7 @@ function aroundDatabase(file: string): string {
   }
   let mode = 'unknown';
   try {
-    const database = new DatabaseSync(file, {readOnly: true});
+    const database = new DatabaseSync(unlockedUri(file), {readOnly: true});
     try {
       mode = String(
         (
@@ -113,30 +117,57 @@ function aroundDatabase(file: string): string {
 }
 
 /**
- * Runs `read` on a read-only connection to the state database `file`, and gives its result. SQLite waits for the lock
- * itself, up to a second per attempt; the attempts end after {@link STATE_READ_MILLISECONDS}, and the failure then names
- * SQLite's code and message, the files beside the database and its journal mode.
+ * The address of `file` for a connection that takes no lock on it (`immutable`): the harness only looks at the editor's
+ * database, and a lock of its own on it is not harmless. A writer that cannot commit because a reader holds a shared
+ * lock fails with SQLITE_BUSY and, if its caller does not retry, keeps its transaction and blocks every reader after it
+ * until it does, which is how a harness's reads lock the editor out (the 'database is locked' of #2420) and lose its
+ * write (the memento that reverts, #2326).
+ */
+function unlockedUri(file: string): string {
+  return `file:${pathToFileURL(file).pathname}?mode=ro&immutable=1`;
+}
+
+/** What `file` is at this moment as far as a read is concerned: its size and its change time. */
+function stampOf(file: string): string {
+  const stat = statSync(file);
+  return `${String(stat.size)}:${String(stat.mtimeMs)}`;
+}
+
+/** The reason a read gave up on an attempt: a writer was between its first write and its commit. */
+class WriterBusy extends Error {}
+
+/**
+ * Runs `read` on a connection to the state database `file` that takes no lock, and gives its result. Without a lock a
+ * read is sound only while no writer is between its first write and its commit: the database file changes only at the
+ * commit, after the writer's rollback journal exists. So an attempt reads only when the journal is absent before and
+ * after it and the database file is the same size and age after it as before; otherwise it pauses and tries again. The
+ * attempts end after {@link STATE_READ_MILLISECONDS}, and the failure then names why the last one gave up, the files
+ * beside the database with their ages, the processes holding them open and its journal mode.
  */
 export function readStateDatabase<Result>(
   file: string,
   read: (database: DatabaseSync) => Result,
   milliseconds = STATE_READ_MILLISECONDS,
 ): Result {
+  const journal = `${file}-journal`;
   const deadline = Date.now() + milliseconds;
   for (let attempt = 1; ; attempt += 1) {
     try {
-      const database = new DatabaseSync(file, {
-        readOnly: true,
-        timeout: Math.max(
-          1,
-          Math.min(BUSY_MILLISECONDS, deadline - Date.now()),
-        ),
-      });
+      if (existsSync(journal)) {
+        throw new WriterBusy('a writer’s journal is present');
+      }
+      const before = stampOf(file);
+      const database = new DatabaseSync(unlockedUri(file), {readOnly: true});
+      let result: Result;
       try {
-        return read(database);
+        result = read(database);
       } finally {
         database.close();
       }
+      if (existsSync(journal) || stampOf(file) !== before) {
+        throw new WriterBusy('a writer wrote while the database was read');
+      }
+      return result;
     } catch (caught) {
       if (Date.now() >= deadline) {
         throw new Error(

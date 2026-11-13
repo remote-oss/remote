@@ -74,7 +74,7 @@ describe('the state database reader (card tooling-207)', function () {
     deepStrictEqual([seen, waited < 5000], [['before', 'held'], true]);
   });
 
-  it('tooling-207: a writer that never commits fails the read within its bound, naming SQLite’s code, the files beside the database and its journal mode', async () => {
+  it('tooling-207: a writer that never commits fails the read within its bound, naming the journal, the files beside the database, the process holding them and the journal mode', async () => {
     const {process: writer} = await holder(file, 60_000);
     const started = Date.now();
     let message = '';
@@ -88,7 +88,7 @@ describe('the state database reader (card tooling-207)', function () {
     deepStrictEqual(
       [
         message.includes('could not be read in 1500 ms'),
-        /code \d+: /.test(message),
+        message.includes('a writer’s journal is present'),
         message.includes('"state.vscdb'),
         message.includes('journal mode'),
         message.includes(`${String(writer.pid)}: `),
@@ -97,5 +97,40 @@ describe('the state database reader (card tooling-207)', function () {
       [true, true, true, true, true, true],
       message,
     );
+  });
+
+  it('tooling-207: a writer with no busy timeout loses no commit to the reads polling beside it', async () => {
+    const script = `
+      const {DatabaseSync} = require('node:sqlite');
+      const database = new DatabaseSync(process.argv[1]);
+      let failures = 0;
+      for (let each = 0; each < 400; each += 1) {
+        try {
+          database.exec('BEGIN');
+          database.exec("INSERT OR REPLACE INTO ItemTable VALUES ('k" + (each % 5) + "', '" + each + "')");
+          database.exec('COMMIT');
+        } catch {
+          failures += 1;
+          try { database.exec('ROLLBACK'); } catch {}
+        }
+      }
+      process.stdout.write('failures ' + failures + '\\n');
+    `;
+    const child = spawn(process.execPath, ['-e', script, file], {
+      stdio: ['ignore', 'pipe', 'inherit'],
+    });
+    let output = '';
+    child.stdout.on('data', (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    const state = {running: true};
+    void new Promise(resolve => child.once('close', resolve)).then(() => {
+      state.running = false;
+    });
+    while (state.running) {
+      readStateDatabase(file, keys);
+      await new Promise(resolve => setTimeout(resolve, 1));
+    }
+    deepStrictEqual(output.trim(), 'failures 0');
   });
 });
