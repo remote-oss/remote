@@ -34,6 +34,7 @@ import {
   PromptReader,
   type ConnectWaitSettings,
   type TunnelSession,
+  type TerminalEnd,
   type TerminalLogin,
 } from 'lib-ssh';
 import {isAborted, portOf} from './connect.ts';
@@ -168,6 +169,18 @@ function notOpenedFor(
         failure: {kind: 'unknown', reason: busyRangeReason(chosen.busyRange)},
       }
     : NOT_OPENED;
+}
+
+/** What the log says of a tunnel terminal that ended before its forwards were ready: how it ended, and whether it printed. */
+function endedDetail(end: TerminalEnd): string {
+  let ending = 'ended without an exit code';
+  if (end.code !== undefined) {
+    ending = `exit code ${String(end.code)}`;
+  } else if (end.reason !== 'process' && end.reason !== 'unknown') {
+    ending = 'ended by the window';
+  }
+  const output = end.hadOutput ? '' : ', no output';
+  return `the tunnel ssh ended before its forwards were ready: ${ending}${output}`;
 }
 
 /** What the step gives when it opens a tunnel. */
@@ -351,7 +364,10 @@ async function openTerminalTunnel(
         };
   }
   if (gate.kind === 'ended') {
-    return NOT_OPENED;
+    return {
+      kind: 'failed',
+      failure: {kind: 'unknown', logDetail: endedDetail(gate.end)},
+    };
   }
   onWaiting();
   const opening = openForwardedTunnel({
