@@ -58,6 +58,13 @@ on:
           coverage, slice 1 and server lifecycle, which a launch's proof does not need
         type: boolean
         default: false
+      measure:
+        description: >-
+          With vscodium, run the parts that go to the pool on the measurement runner instead (the label in the
+          repository variable CI_MEASURE_RUNS_ON), which takes one job at a time, so a timing measurement shares its
+          host with nothing; unset, the dispatch fails at once
+        type: boolean
+        default: false
   # Once a night, at 04:43, main runs the genuine VS Code job and every part of the VSCodium suite at that commit, in
   # groups of their own that no merge replaces: the full run that names the commits since a part's last green.
   schedule:
@@ -135,6 +142,11 @@ jobs:
       parts: ${{ steps.plan.outputs.parts }}
       containers-parts: ${{ steps.plan.outputs.containers-parts }}
     steps:
+      # a measurement never falls back to the shared pool, where other runs would load its host (#2496)
+      - if: inputs.measure && !vars.CI_MEASURE_RUNS_ON
+        run: |
+          echo "::error::measure needs the repository variable CI_MEASURE_RUNS_ON, the label of the measurement runner"
+          exit 1
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -472,9 +484,12 @@ jobs:
       group: ${{ github.event_name == 'schedule' && format('acceptance-vscodium-nightly-{0}', github.sha) || (github.event_name == 'push' && format('acceptance-vscodium-{0}', github.ref)) || format('acceptance-vscodium-run-{0}', github.run_id) }}-${{ matrix.part.name }}
       cancel-in-progress: false
     # on the organisation's pool when the repository variable CI_POOL_RUNS_ON names its label (with X64 and ephemeral,
-    # a fresh machine per job); unset, on ubuntu-24.04
+    # a fresh machine per job); unset, on ubuntu-24.04. A dispatch with measure runs on the measurement runner, which
+    # takes one job at a time: its jobs wait for it in turn, whatever room dispatched them. A concurrency group would not
+    # do, since GitHub keeps one pending job per group and a newer one replaces it.
     runs-on: >-
       ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' ||
+      (inputs.measure && fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_MEASURE_RUNS_ON))) ||
       (vars.CI_POOL_RUNS_ON &&
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON))) || 'ubuntu-24.04' }}
@@ -482,6 +497,9 @@ jobs:
     timeout-minutes: ${{ matrix.part.minutes }}
     steps: &vscodium-steps
       - uses: actions/checkout@v7
+      # a measurement says what its host was doing, at its start and its end
+      - if: inputs.measure
+        run: tools/host-load >> "$GITHUB_STEP_SUMMARY"
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -511,6 +529,8 @@ jobs:
           LAUNCHES: ${{ matrix.part.launches }}
       - if: always()
         run: pnpm acceptance:clean
+      - if: always() && inputs.measure
+        run: tools/host-load >> "$GITHUB_STEP_SUMMARY"
 
   # The parts with a containers launch, on GitHub's runners, at most eight at once: a merge's 33 such parts would
   # otherwise take all of the organisation's 20 and hold the pull requests' own legs, genuine and ci-gate behind them.

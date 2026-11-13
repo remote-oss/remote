@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# host-load: one line for a job's summary on what its host is doing now, so a timing measurement can show it ran alone.
+#
+#   tools/host-load    print the time, the runner, the host's CPUs, its load averages and how many runner jobs it runs
+#
+# The runner jobs are counted by process name (Runner.Worker, one per job a runner is running), never by command line.
+set -euo pipefail
+workers=$(ps -eo comm= | grep -c '^Runner\.Worker$' || true)
+printf '**The host at %s:** runner `%s`, %s CPUs, load averages `%s`, runner jobs on the host: %s\n\n' \
+  "$(date -u +%H:%M:%SZ)" "${RUNNER_NAME:-unnamed}" "$(nproc)" "$(cut -d ' ' -f 1-3 /proc/loadavg)" "$workers"
