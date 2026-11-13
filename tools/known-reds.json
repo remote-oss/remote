@@ -10,15 +10,6 @@
   },
   {
     "launch": "containers-a",
-    "file": "containers/dockerfile.test.ts",
-    "title": "F-0415 AC-7, AC-8, AC-9 (gate-row-6): the create hooks run once, a restart runs the start and attach hooks and initializeCommand again, and a reload runs the attach hook and initializeCommand but not the start hook",
-    "card": 2206,
-    "owner": "daedalus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-a",
     "file": "containers/open-folder-virtual.test.ts",
     "title": "F-0403 AC-28 (c71-untitled): in an untitled workspace core asks whether to save the workspace configuration before the window changes; Cancel leaves the window and creates nothing, and Don’t Save reloads the same window into one container",
     "card": 2432,
@@ -60,105 +51,6 @@
     "card": 2429,
     "owner": "hestia",
     "evidence": 42820396583,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-volume",
-    "file": "containers-volume/clone.test.ts",
-    "title": "F-0701 AC-14 (c151-reuse-part): the same URL again reuses its volume and its dev container: nothing is cloned or built again",
-    "card": 2263,
-    "owner": "daedalus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-volume",
-    "file": "containers-volume/explore-volume.test.ts",
-    "title": "F-0705 AC-13, AC-32 (c155-stop): when the window goes the container stops within about 30 s and is not removed",
-    "card": 2263,
-    "owner": "daedalus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-volume",
-    "file": "containers-volume/explore-volume.test.ts",
-    "title": "F-0705 AC-8, AC-11, AC-12, AC-17, AC-29 (c155-explore): a plain volume opens as root with the volume at /volume and no Docker socket, in Restricted Mode, the same volume again runs the same container, and another volume gets its own",
-    "card": 2263,
-    "owner": "daedalus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-volume",
-    "file": "containers-volume/explore-volume.test.ts",
-    "title": "F-0705 AC-8b (c155-vscode): exploring the vscode volume itself mounts it at /volume and at /vscode",
-    "card": 2263,
-    "owner": "daedalus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-volume",
-    "file": "containers-volume/recovery.test.ts",
-    "title": "F-0410 AC-14, AC-16c: a clone whose build fails offers four buttons, and More Actions picks five items with no container, the recovery one second",
-    "card": 2263,
-    "owner": "daedalus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-volume",
-    "file": "containers-volume/recovery.test.ts",
-    "title": "F-0410 AC-15: Close Remote leaves a plain empty local window",
-    "card": 2263,
-    "owner": "daedalus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-volume",
-    "file": "containers-volume/recovery.test.ts",
-    "title": "F-0410 AC-16 (concurrency): two windows recovering two volumes at once each get a container that mounts only its own volume",
-    "card": 2263,
-    "owner": "daedalus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-volume",
-    "file": "containers-volume/recovery.test.ts",
-    "title": "F-0410 AC-16, AC-16a, AC-16b: the recovery button connects a container of the bootstrap image on the volume, with Git and a docker client but no daemon, and a second start restarts the same container",
-    "card": 2263,
-    "owner": "daedalus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-volume",
-    "file": "containers-volume/recovery.test.ts",
-    "title": "F-0410 AC-28: a stopped container with the labels of another temp root is left as it is, and a new one is made",
-    "card": 2263,
-    "owner": "daedalus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-volume",
-    "file": "containers-volume/recovery.test.ts",
-    "title": "F-0410 AC-29: a stopped recovery container is restarted on its own image after the bootstrap image setting changed",
-    "card": 2263,
-    "owner": "daedalus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-volume",
-    "file": "containers-volume/volume.test.ts",
-    "title": "F-0419 AC-37 (v1): a non-root remote user connects on a fresh volume (contracts §5.2); the shared folders are root 0777 and the commit folder is the user’s 0755",
-    "card": 2263,
-    "owner": "daedalus",
-    "evidence": 43225659271,
     "added": "2026-11-12"
   },
   {
@@ -213,24 +105,6 @@
     "card": 2232,
     "owner": "dike",
     "evidence": 43018061687,
-    "added": "2026-11-13"
-  },
-  {
-    "launch": "containers-volume",
-    "file": "containers-volume/volume.test.ts",
-    "title": "F-0419 AC-25 (s25): a commit folder with only a stray file in it makes the setup dialog with Opening Remote..., a running container on the volume and an unchanged listing, for a second folder too",
-    "card": 2263,
-    "owner": "daedalus",
-    "evidence": 42820396583,
-    "added": "2026-11-13"
-  },
-  {
-    "launch": "containers-volume",
-    "file": "containers-volume/volume.test.ts",
-    "title": "F-0419 AC-26 (s26): a vscode volume of 1 MiB makes the setup dialog with Opening Remote..., and the container runs with the volume at /vscode",
-    "card": 2263,
-    "owner": "daedalus",
-    "evidence": 42820396583,
     "added": "2026-11-13"
   },
   {
