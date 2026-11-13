@@ -3,7 +3,11 @@ import {mkdirSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {closeWindow, runLabelArguments, variable} from '../windows/harness.ts';
 import {removeContainers} from '../windows/folder-windows.ts';
+import {hostIdentityOf} from './host-identity.ts';
 import {connectedWindow, docker, serverProcessesOf} from './resolve-support.ts';
+
+/** The host the rows run on: a Linux host has a user and a group id, which the remote user takes; a Windows host has none. */
+const HOST = hostIdentityOf(process);
 
 /** Builds an image from the run's with a non-root `vscode` user named by its metadata label, and a label of its own; gives its tag. */
 async function imageWithUser(label: string): Promise<string> {
@@ -13,8 +17,8 @@ async function imageWithUser(label: string): Promise<string> {
     path.join(context, 'Dockerfile'),
     [
       `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}`,
-      // The remote user is on the host's UID, as the reference's is, so the UID update changes nothing; the run's own `node` user may hold that UID.
-      `RUN (deluser node || true) && adduser -D -u ${String(process.getuid?.())} vscode`,
+      // The remote user is on the host's UID, as the reference's is, so the UID update changes nothing; the run's own `node` user may hold that UID. A host with no UID (Windows) has no such update: the remote user is on 1000.
+      `RUN (deluser node || true) && adduser -D -u ${String(HOST.userId)} vscode`,
       'LABEL c71.base="present"',
       `LABEL devcontainer.metadata='[{"remoteUser":"vscode"}]'`,
       '',
@@ -70,20 +74,26 @@ describe('F-0403 the container Open Folder in Container creates (card coverage-7
         }>;
       }>;
       const [container] = inspected;
-      const derived = await docker(
-        'image',
-        'inspect',
-        '--format',
-        '{{index .RepoTags 0}}',
-        container?.Config.Image ?? '',
-      );
-      const derivedInspect = JSON.parse(
-        await docker('inspect', derived),
-      ) as Array<{
-        Config: {Labels: Record<string, string>; User: string};
-      }>;
+      // Only a host with a user id gets the derived image of the UID update (F-0403 BR-6); on a host without one the
+      // container runs the configuration's image as it is.
+      const derived = HOST.synchronised
+        ? await docker(
+            'image',
+            'inspect',
+            '--format',
+            '{{index .RepoTags 0}}',
+            container?.Config.Image ?? '',
+          )
+        : undefined;
+      const derivedInspect =
+        derived === undefined
+          ? undefined
+          : (JSON.parse(await docker('inspect', derived)) as Array<{
+              Config: {Labels: Record<string, string>; User: string};
+            }>);
       const baseLayers = await layersOf(image);
-      const derivedLayers = await layersOf(derived);
+      const derivedLayers =
+        derived === undefined ? [] : await layersOf(derived);
       const added = derivedLayers.slice(baseLayers.length);
       const [server] = await serverProcessesOf(containerId);
       const serverUser = await docker(
@@ -112,15 +122,25 @@ describe('F-0403 the container Open Folder in Container creates (card coverage-7
           volume: container?.Mounts.filter(
             mount => mount.Destination === '/vscode',
           ).map(mount => [mount.Type, mount.Name]),
-          derivedName: /^vsc-c71-inspect-[0-9a-f]{64}-uid:latest$/.test(
-            derived,
-          ),
+          derivedName:
+            derived === undefined
+              ? undefined
+              : /^vsc-c71-inspect-[0-9a-f]{64}-uid:latest$/.test(derived),
+          configuredImage:
+            derived === undefined
+              ? container?.Config.Image === image
+              : undefined,
           addsOnlyEmptyLayers:
-            derivedLayers.slice(0, baseLayers.length).join() ===
-              baseLayers.join() && added.every(layer => layer === EMPTY_LAYER),
+            derived === undefined
+              ? undefined
+              : derivedLayers.slice(0, baseLayers.length).join() ===
+                  baseLayers.join() &&
+                added.every(layer => layer === EMPTY_LAYER),
           derivedLabelsKept:
-            derivedInspect[0]?.Config.Labels['c71.base'] === 'present',
-          derivedUser: derivedInspect[0]?.Config.User,
+            derivedInspect === undefined
+              ? undefined
+              : derivedInspect[0]?.Config.Labels['c71.base'] === 'present',
+          derivedUser: derivedInspect?.[0]?.Config.User,
           userId: await userIdOf(containerId, '-u'),
           groupId: await userIdOf(containerId, '-g'),
           containerUser: container?.Config.User,
@@ -134,12 +154,13 @@ describe('F-0403 the container Open Folder in Container creates (card coverage-7
           inherited: 'present',
           bind: [['bind', folder, true]],
           volume: [['volume', 'vscode']],
-          derivedName: true,
-          addsOnlyEmptyLayers: true,
-          derivedLabelsKept: true,
-          derivedUser: 'root',
-          userId: String(process.getuid?.()),
-          groupId: String(process.getgid?.()),
+          derivedName: HOST.synchronised ? true : undefined,
+          configuredImage: HOST.synchronised ? undefined : true,
+          addsOnlyEmptyLayers: HOST.synchronised ? true : undefined,
+          derivedLabelsKept: HOST.synchronised ? true : undefined,
+          derivedUser: HOST.synchronised ? 'root' : undefined,
+          userId: String(HOST.userId),
+          groupId: String(HOST.groupId),
           containerUser: 'root',
           serverUser: 'vscode',
         },
