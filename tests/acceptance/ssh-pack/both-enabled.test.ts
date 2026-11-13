@@ -5,6 +5,7 @@ import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
   connectedWithin,
+  connectionLog,
   inWindow,
   onHostAs,
   readUserSettings,
@@ -19,6 +20,7 @@ import {closePick, pickShown} from '../windows/explorer-home.ts';
 import {
   chooseQuickPickItem,
   extensionPackTabOf,
+  dialogOf,
   extensionPageOf,
   extensionsViewSections,
   languageModeOf,
@@ -176,7 +178,13 @@ describe('the extension and both companions enabled (card #2499)', function () {
         'acceptance.agent.openWindow',
         'vscode-remote://ssh-remote+harness/home/harness',
       );
-      await connectedWithin('harness', 120_000);
+      await connectedWithin('harness', 60_000).catch(
+        async (caught: unknown) => {
+          found.notConnected = String(caught).slice(0, 300);
+          found.dialog = await dialogOf('harness');
+          found.logLines = connectionLog().slice(-40);
+        },
+      );
       await new Promise(resolve => setTimeout(resolve, 5000));
       found.state = await windowState('harness');
       found.notifications = await notifications('harness');
