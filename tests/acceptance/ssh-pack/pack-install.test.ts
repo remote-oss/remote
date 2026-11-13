@@ -1,10 +1,13 @@
-import {spawnSync} from 'node:child_process';
-import {mkdirSync} from 'node:fs';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {mkdirSync, readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {variable} from '../windows/harness.ts';
 import {type StandInGallery, startGallery} from './gallery.ts';
 
 /** The editor's gallery variables pointed at the stand-in gallery, as the launch has them for the editor itself. */
+const execFileAsync = promisify(execFile);
+
 const STAND_IN_GALLERY = {
   VSCODE_GALLERY_SERVICE_URL: 'http://127.0.0.1:23790/_apis/public/gallery',
   VSCODE_GALLERY_ITEM_URL: 'http://127.0.0.1:23790/items',
@@ -25,10 +28,10 @@ describe('the pack installed and removed by id (card #2499)', function () {
     await gallery.stop();
   });
 
-  it('F-2007 AC-1 (c2499-install-measure): what the editor command line asks the gallery for when it installs the extension by id', () => {
+  it('F-2007 AC-1 (c2499-install-measure): what the editor command line asks the gallery for when it installs the extension by id', async () => {
     const base = path.join(variable('HARNESS_RUN_FOLDER'), 'pack-cli');
     mkdirSync(base, {recursive: true});
-    const result = spawnSync(
+    const result = await execFileAsync(
       path.join(
         path.dirname(variable('HARNESS_VSCODIUM_EXECUTABLE')),
         'bin',
@@ -39,15 +42,34 @@ describe('the pack installed and removed by id (card #2499)', function () {
         `--user-data-dir=${path.join(base, 'user-data')}`,
         '--install-extension',
         'remote-oss.remote-ssh',
+        '--verbose',
       ],
       {
         encoding: 'utf8',
-        timeout: 120_000,
-        env: {...process.env, ...STAND_IN_GALLERY},
+        timeout: 60_000,
+        env: {
+          ...process.env,
+          ...STAND_IN_GALLERY,
+          XDG_STATE_HOME: path.join(base, 'state'),
+        },
       },
+    ).then(
+      ({stdout, stderr}) => ({status: 0, stdout, stderr}),
+      (caught: {code?: number | null; stdout?: string; stderr?: string}) => ({
+        status: caught.code ?? null,
+        stdout: caught.stdout ?? '',
+        stderr: caught.stderr ?? '',
+      }),
     );
+    const logs = readdirSync(path.join(base, 'state'), {recursive: true})
+      .map(String)
+      .filter(entry => entry.endsWith('.log'))
+      .map(entry => {
+        const text = readFileSync(path.join(base, 'state', entry), 'utf8');
+        return `${entry}: ${text.slice(-1500)}`;
+      });
     throw new Error(
-      `MEASURED exit ${String(result.status)}; stdout ${JSON.stringify(result.stdout)}; stderr ${JSON.stringify(result.stderr.split('\n').filter(line => !line.includes('DEP0169')))}; requests ${JSON.stringify(gallery.requests())}`,
+      `MEASURED exit ${String(result.status)}; stdout ${JSON.stringify(result.stdout)}; stderr ${JSON.stringify(result.stderr.split('\n').filter(line => !line.includes('DEP0169')))}; connections ${String(gallery.connections())}; requests ${JSON.stringify(gallery.requests())}; logs ${JSON.stringify(logs)}`,
     );
   });
 });

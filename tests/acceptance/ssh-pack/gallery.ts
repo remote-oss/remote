@@ -16,6 +16,8 @@ export interface GalleryRequest {
 export interface StandInGallery {
   /** Every request received, in order. */
   requests(): readonly GalleryRequest[];
+  /** How many connections the gallery accepted, whether or not a request followed. */
+  connections(): number;
   stop(): Promise<void>;
 }
 
@@ -34,6 +36,7 @@ async function bodyOf(request: IncomingMessage): Promise<string> {
  */
 export async function startGallery(): Promise<StandInGallery> {
   const seen: GalleryRequest[] = [];
+  let connected = 0;
   const server: Server = createServer((request, response) => {
     void bodyOf(request).then(body => {
       seen.push({
@@ -49,11 +52,15 @@ export async function startGallery(): Promise<StandInGallery> {
       );
     });
   });
+  server.on('connection', () => {
+    connected += 1;
+  });
   await new Promise<void>(resolve => {
     server.listen(GALLERY_PORT, '127.0.0.1', resolve);
   });
   return {
     requests: () => seen,
+    connections: () => connected,
     stop: () =>
       new Promise<void>(resolve => {
         server.close(() => {
