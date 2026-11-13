@@ -2896,11 +2896,11 @@ export async function waitForDialog(
                 `page ${page.title}`,
                 DIALOG_EXPRESSION,
               );
-        return `${page.title}: ${open?.message ?? 'none'}`;
+        return `${page.title} (page ${page.id}): ${open?.message ?? 'none'}`;
       }),
     );
     throw new Error(
-      `${caught instanceof Error ? caught.message : String(caught)}; open dialogs: ${shown.join('; ')}`,
+      `${caught instanceof Error ? caught.message : String(caught)}; open dialogs: ${shown.join('; ')}; the page remembered for ${name}: ${REMEMBERED_PAGES.get(name) ?? 'none'}`,
       {cause: caught},
     );
   }
