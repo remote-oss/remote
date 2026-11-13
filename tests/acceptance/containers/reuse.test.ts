@@ -22,6 +22,7 @@ import {
   variable,
   waitFor,
   windowState,
+  withLogTail,
 } from '../windows/harness.ts';
 import {
   answerDialog,
@@ -307,6 +308,32 @@ async function rebuildCancelled(
   }
 }
 
+/** How long a window's background lifecycle commands may take to end after it connects. */
+const LIFECYCLE_MILLISECONDS = 60_000;
+
+/**
+ * Resolves once the log written since `mark` says the lifecycle commands ended, which they do in the background after
+ * the window connects; a time-out carries those lines.
+ */
+async function lifecycleFinishedSince(mark: number): Promise<void> {
+  try {
+    await waitFor(
+      'the lifecycle commands to finish',
+      () =>
+        containersLogSince(mark).includes('the lifecycle commands finished'),
+      LIFECYCLE_MILLISECONDS,
+    );
+  } catch (caught) {
+    throw new Error(
+      withLogTail(
+        caught instanceof Error ? caught.message : String(caught),
+        containersLogSince(mark),
+      ),
+      {cause: caught},
+    );
+  }
+}
+
 describe('the remaining Dev Containers gate rows (card containers-19)', function () {
   this.timeout(900_000);
 
@@ -358,6 +385,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       const mark = containersLog().length;
       const name = await reopened(folder);
       const dialog = await dialogOf(name);
+      await lifecycleFinishedSince(mark);
       const lines = containersLogSince(mark);
       const containerIds = await devContainersOf(folder);
       const started = await inspectOf(containerIds[0] ?? '');
