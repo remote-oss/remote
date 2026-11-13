@@ -307,8 +307,8 @@ describe('D1: setDefaultByWslconfig', () => {
   const WSLCONFIG = 'C:\\Windows\\System32\\wslconfig.exe';
 
   /** A runner over a fake that has wslconfig.exe and gives every process `run`. */
-  function withWslconfig(run: FakeRun, session = {}) {
-    const made = runnerOver(run, session);
+  function withWslconfig(behaviour: FakeRun, session = {}) {
+    const made = runnerOver(behaviour, session);
     made.fake.local.set(WSLCONFIG, new Uint8Array(0));
     return made;
   }

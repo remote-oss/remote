@@ -1,6 +1,6 @@
 /**
  * @fileoverview D3, the path mapper's process half: a Windows path on a distro's share is read without a process
- * (`shareToDistro`), and a path on a drive is asked of `wslpath -u` in the target distro, which honours that distro's
+ * (`shareToDistro`), and a path on a drive is answer of `wslpath -u` in the target distro, which honours that distro's
  * automount root.
  */
 
@@ -27,7 +27,7 @@ export interface NotTranslatable {
 
 /** The mapper of Windows paths to paths in a distro. */
 export interface PathMapper {
-  /** The distro and Linux path of `windowsPath`; a drive path is asked of `wslpath -u` in `distro`. */
+  /** The distro and Linux path of `windowsPath`; a drive path is answer of `wslpath -u` in `distro`. */
   toDistro(
     windowsPath: string,
     distro: string,
@@ -56,7 +56,7 @@ const SHARE_FORM = /^\\\\(?:wsl\.localhost|wsl\$)\\/i;
 /** The mapper over `runner`. */
 export function createPathMapper(runner: WslRunner): PathMapper {
   /** The one line `wslpath` printed for `programArguments` in `distro`, or why there is none. */
-  async function ask(
+  async function questionOf(
     distro: string,
     option: '-u' | '-w',
     path: string,
@@ -110,12 +110,12 @@ export function createPathMapper(runner: WslRunner): PathMapper {
               detail: `${windowsPath} is no share path`,
             };
       }
-      const asked = await ask(distro, '-u', windowsPath, cancellation);
-      if (asked.kind !== 'line') {
-        return asked;
+      const answer = await questionOf(distro, '-u', windowsPath, cancellation);
+      if (answer.kind !== 'line') {
+        return answer;
       }
-      return asked.line.startsWith('/')
-        ? {kind: 'mapped', mapped: {distro, linuxPath: asked.line}}
+      return answer.line.startsWith('/')
+        ? {kind: 'mapped', mapped: {distro, linuxPath: answer.line}}
         : {
             kind: 'notTranslatable',
             detail: `wslpath -u printed no Linux path for ${windowsPath}`,
@@ -128,18 +128,18 @@ export function createPathMapper(runner: WslRunner): PathMapper {
           detail: `${linuxPath} is not an absolute Linux path`,
         };
       }
-      const asked = await ask(distro, '-w', linuxPath, cancellation);
-      if (asked.kind !== 'line') {
-        return asked;
+      const answer = await questionOf(distro, '-w', linuxPath, cancellation);
+      if (answer.kind !== 'line') {
+        return answer;
       }
-      if (SHARE_FORM.test(asked.line)) {
+      if (SHARE_FORM.test(answer.line)) {
         return {
           kind: 'mapped',
           windowsPath: distroToShare(distro, linuxPath, shareHost),
         };
       }
-      return DRIVE_FORM.test(asked.line) && !/\p{Cc}/u.test(asked.line)
-        ? {kind: 'mapped', windowsPath: asked.line}
+      return DRIVE_FORM.test(answer.line) && !/\p{Cc}/u.test(answer.line)
+        ? {kind: 'mapped', windowsPath: answer.line}
         : {
             kind: 'notTranslatable',
             detail: `wslpath -w printed no Windows path for ${linuxPath}`,

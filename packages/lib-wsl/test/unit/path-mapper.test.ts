@@ -132,11 +132,11 @@ describe('D3: the path mapper’s process half', () => {
 
 describe('D3: toWindows', () => {
   async function windowsOf(
-    run: FakeRun,
+    behaviour: FakeRun,
     linuxPath = '/home/me',
     host: 'wsl$' | 'wsl.localhost' = 'wsl.localhost',
   ) {
-    const {fake, mapper} = mapperOver(run);
+    const {fake, mapper} = mapperOver(behaviour);
     const result = await mapper.toWindows('Ubuntu', linuxPath, host, NEVER);
     return {fake, result};
   }

@@ -335,14 +335,16 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
     if (located.kind === 'failed') {
       return located;
     }
-    const ran = await runDecoded(
+    const finished = await runDecoded(
       located.path,
       [...VERB_ARGUMENTS[request.verb], ...request.operands],
       request.cancellation,
     );
-    return ran.kind === 'ran' && ran.status !== 0 && UNKNOWN_VERB.test(ran.text)
-      ? failed('wslNeedsUpdate', ran.text.trim())
-      : ran;
+    return finished.kind === 'ran' &&
+      finished.status !== 0 &&
+      UNKNOWN_VERB.test(finished.text)
+      ? failed('wslNeedsUpdate', finished.text.trim())
+      : finished;
   }
 
   async function setDefaultByWslconfig(

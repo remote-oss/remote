@@ -21,6 +21,15 @@ export {
 } from './install.ts';
 export {validDistroName} from './distro-name.ts';
 export {
+  type CatalogueResult,
+  createDistroInventory,
+  type DistroInventory,
+  type DistroInventoryPorts,
+  type DistrosResult,
+  type Presence,
+  type SetDefaultResult,
+} from './distro-inventory.ts';
+export {
   multiDistroAllowed,
   pathTranslationAvailable,
   shareHostFor,
