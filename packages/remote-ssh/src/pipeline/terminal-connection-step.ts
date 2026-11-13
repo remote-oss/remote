@@ -37,7 +37,7 @@ import {
   CONNECT_WAIT_TIMEOUT,
   ofClassification,
 } from './failure.ts';
-import {isForwardingLine, logSshLines} from './ssh-log.ts';
+import {isForwardingLine, logSshLines, withoutAnswer} from './ssh-log.ts';
 import type {
   ConnectInput,
   ConnectionLease,
@@ -292,7 +292,7 @@ export function openTerminalConnectionStep(
       let sshPhase = true;
       const sshOutput = new LineSplitter(line => {
         if (sshPhase || isForwardingLine(line)) {
-          logSshLines(dependencies.logger, [line], undefined);
+          logSshLines(dependencies.logger, [withoutAnswer(line)], undefined);
         }
         if (sshPhase && setupMarkerOf(line) === 'authenticated') {
           sshPhase = false;

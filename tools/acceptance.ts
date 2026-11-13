@@ -1627,6 +1627,15 @@ export async function runLaunches(
   }
 }
 
+/**
+ * What a failed launch reads of its host in one call: its listeners and processes, then the install folder of the
+ * server (`bin/<commit>`) of every account, each entry with the time it was last changed in seconds since the epoch next
+ * to the time now, so that a server that was removed and one that was never installed read differently, and how old the
+ * install in progress is.
+ */
+export const HOST_STATE_COMMAND =
+  'netstat -ltn 2>&1; ps -o pid,user,args 2>&1; echo "the servers\' install folders, seconds since the epoch now: $(date +%s)"; for folder in /home/*/.*server*/bin; do [ -d "$folder" ] && echo "$folder" && { ls -la --time-style=+%s "$folder" 2>&1 || ls -la "$folder" 2>&1; }; done; true';
+
 /** How many of the last lines of a failed launch's logs the run prints. */
 export const FAILURE_LOG_LINES = 150;
 
@@ -1656,7 +1665,7 @@ function stateOf(
 /**
  * What a launch whose rows failed leaves for the job's log, so that a connect the resolver gave up on can be read
  * there: the last lines of the log its extensions wrote (the Remote - SSH channel, and the Dev Containers one when
- * there is one), then its host's listeners and processes and the last lines of the host's sshd log.
+ * there is one), then its host's listeners, processes and server install folders and the last lines of the host's sshd log.
  */
 export function failureReport(
   runFolder: string,
@@ -1679,13 +1688,13 @@ export function failureReport(
     hostContainer === undefined || hostContainer === ''
       ? [`acceptance: ${label} failed: no host container to read`]
       : [
-          `acceptance: ${label} failed: its host's listeners and processes`,
+          `acceptance: ${label} failed: its host's listeners, processes and server install folders`,
           ...stateOf(command, 'docker', [
             'exec',
             hostContainer,
             'sh',
             '-c',
-            'netstat -ltn 2>&1; ps -o pid,user,args 2>&1',
+            HOST_STATE_COMMAND,
           ]),
           `acceptance: ${label} failed: the last lines of its host's sshd log`,
           ...stateOf(command, 'docker', [

@@ -1,15 +1,6 @@
 [
   {
     "launch": "containers-a",
-    "file": "containers/connect-reading.test.ts",
-    "title": "F-0408 AC-14 (ruling-1557-tolerance): reopening a folder whose container runs connects, by the log’s Resolving Remote, and shows S087, each within 1.5 s (athena’s ruling on #1204 for the spec’s 1 s), with no Starting container and no Starting VS Code Server in the log",
-    "card": 2414,
-    "owner": "daedalus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-a",
     "file": "containers/open-folder-virtual.test.ts",
     "title": "F-0403 AC-28 (c71-untitled): in an untitled workspace core asks whether to save the workspace configuration before the window changes; Cancel leaves the window and creates nothing, and Don’t Save reloads the same window into one container",
     "card": 2432,
@@ -159,6 +150,15 @@
     "card": 2469,
     "owner": "daedalus",
     "evidence": 43369951852,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "explorer-folders",
+    "file": "explorer-folders/commands.test.ts",
+    "title": "F-5002 AC-6, AC-11, AC-16 (keys-plain): a key bound to each command with no argument changes no window, title, indicator, file or history row, shows no dialog, leaves the window usable and adds no state key of the extension",
+    "card": 2477,
+    "owner": "themis",
+    "evidence": 43392313193,
     "added": "2026-11-13"
   }
 ]

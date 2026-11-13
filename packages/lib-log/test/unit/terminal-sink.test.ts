@@ -43,6 +43,17 @@ describe('terminal sink (card log-02 table)', () => {
     ]);
   });
 
+  it('terminal sink: a message with a C1 control written before show() and another after it -> the replay and the stream both carry the code point, then \\r\\n', () => {
+    const port = new FakeEditorPort();
+    const sink = createTerminalSink(port, 'WSL');
+    const before: LogLine = {...FIRST, message: 'h\u009b'};
+    sink.write(before);
+    sink.show();
+    sink.write({...before});
+    const escaped = `${defaultFormat({...FIRST, message: 'h\\u{9b}'})}\r\n`;
+    deepStrictEqual(port.terminals.at(0)?.writtenText, [escaped, escaped]);
+  });
+
   it('terminal sink: a write after show() -> streamed at once: one more write call', () => {
     const port = new FakeEditorPort();
     const sink = createTerminalSink(port, 'WSL');
