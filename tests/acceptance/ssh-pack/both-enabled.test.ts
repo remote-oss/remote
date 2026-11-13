@@ -1,27 +1,29 @@
-import {mkdirSync} from 'node:fs';
+import {deepStrictEqual} from 'node:assert';
+import {mkdirSync, readdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
   inWindow,
+  readUserSettings,
+  restoreUserSettings,
   startInWindow,
+  userSettings,
   variable,
   waitFor,
 } from '../windows/harness.ts';
-import {pickShown} from '../windows/explorer-home.ts';
+import {closePick, pickShown} from '../windows/explorer-home.ts';
 import {
   chooseQuickPickItem,
-  editorTabs,
   extensionPackTabOf,
   extensionPageOf,
   extensionsViewSections,
   languageModeOf,
   lineTokensOf,
-  notifications,
   suggestionsOf,
   typeInFocus,
 } from '../windows/renderer.ts';
-import {writeClientSshConfig} from './pack-home.ts';
+import {packHome, writeClientSshConfig} from './pack-home.ts';
 
 describe('the extension and both companions enabled (card #2499)', function () {
   this.timeout(300_000);
@@ -47,28 +49,114 @@ describe('the extension and both companions enabled (card #2499)', function () {
     await closeWindow(window);
   });
 
-  it('F-2007 (c2499-measure-both): what the window shows of the extension and its config file', async () => {
-    const found: Record<string, unknown> = {};
+  /** The path-valued row of the picker of Open SSH Configuration File that ends in `suffix`. */
+  async function pickedFile(suffix: string): Promise<string> {
+    await startInWindow(window, 'opensshremotes.openConfigFile');
+    const picked = await pickShown(window);
+    const found = picked.rows.find(entry => entry.endsWith(suffix));
+    if (found === undefined) {
+      throw new Error(
+        `the picker lists no ${suffix}: ${JSON.stringify(picked)}`,
+      );
+    }
+    return found;
+  }
+
+  /** Closes the active editor, dropping what was typed into it. */
+  async function dropActiveEditor(): Promise<void> {
+    await inWindow(window, 'workbench.action.revertAndCloseActiveEditor');
+  }
+
+  it('F-2007 AC-2 (c2499-pack-tab): the extension’s page has an Extension Pack tab listing the edit companion first and Remote Explorer second, and the manifest declares those two ids in that order and no extensionDependencies', async () => {
+    const page = await extensionPageOf(window, 'Remote - SSH');
+    const packTab = await extensionPackTabOf(window);
+    const extensions = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'extensions-ssh-pack',
+    );
+    const folder = readdirSync(extensions).find(entry =>
+      /^remote-oss\.remote-ssh-\d/.test(entry),
+    );
+    const installed = JSON.parse(
+      readFileSync(
+        path.join(extensions, folder ?? 'missing', 'package.json'),
+        'utf8',
+      ),
+    ) as {extensionPack?: string[]; extensionDependencies?: string[]};
+    deepStrictEqual(
+      [
+        page.tabs.map(label => label.toUpperCase()),
+        packTab,
+        installed.extensionPack,
+        installed.extensionDependencies,
+      ],
+      [
+        ['DETAILS', 'FEATURES', 'EXTENSION PACK'],
+        ['Remote - SSH: Editing Configuration Files', 'Remote Explorer'],
+        ['remote-oss.remote-ssh-edit', 'remote-oss.remote-explorer'],
+        undefined,
+      ],
+    );
+  });
+
+  it('F-2007 AC-3 (c2499-config-language): the user’s config file opens in the edit companion’s mode with colouring and keyword completion', async () => {
+    const file = await pickedFile('.ssh/config');
+    await chooseQuickPickItem(window, file);
+    await waitFor(
+      'the config file to open with a language mode',
+      async () => (await languageModeOf(window)) !== '',
+      30_000,
+    );
+    const mode = await languageModeOf(window);
+    const tokens = await lineTokensOf(window, 'Host');
+    await inWindow(window, 'cursorBottom');
+    await typeInFocus(window, '\nForw');
+    await inWindow(window, 'editor.action.triggerSuggest');
+    await waitFor(
+      'the keyword suggestions',
+      async () => (await suggestionsOf(window)).length > 0,
+      10_000,
+    );
+    const suggestions = await suggestionsOf(window);
+    await dropActiveEditor();
+    deepStrictEqual(
+      [
+        mode,
+        new Set(tokens.map(token => token.tokenClass)).size === tokens.length,
+        suggestions.includes('ForwardAgent'),
+      ],
+      ['SSH Config', true, true],
+    );
+  });
+
+  it('F-2007 AC-12 (c2499-custom-file): a config file outside the companion’s patterns opens in the mode the editor assigns, Plain Text', async () => {
+    const saved = readUserSettings();
+    const custom = path.join(packHome(), 'custom-hosts.conf');
+    writeFileSync(custom, 'Host custom\n  HostName custom.invalid\n');
     try {
-      found.page = await extensionPageOf(window, 'Remote - SSH');
-      found.packTab = await extensionPackTabOf(window);
+      await userSettings({'remote.SSH.configFile': custom});
       await startInWindow(window, 'opensshremotes.openConfigFile');
       const picked = await pickShown(window);
-      found.picker = picked;
-      const file = picked.rows.find(entry => entry.includes('.ssh/config'));
-      if (file !== undefined) {
-        await chooseQuickPickItem(window, file.split(' | ')[0] ?? file);
-      }
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      found.mode = await languageModeOf(window);
-      found.tokens = await lineTokensOf(window, 'Host');
-      found.tabs = (await editorTabs(window)).map(each => each.label);
-      await inWindow(window, 'cursorBottom');
-      await typeInFocus(window, '\nForw');
-      await inWindow(window, 'editor.action.triggerSuggest');
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      found.suggestions = await suggestionsOf(window);
-      found.notifications = await notifications(window);
+      await chooseQuickPickItem(window, picked.rows[0] ?? custom);
+      await waitFor(
+        'the custom file to open with a language mode',
+        async () => (await languageModeOf(window)) !== '',
+        30_000,
+      );
+      const mode = await languageModeOf(window);
+      await dropActiveEditor();
+      deepStrictEqual([picked.rows[0], mode], [custom, 'Plain Text']);
+    } finally {
+      restoreUserSettings(saved);
+    }
+  });
+
+  it('F-2007 (c2499-measure-both): what the remote indicator menu lists, and the remote config file in an SSH window', async () => {
+    const found: Record<string, unknown> = {};
+    try {
+      await startInWindow(window, 'workbench.action.remote.showMenu');
+      found.menu = await pickShown(window);
+      await closePick(window);
     } catch (caught) {
       found.failure = String(caught);
     }
