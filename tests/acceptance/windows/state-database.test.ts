@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {waitFor} from './harness.ts';
-import {readStateDatabase} from './state-database.ts';
+import {readBoundMilliseconds, readStateDatabase} from './state-database.ts';
 
 /** Holds an exclusive write transaction on `file` for `milliseconds` in another process, and resolves once it holds it. */
 function holder(
@@ -73,6 +73,33 @@ describe('the state database reader (card tooling-207)', function () {
     const waited = Date.now() - started;
     writer.kill();
     deepStrictEqual([seen, waited < 5000], [['before', 'held'], true]);
+  });
+
+  it('#2477: a read outside any wait rides out a write open for longer than the 5 s a read first had', async function () {
+    this.timeout(20_000);
+    const {process: writer} = await holder(file, 6500);
+    const started = Date.now();
+    const seen = readStateDatabase(file, keys);
+    const waited = Date.now() - started;
+    writer.kill();
+    deepStrictEqual(
+      [seen, waited > 5000, waited < 15_000],
+      [['before', 'held'], true, true],
+    );
+  });
+
+  it('#2477: the bound of a read is 30 s outside a wait and 5 s inside the check of one, across awaits', async () => {
+    const inside: number[] = [];
+    await waitFor(
+      'a check that reads the bound',
+      async () => {
+        await Promise.resolve();
+        inside.push(readBoundMilliseconds());
+        return true;
+      },
+      1000,
+    );
+    deepStrictEqual([readBoundMilliseconds(), inside], [30_000, [5000]]);
   });
 
   it('tooling-207: a writer that never commits fails the read within its bound, naming the journal, the files beside the database, the process holding them and the journal mode', async () => {

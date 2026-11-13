@@ -29,6 +29,7 @@ import {runCommand} from '../../../tools/command-runner.ts';
 import {oneTimeCode} from '../../../tools/one-time-code.ts';
 import {filesHolding} from '../../../tools/secret-search.ts';
 import {processIdsOf} from '../../../tools/process-ids.ts';
+import {runWithinWait} from './state-database.ts';
 import {
   descendantRootOf,
   processStatOf,
@@ -1827,7 +1828,7 @@ export async function waitFor(
   for (;;) {
     let notYet = '';
     try {
-      if (await check()) {
+      if (await runWithinWait(check)) {
         return;
       }
     } catch (caught) {
