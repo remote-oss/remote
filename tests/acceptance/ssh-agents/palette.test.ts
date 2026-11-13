@@ -12,13 +12,11 @@ import {
   userSettings,
 } from '../windows/harness.ts';
 import {paletteItems, runFromPalette} from '../windows/palette.ts';
-import {closeQuietly, localWindowWithAi} from './support.ts';
+import {closeQuietly, localWindowWithAi, pickerItems} from './support.ts';
 import {
-  answerDialog,
+  answerDialogAt,
   pressEscape,
-  quickPickOf,
-  waitForDialog,
-  waitForQuickPick,
+  waitForDialogElsewhere,
 } from '../windows/renderer.ts';
 
 /** The titles of core's agent-host commands, which the palette never lists for "SSH". */
@@ -132,21 +130,30 @@ describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', fun
         window,
         'Remote-SSH: Open SSH Configuration File...',
       );
-      await waitForQuickPick(window, 30_000);
-      const before = (await quickPickOf(window))?.items ?? [];
+      const before = await pickerItems(window);
       await pressEscape(window);
       await runFromPalette(window, 'Chat: Open Agents Window');
-      const trust = await waitForDialog(window);
-      await answerDialog(window, 'Cancel');
+      const agents = await waitForDialogElsewhere(window);
+      const answer = agents.dialog.buttons.includes('Cancel')
+        ? 'Cancel'
+        : (agents.dialog.buttons[0] ?? 'Cancel');
+      await answerDialogAt(agents.address, answer);
       await runFromPalette(
         window,
         'Remote-SSH: Open SSH Configuration File...',
       );
-      await waitForQuickPick(window, 30_000);
-      const after = (await quickPickOf(window))?.items ?? [];
+      const after = await pickerItems(window);
       deepStrictEqual(
-        {trust: trust.message.length > 0, after},
-        {trust: true, after: before},
+        {
+          message: agents.dialog.message,
+          buttons: agents.dialog.buttons,
+          after,
+        },
+        {
+          message: 'Sign in to use Agents',
+          buttons: agents.dialog.buttons,
+          after: before,
+        },
       );
     } finally {
       await closeQuietly(window);

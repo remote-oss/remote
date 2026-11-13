@@ -5,9 +5,14 @@
 
 import {mkdirSync, readFileSync, statSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {closeContained, userSettings, variable} from '../windows/harness.ts';
+import {
+  closeContained,
+  userSettings,
+  variable,
+  waitFor,
+} from '../windows/harness.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
-import {pressEscape} from '../windows/renderer.ts';
+import {pressEscape, quickPickOf} from '../windows/renderer.ts';
 import {readStateDatabase} from '../windows/state-database.ts';
 
 /** The alias the user's `.ssh/config` of the run's home defines. */
@@ -146,4 +151,22 @@ export async function localWindowWithAi(enabled: boolean): Promise<string> {
 /** Closes window `name` so that one that will not close cannot fail the rows after it: a dialog is dismissed with Escape. */
 export async function closeQuietly(name: string): Promise<void> {
   await closeContained(name, pressEscape);
+}
+
+/**
+ * The items of the picker a palette command opened in window `name`, once it shows: the palette's own list holds
+ * commands, whose labels start with the category, and the picker holds hosts and the footer items.
+ */
+export async function pickerItems(name: string): Promise<string[]> {
+  await waitFor(
+    `the picker of the command in ${name}`,
+    async () => {
+      const items = (await quickPickOf(name))?.items ?? [];
+      return (
+        items.length > 0 && !items.some(item => item.startsWith('Remote-SSH:'))
+      );
+    },
+    30_000,
+  );
+  return (await quickPickOf(name))?.items ?? [];
 }

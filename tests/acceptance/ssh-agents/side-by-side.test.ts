@@ -19,15 +19,14 @@ import {runFromPalette} from '../windows/palette.ts';
 import {
   notifications,
   pressEscape,
-  quickPickOf,
   statusBarText,
-  waitForQuickPick,
   windowTitle,
 } from '../windows/renderer.ts';
 import {
   CUSTOM_ONLY,
   closeQuietly,
   fingerprint,
+  pickerItems,
   storageKeys,
   writeAgentFiles,
   type AgentFiles,
@@ -98,8 +97,7 @@ describe('Remote - SSH beside core’s agent hosts, from outside (card #2500, F-
     await userSettings({'remote.SSH.configFile': files.customOnly});
     const before = fingerprint(files.config);
     await runFromPalette('local', 'Remote-SSH: Connect to Host...');
-    await waitForQuickPick('local', 30_000);
-    const items = (await quickPickOf('local'))?.items ?? [];
+    const items = await pickerItems('local');
     await pressEscape('local');
     deepStrictEqual(
       {
