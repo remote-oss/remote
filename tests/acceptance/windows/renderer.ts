@@ -304,28 +304,6 @@ export function pageTitleByName(
 }
 
 /**
- * Waits until no page carries window `name`'s title, so that a window opened under the same name afterwards is the only
- * page that name gives; it fails naming the titles left. A closed window's agent reports before its page is gone.
- */
-export async function waitForPageGone(
-  name: string,
-  milliseconds = WAIT_MILLISECONDS,
-): Promise<void> {
-  let left: string[] = [];
-  await settled(
-    () => `the page of window ${name} to be gone among ${JSON.stringify(left)}`,
-    async () => {
-      left = titlesOfName(
-        name,
-        (await pages()).map(page => page.title),
-      );
-      return left.length === 0 ? true : undefined;
-    },
-    milliseconds,
-  );
-}
-
-/**
  * The state of window `name` for the page choice, or `undefined` when it doesn't arrive within `remaining`
  * milliseconds: a window that never reports a page of its own fails with the titles, not the agent's wait.
  */
@@ -374,7 +352,13 @@ export async function pageOf(
       const remembered = found.find(
         page => page.id === REMEMBERED_PAGES.get(name),
       );
-      if (remembered !== undefined && isOpen(name)) {
+      // Two pages that carry the name (a window that came back on a new page beside the old one) do not say which is
+      // the window's, so the remembered page is not taken for it.
+      if (
+        remembered !== undefined &&
+        isOpen(name) &&
+        titlesOfName(name, titles).length < 2
+      ) {
         return remembered.webSocketDebuggerUrl;
       }
       const state = await stateForPage(
