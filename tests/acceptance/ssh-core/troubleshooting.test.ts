@@ -19,7 +19,7 @@ import {
   variable,
   waitFor,
 } from '../windows/harness.ts';
-import {hintRecords} from '../windows/hint-store.ts';
+import {hintRecords, waitForRecords} from '../windows/hint-store.ts';
 import {
   closeAllButLocal,
   dismissals,
@@ -205,7 +205,7 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
         async () => (await troubleshootingTabs('c136-c')).length > 0,
         TERMINAL_MILLISECONDS,
       );
-      await waitFor(
+      await waitForRecords(
         'the newest record with its log hint',
         () =>
           hintRecords()

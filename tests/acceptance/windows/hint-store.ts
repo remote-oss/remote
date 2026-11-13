@@ -4,7 +4,7 @@
  */
 
 import path from 'node:path';
-import {variable} from './harness.ts';
+import {variable, waitFor} from './harness.ts';
 import {readStateDatabase} from './state-database.ts';
 
 /** The records of the hint store: when each connect started, and the hints it kept. */
@@ -39,4 +39,30 @@ export function hintRecords(): HintRecords {
       return store?.records ?? [];
     },
   );
+}
+
+/** The newest record of the hint store as text, for a failure to show; what cannot be read says so. */
+function newestRecord(): string {
+  try {
+    return JSON.stringify(hintRecords().at(-1) ?? null);
+  } catch (caught) {
+    return `(unreadable: ${caught instanceof Error ? caught.message : 'no message'})`;
+  }
+}
+
+/**
+ * Waits as `waitFor` does, and when it fails names the newest record of the hint store as it is then: a record that
+ * lacks what the wait is for and a store that cannot be read are told apart.
+ */
+export async function waitForRecords(
+  description: string,
+  check: () => boolean | Promise<boolean>,
+  milliseconds: number,
+): Promise<void> {
+  await waitFor(description, check, milliseconds).catch((caught: unknown) => {
+    throw new Error(
+      `${caught instanceof Error ? caught.message : 'the wait failed'}; the newest record: ${newestRecord()}`,
+      {cause: caught},
+    );
+  });
 }

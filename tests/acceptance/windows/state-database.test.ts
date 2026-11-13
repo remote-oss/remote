@@ -4,6 +4,7 @@ import {mkdtempSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
+import {waitFor} from './harness.ts';
 import {readStateDatabase} from './state-database.ts';
 
 /** Holds an exclusive write transaction on `file` for `milliseconds` in another process, and resolves once it holds it. */
@@ -139,5 +140,33 @@ describe('the state database reader (card tooling-207)', function () {
       writer.close();
     }
     deepStrictEqual(message.includes('write-ahead log'), true, message);
+  });
+
+  it('tooling-207: a read that finds a writer in the middle of its write is a not-yet that a wait carries on from, and the wait names it when it ends', async () => {
+    const {process: writer} = await holder(file, 60_000);
+    let message = '';
+    try {
+      await waitFor(
+        'the store to be readable',
+        () => {
+          readStateDatabase(file, keys, 300);
+          return false;
+        },
+        1500,
+      );
+    } catch (caught) {
+      message = (caught as Error).message;
+    } finally {
+      writer.kill();
+    }
+    deepStrictEqual(
+      [
+        message.startsWith('timed out waiting for the store to be readable'),
+        message.includes('the last check could not tell'),
+        message.includes('a writer’s journal is present'),
+      ],
+      [true, true, true],
+      message,
+    );
   });
 });
