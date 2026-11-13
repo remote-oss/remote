@@ -21,7 +21,11 @@ import {
   extensionPackTabOf,
   extensionPageOf,
   extensionsViewSections,
+  allQuickPickRows,
   languageModeOf,
+  pressEnter,
+  quickPickFacts,
+  typeInQuickPick,
   lineTokensOf,
   notifications,
   suggestionsOf,
@@ -190,26 +194,13 @@ describe('the extension and both companions enabled (card #2499)', function () {
         '-c',
         'ls -la /home/harness/.ssh; cat /home/harness/.ssh/config',
       );
-      await inWindow(
-        remote,
-        'acceptance.agent.openFile',
-        'pack-probe.txt',
-      ).catch((caught: unknown) => {
-        found.probeFailure = String(caught);
-      });
-      await waitFor(
-        'the remote config file to open',
-        async () => {
-          try {
-            await inWindow(remote, 'acceptance.agent.openFile', '.ssh/config');
-            return true;
-          } catch (caught) {
-            found.lastOpenFailure = String(caught);
-            return false;
-          }
-        },
-        90_000,
-      );
+      await startInWindow(remote, 'workbench.action.quickOpen');
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      await typeInQuickPick(remote, '.ssh/config');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      found.quickOpen = await quickPickFacts(remote);
+      found.rows = (await allQuickPickRows(remote)).map(entry => entry.label);
+      await pressEnter(remote);
       await new Promise(resolve => setTimeout(resolve, 3000));
       found.dialogAfter = await dialogOf(remote);
       found.mode = await languageModeOf(remote);
