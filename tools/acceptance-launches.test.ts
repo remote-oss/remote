@@ -1765,6 +1765,15 @@ describe('the install cases (card coverage-17)', () => {
     );
   });
 
+  it("tooling-200: the distro's bases are put into a launch's settings", () => {
+    deepStrictEqual(
+      withHarnessBases('${HARNESS_DOWNLOADS_DISTRO_BASE}/ok/${os}-${arch}', {
+        HARNESS_DOWNLOADS_DISTRO_BASE: 'http://172.29.32.1:9',
+      }),
+      'http://172.29.32.1:9/ok/${os}-${arch}',
+    );
+  });
+
   it('coverage-17: a base the run has not got is left as written', () => {
     deepStrictEqual(
       withHarnessBases('${HARNESS_DOWNLOADS_HTTPS}/ok', {}),

@@ -32,6 +32,7 @@ import {
   type DownloadHost,
   downloadHostArguments,
   downloadVariables,
+  forwardSlashes,
   EARLIER_SERVER_ARCHIVE,
   DROP_HUNG_PATH,
   makeCertificate,
@@ -1197,6 +1198,67 @@ describe('the download host in the run', () => {
     }
   });
 
+  it("tooling-200: on a Windows run the host also listens on the distro's gateway and names it in the distro bases; the x64 Alpine and glibc archives are served; a Linux run has no distro base", async () => {
+    const {root, runFolder, cache} = temporaryRun();
+    try {
+      writeFileSync(path.join(cache, serverArchiveName('alpine-x64')), 'musl');
+      writeFileSync(path.join(cache, serverArchiveName('linux-x64')), 'glibc');
+      const checksums = {
+        'alpine-x64': createHash('sha256').update('musl').digest('hex'),
+        'linux-x64': createHash('sha256').update('glibc').digest('hex'),
+      };
+      const windows = await startRunDownloads(
+        (): CommandResult => ({
+          status: 0,
+          stdout: 'default via 127.0.0.2 dev eth0\n',
+          stderr: '',
+        }),
+        () => Promise.reject(new Error('no download expected')),
+        root,
+        runFolder,
+        'x64',
+        checksums,
+        undefined,
+        undefined,
+        'win32',
+      );
+      const base = windows.variables.HARNESS_DOWNLOADS_DISTRO_BASE ?? '';
+      const port = Number(/:(\d+)$/.exec(base)?.[1]);
+      const bodies = await Promise.all(
+        ['/ok/linux-x64/abc', '/ok/alpine-x64/abc'].map(async pathName =>
+          (await getFrom('127.0.0.2', port, pathName)).toString(),
+        ),
+      );
+      await windows.stop();
+      const linux = await startRunDownloads(
+        (): CommandResult => ({status: 0, stdout: '127.0.0.2\n', stderr: ''}),
+        () => Promise.reject(new Error('no download expected')),
+        root,
+        runFolder,
+        'x64',
+        checksums,
+        undefined,
+        undefined,
+        'linux',
+      );
+      await linux.stop();
+      deepStrictEqual(
+        [
+          base === `http://127.0.0.2:${String(port)}`,
+          windows.variables.HARNESS_DOWNLOADS_DISTRO_HTTPS?.startsWith(
+            'https://127.0.0.2:',
+          ),
+          bodies,
+          Object.keys(linux.variables).filter(name => name.includes('DISTRO')),
+        ],
+        [true, true, ['glibc', 'musl'], []],
+      );
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
   it("tooling-27, tooling-68: a run's download host serves the cached archives on the loopback and the gateway only, and stops", async () => {
     const root = mkdtempSync(path.join(tmpdir(), 'downloads-root-'));
     const runFolder = mkdtempSync(path.join(tmpdir(), 'downloads-run-'));
@@ -1374,6 +1436,38 @@ describe('the download host in the run', () => {
         HARNESS_DOWNLOADS_PORT: '8080',
         HARNESS_DOWNLOADS_TLS_LOG: '/run/downloads-tls.log',
       },
+    );
+  });
+
+  it('tooling-200: a distro address adds the HTTP and HTTPS bases a WSL distro reaches the host at, and no other variable changes', () => {
+    const without = downloadVariables(
+      {httpPort: 8080, httpsPort: 8443},
+      '/run/requests.log',
+      '/run/downloads-tls.log',
+      '/run/downloads/downloads-certificate.pem',
+    );
+    const withDistro = downloadVariables(
+      {httpPort: 8080, httpsPort: 8443},
+      '/run/requests.log',
+      '/run/downloads-tls.log',
+      '/run/downloads/downloads-certificate.pem',
+      undefined,
+      '172.29.32.1',
+    );
+    deepStrictEqual(withDistro, {
+      ...without,
+      HARNESS_DOWNLOADS_DISTRO_BASE: 'http://172.29.32.1:8080',
+      HARNESS_DOWNLOADS_DISTRO_HTTPS: 'https://172.29.32.1:8443',
+    });
+  });
+
+  it('tooling-200: a Windows path is carried with forward slashes, and a path that has none is unchanged', () => {
+    deepStrictEqual(
+      [
+        forwardSlashes('D:\\a\\run\\downloads\\requests.log'),
+        forwardSlashes('/run/requests.log'),
+      ],
+      ['D:/a/run/downloads/requests.log', '/run/requests.log'],
     );
   });
 
