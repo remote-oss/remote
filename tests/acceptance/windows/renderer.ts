@@ -2280,6 +2280,49 @@ export async function statusBarText(
   );
 }
 
+/** The language mode the status bar of window `name` shows for the active editor: "Plain Text", "SSH Config" and so on; empty when it shows none. */
+export function languageModeOf(name: string): Promise<string> {
+  return statusBarText(name, 'status.editor.mode');
+}
+
+/** One run of text of an editor line and the token class core's syntax colouring gave it. */
+export interface LineToken {
+  text: string;
+  tokenClass: string;
+}
+
+/**
+ * The runs of the first visible editor line of window `name` that holds `text`, each with its token class (the `mtk`
+ * class of its span): runs of one class share a colour, so two classes are two colours.
+ */
+export async function lineTokensOf(
+  name: string,
+  text: string,
+): Promise<LineToken[]> {
+  return evaluate<LineToken[]>(
+    name,
+    `(() => {
+      for (const line of document.querySelectorAll('.monaco-editor .view-line')) {
+        if ((line.textContent ?? '').includes(${JSON.stringify(text)})) {
+          return [...line.querySelectorAll('span > span')].map(span => ({
+            text: span.textContent ?? '',
+            tokenClass: [...span.classList].find(each => /^mtk\\d+$/.test(each)) ?? '',
+          }));
+        }
+      }
+      return [];
+    })()`,
+  );
+}
+
+/** The labels of the suggestion list the editor of window `name` shows, in order; none while it is hidden. */
+export async function suggestionsOf(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `[...document.querySelectorAll('.suggest-widget.visible .monaco-list-row .label-name')].map(each => each.textContent ?? '')`,
+  );
+}
+
 /** The DOM ids of every status bar item window `name` shows, in the order of the bar. */
 export async function statusBarItemIds(name: string): Promise<string[]> {
   return evaluate<string[]>(

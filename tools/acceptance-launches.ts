@@ -1523,7 +1523,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'ssh-pack',
       suite: 'ssh-pack',
       partOf: 'ssh-pack',
-      files: ['pack-install.test.ts'],
+      files: ['pack-install.test.ts', 'both-enabled.test.ts'],
       withExtensions: ['remote-oss.remote-explorer'],
       settings: {
         'window.title': '[${rootName}]${remoteName}',
