@@ -5,15 +5,8 @@
 
 import {mkdirSync, readFileSync, statSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {
-  closeContained,
-  inWindow,
-  nextEmptyName,
-  userSettings,
-  variable,
-  waitFor,
-  windowEvents,
-} from '../windows/harness.ts';
+import {closeContained, userSettings, variable} from '../windows/harness.ts';
+import {openFolderWindow} from '../windows/folder-windows.ts';
 import {pressEscape} from '../windows/renderer.ts';
 import {readStateDatabase} from '../windows/state-database.ts';
 
@@ -25,6 +18,8 @@ export const CUSTOM_ONLY = 'f2008-customonly';
 
 /** What the run's `Host harness` block names. */
 export interface HarnessBlock {
+  /** The lines of the block under its Host line, as the run's ssh_config has them. */
+  lines: string[];
   hostName: string;
   port: number;
   user: string;
@@ -57,6 +52,7 @@ export function harnessBlock(): HarnessBlock {
     return found.trim();
   }
   return {
+    lines: block.split('\n').filter(line => line.trim() !== ''),
     hostName: valueOf('HostName'),
     port: Number(valueOf('Port')),
     user: valueOf('User'),
@@ -90,12 +86,7 @@ export function writeAgentFiles(): AgentFiles {
   return {
     config: written(path.join(folder, 'config'), [
       `Host ${ALIAS}`,
-      `  HostName ${block.hostName}`,
-      `  Port ${String(block.port)}`,
-      `  User ${block.user}`,
-      `  IdentityFile ${block.identityFile}`,
-      '  IdentitiesOnly yes',
-      `  UserKnownHostsFile ${knownHosts}`,
+      ...block.lines,
     ]),
     knownHosts,
     customOnly: written(path.join(agentsHome(), 'custom-only.conf'), [
@@ -133,20 +124,23 @@ export function storageKeys(): string[] {
   );
 }
 
+/** How many local windows the rows opened, which numbers their folders. */
+let localWindows = 0;
+
 /**
- * Opens a new empty window with AI features on or off and gives its name. The setting is written first, so the new
- * window starts with it: an empty window that reloads takes a new name, so the first window is never reloaded.
+ * Opens a new local window on a folder of its own, with AI features on or off, and gives its name. The setting is
+ * written first, so the new window starts with it. A window with a folder has a title of its own, which the renderer
+ * helpers need to tell it from the first window, and an empty window that reloads takes a new name.
  */
-export async function emptyWindowWithAi(enabled: boolean): Promise<string> {
+export async function localWindowWithAi(enabled: boolean): Promise<string> {
   await userSettings({'chat.disableAIFeatures': !enabled});
-  const name = nextEmptyName();
-  await inWindow('local', 'workbench.action.newWindow');
-  await waitFor(
-    `window ${name} to activate its agent`,
-    () => windowEvents(name).some(entry => entry.event === 'activated'),
-    60_000,
+  localWindows += 1;
+  const folder = path.join(
+    variable('HARNESS_RUN_FOLDER'),
+    `f2008-local-${String(localWindows)}`,
   );
-  return name;
+  mkdirSync(folder, {recursive: true});
+  return openFolderWindow(folder);
 }
 
 /** Closes window `name` so that one that will not close cannot fail the rows after it: a dialog is dismissed with Escape. */

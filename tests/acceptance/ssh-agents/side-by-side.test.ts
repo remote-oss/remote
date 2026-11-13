@@ -107,8 +107,9 @@ describe('Remote - SSH beside core’s agent hosts, from outside (card #2500, F-
         others: items.filter(item => item.includes('harness')).length,
         count: items.length,
         unchanged: fingerprint(files.config) === before,
+        items,
       },
-      {hosts: 1, others: 0, count: 3, unchanged: true},
+      {hosts: 1, others: 0, count: 3, unchanged: true, items},
     );
   });
 

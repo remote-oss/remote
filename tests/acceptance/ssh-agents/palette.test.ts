@@ -12,7 +12,7 @@ import {
   userSettings,
 } from '../windows/harness.ts';
 import {paletteItems, runFromPalette} from '../windows/palette.ts';
-import {closeQuietly, emptyWindowWithAi} from './support.ts';
+import {closeQuietly, localWindowWithAi} from './support.ts';
 import {
   answerDialog,
   pressEscape,
@@ -55,7 +55,7 @@ describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', fun
 
   /** The titles the palette lists for `text` in a new empty window that starts with AI features on or off. */
   async function listedIn(enabled: boolean, text: string): Promise<string[]> {
-    const window = await emptyWindowWithAi(enabled);
+    const window = await localWindowWithAi(enabled);
     try {
       return titlesOf(await paletteItems(window, text));
     } finally {
@@ -126,7 +126,7 @@ describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', fun
   });
 
   it('F-2008 AC-10 (c2500-agents-window): after Chat: Open Agents Window shows "Sign in to use Agents", the Remote-SSH configuration file picker is the one measured before', async () => {
-    const window = await emptyWindowWithAi(true);
+    const window = await localWindowWithAi(true);
     try {
       await runFromPalette(
         window,
