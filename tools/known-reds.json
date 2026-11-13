@@ -322,5 +322,14 @@
     "owner": "dike",
     "evidence": 42218054216,
     "added": "2026-11-13"
+  },
+  {
+    "launch": "windows",
+    "file": "windows/maintenance.test.ts",
+    "title": "F-2102 AC-18: the Add New row of the Kill Local picker asks for a connection command and changes nothing of the window’s connection",
+    "card": 2466,
+    "owner": "themis",
+    "evidence": 43356589144,
+    "added": "2026-11-13"
   }
 ]
