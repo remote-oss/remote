@@ -1,4 +1,6 @@
 import {deepStrictEqual, rejects} from 'node:assert';
+import {FakeTimers} from './fake-timers.ts';
+import {releaseGate} from './release-gate.ts';
 import {
   type CancelSource,
   type Connected,
@@ -137,7 +139,7 @@ class FakeConnector implements Connector {
 }
 
 /** An editor that records what the host asked of it. */
-class FakeEditor implements ResolverEditor {
+class FakeEditor extends FakeTimers implements ResolverEditor {
   registered: Array<{prefix: string; resolver: EditorResolver}> = [];
   refuses = false;
   disposed = 0;
@@ -150,8 +152,6 @@ class FakeEditor implements ResolverEditor {
   /** Whether the editor's progress promise rejects after its task ended. */
   closingFails = false;
   actions: string[] = [];
-  timers: Array<{milliseconds: number; callback: () => void; live: boolean}> =
-    [];
   readonly progress = {
     withProgress: async <Result>(
       request: ProgressRequest,
@@ -180,24 +180,6 @@ class FakeEditor implements ResolverEditor {
       }
     },
   };
-
-  startTimer(milliseconds: number, callback: () => void): () => void {
-    const timer = {milliseconds, callback, live: true};
-    this.timers.push(timer);
-    return () => {
-      timer.live = false;
-    };
-  }
-
-  /** Runs the timers that are still live, as if their time had passed. */
-  fireTimers(): void {
-    for (const timer of this.timers) {
-      if (timer.live) {
-        timer.live = false;
-        timer.callback();
-      }
-    }
-  }
 
   registerRemoteAuthorityResolver(
     prefix: string,
@@ -1579,17 +1561,6 @@ class ExecConnector extends FakeConnector {
     }
     return Promise.resolve(this.execAnswer);
   }
-}
-
-/** A promise and the function that settles it. */
-function releaseGate(): {promise: Promise<void>; release: () => void} {
-  const gate = {promise: Promise.resolve(), release: (): void => undefined};
-  gate.promise = new Promise<void>(resolveGate => {
-    gate.release = () => {
-      resolveGate();
-    };
-  });
-  return gate;
 }
 
 /** A host whose connector serves exec servers. */

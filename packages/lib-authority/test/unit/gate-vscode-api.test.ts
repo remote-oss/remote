@@ -59,11 +59,11 @@ describe('the editor behind the probes', () => {
 
   it('wsl-09: the timer calls back once after its time, and a cancelled one never does', async () => {
     const calls: string[] = [];
-    const api = probeApiOf(fakeEditor([]));
-    api.startTimer(1, () => {
+    const timing = probeApiOf(fakeEditor([]));
+    timing.startTimer(1, () => {
       calls.push('fired');
     });
-    api.startTimer(1, () => {
+    timing.startTimer(1, () => {
       calls.push('cancelled');
     })();
     await new Promise(resolve => setTimeout(resolve, 20));

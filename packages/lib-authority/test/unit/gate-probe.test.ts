@@ -1,4 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
+import {FakeTimers} from './fake-timers.ts';
+import {releaseGate} from './release-gate.ts';
 import {
   type ProbeApi,
   probeProposals,
@@ -18,14 +20,13 @@ interface Editor {
 }
 
 /** A fake of the editor's API that throws where a missing proposal would, and counts what the probes touch. */
-class FakeApi implements ProbeApi {
+class FakeApi extends FakeTimers implements ProbeApi {
   reads: string[] = [];
   disposed = 0;
-  timers: Array<{milliseconds: number; callback: () => void; live: boolean}> =
-    [];
   private readonly editor: Editor;
 
   constructor(editor: Partial<Editor> = {}) {
+    super();
     this.editor = {guarded: new Set(), ...editor};
   }
 
@@ -57,24 +58,6 @@ class FakeApi implements ProbeApi {
         this.disposed += 1;
       },
     };
-  }
-
-  startTimer(milliseconds: number, callback: () => void): () => void {
-    const timer = {milliseconds, callback, live: true};
-    this.timers.push(timer);
-    return () => {
-      timer.live = false;
-    };
-  }
-
-  /** Runs the timers that are still live, as if their time had passed. */
-  fireTimers(): void {
-    for (const timer of this.timers) {
-      if (timer.live) {
-        timer.live = false;
-        timer.callback();
-      }
-    }
   }
 
   getCommands(): PromiseLike<string[]> {
@@ -275,17 +258,14 @@ describe('probing the proposals of the editor (F-1403)', () => {
 
   it('wsl-09: by command, the commands are read after the first resolve settles, and the bound timer is cancelled', async () => {
     const editor = new FakeApi({commands: ['one.focus']});
-    let settled = (): void => undefined;
+    const gate = releaseGate();
     const waiting = byCommandState(editor, {
-      resolveSettled: () =>
-        new Promise<void>(resolve => {
-          settled = resolve;
-        }),
+      resolveSettled: () => gate.promise,
       boundMilliseconds: 120_000,
     });
     await Promise.resolve();
     const before = editor.reads.includes('getCommands');
-    settled();
+    gate.release();
     const state = await waiting;
     deepStrictEqual(
       [
