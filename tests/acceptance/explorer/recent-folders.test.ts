@@ -128,12 +128,17 @@ describe('the recent folders under a target (card coverage-122)', function () {
       120_000,
     );
     await closeWindow(windowName);
+    await waitFor(
+      `window ${windowName} to be gone`,
+      () => !windowNames().includes(windowName),
+      60_000,
+    );
   }
 
   /** Closes the window `name` when it is open: a window a row reloaded away, or never made, is not. */
   async function closeIfOpen(name: string): Promise<void> {
     if (windowNames().includes(name)) {
-      await closeWindow(name);
+      await closeWindow(name, 120_000);
     }
   }
 
@@ -604,8 +609,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
     const acted = `${HOME}/c122-cs-a`;
     const other = `${HOME}/c122-cs-b`;
     try {
-      await recordVisit('harness', acted, 'c122-cs-a');
-      await recordVisit('harness', other, 'c122-cs-b');
+      await onHost('mkdir', '-p', path.posix.dirname(acted));
       await inWindow(
         driver,
         'acceptance.agent.openWindow',
@@ -618,6 +622,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
         120_000,
       );
       await connectedTo('c122-cs-a', 'harness');
+      await recordVisit('harness', other, 'c122-cs-b');
       await inWindow('c122-cs-a', 'workbench.view.remote');
       await titleAction('c122-cs-a', VIEW, REFRESH);
       await foldersSettled(

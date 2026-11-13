@@ -136,7 +136,7 @@ export async function foldersSettled(
         return false;
       }
     },
-    15_000,
+    30_000,
   ).catch(() => undefined);
   deepStrictEqual(
     await described(),
