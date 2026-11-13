@@ -64,6 +64,9 @@ jobs:
           # address ends the job, since the engine's API is unauthenticated and root
           $engine = (wsl -d Ubuntu-24.04 --exec hostname -I).Trim().Split(' ')[0]
           if ($engine -notmatch '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)') { "the distro's address $engine is not private"; exit 1 }
+          # in NAT mode only: mirrored mode shares the host's interfaces, so the address would no longer be host-only
+          $networking = (wsl -d Ubuntu-24.04 --exec wslinfo --networking-mode).Trim()
+          if ($networking -ne 'nat') { "WSL's networking mode is '$networking', not nat"; exit 1 }
           # the packaged service (Ubuntu under WSL runs systemd), with a TCP listener on that address alone. The Windows
           # CLI reaches it there directly: through WSL2's localhost forwarding a `docker run`'s attached output was lost
           # while its exit status came through (#2505)
