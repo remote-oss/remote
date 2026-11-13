@@ -600,4 +600,27 @@ describe('the editor behind the resolver host: getCanonicalURI (card containers-
       {resolveAttempt: 2, execServer: outer},
     ]);
   });
+
+  it('wsl-38: the editor’s context for a resolve reaches the host with and without the exec server', async () => {
+    const seen: Seen = {events: []};
+    const asked: unknown[] = [];
+    const outer = {name: 'outer'} as unknown as vscode.ExecServer;
+    resolverEditorOf(fakeEditor(seen), {
+      detailsCommand: DETAILS,
+    }).registerRemoteAuthorityResolver('ssh-remote', {
+      resolve: (authority, context) => {
+        asked.push(context);
+        return Promise.resolve(CONNECTION);
+      },
+    });
+    await seen.registered?.resolve('ssh-remote+box', {resolveAttempt: 1});
+    await seen.registered?.resolve('ssh-remote+box', {
+      resolveAttempt: 2,
+      execServer: outer,
+    });
+    deepStrictEqual(asked, [
+      {resolveAttempt: 1},
+      {resolveAttempt: 2, execServer: outer},
+    ]);
+  });
 });

@@ -61,6 +61,11 @@ export interface ConnectInput {
   windowId: string;
   /** The window's folder or workspace, if it has one. */
   windowWorkspace: string | undefined;
+  /**
+   * The outer authority's exec server that the editor handed this resolve, for an authority nested in another; absent
+   * when it handed none. It is for this attempt alone: the host keeps none between attempts.
+   */
+  execServer?: ExecServerHandle;
 }
 
 /** What ended a connect: the user's Cancel on the progress notification, or the window's resolver being disposed. */
@@ -116,7 +121,7 @@ export interface ResolvedConnection {
 export interface EditorResolver {
   resolve(
     authority: string,
-    context: {resolveAttempt: number},
+    context: {resolveAttempt: number; execServer?: ExecServerHandle},
   ): Promise<ResolvedConnection>;
   /**
    * The exec server of an authority that is a midpoint of a nested one, or that an extension asks for with
@@ -519,7 +524,7 @@ export async function registerResolver(
 
   function inputOf(
     decoded: DecodedTarget,
-    context: {resolveAttempt: number},
+    context: {resolveAttempt: number; execServer?: ExecServerHandle},
     isReconnection: boolean,
   ): ConnectInput {
     return {
@@ -529,12 +534,15 @@ export async function registerResolver(
       isReconnection,
       windowId: editor.windowId(),
       windowWorkspace: editor.windowWorkspace(),
+      ...(context.execServer === undefined
+        ? {}
+        : {execServer: context.execServer}),
     };
   }
 
   async function resolveExecServerOne(
     authority: string,
-    context: {resolveAttempt: number},
+    context: {resolveAttempt: number; execServer?: ExecServerHandle},
     serve: NonNullable<Connector['execServer']>,
   ): Promise<ExecServerHandle> {
     const decoded = decodedFor(authority);
@@ -559,7 +567,7 @@ export async function registerResolver(
 
   async function resolveOne(
     authority: string,
-    context: {resolveAttempt: number},
+    context: {resolveAttempt: number; execServer?: ExecServerHandle},
   ): Promise<ResolvedConnection> {
     const decoded = decodedFor(authority);
     const isReconnection = memory.connectedBefore;

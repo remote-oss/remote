@@ -7,6 +7,7 @@
 import type * as vscode from 'vscode';
 import type {
   EditorResolver,
+  ExecServerHandle,
   PhaseName,
   ProgressPort,
   ResolvedConnection,
@@ -48,6 +49,19 @@ function resultOf(
   return result;
 }
 
+/** What the host takes of the editor's context for a resolve: the attempt, and the outer authority's exec server when there is one. */
+function hostContextOf(context: vscode.RemoteAuthorityResolverContext): {
+  resolveAttempt: number;
+  execServer?: ExecServerHandle;
+} {
+  return {
+    resolveAttempt: context.resolveAttempt,
+    ...(context.execServer === undefined
+      ? {}
+      : {execServer: context.execServer}),
+  };
+}
+
 /**
  * The resolver the editor calls: each resolve through the host. It gives the editor no tunnel factory and no tunnel
  * features: core then builds the window's forwards itself, through the server connection, with its own defaults
@@ -61,18 +75,19 @@ function editorResolverOf(
 ): vscode.RemoteAuthorityResolver {
   const editorResolver: vscode.RemoteAuthorityResolver = {
     resolve: async (authority, context) =>
-      resultOf(editor, await resolver.resolve(authority, context)),
+      resultOf(
+        editor,
+        await resolver.resolve(authority, hostContextOf(context)),
+      ),
   };
   const {resolveExecServer} = resolver;
   if (resolveExecServer !== undefined) {
     // The exec server is the extension's, built to the editor's proposed shape, which the host holds as an object.
     editorResolver.resolveExecServer = async (authority, context) =>
-      (await resolveExecServer(authority, {
-        resolveAttempt: context.resolveAttempt,
-        ...(context.execServer === undefined
-          ? {}
-          : {execServer: context.execServer}),
-      })) as vscode.ExecServer;
+      (await resolveExecServer(
+        authority,
+        hostContextOf(context),
+      )) as vscode.ExecServer;
   }
   if (options.candidatePortSource === 'output') {
     editorResolver.candidatePortSource = editor.CandidatePortSource.Output;
