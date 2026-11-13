@@ -155,7 +155,7 @@ describe('New Window on Active Host (card coverage-42)', function () {
     opened.second = second;
     deepStrictEqual(
       {
-        quickly: openedAfter < 3000,
+        quickly: openedAfter < 3000 ? true : `${String(openedAfter)} ms`,
         first: [stateAfter.remoteAuthority, stateAfter.folders.length],
         firstUnchanged:
           JSON.stringify(stateAfter) === JSON.stringify(firstBefore),
