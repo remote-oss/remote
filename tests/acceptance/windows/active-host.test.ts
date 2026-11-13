@@ -53,10 +53,15 @@ const HARNESS_AUTHORITY = 'ssh-remote+harness';
 
 /** Runs New Window on Active Host in window `name` and gives the name of the one empty window it opens. */
 function newWindowFrom(name: string): Promise<string> {
-  return nextEmptyWindow(() =>
-    inWindow(name, 'opensshremotes.openEmptyWindowOnCurrentHost'),
-  );
+  return nextEmptyWindow(async () => {
+    const began = Date.now();
+    await inWindow(name, 'opensshremotes.openEmptyWindowOnCurrentHost');
+    lastCommand.milliseconds = Date.now() - began;
+  });
 }
+
+/** How long the command of the last `newWindowFrom` took to return, so that a slow open says which part was slow. */
+const lastCommand = {milliseconds: 0};
 
 /** The password entries for window `name`: a connect over a socket logs in once for the server and once for the tunnel. */
 function passwordAnswers(name: string): AppendedEntry[] {
@@ -155,7 +160,10 @@ describe('New Window on Active Host (card coverage-42)', function () {
     opened.second = second;
     deepStrictEqual(
       {
-        quickly: openedAfter < 3000 ? true : `${String(openedAfter)} ms`,
+        quickly:
+          openedAfter < 3000
+            ? true
+            : `${String(openedAfter)} ms, of which the command ${String(lastCommand.milliseconds)} ms and the window's activation the rest`,
         first: [stateAfter.remoteAuthority, stateAfter.folders.length],
         firstUnchanged:
           JSON.stringify(stateAfter) === JSON.stringify(firstBefore),

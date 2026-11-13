@@ -73,7 +73,7 @@ describe('the commands of the view out of their context, in other windows (card 
   });
 
   it('F-5002 AC-14 (keys-kinds): a key bound to each command with no argument changes nothing in an empty window, an SSH window and a virtual workspace, and adds no state key of the extension', async () => {
-    const keysBefore = stateKeys();
+    const keysBefore = await stateKeys();
     const restore = await bindKeys(
       COMMANDS.map(([key, command]) => ({
         key: `ctrl+alt+${key}`,
@@ -134,7 +134,7 @@ describe('the commands of the view out of their context, in other windows (card 
       restore();
     }
     deepStrictEqual(
-      [seen, stateKeys()],
+      [seen, await stateKeys()],
       [
         ['empty', 'ssh', 'virtual'].map(kind => ({
           kind,
