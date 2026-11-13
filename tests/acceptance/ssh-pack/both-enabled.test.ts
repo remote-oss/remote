@@ -25,6 +25,7 @@ import {
   languageModeOf,
   lineTokensOf,
   notifications,
+  quickPickFacts,
   suggestionsOf,
   typeInFocus,
 } from '../windows/renderer.ts';
@@ -188,7 +189,7 @@ describe('the extension and both companions enabled (card #2499)', function () {
       found.authority = (await windowState(remote)).remoteAuthority;
       await startInWindow(remote, 'workbench.action.files.openFile');
       await new Promise(resolve => setTimeout(resolve, 2000));
-      found.dialog = await pickShown(remote);
+      found.dialog = await quickPickFacts(remote);
       await answerInputBox(remote, '/home/harness/.remote/config');
       await new Promise(resolve => setTimeout(resolve, 4000));
       found.dialogAfter = await dialogOf(remote);
