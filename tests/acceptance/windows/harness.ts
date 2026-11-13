@@ -1944,16 +1944,74 @@ export function restoreUserSettings(bytes: string | undefined): void {
   }
 }
 
-/** Rewrites the launch's user settings with `change` applied to them, which the editor picks up; then waits 1 s. */
+/** How a write of {@link userSettings} is confirmed: `window` (the default) waits until the local window reads each key as written; `file` is for a key shown to be unreadable there, and its comment says why. */
+export interface UserSettingsOptions {
+  readBack?: 'window' | 'file';
+}
+
+/** A value as text with the keys of its objects in order, so that two values compare as their JSON does whatever order they were written in. */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(',')}]`;
+  }
+  if (typeof value === 'object' && value !== null) {
+    return `{${Object.entries(value)
+      .sort(([first], [second]) => (first < second ? -1 : 1))
+      .map(([key, each]) => `${JSON.stringify(key)}:${canonicalJson(each)}`)
+      .join(',')}}`;
+  }
+  return value === undefined ? 'undefined' : JSON.stringify(value);
+}
+
+/** Waits, up to 30 s, until the local window reads the user setting `key` as `value` (as none for `undefined`); the failure names the key, the value written and the value read. */
+async function readBackOfSetting(key: string, value: unknown): Promise<void> {
+  let read: unknown;
+  try {
+    await waitFor(
+      `the local window to read ${key} as ${canonicalJson(value)}`,
+      async () => {
+        if (value === undefined) {
+          return !(await userScopeHolds('local', key));
+        }
+        read = await settingIn('local', key);
+        return (
+          canonicalJson(read) === canonicalJson(value) &&
+          (value === null || (await userScopeHolds('local', key)))
+        );
+      },
+      30_000,
+    );
+  } catch (caught) {
+    throw new Error(
+      `${caught instanceof Error ? caught.message : 'the wait failed'}; the value written: ${canonicalJson(value)}; the value read: ${canonicalJson(read)}`,
+      {cause: caught},
+    );
+  }
+}
+
+/**
+ * Rewrites the launch's user settings with `change` applied to them, and waits until the local window reads each changed
+ * key back as written (30 s a key, 100 ms apart), instead of a sleep the editor may outlast on a loaded machine. A write
+ * made before the local window's agent has activated gets no read-back: the editor reads the file when it starts.
+ */
 export async function userSettings(
   change: Readonly<Record<string, unknown>>,
+  options: UserSettingsOptions = {},
 ): Promise<void> {
   const file = userSettingsFile();
   const current = existsSync(file)
     ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)
     : {};
   writeFileSync(file, JSON.stringify({...current, ...change}, null, 2));
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  if (
+    options.readBack === 'file' ||
+    !windowEvents('local').some(each => each.event === 'activated')
+  ) {
+    return;
+  }
+  for (const [key, value] of Object.entries(change)) {
+    await readBackOfSetting(key, value);
+  }
 }
 
 /** What window `name` found of its terminals when asked for the active one's buffer. */
