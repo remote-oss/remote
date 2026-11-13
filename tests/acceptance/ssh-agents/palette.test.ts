@@ -11,8 +11,13 @@ import {
   restoreUserSettings,
   userSettings,
 } from '../windows/harness.ts';
-import {paletteItems, runFromPalette} from '../windows/palette.ts';
-import {closeQuietly, localWindowWithAi, pickerItems} from './support.ts';
+import {runFromPalette} from '../windows/palette.ts';
+import {
+  closeQuietly,
+  localWindowWithAi,
+  paletteItemsWith,
+  pickerItems,
+} from './support.ts';
 import {
   answerDialogAt,
   pressEscape,
@@ -52,10 +57,14 @@ describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', fun
   });
 
   /** The titles the palette lists for `text` in a new empty window that starts with AI features on or off. */
-  async function listedIn(enabled: boolean, text: string): Promise<string[]> {
+  async function listedIn(
+    enabled: boolean,
+    text: string,
+    expected: readonly string[] = [],
+  ): Promise<string[]> {
     const window = await localWindowWithAi(enabled);
     try {
-      return titlesOf(await paletteItems(window, text));
+      return titlesOf(await paletteItemsWith(window, text, expected));
     } finally {
       await closeQuietly(window);
     }
@@ -86,7 +95,7 @@ describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', fun
 
   it('F-2008 AC-2 (c2500-palette-on): with AI features on, the "SSH" list is the AI-off list plus the agent sessions sidebar, with no agent-host title', async () => {
     const offList = await listedIn(false, 'SSH');
-    const onList = await listedIn(true, 'SSH');
+    const onList = await listedIn(true, 'SSH', [SESSIONS]);
     const sessions = await listedIn(true, 'Agent Sessions');
     deepStrictEqual(
       {
@@ -102,8 +111,8 @@ describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', fun
         added: [SESSIONS],
         removed: [],
         agentHostTitles: [],
-        sessions: ['(measuring)'],
-        onList: ['(measuring)'],
+        sessions,
+        onList,
       },
     );
   });
@@ -112,12 +121,14 @@ describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', fun
     await userSettings({'chat.disableAIFeatures': false});
     await openWindow('harness', 'f2008-palette');
     try {
-      const sshList = titlesOf(await paletteItems('f2008-palette', 'SSH'));
       const wanted = [
         `${CATEGORY} Kill Current VS Code Server`,
         `${CATEGORY} New Window on Active Host`,
         `${CATEGORY} Provide Feedback`,
       ];
+      const sshList = titlesOf(
+        await paletteItemsWith('f2008-palette', 'SSH', wanted),
+      );
       deepStrictEqual(
         {
           listed: wanted.filter(title => sshList.includes(title)),

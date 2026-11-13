@@ -12,6 +12,7 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
+import {paletteItems} from '../windows/palette.ts';
 import {pressEscape, quickPickOf} from '../windows/renderer.ts';
 import {readStateDatabase} from '../windows/state-database.ts';
 
@@ -169,4 +170,26 @@ export async function pickerItems(name: string): Promise<string[]> {
     30_000,
   );
   return (await quickPickOf(name))?.items ?? [];
+}
+
+/**
+ * What the palette of window `name` lists for `text`, read again for up to 30 s until it holds every title of
+ * `expected`: a window completes its commands a moment after the first list it shows. The last list is the answer, so a
+ * title that never shows is missing from it.
+ */
+export async function paletteItemsWith(
+  name: string,
+  text: string,
+  expected: readonly string[],
+): Promise<string[]> {
+  const deadline = Date.now() + 30_000;
+  let items = await paletteItems(name, text);
+  while (
+    Date.now() < deadline &&
+    !expected.every(title => items.some(item => item.trim() === title))
+  ) {
+    await new Promise(resolve => setTimeout(resolve, 2_000));
+    items = await paletteItems(name, text);
+  }
+  return items;
 }
