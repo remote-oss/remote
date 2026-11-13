@@ -26,7 +26,7 @@ import {
   windowState,
 } from './harness.ts';
 import {activations, openFolderWindow} from './folder-windows.ts';
-import {viewRows} from './renderer.ts';
+import {statusBarText, viewRows} from './renderer.ts';
 import {VIEW} from './explorer-rows.ts';
 
 /** The envelope of the companion interface 1.0, the argument every id of the companion takes. */
@@ -144,12 +144,28 @@ export async function foldersSettled(
   );
 }
 
-/** Waits until window `name` is connected to `alias`. */
+/** What the remote indicator reads while a window resolves its remote: core's text for the state before the connection is made. */
+const RESOLVING_INDICATOR = 'Opening Remote...';
+
+/**
+ * Waits until window `name` is connected to `alias`. The window carries the host's address from the start, so the
+ * connect is over once its remote indicator no longer reads that it is opening.
+ */
 export async function connectedTo(name: string, alias: string): Promise<void> {
   await waitFor(
     `window ${name} to connect to ${alias}`,
-    async () =>
-      (await windowState(name)).remoteAuthority === `ssh-remote+${alias}`,
+    async () => {
+      if ((await windowState(name)).remoteAuthority !== `ssh-remote+${alias}`) {
+        return false;
+      }
+      try {
+        return (
+          (await statusBarText(name, 'status.host')) !== RESOLVING_INDICATOR
+        );
+      } catch {
+        return false;
+      }
+    },
     120_000,
   );
 }
