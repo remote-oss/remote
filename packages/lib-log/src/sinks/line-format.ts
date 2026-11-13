@@ -3,9 +3,9 @@ import type {LogLine} from '../logger.ts';
 import {redact} from '../redaction.ts';
 
 /** The terminal's code for the green class, the red class, and the end of either. */
-const GREEN = '\u001b[32m';
-const RED = '\u001b[31m';
-const RESET = '\u001b[0m';
+const GREEN_CODE = '\u001b[32m';
+const RED_CODE = '\u001b[31m';
+const RESET_CODE = '\u001b[0m';
 
 /** The time of a line in UTC to the millisecond, `YYYY-MM-DD HH:MM:SS.mmm`. */
 function timestampOf(time: number): string {
@@ -34,7 +34,7 @@ export function colouredLineOf(
   secrets: readonly string[] = [],
 ): string {
   const body = bodyOf(line, secrets);
-  return `[${GREEN}${timestampOf(line.time)}${RESET}] ${
-    line.stream === 'stderr' ? `${RED}${body}${RESET}` : body
+  return `[${GREEN_CODE}${timestampOf(line.time)}${RESET_CODE}] ${
+    line.stream === 'stderr' ? `${RED_CODE}${body}${RESET_CODE}` : body
   }`;
 }

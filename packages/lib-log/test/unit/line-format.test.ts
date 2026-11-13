@@ -1,9 +1,9 @@
 import {strictEqual} from 'node:assert';
 import {colouredLineOf, type LogLine, plainLineOf} from '../../src/index.ts';
 
-const GREEN = '\u001b[32m';
-const RED = '\u001b[31m';
-const RESET = '\u001b[0m';
+const GREEN_CODE = '\u001b[32m';
+const RED_CODE = '\u001b[31m';
+const RESET_CODE = '\u001b[0m';
 
 /** A line of `message` at `time`. */
 function lineAt(time: string, message: string): LogLine {
@@ -28,7 +28,7 @@ describe('the line formats of the file and terminal sinks (card wsl-10)', () => 
   it('wsl-10: the timestamp digits of the terminal format are green and the message is the terminal’s own colour', () => {
     strictEqual(
       colouredLineOf(lineAt('2026-11-13T09:05:07.042Z', 'hello')),
-      `[${GREEN}2026-11-13 09:05:07.042${RESET}] hello`,
+      `[${GREEN_CODE}2026-11-13 09:05:07.042${RESET_CODE}] hello`,
     );
   });
 
@@ -38,7 +38,7 @@ describe('the line formats of the file and terminal sinks (card wsl-10)', () => 
         ...lineAt('2026-11-13T09:05:07.042Z', 'oops'),
         stream: 'stderr',
       }),
-      `[${GREEN}2026-11-13 09:05:07.042${RESET}] ${RED}oops${RESET}`,
+      `[${GREEN_CODE}2026-11-13 09:05:07.042${RESET_CODE}] ${RED_CODE}oops${RESET_CODE}`,
     );
   });
 
@@ -48,14 +48,14 @@ describe('the line formats of the file and terminal sinks (card wsl-10)', () => 
         ...lineAt('2026-11-13T09:05:07.042Z', 'fine'),
         stream: 'stdout',
       }),
-      `[${GREEN}2026-11-13 09:05:07.042${RESET}] fine`,
+      `[${GREEN_CODE}2026-11-13 09:05:07.042${RESET_CODE}] fine`,
     );
   });
 
   it('wsl-10: a message that looks like an error is not red, and a colour code in it is written as its code point', () => {
     strictEqual(
       colouredLineOf(lineAt('2026-11-13T09:05:07.042Z', 'error: \u001b[31mx')),
-      `[${GREEN}2026-11-13 09:05:07.042${RESET}] error: \\u{1b}[31mx`,
+      `[${GREEN_CODE}2026-11-13 09:05:07.042${RESET_CODE}] error: \\u{1b}[31mx`,
     );
   });
 

@@ -20,7 +20,11 @@ export function createFileSink(options: FileSinkOptions): Sink {
   return {
     write(line): void {
       const text = `${plainLineOf(line, options.secrets?.() ?? [])}\n`;
-      queue = queue.then(() => options.append(text)).catch(options.onFailure);
+      queue = queue
+        .then(() => options.append(text))
+        .catch((caught: unknown) => {
+          options.onFailure(caught);
+        });
     },
   };
 }

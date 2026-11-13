@@ -4,14 +4,19 @@ import {createFileSink, type LogLine, plainLineOf} from '../../src/index.ts';
 const FIRST: LogLine = {level: 'info', scope: [], message: 'first', time: 0};
 const SECOND: LogLine = {level: 'info', scope: [], message: 'second', time: 1};
 
+/** An append that records the text it is given in `appended`. */
+function recordingIn(appended: string[]): (text: string) => Promise<void> {
+  return text => {
+    appended.push(text);
+    return Promise.resolve();
+  };
+}
+
 describe('file sink (card wsl-10)', () => {
   it('wsl-10: each line is appended in the plain format with a line end, in order', async () => {
     const appended: string[] = [];
     const sink = createFileSink({
-      append: text => {
-        appended.push(text);
-        return Promise.resolve();
-      },
+      append: recordingIn(appended),
       onFailure: () => undefined,
     });
     sink.write(FIRST);
@@ -43,10 +48,7 @@ describe('file sink (card wsl-10)', () => {
   it('wsl-10: the named secrets are redacted from the file', async () => {
     const appended: string[] = [];
     const sink = createFileSink({
-      append: text => {
-        appended.push(text);
-        return Promise.resolve();
-      },
+      append: recordingIn(appended),
       onFailure: () => undefined,
       secrets: () => ['hunter2'],
     });
