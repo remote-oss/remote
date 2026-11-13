@@ -349,5 +349,59 @@
     "owner": "proteus",
     "evidence": 42624951292,
     "added": "2026-11-12"
+  },
+  {
+    "launch": "preconnect",
+    "file": "preconnect/remembered.test.ts",
+    "title": "F-2108 AC-39 (touched): a confirmed script whose modification time changed, with the same contents, runs with no dialog",
+    "card": 2232,
+    "owner": "dike",
+    "evidence": 43018061687,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/volume.test.ts",
+    "title": "F-0419 AC-25 (s25): a commit folder with only a stray file in it makes the setup dialog with Opening Remote..., a running container on the volume and an unchanged listing, for a second folder too",
+    "card": 2263,
+    "owner": "daedalus",
+    "evidence": 42820396583,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/volume.test.ts",
+    "title": "F-0419 AC-26 (s26): a vscode volume of 1 MiB makes the setup dialog with Opening Remote..., and the container runs with the volume at /vscode",
+    "card": 2263,
+    "owner": "daedalus",
+    "evidence": 42820396583,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "default-ports",
+    "file": "default-ports/port-source.test.ts",
+    "title": "F-2507 AC-43 (own-ports-output): with the default source, nothing is forwarded for 60 s after a connect, a reload, and a close and reconnect",
+    "card": 2254,
+    "owner": "themis",
+    "evidence": 42367771624,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "default-ports",
+    "file": "default-ports/forward-entries.test.ts",
+    "title": "F-2507 AC-8 (c83-reload-time): after a reload the default listens again within about five seconds of the resolver returning",
+    "card": 2443,
+    "owner": "themis",
+    "evidence": 42624951292,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "default-ports",
+    "file": "default-ports/forward-entries.test.ts",
+    "title": "F-2507 AC-9, AC-37 (c83-stop-reload): a default row offers Set Port Label, Stop Forwarding Port, Copy Local Address, Open in Browser and Preview in Editor; stopped it has no listener and no row, until the next reload forwards it again",
+    "card": 2443,
+    "owner": "themis",
+    "evidence": 42624951292,
+    "added": "2026-11-13"
   }
 ]
