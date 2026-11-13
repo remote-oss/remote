@@ -268,5 +268,14 @@
     "owner": "hestia",
     "evidence": 43356589144,
     "added": "2026-11-13"
+  },
+  {
+    "launch": "containers-a",
+    "file": "containers/authoring-where.test.ts",
+    "title": "F-0405 AC-32 (c101-no-source-rebuild-with): remote-containers.rebuildAndReopenInContainer on a configuration with no container source and a stopped container shows the modal warning, Cancel changes nothing and Use Template opens the template screen, and the container keeps its id and state",
+    "card": 2403,
+    "owner": "dike",
+    "evidence": 43356589144,
+    "added": "2026-11-13"
   }
 ]
