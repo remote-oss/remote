@@ -5,29 +5,21 @@ import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
   inWindow,
-  onHostAs,
   readUserSettings,
   restoreUserSettings,
   startInWindow,
   userSettings,
   variable,
   waitFor,
-  windowState,
 } from '../windows/harness.ts';
 import {closePick, pickShown} from '../windows/explorer-home.ts';
 import {
   chooseQuickPickItem,
-  dialogOf,
   extensionPackTabOf,
   extensionPageOf,
   extensionsViewSections,
-  allQuickPickRows,
   languageModeOf,
-  pressEnter,
-  quickPickFacts,
-  typeInQuickPick,
   lineTokensOf,
-  notifications,
   suggestionsOf,
   typeInFocus,
 } from '../windows/renderer.ts';
@@ -170,49 +162,5 @@ describe('the extension and both companions enabled (card #2499)', function () {
         ['Connect to Host...', 'Connect Current Window to Host...'],
       ],
     );
-  });
-
-  it('F-2007 (c2499-measure-ssh): the remote config file opened in an SSH window', async () => {
-    const found: Record<string, unknown> = {};
-    let remote = '';
-    try {
-      remote = 'harness';
-      void inWindow(
-        'local',
-        'acceptance.agent.openWindow',
-        'vscode-remote://ssh-remote+harness/home/harness',
-      );
-      await waitFor(
-        'the SSH window to connect',
-        async () => (await windowState(remote)).remoteAuthority !== null,
-        120_000,
-      );
-      found.authority = (await windowState(remote)).remoteAuthority;
-      found.hostFile = await onHostAs(
-        'harness',
-        'sh',
-        '-c',
-        'ls -la /home/harness/.ssh; cat /home/harness/.ssh/config',
-      );
-      await startInWindow(remote, 'workbench.action.quickOpen');
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      await typeInQuickPick(remote, '.ssh/config');
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      found.quickOpen = await quickPickFacts(remote);
-      found.rows = (await allQuickPickRows(remote)).map(entry => entry.label);
-      await pressEnter(remote);
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      found.dialogAfter = await dialogOf(remote);
-      found.mode = await languageModeOf(remote);
-      found.tokens = await lineTokensOf(remote, 'Host');
-      found.notifications = await notifications(remote);
-    } catch (caught) {
-      found.failure = String(caught);
-    } finally {
-      if (remote !== '') {
-        await closeWindow(remote).catch(() => undefined);
-      }
-    }
-    throw new Error(`MEASURED ${JSON.stringify(found)}`);
   });
 });
