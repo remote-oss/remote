@@ -6,7 +6,9 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import {execFile} from 'node:child_process';
 import path from 'node:path';
+import {promisify} from 'node:util';
 import {
   closeWindow,
   connectedToContainer,
@@ -47,6 +49,8 @@ import {
   written,
 } from '../windows/authoring-support.ts';
 import {docker} from './resolve-support.ts';
+
+const execFileAsync = promisify(execFile);
 
 /** The text of the modal for a configuration with no container source. */
 const MISSING_IMAGE =
@@ -158,6 +162,26 @@ async function directRebuild(command: string, label: string): Promise<void> {
   }
 }
 
+/** The shutdown helpers of the run's user as `ps` lists them (process, parent, seconds up, command), or why there is no listing. */
+async function helpersListed(): Promise<string> {
+  try {
+    const {stdout: found} = await execFileAsync('pgrep', [
+      '-f',
+      'shutdown-helper[.]js',
+    ]);
+    const processIds = found.split('\n').filter(line => line !== '');
+    const {stdout} = await execFileAsync('ps', [
+      '-o',
+      'pid,ppid,etimes,args',
+      '-p',
+      processIds.join(','),
+    ]);
+    return stdout.trim();
+  } catch {
+    return 'none running';
+  }
+}
+
 /** What the engine and the Dev Containers log say of a container that did not stop after its window closed at `closedAt` (seconds), so a failure names what it was doing. */
 async function whyNotStopped(
   containerId: string,
@@ -180,7 +204,7 @@ async function whyNotStopped(
     '{{json .State}}',
     containerId,
   ).catch(() => 'unreadable');
-  return `timed out waiting for the container to be stopped; its state: ${state}; its events since the window closed: ${JSON.stringify(events)}; the last lines of the Dev Containers log: ${JSON.stringify(containersLog().slice(-40))}`;
+  return `timed out waiting for the container to be stopped; its state: ${state}; its events since the window closed: ${JSON.stringify(events)}; the shutdown helpers then: ${JSON.stringify(await helpersListed())}; the last lines of the Dev Containers log: ${JSON.stringify(containersLog().slice(-40))}`;
 }
 
 /** Runs `command` on a configuration with no container source, with or without a stopped container of the folder, as row `label`. */
