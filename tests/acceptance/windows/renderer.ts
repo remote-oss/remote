@@ -1231,6 +1231,47 @@ export async function extensionContextMenu(
   return menu;
 }
 
+/**
+ * Opens the context menu of the entry `displayName` of the Extensions view in window `name` and clicks the action
+ * labelled exactly `label`. It fails naming the entry when the view lists it not once, and naming the labels when the
+ * menu holds no such action.
+ */
+export async function extensionMenuAction(
+  name: string,
+  displayName: string,
+  label: string,
+): Promise<void> {
+  const outcome = await evaluate<string>(
+    name,
+    `(async () => {
+      const rows = ${extensionRowsExpression(displayName)};
+      if (rows.length !== 1) {
+        return 'rows ' + rows.length;
+      }
+      const box = rows[0].getBoundingClientRect();
+      rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const labels = [...document.querySelectorAll('.context-view .monaco-menu .action-label')];
+      const action = labels.find(each => (each.textContent ?? '') === ${JSON.stringify(label)});
+      if (action === undefined) {
+        for (const type of ['keydown', 'keyup']) {
+          (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
+        }
+        return 'labels ' + JSON.stringify(labels.map(each => each.textContent ?? ''));
+      }
+      for (const type of ['mousedown', 'mouseup', 'click']) {
+        action.dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, button: 0}));
+      }
+      return 'clicked';
+    })()`,
+  );
+  if (outcome !== 'clicked') {
+    throw new Error(
+      `window ${name}: no action ${JSON.stringify(label)} on the Extensions entry ${JSON.stringify(displayName)} (${outcome})`,
+    );
+  }
+}
+
 /** The display language window `name` runs in, as its page reports it: the one the editor was started with (`--locale`). */
 export async function displayLanguageOf(name: string): Promise<string> {
   return evaluate<string>(name, 'navigator.language');

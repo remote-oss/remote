@@ -1527,7 +1527,11 @@ export function launchesOf(root: string): Launch[] {
       label: 'ssh-pack',
       suite: 'ssh-pack',
       partOf: 'ssh-pack',
-      files: ['pack-install.test.ts', 'both-enabled.test.ts'],
+      files: [
+        'pack-install.test.ts',
+        'both-enabled.test.ts',
+        'pack-enablement.test.ts',
+      ],
       // The remote user's own SSH configuration, which the rows open in an SSH window.
       hostSetup: [{command: PACK_REMOTE_SSH_CONFIG}],
       withExtensions: ['remote-oss.remote-explorer'],
