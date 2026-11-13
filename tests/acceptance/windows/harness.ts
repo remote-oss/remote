@@ -2078,7 +2078,7 @@ export async function connectedWithin(
   }
 }
 
-/** What the host and this machine hold when a window did not connect: the host's listeners and server processes, the last lines of its sshd's log, and this machine's listeners. */
+/** What the host and this machine hold when a window did not connect: the host's listeners and server processes, the last lines of its sshd's log, this machine's listeners, and the last lines of the launch's connection log. */
 async function connectState(): Promise<string> {
   function read(
     what: Promise<{stdout: string; stderr: string}>,
@@ -2108,7 +2108,8 @@ async function connectState(): Promise<string> {
     ),
     read(execFileAsync('ss', ['-ltnp'])),
   ]);
-  return `the host's listeners and processes:\n${listening}\nthe last lines of the host's sshd log:\n${sshdLog}\nthis machine's listeners:\n${here}`;
+  const connect = connectionLog().slice(-40).join('\n');
+  return `the host's listeners and processes:\n${listening}\nthe last lines of the host's sshd log:\n${sshdLog}\nthis machine's listeners:\n${here}\nthe last lines of the launch's connection log:\n${connect}`;
 }
 
 /** Waits until no connection helper of the run runs, for up to `milliseconds`. */
