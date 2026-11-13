@@ -265,6 +265,7 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
       `mkdir -p "$(dirname '${file}')" && printf '%s' '{"terminal.integrated.defaultProfile.linux": "zsh"}' > '${file}'`,
     );
     await openWindow('harness', 'c125-zsh');
+    const failures: unknown[] = [];
     try {
       await inWindow('c125-zsh', 'workbench.action.terminal.new');
       await waitFor(
@@ -273,19 +274,25 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
         30_000,
       );
       deepStrictEqual(await terminalNames('c125-zsh'), ['zsh']);
-    } finally {
-      await onHost('rm', '-f', file);
-      try {
-        // The server reads its machine settings as they change, not at once: the next terminal of the launch opens in the
-        // default shell only when the window reads the setting without zsh (a terminal of zsh in c80-shell, batch 7).
-        await waitFor(
-          `window c125-zsh to read ${DEFAULT_PROFILE} without zsh`,
-          async () => (await settingIn('c125-zsh', DEFAULT_PROFILE)) !== 'zsh',
-          30_000,
-        );
-      } finally {
-        await closeWindow('c125-zsh').catch(() => undefined);
-      }
+    } catch (error) {
+      failures.push(error);
+    }
+    await onHost('rm', '-f', file);
+    try {
+      // The server reads its machine settings as they change, not at once: the next terminal of the launch opens in the
+      // default shell only when the window reads the setting without zsh (a terminal of zsh in c80-shell, batch 7).
+      await waitFor(
+        `window c125-zsh to read ${DEFAULT_PROFILE} without zsh`,
+        async () => (await settingIn('c125-zsh', DEFAULT_PROFILE)) !== 'zsh',
+        30_000,
+      );
+    } catch (error) {
+      failures.push(error);
+    }
+    await closeWindow('c125-zsh').catch(() => undefined);
+    // The row's own error comes first; a wait that timed out after a passing row fails the row by itself.
+    if (failures.length > 0) {
+      throw failures[0];
     }
   });
 });

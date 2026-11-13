@@ -142,16 +142,9 @@ function entriesOf(
       }));
 }
 
-/** The groups whose launches run in one part, in the table's order: the host cases, each of which can need the ones before it. */
-export const ORDERED_GROUPS: readonly string[] = ['hosts'];
-
-/**
- * Whether a launch runs only with others in one part, as the table makes it: a launch the table keeps `together` with
- * another, or one of an ordered group.
- */
+/** Whether a launch runs only with others in one part, as the table makes it: a launch the table keeps `together` with another. */
 export function heldTogether(table: PartsTable): (launch: Launch) => boolean {
   return launch =>
-    ORDERED_GROUPS.includes(launchGroupOf(launch)) ||
     (table.together ?? []).some(labels => labels.includes(launch.label));
 }
 
@@ -168,8 +161,8 @@ function leftOut(launch: Launch): boolean {
 
 /**
  * Every part of a VSCodium run, group by group in the table's order: each group's entries in their order, cut into parts
- * of at most the target, an entry over it alone in its part; an ordered group's launches all in one part, and the
- * launches the table keeps together in the same part. Named-only launches are in, as their group's selection makes them,
+ * of at most the target, an entry over it alone in its part, and the launches the table keeps together in the same
+ * part. Named-only launches are in, as their group's selection makes them,
  * unless the parts leave them out.
  */
 export function partsOfTable(
@@ -184,13 +177,11 @@ export function partsOfTable(
   const together = table.together ?? [];
   return groups.flatMap(group => {
     const ofGroup = entries.filter(entry => entry.group === group);
-    const ordered = ORDERED_GROUPS.includes(group);
     const runs = runsOf(
       ofGroup,
       entry => entry.minutes,
       table.targetMinutes,
       (entry, before) =>
-        ordered ||
         together.some(
           labels =>
             labels.includes(entry.label) && labels.includes(before.label),

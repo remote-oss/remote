@@ -11,7 +11,7 @@ import {
   type HintTableRow,
   messageCellOf,
 } from 'lib-ssh';
-import type {Logger} from 'lib-log';
+import {escapeControls, type Logger} from 'lib-log';
 import type {SessionHint} from './hint-store.ts';
 import {DISABLED_LINE, NO_HINTS_LINE, summaryLines} from './session-summary.ts';
 
@@ -128,9 +128,9 @@ export function rowsOf(hints: readonly SessionHint[]): HintTableRow[] {
       ? [
           {
             status: hint.status,
-            message: messageCellOf(hint.message, hint.details),
-            mitigations: hint.mitigations ?? [],
-            resources: hint.resources ?? [],
+            message: escapeControls(messageCellOf(hint.message, hint.details)),
+            mitigations: (hint.mitigations ?? []).map(escapeControls),
+            resources: (hint.resources ?? []).map(escapeControls),
           },
         ]
       : [],

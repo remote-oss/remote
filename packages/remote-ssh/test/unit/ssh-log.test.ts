@@ -5,6 +5,7 @@ import {
   isForwardingLine,
   logSshLines,
   sshLogEntries,
+  withoutAnswer,
 } from '../../src/pipeline/ssh-log.ts';
 
 const LINES = [
@@ -101,5 +102,58 @@ describe('ssh’s lines in the log (card connect-66)', () => {
       undefined,
     );
     deepStrictEqual(taken, ['1:first', '2:second']);
+  });
+
+  it('#2457, reading-2457-echo-line: a recognised prompt with the answer the terminal echoed after it shows the prompt and that the answer is not logged', () => {
+    deepStrictEqual(
+      [
+        'Are you sure you want to continue connecting (yes/no/[fingerprint])? yes',
+        'Verification code: 123456',
+        "Enter passphrase for key '/home/a/.ssh/id_ed25519': hunter2",
+        "alex@dev's password: hunter2",
+        'Password: hunter2',
+      ].map(withoutAnswer),
+      [
+        'Are you sure you want to continue connecting (yes/no/[fingerprint])? [answer not logged]',
+        'Verification code: [answer not logged]',
+        "Enter passphrase for key '/home/a/.ssh/id_ed25519': [answer not logged]",
+        "alex@dev's password: [answer not logged]",
+        'Password: [answer not logged]',
+      ],
+    );
+  });
+
+  it('#2457: a password prompt with no echo shows the same, and a line that holds no recognised prompt is as it is', () => {
+    deepStrictEqual(
+      [
+        "alex@dev's password: ",
+        'Authenticated to h ([127.0.0.1]:22) using "publickey".',
+        'Are you sure you want to continue connecting',
+        '',
+      ].map(withoutAnswer),
+      [
+        "alex@dev's password: [answer not logged]",
+        'Authenticated to h ([127.0.0.1]:22) using "publickey".',
+        'Are you sure you want to continue connecting',
+        '',
+      ],
+    );
+  });
+
+  it('#2457: only the start of a line is searched for a prompt: one inside the limit is found in a long line, one that ends past it is left as it is', () => {
+    const padding = 'x'.repeat(2000);
+    const prompt = 'Verification code:';
+    deepStrictEqual(
+      [
+        withoutAnswer(`${prompt} ${padding}`),
+        withoutAnswer(`${padding}${prompt} 123456`),
+        withoutAnswer(':'.repeat(5000)),
+      ],
+      [
+        `${prompt} [answer not logged]`,
+        `${padding}${prompt} 123456`,
+        ':'.repeat(5000),
+      ],
+    );
   });
 });

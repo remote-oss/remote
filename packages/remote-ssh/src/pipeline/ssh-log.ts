@@ -6,7 +6,7 @@
  */
 
 import type {Logger} from 'lib-log';
-import {logLinesOf} from 'lib-ssh';
+import {isTerminalPrompt, logLinesOf} from 'lib-ssh';
 import {masked} from '../diagnostics/log-content.ts';
 
 /** One line for the log: the level it is written at, and its text. */
@@ -61,4 +61,30 @@ export function logSshLines(
     }
     logger.sshLines?.([line.endsWith('\r') ? line.slice(0, -1) : line]);
   }
+}
+
+/** What the log shows where a terminal echoed the answer to a prompt. */
+const ANSWER_NOT_LOGGED = '[answer not logged]';
+
+/** How many characters from the start of a line are searched for a prompt: prompts are short, and a long line is not one. */
+const PROMPT_SCAN_LIMIT = 1000;
+
+/** Where a recognised prompt can end: every one of them ends with a colon or a question mark. */
+const PROMPT_END = /[:?]/g;
+
+/**
+ * `line` as the log may hold it: a line that holds a prompt the terminal mode recognises ends there, and shows that the
+ * answer is not logged. A terminal that shows what is typed echoes the answer after the prompt on its line, whoever
+ * typed it, and the log never holds an answer. A prompt that has no echo shows the same, and every other line is as it
+ * is. Only the first {@link PROMPT_SCAN_LIMIT} characters are searched, and only up to each colon and question mark.
+ */
+export function withoutAnswer(line: string): string {
+  const scanned = line.slice(0, PROMPT_SCAN_LIMIT);
+  for (const found of scanned.matchAll(PROMPT_END)) {
+    const end = found.index + 1;
+    if (isTerminalPrompt(scanned.slice(0, end))) {
+      return `${scanned.slice(0, end)} ${ANSWER_NOT_LOGGED}`;
+    }
+  }
+  return line;
 }
