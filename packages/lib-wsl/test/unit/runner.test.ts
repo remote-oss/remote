@@ -303,6 +303,80 @@ describe('D1: the management verbs', () => {
   });
 });
 
+describe('D1: setDefaultByWslconfig', () => {
+  const WSLCONFIG = 'C:\\Windows\\System32\\wslconfig.exe';
+
+  /** A runner over a fake that has wslconfig.exe and gives every process `run`. */
+  function withWslconfig(run: FakeRun, session = {}) {
+    const made = runnerOver(run, session);
+    made.fake.local.set(WSLCONFIG, new Uint8Array(0));
+    return made;
+  }
+
+  const NEVER = new AbortController().signal;
+
+  it('F-6103 (D1): runs wslconfig.exe from System32 with /setdefault and the name, as one argument list', async () => {
+    const {fake, runner} = withWslconfig({kind: 'exits', status: 0});
+    const outcome = await runner.setDefaultByWslconfig('Ubuntu 24', NEVER);
+    deepStrictEqual(
+      [
+        outcome.kind,
+        fake.started.map(each => [each.program, each.programArguments]),
+      ],
+      ['ran', [[WSLCONFIG, ['/setdefault', 'Ubuntu 24']]]],
+    );
+  });
+
+  it('F-6103 (D1): the output is decoded as manage decodes it, and a non-zero status is given as it is', async () => {
+    const {runner} = withWslconfig({
+      kind: 'exits',
+      stdout: utf16Output('no such distro\r\n'),
+      status: 1,
+    });
+    deepStrictEqual(await runner.setDefaultByWslconfig('x', NEVER), {
+      kind: 'ran',
+      text: 'no such distro\n',
+      status: 1,
+    });
+  });
+
+  it('F-6103 (D1): without a system root there is no PATH fallback, and it is wslMissing', async () => {
+    const {fake, runner} = withWslconfig(
+      {kind: 'exits', status: 0},
+      {systemRoot: undefined, environment: {PATH: 'C:\\Tools'}},
+    );
+    fake.local.set('C:\\Tools\\wslconfig.exe', new Uint8Array(0));
+    const outcome = await runner.setDefaultByWslconfig('x', NEVER);
+    deepStrictEqual([kindOf(outcome), fake.started.length], ['wslMissing', 0]);
+  });
+
+  it('F-6103 (D1): a System32 without wslconfig.exe is wslMissing', async () => {
+    const {fake, runner} = runnerOver({kind: 'exits', status: 0});
+    const outcome = await runner.setDefaultByWslconfig('x', NEVER);
+    deepStrictEqual([kindOf(outcome), fake.started.length], ['wslMissing', 0]);
+  });
+
+  it('F-6103 (D1): cancelled before the call is cancelled and starts nothing', async () => {
+    const {fake, runner} = withWslconfig({kind: 'exits', status: 0});
+    const outcome = await runner.setDefaultByWslconfig(
+      'x',
+      AbortSignal.abort(),
+    );
+    deepStrictEqual([kindOf(outcome), fake.started.length], ['cancelled', 0]);
+  });
+
+  it('F-6103 (D1): a run that fails to start is spawnFailed', async () => {
+    const {runner} = withWslconfig({
+      kind: 'failsToStart',
+      error: {code: 'EMFILE', message: 'too many open files'},
+    });
+    deepStrictEqual(
+      kindOf(await runner.setDefaultByWslconfig('x', NEVER)),
+      'spawnFailed',
+    );
+  });
+});
+
 describe('D1: exec', () => {
   it('cw01 exec: names the distro with -d and runs the program with --exec', async () => {
     const {fake} = await executed(EXITS_ZERO);
