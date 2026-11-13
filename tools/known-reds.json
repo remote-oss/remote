@@ -28,15 +28,6 @@
   },
   {
     "launch": "containers-a",
-    "file": "containers/extensions.test.ts",
-    "title": "F-0505 AC-1, AC-12, AC-34 (gate-row-12): an id of the configuration is installed in the new container without holding the window, and a malformed id beside it is no notice",
-    "card": 2206,
-    "owner": "daedalus",
-    "evidence": 43018061687,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-a",
     "file": "containers/image-build.test.ts",
     "title": "F-0412 AC-9 (i9): a cacheFrom that names a local tag nobody pushed does not stop the build, and no dialog or notice shows",
     "card": 2206,
