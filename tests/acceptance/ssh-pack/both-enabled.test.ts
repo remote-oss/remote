@@ -1,7 +1,13 @@
 import {mkdirSync} from 'node:fs';
 import path from 'node:path';
 import {openFolderWindow} from '../windows/folder-windows.ts';
-import {closeWindow, inWindow, variable, waitFor} from '../windows/harness.ts';
+import {
+  closeWindow,
+  inWindow,
+  startInWindow,
+  variable,
+  waitFor,
+} from '../windows/harness.ts';
 import {pickShown} from '../windows/explorer-home.ts';
 import {
   chooseQuickPickItem,
@@ -41,24 +47,29 @@ describe('the extension and both companions enabled (card #2499)', function () {
   });
 
   it('F-2007 (c2499-measure-both): what the window shows of the extension and its config file', async () => {
-    const page = await extensionPageOf(window, 'Remote - SSH');
-    await inWindow(window, 'opensshremotes.openConfigFile');
-    const picked = await pickShown(window);
-    const file = picked.rows.find(entry => entry.includes('.ssh/config'));
-    if (file !== undefined) {
-      await chooseQuickPickItem(window, file.split(' | ')[0] ?? file);
+    const found: Record<string, unknown> = {};
+    try {
+      found.page = await extensionPageOf(window, 'Remote - SSH');
+      await startInWindow(window, 'opensshremotes.openConfigFile');
+      const picked = await pickShown(window);
+      found.picker = picked;
+      const file = picked.rows.find(entry => entry.includes('.ssh/config'));
+      if (file !== undefined) {
+        await chooseQuickPickItem(window, file.split(' | ')[0] ?? file);
+      }
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      found.mode = await languageModeOf(window);
+      found.tokens = await lineTokensOf(window, 'Host');
+      found.tabs = (await editorTabs(window)).map(each => each.label);
+      await inWindow(window, 'cursorBottom');
+      await typeInFocus(window, '\nForw');
+      await inWindow(window, 'editor.action.triggerSuggest');
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      found.suggestions = await suggestionsOf(window);
+      found.notifications = await notifications(window);
+    } catch (caught) {
+      found.failure = String(caught);
     }
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    const mode = await languageModeOf(window);
-    const tokens = await lineTokensOf(window, 'Host');
-    const tabs = (await editorTabs(window)).map(each => each.label);
-    await inWindow(window, 'cursorBottom');
-    await typeInFocus(window, '\nForw');
-    await inWindow(window, 'editor.action.triggerSuggest');
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    const suggestions = await suggestionsOf(window);
-    throw new Error(
-      `MEASURED page ${JSON.stringify(page)}; picker ${JSON.stringify(picked)}; mode ${JSON.stringify(mode)}; tokens ${JSON.stringify(tokens)}; tabs ${JSON.stringify(tabs)}; suggestions ${JSON.stringify(suggestions)}; notifications ${JSON.stringify(await notifications(window))}`,
-    );
+    throw new Error(`MEASURED ${JSON.stringify(found)}`);
   });
 });
