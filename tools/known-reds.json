@@ -315,6 +315,15 @@
     "added": "2026-11-12"
   },
   {
+    "launch": "preconnect",
+    "file": "preconnect/basics.test.ts",
+    "title": "F-2108 AC-11, AC-12 (remember): Don't Ask Again runs it, and another window to another alias runs it with no dialog, the settings file unchanged",
+    "card": 2232,
+    "owner": "dike",
+    "evidence": 42820396583,
+    "added": "2026-11-13"
+  },
+  {
     "launch": "ssh-core",
     "file": "ssh-core/session-hints.test.ts",
     "title": "F-2605 AC-17 (c135-record): a failed attempt keeps 25 environment hints in order, its error hint with a number, and the log hint",
