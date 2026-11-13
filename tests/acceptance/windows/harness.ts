@@ -1965,15 +1965,24 @@ function canonicalJson(value: unknown): string {
   return value === undefined ? 'undefined' : JSON.stringify(value);
 }
 
-/** Waits, up to 30 s, until the local window reads the user setting `key` as `value` (as none for `undefined`); the failure names the key, the value written and the value read. */
-async function readBackOfSetting(key: string, value: unknown): Promise<void> {
+/**
+ * Waits, up to 30 s, until the local window reads the user setting `key` as written. With `window` (the default) that
+ * is its own value (as none for `undefined`), in canonical JSON; with `file`, for a key shown to be unreadable that way,
+ * only that the user's settings hold a value for it (or none for `undefined`) as the window reads them. The failure
+ * names the key, the value written and, for `window`, the value read.
+ */
+async function readBackOfSetting(
+  key: string,
+  value: unknown,
+  readBack: 'window' | 'file',
+): Promise<void> {
   let read: unknown;
   try {
     await waitFor(
-      `the local window to read ${key} as ${canonicalJson(value)}`,
+      `the local window to read ${key} as ${canonicalJson(value)}${readBack === 'file' ? ' (in the user settings)' : ''}`,
       async () => {
-        if (value === undefined) {
-          return !(await userScopeHolds('local', key));
+        if (value === undefined || readBack === 'file') {
+          return (await userScopeHolds('local', key)) === (value !== undefined);
         }
         // The user's own value, not `get`'s: for an object setting with defaults the merged value never equals what was written.
         read = await userValueIn('local', key);
@@ -1983,7 +1992,7 @@ async function readBackOfSetting(key: string, value: unknown): Promise<void> {
     );
   } catch (caught) {
     throw new Error(
-      `${caught instanceof Error ? caught.message : 'the wait failed'}; the value written: ${canonicalJson(value)}; the value read: ${canonicalJson(read)}`,
+      `${caught instanceof Error ? caught.message : 'the wait failed'}; the value written: ${canonicalJson(value)}${readBack === 'file' ? '' : `; the value read: ${canonicalJson(read)}`}`,
       {cause: caught},
     );
   }
@@ -1991,8 +2000,8 @@ async function readBackOfSetting(key: string, value: unknown): Promise<void> {
 
 /**
  * Rewrites the launch's user settings with `change` applied to them, and waits until the local window reads each changed
- * key back as written (30 s a key, 100 ms apart), instead of a sleep the editor may outlast on a loaded machine. A write
- * made before the local window's agent has activated gets no read-back: the editor reads the file when it starts.
+ * key back as written (30 s a key, 100 ms apart), instead of a sleep the editor may outlast on a loaded machine. A call
+ * made before the local window's agent has activated waits for it first, as a command to the window does.
  */
 export async function userSettings(
   change: Readonly<Record<string, unknown>>,
@@ -2003,14 +2012,14 @@ export async function userSettings(
     ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)
     : {};
   writeFileSync(file, JSON.stringify({...current, ...change}, null, 2));
-  if (
-    options.readBack === 'file' ||
-    !windowEvents('local').some(each => each.event === 'activated')
-  ) {
+  if (Object.keys(change).length === 0) {
     return;
   }
+  await waitUntil('window local to activate its agent', () =>
+    windowEvents('local').some(each => each.event === 'activated'),
+  );
   for (const [key, value] of Object.entries(change)) {
-    await readBackOfSetting(key, value);
+    await readBackOfSetting(key, value, options.readBack ?? 'window');
   }
 }
 
