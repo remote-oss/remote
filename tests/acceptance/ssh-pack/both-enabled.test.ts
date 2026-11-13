@@ -6,6 +6,7 @@ import {
   closeWindow,
   connectedWithin,
   inWindow,
+  onHostAs,
   readUserSettings,
   restoreUserSettings,
   startInWindow,
@@ -167,23 +168,28 @@ describe('the extension and both companions enabled (card #2499)', function () {
 
   it('F-2007 AC-13 (c2499-remote-config): the remote config file opened in an SSH window is an SSH Config file with colouring', async () => {
     const saved = readUserSettings();
-    const remote = 'harness';
+    const remote = 'pack-ssh';
     try {
       // ssh reads the configuration of the account's passwd home, not of $HOME, so the connect names the run's file.
       await userSettings({
         'remote.SSH.configFile': variable('HARNESS_SSH_CONFIG'),
       });
+      await onHostAs('harness', 'mkdir', '-p', `/home/harness/${remote}`);
       void inWindow(
         'local',
         'acceptance.agent.openWindow',
-        'vscode-remote://ssh-remote+harness/home/harness',
+        `vscode-remote://ssh-remote+harness/home/harness/${remote}`,
       );
       await connectedWithin(remote, 120_000);
       await waitFor(
         'the remote config file to open',
         async () => {
           try {
-            await inWindow(remote, 'acceptance.agent.openFile', '.ssh/config');
+            await inWindow(
+              remote,
+              'acceptance.agent.openFile',
+              '../.ssh/config',
+            );
             return true;
           } catch {
             return false;
