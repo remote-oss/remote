@@ -48,6 +48,7 @@ export {
 } from './share-path.ts';
 export {
   createWslRunner,
+  exitStatusIs,
   type ExecExited,
   type ExecInput,
   type ExecRequest,

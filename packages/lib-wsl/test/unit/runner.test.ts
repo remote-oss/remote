@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   createWslRunner,
+  exitStatusIs,
   type ExecRequest,
   type StartRequest,
 } from '../../src/runner.ts';
@@ -301,6 +302,21 @@ describe('D1: the management verbs', () => {
     const outcome = await manageStatus(runner);
     deepStrictEqual(kindOf(outcome), 'spawnFailed');
   });
+});
+
+describe('D1: the exit status of a 32-bit code', () => {
+  const cases = [
+    [-1, -1, true],
+    [4_294_967_295, -1, true],
+    [0, -1, false],
+    [1, -1, false],
+    [4_294_967_295, 1, false],
+  ] as const;
+  for (const [status, expected, same] of cases) {
+    it(`F-6102 (D1): status ${String(status)} ${same ? 'is' : 'is not'} the code ${String(expected)}`, () => {
+      deepStrictEqual(exitStatusIs(status, expected), same);
+    });
+  }
 });
 
 describe('D1: setDefaultByWslconfig', () => {

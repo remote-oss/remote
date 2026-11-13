@@ -9,16 +9,15 @@ import {type DistroRow, parseList} from './list.ts';
 import {filterDockerDesktop} from './match.ts';
 import {type OnlineRow, parseOnline} from './online.ts';
 import {sortOnlineCatalogue} from './install.ts';
-import type {RunFailed, WslRunner} from './runner.ts';
+import {exitStatusIs, type RunFailed, type WslRunner} from './runner.ts';
 import {parseStatus} from './status.ts';
 import {multiDistroAllowed} from './windows-build.ts';
 
 /**
- * The exit statuses of `wsl.exe --list --verbose` when no distro is registered: -1, as measured on Windows 2025, and
- * the same 32-bit value read as unsigned, as a child process reports it. A machine without WSL gives -1 as well, which
- * `--status` tells apart.
+ * The exit status of `wsl.exe --list --verbose` when no distro is registered, as measured on Windows 2025. A machine
+ * without WSL gives it as well, which `--status` tells apart.
  */
-const NO_DISTRO_STATUSES: readonly number[] = [-1, 0xffff_ffff];
+const NO_DISTRO_STATUS = -1;
 
 /** Whether WSL is there, and what the extension knows of it. */
 export type Presence =
@@ -133,7 +132,7 @@ export function createDistroInventory(
     if (finished.kind === 'failed') {
       return finished;
     }
-    if (NO_DISTRO_STATUSES.includes(finished.status)) {
+    if (exitStatusIs(finished.status, NO_DISTRO_STATUS)) {
       return {kind: 'rows', rows: []};
     }
     const listFailed = {

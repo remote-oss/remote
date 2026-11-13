@@ -14,6 +14,14 @@ import type {
   WslSession,
 } from './process-port.ts';
 
+/**
+ * Whether the exit status `status` is the 32-bit code `expected`: Windows exit codes are 32-bit, which a shell reads
+ * signed (-1) and a child process may report unsigned (4294967295).
+ */
+export function exitStatusIs(status: number, expected: number): boolean {
+  return (status | 0) === expected;
+}
+
 /** Why a run of `wsl.exe` did not give its result. */
 export type WslFailureKind =
   | 'wslMissing'
