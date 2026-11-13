@@ -151,5 +151,14 @@
     "owner": "dike",
     "evidence": 43356589144,
     "added": "2026-11-13"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/volume.test.ts",
+    "title": "F-0419 AC-36 (s36): two windows that start Reopen in Container together make one vscode volume, both connect with no dialog, and the platform has one commit folder",
+    "card": 2469,
+    "owner": "daedalus",
+    "evidence": 43369951852,
+    "added": "2026-11-13"
   }
 ]
