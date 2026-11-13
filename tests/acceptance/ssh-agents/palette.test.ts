@@ -87,6 +87,7 @@ describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', fun
   it('F-2008 AC-2 (c2500-palette-on): with AI features on, the "SSH" list is the AI-off list plus the agent sessions sidebar, with no agent-host title', async () => {
     const offList = await listedIn(false, 'SSH');
     const onList = await listedIn(true, 'SSH');
+    const sessions = await listedIn(true, 'Agent Sessions');
     deepStrictEqual(
       {
         added: onList.filter(title => !offList.includes(title)),
@@ -94,8 +95,16 @@ describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', fun
         agentHostTitles: onList.filter(title =>
           AGENT_HOST_TITLES.some(banned => title.includes(banned)),
         ),
+        sessions,
+        onList,
       },
-      {added: [SESSIONS], removed: [], agentHostTitles: []},
+      {
+        added: [SESSIONS],
+        removed: [],
+        agentHostTitles: [],
+        sessions,
+        onList,
+      },
     );
   });
 
