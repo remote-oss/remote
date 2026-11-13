@@ -26,6 +26,7 @@ import {
   CUSTOM_ONLY,
   closeQuietly,
   fingerprint,
+  localWindowWithAi,
   pickerItems,
   storageKeys,
   writeAgentFiles,
@@ -96,9 +97,15 @@ describe('Remote - SSH beside core’s agent hosts, from outside (card #2500, F-
   it('F-2008 AC-7 (c2500-config-file): with remote.SSH.configFile naming one host, Connect to Host lists only that host and the two footer items, and ~/.ssh/config is unchanged', async () => {
     await userSettings({'remote.SSH.configFile': files.customOnly});
     const before = fingerprint(files.config);
-    await runFromPalette('local', 'Remote-SSH: Connect to Host...');
-    const items = await pickerItems('local');
-    await pressEscape('local');
+    const window = await localWindowWithAi(false);
+    let items: string[];
+    try {
+      await runFromPalette(window, 'Remote-SSH: Connect to Host...');
+      items = await pickerItems(window);
+      await pressEscape(window);
+    } finally {
+      await closeQuietly(window);
+    }
     deepStrictEqual(
       {
         hosts: items.filter(item => item.includes(CUSTOM_ONLY)).length,

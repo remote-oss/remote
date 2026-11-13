@@ -7,6 +7,7 @@ import {mkdirSync, readFileSync, statSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   closeContained,
+  settingIn,
   userSettings,
   variable,
   waitFor,
@@ -146,7 +147,13 @@ export async function localWindowWithAi(enabled: boolean): Promise<string> {
     `f2008-local-${String(localWindows)}`,
   );
   mkdirSync(folder, {recursive: true});
-  return openFolderWindow(folder);
+  const name = await openFolderWindow(folder);
+  await waitFor(
+    `window ${name} to read chat.disableAIFeatures as ${String(!enabled)}`,
+    async () => (await settingIn(name, 'chat.disableAIFeatures')) === !enabled,
+    30_000,
+  );
+  return name;
 }
 
 /** Closes window `name` so that one that will not close cannot fail the rows after it: a dialog is dismissed with Escape. */
