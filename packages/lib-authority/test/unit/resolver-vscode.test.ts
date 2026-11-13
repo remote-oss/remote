@@ -128,6 +128,15 @@ function hostResolver(connection: ResolvedConnection): EditorResolver {
   return {resolve: () => Promise.resolve(connection)};
 }
 
+/** Registers `resolver` on a fake editor as the `ssh-remote` resolver and gives what the editor saw. */
+function registeredSeen(resolver: EditorResolver): Seen {
+  const seen: Seen = {events: []};
+  resolverEditorOf(fakeEditor(seen), {
+    detailsCommand: DETAILS,
+  }).registerRemoteAuthorityResolver('ssh-remote', resolver);
+  return seen;
+}
+
 /** Registers `connection`'s resolver and resolves once through what the editor was given. */
 async function resolvedThrough(
   connection: ResolvedConnection,
@@ -578,12 +587,9 @@ describe('the editor behind the resolver host: getCanonicalURI (card containers-
   });
 
   it('brief-remote-ssh-engines §2: the exec server the editor passes down is passed to the host', async () => {
-    const seen: Seen = {events: []};
     const asked: unknown[] = [];
     const outer = {name: 'outer'} as unknown as vscode.ExecServer;
-    resolverEditorOf(fakeEditor(seen), {
-      detailsCommand: DETAILS,
-    }).registerRemoteAuthorityResolver('ssh-remote', {
+    const seen = registeredSeen({
       ...hostResolver(CONNECTION),
       resolveExecServer: (authority, context) => {
         asked.push(authority);
@@ -602,12 +608,9 @@ describe('the editor behind the resolver host: getCanonicalURI (card containers-
   });
 
   it('wsl-38: the editor’s context for a resolve reaches the host with and without the exec server', async () => {
-    const seen: Seen = {events: []};
     const asked: unknown[] = [];
     const outer = {name: 'outer'} as unknown as vscode.ExecServer;
-    resolverEditorOf(fakeEditor(seen), {
-      detailsCommand: DETAILS,
-    }).registerRemoteAuthorityResolver('ssh-remote', {
+    const seen = registeredSeen({
       resolve: (authority, context) => {
         asked.push(context);
         return Promise.resolve(CONNECTION);
