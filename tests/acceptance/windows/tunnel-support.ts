@@ -147,23 +147,56 @@ export interface HeldPorts {
   release(): Promise<void>;
 }
 
-/** Holds each of `ports` on `address` with a listener that accepts connections. */
+/** What this machine's sockets say of `port`, for the error of a port that cannot be held. */
+function socketsOf(port: number): string {
+  try {
+    return execFileSync('ss', ['-tanp'], {encoding: 'utf8'})
+      .split('\n')
+      .filter(line => line.includes(`:${String(port)} `))
+      .join(' | ');
+  } catch (caught) {
+    return `ss failed: ${String(caught)}`;
+  }
+}
+
+/** Holds each of `ports` on `address` with a listener that accepts connections; a port that cannot be held fails naming what holds it, and the ports held before it are let go. */
 export async function holdPorts(
   ports: readonly number[],
   address: string,
 ): Promise<HeldPorts> {
-  const servers = await Promise.all(
-    ports.map(
-      port =>
-        new Promise<Server>((resolve, reject) => {
+  const servers: Server[] = [];
+  try {
+    for (const port of ports) {
+      servers.push(
+        await new Promise<Server>((resolve, reject) => {
           const server = createServer(socket => socket.destroy());
-          server.once('error', reject);
+          server.once('error', (caught: Error) => {
+            reject(
+              new Error(
+                `${caught.message}; the sockets of ${address}:${String(port)}: ${socketsOf(port) || 'none'}`,
+                {cause: caught},
+              ),
+            );
+          });
           server.listen(port, address, () => {
             resolve(server);
           });
         }),
-    ),
-  );
+      );
+    }
+  } catch (caught) {
+    await Promise.all(
+      servers.map(
+        server =>
+          new Promise<void>(resolve =>
+            server.close(() => {
+              resolve();
+            }),
+          ),
+      ),
+    );
+    throw caught;
+  }
   return {
     release: async () => {
       await Promise.all(
