@@ -4665,7 +4665,7 @@ export async function settingsItems(name: string): Promise<SettingsItem[]> {
       return items.map(item => ({
         title: (item.querySelector('.setting-item-title')?.textContent ?? '').trim(),
         description: (item.querySelector('.setting-item-description')?.textContent ?? '').trim(),
-        control: (item.querySelector('.setting-item-control')?.innerText ?? '').split('\n').map(line => line.trim()).filter(line => line !== ''),
+        control: (item.querySelector('.setting-item-control')?.innerText ?? '').split('\\n').map(line => line.trim()).filter(line => line !== ''),
       }));
     })()`,
   );
