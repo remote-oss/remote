@@ -391,6 +391,8 @@ describe('the location pick and the store of user data (card containers-91)', fu
       await takeOptionScreen(secondWindow, ALPINE_OPTION);
       await takeFeatureScreen(secondWindow);
       await written(path.join(storeRoot(), 'app-2', CONFIGURATION));
+      // The marker is written after the configuration, so the row waits for it too before reading it.
+      await written(path.join(storeRoot(), 'app-2', MARKER));
       deepStrictEqual(
         [
           before.map(each => each[1]),
