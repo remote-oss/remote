@@ -10,6 +10,7 @@ import {
   recordWindowName,
   windowNameOf,
 } from './window-name.ts';
+import {readSelection} from './terminal-selection.ts';
 
 /** How often the agent looks for a new command, in milliseconds. */
 const POLL_MILLISECONDS = 200;
@@ -558,21 +559,19 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
           }
         }
-        // The selection is a proposed API (terminalSelection) the agent's manifest enables; its types are not part of this
-        // project. Reading it asks nothing of the clipboard, which the machine shares between windows, and makes no copy
+        // Reading the selection asks nothing of the clipboard, which the machine shares between windows, and makes no copy
         // for core to complain about when nothing is selected.
-        const selected = (
-          vscode.window.activeTerminal as {selection?: string} | undefined
-        )?.selection;
+        const selection = readSelection(vscode.window.activeTerminal);
         await settledWithin(
           vscode.commands.executeCommand(CLEAR_STEP),
           COPY_STEP_MILLISECONDS,
         );
         report(agentFolder, name, {
           event: 'terminalBuffer',
-          text: selected ?? '',
+          text: selection.kind === 'text' ? selection.text : null,
           terminals,
           active,
+          ...(selection.kind === 'text' ? {} : {stuck: 'terminalSelection'}),
         });
       },
     ),
