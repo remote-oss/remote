@@ -46,15 +46,6 @@
   },
   {
     "launch": "containers-b",
-    "file": "containers/reopen-command.test.ts",
-    "title": "F-0101 AC-21 (c74-indicator-menu): the remote indicator’s pick in a dev container window has its placeholder, its first item, Rebuild Container, focused",
-    "card": 2082,
-    "owner": "selene",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-b",
     "file": "containers/resolve-reload.test.ts",
     "title": "F-0502 AC-13 (c43-oncreate-once): a container stopped and started again, then reconnected by a reload, does not run its onCreateCommand again",
     "card": 2449,
