@@ -541,6 +541,13 @@ export function activate(context: vscode.ExtensionContext): void {
           });
           return;
         }
+        // The clipboard is the machine's, shared by every window: a copy that selects nothing leaves what an earlier
+        // window or read put there, so a text of this window's own is put first and read back as nothing.
+        const nothing = `acceptance-agent-nothing-${String(Date.now())}-${String(Math.random())}`;
+        await settledWithin(
+          Promise.resolve(vscode.env.clipboard.writeText(nothing)),
+          COPY_STEP_MILLISECONDS,
+        );
         for (const step of COPY_STEPS) {
           const finished = await settledWithin(
             vscode.commands.executeCommand(step),
@@ -566,7 +573,7 @@ export function activate(context: vscode.ExtensionContext): void {
         );
         report(agentFolder, name, {
           event: 'terminalBuffer',
-          text: read ? (copied ?? '') : null,
+          text: read ? (copied === nothing ? '' : (copied ?? '')) : null,
           terminals,
           active,
           ...(read ? {} : {stuck: 'clipboard.readText'}),
