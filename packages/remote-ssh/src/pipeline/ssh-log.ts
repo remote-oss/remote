@@ -6,7 +6,7 @@
  */
 
 import type {Logger} from 'lib-log';
-import {logLinesOf} from 'lib-ssh';
+import {isTerminalPrompt, logLinesOf} from 'lib-ssh';
 import {masked} from '../diagnostics/log-content.ts';
 
 /** One line for the log: the level it is written at, and its text. */
@@ -61,4 +61,21 @@ export function logSshLines(
     }
     logger.sshLines?.([line.endsWith('\r') ? line.slice(0, -1) : line]);
   }
+}
+
+/** What the log shows where a terminal echoed the answer to a prompt. */
+const ANSWER_NOT_LOGGED = '[answer not logged]';
+
+/**
+ * `line` as the log may hold it: a line that holds a prompt the terminal mode recognises ends there, and shows that the
+ * answer is not logged. A terminal that shows what is typed echoes the answer after the prompt on its line, whoever
+ * typed it, and the log never holds an answer. A prompt that has no echo shows the same, and every other line is as it is.
+ */
+export function withoutAnswer(line: string): string {
+  for (let end = 1; end <= line.length; end += 1) {
+    if (isTerminalPrompt(line.slice(0, end))) {
+      return `${line.slice(0, end)} ${ANSWER_NOT_LOGGED}`;
+    }
+  }
+  return line;
 }
