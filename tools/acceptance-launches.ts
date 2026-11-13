@@ -168,6 +168,7 @@ export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
   ['remote-oss.remote-explorer', 'remote-explorer'],
   ['remote-oss.remote-containers', 'remote-containers'],
   ['remote-oss.vscode-remote-extensionpack', 'vscode-remote-extensionpack'],
+  ['remote-oss.remote-wsl', 'remote-wsl'],
 ]);
 
 /** What a launch the renderer helpers read needs: the debugging port, and window titles they can find a window by. */
@@ -1102,6 +1103,34 @@ export function launchesOf(root: string): Launch[] {
       suite: 'cli-path',
       cliSource: true,
       namedOnly: true,
+    },
+    // WSL on Linux: its commands stay out of the way where WSL cannot run, in a desktop window, in the browser build
+    // the editor stands in for with `remote.extensionKind`, and beside the other WSL extension, where it stands down.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'wsl-linux',
+      suite: 'wsl',
+      files: ['activation.test.ts'],
+      withExtensions: ['remote-oss.remote-wsl'],
+    },
+    {
+      ...RENDERER_LAUNCH,
+      label: 'wsl-linux-web',
+      suite: 'wsl',
+      files: ['activation-web.test.ts'],
+      withExtensions: ['remote-oss.remote-wsl'],
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.extensionKind': {'remote-oss.remote-wsl': ['web']},
+      },
+    },
+    {
+      ...RENDERER_LAUNCH,
+      label: 'wsl-linux-standdown',
+      suite: 'wsl',
+      files: ['activation-standdown.test.ts'],
+      withExtensions: ['remote-oss.remote-wsl'],
+      standIns: ['ms-vscode-remote.remote-wsl'],
     },
     {...EXPLORER_LAUNCH, label: 'explorer', suite: 'explorer'},
     {

@@ -58,6 +58,7 @@
         "preconnect/*.test.ts",
         "explorer/*.test.ts",
         "explorer-alone/*.test.ts",
+        "wsl/*.test.ts",
         "explorer-trust/*.test.ts",
         "explorer-trust-pickers/*.test.ts",
         "explorer-home/*.test.ts",
