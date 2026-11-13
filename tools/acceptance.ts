@@ -1898,6 +1898,7 @@ export async function runAcceptance(
     exitCode = exitCodes.find(code => code !== 0) ?? 0;
   } catch (error) {
     console.error(`acceptance: ${failureText(error)}`);
+    console.error(error instanceof Error ? error.stack : String(error));
     exitCode = 1;
   } finally {
     for (const container of started) {
