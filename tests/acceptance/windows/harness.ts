@@ -1030,7 +1030,7 @@ export function withLogTail(message: string, lines: readonly string[]): string {
 }
 
 /** What the remote indicator reads while a window resolves its remote: core's text for the state before the connection is made. */
-const RESOLVING_INDICATOR = 'Opening Remote...';
+export const RESOLVING_INDICATOR = 'Opening Remote...';
 
 /**
  * Resolves once window `name` is connected to its container: it reads its workspace folder through the container's file
@@ -1054,9 +1054,9 @@ export async function connectedToContainer(
           }
           // The renderer module imports this one, so it is loaded when it is needed.
           const {statusBarText} = await import('./renderer.ts');
-          return (
-            (await statusBarText(name, 'status.host')) !== RESOLVING_INDICATOR
-          );
+          // An item that is not drawn yet reads as an empty text, which is no connection either.
+          const indicator = await statusBarText(name, 'status.host');
+          return indicator !== '' && indicator !== RESOLVING_INDICATOR;
         } catch {
           return false;
         }
