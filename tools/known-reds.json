@@ -83,15 +83,6 @@
   {
     "launch": "containers-volume",
     "file": "containers-volume/clone.test.ts",
-    "title": "F-0701 AC-10, AC-33 (c151-no-branch-part): a branch that doesn’t exist fails with S193 and git’s text, leaves its volume an empty folder, and Close Remote leaves an empty local window",
-    "card": 2425,
-    "owner": "triton",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-volume",
-    "file": "containers-volume/clone.test.ts",
     "title": "F-0701 AC-14 (c151-reuse-part): the same URL again reuses its volume and its dev container: nothing is cloned or built again",
     "card": 2263,
     "owner": "daedalus",
