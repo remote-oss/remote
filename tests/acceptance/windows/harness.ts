@@ -1946,7 +1946,7 @@ export function restoreUserSettings(bytes: string | undefined): void {
   }
 }
 
-/** How a write of {@link userSettings} is confirmed: `window` (the default) waits until the local window reads each key as written; `file` is for a key shown to be unreadable there, and its comment says why. */
+/** How a write of {@link userSettings} is confirmed: `window` (the default) waits until the local window reads each key as written; `file` is for a key shown to be unreadable there, and its comment says why: it shows only that a value is there, so it is for adding or removing a key, never for changing one that is already set. */
 export interface UserSettingsOptions {
   readBack?: 'window' | 'file';
 }
@@ -2011,6 +2011,20 @@ export async function userSettings(
   const current = existsSync(file)
     ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)
     : {};
+  if (options.readBack === 'file') {
+    for (const [key, value] of Object.entries(change)) {
+      // Presence says nothing of a change from one value to another: the old one already holds.
+      if (
+        value !== undefined &&
+        key in current &&
+        canonicalJson(current[key]) !== canonicalJson(value)
+      ) {
+        throw new Error(
+          `userSettings with readBack 'file' cannot show that ${key} changed from ${canonicalJson(current[key])} to ${canonicalJson(value)}: it shows only that a value is there, so use the default read-back`,
+        );
+      }
+    }
+  }
   writeFileSync(file, JSON.stringify({...current, ...change}, null, 2));
   if (Object.keys(change).length === 0) {
     return;
