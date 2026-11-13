@@ -17,6 +17,7 @@ import {
   terminalBuffer,
   variable,
   waitFor,
+  windowEvents,
 } from '../windows/harness.ts';
 import {
   dialogOf,
@@ -325,7 +326,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       ];
       if (JSON.stringify(seen) !== JSON.stringify(expected)) {
         console.log(
-          `x17 mismatch, the second reconnect's path:\n${reconnectPath(containersLogSince(mark)).join('\n')}`,
+          `x17 mismatch, the second reconnect's path:\n${reconnectPath(containersLogSince(mark)).join('\n')}\nthe whole log since the second relaunch:\n${containersLogSince(mark).join('\n')}\nthe window's last events: ${JSON.stringify(windowEvents(name).slice(-8))}`,
         );
       }
       deepStrictEqual(seen, expected);
