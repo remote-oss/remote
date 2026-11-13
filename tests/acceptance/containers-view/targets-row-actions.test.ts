@@ -288,6 +288,7 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
         )
       )
         .split('\n')
+        .sort()
         .map(destination => lastUserLine.get(destination))
         .filter(line => line !== undefined);
       await viewed(base);

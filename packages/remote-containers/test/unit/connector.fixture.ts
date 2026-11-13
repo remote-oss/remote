@@ -12,6 +12,7 @@ import {
 } from '../../src/authority/payload.ts';
 import type {CliTarget} from '../../src/cli/cli-arguments.ts';
 import type {CliBridge} from '../../src/cli/cli-bridge.ts';
+import {markerInspectArguments} from '../../src/cli/cli-markers.ts';
 import type {BackgroundStage} from '../../src/lifecycle/container-lifecycle.ts';
 import type {CliEvent, SetUpResult} from '../../src/cli/cli-lines.ts';
 import {
@@ -162,6 +163,12 @@ export interface Scene {
   lifecycleRuns: string[];
   /** What the blocking run gives; done by default. */
   blockingResult: Awaited<ReturnType<ContainerLifecycle['runBlocking']>>;
+  /** What the engine answers the inspect that reads the container's creation time and environment; `fails` for an error. */
+  markerInspect: string;
+  /** Whether the markers' root step finds every marker holding the creation time. */
+  markersRan: boolean;
+  /** The scripts the markers' root step was run with. */
+  markerScripts: string[];
   /** The relay kinds the connector sets up; none by default. */
   relayKinds: RelayKind[];
   /** The relay host requests, and how starting one ends: started with no variables by default. */
@@ -395,6 +402,9 @@ export function sceneOf(
     stopped: 0,
     lifecycleRuns: [],
     blockingResult: {kind: 'done'},
+    markerInspect: '"2026-11-12T00:00:00.5Z"\n["PATH=/bin"]',
+    markersRan: false,
+    markerScripts: [],
     relayKinds: [],
     relayHostRequests: [],
     relayHostStart: {
@@ -472,6 +482,14 @@ export function sceneOf(
         await scene.probe(process);
         return;
       }
+      if (script.includes('markers:ran')) {
+        scene.markerScripts.push(script);
+        if (scene.markersRan) {
+          process.print('markers:ran\n');
+        }
+        process.exit(0);
+        return;
+      }
       scene.killScripts.push(script);
       process.exit(scene.killStatuses.shift() ?? 0);
     }),
@@ -480,6 +498,19 @@ export function sceneOf(
     const bootstrapAnswer = scene.bootstrapAnswer(argv);
     if (bootstrapAnswer !== undefined) {
       return bootstrapAnswer;
+    }
+    if (
+      argv[0] === 'inspect' &&
+      argv.includes(markerInspectArguments('')[4] ?? '')
+    ) {
+      return scene.markerInspect === 'fails'
+        ? {
+            kind: 'ran',
+            status: 1,
+            stdout: '',
+            stderr: 'Error: No such container',
+          }
+        : {kind: 'ran', status: 0, stdout: scene.markerInspect, stderr: ''};
     }
     if (argv[0] === 'version') {
       return {

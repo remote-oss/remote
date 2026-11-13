@@ -40,6 +40,8 @@ import {
   hostBaseVariables,
   runArgumentsOf,
   type CommandResult,
+  FAILURE_LOG_LINES,
+  failureReport,
   failureText,
   FORWARD_ALIASES,
   harnessSshConfig,
@@ -65,6 +67,7 @@ import {
   VSCODIUM_RELEASE,
   vscodiumConfiguration,
   vscodiumConfigurations,
+  vscodiumCliOf,
   vscodiumExecutableOf,
   withOneRetry,
   markDownloadRequests,
@@ -100,6 +103,16 @@ const CONTAINER = 'c0ffee';
 
 /** The host's address on the run network, which the `routed` alias names. */
 const ROUTED_ADDRESS = '172.18.0.2';
+
+/** The macOS build's command-line wrapper in its archive (`unzip -Z1` of the pinned darwin release asset). */
+const MACOS_CLI = path.join(
+  'VSCodium - Insiders.app',
+  'Contents',
+  'Resources',
+  'app',
+  'bin',
+  'codium-insiders',
+);
 
 /** Runs `body` with what it prints on `console.error` collected, and gives what it returned and those lines. */
 async function withErrorLines<Result>(
@@ -518,6 +531,7 @@ const LAUNCH_ORDER = [
     'containers-trust',
     'containers-nodocker',
     'containers-volume',
+    'containers-volume-trust',
     'containers-config',
   ],
   'containers-explorer',
@@ -1565,6 +1579,7 @@ describe('acceptance', () => {
             'containers-trust',
             'containers-nodocker',
             'containers-volume',
+            'containers-volume-trust',
             'containers-config',
           ].map(containersOnly),
           {
@@ -2429,6 +2444,37 @@ describe('acceptance', () => {
       return {waits, sleep};
     }
 
+    /**
+     * Runs `launches` over `container` with `runLaunch` for each attempt and no host setup, base hosts or held ports,
+     * and adds each line the run reports to `reported`.
+     */
+    async function runReporting(
+      reported: string[],
+      launches: Array<Launch | undefined>,
+      container: string,
+      command: CommandRunner,
+      runLaunch: (
+        launch?: Launch,
+      ) => Promise<{exitCode: number; output: string}>,
+    ): Promise<void> {
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        launches,
+        command,
+        container,
+        sleep,
+        runLaunch,
+        () => Promise.resolve(),
+        {},
+        () => Promise.resolve({release: () => Promise.resolve()}),
+        line => {
+          reported.push(line);
+        },
+      );
+    }
+
     /** The user settings each launch found when it started, by label. */
     async function settingsSeen(
       ...launches: Launch[]
@@ -2454,23 +2500,14 @@ describe('acceptance', () => {
     it('qa-01: each launch is announced with its label before it runs, so a log splits at it', async () => {
       const reported: string[] = [];
       const {command} = recordingCommand();
-      const {sleep} = recordingSleeper();
-      await runLaunches(
-        workspace.root,
-        '/run/ssh_config',
+      await runReporting(
+        reported,
         [TERMINAL, REMOTE, undefined],
-        command,
         '',
-        sleep,
+        command,
         launch => {
           reported.push(`ran ${launch?.label ?? 'the one configuration'}`);
           return Promise.resolve({exitCode: 0, output: ''});
-        },
-        () => Promise.resolve(),
-        {},
-        () => Promise.resolve({release: () => Promise.resolve()}),
-        line => {
-          reported.push(line);
         },
       );
       deepStrictEqual(reported, [
@@ -2480,6 +2517,86 @@ describe('acceptance', () => {
         'ran remote',
         'ran the one configuration',
       ]);
+    });
+
+    it("tooling-190: a launch whose rows fail is followed by the tail of its extensions' log and its host's state; one that passes by nothing", async () => {
+      const reported: string[] = [];
+      const {calls, command} = recordingCommand();
+      writeFileSync(
+        path.join(workspace.root, 'remote-log.txt'),
+        'resolve: ssh exited 255\n',
+      );
+      await runReporting(
+        reported,
+        [TERMINAL, REMOTE],
+        'host-1',
+        command,
+        launch =>
+          Promise.resolve({
+            exitCode: launch?.label === 'remote' ? 1 : 0,
+            output: '',
+          }),
+      );
+      deepStrictEqual(
+        [
+          reported,
+          calls.filter(call => call.startsWith('docker exec host-1 sh')),
+        ],
+        [
+          [
+            'acceptance: launch terminal',
+            'acceptance: launch remote',
+            'acceptance: remote failed: the last 1 of the 1 lines of remote-log.txt',
+            '  resolve: ssh exited 255',
+            "acceptance: remote failed: its host's listeners and processes",
+            "acceptance: remote failed: the last lines of its host's sshd log",
+          ],
+          [
+            'docker exec host-1 sh -c netstat -ltn 2>&1; ps -o pid,user,args 2>&1',
+          ],
+        ],
+      );
+    });
+
+    it('tooling-190: the report keeps the last lines of a long log, says when no log was written or no host is known, and notes a host command that failed', () => {
+      writeFileSync(
+        path.join(workspace.root, 'long-log.txt'),
+        [...Array(FAILURE_LOG_LINES + 5).keys()]
+          .map(index => `line ${String(index)}`)
+          .join('\n'),
+      );
+      writeFileSync(
+        path.join(workspace.root, 'long-containers-log.txt'),
+        'built\n',
+      );
+      /** A host command that fails as a container that went away does. */
+      function failing(): ReturnType<CommandRunner> {
+        return {status: 1, stdout: '', stderr: 'no such container'};
+      }
+      const long = failureReport(workspace.root, 'long', 'gone', failing);
+      deepStrictEqual(
+        [
+          long[0],
+          long[1],
+          long.slice(FAILURE_LOG_LINES + 1, FAILURE_LOG_LINES + 6),
+          failureReport(workspace.root, 'none', undefined, failing),
+        ],
+        [
+          `acceptance: long failed: the last ${String(FAILURE_LOG_LINES)} of the ${String(FAILURE_LOG_LINES + 5)} lines of long-log.txt`,
+          '  line 5',
+          [
+            'acceptance: long failed: the last 1 of the 1 lines of long-containers-log.txt',
+            '  built',
+            "acceptance: long failed: its host's listeners and processes",
+            '  (exit 1)',
+            '  no such container',
+          ],
+          [
+            'acceptance: none failed: its extensions wrote no log',
+            'acceptance: none failed: no host container to read',
+          ],
+        ],
+      );
     });
 
     const CONTAINERS: Launch = {
@@ -4241,6 +4358,31 @@ describe('acceptance', () => {
           `vscodium-${VSCODIUM_RELEASE.tagName}-linux-x64`,
         ),
       ]);
+    });
+
+    it("#2350: each pinned build's command-line wrapper is where its release archive puts it", () => {
+      const folder = path.join(workspace.root, 'unpacked');
+      deepStrictEqual(
+        Object.fromEntries(
+          Object.entries(VSCODIUM_PLATFORMS).map(([key, build]) => [
+            key,
+            path.relative(
+              folder,
+              vscodiumCliOf(
+                path.join(folder, build.executable),
+                key.slice(0, key.lastIndexOf('-')) as NodeJS.Platform,
+              ),
+            ),
+          ]),
+        ),
+        {
+          'linux-x64': path.join('bin', 'codium-insiders'),
+          'linux-arm64': path.join('bin', 'codium-insiders'),
+          'darwin-x64': MACOS_CLI,
+          'darwin-arm64': MACOS_CLI,
+          'win32-x64': path.join('bin', 'codium-insiders.cmd'),
+        },
+      );
     });
 
     it('#253 Q14: a platform with no pinned build throws', async () => {

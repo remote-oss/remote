@@ -70,6 +70,18 @@ describe('a maintenance run (F-2411, F-2412)', () => {
     );
   });
 
+  it('F-2205 AC-18, AC-29 (f2205-reason): a target that fails its name check gives the check’s reason with the failed connection, and a failed step without one gives none', async () => {
+    const reason = {id: 'S119', values: ['-']};
+    const named = await perform('uninstall', {
+      validate: () => ({
+        kind: 'failed' as const,
+        failure: {kind: 'invalidSetting' as const, reason},
+      }),
+    });
+    const unnamed = await perform('uninstall', {validate: () => FAILED});
+    deepStrictEqual([named.reason, 'reason' in unnamed], [reason, false]);
+  });
+
   it("F-2411 §10: a kill does not take the start settings' checks", async () => {
     await perform('kill', {
       checkStartSettings: () => FAILED,

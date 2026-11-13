@@ -51,7 +51,7 @@ function clientFileKinds(): string[] {
     [path.join(homedir(), '.ssh'), 'SSH'],
   ];
   const noise =
-    /\/logs\/|\.log$|state\.vscdb|Cache|Local Storage|Session Storage|blob_storage|Network|Crashpad|WebStorage|Service Worker|Dictionaries|\.lock|Local State|Preferences|Cookies|DIPS|machineid|storage\.json|\.jsonl$|\/agent\/|-record|-log\.txt|workspace\.json/;
+    /\/logs\/|\.log$|state\.vscdb|Cache|Local Storage|Session Storage|blob_storage|Network|Crashpad|WebStorage|Service Worker|Dictionaries|\.lock|Local State|Preferences|Cookies|DIPS|TransportSecurity|machineid|storage\.json|\.jsonl$|\/agent\/|-record|-log\.txt|workspace\.json/;
   function files(folder: string): string[] {
     if (!existsSync(folder)) {
       return [];

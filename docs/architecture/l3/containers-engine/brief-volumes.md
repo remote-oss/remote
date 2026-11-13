@@ -189,8 +189,9 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
   shared and editable (BR-4). It's not in `<temp>`: the definition is used as found, so it must not sit where another
   local user could plant one (athena on #2126).
   - `remoteUser: root` (BR-8), the volume at `/volume`, the `vscode` volume at `/vscode`, and no Docker socket.
-  - Its base is `alpine:3.20` (Docker Hub). The reference pins Microsoft's base image (Q2), and we don't pull from
-    Microsoft's registry. If a content row needs something only that image has, the row stops and comes to me.
+  - Its base is the devcontainers `base-alpine` release v0.4.17 (Alpine 3.20), pinned by digest from its registry, as
+    F-0705 decision Q2 option (a) has it (`ruling-2263-explore-base`). The bootstrap and recovery images stay ours on
+    `alpine:3.20`.
 - **Reuse:** by the label pair `vsch.local.volume` + `devcontainer.config_file` (BR-5). Recovery containers take a
   different key (Q3, preferred), with group 7.
 - **The window:** the volume payload with only `volumeName` (and `inspectVolume`), opened in Restricted Mode, titled

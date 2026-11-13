@@ -7,6 +7,7 @@ import {
   onHost,
   openWindow,
   reloadWindow,
+  settingIn,
   terminalNames,
   waitFor,
 } from '../windows/harness.ts';
@@ -67,6 +68,9 @@ async function groupsOf(folder: string): Promise<Array<[string, string]>> {
   );
   return quickPickGroups(folder);
 }
+
+/** The setting that names the profile a new terminal opens. */
+const DEFAULT_PROFILE = 'terminal.integrated.defaultProfile.linux';
 
 describe('the lists and the reload of an SSH window that uses its terminals (card connect-125)', function () {
   this.timeout(300_000);
@@ -236,9 +240,12 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
       const serverBefore = await serverProcessIds();
       await reloadWindow('c125-reload');
       await connectedWithin('c125-reload', 60_000);
+      // A revived terminal is listed before it is named, so the wait is for the names, not the count.
       await waitFor(
-        'the terminals to be revived',
-        async () => (await terminalNames('c125-reload')).length === 2,
+        'the terminals to be revived under their names',
+        async () =>
+          JSON.stringify(await terminalNames('c125-reload')) ===
+          JSON.stringify(before),
         60_000,
       );
       deepStrictEqual(
@@ -267,8 +274,18 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
       );
       deepStrictEqual(await terminalNames('c125-zsh'), ['zsh']);
     } finally {
-      await closeWindow('c125-zsh').catch(() => undefined);
       await onHost('rm', '-f', file);
+      try {
+        // The server reads its machine settings as they change, not at once: the next terminal of the launch opens in the
+        // default shell only when the window reads the setting without zsh (a terminal of zsh in c80-shell, batch 7).
+        await waitFor(
+          `window c125-zsh to read ${DEFAULT_PROFILE} without zsh`,
+          async () => (await settingIn('c125-zsh', DEFAULT_PROFILE)) !== 'zsh',
+          30_000,
+        );
+      } finally {
+        await closeWindow('c125-zsh').catch(() => undefined);
+      }
     }
   });
 });

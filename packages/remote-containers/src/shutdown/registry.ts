@@ -75,6 +75,12 @@ interface Connection {
   /** Whether the connection's end stops the container, unless it is in use. */
   owning: boolean;
   live: boolean;
+  /**
+   * Whether the connection's window closed or reloaded and its own check, which may stop the container, has not run yet:
+   * it still holds the container for an earlier connection's check, so the last window to go decides. A window that left
+   * its container (a failed or lost window), and a connection whose end stops nothing, never hold it.
+   */
+  ending: boolean;
 }
 
 const PROJECT_LABEL = 'com.docker.compose.project';
@@ -116,12 +122,17 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
     return obligation;
   }
 
+  /** Whether `other` holds what it uses: it is live, or its window closed or reloaded and its own check is still to come. */
+  function holds(other: Connection): boolean {
+    return other.live || other.ending;
+  }
+
   /** Whether another live connection holds the container: by its id, or by the identity it is for. */
   function inUse(connection: Connection, containerId: string): boolean {
     return [...connections.values()].some(
       other =>
         other !== connection &&
-        other.live &&
+        holds(other) &&
         (other.containerId === containerId ||
           sameIdentity(other.identity, connection.identity)),
     );
@@ -157,7 +168,7 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
     return [...connections.values()].some(
       other =>
         other !== connection &&
-        other.live &&
+        holds(other) &&
         (other.containerId === container.id ||
           (engineKeyOf(other.engine) === key &&
             (sameIdentity(other.identity, connection.identity) ||
@@ -202,7 +213,7 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
     return ![...connections.values()].some(
       other =>
         other !== connection &&
-        other.live &&
+        holds(other) &&
         engineKeyOf(other.engine) === key &&
         (sameIdentity(other.identity, connection.identity) ||
           other.compose?.project === compose.project),
@@ -232,7 +243,7 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
         [...connections.values()].some(
           other =>
             other !== connection &&
-            other.live &&
+            holds(other) &&
             other.containerId === container.id,
         ),
     );
@@ -308,8 +319,11 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
     await later(CHECK_MILLISECONDS, () => lookUp(connection, attempt + 1));
   }
 
-  /** Ends a live connection, once, and schedules what its end owes. */
-  function end(connection: Connection): void {
+  /**
+   * Ends a live connection, once, and schedules what its end owes. `closed` is true when its window closed or reloaded;
+   * a connection whose end may stop the container then holds it until its own check runs.
+   */
+  function end(connection: Connection, closed: boolean): void {
     if (!connection.live) {
       return;
     }
@@ -317,14 +331,20 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
     if (!connection.owning || connection.action === 'none') {
       return;
     }
+    connection.ending = closed;
+    /** Runs `work` at the connection's check, once it no longer holds anything. */
+    function atCheck(work: () => Promise<void>): void {
+      void later(CHECK_MILLISECONDS, () => {
+        connection.ending = false;
+        return work();
+      });
+    }
     const {containerId, compose} = connection;
     if (compose !== undefined) {
-      void later(CHECK_MILLISECONDS, () =>
-        stopComposeScope(connection, compose),
-      );
+      atCheck(() => stopComposeScope(connection, compose));
       return;
     }
-    void later(CHECK_MILLISECONDS, () =>
+    atCheck(() =>
       containerId === undefined
         ? lookUp(connection, 1)
         : stopUnused(connection, containerId),
@@ -345,6 +365,7 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
         action: undefined,
         owning: request.owning !== false,
         live: true,
+        ending: false,
       });
       return {accepted: true};
     },
@@ -370,13 +391,13 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
       if (connection === undefined) {
         return unknown;
       }
-      end(connection);
+      end(connection, false);
       return {accepted: true};
     },
     leasesChanged: liveLeases => {
       for (const connection of connections.values()) {
         if (!liveLeases.includes(connection.leaseId)) {
-          end(connection);
+          end(connection, true);
         }
       }
     },
