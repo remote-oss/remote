@@ -169,6 +169,31 @@ describe('the session troubleshooting terminal (card connect-136, F-2605)', () =
   });
 });
 
+describe('the rows of the table (card log-04)', () => {
+  it('a control character in a message, the details, a mitigation and a resource is written as its code point', () => {
+    deepStrictEqual(
+      rowsOf([
+        {
+          kind: 'error',
+          status: 'S',
+          message: "set to value 'a\u009bb'",
+          details: 'd\u0007',
+          mitigations: ['m\u009b'],
+          resources: ['r\u0007'],
+        },
+      ]),
+      [
+        {
+          status: 'S',
+          message: "set to value 'a\\u{9b}b' (d\\u{7})",
+          mitigations: ['m\\u{9b}'],
+          resources: ['r\\u{7}'],
+        },
+      ],
+    );
+  });
+});
+
 describe('the rows of the table (card connect-136)', () => {
   it('an error hint without lists has none in its row', () => {
     deepStrictEqual(
@@ -211,6 +236,22 @@ describe('the pseudoterminal of the table (card connect-136)', () => {
         true,
         'See verbose information in the \u001b[1;4mOutput Log...\u001b[0m',
       ],
+    );
+  });
+
+  it("a control character in a row is drawn as its code point after the terminal's own clear code", () => {
+    const {made, written} = makePty(
+      rowsOf([{kind: 'error', status: 'S', message: 'a\u009bb', details: 'd'}]),
+    );
+    made.open(60);
+    const text = written[0] ?? '';
+    deepStrictEqual(
+      [
+        text.startsWith('\u001b[2J'),
+        text.includes('a\\u{9b}b'),
+        text.includes('\u009b'),
+      ],
+      [true, true, false],
     );
   });
 
