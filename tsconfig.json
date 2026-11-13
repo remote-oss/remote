@@ -287,6 +287,9 @@
       "path": "tests/acceptance/extensionpack"
     },
     {
+      "path": "tests/acceptance/ssh-pack"
+    },
+    {
       "path": "tests/acceptance/terminal-login"
     },
     {

@@ -166,6 +166,7 @@ export interface FailureCase {
 /** The extensions only some launches install, by id, with their package names, the ones their VSIX files carry. */
 export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
   ['remote-oss.remote-explorer', 'remote-explorer'],
+  ['remote-oss.remote-ssh-edit', 'remote-ssh-edit'],
   ['remote-oss.remote-containers', 'remote-containers'],
   ['remote-oss.vscode-remote-extensionpack', 'vscode-remote-extensionpack'],
 ]);
@@ -199,6 +200,15 @@ const UNREACHABLE_GALLERY = {
   VSCODE_GALLERY_CONTROL_URL: 'http://127.0.0.1:1',
   VSCODE_GALLERY_RESOURCE_URL_TEMPLATE:
     'http://127.0.0.1:1/{publisher}/{name}/{version}/{path}',
+} as const;
+
+/** The editor's gallery variables pointed at the stand-in gallery the ssh-pack rows start on this port. */
+const STAND_IN_GALLERY = {
+  VSCODE_GALLERY_SERVICE_URL: 'http://127.0.0.1:23790/_apis/public/gallery',
+  VSCODE_GALLERY_ITEM_URL: 'http://127.0.0.1:23790/items',
+  VSCODE_GALLERY_CONTROL_URL: 'http://127.0.0.1:23790/control',
+  VSCODE_GALLERY_RESOURCE_URL_TEMPLATE:
+    'http://127.0.0.1:23790/{publisher}/{name}/{version}/{path}',
 } as const;
 
 /** What the trust launches share: workspace trust on, read by the renderer helpers. */
@@ -465,7 +475,7 @@ export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
  * The launches that may set `remote.SSH.configFile` themselves, by label: none yet. Every other launch uses the run's
  * ssh_config, which the harness hosts reach.
  */
-export const CONFIG_FILE_LAUNCHES: readonly string[] = [];
+export const CONFIG_FILE_LAUNCHES: readonly string[] = ['ssh-pack'];
 
 /** The token for the run's folder, which a launch's settings and environment may name. */
 const RUN_FOLDER_TOKEN = '<run>';
@@ -1507,6 +1517,28 @@ export function launchesOf(root: string): Launch[] {
       suite: 'extensionpack-partial',
       withExtensions: ['remote-oss.vscode-remote-extensionpack'],
       environment: UNREACHABLE_GALLERY,
+    },
+    // Remote - SSH with its two companions beside it, and the stand-in gallery the rows start for core to install from.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-pack',
+      suite: 'ssh-pack',
+      partOf: 'ssh-pack',
+      files: ['pack-install.test.ts'],
+      withExtensions: [
+        'remote-oss.remote-ssh',
+        'remote-oss.remote-ssh-edit',
+        'remote-oss.remote-explorer',
+      ],
+      settings: {
+        'window.title': '[${rootName}]${remoteName}',
+        'window.dialogStyle': 'custom',
+      },
+      environment: {
+        ...STAND_IN_GALLERY,
+        HOME: '<run>/home-pack',
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+      },
     },
     // The same with a fixture language pack active: the display language the pack's strings are read for.
     ...['de', 'hu'].map((language): PlainLaunch => ({

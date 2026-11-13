@@ -158,6 +158,7 @@ function labelsFromExplorer(): string[] {
     'extensionpack',
     'extensionpack-german',
     'extensionpack-partial',
+    'ssh-pack',
     'extensionpack-lp-de',
     'extensionpack-lp-hu',
     ...hostLaunchLabels(),
@@ -597,6 +598,16 @@ describe('the launches of the VSCodium run', () => {
         [
           'extensionpack-partial',
           ['remote-oss.vscode-remote-extensionpack'],
+          true,
+          undefined,
+        ],
+        [
+          'ssh-pack',
+          [
+            'remote-oss.remote-ssh',
+            'remote-oss.remote-ssh-edit',
+            'remote-oss.remote-explorer',
+          ],
           true,
           undefined,
         ],
