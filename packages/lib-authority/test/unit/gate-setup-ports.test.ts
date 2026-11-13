@@ -142,6 +142,38 @@ describe('the ports of the proposed-API setup', () => {
     ]);
   });
 
+  it('wsl-09: the views mode and the settle wait of the identity reach the probe', async () => {
+    const {editor, identity} = surroundings();
+    const timers: number[] = [];
+    const ports = setupPortsOf(
+      {
+        ...editor,
+        probeApi: {
+          ...editor.probeApi,
+          startTimer: (milliseconds, callback) => {
+            timers.push(milliseconds);
+            callback();
+            return () => undefined;
+          },
+        },
+      },
+      {
+        ...identity,
+        proposals: ['resolvers', 'contribViewsRemote'],
+        viewIds: ['remoteTargets'],
+        views: 'byCommand',
+        settle: {
+          resolveSettled: () => new Promise<void>(() => undefined),
+          boundMilliseconds: 120_000,
+        },
+      },
+    );
+    deepStrictEqual(
+      [(await ports.probe()).map(probe => probe.state), timers],
+      [['granted', 'missing'], [120_000]],
+    );
+  });
+
   it('reads the enabled ids from the argv file of the install', async () => {
     const {editor, identity, seen} = surroundings({
       argvText: '{"enable-proposed-api": ["remote-oss.remote-ssh"]}',

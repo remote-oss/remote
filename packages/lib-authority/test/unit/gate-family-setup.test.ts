@@ -172,6 +172,21 @@ describe('the family setup over the editor (card explorer-03b)', () => {
     ]);
   });
 
+  it('wsl-09: with the views read by command and a bound, the views are missing without their focus command although resolvers is granted', async () => {
+    const ports = portsOf({
+      proposals: ['resolvers', 'contribViewsRemote'],
+      views: 'byCommand',
+      settle: {
+        resolveSettled: () => new Promise<void>(() => undefined),
+        boundMilliseconds: 5,
+      },
+    });
+    deepStrictEqual(
+      (await ports.probe()).map(probe => probe.state),
+      ['granted', 'missing'],
+    );
+  });
+
   it('contracts.3.4: a setup notice is the translated template, filled with the extension and the editor', async () => {
     const shown = newShown();
     const outcome = await runSetup(

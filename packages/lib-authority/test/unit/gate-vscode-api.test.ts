@@ -57,6 +57,19 @@ describe('the editor behind the probes', () => {
     deepStrictEqual(reads, ['window.onDidWriteTerminalData']);
   });
 
+  it('wsl-09: the timer calls back once after its time, and a cancelled one never does', async () => {
+    const calls: string[] = [];
+    const api = probeApiOf(fakeEditor([]));
+    api.startTimer(1, () => {
+      calls.push('fired');
+    });
+    api.startTimer(1, () => {
+      calls.push('cancelled');
+    })();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    deepStrictEqual(calls, ['fired']);
+  });
+
   it('lists the commands with the filter the probe gives', async () => {
     const reads: string[] = [];
     const commands = await probeApiOf(fakeEditor(reads)).getCommands(true);
