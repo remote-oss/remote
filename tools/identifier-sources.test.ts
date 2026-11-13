@@ -7,6 +7,7 @@ import {
   readManifest,
   readPackageSources,
 } from './identifier-sources.ts';
+import {syntheticSources} from './identifier-fixtures.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -36,17 +37,7 @@ describe('identifier-sources', () => {
 
   describe('manifest', () => {
     it('reads a manifest without contributions as empty', () => {
-      deepStrictEqual(manifestOf({name: 'empty'}), {
-        commands: [],
-        settings: [],
-        views: [],
-        authorities: [],
-        languages: [],
-        activationEvents: [],
-        menuEntries: [],
-        enabledApiProposals: [],
-        stringReferences: [],
-      });
+      deepStrictEqual(manifestOf({name: 'empty'}), syntheticSources().manifest);
     });
 
     it('marks a command hidden from the palette by when false', () => {
@@ -152,6 +143,36 @@ describe('identifier-sources', () => {
         {menu: 'view/title', item: 'remote-x.more'},
         {menu: 'viewsWelcome', item: 'remote-x.targets', when: 'true'},
         {menu: 'continueEditSession', item: 'remote-x.continue'},
+      ]);
+    });
+
+    it('wsl-07: reads the keybindings, views, walkthroughs and walkthrough steps, each with its when', () => {
+      const manifest = manifestOf({
+        contributes: {
+          keybindings: [{command: 'remote-x.open', key: 'ctrl+o', when: 'a'}],
+          views: {
+            explorer: [
+              {id: 'remote-x.targets', when: 'b'},
+              {id: 'remote-x.bare'},
+            ],
+          },
+          walkthroughs: [
+            {
+              id: 'remote-x.start',
+              when: 'c',
+              steps: [{id: 'remote-x.first', when: 'd'}],
+            },
+            {id: 'remote-x.empty'},
+          ],
+        },
+      });
+      deepStrictEqual(manifest.contributionEntries, [
+        {menu: 'keybindings', item: 'remote-x.open', when: 'a'},
+        {menu: 'views.explorer', item: 'remote-x.targets', when: 'b'},
+        {menu: 'views.explorer', item: 'remote-x.bare'},
+        {menu: 'walkthroughs', item: 'remote-x.start', when: 'c'},
+        {menu: 'walkthroughs.steps', item: 'remote-x.first', when: 'd'},
+        {menu: 'walkthroughs', item: 'remote-x.empty'},
       ]);
     });
 
@@ -285,6 +306,7 @@ describe('identifier-sources', () => {
           {current: 'dev.x.path', legacy: 'remote.x.path', winner: 'legacy'},
         ],
         ungated: [{menu: 'commandPalette', item: 'remote-x.open', reason: 'r'}],
+        gateAlsoKinds: true,
         locales: ['de', 'fr'],
       };
       deepStrictEqual(declaredOf(content), content);
@@ -358,6 +380,25 @@ describe('identifier-sources', () => {
       throws(() => declaredOf({source: 'x', standsDownFor: 'r', extra: 1}), {
         message: 'declared has unknown fields: extra',
       });
+    });
+
+    it('wsl-07: reads a coreAndExtension context key', () => {
+      deepStrictEqual(
+        declaredOf({
+          source: 'x#1',
+          standsDownFor: 'r',
+          contextKeys: [{id: 'remote-x.installed', setter: 'coreAndExtension'}],
+        }).contextKeys,
+        [{id: 'remote-x.installed', setter: 'coreAndExtension'}],
+      );
+    });
+
+    it('wsl-07: fails on a gateAlsoKinds that is not a boolean', () => {
+      throws(
+        () =>
+          declaredOf({source: 'x#1', standsDownFor: 'r', gateAlsoKinds: 'yes'}),
+        {message: 'declared.gateAlsoKinds must be a boolean'},
+      );
     });
 
     it('fails on an unknown field of an entry', () => {
