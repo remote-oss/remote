@@ -41,18 +41,23 @@ async function waitForTerminal(
   });
 }
 
-/** What `read` gives as text within ten seconds, for a failure to name; what does not come in time or fails says so. */
+/** What `read` gives as text within ten seconds, for a failure to name; what is undefined, does not come in time or fails says so. */
 async function withinTenSeconds(read: Promise<unknown>): Promise<string> {
+  let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<string>(resolve => {
-    setTimeout(resolve, 10_000, '(not read in 10 s)');
+    timer = setTimeout(resolve, 10_000, '(not read in 10 s)');
   });
-  return Promise.race([
-    read.then(
-      value => JSON.stringify(value),
-      () => '(unreadable)',
-    ),
-    timeout,
-  ]);
+  try {
+    return await Promise.race([
+      read.then(
+        value => (value === undefined ? '(nothing)' : JSON.stringify(value)),
+        () => '(unreadable)',
+      ),
+      timeout,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
