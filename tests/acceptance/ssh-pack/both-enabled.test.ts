@@ -191,8 +191,8 @@ describe('the extension and both companions enabled (card #2499)', function () {
           try {
             await inWindow(
               remote,
-              'acceptance.agent.openUri',
-              'vscode-remote://ssh-remote+harness/home/harness/.ssh/config',
+              'acceptance.agent.openFile',
+              '/home/harness/.ssh/config',
             );
             return true;
           } catch (caught) {
