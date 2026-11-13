@@ -53,6 +53,7 @@
         "no-proposals/*.test.ts",
         "default-ports/*.test.ts",
         "ssh-core/*.test.ts",
+        "ssh-agents/*.test.ts",
         "ssh-containers/*.test.ts",
         "terminal-pick/*.test.ts",
         "preconnect/*.test.ts",

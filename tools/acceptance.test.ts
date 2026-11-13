@@ -509,6 +509,7 @@ const LAUNCH_ORDER = [
   'agent-notmp',
   'default-ports',
   'ssh-core',
+  'ssh-agents',
   'ssh-containers',
   'no-proposals',
   'explorer',

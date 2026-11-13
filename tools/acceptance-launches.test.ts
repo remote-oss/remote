@@ -325,6 +325,7 @@ describe('the launches of the VSCodium run', () => {
         'agent-notmp',
         'default-ports',
         'ssh-core',
+        'ssh-agents',
         'ssh-containers',
         'no-proposals',
         'cli-path',
@@ -422,6 +423,7 @@ describe('the launches of the VSCodium run', () => {
         ['agent-notmp', undefined, true, undefined],
         ['default-ports', undefined, true, undefined],
         ['ssh-core', undefined, true, undefined],
+        ['ssh-agents', undefined, true, undefined],
         ['ssh-containers', ['remote-oss.remote-containers'], true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
         [
@@ -1296,6 +1298,7 @@ describe('the launches of the VSCodium run', () => {
         'agent-notmp',
         'default-ports',
         'ssh-core',
+        'ssh-agents',
         'ssh-containers',
         ...labelsFromExplorer(),
       ],
