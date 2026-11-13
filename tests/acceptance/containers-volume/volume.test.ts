@@ -510,7 +510,7 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
   });
 
   it.only('measure s36 race', async () => {
-    for (let round = 0; round < 5; round++) {
+    for (let round = 0; round < 20; round++) {
       await clearVolume();
       await removeVolume();
       const mark = containersLog().length;
@@ -531,11 +531,12 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
         console.log(
           `s36m round ${round}: ${JSON.stringify(installed)}\n${contents}`,
         );
+        const lines = containersLogSince(mark);
         console.log(
-          `s36m log ${round}:\n${containersLogSince(mark).join('\n')}`,
+          `s36m summary ${round}: ${JSON.stringify(lines.filter(line => /downloaded from|installed by another|retrying|not installed|cached server archive/.test(line)))}`,
         );
         if (siblings.length > 0) {
-          console.log(`s36m LEFTOVER in round ${round}`);
+          console.log(`s36m LEFTOVER in round ${round}:\n${lines.join('\n')}`);
         }
         await Promise.all(names.map(each => closeWindow(each)));
       } finally {
