@@ -144,15 +144,6 @@
     "added": "2026-11-12"
   },
   {
-    "launch": "containers-view",
-    "file": "containers-view/targets-row-actions.test.ts",
-    "title": "F-0902 AC-24 (last-user): the Remove confirmation adds S373 for each volume and folder no other container uses, in mount order, not for one another container mounts and not for the vscode volume",
-    "card": 2129,
-    "owner": "themis",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
     "launch": "containers-volume",
     "file": "containers-volume/clone.test.ts",
     "title": "F-0701 AC-10, AC-33 (c151-no-branch-part): a branch that doesn’t exist fails with S193 and git’s text, leaves its volume an empty folder, and Close Remote leaves an empty local window",
@@ -270,24 +261,6 @@
     "added": "2026-11-12"
   },
   {
-    "launch": "explorer-folders",
-    "file": "explorer-folders/commands.test.ts",
-    "title": "F-5002 AC-6, AC-11, AC-16 (keys-plain): a key bound to each command with no argument changes no window, title, indicator, file or history row, shows no dialog, leaves the window usable and adds no state key of the extension",
-    "card": 2420,
-    "owner": "themis",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "explorer-folders",
-    "file": "explorer-folders/commands.test.ts",
-    "title": "F-5002 AC-7, AC-16 (keys-bogus): the same keys with the argument \"bogus-f5002\" and with {} change nothing",
-    "card": 2420,
-    "owner": "themis",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
     "launch": "preconnect",
     "file": "preconnect/other.test.ts",
     "title": "F-2108 AC-35 (deleted): a confirmed script that was deleted fails with the read's detail and no dialog, and its entry stays",
@@ -324,24 +297,6 @@
     "added": "2026-11-12"
   },
   {
-    "launch": "trust",
-    "file": "trust/agent-link.test.ts",
-    "title": "F-2311 AC-24 (c99-trust-terminal): after the refusal, a new terminal asks again, and when that is cancelled it opens in Restricted Mode with SSH_AUTH_SOCK as the link and the keys listed",
-    "card": 2254,
-    "owner": "themis",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "web-ui",
-    "file": "web-ui/web-ui.test.ts",
-    "title": "F-2509 AC-21 (nothing-written): running it changes no settings, keybindings, stored state or file of the client or the host",
-    "card": 2413,
-    "owner": "proteus",
-    "evidence": 42624951292,
-    "added": "2026-11-12"
-  },
-  {
     "launch": "preconnect",
     "file": "preconnect/remembered.test.ts",
     "title": "F-2108 AC-39 (touched): a confirmed script whose modification time changed, with the same contents, runs with no dialog",
@@ -375,33 +330,6 @@
     "card": 2254,
     "owner": "themis",
     "evidence": 42367771624,
-    "added": "2026-11-13"
-  },
-  {
-    "launch": "default-ports",
-    "file": "default-ports/forward-entries.test.ts",
-    "title": "F-2507 AC-8 (c83-reload-time): after a reload the default listens again within about five seconds of the resolver returning",
-    "card": 2443,
-    "owner": "themis",
-    "evidence": 42624951292,
-    "added": "2026-11-13"
-  },
-  {
-    "launch": "default-ports",
-    "file": "default-ports/forward-entries.test.ts",
-    "title": "F-2507 AC-9, AC-37 (c83-stop-reload): a default row offers Set Port Label, Stop Forwarding Port, Copy Local Address, Open in Browser and Preview in Editor; stopped it has no listener and no row, until the next reload forwards it again",
-    "card": 2443,
-    "owner": "themis",
-    "evidence": 42624951292,
-    "added": "2026-11-13"
-  },
-  {
-    "launch": "windows",
-    "file": "windows/forward-port.test.ts",
-    "title": "F-2507 AC-18: a port forwarded in a connected window reaches the host's port",
-    "card": 2404,
-    "owner": "triton",
-    "evidence": 42476121959,
     "added": "2026-11-13"
   },
   {
