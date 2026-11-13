@@ -7,8 +7,13 @@
 
 import {type HostChannel, hostPathOf, type ScriptRequest} from 'lib-host';
 import type {Logger} from 'lib-log';
-import {parseResult, RESULT_BEGIN, RESULT_END} from 'lib-server';
-import {masked, serverResultLine} from '../diagnostics/log-content.ts';
+import {masked} from './mask.ts';
+import {serverResultLine} from './result-line.ts';
+import {
+  parseResult,
+  RESULT_BEGIN,
+  RESULT_END,
+} from '../scripts/result-block.ts';
 
 /** The shortest value of a run's environment that the log names instead of showing; a shorter one is too common to hide. */
 const SECRET_LENGTH = 8;

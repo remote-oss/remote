@@ -43,6 +43,7 @@ import {
   type DownloadPort,
   hostLockLoopOf,
   type LicenceModal,
+  loggedChannel,
   type AcceptanceStore,
 } from 'lib-server';
 import {
@@ -107,7 +108,6 @@ import {
 import type {ConnectionRequestEnvironment} from './pipeline/connection-request.ts';
 import type {LinkTerminals} from './pipeline/forwarding-step.ts';
 import {connectorOf, type SshConnector} from './pipeline/connector.ts';
-import {loggedChannel} from './pipeline/remote-log.ts';
 import type {PortChoice} from './pipeline/port-choice.ts';
 import {hostAlias} from './pipeline/host-settings.ts';
 import {

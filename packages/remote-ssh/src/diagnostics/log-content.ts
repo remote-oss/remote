@@ -1,23 +1,10 @@
 /**
  * @fileoverview The lines a resolve writes to the extension's log, as builders: what was resolved, the ports it ended
- * on, the ssh client search, the probed platform and the server's result. The connection token is masked wherever it
- * appears, and no answer is ever written.
+ * on, the ssh client search and the probed platform. No answer is ever written.
  */
 
 import path from 'node:path';
-import type {ProbedHost, ResultBlock} from 'lib-server';
-
-/** `token` with every digit changed to `1` and every ASCII letter to `a`. */
-export function maskOf(token: string): string {
-  return token.replace(/\d/g, '1').replace(/[A-Za-z]/g, 'a');
-}
-
-/** `text` with every occurrence of the connection token masked; the text as it is when there is no token. */
-export function masked(text: string, token: string | undefined): string {
-  return token === undefined || token === ''
-    ? text
-    : text.replaceAll(token, () => maskOf(token));
-}
+import type {ProbedHost} from 'lib-server';
 
 /** The line that opens a resolve: the authority, the attempt, and the word `reconnection` when it is one. */
 export function resolverLine(
@@ -108,29 +95,4 @@ export function loginShellLine(
   return host.loginShell === ''
     ? undefined
     : `the host's login shell is ${host.loginShell} (${path.posix.basename(host.loginShell)})`;
-}
-
-/**
- * The one line a parsed result block gives the log: its status, then the server's port, the host's system and
- * architecture, and the download and install times, each only when the block has it. No other fact is logged, so none
- * of the host's environment values reach the log.
- */
-export function serverResultLine(block: ResultBlock): string {
-  const parts = [
-    block.status,
-    ...(block.serverFacts.port === undefined
-      ? []
-      : [`port ${block.serverFacts.port}`]),
-    ...(block.hostFacts.os === undefined ? [] : [`os ${block.hostFacts.os}`]),
-    ...(block.hostFacts.arch === undefined
-      ? []
-      : [`architecture ${block.hostFacts.arch}`]),
-    ...(block.timings.download === undefined
-      ? []
-      : [`download ${String(block.timings.download)} ms`]),
-    ...(block.timings.install === undefined
-      ? []
-      : [`install ${String(block.timings.install)} ms`]),
-  ];
-  return `Server result: ${parts.join(', ')}`;
 }

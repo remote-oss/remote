@@ -1,5 +1,4 @@
 import {deepStrictEqual} from 'node:assert';
-import type {ResultBlock} from 'lib-server';
 import {
   bannerLine,
   checkingLine,
@@ -7,8 +6,6 @@ import {
   hostPlatformLine,
   loginShellLine,
   listeningLine,
-  masked,
-  maskOf,
   notValidLine,
   pathSettingLine,
   ptySettingLine,
@@ -16,7 +13,6 @@ import {
   resolvedLine,
   resolverLine,
   searchedLines,
-  serverResultLine,
   usingLine,
 } from '../../src/diagnostics/log-content.ts';
 
@@ -46,27 +42,6 @@ describe('the lines of a resolve and its ports (card connect-65)', () => {
     );
   });
 
-  it('F-2003 7.E6: the token is masked in every occurrence, as text, and an empty or absent token changes nothing', () => {
-    deepStrictEqual(
-      [
-        masked('ab12-cd34 and ab12-cd34', 'ab12-cd34'),
-        masked('x ab$&cd y', 'ab$&cd'),
-        masked('keep ab12-cd34', ''),
-        masked('keep ab12-cd34', undefined),
-        maskOf('ab12-cd34'),
-      ],
-      [
-        'aa11-aa11 and aa11-aa11',
-        'x aa$&aa y',
-        'keep ab12-cd34',
-        'keep ab12-cd34',
-        'aa11-aa11',
-      ],
-    );
-  });
-});
-
-describe('the lines of the client search and the probed platform (card connect-28)', () => {
   it('F-2101 §9: the setting is shown as JSON text', () => {
     deepStrictEqual(
       [pathSettingLine(''), pathSettingLine('/opt/a "b"/ssh')],
@@ -152,41 +127,5 @@ describe('the login shell in the log (card coverage-49)', () => {
 
   it('F-2704 BR-2: a host that reported no login shell gives no line', () => {
     deepStrictEqual(loginShellLine({loginShell: ''}), undefined);
-  });
-});
-
-describe('the server result and the progress in the log (card connect-67)', () => {
-  /** A parsed block with `facts`, as lib-server gives it. */
-  function parsedBlock(
-    facts: Partial<Pick<ResultBlock, 'hostFacts' | 'serverFacts' | 'timings'>>,
-  ): ResultBlock {
-    return {
-      status: 'Ok',
-      hostFacts: {},
-      serverFacts: {},
-      cliFacts: {},
-      timings: {},
-      ...facts,
-    };
-  }
-
-  it('F-2003 BR-6 item 8: the result is logged as one summary line from the parsed block', () => {
-    deepStrictEqual(
-      serverResultLine(
-        parsedBlock({
-          hostFacts: {os: 'linux', arch: 'x64', display: ':10'},
-          serverFacts: {port: '41234', token: 'secret'},
-          timings: {download: 1200, install: 800, start: 90},
-        }),
-      ),
-      'Server result: Ok, port 41234, os linux, architecture x64, download 1200 ms, install 800 ms',
-    );
-  });
-
-  it('F-2003 BR-14: the summary has only the parts the block has, and no other fact', () => {
-    deepStrictEqual(
-      serverResultLine(parsedBlock({hostFacts: {sshAuthSock: '/tmp/a'}})),
-      'Server result: Ok',
-    );
   });
 });

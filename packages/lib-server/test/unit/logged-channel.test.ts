@@ -1,7 +1,7 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
 import type {HostChannel, ScriptRequest} from 'lib-host';
 import {RecordingChannel} from 'lib-host/testing/recording-channel';
-import {loggedChannel} from '../../src/pipeline/remote-log.ts';
+import {loggedChannel} from '../../src/logging/logged-channel.ts';
 
 const TOKEN = 'tok3nValue42';
 

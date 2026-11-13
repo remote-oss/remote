@@ -206,3 +206,6 @@ export {
   watchedExecServer,
 } from './cli-control/exec-server.ts';
 export {type S045Event, s045EventOf} from './cli-control/progress.ts';
+export {loggedChannel} from './logging/logged-channel.ts';
+export {masked, maskOf} from './logging/mask.ts';
+export {serverResultLine} from './logging/result-line.ts';

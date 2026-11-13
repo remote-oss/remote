@@ -7,7 +7,7 @@
 
 import type {Logger} from 'lib-log';
 import {isTerminalPrompt, logLinesOf} from 'lib-ssh';
-import {masked} from '../diagnostics/log-content.ts';
+import {masked} from 'lib-server';
 
 /** One line for the log: the level it is written at, and its text. */
 export interface SshLogEntry {
