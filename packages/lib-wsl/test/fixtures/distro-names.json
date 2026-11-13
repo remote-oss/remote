@@ -1,0 +1,15 @@
+[
+  {"name": "", "valid": false},
+  {"name": "Ubuntu", "valid": true},
+  {"name": "Ubuntu-24.04", "valid": true},
+  {"name": "Ubuntu@ssh-remote+host", "valid": false},
+  {"name": "a/b", "valid": false},
+  {"name": "a\\b", "valid": false},
+  {"name": "a\tb", "valid": false},
+  {"name": "a\u0000b", "valid": false},
+  {"name": "a\u007fb", "valid": false},
+  {"name": "a\u0085b", "valid": false},
+  {"name": "Débian", "valid": true},
+  {"name": "日本", "valid": true},
+  {"name": "Ubuntu 24", "valid": true}
+]

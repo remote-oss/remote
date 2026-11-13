@@ -19,7 +19,14 @@ export {
   type InstallLine,
   sortOnlineCatalogue,
 } from './install.ts';
-export {multiDistroAllowed, windowsBuildFromRelease} from './windows-build.ts';
+export {validDistroName} from './distro-name.ts';
+export {
+  multiDistroAllowed,
+  pathTranslationAvailable,
+  shareHostFor,
+  type ShareHost,
+  windowsBuildFromRelease,
+} from './windows-build.ts';
 export {
   distroToShare,
   isWindowsMountShape,
@@ -27,6 +34,7 @@ export {
   parseWslpathOutput,
   shareToDistro,
   type ShareResult,
+  translatableWindowsPath,
   type WslpathResult,
 } from './share-path.ts';
 export {
