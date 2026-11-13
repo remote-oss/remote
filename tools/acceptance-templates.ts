@@ -453,9 +453,24 @@ export async function prepareRunTemplates(
     ]);
     const fetched = command('docker', fetchArguments);
     console.error(
-      `measure: docker ${fetchArguments.join(' ')} exited ${String(fetched.status)}, stdout ${String(fetched.stdout.length)} characters: ${JSON.stringify(fetched.stdout.slice(0, 300))}; stderr: ${JSON.stringify(fetched.stderr.slice(0, 600))}`,
+      `measure: attached run: exited ${String(fetched.status)}, stdout ${String(fetched.stdout.length)} characters, stderr ${JSON.stringify(fetched.stderr.slice(0, 200))}`,
     );
-    const manifest = checked(command, 'docker', fetchArguments);
+    const version = command('docker', ['run', '--rm', ORAS_IMAGE, 'version']);
+    console.error(
+      `measure: attached oras version: exited ${String(version.status)}, stdout ${JSON.stringify(version.stdout.slice(0, 200))}`,
+    );
+    const started = checked(command, 'docker', [
+      'run',
+      '-d',
+      ...fetchArguments.slice(2),
+    ]).trim();
+    const waited = command('docker', ['wait', started]);
+    const logs = command('docker', ['logs', started]);
+    command('docker', ['rm', started]);
+    console.error(
+      `measure: detached run ${started}: wait ${JSON.stringify(waited.stdout.trim())}, logs stdout ${String(logs.stdout.length)} characters: ${JSON.stringify(logs.stdout.slice(0, 200))}`,
+    );
+    const manifest = logs.stdout;
     const pushed = path.join(work, 'oras');
     mkdirSync(pushed, {recursive: true});
     writeFileSync(
