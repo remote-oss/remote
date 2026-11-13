@@ -76,9 +76,13 @@ async function footprintOf(window: string): Promise<Footprint> {
     toasts: await notifications(window),
     centre: await notificationCentre(window),
     logLines: connectionLog().length,
+    // Without SQLite's rollback journal of the editor's own state database: it exists only while a write is open, and
+    // is the editor's, not something the extension added.
     storage: readdirSync(
       path.join(variable('HARNESS_USER_DATA'), 'User', 'globalStorage'),
-    ).sort(),
+    )
+      .filter(name => !name.endsWith('-journal'))
+      .sort(),
     commands: await commandsOfEach(window),
     settings: await settingTitles(window),
     palette,
