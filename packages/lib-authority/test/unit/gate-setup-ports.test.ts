@@ -39,6 +39,7 @@ function surroundings(
     tunnels: Promise.resolve([]),
     onDidWriteTerminalData: () => ({dispose: () => undefined}),
     getCommands: () => Promise.resolve([]),
+    startTimer: () => () => undefined,
   };
   const editor: GateEditor = {
     probeApi,

@@ -30,12 +30,31 @@ export interface ProbeApi {
   onDidWriteTerminalData(listener: () => void): {dispose(): void};
   /** Lists the commands; the views of `contribViewsRemote` exist as `<view id>.focus` only with the grant. */
   getCommands(filterInternal: boolean): PromiseLike<string[]>;
+  /** Calls `callback` once after `milliseconds`; the returned function cancels it. */
+  startTimer(milliseconds: number, callback: () => void): () => void;
+}
+
+/**
+ * How `contribViewsRemote` is told: `withList` takes it as granted with `resolvers` or `tunnels`, because every route
+ * that enables proposals grants an extension's whole list; `byCommand` reads the focus commands of the views alone.
+ */
+export type ViewsProbe = 'byCommand' | 'withList';
+
+/** A wait for the first resolve of the window to settle, which never lasts past its bound. */
+export interface SettleWait {
+  resolveSettled(): PromiseLike<void>;
+  /** The longest the read waits for the settle, in milliseconds. */
+  boundMilliseconds: number;
 }
 
 /** The proposals to probe, and the ids of the remote views the extension contributes. */
 export interface ProbeRequest {
   proposals: readonly ProposalName[];
   viewIds: readonly string[];
+  /** How the views proposal is told; `withList` when absent. */
+  views?: ViewsProbe;
+  /** With `byCommand`, the wait for the first resolve before the commands are read; none reads them at once. */
+  settle?: SettleWait;
 }
 
 /** One probed proposal. */
@@ -55,13 +74,29 @@ function attempt(read: () => void): ProposalState {
   }
 }
 
+/** Resolves when the settle does, or when its bound passes, whichever comes first. */
+function settledWithin(editor: ProbeApi, settle: SettleWait): Promise<void> {
+  return new Promise<void>(resolve => {
+    const cancel = editor.startTimer(settle.boundMilliseconds, resolve);
+    function done(): void {
+      cancel();
+      resolve();
+    }
+    void Promise.resolve(settle.resolveSettled()).then(done, done);
+  });
+}
+
 /** The views of the extension exist as focus commands exactly when the proposal grants their placement. */
 async function probeViews(
   editor: ProbeApi,
   viewIds: readonly string[],
+  settle?: SettleWait,
 ): Promise<ProposalState> {
   if (viewIds.length === 0) {
     return 'unprobeable';
+  }
+  if (settle !== undefined) {
+    await settledWithin(editor, settle);
   }
   try {
     const commands = new Set(await editor.getCommands(true));
@@ -103,7 +138,8 @@ const CALL_PROBED: readonly ProposalName[] = ['resolvers', 'tunnels'];
  * Every route that enables proposals grants an extension's declared list as one unit, so `contribViewsRemote` is
  * granted when `resolvers` or `tunnels` is, without reading the commands: in a window that is connecting, the editor
  * registers the views only after the authority is resolved, which is after the resolver's activation. The commands
- * are read only for an extension with no granted member of its own to go by.
+ * are read only for an extension with no granted member of its own to go by. With `views: 'byCommand'` the commands
+ * alone decide, after the request's settle wait when it has one, whatever `resolvers` says.
  */
 export async function probeProposals(
   editor: ProbeApi,
@@ -113,9 +149,12 @@ export async function probeProposals(
     proposal,
     state: probeOne(editor, proposal),
   }));
-  const listGranted = probes.some(
-    probe => CALL_PROBED.includes(probe.proposal) && probe.state === 'granted',
-  );
+  const listGranted =
+    request.views !== 'byCommand' &&
+    probes.some(
+      probe =>
+        CALL_PROBED.includes(probe.proposal) && probe.state === 'granted',
+    );
   return Promise.all(
     probes.map(async probe =>
       probe.proposal === 'contribViewsRemote'
@@ -123,7 +162,7 @@ export async function probeProposals(
             proposal: probe.proposal,
             state: listGranted
               ? 'granted'
-              : await probeViews(editor, request.viewIds),
+              : await probeViews(editor, request.viewIds, request.settle),
           }
         : probe,
     ),

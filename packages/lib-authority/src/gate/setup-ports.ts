@@ -10,7 +10,13 @@ import type {
   SetupNotice,
   RestartAnswer,
 } from './setup.ts';
-import {type ProbeApi, type ProposalName, probeProposals} from './probe.ts';
+import {
+  type ProbeApi,
+  type ProposalName,
+  probeProposals,
+  type SettleWait,
+  type ViewsProbe,
+} from './probe.ts';
 import {
   argvPath,
   type ArgvLocation,
@@ -94,6 +100,10 @@ export interface GateIdentity {
   proposals: readonly ProposalName[];
   /** The ids of the remote views the extension contributes; their focus commands probe `contribViewsRemote`. */
   viewIds: readonly string[];
+  /** How `contribViewsRemote` is told; `withList` when absent. */
+  views?: ViewsProbe;
+  /** With `views: 'byCommand'`, the wait for the window's first resolve before the commands are read. */
+  settle?: SettleWait;
   /** Where the runtime arguments are; the data folder is looked up when the setup needs it, never at activation. */
   argv: Omit<ArgvLocation, 'dataFolderName'> & {
     dataFolderName(): PromiseLike<string>;
@@ -167,6 +177,8 @@ export function setupPortsOf(
       probeProposals(editor.probeApi, {
         proposals: identity.proposals,
         viewIds: identity.viewIds,
+        ...(identity.views === undefined ? {} : {views: identity.views}),
+        ...(identity.settle === undefined ? {} : {settle: identity.settle}),
       }),
     installedFamilyIds: async () =>
       installedFamilyIds(await editor.installed()),

@@ -35,6 +35,8 @@ export {
   type ProposalProbe,
   type ProposalState,
   probeProposals,
+  type SettleWait,
+  type ViewsProbe,
 } from './gate/probe.ts';
 export {probeApiOf} from './gate/vscode-api.ts';
 export {

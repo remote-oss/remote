@@ -4,6 +4,7 @@ import {
   probeProposals,
   type ProposalName,
   type ProposalState,
+  type SettleWait,
 } from '../../src/index.ts';
 
 const REFUSAL = new Error('Extension CANNOT use API proposal');
@@ -20,6 +21,8 @@ interface Editor {
 class FakeApi implements ProbeApi {
   reads: string[] = [];
   disposed = 0;
+  timers: Array<{milliseconds: number; callback: () => void; live: boolean}> =
+    [];
   private readonly editor: Editor;
 
   constructor(editor: Partial<Editor> = {}) {
@@ -54,6 +57,24 @@ class FakeApi implements ProbeApi {
         this.disposed += 1;
       },
     };
+  }
+
+  startTimer(milliseconds: number, callback: () => void): () => void {
+    const timer = {milliseconds, callback, live: true};
+    this.timers.push(timer);
+    return () => {
+      timer.live = false;
+    };
+  }
+
+  /** Runs the timers that are still live, as if their time had passed. */
+  fireTimers(): void {
+    for (const timer of this.timers) {
+      if (timer.live) {
+        timer.live = false;
+        timer.callback();
+      }
+    }
   }
 
   getCommands(): PromiseLike<string[]> {
@@ -197,6 +218,105 @@ describe('probing the proposals of the editor (F-1403)', () => {
         await stateOf(alone, 'contribViewsRemote', ['one']),
       ],
       [['missing', 'missing', 'missing'], true, 'granted'],
+    );
+  });
+
+  /** The state of `contribViewsRemote` read by command, for an editor holding `commands`. */
+  async function byCommandState(
+    editor: FakeApi,
+    settle?: SettleWait,
+    proposals: readonly ProposalName[] = ['resolvers', 'contribViewsRemote'],
+  ): Promise<ProposalState | undefined> {
+    const probes = await probeProposals(editor, {
+      proposals,
+      viewIds: ['one'],
+      views: 'byCommand',
+      ...(settle === undefined ? {} : {settle}),
+    });
+    return probes.find(probe => probe.proposal === 'contribViewsRemote')?.state;
+  }
+
+  it('wsl-09: by command, contribViewsRemote is granted with the focus command and resolvers granted', async () => {
+    const editor = new FakeApi({commands: ['one.focus']});
+    deepStrictEqual(await byCommandState(editor), 'granted');
+  });
+
+  it('wsl-09: by command, contribViewsRemote is missing without the focus command although resolvers is granted', async () => {
+    const editor = new FakeApi({commands: []});
+    deepStrictEqual(await byCommandState(editor), 'missing');
+  });
+
+  it('wsl-09: by command, contribViewsRemote is granted with the focus command although resolvers is missing', async () => {
+    const editor = new FakeApi({
+      guarded: new Set(['resolvers']),
+      commands: ['one.focus'],
+    });
+    deepStrictEqual(await byCommandState(editor), 'granted');
+  });
+
+  it('wsl-09: by list, the same request is granted with resolvers whatever the commands hold', async () => {
+    const editor = new FakeApi({commands: []});
+    const probes = await probeProposals(editor, {
+      proposals: ['resolvers', 'contribViewsRemote'],
+      viewIds: ['one'],
+      views: 'withList',
+    });
+    deepStrictEqual(
+      probes.map(probe => probe.state),
+      ['granted', 'granted'],
+    );
+  });
+
+  it('wsl-09: by command with no settle wait, the commands are read at once', async () => {
+    const editor = new FakeApi({commands: ['one.focus']});
+    await byCommandState(editor);
+    deepStrictEqual(editor.timers.length, 0);
+  });
+
+  it('wsl-09: by command, the commands are read after the first resolve settles, and the bound timer is cancelled', async () => {
+    const editor = new FakeApi({commands: ['one.focus']});
+    let settled = (): void => undefined;
+    const waiting = byCommandState(editor, {
+      resolveSettled: () =>
+        new Promise<void>(resolve => {
+          settled = resolve;
+        }),
+      boundMilliseconds: 120_000,
+    });
+    await Promise.resolve();
+    const before = editor.reads.includes('getCommands');
+    settled();
+    const state = await waiting;
+    deepStrictEqual(
+      [
+        before,
+        state,
+        editor.timers.map(timer => [timer.milliseconds, timer.live]),
+      ],
+      [false, 'granted', [[120_000, false]]],
+    );
+  });
+
+  it('wsl-09: by command, the commands are read at the bound when the resolve never settles', async () => {
+    const editor = new FakeApi({commands: ['one.focus']});
+    const waiting = byCommandState(editor, {
+      resolveSettled: () => new Promise<void>(() => undefined),
+      boundMilliseconds: 120_000,
+    });
+    await Promise.resolve();
+    const before = editor.reads.includes('getCommands');
+    editor.fireTimers();
+    deepStrictEqual([before, await waiting], [false, 'granted']);
+  });
+
+  it('wsl-09: by command, a resolve whose settle fails does not stop the read', async () => {
+    const editor = new FakeApi({commands: ['one.focus']});
+    deepStrictEqual(
+      await byCommandState(editor, {
+        resolveSettled: () => Promise.reject(new Error('the resolve broke')),
+        boundMilliseconds: 120_000,
+      }),
+      'granted',
     );
   });
 

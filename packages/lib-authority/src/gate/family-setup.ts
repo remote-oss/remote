@@ -5,7 +5,7 @@
 
 import {readFile} from 'node:fs/promises';
 import type * as vscode from 'vscode';
-import type {ProposalName} from './probe.ts';
+import type {ProposalName, SettleWait, ViewsProbe} from './probe.ts';
 import {
   type GateNotices,
   type SetupTexts,
@@ -20,6 +20,10 @@ export interface FamilySetupOptions {
   proposals: readonly ProposalName[];
   /** The ids of the remote views the extension contributes. */
   viewIds: readonly string[];
+  /** How `contribViewsRemote` is told; `withList` when absent. */
+  views?: ViewsProbe;
+  /** With `views: 'byCommand'`, the wait for the window's first resolve before the commands are read. */
+  settle?: SettleWait;
   /** The extension's own English templates, which `translate` turns into the display language. */
   templates: SetupTexts;
   /** A template in the display language: the extension's `vscode.l10n.t`. */
@@ -78,6 +82,8 @@ export function familySetupPortsOf(
       applicationName: editor.env.appName,
       proposals: options.proposals,
       viewIds: options.viewIds,
+      ...(options.views === undefined ? {} : {views: options.views}),
+      ...(options.settle === undefined ? {} : {settle: options.settle}),
       argv: {
         portableFolder: process.env.VSCODE_PORTABLE,
         homeFolder: options.homeFolder,

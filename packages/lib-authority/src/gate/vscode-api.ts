@@ -18,5 +18,11 @@ export function probeApiOf(editor: typeof vscode): ProbeApi {
     onDidWriteTerminalData: listener =>
       editor.window.onDidWriteTerminalData(listener),
     getCommands: filterInternal => editor.commands.getCommands(filterInternal),
+    startTimer: (milliseconds, callback) => {
+      const timer = setTimeout(callback, milliseconds);
+      return () => {
+        clearTimeout(timer);
+      };
+    },
   };
 }
