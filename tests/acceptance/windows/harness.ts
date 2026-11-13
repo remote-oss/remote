@@ -42,6 +42,7 @@ import {
   signalFile,
   type AppendedEntry,
 } from '../../../tools/script-file.ts';
+import {editorFolderOf} from './editor-folder.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -1157,7 +1158,7 @@ export async function devContainersOf(folder: string): Promise<string[]> {
     '--all',
     '--quiet',
     '--filter',
-    `label=devcontainer.local_folder=${folder}`,
+    `label=devcontainer.local_folder=${editorFolderOf(folder)}`,
     '--filter',
     `label=remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
   ]);

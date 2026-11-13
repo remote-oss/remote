@@ -14,6 +14,7 @@
     "../prettier.config.ts",
     "../tests/acceptance/window-agent/src/window-name.ts",
     "../tests/acceptance/window-agent/src/terminal-selection.ts",
+    "../tests/acceptance/windows/editor-folder.ts",
     "../tests/acceptance/windows/quick-pick-reads.ts"
   ],
   "exclude": ["**/fixtures"]
