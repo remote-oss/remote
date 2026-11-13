@@ -5,12 +5,14 @@ import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
   inWindow,
+  onHostAs,
   readUserSettings,
   restoreUserSettings,
   startInWindow,
   userSettings,
   variable,
   waitFor,
+  windowState,
 } from '../windows/harness.ts';
 import {closePick, pickShown} from '../windows/explorer-home.ts';
 import {
@@ -20,6 +22,7 @@ import {
   extensionsViewSections,
   languageModeOf,
   lineTokensOf,
+  notifications,
   suggestionsOf,
   typeInFocus,
 } from '../windows/renderer.ts';
@@ -162,5 +165,51 @@ describe('the extension and both companions enabled (card #2499)', function () {
         ['Connect to Host...', 'Connect Current Window to Host...'],
       ],
     );
+  });
+
+  it('F-2007 (c2499-measure-ssh): the SSH window on the home folder, its state and what a file call does', async () => {
+    const found: Record<string, unknown> = {};
+    try {
+      void inWindow(
+        'local',
+        'acceptance.agent.openWindow',
+        'vscode-remote://ssh-remote+harness/home/harness',
+      );
+      await waitFor(
+        'the SSH window to connect',
+        async () => (await windowState('harness')).remoteAuthority !== null,
+        120_000,
+      );
+      await new Promise(resolve => setTimeout(resolve, 20_000));
+      found.state = await windowState('harness');
+      found.notifications = await notifications('harness');
+      await inWindow(
+        'harness',
+        'acceptance.agent.writeFile',
+        'pack-probe.txt',
+        'x',
+      ).catch((caught: unknown) => {
+        found.writeFailure = String(caught);
+      });
+      found.onHost = await onHostAs(
+        'harness',
+        'sh',
+        '-c',
+        'cat /home/harness/pack-probe.txt',
+      ).catch((caught: unknown) => String(caught));
+      await inWindow(
+        'harness',
+        'acceptance.agent.openFile',
+        '.ssh/config',
+      ).catch((caught: unknown) => {
+        found.openFailure = String(caught);
+      });
+      found.mode = await languageModeOf('harness');
+    } catch (caught) {
+      found.failure = String(caught);
+    } finally {
+      await closeWindow('harness').catch(() => undefined);
+    }
+    throw new Error(`MEASURED ${JSON.stringify(found)}`);
   });
 });
