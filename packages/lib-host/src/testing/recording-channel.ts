@@ -15,6 +15,7 @@ import {
   type ScriptInput,
   type ScriptOutcome,
   type ScriptRequest,
+  type ScriptStream,
 } from '../host-channel.ts';
 
 /** An answer that ends in a failure of any kind. */
@@ -32,13 +33,21 @@ interface HeldEnding {
 export type ScriptEnding =
   {kind: 'exit'; status: number} | FailingEnding | HeldEnding;
 
+/** An output line of a scripted answer, with the stream it came from. */
+export interface TaggedLine {
+  text: string;
+  stream: ScriptStream;
+}
+
 /** A scripted answer to one `runScript` call. */
 export interface ScriptAnswer {
   interpreter: Interpreter;
   /** Whether this answer is for the given script text. */
   matches: (script: string) => boolean;
-  /** The output lines in order, given as such or computed from the bytes the script read on its input. */
-  lines: readonly string[] | ((input: Uint8Array) => readonly string[]);
+  /** The output lines in order, given as such or computed from the bytes the script read on its input; a tagged one is delivered with its stream. */
+  lines:
+    | ReadonlyArray<string | TaggedLine>
+    | ((input: Uint8Array) => ReadonlyArray<string | TaggedLine>);
   ending: ScriptEnding;
 }
 
@@ -129,7 +138,7 @@ export class RecordingChannel implements HostChannel {
   /** Records the call, delivers the first fitting answer's lines and ends as that answer says. */
   async runScript(
     request: ScriptRequest,
-    onLine: (line: string) => void,
+    onLine: (line: string, stream?: ScriptStream) => void,
   ): Promise<ScriptOutcome> {
     this.calls.push({operation: 'runScript', request});
     if (request.cancellation.aborted) {
@@ -149,7 +158,11 @@ export class RecordingChannel implements HostChannel {
     const lines =
       typeof answer.lines === 'function' ? answer.lines(input) : answer.lines;
     for (const line of lines) {
-      onLine(line);
+      if (typeof line === 'string') {
+        onLine(line);
+      } else {
+        onLine(line.text, line.stream);
+      }
     }
     const {ending} = answer;
     switch (ending.kind) {

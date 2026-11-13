@@ -85,6 +85,9 @@ export type ScriptOutcome = ScriptExited | OperationFailed;
 /** How a `copyToHost` call ended. */
 export type CopyOutcome = FileCopied | OperationFailed;
 
+/** The stream of a script's output a line came from, for a transport that keeps its two streams apart. */
+export type ScriptStream = 'stdout' | 'stderr';
+
 /**
  * The narrow interface between the server lifecycle and a transport. A channel never interprets a script's
  * output and never retries an operation by itself.
@@ -92,11 +95,11 @@ export type CopyOutcome = FileCopied | OperationFailed;
 export interface HostChannel {
   /**
    * Runs a script. `onLine` receives each output line in the order the script wrote it, all of them before the
-   * outcome settles.
+   * outcome settles, with the stream it came from when the transport tells the two apart.
    */
   runScript(
     request: ScriptRequest,
-    onLine: (line: string) => void,
+    onLine: (line: string, stream?: ScriptStream) => void,
   ): Promise<ScriptOutcome>;
 
   /** Places a local file at a path on the remote side. */

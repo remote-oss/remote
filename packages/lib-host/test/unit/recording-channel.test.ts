@@ -36,6 +36,28 @@ function probeAnswer(status: number): ScriptAnswer {
   };
 }
 
+/** What a caller's `onLine` was called with for the answer `lines`, one entry per call. */
+async function deliveredFor(
+  lines: ScriptAnswer['lines'],
+): Promise<unknown[][]> {
+  const answer: ScriptAnswer = {
+    interpreter: 'posixShell',
+    matches: script => script === PROBE,
+    lines,
+    ending: {kind: 'exit', status: 0},
+  };
+  const channel = new RecordingChannel({
+    identity: 'host',
+    platformHint: 'linux',
+    scripts: [answer],
+  });
+  const delivered: unknown[][] = [];
+  await channel.runScript(scriptRequest(PROBE), (...received) => {
+    delivered.push(received);
+  });
+  return delivered;
+}
+
 async function linesAndOutcome(
   channel: RecordingChannel,
   request: ScriptRequest,
@@ -373,5 +395,22 @@ describe('recording channel (lib-host fake)', () => {
       kind: 'copied',
     });
     await new Promise(resolve => setTimeout(resolve, 10));
+  });
+  it('wsl-10: a tagged line reaches the caller with its stream, and a plain one with none', async () => {
+    deepStrictEqual(
+      await deliveredFor([
+        'plain',
+        {text: 'out', stream: 'stdout'},
+        {text: 'err', stream: 'stderr'},
+      ]),
+      [['plain'], ['out', 'stdout'], ['err', 'stderr']],
+    );
+  });
+
+  it('wsl-10: lines computed from the input may be tagged too', async () => {
+    deepStrictEqual(
+      await deliveredFor(() => [{text: 'err', stream: 'stderr'}]),
+      [['err', 'stderr']],
+    );
   });
 });

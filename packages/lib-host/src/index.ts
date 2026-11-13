@@ -23,4 +23,5 @@ export {
   type ScriptInput,
   type ScriptOutcome,
   type ScriptRequest,
+  type ScriptStream,
 } from './host-channel.ts';
