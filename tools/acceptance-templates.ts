@@ -443,11 +443,17 @@ export async function prepareRunTemplates(
   );
   for (const name of UNLISTED_TEMPLATES) {
     const reference = `${registry}/${CUSTOM_NAMESPACE}/${name}:latest`;
-    const manifest = checked(
-      command,
-      'docker',
-      orasArguments(['manifest', 'fetch', '--plain-http', reference]),
+    const fetchArguments = orasArguments([
+      'manifest',
+      'fetch',
+      '--plain-http',
+      reference,
+    ]);
+    const fetched = command('docker', fetchArguments);
+    console.error(
+      `measure: docker ${fetchArguments.join(' ')} exited ${String(fetched.status)}, stdout ${String(fetched.stdout.length)} characters: ${JSON.stringify(fetched.stdout.slice(0, 300))}; stderr: ${JSON.stringify(fetched.stderr.slice(0, 600))}`,
     );
+    const manifest = checked(command, 'docker', fetchArguments);
     const pushed = path.join(work, 'oras');
     mkdirSync(pushed, {recursive: true});
     writeFileSync(
