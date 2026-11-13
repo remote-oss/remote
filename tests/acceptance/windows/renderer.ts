@@ -357,7 +357,7 @@ export async function pageOf(
       if (
         remembered !== undefined &&
         isOpen(name) &&
-        titlesOfName(name, titles).length === 1
+        titlesOfName(name, titles).length < 2
       ) {
         return remembered.webSocketDebuggerUrl;
       }
