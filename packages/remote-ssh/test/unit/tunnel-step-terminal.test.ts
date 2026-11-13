@@ -364,6 +364,29 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     deepStrictEqual([logins.length, questions], [0, []]);
   });
 
+  it('#2457, reading-2457-echo-line: an answer typed at a recognised prompt of the SSH Tunnel terminal is not in the log, shown or hidden, and the next line is', async () => {
+    for (const reveal of [true, false]) {
+      const {open, opened, sink} = stepWith({reveal});
+      void open();
+      await settled();
+      opened().write(
+        'Are you sure you want to continue connecting (yes/no/[fingerprint])? yes\r\n',
+      );
+      opened().write("alex@dev's password: \r\nWarning: Permanently added h\n");
+      await settled();
+      deepStrictEqual(
+        sink.lines
+          .map(line => line.message)
+          .filter(message => message.startsWith('[ssh] ')),
+        [
+          '[ssh] Are you sure you want to continue connecting (yes/no/[fingerprint])? [answer not logged]',
+          "[ssh] alex@dev's password: [answer not logged]",
+          '[ssh] Warning: Permanently added h',
+        ],
+      );
+    }
+  });
+
   it('F-2003 BR-8: every line of the SSH Tunnel terminal is logged as ssh’s, including a refused channel', async () => {
     const {open, opened, sink} = stepWith();
     void open();

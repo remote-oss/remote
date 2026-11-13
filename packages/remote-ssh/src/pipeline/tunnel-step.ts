@@ -40,7 +40,7 @@ import {
 import {isAborted, portOf} from './connect.ts';
 import {clientRefusal, ofClassification} from './failure.ts';
 import {busyRangeReason, type PortChoice} from './port-choice.ts';
-import {logSshLines} from './ssh-log.ts';
+import {logSshLines, withoutAnswer} from './ssh-log.ts';
 import type {
   ConnectInput,
   ConnectionLease,
@@ -294,7 +294,7 @@ async function openTerminalTunnel(
   });
   // The tunnel's terminal holds nothing but ssh, so all of its lines are ssh's own.
   const sshOutput = new LineSplitter(line => {
-    logSshLines(dependencies.logger, [line], undefined);
+    logSshLines(dependencies.logger, [withoutAnswer(line)], undefined);
     const refusal = clientRefusal(line);
     if (refusal !== undefined) {
       refuse?.(refusal);
