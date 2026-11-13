@@ -41,6 +41,7 @@ import {
   runArgumentsOf,
   type CommandResult,
   FAILURE_LOG_LINES,
+  HOST_STATE_COMMAND,
   failureReport,
   failureText,
   FORWARD_ALIASES,
@@ -2548,12 +2549,10 @@ describe('acceptance', () => {
             'acceptance: launch remote',
             'acceptance: remote failed: the last 1 of the 1 lines of remote-log.txt',
             '  resolve: ssh exited 255',
-            "acceptance: remote failed: its host's listeners and processes",
+            "acceptance: remote failed: its host's listeners, processes and server install folders",
             "acceptance: remote failed: the last lines of its host's sshd log",
           ],
-          [
-            'docker exec host-1 sh -c netstat -ltn 2>&1; ps -o pid,user,args 2>&1',
-          ],
+          [`docker exec host-1 sh -c ${HOST_STATE_COMMAND}`],
         ],
       );
     });
@@ -2587,7 +2586,7 @@ describe('acceptance', () => {
           [
             'acceptance: long failed: the last 1 of the 1 lines of long-containers-log.txt',
             '  built',
-            "acceptance: long failed: its host's listeners and processes",
+            "acceptance: long failed: its host's listeners, processes and server install folders",
             '  (exit 1)',
             '  no such container',
           ],
