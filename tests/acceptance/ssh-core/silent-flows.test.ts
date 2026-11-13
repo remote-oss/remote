@@ -147,8 +147,15 @@ describe('the extension in the core flows of an SSH window (card connect-125)', 
         // What the window shows when the wait ends tells a program that did not start (a pick, a dialog) from one whose
         // output did not reach the console.
         const shown = await pageText(folder).catch(() => '(unreadable)');
+        // Then the Debug Console is asked for, so that a program that ran while another panel was shown reads
+        // differently from a session that never started.
+        await startInWindow(folder, 'workbench.debug.action.toggleRepl').catch(
+          () => undefined,
+        );
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        const revealed = await pageText(folder).catch(() => '(unreadable)');
         throw new Error(
-          `${String(caught)}; the window shows (its last 1500 characters): ${JSON.stringify(shown.slice(-1500))}`,
+          `${String(caught)}; the window shows (its last 1500 characters): ${JSON.stringify(shown.slice(-1500))}; after Debug Console was asked for, the program's line is ${revealed.includes(`c125-ran-on-${host}`) ? 'there' : 'not there'} and the window shows (its last 600 characters): ${JSON.stringify(revealed.slice(-600))}`,
           {cause: caught},
         );
       });
