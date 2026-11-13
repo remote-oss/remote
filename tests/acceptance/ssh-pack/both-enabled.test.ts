@@ -4,6 +4,7 @@ import path from 'node:path';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
+  connectedWithin,
   inWindow,
   onHostAs,
   readUserSettings,
@@ -175,12 +176,8 @@ describe('the extension and both companions enabled (card #2499)', function () {
         'acceptance.agent.openWindow',
         'vscode-remote://ssh-remote+harness/home/harness',
       );
-      await waitFor(
-        'the SSH window to connect',
-        async () => (await windowState('harness')).remoteAuthority !== null,
-        120_000,
-      );
-      await new Promise(resolve => setTimeout(resolve, 20_000));
+      await connectedWithin('harness', 120_000);
+      await new Promise(resolve => setTimeout(resolve, 5000));
       found.state = await windowState('harness');
       found.notifications = await notifications('harness');
       await inWindow(
