@@ -459,18 +459,7 @@ export async function prepareRunTemplates(
     console.error(
       `measure: attached oras version: exited ${String(version.status)}, stdout ${JSON.stringify(version.stdout.slice(0, 200))}`,
     );
-    const started = checked(command, 'docker', [
-      'run',
-      '-d',
-      ...fetchArguments.slice(2),
-    ]).trim();
-    const waited = command('docker', ['wait', started]);
-    const logs = command('docker', ['logs', started]);
-    command('docker', ['rm', started]);
-    console.error(
-      `measure: detached run ${started}: wait ${JSON.stringify(waited.stdout.trim())}, logs stdout ${String(logs.stdout.length)} characters: ${JSON.stringify(logs.stdout.slice(0, 200))}`,
-    );
-    const manifest = logs.stdout;
+    const manifest = fetched.stdout;
     const pushed = path.join(work, 'oras');
     mkdirSync(pushed, {recursive: true});
     writeFileSync(
