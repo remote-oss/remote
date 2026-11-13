@@ -151,14 +151,5 @@
     "owner": "daedalus",
     "evidence": 43369951852,
     "added": "2026-11-13"
-  },
-  {
-    "launch": "explorer-folders",
-    "file": "explorer-folders/commands.test.ts",
-    "title": "F-5002 AC-6, AC-11, AC-16 (keys-plain): a key bound to each command with no argument changes no window, title, indicator, file or history row, shows no dialog, leaves the window usable and adds no state key of the extension",
-    "card": 2477,
-    "owner": "themis",
-    "evidence": 43392313193,
-    "added": "2026-11-13"
   }
 ]
