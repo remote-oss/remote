@@ -139,4 +139,21 @@ describe('ssh’s lines in the log (card connect-66)', () => {
       ],
     );
   });
+
+  it('#2457: only the start of a line is searched for a prompt: one inside the limit is found in a long line, one that ends past it is left as it is', () => {
+    const padding = 'x'.repeat(2000);
+    const prompt = 'Verification code:';
+    deepStrictEqual(
+      [
+        withoutAnswer(`${prompt} ${padding}`),
+        withoutAnswer(`${padding}${prompt} 123456`),
+        withoutAnswer(':'.repeat(5000)),
+      ],
+      [
+        `${prompt} [answer not logged]`,
+        `${padding}${prompt} 123456`,
+        ':'.repeat(5000),
+      ],
+    );
+  });
 });
