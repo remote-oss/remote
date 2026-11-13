@@ -601,16 +601,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
-        [
-          'ssh-pack',
-          [
-            'remote-oss.remote-ssh',
-            'remote-oss.remote-ssh-edit',
-            'remote-oss.remote-explorer',
-          ],
-          true,
-          undefined,
-        ],
+        ['ssh-pack', ['remote-oss.remote-explorer'], true, undefined],
         ...['extensionpack-lp-de', 'extensionpack-lp-hu'].map(label => [
           label,
           [

@@ -166,7 +166,6 @@ export interface FailureCase {
 /** The extensions only some launches install, by id, with their package names, the ones their VSIX files carry. */
 export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
   ['remote-oss.remote-explorer', 'remote-explorer'],
-  ['remote-oss.remote-ssh-edit', 'remote-ssh-edit'],
   ['remote-oss.remote-containers', 'remote-containers'],
   ['remote-oss.vscode-remote-extensionpack', 'vscode-remote-extensionpack'],
 ]);
@@ -1518,18 +1517,14 @@ export function launchesOf(root: string): Launch[] {
       withExtensions: ['remote-oss.vscode-remote-extensionpack'],
       environment: UNREACHABLE_GALLERY,
     },
-    // Remote - SSH with its two companions beside it, and the stand-in gallery the rows start for core to install from.
+    // Remote - SSH and its two companions (the edit companion is among the run's own VSIX files), and the stand-in gallery the rows start for core to install from.
     {
       ...RENDERER_LAUNCH,
       label: 'ssh-pack',
       suite: 'ssh-pack',
       partOf: 'ssh-pack',
       files: ['pack-install.test.ts'],
-      withExtensions: [
-        'remote-oss.remote-ssh',
-        'remote-oss.remote-ssh-edit',
-        'remote-oss.remote-explorer',
-      ],
+      withExtensions: ['remote-oss.remote-explorer'],
       settings: {
         'window.title': '[${rootName}]${remoteName}',
         'window.dialogStyle': 'custom',
