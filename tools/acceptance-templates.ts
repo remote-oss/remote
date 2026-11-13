@@ -374,6 +374,8 @@ export async function prepareRunTemplates(
       'the run dev container image is missing, and the mini and no-metadata-lab templates name it',
     );
   }
+  // measure (#2505): the image is local before the first run of it, so no run of it pulls
+  checked(command, 'docker', ['pull', ORAS_IMAGE]);
   const registry = templateRegistryOf(registryAddress);
   const work = runTemplatesFolder(runFolder);
   const mirrorSources = path.join(work, 'mirror', 'src');
