@@ -1,129 +1,59 @@
-# The acceptance suite with a Windows and a macOS client, on GitHub's hosted runners. On a schedule and by dispatch only,
-# never on a pull request, so no fork's code reaches a hosted runner from here, and with no secret.
-#
-# - windows-2025: the Windows client. WSL2 gives the Linux side: an Ubuntu 24.04 distro whose Docker engine runs the
-#   SSH hosts and the dev containers, reached from Windows over WSL2's localhost forwarding (the Windows engine of the
-#   image runs Windows containers only). VSCodium answers on its debugging port there.
-# - macos-15-intel: the macOS client, with colima's Docker for linux/x86_64 (about 10 minutes to start).
-#
-# Each job runs `node tools/acceptance.ts --editor vscodium` for its launch list and leaves the run's summary in the job
-# summary. The run folder holds keys, so it is never uploaded.
+# A measurement for card #2365 (pkg-1, the presence bound of R-79), by dispatch on this branch only: how long
+# `wsl.exe --status` and `wsl.exe --list --verbose` take on GitHub's windows-2025 runner, cold and warm. No product code
+# runs here, and no secret.
 name: platform
 
 on:
-  schedule:
-    - cron: '41 3 * * *'
   workflow_dispatch:
-    inputs:
-      windows-launches:
-        description: The launches of the Windows job, joined by commas; none skips the job
-        type: string
-        default: containers-a,containers-b,containers-trust,local,remote
-      macos-launches:
-        description: The launches of the macOS job, joined by commas; none skips the job
-        type: string
-        default: containers-a,containers-b,containers-trust,local,remote
 
 permissions:
   contents: read
 
 jobs:
-  windows:
-    if: github.event_name == 'schedule' || inputs.windows-launches != 'none'
+  windows-2025:
     runs-on: windows-2025
-    timeout-minutes: 240
-    concurrency:
-      group: platform-windows-${{ github.ref }}
-      cancel-in-progress: false
+    timeout-minutes: 60
     defaults:
       run:
         shell: pwsh
-    env:
-      LAUNCHES: ${{ inputs.windows-launches || 'containers-a,containers-b,containers-trust,local,remote' }}
-      WSL_UTF8: '1'
     steps:
-      # the host images and their scripts are built in the WSL engine from this checkout, so they keep the repository's
-      # LF line ends: a CRLF shell script would end the host's entrypoint at once
-      - run: git config --global core.autocrlf false
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: The Linux side, an Ubuntu distro in WSL2 with its own Docker engine
+      - name: The timing function
+        run: |
+          @'
+          function Timed([string] $label, [string[]] $arguments) {
+            $out = New-TemporaryFile; $err = New-TemporaryFile
+            $watch = [Diagnostics.Stopwatch]::StartNew()
+            $process = Start-Process -FilePath wsl.exe -ArgumentList $arguments -NoNewWindow -Wait -PassThru `
+              -RedirectStandardOutput $out -RedirectStandardError $err
+            $watch.Stop()
+            "TIMED | $label | wsl.exe $($arguments -join ' ') | exit $($process.ExitCode) | $($watch.ElapsedMilliseconds) ms"
+          }
+          function Pair([string] $label) {
+            Timed $label @('--status')
+            Timed $label @('--list', '--verbose')
+          }
+          '@ | Set-Content "$env:RUNNER_TEMP\timed.ps1"
+      - name: The first pair, WSL not yet started and no distro registered
+        run: |
+          . "$env:RUNNER_TEMP\timed.ps1"
+          Pair 'first, no distro'
+      - name: Ubuntu 24.04 installed and started once
         timeout-minutes: 30
         run: |
           wsl --install Ubuntu-24.04 --no-launch --web-download
-          wsl -d Ubuntu-24.04 -u root -- sh -c 'apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io docker-buildx 2>&1 | tail -2'
-          # the packaged service (Ubuntu under WSL runs systemd), with a TCP listener on the distro's loopback only: the
-          # Docker API is unauthenticated and root there, and WSL2's localhost forwarding carries it to Windows' 127.0.0.1
-          wsl -d Ubuntu-24.04 -u root -- sh -c 'mkdir -p /etc/systemd/system/docker.service.d && printf "[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock\n" > /etc/systemd/system/docker.service.d/tcp.conf && systemctl daemon-reload && systemctl restart docker && systemctl is-active docker'
-          # a wsl.exe that stays, so the distro and its engine outlive this step
-          Start-Process wsl.exe -WindowStyle Hidden -ArgumentList '-d', 'Ubuntu-24.04', '--', 'sleep', 'infinity'
-          $up = $false
-          for ($i = 0; $i -lt 60 -and -not $up; $i++) {
-            Start-Sleep 2
-            docker -H tcp://127.0.0.1:2375 version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}' 2>$null
-            $up = $LASTEXITCODE -eq 0
+          wsl -d Ubuntu-24.04 -u root -- true
+          "exit $LASTEXITCODE"
+      - name: Ten cold pairs, each after wsl --shutdown, each pair in fresh processes
+        run: |
+          . "$env:RUNNER_TEMP\timed.ps1"
+          for ($i = 1; $i -le 10; $i++) {
+            wsl.exe --shutdown
+            Start-Sleep -Seconds 2
+            Pair "cold $i"
           }
-          if (-not $up) { wsl -d Ubuntu-24.04 -u root -- sh -c 'systemctl status docker --no-pager | tail -15'; exit 1 }
-          "DOCKER_HOST=tcp://127.0.0.1:2375" >> $env:GITHUB_ENV
-      # the image's Docker CLI has no buildx plugin, and the harness builds its images with `docker build --load`
-      - name: Docker's buildx plugin for the Windows CLI
+      - name: Ten warm pairs, with the distro running, for comparison
         run: |
-          $plugins = Join-Path $env:USERPROFILE '.docker\cli-plugins'
-          New-Item -ItemType Directory -Force $plugins | Out-Null
-          $exe = Join-Path $plugins 'docker-buildx.exe'
-          Invoke-WebRequest 'https://github.com/docker/buildx/releases/download/v0.38.0/buildx-v0.38.0.windows-amd64.exe' -OutFile $exe
-          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
-          if ($hash -ne 'b39784aed5b3f9b24d1971bbcbad8c8206033fa63ed4fea82c9141728fe0ea26') { "docker-buildx.exe has sha256 $hash, not its pin"; exit 1 }
-          docker buildx version
-      # the run's download host listens on the Windows side's WSL adapter, where the distro's containers reach it: inbound
-      # to Node on that adapter only
-      - name: The download host is reached from the WSL distro
-        run: New-NetFirewallRule -DisplayName 'acceptance download host from WSL' -Direction Inbound -Program (Get-Command node).Source -InterfaceAlias 'vEthernet (WSL*)' -Action Allow | Out-Null
-      # The image's OpenSSH for Windows, whose agent is a service on a named pipe (disabled until a job starts it); the
-      # run's keys go into it and the run takes them out again.
-      - name: The OpenSSH client and its agent service
-        run: |
-          Get-Command ssh, ssh-keygen, ssh-agent, ssh-add, env -All -ErrorAction SilentlyContinue | Format-Table -AutoSize Name, Source
-          ssh -V
-          Set-Service ssh-agent -StartupType Manual
-          Start-Service ssh-agent
-          Get-Service ssh-agent | Format-Table -AutoSize Name, Status, StartType
-      - name: The launches
-        run: pnpm test:acceptance:vscodium --launches $env:LAUNCHES
-      - if: always()
-        run: pnpm acceptance:clean
-
-  macos:
-    if: github.event_name == 'schedule' || inputs.macos-launches != 'none'
-    runs-on: macos-15-intel
-    timeout-minutes: 240
-    concurrency:
-      group: platform-macos-${{ github.ref }}
-      cancel-in-progress: false
-    env:
-      LAUNCHES: ${{ inputs.macos-launches || 'containers-a,containers-b,containers-trust,local,remote' }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Docker for linux/x86_64 through colima
-        timeout-minutes: 25
-        run: |
-          brew install colima docker docker-buildx >/dev/null
-          mkdir -p ~/.docker && printf '{"cliPluginsExtraDirs": ["%s/lib/docker/cli-plugins"]}\n' "$(brew --prefix)" > ~/.docker/config.json
-          colima start --cpu 3 --memory 8
-          docker version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}'
-          docker buildx version
-      - name: The launches
-        run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
-      - if: always()
-        run: pnpm acceptance:clean
+          . "$env:RUNNER_TEMP\timed.ps1"
+          Start-Process wsl.exe -WindowStyle Hidden -ArgumentList '-d', 'Ubuntu-24.04', '--', 'sleep', '600'
+          Start-Sleep -Seconds 5
+          for ($i = 1; $i -le 10; $i++) { Pair "warm $i" }
