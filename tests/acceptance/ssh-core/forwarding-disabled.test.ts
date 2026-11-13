@@ -526,6 +526,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
           recordLines('failureDialog', name).map(line => line.question),
         ],
         [0, [refusedDialog('noforward'), refusedDialog('noforward')]],
+        `the connection log since the reload: ${JSON.stringify(connectionLog().slice(mark, mark + 120))}`,
       );
     });
   });
