@@ -296,20 +296,28 @@ function readViews(contributes: JsonCursor): string[] {
   );
 }
 
+/** Adds to `entries` the entry of a contribution list: the contribution's menu or kind, the item it shows in `itemField`, and its `when`. */
+function addEntry(
+  entries: MenuEntry[],
+  menu: string,
+  entry: JsonCursor,
+  itemField: string,
+): void {
+  const when = entry.field('when');
+  entries.push({
+    menu,
+    item: entry.field(itemField).string(),
+    ...(when.isAbsent() ? {} : {when: when.string()}),
+  });
+}
+
 function readMenuEntries(contributes: JsonCursor): MenuEntry[] {
   const entries: MenuEntry[] = [];
-  function addEntry(menu: string, entry: JsonCursor, itemField: string): void {
-    const when = entry.field('when');
-    entries.push({
-      menu,
-      item: entry.field(itemField).string(),
-      ...(when.isAbsent() ? {} : {when: when.string()}),
-    });
-  }
   const menus = contributes.field('menus');
   for (const menu of menus.isAbsent() ? [] : Object.keys(menus.object())) {
     for (const entry of menus.field(menu).items()) {
       addEntry(
+        entries,
         menu,
         entry,
         entry.field('submenu').isAbsent() ? 'command' : 'submenu',
@@ -317,12 +325,12 @@ function readMenuEntries(contributes: JsonCursor): MenuEntry[] {
     }
   }
   for (const entry of contributes.field('viewsWelcome').optionalItems()) {
-    addEntry('viewsWelcome', entry, 'view');
+    addEntry(entries, 'viewsWelcome', entry, 'view');
   }
   for (const entry of contributes
     .field('continueEditSession')
     .optionalItems()) {
-    addEntry('continueEditSession', entry, 'command');
+    addEntry(entries, 'continueEditSession', entry, 'command');
   }
   return entries;
 }
@@ -330,27 +338,19 @@ function readMenuEntries(contributes: JsonCursor): MenuEntry[] {
 /** The keybindings, views, walkthroughs and walkthrough steps, each as an entry of its own kind with its `when`. */
 function readContributionEntries(contributes: JsonCursor): MenuEntry[] {
   const entries: MenuEntry[] = [];
-  function addEntry(menu: string, entry: JsonCursor, itemField: string): void {
-    const when = entry.field('when');
-    entries.push({
-      menu,
-      item: entry.field(itemField).string(),
-      ...(when.isAbsent() ? {} : {when: when.string()}),
-    });
-  }
   for (const entry of contributes.field('keybindings').optionalItems()) {
-    addEntry('keybindings', entry, 'command');
+    addEntry(entries, 'keybindings', entry, 'command');
   }
   const views = contributes.field('views');
   for (const container of views.isAbsent() ? [] : Object.keys(views.object())) {
     for (const entry of views.field(container).items()) {
-      addEntry(`views.${container}`, entry, 'id');
+      addEntry(entries, `views.${container}`, entry, 'id');
     }
   }
   for (const walkthrough of contributes.field('walkthroughs').optionalItems()) {
-    addEntry('walkthroughs', walkthrough, 'id');
+    addEntry(entries, 'walkthroughs', walkthrough, 'id');
     for (const step of walkthrough.field('steps').optionalItems()) {
-      addEntry('walkthroughs.steps', step, 'id');
+      addEntry(entries, 'walkthroughs.steps', step, 'id');
     }
   }
   return entries;

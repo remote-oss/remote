@@ -7,6 +7,7 @@ import {
   readManifest,
   readPackageSources,
 } from './identifier-sources.ts';
+import {syntheticSources} from './identifier-fixtures.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -36,18 +37,7 @@ describe('identifier-sources', () => {
 
   describe('manifest', () => {
     it('reads a manifest without contributions as empty', () => {
-      deepStrictEqual(manifestOf({name: 'empty'}), {
-        commands: [],
-        settings: [],
-        views: [],
-        authorities: [],
-        languages: [],
-        activationEvents: [],
-        menuEntries: [],
-        contributionEntries: [],
-        enabledApiProposals: [],
-        stringReferences: [],
-      });
+      deepStrictEqual(manifestOf({name: 'empty'}), syntheticSources().manifest);
     });
 
     it('marks a command hidden from the palette by when false', () => {
