@@ -3,7 +3,7 @@ import {closeWindow, variable} from '../windows/harness.ts';
 import {docker} from '../windows/dev-containers-view.ts';
 import {noWindowLeft} from './support.ts';
 import {connectedWindow, removeContainers} from '../windows/folder-windows.ts';
-import {notifications} from '../windows/renderer.ts';
+import {toastsOnceSettled} from '../windows/renderer.ts';
 
 /** The entries of the container's `devcontainer.metadata` label. */
 async function metadataOf(containerId: string): Promise<unknown[]> {
@@ -49,7 +49,7 @@ describe('The configuration in the container’s metadata label (card coverage-1
         {
           last: entries.at(-1),
           secret: environment.includes('C112_SECRET'),
-          notices: await notifications(name),
+          notices: await toastsOnceSettled(name),
         },
         {
           last: {

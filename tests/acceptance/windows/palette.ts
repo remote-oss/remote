@@ -1,6 +1,7 @@
-import {startInWindow} from './harness.ts';
+import {startInWindow, windowEvents} from './harness.ts';
 import {
   chooseQuickPickRow,
+  pageFocusFacts,
   pressEscape,
   quickPickOf,
   typeInQuickPick,
@@ -10,13 +11,36 @@ import {
 /** How long the palette's list must read the same, in milliseconds, before it counts as settled. */
 const SETTLE_MILLISECONDS = 600;
 
+/**
+ * Opens the Command Palette of window `name` and waits for its list. When it does not show, the error says what the
+ * pages' focus and quick input were and what the window's agent did with the command, so that a palette that has no
+ * effect can be told from one that never got the command.
+ */
+async function showedPalette(name: string): Promise<void> {
+  const sent = Date.now();
+  await startInWindow(name, 'workbench.action.showCommands');
+  try {
+    await waitForQuickPick(name, 30_000);
+  } catch (caught) {
+    const events = windowEvents(name)
+      .slice(-14)
+      .map(
+        entry =>
+          `${entry.event}${entry.id === undefined ? '' : `#${entry.id.slice(-4)}`}@${String(entry.time - sent)}`,
+      );
+    throw new Error(
+      `${String(caught)}; pages ${JSON.stringify(await pageFocusFacts())}; the agent's events (ms from the command) ${JSON.stringify(events)}`,
+      {cause: caught},
+    );
+  }
+}
+
 /** The labels of the items that the command palette of window `name` lists for `text`, once its list has settled. */
 export async function paletteItems(
   name: string,
   text: string,
 ): Promise<string[]> {
-  await startInWindow(name, 'workbench.action.showCommands');
-  await waitForQuickPick(name, 30_000);
+  await showedPalette(name);
   await typeInQuickPick(name, `>${text}`);
   let items: string[] = [];
   for (let reads = 0; reads < 40; reads += 1) {
@@ -36,8 +60,7 @@ export async function runFromPalette(
   name: string,
   title: string,
 ): Promise<void> {
-  await startInWindow(name, 'workbench.action.showCommands');
-  await waitForQuickPick(name, 30_000);
+  await showedPalette(name);
   await typeInQuickPick(name, `>${title}`);
   await new Promise(resolve => setTimeout(resolve, 1000));
   await chooseQuickPickRow(name, title);

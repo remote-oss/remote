@@ -179,6 +179,7 @@ const CONTAINERS_LAUNCHES = [
   'containers-trust',
   'containers-nodocker',
   'containers-volume',
+  'containers-volume-trust',
   'containers-config',
   'containers-explorer',
   'containers-ports',
@@ -483,6 +484,12 @@ describe('the launches of the VSCodium run', () => {
           undefined,
         ],
         [
+          'containers-volume-trust',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
+        [
           'containers-config',
           ['remote-oss.remote-containers'],
           true,
@@ -619,6 +626,7 @@ describe('the launches of the VSCodium run', () => {
       'window.dialogStyle': 'custom',
       'files.simpleDialog.enable': true,
       'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+      'workbench.startupEditor': 'none',
     };
     deepStrictEqual(
       launches
@@ -670,6 +678,13 @@ describe('the launches of the VSCodium run', () => {
           'containers-volume',
           'containers-volume',
           shared,
+          undefined,
+          undefined,
+        ],
+        [
+          'containers-volume-trust',
+          'containers-volume',
+          {...shared, 'security.workspace.trust.startupPrompt': 'never'},
           undefined,
           undefined,
         ],
@@ -863,7 +878,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-33, containers-12, coverage-25c: explorer-trust, the two trust launches, web-ui-trust and containers-trust are the only ones with workspace trust on; explorer-trust keeps the explorer’s title, trust turns core’s startup prompt on, trust-terminal keeps core’s defaults with the terminal mode, and web-ui-trust and containers-trust turn the prompt off', () => {
+  it('tooling-33, containers-12, coverage-25c: explorer-trust, the two trust launches, web-ui-trust, containers-trust, containers-nodocker and containers-volume-trust are the only ones with workspace trust on; explorer-trust keeps the explorer’s title, trust turns core’s startup prompt on, trust-terminal keeps core’s defaults with the terminal mode, and web-ui-trust and containers-trust turn the prompt off', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' && launch.workspaceTrust !== undefined
@@ -917,6 +932,7 @@ describe('the launches of the VSCodium run', () => {
             'window.dialogStyle': 'custom',
             'files.simpleDialog.enable': true,
             'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+            'workbench.startupEditor': 'none',
             'security.workspace.trust.startupPrompt': 'never',
           },
         ],
@@ -928,6 +944,19 @@ describe('the launches of the VSCodium run', () => {
             'window.dialogStyle': 'custom',
             'files.simpleDialog.enable': true,
             'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+            'workbench.startupEditor': 'none',
+            'security.workspace.trust.startupPrompt': 'never',
+          },
+        ],
+        [
+          'containers-volume-trust',
+          true,
+          {
+            'window.title': '[${rootName}]',
+            'window.dialogStyle': 'custom',
+            'files.simpleDialog.enable': true,
+            'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+            'workbench.startupEditor': 'none',
             'security.workspace.trust.startupPrompt': 'never',
           },
         ],

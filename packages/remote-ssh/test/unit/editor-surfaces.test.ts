@@ -33,6 +33,7 @@ function surfacesWith(
     noticeFails?: boolean;
   } = {},
 ): {surfaces: ReturnType<typeof editorSurfacesOf>; calls: Calls} {
+  const written = new Map<string, unknown>();
   const calls: Calls = {
     operations: [],
     writes: [],
@@ -134,9 +135,10 @@ function surfacesWith(
       displayName: 'Remote - SSH',
     },
     acceptanceState: {
-      get: key => changes.accepted?.[key],
+      get: key => written.get(key) ?? changes.accepted?.[key],
       update: (key, value) => {
         calls.stored.push([key, value]);
+        written.set(key, value);
         return Promise.resolve();
       },
     },

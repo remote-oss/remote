@@ -91,9 +91,17 @@ describe('the readers of a long list by position (card tooling-122)', function (
         });
       }
       await startInWindow(window, CONNECT);
-      const entries = await allQuickPickRows(window);
-      const aboveHosts = entries.findIndex(entry =>
-        entry.label.trim().startsWith('mt-'),
+      // The picker fills with the hosts after it opens, so the rows above them are counted once it lists the first.
+      let aboveHosts = -1;
+      await waitFor(
+        'the picker to list the hosts',
+        async () => {
+          aboveHosts = (await allQuickPickRows(window)).findIndex(entry =>
+            entry.label.trim().startsWith('mt-'),
+          );
+          return aboveHosts >= 0;
+        },
+        LISTING_MILLISECONDS,
       );
       const fromPicker: Array<{label: string; took: boolean}> = [];
       for (const position of POSITIONS) {

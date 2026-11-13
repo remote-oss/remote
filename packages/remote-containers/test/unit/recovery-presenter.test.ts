@@ -693,7 +693,7 @@ describe('the failure presenter C8 (card containers-11)', () => {
   });
 
   describe('a clone in a volume (card containers-151)', () => {
-    it('F-0701 7.E2, AC-33: the dialog offers Close Remote in Edit Locally’s place, and Close Remote closes the remote', async () => {
+    it('F-0701 7.E2, AC-10, AC-33: the dialog offers Close Remote and the recovery container in Edit Locally’s place, in the order the editor shows as Close Remote, then the recovery container, and Close Remote closes the remote', async () => {
       const scene = await present(cloneFailed('fatal: no'), {
         target: undefined,
         volume: true,
@@ -703,7 +703,7 @@ describe('the failure presenter C8 (card containers-11)', () => {
         [scene.calls, scene.outcome],
         [
           [
-            'showError |Git clone failed. fatal: no|Retry,Close Remote,Edit devcontainer.json in Recovery Container,More Actions... (close)',
+            'showError |Git clone failed. fatal: no|Retry,Edit devcontainer.json in Recovery Container,Close Remote,More Actions... (close)',
             'closeRemote',
           ],
           'handled',

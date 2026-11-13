@@ -229,6 +229,118 @@ describe('the dev container CLI through the bridge, on local Docker (card contai
     );
   });
 
+  it('F-0408 AC-14: the configuration and merged configuration that up gives are the read of the same container, except that each lifecycle list holds its commands once, as the container’s label does', async () => {
+    const featured = path.join(folder, 'featured');
+    mkdirSync(path.join(featured, '.devcontainer', 'feat'), {recursive: true});
+    writeFileSync(
+      path.join(featured, '.devcontainer', 'devcontainer.json'),
+      JSON.stringify({
+        name: 'featured',
+        image: 'alpine:3.22',
+        features: {'./feat': {}},
+        containerEnv: {PLAIN: '1'},
+        remoteEnv: {WITH: '${containerEnv:PLAIN}'},
+        postCreateCommand: 'echo created',
+        postStartCommand: 'echo started',
+      }),
+    );
+    writeFileSync(
+      path.join(featured, '.devcontainer', 'feat', 'devcontainer-feature.json'),
+      JSON.stringify({
+        id: 'feat',
+        version: '1.0.0',
+        name: 'Feat',
+        containerEnv: {FEAT: 'on'},
+        postCreateCommand: 'echo feature',
+        customizations: {vscode: {extensions: ['x.y']}},
+      }),
+    );
+    writeFileSync(
+      path.join(featured, '.devcontainer', 'feat', 'install.sh'),
+      '#!/bin/sh\nexit 0\n',
+      {mode: 0o755},
+    );
+    const featuredConfig = path.join(
+      featured,
+      '.devcontainer',
+      'devcontainer.json',
+    );
+    const featuredTarget: CliTarget = {
+      ...target(),
+      workspaceFolder: featured,
+      configFile: featuredConfig,
+      idLabels: [
+        `devcontainer.local_folder=${featured}`,
+        `devcontainer.config_file=${featuredConfig}`,
+        RUN_LABEL,
+      ],
+    };
+    const upResult = await bridge().up(
+      featuredTarget,
+      options,
+      () => undefined,
+      never,
+    );
+    if (upResult.kind !== 'up') {
+      throw new Error(`up failed: ${JSON.stringify(upResult)}`);
+    }
+    const read = await bridge().readConfiguration(
+      featuredTarget,
+      upResult.containerId,
+      () => undefined,
+      never,
+    );
+    if (read.kind !== 'configuration') {
+      throw new Error(`the read failed: ${JSON.stringify(read)}`);
+    }
+    const label = JSON.parse(
+      execFileSync(
+        'docker',
+        [
+          'inspect',
+          '--format',
+          '{{index .Config.Labels "devcontainer.metadata"}}',
+          upResult.containerId,
+        ],
+        {encoding: 'utf8'},
+      ),
+    ) as Array<Record<string, unknown>>;
+    const lists = [
+      ['onCreateCommand', 'onCreateCommands'],
+      ['updateContentCommand', 'updateContentCommands'],
+      ['postCreateCommand', 'postCreateCommands'],
+      ['postStartCommand', 'postStartCommands'],
+      ['postAttachCommand', 'postAttachCommands'],
+    ] as const;
+    const listNames: readonly string[] = lists.map(([, list]) => list);
+    function withoutLists(
+      merged: Record<string, unknown> | undefined,
+    ): Record<string, unknown> {
+      return Object.fromEntries(
+        Object.entries(merged ?? {}).filter(
+          ([key]) => !listNames.includes(key),
+        ),
+      );
+    }
+    deepStrictEqual(
+      [
+        upResult.configuration,
+        withoutLists(upResult.mergedConfiguration),
+        lists.map(([, list]) => [list, upResult.mergedConfiguration?.[list]]),
+      ],
+      [
+        read.configuration,
+        withoutLists(read.mergedConfiguration),
+        lists.map(([command, list]) => [
+          list,
+          label
+            .filter(entry => entry[command] !== undefined)
+            .map(entry => entry[command]),
+        ]),
+      ],
+    );
+  });
+
   it('C3: the CLI passes `${containerEnv:…}` in `initializeCommand` through unsubstituted (ADR-0009 deviation 2’s premise)', () => {
     deepStrictEqual(
       readFileSync(initializeProbe, 'utf8'),

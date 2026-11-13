@@ -1,7 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
 import {existsSync, mkdirSync, readdirSync} from 'node:fs';
-import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
@@ -24,6 +23,7 @@ import {
 } from '../windows/renderer.ts';
 import {rowsWhen, VIEW} from '../windows/dev-containers-view.ts';
 import {connectedWindow, removeContainersOf} from './support.ts';
+import {readStateDatabase} from '../windows/state-database.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -100,8 +100,7 @@ function ownedState(): Record<string, string> {
   ].filter(file => existsSync(file));
   const items: Record<string, string> = {};
   for (const file of files) {
-    const database = new DatabaseSync(file, {readOnly: true});
-    try {
+    readStateDatabase(file, database => {
       for (const entry of database
         .prepare('SELECT key, value FROM ItemTable')
         .all() as Array<{key: string; value: string}>) {
@@ -110,9 +109,7 @@ function ownedState(): Record<string, string> {
             entry.value;
         }
       }
-    } finally {
-      database.close();
-    }
+    });
   }
   return items;
 }

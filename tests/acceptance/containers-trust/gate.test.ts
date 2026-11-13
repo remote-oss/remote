@@ -53,6 +53,7 @@ import {
   stateOf as containerStateOf,
   VIEW,
 } from '../windows/dev-containers-view.ts';
+import {answerNativeFolderDialog} from './native-folder-dialog.ts';
 import {folderWrapper, recordedCalls} from '../windows/folder-wrapper.ts';
 
 /** The question core asks of a folder, F-0106 5.0 step 2. */
@@ -757,39 +758,74 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     await closeWindow(name);
   }
 
-  it('F-0106 AC-6 (c69-6): Open Folder in Container on an untrusted folder switches the window title and the status bar to the target folder before core asks', async () => {
-    const folder = devContainerFolder('c69-switch', {name: 'C69 Switch'});
-    const from = await openFolderWindow(devContainerFolder('c69-switch-from'));
-    await openFolderFrom(from, folder);
-    await waitForDialog('c69-switch');
+  /**
+   * Opens `key`'s folder in a container from another window with `open`, and gives what the new window shows while
+   * core's trust question is open, then declines it.
+   */
+  async function switchedBeforeCore(
+    key: string,
+    open: (from: string, folder: string) => Promise<void>,
+  ) {
+    const folder = devContainerFolder(key, {name: key});
+    const from = await openFolderWindow(devContainerFolder(`${key}-from`));
+    await open(from, folder);
+    await waitForDialog(key);
     const authority = decodeURIComponent(
-      (await windowState('c69-switch')).folders[0] ?? '',
+      (await windowState(key)).folders[0] ?? '',
     );
     const encoded = /^vscode-remote:\/\/dev-container\+([0-9a-f]+)\//.exec(
       authority,
     )?.[1];
-    deepStrictEqual(
-      {
-        title: (await windowTitle('c69-switch')).includes('c69-switch'),
-        hostPath: (
-          JSON.parse(Buffer.from(encoded ?? '', 'hex').toString()) as {
-            hostPath: string;
-          }
-        ).hostPath,
-        remoteName: (await windowState('c69-switch')).remoteName,
-        indicator: await statusBarText('c69-switch', 'status.host'),
-      },
-      {
+    const shown = {
+      title: (await windowTitle(key)).includes(key),
+      hostPath: (
+        JSON.parse(Buffer.from(encoded ?? '', 'hex').toString()) as {
+          hostPath: string;
+        }
+      ).hostPath,
+      remoteName: (await windowState(key)).remoteName,
+      indicator: await statusBarText(key, 'status.host'),
+    };
+    await answerDialog(key, 'Cancel');
+    await waitForDialog(key);
+    await answerDialog(key, 'OK');
+    await closeWindow(key);
+    return {shown, folder};
+  }
+
+  it('F-0106 AC-6 (c69-6): Open Folder in Container on an untrusted folder switches the window title and the status bar to the target folder before core asks', async () => {
+    const {shown, folder} = await switchedBeforeCore(
+      'c69-switch',
+      openFolderFrom,
+    );
+    deepStrictEqual(shown, {
+      title: true,
+      hostPath: folder,
+      remoteName: 'dev-container',
+      indicator: 'Opening Remote...',
+    });
+  });
+
+  it('F-0106 AC-50 (c123-native-dialog): with the editor’s own folder dialog off, Open Folder in Container on an untrusted folder switches the window and shows Opening Remote... before core asks, as with the in-window dialog', async () => {
+    await setUserSetting('files.simpleDialog.enable', false);
+    try {
+      const {shown, folder} = await switchedBeforeCore(
+        'c123-native',
+        async (from, target) => {
+          inWindow(from, 'remote-containers.openFolder').catch(() => undefined);
+          await answerNativeFolderDialog(target);
+        },
+      );
+      deepStrictEqual(shown, {
         title: true,
         hostPath: folder,
         remoteName: 'dev-container',
         indicator: 'Opening Remote...',
-      },
-    );
-    await answerDialog('c69-switch', 'Cancel');
-    await waitForDialog('c69-switch');
-    await answerDialog('c69-switch', 'OK');
-    await closeWindow('c69-switch');
+      });
+    } finally {
+      // The launch's own value, which the row's false replaced in the user settings the launch wrote.
+      await setUserSetting('files.simpleDialog.enable', true);
+    }
   });
 
   it('F-0106 AC-6a (c69-6a): accepting core’s dialog for a folder with a configuration goes straight to Connecting to Dev Container, with no quick pick', async () => {

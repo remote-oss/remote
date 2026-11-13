@@ -147,7 +147,15 @@ jobs:
           LAUNCHES: ${{ inputs.launches }}
         run: |
           if [ -n "$LAUNCHES" ] && [ "$LAUNCHES" != all ]; then
-            parts=$(jq -cn --arg launches "$LAUNCHES" '[{name: $launches, launches: $launches, minutes: 180}]')
+            # the part's name goes into its job's name and its concurrency group, and a group too long for GitHub
+            # (somewhere past 335 characters: 479 launches characters made no job) leaves the job uncreated; a long
+            # list is named by its first 60 characters and how many entries follow
+            parts=$(jq -cn --arg launches "$LAUNCHES" '[{
+              name: (if ($launches | length) <= 100 then $launches
+                else ($launches | split(",")) as $entries
+                  | ($entries[0] | if length > 60 then .[0:60] + "…" else . end)
+                    + (if ($entries | length) > 1 then " and \($entries | length - 1) more" else "" end) end),
+              launches: $launches, minutes: 180}]')
           else
             parts=$(node tools/acceptance-parts.ts --matrix)
           fi
@@ -165,6 +173,11 @@ jobs:
       ${{ (vars.CI_POOL_RUNS_ON || vars.CI_CHECKS_RUNS_ON) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON || vars.CI_CHECKS_RUNS_ON)) || 'ubuntu-24.04' }}
     timeout-minutes: 20 # 5 to 7.6 min on a free runner; 10 was cut twice under load (2026-10-14)
+    # read only: check-known-reds reads the issues and runs that tools/known-reds.json names
+    permissions:
+      contents: read
+      issues: read
+      actions: read
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6 # the version comes from packageManager in package.json
@@ -184,6 +197,10 @@ jobs:
         if: github.ref_type == 'tag'
       - run: pnpm check-public-surface
       - run: pnpm check-coverage # every acceptance criterion tagged, and every tagged one cited by a test (#142)
+      # every known red's issue is open and its evidence a run of main, so a fixed red leaves the list (#2445)
+      - run: pnpm check-known-reds
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: pnpm typecheck
       # eslint's heap is 6 GiB (package.json); the runner's cgroup cap must stay above it (8 GiB since #692)
       - run: echo "runner memory.max $(cat /sys/fs/cgroup/memory.max)"

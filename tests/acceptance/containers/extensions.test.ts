@@ -21,6 +21,7 @@ import {
   dialogOf,
   extensionStatusShown,
   notificationCentre,
+  toastFacts,
 } from '../windows/renderer.ts';
 
 /** How long the install may take after the window is connected: the window does not wait for it (F-0505 BR-8). */
@@ -51,6 +52,23 @@ const GALLERY_VERSIONS_AND_PROPERTIES = 17;
 /** The suffix the server gives the folder of a universal extension it installs from the gallery, which one it installs from a package file lacks. */
 const UNIVERSAL = '-universal';
 
+/** Core's own progress while a window activates its extensions: it is listed for a moment after any connect. */
+const CORE_ACTIVATION_PROGRESS = 'Activating Extensions...';
+
+/** The notification centre of window `name` once core's activation progress has left it, within 30 s. */
+async function settledCentre(name: string): Promise<string[]> {
+  let notices: string[] = [];
+  await waitFor(
+    `core's ${CORE_ACTIVATION_PROGRESS} to leave the notification centre of ${name}`,
+    async () => {
+      notices = await notificationCentre(name);
+      return !notices.includes(CORE_ACTIVATION_PROGRESS);
+    },
+    30_000,
+  );
+  return notices;
+}
+
 describe('the configuration’s extensions in the container (card containers-16)', function () {
   this.timeout(600_000);
 
@@ -76,7 +94,12 @@ describe('the configuration’s extensions in the container (card containers-16)
       `containers-16 row 12: the window was connected ${String(Date.now() - connectedAt)} ms before the extension folder existed`,
     );
     const installed = await installedIn(containerId);
-    const notices = await notificationCentre(name);
+    const notices = await settledCentre(name);
+    if (notices.length > 0) {
+      console.log(
+        `gate-row-12 notices with their sources: ${JSON.stringify(await toastFacts(name))}`,
+      );
+    }
     await closeWindow(name);
     deepStrictEqual(
       [

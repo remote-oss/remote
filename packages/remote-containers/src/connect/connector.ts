@@ -152,6 +152,12 @@ import {
 import {gpuAvailabilityOf} from './gpu-availability.ts';
 import {featureSettingsOf} from './feature-settings.ts';
 import {
+  commandsRan,
+  markerInspectArguments,
+  markersNeeded,
+  parseMarkerInspect,
+} from '../cli/cli-markers.ts';
+import {
   type ContainerState,
   type ReconnectionOutcome,
   reconnectionOutcomeOf,
@@ -1520,12 +1526,59 @@ export function containerConnectorOf(
   async function blockingHooks(
     relays: Readonly<Record<string, string>>,
     cancellation: AbortSignal,
+    alreadyRan?: () => Promise<string | undefined>,
   ): Promise<Failed | undefined> {
     phases.tell({name: 'startingServer'});
+    const ranUpTo = await alreadyRan?.();
+    if (ranUpTo !== undefined) {
+      logger.info(
+        `the commands up to ${ranUpTo} already ran in this container: the blocking run is skipped`,
+      );
+      return undefined;
+    }
     const blocking = await lifecycle?.runBlocking(relays, cancellation);
     return blocking === undefined || blocking.kind === 'done'
       ? undefined
       : failureOf(blocking, []);
+  }
+
+  /**
+   * The `waitFor` the blocking commands of a container that was already running have run up to, by the CLI's own
+   * markers; nothing on any doubt, so that the blocking run happens.
+   */
+  async function blockingCommandsRan(
+    prepared: Extract<ContainerOutcome, {kind: 'ready'}>,
+    engine: EngineHost,
+    rootChannel: HostChannel,
+    cancellation: AbortSignal,
+  ): Promise<string | undefined> {
+    const names = markersNeeded(prepared.mergedConfiguration);
+    if (names === undefined) {
+      return undefined;
+    }
+    const waitFor = prepared.mergedConfiguration?.waitFor;
+    const ranUpTo =
+      typeof waitFor === 'string' ? waitFor : 'updateContentCommand';
+    if (names.length === 0) {
+      return ranUpTo;
+    }
+    const inspected = await engine.run(
+      markerInspectArguments(prepared.containerId),
+      {kind: 'none'},
+      {cancellation},
+    );
+    const facts =
+      inspected.kind === 'ran' && inspected.status === 0
+        ? parseMarkerInspect(inspected.stdout)
+        : undefined;
+    return facts !== undefined &&
+      (await commandsRan(
+        rootChannel,
+        {user: prepared.remoteUser, names, ...facts},
+        cancellation,
+      ))
+      ? ranUpTo
+      : undefined;
   }
 
   /** Reads the merged configuration, installs and starts the server, relays its port, and holds the connection. */
@@ -1549,12 +1602,20 @@ export function containerConnectorOf(
         cancellation,
       );
     }
-    const configuration = await bridge.readConfiguration(
-      context.cliTarget,
-      prepared.containerId,
-      logCliEvent,
-      cancellation,
-    );
+    // `up` read the configuration and its merge with the container's metadata; an outcome that did not come from it is read.
+    const configuration =
+      prepared.configuration === undefined
+        ? await bridge.readConfiguration(
+            context.cliTarget,
+            prepared.containerId,
+            logCliEvent,
+            cancellation,
+          )
+        : {
+            kind: 'configuration' as const,
+            configuration: prepared.configuration,
+            mergedConfiguration: prepared.mergedConfiguration,
+          };
     const merged =
       configuration.kind === 'configuration'
         ? configuration.mergedConfiguration
@@ -1571,6 +1632,7 @@ export function containerConnectorOf(
         `the configuration's name could not be read: ${cliFailureText(configuration)}`,
       );
     }
+    const rootChannel = execChannelOf(engine, prepared.containerId, 'root');
     return connectChannel(
       {
         payload,
@@ -1579,7 +1641,7 @@ export function containerConnectorOf(
           prepared.containerId,
           prepared.remoteUser,
         ),
-        rootChannel: execChannelOf(engine, prepared.containerId, 'root'),
+        rootChannel,
         remoteUser: prepared.remoteUser,
         volumeMounted: prepared.volumeMounted,
         created: prepared.created,
@@ -1591,7 +1653,20 @@ export function containerConnectorOf(
         name,
         explored: context.explored === true,
         relayHost: {engine, containerId: prepared.containerId},
-        beforeStart: relays => blockingHooks(relays, cancellation),
+        beforeStart: relays =>
+          blockingHooks(
+            relays,
+            cancellation,
+            prepared.created
+              ? undefined
+              : () =>
+                  blockingCommandsRan(
+                    prepared,
+                    engine,
+                    rootChannel,
+                    cancellation,
+                  ),
+          ),
         openRelay: (server, onConnectionClosed) =>
           dependencies.openRelay({
             engine,

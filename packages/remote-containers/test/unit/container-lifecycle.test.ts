@@ -401,6 +401,17 @@ function mountings(result: {
   ];
 }
 
+/** An engine whose listing holds one running container of the pair, NEW. */
+function runningPairEngine(): EngineHost {
+  return scriptedEngine({
+    [LISTING]: [ran(`${NEW}\n`)],
+    [LEGACY_LISTING]: [ran('')],
+    [`inspect --type container ${NEW}`]: [
+      ran(inspected([[NEW, 'running']], false)),
+    ],
+  });
+}
+
 /** What a run's single `up` was given for its id labels, or none when it never ran. */
 function targetIdLabels(result: {bridge: FakeBridge}): readonly string[] {
   return result.bridge.ups.length === 1
@@ -510,15 +521,7 @@ describe('containerLifecycleOf', () => {
   });
 
   it('uses a running container of the pair and reports it as not created', async () => {
-    const result = await prepared(
-      scriptedEngine({
-        [LISTING]: [ran(`${NEW}\n`)],
-        [LEGACY_LISTING]: [ran('')],
-        [`inspect --type container ${NEW}`]: [
-          ran(inspected([[NEW, 'running']], false)),
-        ],
-      }),
-    );
+    const result = await prepared(runningPairEngine());
     deepStrictEqual(result.outcome, {
       kind: 'ready',
       containerId: NEW,
@@ -527,6 +530,28 @@ describe('containerLifecycleOf', () => {
       volumeMounted: false,
       created: false,
     });
+  });
+
+  it('F-0408 AC-14: the configuration and the merged configuration that up gave come out with the ready container, and none when up gave none', async () => {
+    const withConfiguration = fakeBridge();
+    withConfiguration.upResult = {
+      ...UP,
+      configuration: {name: 'N'},
+      mergedConfiguration: {remoteEnv: {FIRST: '1'}},
+    };
+    const outcomes = [];
+    for (const bridge of [withConfiguration, fakeBridge()]) {
+      const result = await prepared(runningPairEngine(), bridge);
+      outcomes.push(
+        result.outcome.kind === 'ready'
+          ? [result.outcome.configuration, result.outcome.mergedConfiguration]
+          : undefined,
+      );
+    }
+    deepStrictEqual(outcomes, [
+      [{name: 'N'}, {remoteEnv: {FIRST: '1'}}],
+      [undefined, undefined],
+    ]);
   });
 
   it("F-0409 AC-7 (C7's half) and AC-46 (C7's half): a paused or restarting container is unusable and the CLI is not called", async () => {
