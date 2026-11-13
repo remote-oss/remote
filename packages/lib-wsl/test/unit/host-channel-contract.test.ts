@@ -1,3 +1,4 @@
+import {deepStrictEqual} from 'node:assert';
 import type {ChannelFailureKind} from 'lib-host';
 import {
   channelContractCases,
@@ -139,4 +140,44 @@ describe('host channel over WSL: the lib-host contract (D4 on D4f)', function ()
   for (const contractCase of channelContractCases(WSL_HARNESS)) {
     it(contractCase.name, contractCase.check);
   }
+});
+
+describe('host channel over WSL: the stream of each line (card wsl-10)', () => {
+  /** What the channel's `onLine` was called with for a script that prints on both streams. */
+  async function delivered(): Promise<unknown[][]> {
+    const fake = fakeWsl(() => ({
+      kind: 'exits',
+      stdout: utf8Output('out line\n'),
+      stderr: utf8Output('err line\n'),
+      status: 0,
+    }));
+    const runner = createWslRunner(fake);
+    const channel = createWslHostChannel({
+      runner,
+      mapper: createPathMapper(runner),
+      distro: DISTRO,
+    });
+    const received: unknown[][] = [];
+    await channel.runScript(
+      {
+        script: 'scenario',
+        interpreter: 'posixShell',
+        environment: {},
+        input: {kind: 'text', text: ''},
+        cancellation: new AbortController().signal,
+      },
+      (...line) => {
+        received.push(line);
+      },
+    );
+    return received;
+  }
+
+  it('wsl-10: a line the script prints on standard output reaches the caller tagged stdout', async () => {
+    deepStrictEqual((await delivered())[0], ['out line', 'stdout']);
+  });
+
+  it('wsl-10: a line the script prints on standard error reaches the caller tagged stderr', async () => {
+    deepStrictEqual((await delivered())[1], ['err line', 'stderr']);
+  });
 });

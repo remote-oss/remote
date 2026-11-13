@@ -40,10 +40,12 @@ async function executed(
 ) {
   const {fake, runner} = runnerOver(behaviour, session);
   const lines: string[] = [];
-  const outcome = await runner.exec(requestOf(changes), line => {
+  const tagged: string[] = [];
+  const outcome = await runner.exec(requestOf(changes), (line, stream) => {
     lines.push(line);
+    tagged.push(`${stream}: ${line}`);
   });
-  return {fake, lines, outcome};
+  return {fake, lines, tagged, outcome};
 }
 
 const EXITS_ZERO: FakeRun = {kind: 'exits', status: 0};
@@ -394,6 +396,16 @@ describe('D1: exec', () => {
       status: 0,
     });
     deepStrictEqual(lines, ['one', 'two', 'three']);
+  });
+
+  it('wsl-10: exec tags each line with the stream it came from', async () => {
+    const {tagged} = await executed({
+      kind: 'exits',
+      stdout: utf8Output('one\n'),
+      stderr: utf8Output('two\n'),
+      status: 0,
+    });
+    deepStrictEqual(tagged, ['stdout: one', 'stderr: two']);
   });
 
   it('cw01 exec: gives a non-zero status of the program as a result', async () => {

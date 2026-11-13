@@ -5,6 +5,7 @@
  */
 
 import {decodeManagementOutput} from './decode.ts';
+import type {ScriptStream} from 'lib-host';
 import {LineDecoder} from './line-decoder.ts';
 import type {
   StartError,
@@ -117,10 +118,10 @@ export interface WslRunner {
   start(
     request: StartRequest,
   ): Promise<{kind: 'started'; process: LiveProcess} | RunFailed>;
-  /** Runs a program in a distro; each output line goes to `onLine` before the outcome settles. */
+  /** Runs a program in a distro; each output line goes to `onLine`, with the stream it came from, before the outcome settles. */
   exec(
     request: ExecRequest,
-    onLine: (line: string) => void,
+    onLine: (line: string, stream: ScriptStream) => void,
   ): Promise<ExecExited | RunFailed>;
 }
 
@@ -486,7 +487,7 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
 
   async function exec(
     request: ExecRequest,
-    onLine: (line: string) => void,
+    onLine: (line: string, stream: ScriptStream) => void,
   ): Promise<ExecExited | RunFailed> {
     const refused = rejected(request);
     if (refused !== undefined) {
@@ -509,12 +510,12 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
     let delivering = true;
     const lines = new LineDecoder(line => {
       if (delivering) {
-        onLine(line);
+        onLine(line, 'stdout');
       }
     });
     const errorLines = new LineDecoder(line => {
       if (delivering) {
-        onLine(line);
+        onLine(line, 'stderr');
       }
     });
     live.onOutput(chunk => {
