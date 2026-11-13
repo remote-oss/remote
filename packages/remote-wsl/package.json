@@ -1,8 +1,10 @@
 {
   "name": "remote-wsl",
+  "displayName": "%displayName%",
+  "description": "%description%",
   "version": "0.0.0",
+  "publisher": "remote-oss",
   "private": true,
-  "description": "Open your Linux projects in WSL and use Linux tools from a Windows editor, without leaving it.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -12,11 +14,449 @@
   "bugs": {
     "url": "https://github.com/remote-oss/remote/issues"
   },
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "browser": "./dist/web/extension.js",
   "keywords": [
     "remote development",
     "remote",
     "wsl",
     "linux",
     "windows"
-  ]
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": true,
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
+  "activationEvents": [
+    "onStartupFinished",
+    "onResolveRemoteAuthority:wsl",
+    "onCommand:remote-wsl.newWindow",
+    "onCommand:remote-wsl.newWindowForDistro"
+  ],
+  "enabledApiProposals": [
+    "resolvers",
+    "contribViewsRemote",
+    "contribRemoteHelp"
+  ],
+  "l10n": "./l10n",
+  "contributes": {
+    "commands": [
+      {
+        "command": "remote-wsl.connect",
+        "title": "%commands.connect.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.connectUsingDistro",
+        "title": "%commands.connectUsingDistro.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.connectInNewWindow",
+        "title": "%commands.connectInNewWindow.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.connectUsingDistroInNewWindow",
+        "title": "%commands.connectUsingDistroInNewWindow.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.openFolder",
+        "title": "%commands.openFolder.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.reopenFromRecommendation",
+        "title": "%commands.reopenFromRecommendation.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.reopenInWSL",
+        "title": "%commands.reopenInWSL.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.reopenInWindows",
+        "title": "%commands.reopenInWindows.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.showLog",
+        "title": "%commands.showLog.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.getHelp",
+        "title": "%commands.getHelp.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.getStarted",
+        "title": "%commands.getStarted.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.provideFeedback",
+        "title": "%commands.provideFeedback.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.reportIssue",
+        "title": "%commands.reportIssue.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.revealInExplorer",
+        "title": "%commands.revealInExplorer.title%",
+        "category": "%commands.category.file%"
+      },
+      {
+        "command": "remote-wsl.explorer.connectInCurrentWindow",
+        "title": "%commands.explorer.connectInCurrentWindow.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.explorer.connectInNewWindow",
+        "title": "%commands.explorer.connectInNewWindow.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.explorer.removeFolder",
+        "title": "%commands.explorer.removeFolder.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.explorer.openDistroInCurrentWindow",
+        "title": "%commands.explorer.openDistroInCurrentWindow.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.explorer.openDistroInNewWindow",
+        "title": "%commands.explorer.openDistroInNewWindow.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.explorer.setDefaultDistro",
+        "title": "%commands.explorer.setDefaultDistro.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.explorer.deleteDistro",
+        "title": "%commands.explorer.deleteDistro.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.explorer.refresh",
+        "title": "%commands.explorer.refresh.title%",
+        "category": "%commands.category.wsl%"
+      },
+      {
+        "command": "remote-wsl.explorer.addDistro",
+        "title": "%commands.explorer.addDistro.title%",
+        "category": "%commands.category.wsl%"
+      }
+    ],
+    "configuration": {
+      "title": "WSL",
+      "properties": {
+        "remote.WSL.fileWatcher.polling": {
+          "description": "%settings.fileWatcherPolling.description%",
+          "type": "boolean",
+          "default": false
+        },
+        "remote.WSL.fileWatcher.pollingInterval": {
+          "markdownDescription": "%settings.fileWatcherPollingInterval.description%",
+          "type": "number",
+          "default": 5000
+        },
+        "remote.WSL.debug": {
+          "description": "%settings.debug.description%",
+          "type": "boolean",
+          "default": false
+        },
+        "remote.WSL.useShellEnvironment": {
+          "description": "%settings.useShellEnvironment.description%",
+          "type": "boolean",
+          "default": true
+        },
+        "remote.WSL.downloadInBackground": {
+          "description": "%settings.downloadInBackground.description%",
+          "type": "boolean",
+          "default": true
+        },
+        "remote.WSL.experimental.scriptLessStartup": {
+          "description": "%settings.scriptLessStartup.description%",
+          "type": "boolean",
+          "default": false
+        },
+        "remote.WSL1.connectionMethod": {
+          "description": "",
+          "type": "string",
+          "deprecationMessage": "%settings.wsl1ConnectionMethod.deprecationMessage%"
+        },
+        "remote.WSL2.connectionMethod": {
+          "description": "",
+          "type": "string",
+          "deprecationMessage": "%settings.wsl2ConnectionMethod.deprecationMessage%"
+        },
+        "remote.WSL.serverDownloadUrlTemplate": {
+          "markdownDescription": "%settings.serverDownloadUrlTemplate.description%",
+          "type": "string",
+          "scope": "application"
+        }
+      }
+    },
+    "views": {
+      "remote": [
+        {
+          "id": "targetsWsl",
+          "name": "%views.targetsWsl.name%",
+          "group": "targets@3",
+          "remoteName": "wsl",
+          "when": "((isWindows && !isWeb) || wslFeatureInstalled) && !wsl.standingDown"
+        }
+      ]
+    },
+    "menus": {
+      "statusBar/remoteIndicator": [
+        {
+          "command": "remote-wsl.connect",
+          "group": "remote_10_wsl_0_local@1",
+          "when": "(((isWindows && !isWeb) || wslFeatureInstalled) && !wsl.openInNewWindow) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.connectInNewWindow",
+          "group": "remote_10_wsl_0_local@1",
+          "when": "(((isWindows && !isWeb) || wslFeatureInstalled) && wsl.openInNewWindow) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.connectUsingDistro",
+          "group": "remote_10_wsl_0_local@2",
+          "when": "((wslFeatureInstalled || wslFeatureInstalled) && !wsl.openInNewWindow) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.connectUsingDistroInNewWindow",
+          "group": "remote_10_wsl_0_local@2",
+          "when": "(wslFeatureInstalled && wsl.openInNewWindow) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.reopenInWindows",
+          "group": "remote_10_wsl_1_open@3",
+          "when": "(remoteName == wsl && workspaceFolderCount != 0) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.showLog",
+          "group": "remote_10_wsl_1_open@9",
+          "when": "(remoteName == wsl) && !wsl.standingDown"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "remote-wsl.connect",
+          "when": "((isWindows && !isWeb) || wslFeatureInstalled) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.connectUsingDistro",
+          "when": "((isWindows && !isWeb) || wslFeatureInstalled) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.connectInNewWindow",
+          "when": "((isWindows && !isWeb) || wslFeatureInstalled) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.connectUsingDistroInNewWindow",
+          "when": "((isWindows && !isWeb) || wslFeatureInstalled) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.openFolder",
+          "when": "(isWindows && !isWeb) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.reopenFromRecommendation",
+          "when": "false"
+        },
+        {
+          "command": "remote-wsl.reopenInWSL",
+          "when": "(!wsl.noWSLPath && workspaceFolderCount != 0 && !virtualWorkspace && remoteName != wsl) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.reopenInWindows",
+          "when": "(remoteName == wsl && !wsl.noWSLPath && workspaceFolderCount != 0) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.showLog",
+          "when": "!wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.getHelp",
+          "when": "((isWindows && !isWeb) || wslFeatureInstalled) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.getStarted",
+          "when": "false"
+        },
+        {
+          "command": "remote-wsl.provideFeedback",
+          "when": "((isWindows && !isWeb) || wslFeatureInstalled) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.reportIssue",
+          "when": "((isWindows && !isWeb) || wslFeatureInstalled) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.revealInExplorer",
+          "when": "(!isWeb && remoteName == wsl && !wsl.noWSLPath) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.explorer.connectInCurrentWindow",
+          "when": "false"
+        },
+        {
+          "command": "remote-wsl.explorer.connectInNewWindow",
+          "when": "false"
+        },
+        {
+          "command": "remote-wsl.explorer.removeFolder",
+          "when": "false"
+        },
+        {
+          "command": "remote-wsl.explorer.openDistroInCurrentWindow",
+          "when": "false"
+        },
+        {
+          "command": "remote-wsl.explorer.openDistroInNewWindow",
+          "when": "false"
+        },
+        {
+          "command": "remote-wsl.explorer.setDefaultDistro",
+          "when": "false"
+        },
+        {
+          "command": "remote-wsl.explorer.deleteDistro",
+          "when": "false"
+        },
+        {
+          "command": "remote-wsl.explorer.refresh",
+          "when": "false"
+        },
+        {
+          "command": "remote-wsl.explorer.addDistro",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "remote-wsl.explorer.addDistro",
+          "group": "navigation@1",
+          "when": "(view == targetsWsl) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.explorer.refresh",
+          "group": "navigation@2",
+          "when": "(view == targetsWsl) && !wsl.standingDown"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "remote-wsl.explorer.connectInCurrentWindow",
+          "group": "1_folder@1",
+          "when": "(view == targetsWsl && viewItem == folder) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.explorer.connectInCurrentWindow",
+          "group": "inline@1",
+          "when": "(view == targetsWsl && viewItem == folder) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.explorer.connectInNewWindow",
+          "group": "1_folder@1",
+          "when": "(view == targetsWsl && viewItem == folder) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.explorer.connectInNewWindow",
+          "group": "inline@2",
+          "when": "(view == targetsWsl && viewItem == folder) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.explorer.removeFolder",
+          "group": "2_folder@",
+          "when": "(view == targetsWsl && viewItem == folder) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.explorer.removeFolder",
+          "group": "inline@2",
+          "when": "(view == targetsWsl && viewItem == folder) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.explorer.openDistroInCurrentWindow",
+          "group": "1_distro@1",
+          "when": "(view == targetsWsl && viewItem == inactiveDistro) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.explorer.openDistroInCurrentWindow",
+          "group": "inline@1",
+          "when": "(view == targetsWsl && viewItem == inactiveDistro) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.explorer.openDistroInNewWindow",
+          "group": "1_distro@1",
+          "when": "(view == targetsWsl && viewItem == inactiveDistro) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.explorer.openDistroInNewWindow",
+          "group": "inline@2",
+          "when": "(view == targetsWsl && viewItem == inactiveDistro) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.explorer.setDefaultDistro",
+          "group": "2_distro@2",
+          "when": "(view == targetsWsl && viewItem =~ /^(inactive|active)Distro$/) && !wsl.standingDown"
+        },
+        {
+          "command": "remote-wsl.explorer.deleteDistro",
+          "group": "2_distro@2",
+          "when": "(view == targetsWsl && viewItem =~ /^(inactive|active)Distro$/) && !wsl.standingDown"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "remote-wsl.revealInExplorer",
+          "group": "navigation@20",
+          "when": "(!isWeb && remoteName == wsl && !wsl.noWSLPath) && !wsl.standingDown"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "remote-wsl.revealInExplorer",
+          "group": "2_files@20",
+          "when": "(!isWeb && remoteName == wsl && !wsl.noWSLPath) && !wsl.standingDown"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "remote-wsl.revealInExplorer",
+        "key": "shift+alt+r",
+        "when": "(editorFocus && remoteName == wsl) && !wsl.standingDown"
+      }
+    ]
+  },
+  "dependencies": {
+    "lib-identifiers": "workspace:*",
+    "lib-log": "workspace:*",
+    "lib-standdown": "workspace:*",
+    "lib-wsl": "workspace:*"
+  }
 }
