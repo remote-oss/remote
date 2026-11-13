@@ -21,7 +21,7 @@ import {
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   dialogOf,
-  notificationCentre,
+  noticesOnceSettled,
   paletteRows,
   rememberPage,
   statusItem,
@@ -47,7 +47,7 @@ const NOTICE_START = 'Folder contains a Dev Container configuration file.';
 
 /** The notices of window `name` other than the reopen notification. */
 async function otherNotices(name: string): Promise<string[]> {
-  return (await notificationCentre(name).catch(() => [])).filter(
+  return (await noticesOnceSettled(name).catch(() => [])).filter(
     text => !text.startsWith(NOTICE_START),
   );
 }

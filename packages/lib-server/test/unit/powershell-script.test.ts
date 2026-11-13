@@ -1316,15 +1316,27 @@ function isRunning(processId: number): boolean {
   }
 }
 
-/** Starts a copy of `sleep` from inside `folder`, so its program lies there, and gives its process id. */
-function sleeperIn(folder: string): number {
-  mkdirSync(folder, {recursive: true});
-  const program = path.join(folder, 'sleep');
+/**
+ * Starts a copy of `sleep` at `program` for 30 seconds, detached, and gives its process. The copy is run under the name
+ * `sleep`: a coreutils that is one multi-call program (uutils, as on Ubuntu 26.04) picks the utility by that name, and
+ * under the copy's own file name it would be none and exit at once. The process's program is still the copy.
+ */
+function sleepCopyAt(program: string): ChildProcess {
+  mkdirSync(path.dirname(program), {recursive: true});
   copyFileSync('/bin/sleep', program);
   chmodSync(program, 0o755);
-  const child = spawn(program, ['30'], {detached: true, stdio: 'ignore'});
+  const child = spawn(program, ['30'], {
+    argv0: 'sleep',
+    detached: true,
+    stdio: 'ignore',
+  });
   child.unref();
-  return child.pid ?? 0;
+  return child;
+}
+
+/** Starts a copy of `sleep` from inside `folder`, so its program lies there, and gives its process id. */
+function sleeperIn(folder: string): number {
+  return sleepCopyAt(path.join(folder, 'sleep')).pid ?? 0;
 }
 
 /** Waits until the process ends, for at most two seconds; gives whether it ended. */
@@ -1842,15 +1854,7 @@ describe('the PowerShell CLI stop, run under pwsh', function () {
   it('F-2403: the recorded CLI is ended while it is still the CLI, and nothing else is', async () => {
     const host = powershellHost();
     const base = cliParameters(host);
-    const cliFile = cliFileOf(host, base);
-    mkdirSync(path.dirname(cliFile), {recursive: true});
-    copyFileSync('/bin/sleep', cliFile);
-    chmodSync(cliFile, 0o755);
-    const cliProgram = spawn(cliFile, ['30'], {
-      detached: true,
-      stdio: 'ignore',
-    });
-    cliProgram.unref();
+    const cliProgram = sleepCopyAt(cliFileOf(host, base));
     const other = sleeperIn(path.join(host.root, 'other'));
     try {
       const outcomes = [cliProgram.pid ?? 0, other, 'x1'].map(processId =>

@@ -27,10 +27,22 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-/** The rows' Port column once the view shows `count` rows, or whatever it shows after the wait. */
+/** A Port column entry that carries a label: the label, then the port number in brackets. */
+const LABELLED = /^.+ \(\d+\)$/;
+
+/**
+ * The rows' Port column once `count` rows carry a label, or whatever the view shows after the wait. The view lists a
+ * port before it has applied its label, after a reload too.
+ */
 async function portColumn(window: string, count: number): Promise<string[]> {
   await showPorts(window);
-  return portsOf(await rowsWhen(window, shown => shown.length >= count)).sort();
+  return portsOf(
+    await rowsWhen(
+      window,
+      shown =>
+        portsOf(shown).filter(port => LABELLED.test(port)).length >= count,
+    ),
+  ).sort();
 }
 
 describe('the port attributes of the configuration (card containers-73)', function () {

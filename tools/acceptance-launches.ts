@@ -229,6 +229,9 @@ const CONTAINERS_LAUNCH = {
     // The folder dialog is the in-window one, which the renderer helpers can type into.
     'files.simpleDialog.enable': true,
     'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+    // A new window opens no Welcome page of its own, which would replace the preview tab of a file a row reads, later on a
+    // slower machine.
+    'workbench.startupEditor': 'none',
   },
 } as const;
 
@@ -1272,6 +1275,25 @@ export function launchesOf(root: string): Launch[] {
       ...CONTAINERS_LAUNCH,
       label: 'containers-volume',
       suite: 'containers-volume',
+      files: [
+        'clone.test.ts',
+        'recovery.test.ts',
+        'uri-handler.test.ts',
+        'volume.test.ts',
+      ],
+    },
+    // Explore a Volume opens its window in Restricted Mode, which only a launch with workspace trust on shows; the other
+    // volume rows run with trust off, as a folder of theirs needs no trust question.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-volume-trust',
+      suite: 'containers-volume',
+      files: ['explore-volume.test.ts'],
+      workspaceTrust: true,
+      settings: {
+        ...CONTAINERS_LAUNCH.settings,
+        'security.workspace.trust.startupPrompt': 'never',
+      },
     },
     // The editor starts with two variables of its own, one set and one empty, which a configuration's references read.
     {

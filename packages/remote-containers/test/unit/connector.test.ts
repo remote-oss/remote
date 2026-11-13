@@ -1248,6 +1248,140 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
+  it('F-0408 AC-14: a container whose outcome carries the configuration up read takes its merged part from it, with no read of its own', async () => {
+    const scene = sceneOf();
+    scene.defaultExtensions = ['c.d'];
+    scene.outcome = {
+      ...READY,
+      created: true,
+      configuration: {name: 'FromUp'},
+      mergedConfiguration: {customizations: {vscode: [{extensions: ['a.b']}]}},
+    };
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.configurationReads.filter(
+          read => read.containerId === READY.containerId,
+        ),
+        scene.serverRequests.map(request => request.defaultExtensions),
+      ],
+      [[], [['a.b', 'c.d']]],
+    );
+  });
+
+  describe('the blocking run of a container that was already running (F-0408 AC-14)', () => {
+    const LISTED = {
+      onCreateCommands: [],
+      updateContentCommands: ['npm ci'],
+    };
+    /** A scene whose container was already running, with `merged` as its merged configuration. */
+    function reusedScene(merged: Record<string, unknown>): Scene {
+      const scene = sceneOf();
+      scene.outcome = {
+        ...READY,
+        created: false,
+        configuration: {name: 'Proj'},
+        mergedConfiguration: merged,
+      };
+      return scene;
+    }
+    /** What the scene did about the blocking run: whether it ran, the markers' script runs, and the skip's log line. */
+    function aboutBlocking(scene: Scene): [boolean, number, string[]] {
+      return [
+        scene.lifecycleRuns.some(entry => entry.startsWith('blocking')),
+        scene.markerScripts.length,
+        messages(scene).filter(line =>
+          line.includes('blocking run is skipped'),
+        ),
+      ];
+    }
+
+    it('is skipped, with one log line, when the markers say the commands up to waitFor ran', async () => {
+      const scene = reusedScene(LISTED);
+      scene.markersRan = true;
+      await connected(scene);
+      deepStrictEqual(aboutBlocking(scene), [
+        false,
+        1,
+        [
+          'the commands up to updateContentCommand already ran in this container: the blocking run is skipped',
+        ],
+      ]);
+    });
+
+    it('is skipped without reading any marker when no command up to waitFor has an entry, and says up to which command', async () => {
+      const scene = reusedScene({waitFor: 'onCreateCommand', ...LISTED});
+      await connected(scene);
+      deepStrictEqual(aboutBlocking(scene), [
+        false,
+        0,
+        [
+          'the commands up to onCreateCommand already ran in this container: the blocking run is skipped',
+        ],
+      ]);
+    });
+
+    it('happens when a marker does not say the commands ran', async () => {
+      const scene = reusedScene(LISTED);
+      await connected(scene);
+      deepStrictEqual(aboutBlocking(scene), [true, 1, []]);
+    });
+
+    it('happens, with no marker read, for a container that was newly started', async () => {
+      const scene = sceneOf();
+      scene.outcome = {
+        ...READY,
+        created: true,
+        mergedConfiguration: LISTED,
+      };
+      scene.markersRan = true;
+      await connected(scene);
+      deepStrictEqual(aboutBlocking(scene), [true, 0, []]);
+    });
+
+    it('happens, with no marker read, for a waitFor that the markers are not read for, and for a configuration up did not give', async () => {
+      const outcomes: unknown[] = [];
+      for (const merged of [
+        {waitFor: 'postStartCommand', ...LISTED},
+        undefined,
+      ]) {
+        const scene = reusedScene(LISTED);
+        scene.outcome = {
+          ...READY,
+          created: false,
+          ...(merged === undefined ? {} : {mergedConfiguration: merged}),
+        };
+        scene.markersRan = true;
+        await connected(scene);
+        outcomes.push(aboutBlocking(scene));
+      }
+      deepStrictEqual(outcomes, [
+        [true, 0, []],
+        [true, 0, []],
+      ]);
+    });
+
+    it('happens when the engine does not give the creation time', async () => {
+      const outcomes: unknown[] = [];
+      for (const answer of [
+        'fails',
+        'not json',
+        '"2026-11-12T00:00:00Z"\nnot json',
+      ]) {
+        const scene = reusedScene(LISTED);
+        scene.markersRan = true;
+        scene.markerInspect = answer;
+        await connected(scene);
+        outcomes.push(aboutBlocking(scene));
+      }
+      deepStrictEqual(outcomes, [
+        [true, 0, []],
+        [true, 0, []],
+        [true, 0, []],
+      ]);
+    });
+  });
+
   it('F-0505 AC-14: a reused container installs nothing, and says nothing of it', async () => {
     const scene = sceneOf();
     scene.outcome = {...READY, created: false};

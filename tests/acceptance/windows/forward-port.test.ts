@@ -1,5 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
-import {connectingPrograms, holdOpen, listenersOf} from './forward-support.ts';
+import {
+  connectingPrograms,
+  holdOpen,
+  listenersOf,
+  REQUEST,
+} from './forward-support.ts';
 import {inWindow, onHost, openWindow, windowEvents} from './harness.ts';
 
 /** The port on the host that the listener answers on. */
@@ -8,7 +13,7 @@ const REMOTE_PORT = 8613;
 /** What the listener says to a connection. */
 const GREETING = 'forwarded-8613';
 
-/** The listener's program on the host: it greets, then keeps the connection open for a while. */
+/** The listener's program on the host: it answers the client's first line, then keeps the connection open for a while. */
 const GREETER = '/tmp/forward-greeter.sh';
 
 /** The local port a `forwarded` event of window `name` names, whatever shape the editor gives the address in. */
@@ -31,7 +36,7 @@ describe('a port forwarded in a connected window (card connect-34)', function ()
     await onHost(
       'sh',
       '-c',
-      `printf '#!/bin/sh\\necho ${GREETING}\\nsleep 30\\n' > ${GREETER} && chmod 755 ${GREETER}`,
+      `printf '#!/bin/sh\\nread line\\necho ${GREETING}\\nsleep 30\\n' > ${GREETER} && chmod 755 ${GREETER}`,
     );
     await onHost(
       'sh',
@@ -52,7 +57,7 @@ describe('a port forwarded in a connected window (card connect-34)', function ()
 
   it("F-2507 AC-18: a port forwarded in a connected window reaches the host's port", async () => {
     const port = localPortOf('f1');
-    const held = await holdOpen(port);
+    const held = await holdOpen(port, REQUEST);
     held.release();
     // What listens on the port on each side, said only when the greeting is not the listener's.
     const listeners =
@@ -67,7 +72,7 @@ describe('a port forwarded in a connected window (card connect-34)', function ()
   });
 
   it('F-2507 AC-18 (host-side): the connection to the port is opened by the VS Code Server, not by sshd', async () => {
-    const held = await holdOpen(localPortOf('f1'));
+    const held = await holdOpen(localPortOf('f1'), REQUEST);
     const programs = await connectingPrograms(REMOTE_PORT);
     held.release();
     deepStrictEqual(
