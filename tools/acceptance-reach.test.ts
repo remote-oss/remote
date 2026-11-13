@@ -568,7 +568,7 @@ describe('acceptance-reach: what a change to a package reaches (card tooling-169
     deepStrictEqual([byName, sourceGraph(root)], [[undefined], undefined]);
   });
 
-  it('tooling-169: in the repository, lib-wsl and remote-containers reach the launches that install Dev Containers, and lib-host every launch', () => {
+  it('tooling-169: in the repository, remote-containers reaches the launches that install Dev Containers, lib-wsl those and the ones that install WSL, and lib-host every launch', () => {
     const launches = launchesOf(REPOSITORY_ROOT);
     const graph = sourceGraph(REPOSITORY_ROOT);
     if (graph === undefined) {
@@ -583,11 +583,22 @@ describe('acceptance-reach: what a change to a package reaches (card tooling-169
           ),
       )
       .map(launch => launch.label);
+    const wslLaunches = launches
+      .filter(
+        launch =>
+          launch.kind === 'plain' &&
+          (launch.withExtensions ?? []).includes('remote-oss.remote-wsl'),
+      )
+      .map(launch => launch.label);
     deepStrictEqual(
       ['lib-wsl', 'remote-containers', 'lib-host'].map(name =>
-        packageReach(graph, `packages/${name}`, launches),
+        packageReach(graph, `packages/${name}`, launches)?.sort(),
       ),
-      [containers, containers, undefined],
+      [
+        [...containers, ...wslLaunches].sort(),
+        [...containers].sort(),
+        undefined,
+      ],
     );
   });
 
