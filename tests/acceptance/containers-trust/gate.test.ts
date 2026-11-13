@@ -46,7 +46,6 @@ import {
   statusBarText,
   quickPickOf,
   waitForDialog,
-  waitForPageGone,
   welcomeText,
   windowTitle,
 } from '../windows/renderer.ts';
@@ -1044,7 +1043,6 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     await answerDialog(name, 'OK');
     await reloaded;
     await closeWindow(name);
-    await waitForPageGone(name);
     const from = await openFolderWindow(
       devContainerFolder('c123-recent-revoked-from'),
     );
