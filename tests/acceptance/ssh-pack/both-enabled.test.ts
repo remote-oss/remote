@@ -5,12 +5,14 @@ import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
   inWindow,
+  onHostAs,
   readUserSettings,
   restoreUserSettings,
   startInWindow,
   userSettings,
   variable,
   waitFor,
+  windowState,
 } from '../windows/harness.ts';
 import {closePick, pickShown} from '../windows/explorer-home.ts';
 import {
@@ -20,6 +22,7 @@ import {
   extensionsViewSections,
   languageModeOf,
   lineTokensOf,
+  notifications,
   suggestionsOf,
   typeInFocus,
 } from '../windows/renderer.ts';
@@ -131,7 +134,7 @@ describe('the extension and both companions enabled (card #2499)', function () {
 
   it('F-2007 AC-12 (c2499-custom-file): a config file outside the companion’s patterns opens in the mode the editor assigns, Plain Text', async () => {
     const saved = readUserSettings();
-    const custom = path.join(packHome(), 'custom-hosts.conf');
+    const custom = path.join(packHome(), 'f2007-custom-hosts');
     writeFileSync(custom, 'Host custom\n  HostName custom.invalid\n');
     try {
       await userSettings({'remote.SSH.configFile': custom});
@@ -151,14 +154,51 @@ describe('the extension and both companions enabled (card #2499)', function () {
     }
   });
 
-  it('F-2007 (c2499-measure-both): what the remote indicator menu lists, and the remote config file in an SSH window', async () => {
+  it('F-2007 AC-14 (c2499-menu-part): the remote indicator menu of a local window lists Connect to Host... and Connect Current Window to Host...', async () => {
+    await startInWindow(window, 'workbench.action.remote.showMenu');
+    const menu = await pickShown(window);
+    await closePick(window);
+    deepStrictEqual(
+      [menu.placeholder, menu.rows],
+      [
+        'Select an option to open a Remote Window',
+        ['Connect to Host...', 'Connect Current Window to Host...'],
+      ],
+    );
+  });
+
+  it('F-2007 (c2499-measure-ssh): the remote config file opened in an SSH window', async () => {
     const found: Record<string, unknown> = {};
+    let ssh = '';
     try {
-      await startInWindow(window, 'workbench.action.remote.showMenu');
-      found.menu = await pickShown(window);
-      await closePick(window);
+      ssh = 'pack-ssh';
+      await onHostAs('harness', 'mkdir', '-p', '/home/harness/pack-ssh');
+      void inWindow(
+        'local',
+        'acceptance.agent.openWindow',
+        'vscode-remote://ssh-remote+harness/home/harness/pack-ssh',
+      );
+      await waitFor(
+        'the SSH window to connect',
+        async () => (await windowState(ssh)).remoteAuthority !== null,
+        120_000,
+      );
+      found.authority = (await windowState(ssh)).remoteAuthority;
+      await inWindow(
+        ssh,
+        'vscode.open',
+        'vscode-remote://ssh-remote+harness/home/harness/.ssh/config',
+      );
+      await new Promise(resolve => setTimeout(resolve, 4000));
+      found.mode = await languageModeOf(ssh);
+      found.tokens = await lineTokensOf(ssh, 'Host');
+      found.notifications = await notifications(ssh);
     } catch (caught) {
       found.failure = String(caught);
+    } finally {
+      if (ssh !== '') {
+        await closeWindow(ssh).catch(() => undefined);
+      }
     }
     throw new Error(`MEASURED ${JSON.stringify(found)}`);
   });
