@@ -16,8 +16,10 @@ import {
   readUserSettings,
   recordLines,
   restoreUserSettings,
+  settingIn,
   userSettings,
   variable,
+  waitFor,
   windowState,
 } from './harness.ts';
 import {
@@ -180,6 +182,15 @@ describe('Add New SSH Host and the server maintenance commands (card coverage-30
     const broken = 'Host "unterminated\n  HostName 127.0.0.1\n';
     writeFileSync(runFile('broken_config'), broken);
     await userSettings({'remote.SSH.configFile': runFile('broken_config')});
+    // The file is written and read by the editor later: the commands below ask the extension, which must hold the new
+    // value, or the first of them runs against the previous file (a host pick opens and nothing fails).
+    await waitFor(
+      'the local window to read remote.SSH.configFile as the broken file',
+      async () =>
+        (await settingIn('local', 'remote.SSH.configFile')) ===
+        runFile('broken_config'),
+      30_000,
+    );
     const reader = readerText(broken);
     const results: Array<[string, boolean, boolean]> = [];
     for (const command of HOST_COMMANDS) {
