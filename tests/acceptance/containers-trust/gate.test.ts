@@ -304,14 +304,12 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     );
     await clickButton(name, "Don't Trust");
     const reloaded = reloadWindow(name);
-    const question = await waitForDialogOfName(name);
-    const asked = question.dialog;
-    const askedText = await dialogTextAt(question.address);
-    await answerDialogAt(question.address, 'Cancel');
-    const refusal = await waitForDialogOfName(name);
-    const declined = refusal.dialog;
-    const declinedText = await dialogTextAt(refusal.address);
-    await answerDialogAt(refusal.address, 'OK');
+    const asked = await waitForDialog(name);
+    const askedText = await dialogText(name);
+    await answerDialog(name, 'Cancel');
+    const declined = await waitForDialog(name);
+    const declinedText = await dialogText(name);
+    await answerDialog(name, 'OK');
     await reloaded;
     await waitFor(
       `window ${name} to be a local folder again`,
@@ -1059,12 +1057,14 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     inWindow(from, 'acceptance.agent.openWindow', entry?.uri).catch(
       () => undefined,
     );
-    const asked = await waitForDialog(name);
-    const askedText = await dialogText(name);
-    await answerDialog(name, 'Cancel');
-    const declined = await waitForDialog(name);
-    const declinedText = await dialogText(name);
-    await answerDialog(name, 'OK');
+    const question = await waitForDialogOfName(name);
+    const asked = question.dialog;
+    const askedText = await dialogTextAt(question.address);
+    await answerDialogAt(question.address, 'Cancel');
+    const refusal = await waitForDialogOfName(name);
+    const declined = refusal.dialog;
+    const declinedText = await dialogTextAt(refusal.address);
+    await answerDialogAt(refusal.address, 'OK');
     await waitFor(
       `window ${name} to be a local folder`,
       async () => (await windowState(name)).remoteName === null,
