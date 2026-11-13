@@ -287,7 +287,9 @@ const UNPACK_FUNCTIONS: readonly string[] = [
 
 /**
  * The install into a shared tree: the unpack goes into a sibling of the tree that is renamed once it is whole, and
- * `bin/<commit>` is a link to the tree. A tree is complete exactly when its launcher is executable.
+ * `bin/<commit>` is a link to the tree. A tree is complete exactly when its launcher is executable. A rename that fails
+ * because another container's complete tree landed first, between the check and the rename, ends as the check would
+ * have: the own sibling is removed and the tree is used.
  */
 const TREE_FUNCTIONS: readonly string[] = [
   'ensure_install_link() {',
@@ -322,7 +324,11 @@ const TREE_FUNCTIONS: readonly string[] = [
   '    rm -rf "$TREE_STAGING"',
   '    return 0',
   '  fi',
-  '  mv "$TREE_STAGING" "$INSTALL_TREE" || return 1',
+  '  mv "$TREE_STAGING" "$INSTALL_TREE" || {',
+  '    [ -x "$INSTALL_TREE/$LAUNCHER" ] || return 1',
+  '    rm -rf "$TREE_STAGING"',
+  '    return 0',
+  '  }',
   '  rm -rf "${INSTALL_TREE:?}/${TREE_STAGING##*/}"',
   '  [ -x "$INSTALL_TREE/$LAUNCHER" ]',
   '}',

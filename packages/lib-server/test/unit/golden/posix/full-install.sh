@@ -309,7 +309,11 @@ install_tree() {
     rm -rf "$TREE_STAGING"
     return 0
   fi
-  mv "$TREE_STAGING" "$INSTALL_TREE" || return 1
+  mv "$TREE_STAGING" "$INSTALL_TREE" || {
+    [ -x "$INSTALL_TREE/$LAUNCHER" ] || return 1
+    rm -rf "$TREE_STAGING"
+    return 0
+  }
   rm -rf "${INSTALL_TREE:?}/${TREE_STAGING##*/}"
   [ -x "$INSTALL_TREE/$LAUNCHER" ]
 }

@@ -257,6 +257,47 @@ describe('the install into a shared tree (card containers-05)', () => {
     );
   });
 
+  it("containers-05 R4: a rename that fails because another container's complete tree landed after the check uses that tree and removes the own sibling", () => {
+    const real = path.join(path.dirname(realTar(host)), 'mv');
+    const mvFile = path.join(host.tools, 'mv');
+    rmSync(mvFile);
+    writeFileSync(
+      mvFile,
+      [
+        '#!/bin/sh',
+        `case $1 in *_${SUFFIX}) cp -R "$1" "$2" && : >"$2/winner" && exit 1 ;; esac`,
+        `exec '${real}' "$@"`,
+      ].join('\n'),
+    );
+    chmodSync(mvFile, 0o755);
+    const block = blockOf(host, single('install'), treeParameters(host));
+    deepStrictEqual(
+      [
+        block === 'none' ? 'none' : block.status,
+        readlinkSync(installFolder(host)),
+        existsSync(path.join(treeOf(host), 'winner')),
+        entries(path.dirname(treeOf(host))),
+      ],
+      ['Ok', treeOf(host), true, [COMMIT]],
+    );
+  });
+
+  it('containers-05 R4: a rename that fails with no complete tree at the target makes the install UnpackFailed and keeps the sibling', () => {
+    const mvFile = path.join(host.tools, 'mv');
+    rmSync(mvFile);
+    writeFileSync(
+      mvFile,
+      ['#!/bin/sh', `case $1 in *_${SUFFIX}) exit 1 ;; esac`, 'exit 0'].join(
+        '\n',
+      ),
+    );
+    chmodSync(mvFile, 0o755);
+    deepStrictEqual(
+      [statusOf(host, 'install'), entries(path.dirname(treeOf(host)))],
+      ['UnpackFailed', [`${COMMIT}_${SUFFIX}`]],
+    );
+  });
+
   it('F-0503 BR-3: a link to another folder is replaced by a link to the tree', () => {
     runScript(host, single('install'), treeParameters(host));
     rmSync(installFolder(host));
