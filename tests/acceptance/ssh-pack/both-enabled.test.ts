@@ -185,12 +185,24 @@ describe('the extension and both companions enabled (card #2499)', function () {
         120_000,
       );
       found.authority = (await windowState(remote)).remoteAuthority;
-      await inWindow(
-        remote,
-        'acceptance.agent.openUri',
-        'vscode-remote://ssh-remote+harness/home/harness/.ssh/config',
+      await waitFor(
+        'the remote config file to open',
+        async () => {
+          try {
+            await inWindow(
+              remote,
+              'acceptance.agent.openUri',
+              'vscode-remote://ssh-remote+harness/home/harness/.ssh/config',
+            );
+            return true;
+          } catch (caught) {
+            found.lastOpenFailure = String(caught);
+            return false;
+          }
+        },
+        90_000,
       );
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
       found.dialogAfter = await dialogOf(remote);
       found.mode = await languageModeOf(remote);
       found.tokens = await lineTokensOf(remote, 'Host');
