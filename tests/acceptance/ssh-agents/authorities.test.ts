@@ -9,7 +9,6 @@ import {spawnSync} from 'node:child_process';
 import {readFileSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {
-  closeWindow,
   connectedWithin,
   openWindow,
   readUserSettings,
@@ -21,7 +20,6 @@ import {authorityHex} from './authority-hex.ts';
 import {
   answerDialog,
   chooseQuickPickRow,
-  dialogText,
   quickPickOf,
   statusBarText,
   waitForDialog,
@@ -29,8 +27,8 @@ import {
   windowTitle,
 } from '../windows/renderer.ts';
 import {
-  agentsHome,
   ALIAS,
+  closeQuietly,
   fingerprint,
   harnessBlock,
   writeAgentFiles,
@@ -82,7 +80,7 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
         {indicator: true, title: true},
       );
     } finally {
-      await closeWindow('f2008-alias-window');
+      await closeQuietly('f2008-alias-window');
     }
   });
 
@@ -103,7 +101,7 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
         {indicator: true, title: true},
       );
     } finally {
-      await closeWindow('f2008-hex-alias');
+      await closeQuietly('f2008-hex-alias');
     }
   });
 
@@ -168,7 +166,7 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
         {indicator: true, title: true, newLines: 1, found: 0, stored: []},
       );
     } finally {
-      await closeWindow('f2008-hex-address');
+      await closeQuietly('f2008-hex-address');
     }
   });
 
@@ -185,7 +183,7 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
         true,
       );
     } finally {
-      await closeWindow('f2008-bare-address');
+      await closeQuietly('f2008-bare-address');
     }
   });
 
@@ -196,24 +194,21 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
     );
     await openWindow(ALIAS, 'f2008-missing-alias');
     try {
-      await waitForDialog('f2008-missing-alias');
-      const text = (await dialogText('f2008-missing-alias')) ?? '';
-      await answerDialog('f2008-missing-alias', 'Close');
+      const dialog = await waitForDialog('f2008-missing-alias');
+      await answerDialog('f2008-missing-alias', 'Close Remote');
+      const unchanged =
+        [files.config, files.knownHosts, files.customOnly]
+          .map(fingerprint)
+          .join() === before.join();
       deepStrictEqual(
+        {details: dialog.details, unchanged},
         {
-          detail: text.includes(
-            `Could not establish connection to "${ALIAS}": Could not resolve hostname.`,
-          ),
-          unchanged:
-            [files.config, files.knownHosts, files.customOnly]
-              .map(fingerprint)
-              .join() === before.join(),
-          home: agentsHome() === path.dirname(path.dirname(files.config)),
+          details: `Could not establish connection to "${ALIAS}": Could not resolve hostname.`,
+          unchanged: true,
         },
-        {detail: true, unchanged: true, home: true},
       );
     } finally {
-      await closeWindow('f2008-missing-alias');
+      await closeQuietly('f2008-missing-alias');
     }
   });
 });

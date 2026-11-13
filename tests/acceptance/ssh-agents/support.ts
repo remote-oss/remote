@@ -5,7 +5,16 @@
 
 import {mkdirSync, readFileSync, statSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {variable} from '../windows/harness.ts';
+import {
+  closeContained,
+  inWindow,
+  nextEmptyName,
+  userSettings,
+  variable,
+  waitFor,
+  windowEvents,
+} from '../windows/harness.ts';
+import {pressEscape} from '../windows/renderer.ts';
 import {readStateDatabase} from '../windows/state-database.ts';
 
 /** The alias the user's `.ssh/config` of the run's home defines. */
@@ -122,4 +131,25 @@ export function storageKeys(): string[] {
         }>
       ).map(entry => entry.key),
   );
+}
+
+/**
+ * Opens a new empty window with AI features on or off and gives its name. The setting is written first, so the new
+ * window starts with it: an empty window that reloads takes a new name, so the first window is never reloaded.
+ */
+export async function emptyWindowWithAi(enabled: boolean): Promise<string> {
+  await userSettings({'chat.disableAIFeatures': !enabled});
+  const name = nextEmptyName();
+  await inWindow('local', 'workbench.action.newWindow');
+  await waitFor(
+    `window ${name} to activate its agent`,
+    () => windowEvents(name).some(entry => entry.event === 'activated'),
+    60_000,
+  );
+  return name;
+}
+
+/** Closes window `name` so that one that will not close cannot fail the rows after it: a dialog is dismissed with Escape. */
+export async function closeQuietly(name: string): Promise<void> {
+  await closeContained(name, pressEscape);
 }

@@ -6,16 +6,16 @@
 
 import {deepStrictEqual} from 'node:assert';
 import {
-  closeWindow,
   openWindow,
   readUserSettings,
-  reloadWindow,
   restoreUserSettings,
   userSettings,
 } from '../windows/harness.ts';
 import {paletteItems, runFromPalette} from '../windows/palette.ts';
+import {closeQuietly, emptyWindowWithAi} from './support.ts';
 import {
   answerDialog,
+  pressEscape,
   quickPickOf,
   waitForDialog,
   waitForQuickPick,
@@ -41,12 +41,6 @@ function titlesOf(items: readonly string[]): string[] {
   return items.map(item => item.trim());
 }
 
-/** Switches the AI features of the local window with the setting `chat.disableAIFeatures` and reloads the window. */
-async function switchAi(enabled: boolean): Promise<void> {
-  await userSettings({'chat.disableAIFeatures': !enabled});
-  await reloadWindow('local');
-}
-
 describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', function () {
   this.timeout(300_000);
   let saved: string | undefined;
@@ -55,15 +49,23 @@ describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', fun
     saved = readUserSettings();
   });
 
-  after(async () => {
+  after(() => {
     restoreUserSettings(saved);
-    await reloadWindow('local');
   });
 
+  /** The titles the palette lists for `text` in a new empty window that starts with AI features on or off. */
+  async function listedIn(enabled: boolean, text: string): Promise<string[]> {
+    const window = await emptyWindowWithAi(enabled);
+    try {
+      return titlesOf(await paletteItems(window, text));
+    } finally {
+      await closeQuietly(window);
+    }
+  }
+
   it('F-2008 AC-1 (c2500-palette-off): with AI features off, "SSH" lists only Remote-SSH commands and unrelated core items, and "Agents" finds no command', async () => {
-    await switchAi(false);
-    const sshList = titlesOf(await paletteItems('local', 'SSH'));
-    const agents = titlesOf(await paletteItems('local', 'Agents'));
+    const sshList = await listedIn(false, 'SSH');
+    const agents = await listedIn(false, 'Agents');
     deepStrictEqual(
       {
         agentHostTitles: sshList.filter(title =>
@@ -73,20 +75,20 @@ describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', fun
           title => title.startsWith(CATEGORY) && /agent/i.test(title),
         ),
         agents,
+        listed: sshList,
       },
       {
         agentHostTitles: [],
         agentMentions: [],
         agents: ['No matching commands'],
+        listed: sshList,
       },
     );
   });
 
   it('F-2008 AC-2 (c2500-palette-on): with AI features on, the "SSH" list is the AI-off list plus the agent sessions sidebar, with no agent-host title', async () => {
-    await switchAi(false);
-    const offList = titlesOf(await paletteItems('local', 'SSH'));
-    await switchAi(true);
-    const onList = titlesOf(await paletteItems('local', 'SSH'));
+    const offList = await listedIn(false, 'SSH');
+    const onList = await listedIn(true, 'SSH');
     deepStrictEqual(
       {
         added: onList.filter(title => !offList.includes(title)),
@@ -100,49 +102,54 @@ describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', fun
   });
 
   it('F-2008 AC-3 (c2500-palette-window): in an SSH window with AI features on, the window commands are listed under Remote-SSH and no agent-host command is', async () => {
-    await switchAi(true);
+    await userSettings({'chat.disableAIFeatures': false});
     await openWindow('harness', 'f2008-palette');
     try {
       const sshList = titlesOf(await paletteItems('f2008-palette', 'SSH'));
+      const wanted = [
+        `${CATEGORY} Kill Current VS Code Server`,
+        `${CATEGORY} New Window on Active Host`,
+        `${CATEGORY} Provide Feedback`,
+      ];
       deepStrictEqual(
         {
-          listed: [
-            `${CATEGORY} Kill Current VS Code Server`,
-            `${CATEGORY} New Window on Active Host`,
-            `${CATEGORY} Provide Feedback`,
-          ].filter(title => sshList.includes(title)),
+          listed: wanted.filter(title => sshList.includes(title)),
           agentHostTitles: sshList.filter(title =>
             AGENT_HOST_TITLES.some(banned => title.includes(banned)),
           ),
         },
-        {
-          listed: [
-            `${CATEGORY} Kill Current VS Code Server`,
-            `${CATEGORY} New Window on Active Host`,
-            `${CATEGORY} Provide Feedback`,
-          ],
-          agentHostTitles: [],
-        },
+        {listed: wanted, agentHostTitles: []},
       );
     } finally {
-      await closeWindow('f2008-palette');
+      await closeQuietly('f2008-palette');
     }
   });
 
   it('F-2008 AC-10 (c2500-agents-window): after Chat: Open Agents Window shows "Sign in to use Agents", the Remote-SSH configuration file picker is the one measured before', async () => {
-    await switchAi(true);
-    await runFromPalette('local', 'Remote-SSH: Open SSH Configuration File...');
-    await waitForQuickPick('local', 30_000);
-    const before = (await quickPickOf('local'))?.items ?? [];
-    await runFromPalette('local', 'Chat: Open Agents Window');
-    const trust = await waitForDialog('local');
-    await answerDialog('local', 'Cancel');
-    await runFromPalette('local', 'Remote-SSH: Open SSH Configuration File...');
-    await waitForQuickPick('local', 30_000);
-    const after = (await quickPickOf('local'))?.items ?? [];
-    deepStrictEqual(
-      {trust: trust.message.length > 0, after},
-      {trust: true, after: before},
-    );
+    const window = await emptyWindowWithAi(true);
+    try {
+      await runFromPalette(
+        window,
+        'Remote-SSH: Open SSH Configuration File...',
+      );
+      await waitForQuickPick(window, 30_000);
+      const before = (await quickPickOf(window))?.items ?? [];
+      await pressEscape(window);
+      await runFromPalette(window, 'Chat: Open Agents Window');
+      const trust = await waitForDialog(window);
+      await answerDialog(window, 'Cancel');
+      await runFromPalette(
+        window,
+        'Remote-SSH: Open SSH Configuration File...',
+      );
+      await waitForQuickPick(window, 30_000);
+      const after = (await quickPickOf(window))?.items ?? [];
+      deepStrictEqual(
+        {trust: trust.message.length > 0, after},
+        {trust: true, after: before},
+      );
+    } finally {
+      await closeQuietly(window);
+    }
   });
 });

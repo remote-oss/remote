@@ -7,7 +7,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import {
-  closeWindow,
   connectedWithin,
   openWindow,
   readUserSettings,
@@ -27,6 +26,7 @@ import {
 } from '../windows/renderer.ts';
 import {
   CUSTOM_ONLY,
+  closeQuietly,
   fingerprint,
   storageKeys,
   writeAgentFiles,
@@ -56,10 +56,6 @@ describe('Remote - SSH beside core’s agent hosts, from outside (card #2500, F-
     restoreUserSettings(saved);
   });
 
-  after(async () => {
-    await reloadWindow('local');
-  });
-
   it('F-2008 AC-4 (c2500-same-connection): a connection to the host shows the same title, indicator and no notification with AI features off and on', async () => {
     const shown: Array<Awaited<ReturnType<typeof shownBy>>> = [];
     for (const [enabled, window] of [
@@ -67,7 +63,6 @@ describe('Remote - SSH beside core’s agent hosts, from outside (card #2500, F-
       [true, 'f2008-ai-on'],
     ] as const) {
       await userSettings({'chat.disableAIFeatures': !enabled});
-      await reloadWindow('local');
       await openWindow('harness', window);
       try {
         await connectedWithin(window, 90_000);
@@ -77,7 +72,7 @@ describe('Remote - SSH beside core’s agent hosts, from outside (card #2500, F-
           title: shownNow.title.replace(window, '<folder>'),
         });
       } finally {
-        await closeWindow(window);
+        await closeQuietly(window);
       }
     }
     const wanted = {...shown[0], notifications: []};
@@ -91,7 +86,7 @@ describe('Remote - SSH beside core’s agent hosts, from outside (card #2500, F-
     for (const window of ['f2008-s1', 'f2008-s2', 'f2008-s3']) {
       await openWindow('harness', window);
       await connectedWithin(window, 90_000);
-      await closeWindow(window);
+      await closeQuietly(window);
     }
     deepStrictEqual(
       storageKeys().filter(key => key.startsWith('remoteAgentHost.')),
@@ -127,7 +122,7 @@ describe('Remote - SSH beside core’s agent hosts, from outside (card #2500, F-
       await reloadWindow('f2008-keys');
       await connectedWithin('f2008-keys', 90_000);
     } finally {
-      await closeWindow('f2008-keys');
+      await closeQuietly('f2008-keys');
     }
     deepStrictEqual(
       {
