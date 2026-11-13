@@ -112,7 +112,13 @@ describe('the pre-connection script that fails the connect (card connect-87)', f
         'the second failure dialog of pf23',
         () => recordLines('failureDialog', 'pf23').length >= 2,
         180_000,
-      );
+      ).catch((caught: unknown) => {
+        // Which of a second preconnect dialog, no second dialog at all and a script that ran once it was.
+        throw new Error(
+          `${String(caught)}; pf23's preconnect dialogs: ${JSON.stringify(recordLines('preconnectDialog', 'pf23'))}; its failure dialogs: ${JSON.stringify(recordLines('failureDialog', 'pf23'))}; the marker: ${JSON.stringify(markerOf(script))}`,
+          {cause: caught},
+        );
+      });
     });
     deepStrictEqual(
       [
