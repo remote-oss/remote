@@ -1232,6 +1232,39 @@ export async function extensionContextMenu(
 }
 
 /**
+ * The labels of the context menu of the entry `displayName` of the Extensions view in window `name` that can be used, in
+ * order: an action core shows greyed out is left out. The menu is closed again.
+ */
+export async function extensionMenuEnabledActions(
+  name: string,
+  displayName: string,
+): Promise<string[]> {
+  const menu = await evaluate<string[] | null>(
+    name,
+    `(async () => {
+      const rows = ${extensionRowsExpression(displayName)};
+      if (rows.length !== 1) {
+        return null;
+      }
+      const box = rows[0].getBoundingClientRect();
+      rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const labels = [...document.querySelectorAll('.context-view .monaco-menu .action-item')].filter(item => !item.classList.contains('disabled')).map(item => item.querySelector('.action-label')?.textContent ?? '').filter(label => label !== '');
+      for (const type of ['keydown', 'keyup']) {
+        (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
+      }
+      return labels;
+    })()`,
+  );
+  if (menu === null) {
+    throw new Error(
+      `window ${name}: not one Extensions entry named ${JSON.stringify(displayName)}`,
+    );
+  }
+  return menu;
+}
+
+/**
  * Opens the context menu of the entry `displayName` of the Extensions view in window `name` and clicks the action
  * labelled exactly `label`. It fails naming the entry when the view lists it not once, and naming the labels when the
  * menu holds no such action.

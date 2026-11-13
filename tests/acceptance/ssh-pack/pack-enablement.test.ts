@@ -5,7 +5,7 @@ import {openFolderWindow} from '../windows/folder-windows.ts';
 import {closeWindow, inWindow, variable, waitFor} from '../windows/harness.ts';
 import {
   dialogOf,
-  extensionContextMenu,
+  extensionMenuEnabledActions,
   extensionMenuAction,
   extensionsViewSections,
 } from '../windows/renderer.ts';
@@ -47,7 +47,7 @@ describe('the pack disabled and enabled together (card #2499)', function () {
     const menus: string[][] = [];
     for (const companion of COMPANIONS) {
       menus.push(
-        (await extensionContextMenu(window, companion)).filter(
+        (await extensionMenuEnabledActions(window, companion)).filter(
           label => label === 'Enable' || label === 'Disable',
         ),
       );
