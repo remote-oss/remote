@@ -494,11 +494,9 @@ describe('Kill VS Code Server (card coverage-39)', function () {
     const servers = await serverProcesses();
     const name = await nextEmptyWindow(() => killCurrent('x1'));
     const state = await windowState(name);
-    const after = await serverProcesses();
     deepStrictEqual(
-      [state.remoteName, state.folders, after],
+      [state.remoteName, state.folders, await serverProcesses()],
       [null, [], servers],
-      `the servers before: ${JSON.stringify(servers)}; the host's server files and processes after: ${await onHost('sh', '-c', 'ls -la "$HOME"/.*/ 2>&1 | head -40; ps -eo pid,etime,args | grep -E "[s]erver" | cut -c1-160')}`,
     );
     await closeWindow(name);
   });
