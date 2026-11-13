@@ -5,7 +5,6 @@ import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
   inWindow,
-  onHostAs,
   readUserSettings,
   restoreUserSettings,
   startInWindow,
@@ -173,11 +172,10 @@ describe('the extension and both companions enabled (card #2499)', function () {
     let remote = '';
     try {
       remote = 'pack-ssh';
-      await onHostAs('harness', 'mkdir', '-p', '/home/harness/pack-ssh');
       void inWindow(
         'local',
         'acceptance.agent.openWindow',
-        'vscode-remote://ssh-remote+harness/home/harness/pack-ssh',
+        'vscode-remote://ssh-remote+harness/home/harness',
       );
       await waitFor(
         'the SSH window to connect',
@@ -189,11 +187,7 @@ describe('the extension and both companions enabled (card #2499)', function () {
         'the remote config file to open',
         async () => {
           try {
-            await inWindow(
-              remote,
-              'acceptance.agent.openFile',
-              '/home/harness/.ssh/config',
-            );
+            await inWindow(remote, 'acceptance.agent.openFile', '.ssh/config');
             return true;
           } catch (caught) {
             found.lastOpenFailure = String(caught);

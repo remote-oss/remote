@@ -201,6 +201,10 @@ const UNREACHABLE_GALLERY = {
     'http://127.0.0.1:1/{publisher}/{name}/{version}/{path}',
 } as const;
 
+/** The command that gives the harness host's user the two-line SSH configuration the ssh-pack rows open. */
+const PACK_REMOTE_SSH_CONFIG =
+  "printf 'Host f2007-remote\\n  HostName f2007-remote.invalid\\n' > /home/harness/.ssh/config && chown harness:harness /home/harness/.ssh/config";
+
 /** The editor's gallery variables pointed at the stand-in gallery the ssh-pack rows start on this port. */
 const STAND_IN_GALLERY = {
   VSCODE_GALLERY_SERVICE_URL: 'http://127.0.0.1:23790/_apis/public/gallery',
@@ -1524,6 +1528,8 @@ export function launchesOf(root: string): Launch[] {
       suite: 'ssh-pack',
       partOf: 'ssh-pack',
       files: ['pack-install.test.ts', 'both-enabled.test.ts'],
+      // The remote user's own SSH configuration, which the rows open in an SSH window.
+      hostSetup: [{command: PACK_REMOTE_SSH_CONFIG}],
       withExtensions: ['remote-oss.remote-explorer'],
       settings: {
         'window.title': '[${rootName}]${remoteName}',
