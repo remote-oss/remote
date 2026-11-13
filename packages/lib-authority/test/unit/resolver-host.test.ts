@@ -2070,3 +2070,58 @@ describe('the resolver host options of the WSL family (card wsl-18)', () => {
     );
   });
 });
+
+describe('the resolver host: the outer authority’s exec server (card wsl-38)', () => {
+  const OUTER = {name: 'outer'};
+  const LATER = {name: 'later'};
+
+  it('wsl-38: a resolve whose context carries an exec server gives the connector that same object', async () => {
+    const context = await setup();
+    await resolverOf(context.editor).resolve(AUTHORITY, {
+      resolveAttempt: 1,
+      execServer: OUTER,
+    });
+    deepStrictEqual(context.connector.inputs[0]?.execServer === OUTER, true);
+  });
+
+  it('wsl-38: a resolve without one gives the connector an input with no execServer key', async () => {
+    const context = await setup();
+    await resolve(context);
+    deepStrictEqual('execServer' in (context.connector.inputs[0] ?? {}), false);
+  });
+
+  it('wsl-38: a later attempt with another exec server gives the connector the new one, never the first', async () => {
+    const context = await setup();
+    await resolverOf(context.editor).resolve(AUTHORITY, {
+      resolveAttempt: 1,
+      execServer: OUTER,
+    });
+    await resolverOf(context.editor).resolve(AUTHORITY, {
+      resolveAttempt: 2,
+      execServer: LATER,
+    });
+    deepStrictEqual(
+      context.connector.inputs.map(input => input.execServer),
+      [OUTER, LATER],
+    );
+  });
+
+  it('wsl-38: a later attempt without one carries none from the attempt before', async () => {
+    const context = await setup();
+    await resolverOf(context.editor).resolve(AUTHORITY, {
+      resolveAttempt: 1,
+      execServer: OUTER,
+    });
+    await resolve(context, AUTHORITY, 2);
+    deepStrictEqual('execServer' in (context.connector.inputs[1] ?? {}), false);
+  });
+
+  it('wsl-38: resolveExecServer with an exec server in its context gives the connector’s execServer the same field', async () => {
+    const context = await execScene();
+    await resolverOf(context.editor).resolveExecServer?.(AUTHORITY, {
+      resolveAttempt: 1,
+      execServer: OUTER,
+    });
+    deepStrictEqual(context.served.execInputs[0]?.execServer === OUTER, true);
+  });
+});
