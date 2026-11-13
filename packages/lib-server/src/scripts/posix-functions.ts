@@ -285,9 +285,14 @@ const UNPACK_FUNCTIONS: readonly string[] = [
   '}',
 ];
 
+/** How many milliseconds an install tries for a sibling name no other install holds. */
+const SIBLING_TRIES = 100;
+
 /**
  * The install into a shared tree: the unpack goes into a sibling of the tree that is renamed once it is whole, and
- * `bin/<commit>` is a link to the tree. A tree is complete exactly when its launcher is executable. A rename that fails
+ * `bin/<commit>` is a link to the tree. A tree is complete exactly when its launcher is executable. The sibling is made
+ * with `mkdir`, so it is this install's own: a name another install holds, at the same millisecond or left by an
+ * interrupted one, is never reused, and the next millisecond is tried, a bounded number of times. A rename that fails
  * because another container's complete tree landed first, between the check and the rename, ends as the check would
  * have: the own sibling is removed and the tree is used.
  */
@@ -317,7 +322,14 @@ const TREE_FUNCTIONS: readonly string[] = [
   '  fact server.installLink made',
   '}',
   'install_tree() {',
-  '  TREE_STAGING=${INSTALL_TREE}_$STAGING_SUFFIX',
+  '  TREE_SUFFIX=$STAGING_SUFFIX',
+  '  TREE_TRIES=1',
+  '  until mkdir "${INSTALL_TREE}_$TREE_SUFFIX" 2>/dev/null; do',
+  `    [ "$TREE_TRIES" -lt ${String(SIBLING_TRIES)} ] || return 1`,
+  '    TREE_TRIES=$((TREE_TRIES + 1))',
+  '    TREE_SUFFIX=$((TREE_SUFFIX + 1))',
+  '  done',
+  '  TREE_STAGING=${INSTALL_TREE}_$TREE_SUFFIX',
   '  unpack_into "$1" "$TREE_STAGING" || return 1',
   '  [ -x "$TREE_STAGING/$LAUNCHER" ] || return 1',
   '  if [ -x "$INSTALL_TREE/$LAUNCHER" ]; then',
