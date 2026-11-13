@@ -1,12 +1,17 @@
 import {LEVEL_ORDER, type Level} from './levels.ts';
 import {redact} from './redaction.ts';
 
+/** The stream of a process's output a line came from. */
+export type LineStream = 'stdout' | 'stderr';
+
 /** One line of a log, as it reaches a sink. */
 export interface LogLine {
   level: Level;
   scope: readonly string[];
   message: string;
   time: number;
+  /** The stream the line came from, for a line that is a process's output. */
+  stream?: LineStream;
 }
 
 /** The end a log line is written to; the library passes lines on and decides nothing about output. */
@@ -20,11 +25,11 @@ export interface Sink {
  */
 export interface Logger {
   readonly scope: readonly string[];
-  trace(message: string): void;
-  debug(message: string): void;
-  info(message: string): void;
-  warn(message: string): void;
-  error(message: string): void;
+  trace(message: string, stream?: LineStream): void;
+  debug(message: string, stream?: LineStream): void;
+  info(message: string, stream?: LineStream): void;
+  warn(message: string, stream?: LineStream): void;
+  error(message: string, stream?: LineStream): void;
   child(scopeName: string): Logger;
 }
 
@@ -47,7 +52,7 @@ export function createLogger(
   options: LoggerOptions,
 ): Logger {
   function build(scope: readonly string[]): Logger {
-    function write(level: Level, message: string): void {
+    function write(level: Level, message: string, stream?: LineStream): void {
       if (
         LEVEL_ORDER.indexOf(level) < LEVEL_ORDER.indexOf(options.minimumLevel())
       ) {
@@ -58,6 +63,7 @@ export function createLogger(
         scope,
         message: redact(message, options.secrets ? options.secrets() : []),
         time: options.clock ? options.clock() : 0,
+        ...(stream === undefined ? {} : {stream}),
       };
       if (sink !== undefined) {
         sink.write(line);
@@ -65,20 +71,20 @@ export function createLogger(
     }
     return {
       scope,
-      trace: (message: string) => {
-        write('trace', message);
+      trace: (message: string, stream?: LineStream) => {
+        write('trace', message, stream);
       },
-      debug: (message: string) => {
-        write('debug', message);
+      debug: (message: string, stream?: LineStream) => {
+        write('debug', message, stream);
       },
-      info: (message: string) => {
-        write('info', message);
+      info: (message: string, stream?: LineStream) => {
+        write('info', message, stream);
       },
-      warn: (message: string) => {
-        write('warn', message);
+      warn: (message: string, stream?: LineStream) => {
+        write('warn', message, stream);
       },
-      error: (message: string) => {
-        write('error', message);
+      error: (message: string, stream?: LineStream) => {
+        write('error', message, stream);
       },
       child: (scopeName: string) => build([...scope, scopeName]),
     };

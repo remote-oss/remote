@@ -6,6 +6,7 @@
 
 export {type Level, LEVEL_ORDER} from './levels.ts';
 export {
+  type LineStream,
   type LogLine,
   type Logger,
   type LoggerOptions,
@@ -23,6 +24,12 @@ export {
   type ChannelPort,
   type EditorLogPort,
   type RevealableChannel,
+  type TerminalWriter,
 } from './sinks/editor-port.ts';
 export {createChannelSink, defaultFormat} from './sinks/channel-sink.ts';
-export {createTerminalSink} from './sinks/terminal-sink.ts';
+export {createFileSink, type FileSinkOptions} from './sinks/file-sink.ts';
+export {colouredLineOf, plainLineOf} from './sinks/line-format.ts';
+export {
+  createTerminalSink,
+  type TerminalSinkOptions,
+} from './sinks/terminal-sink.ts';

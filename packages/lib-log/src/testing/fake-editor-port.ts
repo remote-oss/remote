@@ -1,4 +1,4 @@
-import type {EditorLogPort} from '../sinks/editor-port.ts';
+import type {EditorLogPort, TerminalWriter} from '../sinks/editor-port.ts';
 
 /** One output channel the fake created, with everything it received. */
 export interface RecordedChannel {
@@ -16,8 +16,12 @@ export interface RecordedTerminal {
   name: string;
   /** The text written, in order. */
   writtenText: string[];
+  /** The open listeners registered. */
+  openListeners: Array<() => void>;
   /** The close listeners registered. */
   closeListeners: Array<() => void>;
+  /** The `preserveFocus` of each reveal, in order. */
+  shows: boolean[];
   /** How often dispose was called. */
   disposeCalls: number;
 }
@@ -56,21 +60,25 @@ export class FakeEditorPort implements EditorLogPort {
   }
 
   /** Create and record a terminal writer under `name`. */
-  createTerminalWriter(name: string): {
-    write(text: string): void;
-    onDidClose(listener: () => void): void;
-    dispose(): void;
-  } {
+  createTerminalWriter(name: string): TerminalWriter {
     const terminal: RecordedTerminal = {
       name,
       writtenText: [],
+      openListeners: [],
       closeListeners: [],
+      shows: [],
       disposeCalls: 0,
     };
     this.terminals.push(terminal);
     return {
       write: (text: string) => {
         terminal.writtenText.push(text);
+      },
+      show: (preserveFocus: boolean) => {
+        terminal.shows.push(preserveFocus);
+      },
+      onDidOpen: (listener: () => void) => {
+        terminal.openListeners.push(listener);
       },
       onDidClose: (listener: () => void) => {
         terminal.closeListeners.push(listener);
@@ -79,6 +87,18 @@ export class FakeEditorPort implements EditorLogPort {
         terminal.disposeCalls += 1;
       },
     };
+  }
+
+  /** Fire `onDidOpen` for the latest terminal, as the editor does when it opens it: the listeners run once. */
+  openLatestTerminal(): void {
+    const latest = this.terminals.at(-1);
+    if (latest !== undefined) {
+      const listeners = latest.openListeners;
+      latest.openListeners = [];
+      for (const listener of listeners) {
+        listener();
+      }
+    }
   }
 
   /**
