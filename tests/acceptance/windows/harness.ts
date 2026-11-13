@@ -91,6 +91,8 @@ export interface AgentEvent {
   defaultValue?: unknown;
   /** Whether the user's settings hold a value for the setting, as `setting` reports it: a key holding `null` reads as no value, as an absent one does. */
   inUserScope?: boolean;
+  /** The value the user's settings hold for the setting, as `setting` reports it (not merged with the default, as `value` is for an object): null for none. */
+  userValue?: unknown;
   /** Where a forwarded port is reachable on this machine, as the editor gave it. */
   localAddress?: string | {host: string; port: number};
   remotePort?: number;
@@ -1973,11 +1975,9 @@ async function readBackOfSetting(key: string, value: unknown): Promise<void> {
         if (value === undefined) {
           return !(await userScopeHolds('local', key));
         }
-        read = await settingIn('local', key);
-        return (
-          canonicalJson(read) === canonicalJson(value) &&
-          (value === null || (await userScopeHolds('local', key)))
-        );
+        // The user's own value, not `get`'s: for an object setting with defaults the merged value never equals what was written.
+        read = await userValueIn('local', key);
+        return canonicalJson(read) === canonicalJson(value);
       },
       30_000,
     );
@@ -2076,6 +2076,14 @@ export async function userScopeHolds(
   return (
     (await reported(name, 'setting', 'acceptance.agent.setting', settingId))
       ?.inUserScope === true
+  );
+}
+
+/** The value the user's settings hold for the setting `settingId`, as window `name` reads it: the user's own, not merged with the setting's default; null for none. */
+async function userValueIn(name: string, settingId: string): Promise<unknown> {
+  return (
+    (await reported(name, 'setting', 'acceptance.agent.setting', settingId))
+      ?.userValue ?? null
   );
 }
 
