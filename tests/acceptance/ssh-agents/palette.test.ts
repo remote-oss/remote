@@ -102,8 +102,8 @@ describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', fun
         added: [SESSIONS],
         removed: [],
         agentHostTitles: [],
-        sessions,
-        onList,
+        sessions: ['(measuring)'],
+        onList: ['(measuring)'],
       },
     );
   });
