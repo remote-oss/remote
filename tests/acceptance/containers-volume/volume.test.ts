@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
-import {readFileSync, writeFileSync} from 'node:fs';
+import {readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {volumeServerFolder} from 'lib-product';
@@ -493,6 +494,10 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
     for (let round = 0; round < 20; round++) {
       await clearVolume();
       await removeVolume();
+      rmSync(path.join(tmpdir(), 'vscode-remote-containers'), {
+        recursive: true,
+        force: true,
+      });
       const mark = containersLog().length;
       const folders = [`race-a${round}`, `race-b${round}`].map(each =>
         devContainerFolder(each, {name: each}),
