@@ -115,6 +115,13 @@ class FakeConnector implements Connector {
     };
   }
 
+  /** Reports `phase` to the host now, as the connector does while its connect is still running. */
+  emit(phase: ConnectPhase): void {
+    for (const listener of this.phaseListeners) {
+      listener(phase);
+    }
+  }
+
   listenerCount(): number {
     return (
       this.phaseListeners.size +
@@ -1738,5 +1745,327 @@ describe('the resolver host: exec servers', () => {
     gate.release();
     await Promise.all([first, second]);
     deepStrictEqual([before, context.served.execInputs.length], [0, 1]);
+  });
+});
+
+describe('the resolver host options of the WSL family (card wsl-18)', () => {
+  const MALFORMED_WSL = 'wsl+Ubuntu@nope+x';
+  const MALFORMED_SSH = 'ssh-remote+7b7d';
+
+  /** What resolving `authority` gives: the editor's error, the connects made and the progresses opened. */
+  async function malformedOutcome(
+    context: Setup,
+    authority: string,
+  ): Promise<[string, number, number]> {
+    let error = 'resolved';
+    try {
+      await resolve(context, authority);
+    } catch (caught) {
+      error = caught instanceof EditorError ? caught.origin : 'other';
+    }
+    return [
+      error,
+      context.connector.inputs.length,
+      context.editor.progressRuns.length,
+    ];
+  }
+
+  it('wsl-18: with malformedHandled, a malformed authority of the family and a bad outer give the handled error, with no connect and no progress', async () => {
+    const context = await setup({family: 'wsl', malformedHandled: true});
+    deepStrictEqual(
+      [
+        await malformedOutcome(context, MALFORMED_WSL),
+        await malformedOutcome(context, 'wsl+Ubuntu@nope'),
+      ],
+      [
+        ['notAvailable(handled=true)', 0, 0],
+        ['notAvailable(handled=true)', 0, 0],
+      ],
+    );
+  });
+
+  it('wsl-18: without malformedHandled, a malformed authority of the family is unhandled', async () => {
+    const context = await setup({family: 'wsl'});
+    deepStrictEqual(await malformedOutcome(context, MALFORMED_WSL), [
+      'notAvailable(handled=false)',
+      0,
+      0,
+    ]);
+  });
+
+  it('wsl-18: with malformedHandled, a malformed authority of another family stays unhandled', async () => {
+    const context = await setup({family: 'wsl', malformedHandled: true});
+    deepStrictEqual(await malformedOutcome(context, MALFORMED_SSH), [
+      'notAvailable(handled=false)',
+      0,
+      0,
+    ]);
+  });
+
+  /** A title that is empty for the stage `opened`, as the family's titleOf gives it. */
+  const EMPTY_OPENED = (phase: ConnectPhase): string =>
+    phase.name === 'opened' ? '' : `phase ${phase.name}`;
+
+  it('wsl-18: with emptyStageClearsText, an empty stage that opens the progress, and one after it, are reported as empty messages', async () => {
+    const context = await setup({
+      emptyStageClearsText: true,
+      titleOf: EMPTY_OPENED,
+    });
+    context.connector.phases = [
+      {name: 'opened'},
+      {name: 'initializing'},
+      {name: 'opened'},
+    ];
+    await resolve(context);
+    deepStrictEqual(context.editor.progressRuns[0]?.updates, [
+      '',
+      'phase initializing',
+      '',
+    ]);
+  });
+
+  it('wsl-18: without emptyStageClearsText, an empty stage adds no report', async () => {
+    const context = await setup({titleOf: EMPTY_OPENED});
+    context.connector.phases = [{name: 'initializing'}, {name: 'opened'}];
+    await resolve(context);
+    deepStrictEqual(context.editor.progressRuns[0]?.updates, [
+      'phase initializing',
+    ]);
+  });
+
+  /** The increments the progress got for stages named `phases`, in order. */
+  async function incrementsFor(
+    phases: ConnectPhase[],
+  ): Promise<Array<number | undefined>> {
+    const context = await setup({barFromConnector: true});
+    context.connector.phases = phases;
+    await resolve(context);
+    return context.editor.progressRuns[0]?.increments ?? [];
+  }
+
+  it('wsl-18: with barFromConnector, the increments for bars of 1, 9, 44, 45 and 90 are the steps between them', async () => {
+    deepStrictEqual(
+      await incrementsFor([
+        {name: 'initializing', bar: 1},
+        {name: 'downloading', bar: 9},
+        {name: 'installing', bar: 44},
+        {name: 'startingServer', bar: 45},
+        {name: 'opened', bar: 90},
+      ]),
+      [1, 8, 35, 1, 45],
+    );
+  });
+
+  it('wsl-18: with barFromConnector, a lower bar after a higher one adds 0', async () => {
+    deepStrictEqual(
+      await incrementsFor([
+        {name: 'initializing', bar: 50},
+        {name: 'downloading', bar: 20},
+      ]),
+      [50, 0],
+    );
+  });
+
+  it('wsl-18: with barFromConnector, a stage without a bar adds no increment, and the first bar ends the indefinite one', async () => {
+    deepStrictEqual(
+      await incrementsFor([
+        {name: 'initializing'},
+        {name: 'downloading', bar: 7},
+        {name: 'installing'},
+      ]),
+      [undefined, 7, undefined],
+    );
+  });
+
+  it('wsl-18: with barFromConnector, a progress that opens late starts at the highest bar the connector named', async () => {
+    const context = await setup({
+      barFromConnector: true,
+      progressDelayMilliseconds: 1500,
+    });
+    const gate = releaseGate();
+    context.connector.hold = gate.promise;
+    context.connector.phases = [
+      {name: 'initializing', bar: 5},
+      {name: 'downloading', bar: 30},
+      {name: 'installing'},
+    ];
+    const running = resolve(context);
+    await Promise.resolve();
+    context.editor.fireTimers();
+    gate.release();
+    await running;
+    deepStrictEqual(context.editor.progressRuns[0]?.increments, [30]);
+  });
+
+  it('wsl-18: barFromConnector replaces determinateStages', async () => {
+    const context = await setup({
+      barFromConnector: true,
+      determinateStages: true,
+    });
+    context.connector.phases = [
+      {name: 'serverDownloadPercent', percent: 40},
+      {name: 'initializing', bar: 3},
+    ];
+    await resolve(context);
+    deepStrictEqual(context.editor.progressRuns[0]?.increments, [undefined, 3]);
+  });
+
+  /** A family whose progress takes its title from the connector, and is never asked for another. */
+  async function titledSetup(delay?: number): Promise<Setup> {
+    return setup({
+      titleFromConnector: true,
+      startTitle: () => {
+        throw new Error('the title is the connector’s');
+      },
+      ...(delay === undefined ? {} : {progressDelayMilliseconds: delay}),
+    });
+  }
+
+  it('wsl-18: with titleFromConnector, no progress opens before a stage has carried a title', async () => {
+    const context = await titledSetup();
+    context.connector.phases = [{name: 'initializing'}];
+    await resolve(context);
+    deepStrictEqual(context.editor.progressRuns.length, 0);
+  });
+
+  it('wsl-18: with titleFromConnector and no delay, the progress opens with the title of the first stage that carries one', async () => {
+    const context = await titledSetup();
+    context.connector.phases = [
+      {name: 'initializing'},
+      {name: 'downloading', progressTitle: 'Opening WSL'},
+    ];
+    await resolve(context);
+    deepStrictEqual(
+      context.editor.progressRuns.map(entry => [entry.title, entry.updates]),
+      [['Opening WSL', ['phase downloading']]],
+    );
+  });
+
+  it('wsl-18: with a delay, a titled stage at 200 ms opens the progress when the delay ends, with the latest text', async () => {
+    const context = await titledSetup(1500);
+    const gate = releaseGate();
+    context.connector.hold = gate.promise;
+    const running = resolve(context);
+    await Promise.resolve();
+    context.connector.emit({
+      name: 'initializing',
+      progressTitle: 'Opening WSL',
+    });
+    context.connector.emit({name: 'installing'});
+    const before = context.editor.progressRuns.length;
+    context.editor.fireTimers();
+    gate.release();
+    await running;
+    deepStrictEqual(
+      [
+        before,
+        context.editor.progressRuns.map(entry => [entry.title, entry.updates]),
+      ],
+      [0, [['Opening WSL', ['phase installing']]]],
+    );
+  });
+
+  it('wsl-18: with a delay, a titled stage after the delay opens the progress at once', async () => {
+    const context = await titledSetup(1500);
+    const gate = releaseGate();
+    context.connector.hold = gate.promise;
+    const running = resolve(context);
+    await Promise.resolve();
+    context.editor.fireTimers();
+    const before = context.editor.progressRuns.length;
+    context.connector.emit({
+      name: 'initializing',
+      progressTitle: 'Opening WSL',
+    });
+    const after = context.editor.progressRuns.length;
+    gate.release();
+    await running;
+    deepStrictEqual([before, after], [0, 1]);
+  });
+
+  it('wsl-18: with a delay, a connect that ends before it opens no progress, whatever its stages carried', async () => {
+    const context = await titledSetup(1500);
+    context.connector.phases = [
+      {name: 'initializing', progressTitle: 'Opening WSL'},
+    ];
+    await resolve(context);
+    deepStrictEqual(context.editor.progressRuns.length, 0);
+  });
+
+  it('wsl-18: a later title does not change the open progress', async () => {
+    const context = await titledSetup();
+    context.connector.phases = [
+      {name: 'initializing', progressTitle: 'First'},
+      {name: 'downloading', progressTitle: 'Second'},
+    ];
+    await resolve(context);
+    deepStrictEqual(
+      context.editor.progressRuns.map(entry => entry.title),
+      ['First'],
+    );
+  });
+
+  /** The failure the presenter is asked about, as the order of the failure mapping sends it there. */
+  async function presented(
+    changes: Partial<ResolverOptions>,
+    outcome: PresenterOutcome = 'handled',
+  ): Promise<{context: Setup; progressEndedWhilePresenting: number}> {
+    const context = await setup(changes);
+    context.connector.answer = FAILURE;
+    context.connector.phases = [{name: 'initializing'}];
+    context.presenter.outcome = outcome;
+    const gate = releaseGate();
+    context.presenter.gate = gate.promise;
+    const running = resolve(context).catch(() => undefined);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const progressEndedWhilePresenting = context.editor.progressEnded;
+    gate.release();
+    await running;
+    return {context, progressEndedWhilePresenting};
+  }
+
+  it('wsl-18: with presentInsideProgress, the progress is still open while the presenter has not answered, and ends after it', async () => {
+    const {context, progressEndedWhilePresenting} = await presented({
+      presentInsideProgress: true,
+    });
+    deepStrictEqual(
+      [progressEndedWhilePresenting, context.editor.progressEnded],
+      [0, 1],
+    );
+  });
+
+  it('wsl-18: without presentInsideProgress, the progress has ended before the presenter answers', async () => {
+    const {progressEndedWhilePresenting} = await presented({});
+    deepStrictEqual(progressEndedWhilePresenting, 1);
+  });
+
+  it('wsl-18: with presentInsideProgress, each answer of the presenter is acted on as before', async () => {
+    const answers: PresenterOutcome[] = ['handled', 'reload', 'closeRemote'];
+    const results: string[][] = [];
+    for (const answer of answers) {
+      const {context} = await presented({presentInsideProgress: true}, answer);
+      results.push(context.editor.actions);
+    }
+    deepStrictEqual(results, [[], ['reload'], ['closeRemote']]);
+  });
+
+  it('wsl-18: with presentInsideProgress, a connector that throws is presented inside the progress too', async () => {
+    const context = await setup({presentInsideProgress: true});
+    context.connector.failure = new Error('the connector broke');
+    context.connector.phases = [{name: 'initializing'}];
+    await failureOf(context);
+    deepStrictEqual(
+      context.presenter.seen.map(failed => failed.reason),
+      [{text: 'the connector broke'}],
+    );
+  });
+
+  it('wsl-18: with presentInsideProgress, a failure the presenter is not asked about is mapped as before', async () => {
+    const context = await setup({presentInsideProgress: true});
+    context.connector.answer = {...FAILURE, retryable: true};
+    deepStrictEqual(
+      [await failureOf(context), context.presenter.seen.length],
+      ['temporarilyNotAvailable: Could not reach the host.', 0],
+    );
   });
 });
