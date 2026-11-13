@@ -10,28 +10,10 @@
   },
   {
     "launch": "containers-a",
-    "file": "containers/connect-reading.test.ts",
-    "title": "F-0408 AC-15 (c68-pull): an image that is not local is pulled inside the Starting container step, and no notification, suffix, title or editor names the pull",
-    "card": 2418,
-    "owner": "hestia",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-a",
     "file": "containers/dockerfile.test.ts",
     "title": "F-0415 AC-7, AC-8, AC-9 (gate-row-6): the create hooks run once, a restart runs the start and attach hooks and initializeCommand again, and a reload runs the attach hook and initializeCommand but not the start hook",
     "card": 2206,
     "owner": "daedalus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-a",
-    "file": "containers/image-build.test.ts",
-    "title": "F-0412 AC-9 (i9): a cacheFrom that names a local tag nobody pushed does not stop the build, and no dialog or notice shows",
-    "card": 2206,
-    "owner": "hestia",
     "evidence": 43225659271,
     "added": "2026-11-12"
   },
@@ -275,6 +257,15 @@
     "title": "F-2102 AC-18: the Add New row of the Kill Local picker asks for a connection command and changes nothing of the window’s connection",
     "card": 2466,
     "owner": "themis",
+    "evidence": 43356589144,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "explorer-folders",
+    "file": "explorer-folders/folders-4-many.test.ts",
+    "title": "F-2503 AC-21 (many-folders): 122 different folders opened one after another on one host are all listed, most recent first, none dropped",
+    "card": 2467,
+    "owner": "hestia",
     "evidence": 43356589144,
     "added": "2026-11-13"
   }
