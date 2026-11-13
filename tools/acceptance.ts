@@ -1110,6 +1110,22 @@ export interface Install {
   folder: string;
   files: string[];
   client: 'vscodium' | 'vscode';
+  /**
+   * The gallery variables of the launch's own environment, which the editor's command line has while it installs: a
+   * pack's members are then looked for where the launch's editor will look, not in the public gallery.
+   */
+  gallery?: Record<string, string>;
+}
+
+/** The gallery variables among `environment`. */
+function galleryVariablesOf(
+  environment: Readonly<Record<string, string>> | undefined,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(environment ?? {}).filter(([name]) =>
+      name.startsWith('VSCODE_GALLERY_'),
+    ),
+  );
 }
 
 /**
@@ -1152,6 +1168,9 @@ export function installsOf(
               : [languagePackVsixOf(runFolder, launch.languagePack)]),
           ],
           client: launch.client ?? 'vscodium',
+          ...(Object.keys(galleryVariablesOf(launch.environment)).length === 0
+            ? {}
+            : {gallery: galleryVariablesOf(launch.environment)}),
         },
       ];
     }),
@@ -1308,13 +1327,25 @@ async function prepare(
     const stateBefore = process.env.XDG_STATE_HOME;
     process.env.XDG_STATE_HOME = stateFolderOf(runFolder, 'install');
     try {
-      for (const {folder, files, client} of installs) {
-        checked(command, editorCommands[client], [
-          `--extensions-dir=${folder}`,
-          `--user-data-dir=${userDataFolderOf(runFolder)}`,
-          `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
-          ...files.flatMap(file => ['--install-extension', file]),
-        ]);
+      for (const {folder, files, client, gallery} of installs) {
+        const before = {...process.env};
+        Object.assign(process.env, gallery);
+        try {
+          checked(command, editorCommands[client], [
+            `--extensions-dir=${folder}`,
+            `--user-data-dir=${userDataFolderOf(runFolder)}`,
+            `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
+            ...files.flatMap(file => ['--install-extension', file]),
+          ]);
+        } finally {
+          for (const name of Object.keys(gallery ?? {})) {
+            if (before[name] === undefined) {
+              delete process.env[name];
+            } else {
+              process.env[name] = before[name];
+            }
+          }
+        }
       }
     } finally {
       if (stateBefore === undefined) {

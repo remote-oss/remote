@@ -592,6 +592,22 @@ function chosenLabels(
     ? [chosen]
     : chosen.map(launch => launch.label);
 }
+/** The gallery variables of the launches with no gallery to reach, and of the one with the stand-in gallery. */
+const UNREACHABLE_GALLERY_VARIABLES = {
+  VSCODE_GALLERY_SERVICE_URL: 'http://127.0.0.1:1',
+  VSCODE_GALLERY_ITEM_URL: 'http://127.0.0.1:1',
+  VSCODE_GALLERY_CONTROL_URL: 'http://127.0.0.1:1',
+  VSCODE_GALLERY_RESOURCE_URL_TEMPLATE:
+    'http://127.0.0.1:1/{publisher}/{name}/{version}/{path}',
+};
+const STAND_IN_GALLERY_VARIABLES = {
+  VSCODE_GALLERY_SERVICE_URL: 'http://127.0.0.1:23790/_apis/public/gallery',
+  VSCODE_GALLERY_ITEM_URL: 'http://127.0.0.1:23790/items',
+  VSCODE_GALLERY_CONTROL_URL: 'http://127.0.0.1:23790/control',
+  VSCODE_GALLERY_RESOURCE_URL_TEMPLATE:
+    'http://127.0.0.1:23790/{publisher}/{name}/{version}/{path}',
+};
+
 describe('acceptance', () => {
   let workspace: TemporaryWorkspace;
   let harness: FakeHarness;
@@ -1681,6 +1697,7 @@ describe('acceptance', () => {
             'containers-ssh-noclient',
           ].map(containersOnly),
           ...['extensionpack', 'extensionpack-german'].map(label => ({
+            gallery: UNREACHABLE_GALLERY_VARIABLES,
             folder: path.join('/run', `extensions-${label}`),
             files: [
               '/dist/remote-ssh.vsix',
@@ -1695,6 +1712,7 @@ describe('acceptance', () => {
             client: 'vscodium',
           })),
           {
+            gallery: UNREACHABLE_GALLERY_VARIABLES,
             folder: path.join('/run', 'extensions-extensionpack-partial'),
             files: [
               '/dist/remote-ssh.vsix',
@@ -1708,6 +1726,7 @@ describe('acceptance', () => {
             client: 'vscodium',
           },
           {
+            gallery: STAND_IN_GALLERY_VARIABLES,
             folder: path.join('/run', 'extensions-ssh-pack'),
             files: [
               '/dist/remote-ssh.vsix',
@@ -1717,6 +1736,7 @@ describe('acceptance', () => {
             client: 'vscodium',
           },
           ...['de', 'hu'].map(language => ({
+            gallery: UNREACHABLE_GALLERY_VARIABLES,
             folder: path.join(
               '/run',
               `extensions-extensionpack-lp-${language}`,
