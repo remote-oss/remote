@@ -5,12 +5,13 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {mkdirSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {
   closeWindow,
   inWindow,
+  moveFocusAway,
   onHost,
   readUserSettings,
   recordLines,
@@ -24,15 +25,27 @@ import {
 } from '../windows/harness.ts';
 import {
   actionTooltip,
+  clickDialogButton,
+  clickRowLabel,
+  chooseSettingOption,
   hoverRow,
   notifications,
+  pressControlAltF,
+  pressEnter,
+  pressEscape,
+  pressShiftArrow,
+  pressSpace,
   quickPickFacts,
+  quickPickRows,
   rowAction,
   rowContextMenu,
+  rowContextMenuByKey,
   rowDetails,
   rowMenuAction,
   rowTooltip,
+  selectedRows,
   shownRowActionTitles,
+  settingsItems,
   titleAction,
   toggleRow,
   viewRows,
@@ -40,12 +53,14 @@ import {
 } from '../windows/renderer.ts';
 import {VIEW} from '../windows/explorer-rows.ts';
 import {
+  bindKeys,
   connectedTo,
   folderRowsOf,
   foldersSettled,
   HOME,
   historyOf,
 } from '../windows/explorer-folders.ts';
+import {stateKeyNames} from '../windows/global-state.ts';
 import {reloadedWindow} from './reloaded-window.ts';
 
 /** The view's actions and refresh, and the host of a second, reachable alias. */
@@ -923,6 +938,848 @@ describe('the recent folders under a target (card coverage-122)', function () {
     } finally {
       restoreUserSettings(saved);
       await closeIfOpen(window);
+    }
+  });
+
+  it('F-5104 AC-22 (c122-core-recent): the view remove leaves File Open Recent unchanged, and the core clear leaves the view rows unchanged', async function () {
+    this.timeout(600_000);
+    const window = await viewWindowIn('c122-core');
+    const target = `${HOME}/c122-core-a`;
+    try {
+      await recordVisit('harness', target, 'c122-core-a');
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(window, 'harness', [target], `${HOME}/c122-core-`);
+      async function holds(): Promise<boolean> {
+        return (await quickPickRows(window)).some(
+          each =>
+            each.label.includes('c122-core-a') ||
+            each.description.includes(target),
+        );
+      }
+      await inWindow(window, 'workbench.action.openRecent');
+      await waitFor(
+        `the recent list of window ${window} to hold the visited folder`,
+        holds,
+        15_000,
+      );
+      const recentBefore = await holds();
+      await pressEscape(window);
+      await rowMenuAction(window, VIEW, 'c122-core-a', REMOVE);
+      await foldersSettled(window, 'harness', [], `${HOME}/c122-core-`);
+      await inWindow(window, 'workbench.action.openRecent');
+      await waitFor(
+        `the recent list of window ${window} to keep the removed folder`,
+        holds,
+        15_000,
+      );
+      const recentAfterRemove = await holds();
+      await pressEscape(window);
+      const beforeClear = (await folderRowsOf(window, 'harness')).map(
+        each => each.description,
+      );
+      await inWindow(window, 'workbench.action.clearRecentFiles');
+      await clickDialogButton(window, 'Clear');
+      await titleAction(window, VIEW, REFRESH);
+      const afterClear = (await folderRowsOf(window, 'harness')).map(
+        each => each.description,
+      );
+      deepStrictEqual(
+        [recentBefore, recentAfterRemove, beforeClear, afterClear],
+        [true, true, beforeClear, beforeClear],
+      );
+    } finally {
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5104 AC-23 (c122-remove-reconnect): a removed row stays gone on Refresh and comes back when its window reloads and reconnects', async function () {
+    this.timeout(600_000);
+    const view = await viewWindowIn('c122-rer');
+    const opened = 'c122-rer-a';
+    const target = `${HOME}/c122-rer-a`;
+    try {
+      await onHost('mkdir', '-p', path.posix.dirname(target));
+      await inWindow(
+        driver,
+        'acceptance.agent.openWindow',
+        `vscode-remote://ssh-remote+harness${target}`,
+      );
+      await waitFor(
+        `window ${opened} to activate its agent`,
+        () => windowEvents(opened).some(each => each.event === 'activated'),
+        120_000,
+      );
+      await connectedTo(opened, 'harness');
+      await titleAction(view, VIEW, REFRESH);
+      await foldersSettled(view, 'harness', [target], `${HOME}/c122-rer-`);
+      await rowMenuAction(view, VIEW, 'c122-rer-a', REMOVE);
+      await foldersSettled(view, 'harness', [], `${HOME}/c122-rer-`);
+      await titleAction(view, VIEW, REFRESH);
+      await foldersSettled(view, 'harness', [], `${HOME}/c122-rer-`);
+      const afterRemove =
+        (await historyOf(driver)).harness?.filter(entry =>
+          entry.path.startsWith(`${HOME}/c122-rer-`),
+        ) ?? [];
+      await inWindow(opened, 'workbench.action.reloadWindow');
+      await waitFor(
+        `window ${opened} to reconnect after its reload`,
+        async () => {
+          try {
+            return (
+              (await windowState(opened)).remoteAuthority ===
+              'ssh-remote+harness'
+            );
+          } catch {
+            return false;
+          }
+        },
+        180_000,
+      );
+      await waitFor(
+        `the history of harness to hold the reconnected folder`,
+        async () =>
+          (await historyOf(driver)).harness?.some(
+            entry => entry.path === target,
+          ) ?? false,
+        120_000,
+      );
+      const afterReload =
+        (await historyOf(driver)).harness?.filter(entry =>
+          entry.path.startsWith(`${HOME}/c122-rer-`),
+        ) ?? [];
+      deepStrictEqual(
+        [afterRemove, afterReload],
+        [[], [{path: target, kind: 'folder'}]],
+      );
+    } finally {
+      await closeIfOpen(opened);
+      await closeWindow(view);
+    }
+  });
+
+  it('F-5104 AC-24 (c122-two-windows): a folder opened or removed in one window reaches the other only on its Refresh or restart', async function () {
+    this.timeout(600_000);
+    const first = await viewWindowIn('c122-tw-1');
+    const second = await viewWindowIn('c122-tw-2');
+    const target = `${HOME}/c122-tw-a`;
+    try {
+      await recordVisit('harness', target, 'c122-tw-a');
+      await titleAction(first, VIEW, REFRESH);
+      await foldersSettled(first, 'harness', [target], `${HOME}/c122-tw-`);
+      const firstHas = (await folderRowsOf(first, 'harness')).some(
+        each => each.description === target,
+      );
+      const secondNotYet = (await folderRowsOf(second, 'harness')).some(
+        each => each.description === target,
+      );
+      await titleAction(second, VIEW, REFRESH);
+      const secondAfterRefresh = (await folderRowsOf(second, 'harness')).some(
+        each => each.description === target,
+      );
+      await rowMenuAction(first, VIEW, 'c122-tw-a', REMOVE);
+      await foldersSettled(first, 'harness', [], `${HOME}/c122-tw-`);
+      const secondStillThere = (await folderRowsOf(second, 'harness')).some(
+        each => each.description === target,
+      );
+      await closeWindow(second);
+      const restarted = await viewWindowIn('c122-tw-2');
+      try {
+        await waitFor(
+          `the hosts of window ${restarted} to stand at their start`,
+          async () => {
+            const rows = (await viewRows(restarted, VIEW)) ?? [];
+            return rows.some(
+              entry => entry.level === 2 && entry.label === 'harness',
+            );
+          },
+          30_000,
+        );
+        const restartedGone = (await folderRowsOf(restarted, 'harness')).some(
+          each => each.description === target,
+        );
+        deepStrictEqual(
+          [
+            firstHas,
+            secondNotYet,
+            secondAfterRefresh,
+            secondStillThere,
+            restartedGone,
+          ],
+          [true, false, true, true, false],
+        );
+      } finally {
+        await closeWindow(restarted);
+      }
+    } finally {
+      await closeIfOpen(second);
+      await closeWindow(first);
+    }
+  });
+
+  it('F-5104 AC-25 (c122-keys): Enter and Space on a focused folder row run nothing, open no window and change no history', async function () {
+    this.timeout(600_000);
+    const window = await viewWindowIn('c122-keys');
+    const target = `${HOME}/c122-keys-a`;
+    try {
+      await recordVisit('harness', target, 'c122-keys-a');
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(window, 'harness', [target], `${HOME}/c122-keys-`);
+      await clickRowLabel(window, VIEW, 'c122-keys-a');
+      const windowsBefore = windowNames();
+      const historyBefore = await historyOf(driver);
+      const settingsBefore = readUserSettings();
+      await pressEnter(window);
+      await pressSpace(window);
+      deepStrictEqual(
+        [
+          windowNames(),
+          await historyOf(driver),
+          readUserSettings(),
+          await notifications(window),
+          await quickPickFacts(window),
+        ],
+        [windowsBefore, historyBefore, settingsBefore, [], undefined],
+      );
+    } finally {
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5104 AC-33 (c122-keybindings): the bound connect and remove keys run nothing from the editor, a host row or a folder row', async function () {
+    this.timeout(600_000);
+    const window = await viewWindowIn('c122-kbd');
+    const target = `${HOME}/c122-kbd-a`;
+    const unbind = await bindKeys([
+      {
+        key: 'ctrl+alt+f1',
+        command: 'remote-explorer.connectToFolderInCurrentWindow',
+      },
+      {
+        key: 'ctrl+alt+f2',
+        command: 'remote-explorer.connectToFolderInNewWindow',
+      },
+      {key: 'ctrl+alt+f3', command: 'remote-explorer.deleteFolderHistoryItem'},
+    ]);
+    try {
+      await recordVisit('harness', target, 'c122-kbd-a');
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(window, 'harness', [target], `${HOME}/c122-kbd-`);
+      const windowsBefore = windowNames();
+      const historyBefore = await historyOf(driver);
+      const settingsBefore = readUserSettings();
+      const configBefore = readFileSync(variable('HARNESS_SSH_CONFIG'));
+      const stateBefore = await windowState(window);
+      async function press(
+        keyNumber: number,
+        focus: (name: string) => Promise<void>,
+      ): Promise<void> {
+        await focus(window);
+        await pressControlAltF(window, keyNumber);
+        await new Promise(resolve => setTimeout(resolve, 2_000));
+      }
+      for (const keyNumber of [1, 2, 3]) {
+        await press(keyNumber, async name => {
+          await moveFocusAway(name);
+        });
+        await press(keyNumber, async name => {
+          await clickRowLabel(name, VIEW, 'harness');
+        });
+        await press(keyNumber, async name => {
+          await clickRowLabel(name, VIEW, 'c122-kbd-a');
+        });
+      }
+      const stateAfter = await windowState(window);
+      deepStrictEqual(
+        [
+          windowNames(),
+          await historyOf(driver),
+          readUserSettings(),
+          readFileSync(variable('HARNESS_SSH_CONFIG')),
+          [stateAfter.remoteAuthority, stateAfter.folders],
+          await notifications(window),
+          ((await viewRows(window, VIEW)) ?? []).length > 0,
+        ],
+        [
+          windowsBefore,
+          historyBefore,
+          settingsBefore,
+          configBefore,
+          [stateBefore.remoteAuthority, stateBefore.folders],
+          [],
+          true,
+        ],
+      );
+    } finally {
+      unbind();
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5104 AC-35 (c122-settings-editor): the two settings show the exact texts with the all-profiles mark, and the dropdown writes the user file', async function () {
+    this.timeout(600_000);
+    const window = await viewWindowIn('c122-set');
+    const saved = readUserSettings();
+    try {
+      await inWindow(
+        window,
+        'workbench.action.openSettings',
+        '@ext:remote-oss',
+      );
+      await waitFor(
+        `the two settings of the extension in the editor of window ${window}`,
+        async () => (await settingsItems(window)).length === 2,
+        30_000,
+      );
+      const items = await settingsItems(window);
+      const sort = items.find(each =>
+        each.title.includes('Folders Sort Order'),
+      );
+      const collapse = items.find(each =>
+        each.title.includes('Collapse Recent Folders'),
+      );
+      await chooseSettingOption(window, 'alphabetical');
+      await waitFor(
+        `the user settings to hold the chosen sort order`,
+        () =>
+          (readUserSettings() ?? '').includes(
+            '"remote-explorer.foldersSortOrder": "alphabetical"',
+          ),
+        15_000,
+      );
+      const written = (readUserSettings() ?? '').includes(
+        '"remote-explorer.foldersSortOrder": "alphabetical"',
+      );
+      deepStrictEqual(
+        [
+          sort?.title,
+          sort?.description,
+          collapse?.title,
+          collapse?.description,
+          (sort?.control ?? []).includes('most recently used'),
+          (sort?.control ?? []).includes('alphabetical'),
+          (sort?.control ?? []).includes(
+            'Display folders in order of the most recently opened at the top',
+          ),
+          written,
+        ],
+        [
+          'Remote-explorer: Folders Sort Order (Applies to all profiles)',
+          'Specifies the order in which to display folders under Remote targets in the Remote Explorer.',
+          'Remote-explorer: Collapse Recent Folders (Applies to all profiles)',
+          'Collapse the recent folders under Remote targets in the Remote Explorer.',
+          true,
+          true,
+          true,
+          true,
+        ],
+      );
+    } finally {
+      restoreUserSettings(saved);
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5104 AC-36 (c122-no-own-state): a connect and a remove write no state of the extension and show no notice of its own', async function () {
+    this.timeout(600_000);
+    const window = await viewWindowIn('c122-state');
+    const target = `${HOME}/c122-state-a`;
+    const saved = readUserSettings();
+    try {
+      await recordVisit('harness', target, 'c122-state-a');
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(window, 'harness', [target], `${HOME}/c122-state-`);
+      await rowAction(window, VIEW, 'c122-state-a', IN_NEW);
+      await waitFor(
+        `window c122-state-a to stand on ssh-remote+harness`,
+        async () =>
+          windowNames().includes('c122-state-a') &&
+          (await windowState('c122-state-a')).remoteAuthority ===
+            'ssh-remote+harness',
+        120_000,
+      );
+      await rowMenuAction(window, VIEW, 'c122-state-a', REMOVE);
+      await foldersSettled(window, 'harness', [], `${HOME}/c122-state-`);
+      deepStrictEqual(
+        [
+          existsSync(
+            path.join(
+              variable('HARNESS_USER_DATA'),
+              'User',
+              'globalStorage',
+              'remote-oss.remote-explorer',
+            ),
+          ),
+          await stateKeyNames('remote-oss.remote-explorer'),
+          readUserSettings(),
+          await notifications(window),
+          await notifications('c122-state-a'),
+        ],
+        [false, [], saved, [], []],
+      );
+    } finally {
+      await closeIfOpen('c122-state-a');
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5104 AC-37 (c122-ws-newwin): a new-window connect on a workspace row opens one window on the workspace and the acting window stays as it was', async function () {
+    this.timeout(600_000);
+    const window = await viewWindowIn('c122-wn-view');
+    const folder = `${HOME}/c122-wn`;
+    const target = `${folder}/z.code-workspace`;
+    const opened = 'c122-wn';
+    try {
+      await onHost('mkdir', '-p', folder);
+      await onHost(
+        'bash',
+        '-c',
+        `printf '%s' '{"folders":[{"path":"${folder}"}]}' > '${target}'`,
+      );
+      await recordVisit('harness', target, opened);
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(window, 'harness', [target], folder);
+      const before = windowNames();
+      const actingBefore = await windowState(window);
+      await rowAction(window, VIEW, 'z (Workspace)', IN_NEW);
+      await waitFor(
+        `window ${opened} to stand on the workspace`,
+        async () =>
+          windowNames().includes(opened) &&
+          (await windowState(opened)).remoteAuthority === 'ssh-remote+harness',
+        120_000,
+      );
+      deepStrictEqual(
+        [
+          windowNames().filter(name => !before.includes(name)),
+          await windowTitle(opened),
+          (await windowState(opened)).workspaceFile,
+          [
+            (await windowState(window)).remoteAuthority,
+            (await windowState(window)).folders,
+          ],
+          await notifications(window),
+        ],
+        [
+          [opened],
+          'z (Workspace) [SSH: harness]',
+          target,
+          [actingBefore.remoteAuthority, actingBefore.folders],
+          [],
+        ],
+      );
+    } finally {
+      await closeIfOpen(opened);
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5104 AC-38 (c122-stale-connect): a connect on a row removed in another window opens the folder and records it again at the front', async function () {
+    this.timeout(600_000);
+    const first = await viewWindowIn('c122-stc-1');
+    const second = await viewWindowIn('c122-stc-2');
+    const opened = 'c122-stc-a';
+    const target = `${HOME}/c122-stc-a`;
+    try {
+      await recordVisit('harness', target, opened);
+      await titleAction(first, VIEW, REFRESH);
+      await titleAction(second, VIEW, REFRESH);
+      await foldersSettled(first, 'harness', [target], `${HOME}/c122-stc-`);
+      await foldersSettled(second, 'harness', [target], `${HOME}/c122-stc-`);
+      await rowMenuAction(second, VIEW, 'c122-stc-a', REMOVE);
+      await foldersSettled(second, 'harness', [], `${HOME}/c122-stc-`);
+      const before = windowNames();
+      await rowAction(first, VIEW, 'c122-stc-a', IN_NEW);
+      await waitFor(
+        `window ${opened} to stand on ssh-remote+harness`,
+        async () =>
+          windowNames().includes(opened) &&
+          (await windowState(opened)).remoteAuthority === 'ssh-remote+harness',
+        120_000,
+      );
+      const recorded = (await historyOf(driver)).harness ?? [];
+      deepStrictEqual(
+        [
+          windowNames().filter(name => !before.includes(name)),
+          await notifications(first),
+          recorded[0]?.path,
+          recorded.filter(entry => entry.path.startsWith(`${HOME}/c122-stc-`))
+            .length,
+        ],
+        [[opened], [], target, 1],
+      );
+    } finally {
+      await closeIfOpen(opened);
+      await closeIfOpen(first);
+      await closeIfOpen(second);
+    }
+  });
+
+  it('F-5104 AC-39 (c122-stale-remove): a remove on a row removed in another window disappears at once and touches only that entry', async function () {
+    this.timeout(600_000);
+    const first = await viewWindowIn('c122-str-1');
+    const second = await viewWindowIn('c122-str-2');
+    const older = `${HOME}/c122-str-a`;
+    const newer = `${HOME}/c122-str-b`;
+    try {
+      await recordVisit('harness', older, 'c122-str-a');
+      await recordVisit('harness', newer, 'c122-str-b');
+      await titleAction(first, VIEW, REFRESH);
+      await titleAction(second, VIEW, REFRESH);
+      await foldersSettled(
+        first,
+        'harness',
+        [newer, older],
+        `${HOME}/c122-str-`,
+      );
+      await foldersSettled(
+        second,
+        'harness',
+        [newer, older],
+        `${HOME}/c122-str-`,
+      );
+      await rowMenuAction(second, VIEW, 'c122-str-b', REMOVE);
+      await foldersSettled(second, 'harness', [older], `${HOME}/c122-str-`);
+      await rowMenuAction(first, VIEW, 'c122-str-b', REMOVE);
+      await foldersSettled(first, 'harness', [older], `${HOME}/c122-str-`);
+      deepStrictEqual(
+        [
+          (await folderRowsOf(first, 'harness'))
+            .filter(each => each.description.startsWith(`${HOME}/c122-str-`))
+            .map(each => each.description),
+          await notifications(first),
+          (await historyOf(driver)).harness
+            ?.map(entry => entry.path)
+            .filter(each => each.startsWith(`${HOME}/c122-str-`)) ?? [],
+        ],
+        [[older], [], [older]],
+      );
+    } finally {
+      await closeIfOpen(first);
+      await closeIfOpen(second);
+    }
+  });
+
+  it('F-5104 AC-40 (c122-nomulti): the Shift arrows keep the single selection and the remove that follows acts on one row only', async function () {
+    this.timeout(600_000);
+    const window = await viewWindowIn('c122-nm');
+    const older = `${HOME}/c122-nm-a`;
+    const newer = `${HOME}/c122-nm-b`;
+    try {
+      await recordVisit('harness', older, 'c122-nm-a');
+      await recordVisit('harness', newer, 'c122-nm-b');
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(
+        window,
+        'harness',
+        [newer, older],
+        `${HOME}/c122-nm-`,
+      );
+      await clickRowLabel(window, VIEW, 'c122-nm-b');
+      const focusedBefore = await selectedRows(window, VIEW);
+      await pressShiftArrow(window, 'ArrowDown');
+      await pressShiftArrow(window, 'ArrowUp');
+      const selectionAfter = await selectedRows(window, VIEW);
+      await rowMenuAction(window, VIEW, 'c122-nm-b', REMOVE);
+      await foldersSettled(window, 'harness', [older], `${HOME}/c122-nm-`);
+      deepStrictEqual(
+        [
+          focusedBefore,
+          selectionAfter,
+          (await historyOf(driver)).harness
+            ?.map(entry => entry.path)
+            .filter(each => each.startsWith(`${HOME}/c122-nm-`)) ?? [],
+        ],
+        [['c122-nm-b'], ['c122-nm-b'], [older]],
+      );
+    } finally {
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5104 AC-41 (c122-aria): the accessible name of a folder row is its tooltip with has actions appended', async () => {
+    const window = await viewWindowIn('c122-aria');
+    const target = `${HOME}/c122-aria-a`;
+    try {
+      await recordVisit('harness', target, 'c122-aria-a');
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(window, 'harness', [target], `${HOME}/c122-aria-`);
+      const detail = ((await rowDetails(window, VIEW)) ?? []).find(
+        each => each.label === 'c122-aria-a',
+      );
+      deepStrictEqual(detail?.ariaLabel, `'${target}' on harness, has actions`);
+    } finally {
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5104 AC-42 (c122-empty-ssh): an empty SSH window on the host adds no folder row and no history entry', async function () {
+    this.timeout(600_000);
+    const window = await viewWindowIn('c122-es');
+    const target = `${HOME}/c122-es-a`;
+    let empty = '';
+    try {
+      await recordVisit('harness', target, 'c122-es-a');
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(window, 'harness', [target], `${HOME}/c122-es-`);
+      const before = windowNames();
+      const historyBefore = await historyOf(driver);
+      await inWindow(
+        driver,
+        'acceptance.agent.openWindow',
+        'vscode-remote://ssh-remote+harness',
+      );
+      empty = windowNames().find(name => !before.includes(name)) ?? '';
+      await waitFor(
+        `the empty window ${empty} to connect to harness`,
+        async () => {
+          try {
+            return (
+              empty !== '' &&
+              (await windowState(empty)).remoteAuthority ===
+                'ssh-remote+harness'
+            );
+          } catch {
+            return false;
+          }
+        },
+        120_000,
+      );
+      await inWindow(empty, 'workbench.view.remote');
+      await titleAction(empty, VIEW, REFRESH);
+      deepStrictEqual(
+        [
+          (await folderRowsOf(empty, 'harness')).map(each => each.description),
+          await historyOf(driver),
+          windowNames().filter(name => !before.includes(name)),
+        ],
+        [[target], historyBefore, [empty]],
+      );
+    } finally {
+      await closeIfOpen(empty);
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5104 AC-43 (c122-cfs): the collapse value set only in a folder setting leaves the hosts at their default at the window start', async () => {
+    const window = 'c122-cfs';
+    const target = `${HOME}/c122-cfs-a`;
+    const folder = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'explorer-folders',
+      'c122-cfs',
+    );
+    try {
+      mkdirSync(path.join(folder, '.vscode'), {recursive: true});
+      writeFileSync(
+        path.join(folder, '.vscode', 'settings.json'),
+        '{"remote-explorer.collapseRecentFolders": true}',
+      );
+      await recordVisit('harness', target, 'c122-cfs-a');
+      await inWindow(
+        driver,
+        'acceptance.agent.openWindow',
+        pathToFileURL(folder).href,
+      );
+      await waitFor(
+        `window ${window} to activate its agent`,
+        () => windowEvents(window).some(each => each.event === 'activated'),
+        120_000,
+      );
+      await inWindow(window, 'workbench.view.remote');
+      await waitFor(
+        `the hosts of window ${window} to stand at their start`,
+        async () => {
+          const rows = (await viewRows(window, VIEW)) ?? [];
+          return (
+            rows.some(
+              entry => entry.level === 2 && entry.label === 'harness',
+            ) &&
+            rows.some(entry => entry.level === 2 && entry.label === 'refused')
+          );
+        },
+        30_000,
+      );
+      const atStart = [
+        await hostExpanded(window, 'harness'),
+        await hostExpanded(window, 'refused'),
+      ];
+      deepStrictEqual(atStart, [true, undefined]);
+    } finally {
+      await closeIfOpen(window);
+    }
+  });
+
+  it('F-5104 AC-44 (c122-ssh-view): the view in an SSH window lists the same rows as the local one, with the connected look on its host', async function () {
+    this.timeout(600_000);
+    const window = await viewWindowIn('c122-sv');
+    const opened = 'c122-sv-a';
+    const target = `${HOME}/c122-sv-a`;
+    try {
+      await onHost('mkdir', '-p', path.posix.dirname(target));
+      await inWindow(
+        driver,
+        'acceptance.agent.openWindow',
+        `vscode-remote://ssh-remote+harness${target}`,
+      );
+      await waitFor(
+        `window ${opened} to activate its agent`,
+        () => windowEvents(opened).some(each => each.event === 'activated'),
+        120_000,
+      );
+      await connectedTo(opened, 'harness');
+      await titleAction(window, VIEW, REFRESH);
+      await inWindow(opened, 'workbench.view.remote');
+      await titleAction(opened, VIEW, REFRESH);
+      await foldersSettled(window, 'harness', [target], `${HOME}/c122-sv-`);
+      await foldersSettled(opened, 'harness', [target], `${HOME}/c122-sv-`);
+      async function hostLook(
+        name: string,
+      ): Promise<[boolean | undefined, string | undefined]> {
+        const rows = (await viewRows(name, VIEW)) ?? [];
+        const host = rows.find(
+          entry => entry.level === 2 && entry.label === 'harness',
+        );
+        return [host?.expanded, host?.description];
+      }
+      const localFolders = (await folderRowsOf(window, 'harness')).map(
+        each => each.description,
+      );
+      const sshFolders = (await folderRowsOf(opened, 'harness')).map(
+        each => each.description,
+      );
+      deepStrictEqual(
+        [sshFolders, await hostLook(window), await hostLook(opened)],
+        [localFolders, [true, ''], [true, 'connected']],
+      );
+    } finally {
+      await closeIfOpen(opened);
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5104 AC-45 (c122-shift-f10): Shift+F10 on a focused folder row opens its context menu with the three entries in order', async () => {
+    const window = await viewWindowIn('c122-f10');
+    const target = `${HOME}/c122-f10-a`;
+    try {
+      await recordVisit('harness', target, 'c122-f10-a');
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(window, 'harness', [target], `${HOME}/c122-f10-`);
+      const menu = await rowContextMenuByKey(window, VIEW, 'c122-f10-a');
+      deepStrictEqual(menu, [CURRENT, IN_NEW, REMOVE]);
+    } finally {
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5104 AC-46 (c122-cross-current): a current-window connect on a folder open in another window changes nothing', async function () {
+    this.timeout(600_000);
+    const window = await viewWindowIn('c122-xc');
+    const opened = 'c122-xc-b';
+    const target = `${HOME}/c122-xc-b`;
+    const older = `${HOME}/c122-xc-a`;
+    try {
+      await onHost('mkdir', '-p', path.posix.dirname(target));
+      await inWindow(
+        driver,
+        'acceptance.agent.openWindow',
+        `vscode-remote://ssh-remote+harness${target}`,
+      );
+      await waitFor(
+        `window ${opened} to activate its agent`,
+        () => windowEvents(opened).some(each => each.event === 'activated'),
+        120_000,
+      );
+      await connectedTo(opened, 'harness');
+      await recordVisit('harness', older, 'c122-xc-a');
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(
+        window,
+        'harness',
+        [older, target],
+        `${HOME}/c122-xc-`,
+      );
+      const before = windowNames();
+      const stateBefore = await windowState(window);
+      await rowAction(window, VIEW, 'c122-xc-b', CURRENT);
+      await new Promise(resolve => setTimeout(resolve, 5_000));
+      deepStrictEqual(
+        [
+          windowNames().filter(name => !before.includes(name)),
+          (await windowState(window)).remoteAuthority,
+          (await windowState(window)).folders,
+          await notifications(window),
+          (await historyOf(driver)).harness
+            ?.map(entry => entry.path)
+            .filter(each => each.startsWith(`${HOME}/c122-xc-`)) ?? [],
+        ],
+        [
+          [],
+          stateBefore.remoteAuthority,
+          stateBefore.folders,
+          [],
+          [older, target],
+        ],
+      );
+    } finally {
+      await closeIfOpen(opened);
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5104 AC-49 (c122-truthy): the collapse setting takes its truth from the value the user settings hold at the window start', async function () {
+    this.timeout(600_000);
+    const saved = readUserSettings();
+    const target = `${HOME}/c122-tr-a`;
+    try {
+      await recordVisit('harness', target, 'c122-tr-a');
+      async function startWith(
+        value: unknown,
+        label: string,
+      ): Promise<[boolean | undefined, boolean | undefined]> {
+        await userSettings({'remote-explorer.collapseRecentFolders': value});
+        const window = await viewWindowIn(label);
+        try {
+          await waitFor(
+            `the hosts of window ${label} to stand at their start`,
+            async () => {
+              const rows = (await viewRows(window, VIEW)) ?? [];
+              return (
+                rows.some(
+                  entry => entry.level === 2 && entry.label === 'harness',
+                ) &&
+                rows.some(
+                  entry => entry.level === 2 && entry.label === 'refused',
+                )
+              );
+            },
+            30_000,
+          );
+          return [
+            await hostExpanded(window, 'harness'),
+            await hostExpanded(window, 'refused'),
+          ];
+        } finally {
+          await closeWindow(window);
+        }
+      }
+      deepStrictEqual(
+        [
+          await startWith('true', 'c122-tr-t1'),
+          await startWith(1, 'c122-tr-n1'),
+          await startWith('false', 'c122-tr-f1'),
+          await startWith(0, 'c122-tr-z0'),
+          await startWith('', 'c122-tr-e0'),
+        ],
+        [
+          [false, false],
+          [false, false],
+          [false, false],
+          [true, undefined],
+          [true, undefined],
+        ],
+      );
+    } finally {
+      restoreUserSettings(saved);
     }
   });
 });

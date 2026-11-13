@@ -957,6 +957,22 @@ export async function clickRowLabel(
 }
 
 /**
+ * The labels of the rows the view `viewName` of window `name` has selected; the list of a single-selection view holds
+ * at most one.
+ */
+export async function selectedRows(
+  name: string,
+  viewName: string,
+): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      return [...(pane?.querySelectorAll('[role="treeitem"].selected, [role="treeitem"][aria-selected="true"]') ?? [])].map(row => row.querySelector('.label-name')?.textContent ?? '');
+    })()`,
+  );
+}
+/**
  * The tooltip the editor draws for the inline action `actionTitle` of the one row labelled `rowLabel` in view
  * `viewName` of window `name`, read after the mouse rests on the action; the mouse is moved away again. The row's
  * actions stay out of sight until the row is hovered, so the row is hovered again before each re-read until the
@@ -4259,6 +4275,48 @@ export async function pressControlAlt(
 /** The modifier bit of Shift in the protocol's key events. */
 const SHIFT = 8;
 
+/** Presses the Space key in window `name`, as the keyboard does. */
+export async function pressSpace(name: string): Promise<void> {
+  await pressStroke(await pageOf(name), name, {
+    key: ' ',
+    code: 'Space',
+    windowsVirtualKeyCode: 32,
+    nativeVirtualKeyCode: 32,
+  });
+}
+
+/** Presses Shift+ArrowDown or Shift+ArrowUp in window `name`, as the keyboard does. */
+export async function pressShiftArrow(
+  name: string,
+  arrow: 'ArrowDown' | 'ArrowUp',
+): Promise<void> {
+  await pressStroke(await pageOf(name), name, {
+    key: arrow,
+    code: arrow,
+    windowsVirtualKeyCode: VIRTUAL_KEY_CODES[arrow],
+    nativeVirtualKeyCode: VIRTUAL_KEY_CODES[arrow],
+    modifiers: SHIFT,
+  });
+}
+
+/**
+ * Presses Ctrl+Alt+F`number` in window `name`, as the keyboard does, so that a user keybinding on it runs its
+ * command.
+ */
+export async function pressControlAltF(
+  name: string,
+  number: number,
+): Promise<void> {
+  const key = `F${String(number)}`;
+  await pressStroke(await pageOf(name), name, {
+    key,
+    code: key,
+    windowsVirtualKeyCode: 111 + number,
+    nativeVirtualKeyCode: 111 + number,
+    modifiers: ALT_AND_CONTROL,
+  });
+}
+
 /** The protocol virtual key code of F10. */
 const F10_KEY_CODE = 121;
 
@@ -4523,6 +4581,23 @@ export async function pressQuickPickOk(name: string): Promise<void> {
   );
 }
 
+/** Clicks the button whose text is `text` in the modal dialog open in window `name`; it fails naming the button when none is. */
+export async function clickDialogButton(
+  name: string,
+  text: string,
+): Promise<void> {
+  const pressed = await evaluate<boolean>(
+    name,
+    `(() => {
+      const button = [...document.querySelectorAll('.monaco-dialog-box .monaco-button')].find(each => (each.textContent ?? '').trim() === ${JSON.stringify(text)});
+      button?.click();
+      return button !== undefined;
+    })()`,
+  );
+  if (!pressed) {
+    throw new Error(`window ${name}: no dialog button ${JSON.stringify(text)}`);
+  }
+}
 /** What the Settings editor shows for one setting. */
 export interface SettingRow {
   /** The lines of the row's text, in order: the title with its indicator, then the description. */
@@ -4569,4 +4644,51 @@ export async function markedTerminalTabs(name: string): Promise<string[]> {
     name,
     `[...document.querySelectorAll('.single-terminal-tab, .terminal-tabs-entry')].filter(tab => tab.querySelector('.codicon-warning') !== null).map(tab => tab.getAttribute('aria-label') ?? tab.getAttribute('title') ?? (tab.textContent ?? '').trim())`,
   );
+}
+
+/** What the Settings editor shows for one setting: its title and description, and the lines its control holds. */
+export interface SettingsItem {
+  /** The title of the setting, with the indicator core appends, for example (Applies to all profiles). */
+  title: string;
+  /** The description below it, as written in the manifest. */
+  description: string;
+  /** The lines the control holds: the options of a dropdown with the highlighted one's description, or the empty list of a checkbox. */
+  control: string[];
+}
+
+/** Each setting the Settings editor of window `name` lists, in order; none when it lists no setting. */
+export async function settingsItems(name: string): Promise<SettingsItem[]> {
+  return evaluate<SettingsItem[]>(
+    name,
+    `(() => {
+      const items = [...document.querySelectorAll('.settings-editor .setting-item')];
+      return items.map(item => ({
+        title: (item.querySelector('.setting-item-title')?.textContent ?? '').trim(),
+        description: (item.querySelector('.setting-item-description')?.textContent ?? '').trim(),
+        control: (item.querySelector('.setting-item-control')?.innerText ?? '').split('\n').map(line => line.trim()).filter(line => line !== ''),
+      }));
+    })()`,
+  );
+}
+
+/** Chooses the option `option` in the first dropdown the Settings editor of window `name` lists. */
+export async function chooseSettingOption(
+  name: string,
+  option: string,
+): Promise<void> {
+  const chosen = await evaluate<boolean>(
+    name,
+    `(() => {
+      const select = document.querySelector('.settings-editor select');
+      if (select === null) {
+        return false;
+      }
+      select.value = ${JSON.stringify(option)};
+      select.dispatchEvent(new Event('change', {bubbles: true}));
+      return true;
+    })()`,
+  );
+  if (!chosen) {
+    throw new Error(`window ${name}: the settings editor lists no dropdown`);
+  }
 }

@@ -37,3 +37,10 @@ export function extensionState(): Promise<Record<string, unknown>> {
     stored === undefined ? {} : (JSON.parse(stored) as Record<string, unknown>),
   );
 }
+
+/** The names of the keys of the profile's global state that start with `prefix`, sorted. */
+export async function stateKeyNames(prefix: string): Promise<string[]> {
+  return [...(await globalState()).keys()]
+    .filter(key => key.startsWith(prefix))
+    .sort();
+}
