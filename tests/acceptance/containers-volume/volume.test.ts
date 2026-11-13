@@ -525,9 +525,19 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
       try {
         const names = await Promise.all(folders.map(each => windowOf(each)));
         await Promise.all(names.map(each => reopenStarted(each)));
-        await Promise.all(
-          names.map(each => connectedToContainer(each, 400_000)),
-        );
+        try {
+          await Promise.all(
+            names.map(each => connectedToContainer(each, 400_000)),
+          );
+        } catch (caught) {
+          const listing = await onVolume(
+            `cd ${serverFolderOf()}/bin && ls -la --time-style=full-iso */ && for d in */*_*; do [ -d "$d" ] || continue; echo "== $d"; ls -laR --time-style=full-iso "$d" | head -40; done; true`,
+          );
+          console.log(
+            `s36m FAILED round ${round}:\n${listing}\n${containersLogSince(mark).join('\n')}`,
+          );
+          throw caught;
+        }
         const installed = await installedOnVolume();
         const siblings = installed.filter(line => line.includes('_'));
         const contents = await onVolume(
