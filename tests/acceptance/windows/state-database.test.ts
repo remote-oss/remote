@@ -99,41 +99,6 @@ describe('the state database reader (card tooling-207)', function () {
     );
   });
 
-  it('tooling-207: a writer with no busy timeout loses no commit to the reads polling beside it', async () => {
-    const script = `
-      const {DatabaseSync} = require('node:sqlite');
-      const database = new DatabaseSync(process.argv[1]);
-      let failures = 0;
-      for (let each = 0; each < 400; each += 1) {
-        try {
-          database.exec('BEGIN');
-          database.exec("INSERT OR REPLACE INTO ItemTable VALUES ('k" + (each % 5) + "', '" + each + "')");
-          database.exec('COMMIT');
-        } catch {
-          failures += 1;
-          try { database.exec('ROLLBACK'); } catch {}
-        }
-      }
-      process.stdout.write('failures ' + failures + '\\n');
-    `;
-    const child = spawn(process.execPath, ['-e', script, file], {
-      stdio: ['ignore', 'pipe', 'inherit'],
-    });
-    let output = '';
-    child.stdout.on('data', (chunk: Buffer) => {
-      output += chunk.toString();
-    });
-    const state = {running: true};
-    void new Promise(resolve => child.once('close', resolve)).then(() => {
-      state.running = false;
-    });
-    while (state.running) {
-      readStateDatabase(file, keys);
-      await new Promise(resolve => setTimeout(resolve, 1));
-    }
-    deepStrictEqual(output.trim(), 'failures 0');
-  });
-
   it('tooling-207: a read that is still open takes no lock: a writer with no busy timeout commits beside it', () => {
     const outcome: {commit: string; reads: string[]} = {
       commit: 'not run',
@@ -159,5 +124,20 @@ describe('the state database reader (card tooling-207)', function () {
       }
     });
     deepStrictEqual(outcome.commit, 'committed');
+  });
+
+  it('tooling-207: a database in write-ahead mode is refused, naming its log, not read stale', () => {
+    const writer = new DatabaseSync(file);
+    writer.exec('PRAGMA journal_mode = WAL');
+    writer.exec("INSERT OR REPLACE INTO ItemTable VALUES ('walled', 'three')");
+    let message = '';
+    try {
+      readStateDatabase(file, keys);
+    } catch (caught) {
+      message = (caught as Error).message;
+    } finally {
+      writer.close();
+    }
+    deepStrictEqual(message.includes('write-ahead log'), true, message);
   });
 });

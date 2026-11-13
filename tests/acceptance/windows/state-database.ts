@@ -152,6 +152,12 @@ export function readStateDatabase<Result>(
   const journal = `${file}-journal`;
   const deadline = Date.now() + milliseconds;
   for (let attempt = 1; ; attempt += 1) {
+    if (existsSync(`${file}-wal`)) {
+      // Not a wait: a lock-free connection ignores the write-ahead log and would read what is stale without a word.
+      throw new Error(
+        `the state database ${file} has a write-ahead log (${file}-wal): this reader takes no lock and would read it stale, so it reads a rollback-journal database only`,
+      );
+    }
     try {
       if (existsSync(journal)) {
         throw new WriterBusy('a writer’s journal is present');
