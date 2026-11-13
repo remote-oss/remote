@@ -130,17 +130,13 @@ describe('the recent folders under a target (card coverage-122)', function () {
       async () => (await historyOf(driver))[alias]?.[0]?.path === target,
       120_000,
     );
+    // closeWindow resolves once the window is gone, so the visit stands on its close.
     await closeWindow(windowName);
-    await waitFor(
-      `window ${windowName} to be gone`,
-      () => !windowNames().includes(windowName),
-      60_000,
-    );
   }
 
   /** Closes the window `name` when it is open: a window a row reloaded away, or never made, is not. */
   async function closeIfOpen(name: string): Promise<void> {
-    if (windowNames().includes(name)) {
+    if (isOpen(name)) {
       await closeWindow(name, 120_000);
     }
   }
@@ -479,21 +475,22 @@ describe('the recent folders under a target (card coverage-122)', function () {
         [target],
         `${HOME}/c122-current-`,
       );
-      const before = windowNames();
+      const openBefore = windowNames().filter(isOpen);
       await rowAction(window, VIEW, 'c122-current-a', CURRENT);
       await waitFor(
         `window c122-current-a to stand on ssh-remote+harness`,
         async () =>
-          windowNames().includes('c122-current-a') &&
           (await windowState('c122-current-a')).remoteAuthority ===
-            'ssh-remote+harness',
+          'ssh-remote+harness',
         120_000,
       );
       deepStrictEqual(
         [
-          before.includes(window),
-          windowNames().includes(window),
-          windowNames().filter(name => !before.includes(name)),
+          openBefore.includes(window),
+          isOpen(window),
+          windowNames().filter(
+            name => isOpen(name) && !openBefore.includes(name),
+          ),
           await notifications('c122-current-a'),
           await quickPickFacts('c122-current-a'),
         ],
@@ -565,19 +562,20 @@ describe('the recent folders under a target (card coverage-122)', function () {
       await recordVisit('harness', target, 'c122-newwin-a');
       await titleAction(window, VIEW, REFRESH);
       await foldersSettled(window, 'harness', [target], `${HOME}/c122-newwin-`);
-      const before = windowNames();
+      const openBefore = windowNames().filter(isOpen);
       await rowAction(window, VIEW, 'c122-newwin-a', IN_NEW);
       await waitFor(
         `window c122-newwin-a to stand on ssh-remote+harness`,
         async () =>
-          windowNames().includes('c122-newwin-a') &&
           (await windowState('c122-newwin-a')).remoteAuthority ===
-            'ssh-remote+harness',
+          'ssh-remote+harness',
         120_000,
       );
       deepStrictEqual(
         [
-          windowNames().filter(name => !before.includes(name)),
+          windowNames().filter(
+            name => isOpen(name) && !openBefore.includes(name),
+          ),
           (await windowState(window)).remoteAuthority,
           (await windowState(window)).folders.length,
           ((await viewRows(window, VIEW)) ?? []).length > 0,
@@ -1368,19 +1366,20 @@ describe('the recent folders under a target (card coverage-122)', function () {
       await recordVisit('harness', target, opened);
       await titleAction(window, VIEW, REFRESH);
       await foldersSettled(window, 'harness', [target], folder);
-      const before = windowNames();
+      const openBefore = windowNames().filter(isOpen);
       const actingBefore = await windowState(window);
       await rowAction(window, VIEW, 'z (Workspace)', IN_NEW);
       await waitFor(
         `window ${opened} to stand on the workspace`,
         async () =>
-          windowNames().includes(opened) &&
           (await windowState(opened)).remoteAuthority === 'ssh-remote+harness',
         120_000,
       );
       deepStrictEqual(
         [
-          windowNames().filter(name => !before.includes(name)),
+          windowNames().filter(
+            name => isOpen(name) && !openBefore.includes(name),
+          ),
           await windowTitle(opened),
           (await windowState(opened)).workspaceFile,
           [
@@ -1417,19 +1416,20 @@ describe('the recent folders under a target (card coverage-122)', function () {
       await foldersSettled(second, 'harness', [target], `${HOME}/c122-stc-`);
       await rowMenuAction(second, VIEW, 'c122-stc-a', REMOVE);
       await foldersSettled(second, 'harness', [], `${HOME}/c122-stc-`);
-      const before = windowNames();
+      const openBefore = windowNames().filter(isOpen);
       await rowAction(first, VIEW, 'c122-stc-a', IN_NEW);
       await waitFor(
         `window ${opened} to stand on ssh-remote+harness`,
         async () =>
-          windowNames().includes(opened) &&
           (await windowState(opened)).remoteAuthority === 'ssh-remote+harness',
         120_000,
       );
       const recorded = (await historyOf(driver)).harness ?? [];
       deepStrictEqual(
         [
-          windowNames().filter(name => !before.includes(name)),
+          windowNames().filter(
+            name => isOpen(name) && !openBefore.includes(name),
+          ),
           await notifications(first),
           recorded[0]?.path,
           recorded.filter(entry => entry.path.startsWith(`${HOME}/c122-stc-`))
