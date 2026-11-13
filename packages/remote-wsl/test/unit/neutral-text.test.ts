@@ -40,4 +40,11 @@ describe('the text neutraliser (wsl.package)', () => {
       'Ubuntu-24.04 /home/user',
     );
   });
+
+  it('escapes an incoming backslash too, so it cannot cancel the escape of the character after it', () => {
+    deepStrictEqual(
+      neutralText('\\[x\\]\\(https://e\\)'),
+      '\\\\\\[x\\\\\\]\\\\\\(https://e\\\\\\)',
+    );
+  });
 });

@@ -223,4 +223,24 @@ describe('the activation of WSL (wsl.package)', () => {
       [[], true, []],
     );
   });
+
+  it('a presence check that throws at once, and a distro key the window refuses to set, settle quietly', async () => {
+    const throwing = sceneOf(false, () => {
+      throw new Error('no runner');
+    });
+    const refusing = sceneOf(false, () => Promise.resolve({kind: 'noDistro'}));
+    refusing.inputs.contextKeys = {
+      setContext: () => Promise.reject(new Error('window closed')),
+    };
+    const settled: string[] = [];
+    for (const scene of [throwing, refusing]) {
+      const outcome = await activateWsl(scene.inputs);
+      if (outcome.kind === 'serving') {
+        await outcome.presenceSettled;
+        settled.push(String(scene.timers[0]?.stopped));
+      }
+    }
+    await new Promise(resolve => setImmediate(resolve));
+    deepStrictEqual(settled, ['true', 'true']);
+  });
 });

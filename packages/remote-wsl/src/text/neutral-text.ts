@@ -4,8 +4,11 @@
  * `[`, `]`, `(`, `)` and `$(` there as link and icon syntax, and control characters as layout.
  */
 
-/** The characters the editor reads as link or icon syntax: a bracket or parenthesis, or `$` that opens an icon. */
-const MARKUP = /[[\]()]|\$(?=\()/gu;
+/**
+ * The characters the editor reads as link or icon syntax: a bracket, a parenthesis, `$` that opens an icon, and the
+ * backslash, which would otherwise cancel the escape put before the character after it.
+ */
+const MARKUP = /[[\]()\\]|\$(?=\()/gu;
 
 /** Whether a code point is a C0 (U+0000 to U+001F) or C1 (U+0080 to U+009F) control character. */
 function isControl(codePoint: number): boolean {

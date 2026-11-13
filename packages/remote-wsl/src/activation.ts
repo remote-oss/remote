@@ -86,24 +86,28 @@ function readPresence<Commands extends Readonly<Record<string, CommandEntry>>>(
         settle();
       },
     );
-    presence(controller.signal).then(
-      result => {
-        if (controller.signal.aborted) {
-          return;
-        }
-        stopTimer();
-        void setContextKey(
-          inputs.contextKeys,
-          inputs.table.noDistrosKey,
-          result.kind === 'noDistro',
-        );
-        settle();
-      },
-      () => {
-        stopTimer();
-        settle();
-      },
-    );
+    Promise.resolve()
+      .then(() => presence(controller.signal))
+      .then(
+        result => {
+          if (controller.signal.aborted) {
+            return;
+          }
+          stopTimer();
+          Promise.resolve(
+            setContextKey(
+              inputs.contextKeys,
+              inputs.table.noDistrosKey,
+              result.kind === 'noDistro',
+            ),
+          ).catch(() => undefined);
+          settle();
+        },
+        () => {
+          stopTimer();
+          settle();
+        },
+      );
   });
 }
 
