@@ -115,6 +115,8 @@ export function upArguments(target: CliTarget, options: UpOptions): string[] {
     ...additionalFeatures(target),
     ...(target.features.lockfile ? [] : ['--no-lockfile']),
     '--skip-post-create',
+    '--include-configuration',
+    '--include-merged-configuration',
     '--gpu-availability',
     options.gpuAvailability,
     '--workspace-mount-consistency',

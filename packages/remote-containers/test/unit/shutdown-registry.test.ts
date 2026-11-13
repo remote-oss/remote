@@ -164,6 +164,31 @@ describe('the shutdown registry (card containers-68)', () => {
     );
   });
 
+  /** Two windows of one container: the first closes, and nine seconds later the second closes or reloads. */
+  async function secondGoesAfterFirst(): Promise<ReturnType<typeof scene>> {
+    const closing = scene();
+    connect(closing.registry, 1, 'first', IDENTITY, STOP);
+    connect(closing.registry, 2, 'second', IDENTITY, STOP);
+    closing.registry.leasesChanged([2]);
+    await closing.advance(9000);
+    closing.registry.leasesChanged([]);
+    return closing;
+  }
+
+  it("F-0417 AC-24: an earlier close's check that falls inside another window's reload stops nothing, and the reloaded window keeps the container", async () => {
+    const {registry, advance, runs} = await secondGoesAfterFirst();
+    await advance(2000);
+    connect(registry, 3, 'reloaded', IDENTITY, STOP);
+    await advance(2 * CHECK_MILLISECONDS);
+    deepStrictEqual(runs, []);
+  });
+
+  it("F-0417 AC-1, BR-5: when two windows close in turn, the container stops once, at the last close's check", async () => {
+    const {advance, runs} = await secondGoesAfterFirst();
+    await advance(2 * CHECK_MILLISECONDS);
+    deepStrictEqual(runs, ['19s stop c0ffee']);
+  });
+
   it('F-0417 BR-5: another live connection with the same container id keeps it running, and the check leaves a line in the log', async () => {
     const {registry, advance, runs, logs} = scene();
     connect(registry, 1, 'a', IDENTITY, STOP);

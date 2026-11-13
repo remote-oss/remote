@@ -1,6 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
 import {mkdirSync, readFileSync, readdirSync} from 'node:fs';
-import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {closeWindow, inWindow, variable, waitFor} from '../windows/harness.ts';
@@ -17,6 +16,7 @@ import {
   notifications,
   windowSizeOf,
 } from '../windows/renderer.ts';
+import {readStateDatabase} from '../windows/state-database.ts';
 
 /** The pack's package folder. */
 const PACKAGE_FOLDER = path.join(
@@ -70,20 +70,15 @@ function stateKeysNamedAfterPack(userData: string): string[] {
   return readdirSync(path.join(userData, 'User'), {recursive: true})
     .map(String)
     .filter(entry => entry.endsWith('state.vscdb'))
-    .flatMap(entry => {
-      const database = new DatabaseSync(path.join(userData, 'User', entry), {
-        readOnly: true,
-      });
-      try {
-        return (
+    .flatMap(entry =>
+      readStateDatabase(path.join(userData, 'User', entry), database =>
+        (
           database
             .prepare('SELECT key FROM ItemTable WHERE key LIKE ?')
             .all(`%${PACK_ID}%`) as Array<{key: string}>
-        ).map(found => `${entry}: ${found.key}`);
-      } finally {
-        database.close();
-      }
-    });
+        ).map(found => `${entry}: ${found.key}`),
+      ),
+    );
 }
 
 /** What a README renders as, read from its Markdown: the headings, the links, the images and the list items. */

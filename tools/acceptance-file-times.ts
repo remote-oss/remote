@@ -4,15 +4,49 @@
  *
  *     acceptance: file <suite folder>/<file> <seconds>
  *
- * The plain launches run with it, so a run's log holds the minutes the parts table is made from.
+ * The plain launches run with it, so a run's log holds the minutes the parts table is made from. When
+ * REMOTE_OSS_ACCEPTANCE_OUTCOME names a file, it also writes the run's outcome there at its end: each failed row or hook
+ * with its message, each passed row, and that the run ended (tools/known-reds.ts reads it).
  */
 
+import {writeFileSync} from 'node:fs';
 import path from 'node:path';
 import Mocha from 'mocha';
+import {
+  OUTCOME_VARIABLE,
+  type LaunchOutcome,
+  type OutcomeRow,
+} from './known-reds.ts';
 
 const {
-  constants: {EVENT_RUN_END, EVENT_SUITE_BEGIN, EVENT_SUITE_END},
+  constants: {
+    EVENT_RUN_END,
+    EVENT_SUITE_BEGIN,
+    EVENT_SUITE_END,
+    EVENT_TEST_FAIL,
+    EVENT_TEST_PASS,
+  },
 } = Mocha.Runner;
+
+/** The row `runnable` is, by its file (suite folder and name) and its own title. */
+export function outcomeRowOf(runnable: Mocha.Runnable): OutcomeRow {
+  const file = runnable.file ?? '';
+  return {
+    file: `${path.basename(path.dirname(file))}/${path.basename(file)}`,
+    title: runnable.title,
+  };
+}
+
+/** The first line of what failed `runnable`. */
+function firstLineOf(failure: unknown): string {
+  const text =
+    failure instanceof Error
+      ? failure.message
+      : typeof failure === 'string'
+        ? failure
+        : JSON.stringify(failure);
+  return text.split('\n')[0] ?? '';
+}
 
 /** The line of one file: its suite folder and name, and its seconds to one decimal. */
 export function fileTimeLine(file: string, seconds: number): string {
@@ -45,9 +79,27 @@ class FileTimes extends Mocha.reporters.Spec {
         );
       }
     });
+    const outcome: LaunchOutcome = {ended: false, failures: [], passes: []};
+    runner.on(EVENT_TEST_PASS, (test: Mocha.Test) => {
+      outcome.passes.push(outcomeRowOf(test));
+    });
+    runner.on(EVENT_TEST_FAIL, (runnable: Mocha.Runnable, failure: unknown) => {
+      outcome.failures.push({
+        ...outcomeRowOf(runnable),
+        kind:
+          (runnable as Mocha.Hook | Mocha.Test).type === 'hook'
+            ? 'hook'
+            : 'test',
+        message: firstLineOf(failure),
+      });
+    });
     runner.once(EVENT_RUN_END, () => {
       for (const [file, total] of seconds) {
         console.log(fileTimeLine(file, total));
+      }
+      const outcomeFile = process.env[OUTCOME_VARIABLE];
+      if (outcomeFile !== undefined && outcomeFile !== '') {
+        writeFileSync(outcomeFile, JSON.stringify({...outcome, ended: true}));
       }
     });
   }

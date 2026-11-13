@@ -1,6 +1,15 @@
 {
   "targetMinutes": 15,
-  "together": [["socket-prime", "socket"]],
+  "together": [
+    ["socket-prime", "socket"],
+    ["install-install-present-prime", "install-install-present"],
+    [
+      "install-install-present-stopped-prime",
+      "install-install-present-stopped"
+    ],
+    ["install-install-repaired-prime", "install-install-repaired"],
+    ["ports-reuse-prime", "ports-reuse"]
+  ],
   "minutes": {
     "add-host": {"add-host.test.ts": 0.4},
     "agent": 0.3,
@@ -215,10 +224,12 @@
     },
     "containers-volume": {
       "clone.test.ts": 1.9,
-      "explore-volume.test.ts": 49.3,
       "recovery.test.ts": 18.4,
       "uri-handler.test.ts": 5.2,
       "volume.test.ts": 2.9
+    },
+    "containers-volume-trust": {
+      "explore-volume.test.ts": 3.0
     },
     "default-ports": {
       "forward-entries.test.ts": 3,
@@ -242,13 +253,16 @@
       "ssh-group-absent.test.ts": 0.3
     },
     "explorer-folders": {
-      "commands-kinds.test.ts": 8.3,
-      "commands.test.ts": 18.8,
-      "failed-connect.test.ts": 0.3,
+      "commands-kinds.test.ts": 8.2,
+      "commands.test.ts": 19.8,
+      "failed-connect.test.ts": 0.2,
       "first-ssh-group-window.test.ts": 2.7,
-      "folders.test.ts": 42.5,
-      "gate.test.ts": 14.3,
-      "host-rows.test.ts": 2.6
+      "gate.test.ts": 18.3,
+      "host-rows.test.ts": 5.2,
+      "folders-1-history.test.ts": 10.2,
+      "folders-2-remove.test.ts": 13.1,
+      "folders-3-clear-and-rename.test.ts": 11.5,
+      "folders-4-many.test.ts": 7.9
     },
     "explorer-home": {
       "home-files.test.ts": 0.3,
@@ -302,8 +316,11 @@
     "install-install-fresh-legacy": 0.3,
     "install-install-path": 0.3,
     "install-install-present": 0.2,
+    "install-install-present-prime": 0.2,
     "install-install-present-stopped": 0.3,
+    "install-install-present-stopped-prime": 0.3,
     "install-install-repaired": 0.2,
+    "install-install-repaired-prime": 0.2,
     "install-install-tilde-path": 0.3,
     "install-licence-update-service": 0.1,
     "install-local-404": 0.1,
@@ -381,6 +398,7 @@
     "ports-range-held": 0.2,
     "ports-range-single": 0.2,
     "ports-reuse": 0.2,
+    "ports-reuse-prime": 0.3,
     "preconnect": {
       "basics.test.ts": 0.8,
       "failures.test.ts": 0.6,

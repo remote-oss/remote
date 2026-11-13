@@ -7,7 +7,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {existsSync, mkdirSync, readdirSync} from 'node:fs';
 import path from 'node:path';
-import {DatabaseSync} from 'node:sqlite';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
@@ -27,6 +26,7 @@ import {
   rowsSettled,
   VIEW,
 } from '../windows/explorer-rows.ts';
+import {readStateDatabase} from '../windows/state-database.ts';
 
 const EXPLORER = 'remote-oss.remote-explorer';
 const SSH_COMPANION = 'remote-oss.remote-ssh';
@@ -71,15 +71,12 @@ function explorerStateKeys(userData: string): string[] {
   if (!existsSync(database)) {
     return [];
   }
-  const opened = new DatabaseSync(database, {readOnly: true});
-  try {
-    return opened
+  return readStateDatabase(database, opened =>
+    opened
       .prepare("SELECT key FROM ItemTable WHERE key LIKE '%remote-explorer%'")
       .all()
-      .map(entry => String(entry.key));
-  } finally {
-    opened.close();
-  }
+      .map(entry => String(entry.key)),
+  );
 }
 
 describe('when the explorer activates, and what it leaves (card coverage-25c, part b)', function () {

@@ -40,6 +40,8 @@ interface InstallCase {
   noArchiveLeft?: boolean;
   /** File names, as `find -name` patterns, that nothing under the host's home and temporary folders may carry. */
   noHostFiles?: string[];
+  /** Whether the case only makes the state of the case that needs it, so its only row is its own connect. */
+  primer?: true;
 }
 
 /** The install case of this window, named by the variable the harness gave it. */
@@ -112,17 +114,19 @@ describe(`the install case "${installCase?.label ?? 'unknown'}" of the VSCodium 
       );
     });
 
-    it(`F-2403 AC-21: no text of the list appears (${label})`, () => {
-      const shown = [
-        dialogQuestion() ?? '',
-        ...recordLines('mitigationPick').flatMap(line => line.items ?? []),
-        ...recordLines('notice').map(line => line.question),
-      ];
-      deepStrictEqual(
-        UNSHOWN_TEXTS.filter(text => shown.some(each => each.includes(text))),
-        [],
-      );
-    });
+    if (installCase.primer !== true) {
+      it(`F-2403 AC-21: no text of the list appears (${label})`, () => {
+        const shown = [
+          dialogQuestion() ?? '',
+          ...recordLines('mitigationPick').flatMap(line => line.items ?? []),
+          ...recordLines('notice').map(line => line.question),
+        ];
+        deepStrictEqual(
+          UNSHOWN_TEXTS.filter(text => shown.some(each => each.includes(text))),
+          [],
+        );
+      });
+    }
   }
 
   if (

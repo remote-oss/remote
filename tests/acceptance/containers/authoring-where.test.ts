@@ -10,6 +10,7 @@ import path from 'node:path';
 import {
   closeWindow,
   connectedToContainer,
+  containersLog,
   devContainerFolder,
   devContainersOf,
   isOpen,
@@ -157,6 +158,31 @@ async function directRebuild(command: string, label: string): Promise<void> {
   }
 }
 
+/** What the engine and the Dev Containers log say of a container that did not stop after its window closed at `closedAt` (seconds), so a failure names what it was doing. */
+async function whyNotStopped(
+  containerId: string,
+  closedAt: number,
+): Promise<string> {
+  const events = await docker(
+    'events',
+    '--since',
+    String(closedAt),
+    '--until',
+    String(Math.ceil(Date.now() / 1000) + 1),
+    '--filter',
+    `container=${containerId}`,
+    '--format',
+    '{{.Time}} {{.Action}}',
+  ).catch(() => 'unreadable');
+  const state = await docker(
+    'inspect',
+    '--format',
+    '{{json .State}}',
+    containerId,
+  ).catch(() => 'unreadable');
+  return `timed out waiting for the container to be stopped; its state: ${state}; its events since the window closed: ${JSON.stringify(events)}; the last lines of the Dev Containers log: ${JSON.stringify(containersLog().slice(-40))}`;
+}
+
 /** Runs `command` on a configuration with no container source, with or without a stopped container of the folder, as row `label`. */
 async function noSourceRebuild(
   command: string,
@@ -172,12 +198,19 @@ async function noSourceRebuild(
     const first = await openFolderWindow(folder);
     await reopenInContainer(first);
     containerId = (await devContainersOf(folder))[0] ?? '';
+    const closedAt = Math.floor(Date.now() / 1000);
     await closeWindow(first);
-    await waitFor(
-      'the container to be stopped',
-      async () => (await containerStateOf(containerId)).endsWith(' exited'),
-      90_000,
-    );
+    try {
+      await waitFor(
+        'the container to be stopped',
+        async () => (await containerStateOf(containerId)).endsWith(' exited'),
+        90_000,
+      );
+    } catch (failure) {
+      throw new Error(await whyNotStopped(containerId, closedAt), {
+        cause: failure,
+      });
+    }
   }
   writeFileSync(file, '{"name":"No Source"}');
   const before = containerId === '' ? '' : await containerStateOf(containerId);

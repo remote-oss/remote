@@ -62,6 +62,17 @@ export function acceptanceRunId(
   return `local-${String(processId)}`;
 }
 
+/**
+ * The folder the run's own folder is made in: the machine's temporary folder, except on macOS, where the per-user
+ * one (`/var/folders/…/T`) is so long that the editor's main socket in the run's user data folder passes the 104
+ * bytes of a Unix socket path (`listen EINVAL`), so `/tmp` there. The clean-up looks in the same folder.
+ */
+export function runFolderBase(
+  platform: NodeJS.Platform = process.platform,
+): string {
+  return platform === 'darwin' ? '/tmp' : tmpdir();
+}
+
 /** The folder under tests/acceptance that each base of the SSH host builds from. */
 const HOST_FOLDERS: Readonly<Record<HostBase, string>> = {
   alpine: 'host',
@@ -659,7 +670,7 @@ if (isMainModule(import.meta.url)) {
   const runId = acceptanceRunId(process.env, process.pid);
   try {
     // A helper that left a killed run's editor still runs: it is stopped before the editors and containers go.
-    stopRunHelpers(tmpdir(), runId);
+    stopRunHelpers(runFolderBase(), runId);
     cleanRun(runCommand, runId);
     // The Podman a `containers-podman` run drove, when the machine has a working one; its `vscode` volume stays.
     if (runCommand('podman', ['ps', '--quiet']).status === 0) {

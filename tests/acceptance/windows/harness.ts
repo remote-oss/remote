@@ -1824,9 +1824,24 @@ export async function waitFor(
   milliseconds: number,
 ): Promise<void> {
   const deadline = Date.now() + milliseconds;
-  while (!(await check())) {
+  for (;;) {
+    let notYet = '';
+    try {
+      if (await check()) {
+        return;
+      }
+    } catch (caught) {
+      // A check that throws an error carrying `notYet` says it cannot tell yet (a read that found a writer in the middle of
+      // its write): that is the check not holding, not the wait ending.
+      if ((caught as {notYet?: unknown} | null)?.notYet !== true) {
+        throw caught;
+      }
+      notYet = (caught as Error).message;
+    }
     if (Date.now() > deadline) {
-      throw new Error(`timed out waiting for ${description}`);
+      throw new Error(
+        `timed out waiting for ${description}${notYet === '' ? '' : ` (the last check could not tell: ${notYet})`}`,
+      );
     }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
@@ -1944,24 +1959,38 @@ export async function writeUserSetting(
   window: string,
   milliseconds: number,
 ): Promise<void> {
-  if (value === undefined) {
-    await inWindow('local', 'acceptance.agent.removeSetting', settingId);
+  try {
+    if (value === undefined) {
+      await inWindow('local', 'acceptance.agent.removeSetting', settingId);
+      await waitFor(
+        `${window} to read ${settingId} removed`,
+        async () => !(await userScopeHolds(window, settingId)),
+        milliseconds,
+      );
+      return;
+    }
+    await inWindow('local', 'acceptance.agent.updateSetting', settingId, value);
     await waitFor(
-      `${window} to read ${settingId} removed`,
-      async () => !(await userScopeHolds(window, settingId)),
+      `${window} to read ${settingId} as ${JSON.stringify(value)}`,
+      async () =>
+        JSON.stringify(await settingIn(window, settingId)) ===
+          JSON.stringify(value) &&
+        (value === null || (await userScopeHolds(window, settingId))),
       milliseconds,
     );
-    return;
+  } catch (caught) {
+    // What the window reads and what the file holds when the wait ends tell a late read from a write that did not land.
+    const read = JSON.stringify(
+      await settingIn(window, settingId).catch(() => 'unreadable'),
+    );
+    const inUserScope = await userScopeHolds(window, settingId).catch(
+      () => 'unreadable',
+    );
+    throw new Error(
+      `${caught instanceof Error ? caught.message : String(caught)}; the window reads ${read}, in the user scope: ${String(inUserScope)}; the user settings file holds ${JSON.stringify(readUserSettings())}`,
+      {cause: caught},
+    );
   }
-  await inWindow('local', 'acceptance.agent.updateSetting', settingId, value);
-  await waitFor(
-    `${window} to read ${settingId} as ${JSON.stringify(value)}`,
-    async () =>
-      JSON.stringify(await settingIn(window, settingId)) ===
-        JSON.stringify(value) &&
-      (value === null || (await userScopeHolds(window, settingId))),
-    milliseconds,
-  );
 }
 
 /** The default window `name` has for the setting `settingId`, the one its Settings editor shows, or null for none. */

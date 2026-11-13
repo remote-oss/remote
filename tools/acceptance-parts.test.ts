@@ -41,6 +41,32 @@ function suiteFiles(suite: string): string[] {
     : [];
 }
 
+/**
+ * The table's entries that no run can match: a label no launch has, or a file that its plain launch does not run. A
+ * split or a rename leaves one behind, its minutes then count for nothing, and the new files count as unmeasured. It
+ * is a row's helper, not the tool's, so that a change to it reaches no launch.
+ */
+function staleEntriesOf(
+  table: PartsTable,
+  launches: readonly Launch[],
+  suiteFiles: (suite: string) => string[],
+): string[] {
+  const byLabel = new Map(launches.map(launch => [launch.label, launch]));
+  return Object.entries(table.minutes).flatMap(([label, measured]) => {
+    const launch = byLabel.get(label);
+    if (launch === undefined) {
+      return [`${label}: no launch has this label`];
+    }
+    if (typeof measured !== 'object' || launch.kind !== 'plain') {
+      return [];
+    }
+    const files = new Set(launch.files ?? suiteFiles(launch.suite));
+    return Object.keys(measured)
+      .filter(file => !files.has(file))
+      .map(file => `${label}: ${file} is not a file of the launch`);
+  });
+}
+
 describe('acceptance-parts (card tooling-159)', () => {
   it('tooling-159: the time limit is twice the minutes and ten more, at least thirty', () => {
     deepStrictEqual([0, 9, 10, 14.2, 49.2].map(limitOf), [30, 30, 30, 39, 109]);
@@ -129,9 +155,10 @@ describe('acceptance-parts (card tooling-159)', () => {
     );
   });
 
-  it('tooling-159: the host cases run in one part in the table order, past the target, and a launch of the CLI-source editor is left out', () => {
+  it('tooling-159, tooling-168: host cases pack by their minutes like any group, a primer stays with its case, and a launch of the CLI-source editor is left out', () => {
     const launches: Launch[] = [
       {label: 'case-one', runner: 'runner-remote', suite: 'suite-ports'},
+      {label: 'case-two-prime', runner: 'runner-remote', suite: 'suite-ports'},
       {label: 'case-two', runner: 'runner-remote', suite: 'suite-ports'},
       {label: 'cli-copy', kind: 'plain', suite: 'cli-copy', cliSource: true},
     ];
@@ -140,15 +167,28 @@ describe('acceptance-parts (card tooling-159)', () => {
         launches,
         {
           targetMinutes: 15,
-          minutes: {'case-one': 4, 'case-two': 14, 'cli-copy': 1},
+          together: [['case-two-prime', 'case-two']],
+          minutes: {
+            'case-one': 14,
+            'case-two-prime': 5,
+            'case-two': 10,
+            'cli-copy': 1,
+          },
         },
         suiteFiles,
       ),
-      [{name: 'hosts 1/1', launches: 'case-one,case-two', minutes: 46}],
+      [
+        {name: 'hosts 1/2', launches: 'case-one', minutes: limitOf(14)},
+        {
+          name: 'hosts 2/2',
+          launches: 'case-two-prime,case-two',
+          minutes: limitOf(15),
+        },
+      ],
     );
   });
 
-  it('tooling-159: a launch the table keeps together with another, or one of an ordered group, runs only with others', () => {
+  it('tooling-159, tooling-168: a launch the table keeps together with another runs only with others, and a host case no longer does', () => {
     const held = heldTogether({
       targetMinutes: 15,
       together: [['local', 'second']],
@@ -164,7 +204,7 @@ describe('acceptance-parts (card tooling-159)', () => {
         }),
         held({label: 'long', kind: 'plain', suite: 'long'}),
       ],
-      [true, true, false],
+      [true, false, false],
     );
   });
 
@@ -195,6 +235,35 @@ describe('acceptance-parts (card tooling-159)', () => {
         remote: 1.5,
       },
     });
+  });
+
+  it('tooling-194: a table entry no run can match is named: a label no launch has, and a file its plain launch does not run', () => {
+    const table: PartsTable = {
+      targetMinutes: 15,
+      minutes: {
+        local: 9,
+        gone: 4,
+        long: {'l1.test.ts': 12, 'split.test.ts': 30},
+        boxes: {'b1.test.ts': 2, 'b3.test.ts': 1},
+      },
+    };
+    deepStrictEqual(staleEntriesOf(table, LAUNCHES, suiteFiles), [
+      'gone: no launch has this label',
+      'long: split.test.ts is not a file of the launch',
+      'boxes: b3.test.ts is not a file of the launch',
+    ]);
+  });
+
+  it("tooling-194: the repository's table names only labels its launches have and files they run", () => {
+    const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
+    deepStrictEqual(
+      staleEntriesOf(
+        table,
+        launchesOf(REPOSITORY_ROOT),
+        suiteFilesIn(REPOSITORY_ROOT),
+      ),
+      [],
+    );
   });
 
   it("tooling-159: the repository's parts make every launch but the genuine ones, each test file of a split launch exactly once, the same parts each time", () => {

@@ -59,7 +59,8 @@ describe('login shells that do not finish or end early: the connect fails or wai
   });
 
   it('F-2704 AC-11 (ruling-1221-read): a .bash_profile that reads a line ends the connect within 5 s with the dialog of AC-13, and the log names the cause', async () => {
-    await setting('remote.SSH.connectTimeout', 10);
+    const timeoutSeconds = 10;
+    await setting('remote.SSH.connectTimeout', timeoutSeconds);
     await freshServer('harness-bash');
     await writeHomeFile('harness-bash', '.bash_profile', 'read answer\n');
     const mark = connectionLog().length;
@@ -68,7 +69,11 @@ describe('login shells that do not finish or end early: the connect fails or wai
       {
         question: failed.dialog.question,
         buttons: failed.dialog.buttons,
-        quick: failed.dialog.milliseconds < 5000,
+        // From the start of the connect, as the other rows of this file time theirs: the window's own start before it is not
+        // the connect's.
+        quick: failed.dialog.sinceConnectStarted < 5000,
+        // From the user's side too: no wait for the connect timeout, counted from the window being asked for.
+        beforeTimeout: failed.dialog.milliseconds < timeoutSeconds * 1000,
         logged: logSince(mark).some(line =>
           line.includes(
             'the SSH session ended before the host reported its platform',
@@ -79,8 +84,10 @@ describe('login shells that do not finish or end early: the connect fails or wai
         question: 'Could not establish connection to "harness-bash".',
         buttons: BUTTONS,
         quick: true,
+        beforeTimeout: true,
         logged: true,
       },
+      `the dialog came ${String(failed.dialog.milliseconds)} ms after the window was asked for and ${String(failed.dialog.sinceConnectStarted)} ms after the connect started`,
     );
   });
 

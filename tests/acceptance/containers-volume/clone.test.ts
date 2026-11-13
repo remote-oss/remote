@@ -22,7 +22,7 @@ import {
   containersWith,
   dockerLines,
   removeClone,
-} from '../windows/volume-clones.ts';
+} from './volume-clones.ts';
 import {
   acceptQuickPick,
   answerDialog,
@@ -242,7 +242,12 @@ describe('Clone Repository in Container Volume (card containers-151)', function 
       {
         detail: true,
         branch: true,
-        buttons: ['Close Remote', 'More Actions...', 'Retry'],
+        buttons: [
+          'Close Remote',
+          'Edit devcontainer.json in Recovery Container',
+          'More Actions...',
+          'Retry',
+        ],
         volumes: [`${FOLDER}-no-such-branch-c151-<digest> true`],
         folder: '',
         bootstraps: 0,

@@ -65,10 +65,12 @@ export function failureDialogOf(
   volumeWindow = false,
 ): FailureDialog {
   const requirements = failed.kind === 'requirementsNotMet';
+  // On Linux and macOS the editor's modal layout moves the close affordance to second place and reverses the list, so
+  // this order shows "Close Remote" before "Edit devcontainer.json in Recovery Container".
   const closeRemote: FailureButton[] = volumeWindow
     ? [
-        {label: failureText('S076', [], translate), action: 'closeRemote'},
         {label: failureText('S159', [], translate), action: 'recovery'},
+        {label: failureText('S076', [], translate), action: 'closeRemote'},
       ]
     : [];
   const edit: FailureButton[] =

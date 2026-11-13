@@ -37,7 +37,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import {hostname, tmpdir} from 'node:os';
+import {hostname} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 import path from 'node:path';
 import {
@@ -64,6 +64,7 @@ import {
   connectRunNetwork,
   loadImageIntoPodman,
   requirePodman,
+  runFolderBase,
   startHostContainer,
   sweepStaleRunObjects,
 } from './acceptance-run.ts';
@@ -128,6 +129,7 @@ import {
   userDataFolderOf,
   writeStandIns,
 } from './acceptance-plain.ts';
+import {knownRedsJudge} from './known-reds.ts';
 import {
   isMainModule,
   REPOSITORY_ROOT,
@@ -1500,7 +1502,7 @@ function runHostSetup(
  * each attempt of a VSCodium launch finds the run's base settings plus the launch's own, so none inherits another's.
  * A launch with host setup runs it on its own host before each attempt (the harness host, or the host of its
  * `hostBase` in `baseContainers`), and waits the helper's grace after the launch before it, so its resolve finds no
- * live helper of the run.
+ * live helper of the run. A launch whose rows fail is followed in the report by its failureReport.
  */
 export async function runLaunches(
   runFolder: string,
@@ -1518,6 +1520,7 @@ export async function runLaunches(
   },
   lock: LaunchLock = NO_LOCK,
   baseContainers: Readonly<Partial<Record<HostBase, string>>> = {},
+  judge: (exitCode: number, launch: Launch) => number = exitCode => exitCode,
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   // The harness host starts with the update service's name pinned to the download host.
@@ -1539,7 +1542,21 @@ export async function runLaunches(
       await lock.take();
     }
     try {
-      exitCodes.push(await runAttempts(launch));
+      const exitCode = await runAttempts(launch);
+      const judged = launch === undefined ? exitCode : judge(exitCode, launch);
+      exitCodes.push(judged);
+      if (judged !== 0 && launch !== undefined) {
+        for (const line of failureReport(
+          runFolder,
+          launch.label,
+          launch.hostBase === undefined
+            ? container
+            : baseContainers[launch.hostBase],
+          command,
+        )) {
+          report(line);
+        }
+      }
     } finally {
       if (locked) {
         lock.release();
@@ -1608,6 +1625,91 @@ export async function runLaunches(
       }
     }, report);
   }
+}
+
+/**
+ * What a failed launch reads of its host in one call: its listeners and processes, then the install folder of the
+ * server (`bin/<commit>`) of every account, each entry with the time it was last changed in seconds since the epoch next
+ * to the time now, so that a server that was removed and one that was never installed read differently, and how old the
+ * install in progress is.
+ */
+export const HOST_STATE_COMMAND =
+  'netstat -ltn 2>&1; ps -o pid,user,args 2>&1; echo "the servers\' install folders, seconds since the epoch now: $(date +%s)"; for folder in /home/*/.*server*/bin; do [ -d "$folder" ] && echo "$folder" && { ls -la --time-style=+%s "$folder" 2>&1 || ls -la "$folder" 2>&1; }; done; true';
+
+/** How many of the last lines of a failed launch's logs the run prints. */
+export const FAILURE_LOG_LINES = 150;
+
+/** The lines of `text` without an empty one at the end, of which the last FAILURE_LOG_LINES, each indented. */
+function tailOf(text: string): {lines: string[]; count: number} {
+  const all = text.split('\n').filter(line => line !== '');
+  return {
+    lines: all.slice(-FAILURE_LOG_LINES).map(line => `  ${line}`),
+    count: all.length,
+  };
+}
+
+/** The output of one command, its standard output and error, indented; what failed when it could not run. */
+function stateOf(
+  command: CommandRunner,
+  program: string,
+  programArguments: readonly string[],
+): string[] {
+  const result = command(program, programArguments);
+  const text = `${result.stdout}${result.stderr}`;
+  return [
+    ...(result.status === 0 ? [] : [`  (exit ${String(result.status)})`]),
+    ...tailOf(text).lines,
+  ];
+}
+
+/**
+ * What a launch whose rows failed leaves for the job's log, so that a connect the resolver gave up on can be read
+ * there: the last lines of the log its extensions wrote (the Remote - SSH channel, and the Dev Containers one when
+ * there is one), then its host's listeners, processes and server install folders and the last lines of the host's sshd log.
+ */
+export function failureReport(
+  runFolder: string,
+  label: string,
+  hostContainer: string | undefined,
+  command: CommandRunner,
+): string[] {
+  const files = launchFiles(runFolder, label);
+  const logs = [files.logFile, files.containersLogFile].flatMap(file => {
+    if (!existsSync(file)) {
+      return [];
+    }
+    const {lines, count} = tailOf(readFileSync(file, 'utf8'));
+    return [
+      `acceptance: ${label} failed: the last ${String(lines.length)} of the ${String(count)} lines of ${path.basename(file)}`,
+      ...lines,
+    ];
+  });
+  const host =
+    hostContainer === undefined || hostContainer === ''
+      ? [`acceptance: ${label} failed: no host container to read`]
+      : [
+          `acceptance: ${label} failed: its host's listeners, processes and server install folders`,
+          ...stateOf(command, 'docker', [
+            'exec',
+            hostContainer,
+            'sh',
+            '-c',
+            HOST_STATE_COMMAND,
+          ]),
+          `acceptance: ${label} failed: the last lines of its host's sshd log`,
+          ...stateOf(command, 'docker', [
+            'logs',
+            '--tail',
+            '30',
+            hostContainer,
+          ]),
+        ];
+  return [
+    ...(logs.length === 0
+      ? [`acceptance: ${label} failed: its extensions wrote no log`]
+      : logs),
+    ...host,
+  ];
 }
 
 /**
@@ -1685,7 +1787,9 @@ export async function runAcceptance(
   }
   const runId = acceptanceRunId(process.env, process.pid);
   // The run id in the name lets the clean-up find the editor of a run that was killed.
-  const runFolder = mkdtempSync(path.join(tmpdir(), `acceptance-${runId}-`));
+  const runFolder = mkdtempSync(
+    path.join(runFolderBase(), `acceptance-${runId}-`),
+  );
   const started: string[] = [];
   const stops: Array<() => Promise<void>> = [];
   const startedSeconds = Date.now() / 1000;
@@ -1788,6 +1892,7 @@ export async function runAcceptance(
           },
         ),
         baseContainersOf({...variables}),
+        knownRedsJudge(root, runFolder, process.env),
       )),
     );
     exitCode = exitCodes.find(code => code !== 0) ?? 0;
@@ -2085,9 +2190,28 @@ export interface VscodiumTransfer {
   unpack: (archive: Uint8Array, folder: string) => void;
 }
 
-/** The command-line wrapper beside the VSCodium executable; the editor itself, started through it, does not run tests. */
-function vscodiumCliOf(executable: string): string {
-  return path.join(path.dirname(executable), 'bin', 'codium-insiders');
+/**
+ * Where a VSCodium build's command-line wrapper is, from its executable's folder, by the client's platform, as the
+ * pinned release's archives lay it out: `bin/codium-insiders` beside the executable on Linux, the batch file
+ * `bin\codium-insiders.cmd` on Windows (its extensionless sibling is a shell script), and the bundle's
+ * `Contents/Resources/app/bin` on macOS.
+ */
+const VSCODIUM_CLI_PATHS: Readonly<
+  Partial<Record<NodeJS.Platform, readonly string[]>>
+> = {
+  darwin: ['..', 'Resources', 'app', 'bin', 'codium-insiders'],
+  win32: ['bin', 'codium-insiders.cmd'],
+};
+
+/** The command-line wrapper of the VSCodium executable; the editor itself, started through it, does not run tests. */
+export function vscodiumCliOf(
+  executable: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  return path.join(
+    path.dirname(executable),
+    ...(VSCODIUM_CLI_PATHS[platform] ?? ['bin', 'codium-insiders']),
+  );
 }
 
 /**

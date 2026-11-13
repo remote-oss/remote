@@ -226,6 +226,26 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     ]);
   });
 
+  it('#2457, reading-2457-echo-line: an answer typed at a recognised prompt of the install terminal is not in the log, shown or hidden, and the next line is', async () => {
+    for (const reveal of [true, false]) {
+      const made = fixture({level: 'trace', reveal});
+      const {result, terminal} = await started(made);
+      terminal.write(
+        'Are you sure you want to continue connecting (yes/no/[fingerprint])? yes\r\n',
+      );
+      terminal.write("alex@dev's password: \r\nWarning: Permanently added h\n");
+      terminal.write(AUTHENTICATED_ONLY);
+      terminal.write("printf 'LAYER1-READY\\n'\nexec sh\nLAYER1-READY\n");
+      await result;
+      deepStrictEqual(sshLogged(made), [
+        '[ssh] Are you sure you want to continue connecting (yes/no/[fingerprint])? [answer not logged]',
+        "[ssh] alex@dev's password: [answer not logged]",
+        '[ssh] Warning: Permanently added h',
+        '[ssh] Authenticated to dev ([10.0.0.1]:22) using "publickey".',
+      ]);
+    }
+  });
+
   it('F-2003 BR-8: after authentication terminal mode logs only ssh’s own channel and forward lines, from a mixed pty buffer, before and after the hand-over', async () => {
     const made = fixture({level: 'trace'});
     const {result, terminal} = await started(made);

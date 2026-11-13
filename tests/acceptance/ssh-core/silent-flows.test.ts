@@ -55,6 +55,20 @@ async function settingTitles(window: string): Promise<string[]> {
   ].sort();
 }
 
+/**
+ * The commands of window `window` under each prefix, one prefix after the other: the harness tells a report from its
+ * predecessors by their count, so two asks of the window's commands at once would take each other's answers.
+ */
+async function commandsOfEach(window: string): Promise<string[]> {
+  return COMMAND_PREFIXES.reduce<Promise<string[]>>(
+    async (before, prefix) => [
+      ...(await before),
+      ...(await commandsOf(window, prefix)),
+    ],
+    Promise.resolve([]),
+  );
+}
+
 async function footprintOf(window: string): Promise<Footprint> {
   // The palette is read first: the notification centre, once open, keeps the keyboard.
   const palette = (await paletteRows(window, 'Remote-SSH:')).sort();
@@ -62,14 +76,14 @@ async function footprintOf(window: string): Promise<Footprint> {
     toasts: await notifications(window),
     centre: await notificationCentre(window),
     logLines: connectionLog().length,
+    // Without SQLite's rollback journal of the editor's own state database: it exists only while a write is open, and
+    // is the editor's, not something the extension added.
     storage: readdirSync(
       path.join(variable('HARNESS_USER_DATA'), 'User', 'globalStorage'),
-    ).sort(),
-    commands: (
-      await Promise.all(
-        COMMAND_PREFIXES.map(prefix => commandsOf(window, prefix)),
-      )
-    ).flat(),
+    )
+      .filter(name => !name.endsWith('-journal'))
+      .sort(),
+    commands: await commandsOfEach(window),
     settings: await settingTitles(window),
     palette,
   };
@@ -129,7 +143,15 @@ describe('the extension in the core flows of an SSH window (card connect-125)', 
         'the program to print in the Debug Console',
         async () => (await pageText(folder)).includes(`c125-ran-on-${host}`),
         90_000,
-      );
+      ).catch(async (caught: unknown) => {
+        // What the window shows when the wait ends tells a program that did not start (a pick, a dialog) from one whose
+        // output did not reach the console.
+        const shown = await pageText(folder).catch(() => '(unreadable)');
+        throw new Error(
+          `${String(caught)}; the window shows (its last 1500 characters): ${JSON.stringify(shown.slice(-1500))}`,
+          {cause: caught},
+        );
+      });
       await new Promise(resolve => setTimeout(resolve, 5000));
       await inWindow(folder, 'workbench.action.debug.stop').catch(
         () => undefined,

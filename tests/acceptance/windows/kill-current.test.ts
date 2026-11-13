@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   closeWindow,
+  connectedWithin,
   emptyWindows,
   inWindow,
   nextEmptyName,
@@ -30,11 +31,8 @@ describe('Kill Current VS Code Server in a window (card connect-43)', function (
 
   it('F-2411 AC-19: Kill Current in a connected default-mode window turns it into an empty local window and the server keeps running', async () => {
     await openWindow('harness', 'kc1');
-    await waitFor(
-      'kc1 to be connected',
-      async () => (await windowState('kc1')).remoteName === 'ssh-remote',
-      60_000,
-    );
+    // The window's authority names ssh-remote as soon as it opens; connected is when its remote side answers.
+    await connectedWithin('kc1', 60_000);
     const servers = await serverProcesses();
     const next = nextEmptyName();
     const name = await nextEmptyWindow(() =>
