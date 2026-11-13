@@ -59,12 +59,17 @@ export interface ManifestIdentifiers {
   enabledApiProposals: string[];
   /** Every `%key%` reference in the manifest's strings. */
   stringReferences: string[];
+  /**
+   * The keybindings, views, walkthroughs and walkthrough steps, which the stand-down key gates only for a package
+   * whose `identifiers.json` sets `gateAlsoKinds`.
+   */
+  contributionEntries: MenuEntry[];
 }
 
 /** A context key of the package, and who sets it. */
 interface DeclaredContextKey {
   id: string;
-  setter: 'extension' | 'core';
+  setter: 'extension' | 'core' | 'coreAndExtension';
 }
 
 /** An id core sees but the manifest does not contribute. */
@@ -123,6 +128,8 @@ export interface DeclaredIdentifiers {
   invented: InventedIdentifier[];
   settingPairs: SettingPair[];
   ungated: UngatedEntry[];
+  /** Whether the stand-down key also gates keybindings, views, walkthroughs and their steps; absent for a package that does not. */
+  gateAlsoKinds?: boolean;
   /** The locales the package ships string tables for; absent when the package states none. */
   locales?: string[];
 }
@@ -320,6 +327,35 @@ function readMenuEntries(contributes: JsonCursor): MenuEntry[] {
   return entries;
 }
 
+/** The keybindings, views, walkthroughs and walkthrough steps, each as an entry of its own kind with its `when`. */
+function readContributionEntries(contributes: JsonCursor): MenuEntry[] {
+  const entries: MenuEntry[] = [];
+  function addEntry(menu: string, entry: JsonCursor, itemField: string): void {
+    const when = entry.field('when');
+    entries.push({
+      menu,
+      item: entry.field(itemField).string(),
+      ...(when.isAbsent() ? {} : {when: when.string()}),
+    });
+  }
+  for (const entry of contributes.field('keybindings').optionalItems()) {
+    addEntry('keybindings', entry, 'command');
+  }
+  const views = contributes.field('views');
+  for (const container of views.isAbsent() ? [] : Object.keys(views.object())) {
+    for (const entry of views.field(container).items()) {
+      addEntry(`views.${container}`, entry, 'id');
+    }
+  }
+  for (const walkthrough of contributes.field('walkthroughs').optionalItems()) {
+    addEntry('walkthroughs', walkthrough, 'id');
+    for (const step of walkthrough.field('steps').optionalItems()) {
+      addEntry('walkthroughs.steps', step, 'id');
+    }
+  }
+  return entries;
+}
+
 function stringReferencesIn(value: unknown): string[] {
   if (typeof value === 'string') {
     const match = /^%(.+)%$/.exec(value);
@@ -371,6 +407,7 @@ export function readManifest(file: string, where: string): ManifestIdentifiers {
     ],
     activationEvents,
     menuEntries,
+    contributionEntries: readContributionEntries(contributions),
     enabledApiProposals: manifest
       .field('enabledApiProposals')
       .optionalItems()
@@ -408,6 +445,7 @@ const DECLARED_FIELDS = [
   'invented',
   'settingPairs',
   'ungated',
+  'gateAlsoKinds',
   'locales',
 ];
 
@@ -416,6 +454,7 @@ export function readDeclared(file: string, where: string): DeclaredIdentifiers {
   const declared = readJson(file, where).onlyFields(DECLARED_FIELDS);
   const standingDownKey = declared.field('standingDownKey');
   const locales = declared.field('locales');
+  const gateAlsoKinds = declared.field('gateAlsoKinds');
   return {
     source: declared.field('source').nonEmptyString(),
     standsDownFor: declared.field('standsDownFor').string(),
@@ -425,7 +464,9 @@ export function readDeclared(file: string, where: string): DeclaredIdentifiers {
       .optionalItems()
       .map(entry => ({
         id: entry.onlyFields(['id', 'setter']).field('id').string(),
-        setter: entry.field('setter').oneOf(['extension', 'core'] as const),
+        setter: entry
+          .field('setter')
+          .oneOf(['extension', 'core', 'coreAndExtension'] as const),
       })),
     infoLineCommands: declared
       .field('infoLineCommands')
@@ -493,6 +534,9 @@ export function readDeclared(file: string, where: string): DeclaredIdentifiers {
     ...(standingDownKey.isAbsent()
       ? {}
       : {standingDownKey: standingDownKey.string()}),
+    ...(gateAlsoKinds.isAbsent()
+      ? {}
+      : {gateAlsoKinds: gateAlsoKinds.boolean()}),
     ...(locales.isAbsent()
       ? {}
       : {locales: locales.items().map(locale => locale.string())}),
