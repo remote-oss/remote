@@ -1355,8 +1355,72 @@ export async function closeWindow(
         (extensionHost !== undefined && processIsGone(extensionHost)),
       milliseconds,
     );
+  } catch (caught) {
+    throw new Error(
+      `${caught instanceof Error ? caught.message : String(caught)}; ${closeStateOf(name, commandId)}`,
+      {cause: caught},
+    );
   } finally {
     withdrawUnaccepted(name, commandId);
+  }
+}
+
+/**
+ * What a window that did not close shows of itself, for the failure to name (#2482): whether its agent accepted the
+ * close, the commands it accepted that have not ended, the last of its events, and each process that recorded itself
+ * as the window's with its state and parent. A host that outlives the close may be a stale one of an earlier start of
+ * the window, or the current one that never got the command; these tell the two apart.
+ */
+function closeStateOf(name: string, commandId: string): string {
+  try {
+    const now = Date.now();
+    const events = windowEvents(name);
+    const commands = linesOf<{id: string; command?: string}>(
+      agentFile(name, 'commands'),
+    );
+    function nameOf(commandIdentifier: string | undefined): string {
+      return (
+        commands.find(each => each.id === commandIdentifier)?.command ??
+        'a command'
+      );
+    }
+    const ended = new Set(
+      events
+        .filter(each => each.event === 'done' || each.event === 'failed')
+        .map(each => each.id),
+    );
+    const running = events
+      .filter(each => each.event === 'accepted' && !ended.has(each.id))
+      .map(
+        each =>
+          `${nameOf(each.id)} accepted ${String(Math.round((now - each.time) / 1000))} s ago`,
+      );
+    const last = events
+      .slice(-5)
+      .map(
+        each =>
+          `${each.event}${each.id === undefined ? '' : ` ${nameOf(each.id)}`} ${String(Math.round((now - each.time) / 1000))} s ago`,
+      );
+    const pids = variable('REMOTE_OSS_ACCEPTANCE_WINDOWS');
+    const processes = readdirSync(pids)
+      .filter(file => readFileSync(path.join(pids, file), 'utf8') === name)
+      .map(file => {
+        const status = (() => {
+          try {
+            return readFileSync(`/proc/${file}/status`, 'utf8');
+          } catch {
+            return '';
+          }
+        })();
+        const state = /^State:\s*(.*)$/mu.exec(status)?.[1];
+        const parent = /^PPid:\s*(\d+)$/mu.exec(status)?.[1];
+        return state === undefined
+          ? `${file} gone`
+          : `${file} ${state} parent ${parent ?? 'unknown'}`;
+      });
+    return `the close was ${events.some(each => each.id === commandId && each.event === 'accepted') ? 'accepted' : 'not accepted'} by the window's agent; running commands: ${JSON.stringify(running)}; its last events: ${JSON.stringify(last)}; its recorded processes: ${JSON.stringify(processes)}`;
+  } catch (caught) {
+    return `the window's state could not be read: ${String(caught)}`;
   }
 }
 
