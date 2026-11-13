@@ -1803,13 +1803,14 @@ describe('the resolver host options of the WSL family (card wsl-18)', () => {
   });
 
   /** A title that is empty for the stage `opened`, as the family's titleOf gives it. */
-  const EMPTY_OPENED = (phase: ConnectPhase): string =>
-    phase.name === 'opened' ? '' : `phase ${phase.name}`;
+  function emptyOpened(phase: ConnectPhase): string {
+    return phase.name === 'opened' ? '' : `phase ${phase.name}`;
+  }
 
   it('wsl-18: with emptyStageClearsText, an empty stage that opens the progress, and one after it, are reported as empty messages', async () => {
     const context = await setup({
       emptyStageClearsText: true,
-      titleOf: EMPTY_OPENED,
+      titleOf: emptyOpened,
     });
     context.connector.phases = [
       {name: 'opened'},
@@ -1825,7 +1826,7 @@ describe('the resolver host options of the WSL family (card wsl-18)', () => {
   });
 
   it('wsl-18: without emptyStageClearsText, an empty stage adds no report', async () => {
-    const context = await setup({titleOf: EMPTY_OPENED});
+    const context = await setup({titleOf: emptyOpened});
     context.connector.phases = [{name: 'initializing'}, {name: 'opened'}];
     await resolve(context);
     deepStrictEqual(context.editor.progressRuns[0]?.updates, [
@@ -1846,11 +1847,11 @@ describe('the resolver host options of the WSL family (card wsl-18)', () => {
   it('wsl-18: with barFromConnector, the increments for bars of 1, 9, 44, 45 and 90 are the steps between them', async () => {
     deepStrictEqual(
       await incrementsFor([
-        {name: 'initializing', bar: 1},
-        {name: 'downloading', bar: 9},
-        {name: 'installing', bar: 44},
-        {name: 'startingServer', bar: 45},
-        {name: 'opened', bar: 90},
+        {name: 'initializing', barPosition: 1},
+        {name: 'downloading', barPosition: 9},
+        {name: 'installing', barPosition: 44},
+        {name: 'startingServer', barPosition: 45},
+        {name: 'opened', barPosition: 90},
       ]),
       [1, 8, 35, 1, 45],
     );
@@ -1859,8 +1860,8 @@ describe('the resolver host options of the WSL family (card wsl-18)', () => {
   it('wsl-18: with barFromConnector, a lower bar after a higher one adds 0', async () => {
     deepStrictEqual(
       await incrementsFor([
-        {name: 'initializing', bar: 50},
-        {name: 'downloading', bar: 20},
+        {name: 'initializing', barPosition: 50},
+        {name: 'downloading', barPosition: 20},
       ]),
       [50, 0],
     );
@@ -1870,7 +1871,7 @@ describe('the resolver host options of the WSL family (card wsl-18)', () => {
     deepStrictEqual(
       await incrementsFor([
         {name: 'initializing'},
-        {name: 'downloading', bar: 7},
+        {name: 'downloading', barPosition: 7},
         {name: 'installing'},
       ]),
       [undefined, 7, undefined],
@@ -1885,8 +1886,8 @@ describe('the resolver host options of the WSL family (card wsl-18)', () => {
     const gate = releaseGate();
     context.connector.hold = gate.promise;
     context.connector.phases = [
-      {name: 'initializing', bar: 5},
-      {name: 'downloading', bar: 30},
+      {name: 'initializing', barPosition: 5},
+      {name: 'downloading', barPosition: 30},
       {name: 'installing'},
     ];
     const running = resolve(context);
@@ -1904,7 +1905,7 @@ describe('the resolver host options of the WSL family (card wsl-18)', () => {
     });
     context.connector.phases = [
       {name: 'serverDownloadPercent', percent: 40},
-      {name: 'initializing', bar: 3},
+      {name: 'initializing', barPosition: 3},
     ];
     await resolve(context);
     deepStrictEqual(context.editor.progressRuns[0]?.increments, [undefined, 3]);

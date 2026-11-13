@@ -59,7 +59,7 @@ export interface ConnectPhase {
    * The bar's position from 0 to 100 that the connector names, for a family with `barFromConnector`: only the connector
    * knows whether this connect downloaded.
    */
-  bar?: number;
+  barPosition?: number;
   /** The title the progress opens with, for a family with `titleFromConnector`. */
   progressTitle?: string;
 }
@@ -220,8 +220,8 @@ export interface ResolverOptions {
    */
   emptyStageClearsText?: boolean;
   /**
-   * Whether the bar is the connector's: each report carries the increment from the bar shown so far to the stage's `bar`
-   * (never a negative one), and a stage without `bar` adds none, so the bar is indefinite until the first. It replaces
+   * Whether the bar is the connector's: each report carries the increment from the bar shown so far to the stage's `barPosition`
+   * (never a negative one), and a stage without `barPosition` adds none, so the bar is indefinite until the first. It replaces
    * `determinateStages`.
    */
   barFromConnector?: boolean;
@@ -448,7 +448,7 @@ export async function registerResolver(
     let barReported = 0;
     // The title the first stage that carried one gave, and whether the progress is due, for `titleFromConnector`.
     let progressTitle: string | undefined;
-    let due = false;
+    let progressDue = false;
     let report: ProgressUpdate | undefined;
     // The share of the bar added since the last report, and the download percent already counted.
     let unreported = 0;
@@ -486,7 +486,7 @@ export async function registerResolver(
       return title !== '' || options.emptyStageClearsText === true;
     }
     function open(): void {
-      due = true;
+      progressDue = true;
       if (
         opened ||
         (options.titleFromConnector === true && progressTitle === undefined)
@@ -540,8 +540,8 @@ export async function registerResolver(
         staged: title !== '',
         stage: phase.name,
       };
-      if (phase.bar !== undefined) {
-        namedBar = Math.max(namedBar ?? 0, phase.bar);
+      if (phase.barPosition !== undefined) {
+        namedBar = Math.max(namedBar ?? 0, phase.barPosition);
       }
       const titledNow =
         options.titleFromConnector === true &&
@@ -556,7 +556,7 @@ export async function registerResolver(
         downloaded = Math.max(downloaded, percent);
       }
       if (report !== undefined) {
-        const increment = incrementOf(phase.bar);
+        const increment = incrementOf(phase.barPosition);
         if (
           reportable(shown.title) &&
           (reported?.title !== shown.title ||
@@ -569,7 +569,7 @@ export async function registerResolver(
       } else if (
         (phase.quiet !== true &&
           options.progressDelayMilliseconds === undefined) ||
-        (titledNow && due)
+        (titledNow && progressDue)
       ) {
         open();
       }

@@ -11,8 +11,10 @@ import type {FailureStringId} from './failure-strings.ts';
 /** The link the script's stage carries in place of the details link; neither word of it is translated. */
 const SHOW_LOG_LINK = `[show log](command:${commands.showLog.id} "Show log")`;
 
-/** The string id of each stage's message; the share downloaded has none, so it keeps the stage before it. */
-const PHASE_IDS: Readonly<Record<PhaseName, FailureStringId | undefined>> = {
+/** The string id of each stage's message; the share downloaded has none, so it keeps the stage before it, and a stage another family reports is not named. */
+const PHASE_IDS: Readonly<
+  Partial<Record<PhaseName, FailureStringId | undefined>>
+> = {
   initializing: 'S082',
   waitingForOtherWindow: 'S157',
   downloading: 'S041',
