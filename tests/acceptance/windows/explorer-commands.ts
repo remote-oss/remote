@@ -6,7 +6,6 @@
 
 import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {DatabaseSync} from 'node:sqlite';
 import {userSettingsFile, variable, windowNames} from './harness.ts';
 import {activations} from './folder-windows.ts';
 import {folderRowsOf, HOME} from './explorer-folders.ts';
@@ -19,6 +18,7 @@ import {
   statusItem,
   windowTitle,
 } from './renderer.ts';
+import {readStateDatabase} from './state-database.ts';
 
 /** The host the rows' folders were opened on. */
 export const HOST = 'harness';
@@ -62,16 +62,13 @@ export function stateKeys(): string[] {
   if (!existsSync(file)) {
     return [];
   }
-  const database = new DatabaseSync(file, {readOnly: true});
-  try {
-    return (
+  return readStateDatabase(file, database =>
+    (
       database
         .prepare('SELECT key FROM ItemTable WHERE key = ?')
         .all(EXTENSION_ID) as Array<{key: string}>
-    ).map(entry => entry.key);
-  } finally {
-    database.close();
-  }
+    ).map(entry => entry.key),
+  );
 }
 
 /** Everything the rows compare before and after a key: the window, its text and files, and the history rows. */

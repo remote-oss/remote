@@ -242,13 +242,16 @@
       "ssh-group-absent.test.ts": 0.3
     },
     "explorer-folders": {
-      "commands-kinds.test.ts": 8.3,
-      "commands.test.ts": 18.8,
-      "failed-connect.test.ts": 0.3,
+      "commands-kinds.test.ts": 8.2,
+      "commands.test.ts": 19.8,
+      "failed-connect.test.ts": 0.2,
       "first-ssh-group-window.test.ts": 2.7,
-      "folders.test.ts": 42.5,
-      "gate.test.ts": 14.3,
-      "host-rows.test.ts": 2.6
+      "gate.test.ts": 18.3,
+      "host-rows.test.ts": 5.2,
+      "folders-1-history.test.ts": 10.2,
+      "folders-2-remove.test.ts": 13.1,
+      "folders-3-clear-and-rename.test.ts": 11.5,
+      "folders-4-many.test.ts": 7.9
     },
     "explorer-home": {
       "home-files.test.ts": 0.3,

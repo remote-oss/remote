@@ -7,7 +7,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {randomBytes} from 'node:crypto';
 import {existsSync, mkdirSync, readFileSync} from 'node:fs';
-import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
 import {
   runLabelArguments,
@@ -44,6 +43,7 @@ import {
   viewed,
   VIEW,
 } from '../windows/dev-containers-view.ts';
+import {readStateDatabase} from '../windows/state-database.ts';
 
 const LOCAL = 'local';
 const CLEAN_CONTAINERS = 'remote-containers.cleanUpDevContainers';
@@ -174,21 +174,19 @@ function storedNow(): string {
   const userData = variable('HARNESS_USER_DATA');
   const settings = path.join(userData, 'User', 'settings.json');
   const database = path.join(userData, 'User', 'globalStorage', 'state.vscdb');
-  const opened = existsSync(database)
-    ? new DatabaseSync(database, {readOnly: true})
+  const stored = existsSync(database)
+    ? readStateDatabase(database, opened =>
+        opened
+          .prepare(
+            "SELECT key, value FROM ItemTable WHERE key LIKE '%remote-containers%' ORDER BY key",
+          )
+          .all(),
+      )
     : undefined;
-  try {
-    return JSON.stringify([
-      existsSync(settings) ? readFileSync(settings, 'utf8') : '',
-      opened
-        ?.prepare(
-          "SELECT key, value FROM ItemTable WHERE key LIKE '%remote-containers%' ORDER BY key",
-        )
-        .all(),
-    ]);
-  } finally {
-    opened?.close();
-  }
+  return JSON.stringify([
+    existsSync(settings) ? readFileSync(settings, 'utf8') : '',
+    stored,
+  ]);
 }
 
 describe('Clean Up Dev Containers and Dev Volumes (card containers-168)', function () {
