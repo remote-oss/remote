@@ -403,5 +403,14 @@
     "owner": "themis",
     "evidence": 42624951292,
     "added": "2026-11-13"
+  },
+  {
+    "launch": "windows",
+    "file": "windows/forward-port.test.ts",
+    "title": "F-2507 AC-18: a port forwarded in a connected window reaches the host's port",
+    "card": 2404,
+    "owner": "triton",
+    "evidence": 42476121959,
+    "added": "2026-11-13"
   }
 ]
