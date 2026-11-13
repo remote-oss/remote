@@ -11,10 +11,12 @@ import {pathToFileURL} from 'node:url';
 import {
   closeWindow,
   inWindow,
+  isOpen,
   moveFocusAway,
   onHost,
   readUserSettings,
   recordLines,
+  relaunch,
   restoreUserSettings,
   userSettings,
   variable,
@@ -49,6 +51,7 @@ import {
   titleAction,
   toggleRow,
   viewRows,
+  waitForDialog,
   windowTitle,
 } from '../windows/renderer.ts';
 import {VIEW} from '../windows/explorer-rows.ts';
@@ -140,6 +143,28 @@ describe('the recent folders under a target (card coverage-122)', function () {
     if (windowNames().includes(name)) {
       await closeWindow(name, 120_000);
     }
+  }
+
+  /**
+   * Seeds the SSH companion's folder history with `hosts`, the whole history: the relaunch restarts the launch's
+   * editor and writes it between the stop and the start, so the earlier rows' entries are wiped, and reopens the
+   * window on its folder. The view is shown in the window again.
+   */
+  async function seedHistory(
+    window: string,
+    hosts: ReadonlyArray<{
+      hostKey: string;
+      entries: ReadonlyArray<{path: string; kind: 'folder' | 'workspace'}>;
+    }>,
+  ): Promise<void> {
+    await relaunch(window, {
+      environment: {},
+      globalState: {
+        extension: 'remote-oss.remote-ssh',
+        entries: {'folder.history.v1': {hosts}},
+      },
+    });
+    await inWindow(window, 'workbench.view.remote');
   }
 
   /** The expanded state of the host row `label` in window `window`: a leaf is undefined, a collapsed row false. */
@@ -1785,6 +1810,316 @@ describe('the recent folders under a target (card coverage-122)', function () {
       );
     } finally {
       restoreUserSettings(saved);
+    }
+  });
+
+  it('F-5104 AC-20 (c122-dupes): removing one copy of a path listed twice under a host removes every copy under it, and the same path under the other host stays', async function () {
+    this.timeout(600_000);
+    const window = await viewWindowIn('c122-dupes');
+    const dupe = `${HOME}/c122-dupe`;
+    try {
+      await onHost('mkdir', '-p', dupe);
+      await seedHistory(window, [
+        {
+          hostKey: 'harness',
+          entries: [
+            {path: dupe, kind: 'folder'},
+            {path: dupe, kind: 'folder'},
+          ],
+        },
+        {hostKey: 'jumped', entries: [{path: dupe, kind: 'folder'}]},
+      ]);
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(window, 'harness', [dupe, dupe], `${HOME}/c122-`);
+      await foldersSettled(window, 'jumped', [dupe], `${HOME}/c122-`);
+      await rowMenuAction(window, VIEW, 'c122-dupe', REMOVE, {
+        index: 0,
+        count: 3,
+      });
+      await foldersSettled(window, 'harness', [], `${HOME}/c122-`);
+      deepStrictEqual(
+        [
+          (await folderRowsOf(window, 'harness')).map(each => each.description),
+          (await folderRowsOf(window, 'jumped')).map(each => each.description),
+          (await historyOf(window)).harness,
+          (await historyOf(window)).jumped,
+        ],
+        [[], [dupe], undefined, [{path: dupe, kind: 'folder'}]],
+      );
+    } finally {
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5104 AC-28 (c122-missing): a new-window connect on a path that does not exist on the host shows nothing of its own, and the row is the first only after the Refresh', async function () {
+    this.timeout(600_000);
+    const saved = readUserSettings();
+    const window = await viewWindowIn('c122-miss');
+    const older = `${HOME}/c122-miss-a`;
+    const missing = `${HOME}/c122-miss-b`;
+    const opened = 'c122-miss-b';
+    try {
+      await onHost('mkdir', '-p', older);
+      await onHost('bash', '-c', `rm -f '${missing}'`);
+      await seedHistory(window, [
+        {
+          hostKey: 'harness',
+          entries: [
+            {path: older, kind: 'folder'},
+            {path: missing, kind: 'folder'},
+          ],
+        },
+      ]);
+      await userSettings({'window.dialogStyle': 'custom'});
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(
+        window,
+        'harness',
+        [older, missing],
+        `${HOME}/c122-`,
+      );
+      const before = windowNames();
+      await rowAction(window, VIEW, 'c122-miss-b', IN_NEW);
+      await waitFor(
+        `window ${opened} to activate its agent`,
+        () => windowEvents(opened).some(each => each.event === 'activated'),
+        120_000,
+      );
+      const dialog = await waitForDialog(opened, 60_000);
+      await clickDialogButton(opened, 'Cancel');
+      await waitFor(
+        `window ${opened} to stand on ssh-remote+harness`,
+        async () =>
+          windowNames().includes(opened) &&
+          (await windowState(opened)).remoteAuthority === 'ssh-remote+harness',
+        120_000,
+      );
+      const rowsBefore = (await folderRowsOf(window, 'harness')).map(
+        each => each.description,
+      );
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(
+        window,
+        'harness',
+        [missing, older],
+        `${HOME}/c122-`,
+      );
+      deepStrictEqual(
+        [
+          windowNames().filter(name => !before.includes(name)),
+          dialog.message,
+          dialog.buttons,
+          await notifications(window),
+          rowsBefore,
+        ],
+        [
+          [opened],
+          'Workspace does not exist',
+          ['Cancel', 'Open Workspace...'],
+          [],
+          [older, missing],
+        ],
+      );
+    } finally {
+      restoreUserSettings(saved);
+      await closeIfOpen(opened);
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5104 AC-29 (c122-unreach): a current-window connect on a row under an unreachable host fails the window, keeps the history order, and a reachable row from it recovers', async function () {
+    this.timeout(600_000);
+    const saved = readUserSettings();
+    const window = await viewWindowIn('c122-un');
+    const first = `${HOME}/c122-un-a`;
+    const second = `${HOME}/c122-un-b`;
+    const reachable = `${HOME}/c122-un-c`;
+    const failed = 'c122-un-b';
+    const recoveredName = 'c122-un-c';
+    try {
+      await onHost('mkdir', '-p', reachable);
+      await seedHistory(window, [
+        {
+          hostKey: 'nowhere',
+          entries: [
+            {path: first, kind: 'folder'},
+            {path: second, kind: 'folder'},
+          ],
+        },
+        {hostKey: 'harness', entries: [{path: reachable, kind: 'folder'}]},
+      ]);
+      await userSettings({'window.dialogStyle': 'custom'});
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(window, 'nowhere', [first, second], `${HOME}/c122-`);
+      await foldersSettled(window, 'harness', [reachable], `${HOME}/c122-`);
+      await rowAction(window, VIEW, 'c122-un-b', CURRENT);
+      await waitFor(
+        `window ${failed} to stand`,
+        () => windowNames().includes(failed),
+        120_000,
+      );
+      await waitForDialog(failed, 120_000);
+      await clickDialogButton(failed, 'Close Remote');
+      async function comesLocal(): Promise<string> {
+        for (const name of windowNames()) {
+          if (name === 'local' || !isOpen(name)) {
+            continue;
+          }
+          const state = await windowState(name).catch(() => undefined);
+          if (state?.remoteAuthority === null) {
+            return name;
+          }
+        }
+        return '';
+      }
+      await waitFor(
+        `the window ${failed} to come back local`,
+        async () => (await comesLocal()) !== '',
+        120_000,
+      );
+      const recovered = await comesLocal();
+      await inWindow(recovered, 'workbench.view.remote');
+      await titleAction(recovered, VIEW, REFRESH);
+      await foldersSettled(recovered, 'harness', [reachable], `${HOME}/c122-`);
+      await rowAction(recovered, VIEW, 'c122-un-c', CURRENT);
+      await waitFor(
+        `window ${recoveredName} to stand on ssh-remote+harness`,
+        async () =>
+          windowNames().includes(recoveredName) &&
+          (await windowState(recoveredName)).remoteAuthority ===
+            'ssh-remote+harness',
+        120_000,
+      );
+      deepStrictEqual(
+        [
+          windowNames().includes(failed),
+          await notifications(failed),
+          (await historyOf(recoveredName)).nowhere?.map(entry => entry.path) ??
+            [],
+          (await windowState(recoveredName)).remoteAuthority,
+        ],
+        [true, [], [first, second], 'ssh-remote+harness'],
+      );
+    } finally {
+      restoreUserSettings(saved);
+      await closeIfOpen(recoveredName);
+      await closeIfOpen(failed);
+      await closeIfOpen(window);
+    }
+  });
+
+  it('F-5104 AC-47 (c122-case): only the lower-case suffix counts as a workspace file, and a new-window connect on a mis-cased one opens an SSH window with no workspace', async function () {
+    this.timeout(600_000);
+    const window = await viewWindowIn('c122-case');
+    const lower = `${HOME}/c122-case/x.code-workspace`;
+    const upper = `${HOME}/c122-case/UP.CODE-WORKSPACE`;
+    const mixed = `${HOME}/c122-case/Mixed.Code-Workspace`;
+    let opened = '';
+    try {
+      await onHost(
+        'bash',
+        '-c',
+        [
+          `mkdir -p '${HOME}/c122-case'`,
+          `printf '' > '${upper}'`,
+          `printf '' > '${mixed}'`,
+          `rm -f '${lower}'`,
+        ].join(' && '),
+      );
+      await seedHistory(window, [
+        {
+          hostKey: 'harness',
+          entries: [
+            {path: lower, kind: 'workspace'},
+            {path: upper, kind: 'folder'},
+            {path: mixed, kind: 'folder'},
+          ],
+        },
+      ]);
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(
+        window,
+        'harness',
+        [lower, upper, mixed],
+        `${HOME}/c122-`,
+      );
+      const labels = (await folderRowsOf(window, 'harness')).map(
+        each => each.label,
+      );
+      const before = windowNames();
+      await rowAction(window, VIEW, 'UP.CODE-WORKSPACE', IN_NEW);
+      await waitFor(
+        `the new window of ${window}`,
+        () => windowNames().some(name => !before.includes(name)),
+        120_000,
+      );
+      opened = windowNames().find(name => !before.includes(name)) ?? '';
+      await waitFor(
+        `window ${opened} to stand on ssh-remote+harness`,
+        async () =>
+          windowNames().includes(opened) &&
+          (await windowState(opened)).remoteAuthority === 'ssh-remote+harness',
+        120_000,
+      );
+      deepStrictEqual(
+        [
+          labels,
+          windowNames().filter(name => !before.includes(name)),
+          (await windowState(opened)).remoteAuthority,
+          (await windowState(opened)).folders.length,
+          await windowTitle(opened),
+          await notifications(window),
+        ],
+        [
+          ['x (Workspace)', 'UP.CODE-WORKSPACE', 'Mixed.Code-Workspace'],
+          [opened],
+          'ssh-remote+harness',
+          0,
+          'Visual Studio Code',
+          [],
+        ],
+      );
+    } finally {
+      await closeIfOpen(opened);
+      await closeIfOpen(window);
+    }
+  });
+
+  it('F-5104 AC-48 (c122-alphadupes): with the alphabetical order, three copies of one path stand next to each other at its sorted position', async function () {
+    this.timeout(600_000);
+    const saved = readUserSettings();
+    const window = await viewWindowIn('c122-ad');
+    const earlier = `${HOME}/c122-ad-a`;
+    const triple = `${HOME}/c122-ad-b`;
+    try {
+      await onHost('mkdir', '-p', earlier);
+      await onHost('mkdir', '-p', triple);
+      await seedHistory(window, [
+        {
+          hostKey: 'harness',
+          entries: [
+            {path: triple, kind: 'folder'},
+            {path: triple, kind: 'folder'},
+            {path: triple, kind: 'folder'},
+            {path: earlier, kind: 'folder'},
+          ],
+        },
+      ]);
+      await userSettings({'remote-explorer.foldersSortOrder': 'alphabetical'});
+      await titleAction(window, VIEW, REFRESH);
+      await foldersSettled(
+        window,
+        'harness',
+        [earlier, triple, triple, triple],
+        `${HOME}/c122-`,
+      );
+      deepStrictEqual(
+        (await folderRowsOf(window, 'harness')).map(each => each.label),
+        ['c122-ad-a', 'c122-ad-b', 'c122-ad-b', 'c122-ad-b'],
+      );
+    } finally {
+      restoreUserSettings(saved);
+      await closeIfOpen(window);
     }
   });
 });

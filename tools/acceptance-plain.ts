@@ -16,6 +16,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
 import {build} from 'esbuild';
 import {
   needsDevContainerImage,
@@ -561,6 +562,51 @@ export interface RelaunchRequest {
   id: string;
   /** The variables to set; a `null` removes the launch's own. */
   environment: Record<string, string | null>;
+  /** The entries to write into the extension's entry of the profile's global state, between the stop and the start. */
+  globalState?: {extension: string; entries: Record<string, unknown>};
+}
+
+/**
+ * Writes `entries` into the entry `extension` holds in the profile's global state, `state.vscdb` under `userData`,
+ * while no editor runs: it reads the entry's JSON (or starts from none), sets the entries, and writes it back in one
+ * transaction. It fails when the launch names no user data folder or the state database is not there.
+ */
+export function seedGlobalState(
+  userData: string | undefined,
+  globalState: {extension: string; entries: Record<string, unknown>},
+): void {
+  if (userData === undefined) {
+    throw new Error('the relaunch names no user data folder to seed');
+  }
+  const file = path.join(userData, 'User', 'globalStorage', 'state.vscdb');
+  if (!existsSync(file)) {
+    throw new Error(`the profile's state database ${file} is not there`);
+  }
+  const database = new DatabaseSync(file);
+  try {
+    database.exec('BEGIN');
+    try {
+      const record = database
+        .prepare('SELECT value FROM ItemTable WHERE key = ?')
+        .get(globalState.extension) as {value: string} | undefined;
+      const stored =
+        record === undefined
+          ? {}
+          : (JSON.parse(record.value) as Record<string, unknown>);
+      for (const [key, value] of Object.entries(globalState.entries)) {
+        stored[key] = value;
+      }
+      database
+        .prepare('INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)')
+        .run(globalState.extension, JSON.stringify(stored));
+      database.exec('COMMIT');
+    } catch (caught) {
+      database.exec('ROLLBACK');
+      throw caught;
+    }
+  } finally {
+    database.close();
+  }
 }
 
 /** The harness's answer to a request. */
@@ -615,7 +661,14 @@ export async function answerRelaunch(
   try {
     const before = steps.activations(steps.ownWindow);
     await current.editor.stop();
-    current.editor = steps.start(programOf(request));
+    const program = programOf(request);
+    if (request.globalState !== undefined) {
+      seedGlobalState(
+        program.environment.HARNESS_USER_DATA,
+        request.globalState,
+      );
+    }
+    current.editor = steps.start(program);
     const activated = await waitUntil(
       () => steps.activations(steps.ownWindow) > before,
       steps.activationMilliseconds,

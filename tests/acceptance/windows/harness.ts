@@ -956,14 +956,22 @@ export async function reloadingCommand(
 }
 
 /**
- * Restarts the launch's editor with `environment` added to its own (a `null` removes a variable) and reopens window `name` on what it showed, a
- * folder or a workspace file, remote or not: the editor opens the launch's own window, and this opens the target from
- * it. Resolves once window `name` has activated its agent again. Only a plain launch can: its harness answers, and a
- * launch of the runner fails here.
+ * Restarts the launch's editor with `environment` added to its own (a `null` removes a variable), writes
+ * `globalState`'s entries into the extension's entry of the profile's global state between the stop and the start, and
+ * reopens window `name` on what it showed, a folder or a workspace file, remote or not: the editor opens the launch's
+ * own window, and this opens the target from it. Resolves once window `name` has activated its agent again. Only a plain
+ * launch can: its harness answers, and a launch of the runner fails here.
  */
 export async function relaunch(
   name: string,
-  options: {environment: Readonly<Record<string, string | null>>},
+  options: {
+    environment: Readonly<Record<string, string | null>>;
+    /** The entries to write into the extension's entry of the profile's global state, between the stop and the start. */
+    globalState?: {
+      extension: string;
+      entries: Readonly<Record<string, unknown>>;
+    };
+  },
 ): Promise<void> {
   const folder = process.env.REMOTE_OSS_ACCEPTANCE_RELAUNCH;
   if (folder === undefined || folder === '') {
@@ -978,7 +986,13 @@ export async function relaunch(
   rmSync(answerFile, {force: true});
   writeFileSync(
     path.join(folder, 'request.json'),
-    JSON.stringify({id: requestId, environment: options.environment}),
+    JSON.stringify({
+      id: requestId,
+      environment: options.environment,
+      ...(options.globalState === undefined
+        ? {}
+        : {globalState: options.globalState}),
+    }),
   );
   let own = '';
   await waitFor(

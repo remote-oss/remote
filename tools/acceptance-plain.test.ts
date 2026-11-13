@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
 import {
   activationsIn,
   answerRelaunch,
@@ -1494,6 +1495,215 @@ describe('answerRelaunch (card tooling-88)', () => {
       ],
       [2, 0],
     );
+  });
+});
+
+describe('the global-state seed of a relaunch (card coverage-122)', () => {
+  const SEED = {
+    extension: 'remote-oss.remote-ssh',
+    entries: {'folder.history.v1': {hosts: []}},
+  };
+  let workspace: TemporaryWorkspace;
+  let stateFile: string;
+
+  beforeEach(() => {
+    workspace = new TemporaryWorkspace('seed');
+  });
+
+  afterEach(() => {
+    workspace.remove();
+  });
+
+  /** Makes the profile's state database under the user data folder, with `rows` stored, and holds the file's path. */
+  function stateDatabase(rows: Record<string, string>): void {
+    const folder = path.join(
+      workspace.root,
+      'user-data',
+      'User',
+      'globalStorage',
+    );
+    mkdirSync(folder, {recursive: true});
+    stateFile = path.join(folder, 'state.vscdb');
+    const database = new DatabaseSync(stateFile);
+    database.exec(
+      'CREATE TABLE IF NOT EXISTS ItemTable (key TEXT NOT NULL PRIMARY KEY, value BLOB)',
+    );
+    for (const [key, value] of Object.entries(rows)) {
+      database
+        .prepare('INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)')
+        .run(key, value);
+    }
+    database.close();
+  }
+
+  /** The entry stored under `key`, or undefined when it has no row or the database does not open. */
+  function stored(key: string): unknown {
+    let database: DatabaseSync;
+    try {
+      database = new DatabaseSync(stateFile);
+    } catch {
+      return undefined;
+    }
+    try {
+      const record = database
+        .prepare('SELECT value FROM ItemTable WHERE key = ?')
+        .get(key) as {value: string} | undefined;
+      return record === undefined ? undefined : JSON.parse(record.value);
+    } finally {
+      database.close();
+    }
+  }
+
+  /** Runs one answer that seeds, with scripted stop and start that read the database: the steps, the stored entry at each and the answer's text. */
+  async function seededAnswer(request: {
+    globalState?: {extension: string; entries: Record<string, unknown>};
+  }): Promise<{
+    happened: string[];
+    atStop: unknown;
+    atStart: unknown;
+    answer: string | undefined;
+  }> {
+    const happened: string[] = [];
+    let atStop: unknown;
+    let atStart: unknown;
+    let activations = 0;
+    let newEditor: {stop: () => Promise<void>} | undefined;
+    const program: Program = {
+      file: '/editor',
+      programArguments: [],
+      environment: {
+        HARNESS_USER_DATA: path.join(workspace.root, 'user-data'),
+      },
+    };
+    writeFileSync(
+      path.join(workspace.root, 'request.json'),
+      JSON.stringify({id: 'seed', environment: {}, ...request}),
+    );
+    const current = {
+      editor: {
+        stop: () => {
+          happened.push('stop');
+          atStop = stored(SEED.extension);
+          return Promise.resolve();
+        },
+      },
+    };
+    await answerRelaunch(
+      workspace.root,
+      current,
+      () => program,
+      {
+        start: () => {
+          atStart = stored(SEED.extension);
+          happened.push('start');
+          activations += 1;
+          newEditor = {
+            stop: () => {
+              happened.push('stop new');
+              return Promise.resolve();
+            },
+          };
+          return newEditor;
+        },
+        ownWindow: 'local',
+        activations: () => activations,
+        activationMilliseconds: 50,
+        pollMilliseconds: 5,
+      },
+      new Set(),
+    );
+    if (newEditor !== undefined) {
+      await newEditor.stop();
+    }
+    const answerFile = path.join(workspace.root, 'response.json');
+    return {
+      happened,
+      atStop,
+      atStart,
+      answer: existsSync(answerFile)
+        ? readFileSync(answerFile, 'utf8')
+        : undefined,
+    };
+  }
+
+  it('coverage-122: the seed is applied between stop and start, and the answer succeeds', async () => {
+    stateDatabase({'remote-oss.remote-ssh': '{"legacy":true}'});
+    const outcome = await seededAnswer({globalState: SEED});
+    deepStrictEqual(
+      [outcome.happened, outcome.atStop, outcome.atStart, outcome.answer],
+      [
+        ['stop', 'start', 'stop new'],
+        {legacy: true},
+        {legacy: true, 'folder.history.v1': {hosts: []}},
+        JSON.stringify({id: 'seed', succeeded: true, own: 'local'}),
+      ],
+    );
+  });
+
+  it('coverage-122: an existing entry of the extension keeps its other keys', async () => {
+    stateDatabase({
+      'remote-oss.remote-ssh': JSON.stringify({
+        'folder.history.v1': {hosts: [{hostKey: 'old'}]},
+        'sibling.key': {held: 'yes'},
+      }),
+    });
+    const outcome = await seededAnswer({globalState: SEED});
+    deepStrictEqual(outcome.atStart, {
+      'folder.history.v1': {hosts: []},
+      'sibling.key': {held: 'yes'},
+    });
+  });
+
+  it('coverage-122: no row of the extension yet works, and the other extensions stay untouched', async () => {
+    stateDatabase({'other.extension': '{"kept":true}'});
+    const outcome = await seededAnswer({globalState: SEED});
+    deepStrictEqual(
+      [outcome.atStop, stored(SEED.extension), stored('other.extension')],
+      [undefined, SEED.entries, {kept: true}],
+    );
+  });
+
+  it('coverage-122: a request with no globalState touches no file', async () => {
+    stateDatabase({'remote-oss.remote-ssh': '{"legacy":true}'});
+    const bytesBefore = readFileSync(stateFile);
+    const outcome = await seededAnswer({});
+    deepStrictEqual(
+      [
+        outcome.happened,
+        outcome.atStop,
+        readFileSync(stateFile).equals(bytesBefore),
+        outcome.answer,
+      ],
+      [
+        ['stop', 'start', 'stop new'],
+        {legacy: true},
+        true,
+        JSON.stringify({id: 'seed', succeeded: true, own: 'local'}),
+      ],
+    );
+  });
+
+  it('coverage-122: a state file that does not open fails the answer with the error', async () => {
+    stateFile = path.join(
+      workspace.root,
+      'user-data',
+      'User',
+      'globalStorage',
+      'state.vscdb',
+    );
+    mkdirSync(stateFile, {recursive: true});
+    const outcome = await seededAnswer({globalState: SEED});
+    deepStrictEqual(outcome, {
+      happened: ['stop'],
+      atStop: undefined,
+      atStart: undefined,
+      answer: JSON.stringify({
+        id: 'seed',
+        succeeded: false,
+        own: 'local',
+        message: 'Error: unable to open database file',
+      }),
+    });
   });
 });
 
