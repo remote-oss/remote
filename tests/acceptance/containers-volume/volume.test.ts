@@ -7,6 +7,8 @@ import {volumeServerFolder} from 'lib-product';
 import {
   closeWindow,
   connectedToContainer,
+  containersLog,
+  containersLogSince,
   devContainerFolder,
   devContainersOf,
   reopenInContainer,
@@ -504,6 +506,44 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
       );
     } finally {
       await removeContainers(folder);
+    }
+  });
+
+  it.only('measure s36 race', async () => {
+    for (let round = 0; round < 5; round++) {
+      await clearVolume();
+      await removeVolume();
+      const mark = containersLog().length;
+      const folders = [`race-a${round}`, `race-b${round}`].map(each =>
+        devContainerFolder(each, {name: each}),
+      );
+      try {
+        const names = await Promise.all(folders.map(each => windowOf(each)));
+        await Promise.all(names.map(each => reopenStarted(each)));
+        await Promise.all(
+          names.map(each => connectedToContainer(each, 400_000)),
+        );
+        const installed = await installedOnVolume();
+        const siblings = installed.filter(line => line.includes('_'));
+        const contents = await onVolume(
+          `cd ${serverFolderOf()}/bin && for d in */*_*; do [ -d "$d" ] || continue; echo "== $d"; ls -la --time-style=full-iso "$d" | head -20; ls -la --time-style=full-iso "$d"/* 2>/dev/null | head -10; done; ls -la --time-style=full-iso */; true`,
+        );
+        console.log(
+          `s36m round ${round}: ${JSON.stringify(installed)}\n${contents}`,
+        );
+        console.log(
+          `s36m log ${round}:\n${containersLogSince(mark).join('\n')}`,
+        );
+        if (siblings.length > 0) {
+          console.log(`s36m LEFTOVER in round ${round}`);
+        }
+        await Promise.all(names.map(each => closeWindow(each)));
+      } finally {
+        for (const folder of folders) {
+          await removeContainers(folder);
+        }
+        await docker('volume', 'create', 'vscode');
+      }
     }
   });
 
