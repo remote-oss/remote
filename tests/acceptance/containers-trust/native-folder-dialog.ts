@@ -40,8 +40,12 @@ async function chooserWindow(): Promise<string | undefined> {
     );
     const last = found.split('\n').at(-1) ?? '';
     return last === '' ? undefined : last;
-  } catch {
-    return undefined;
+  } catch (caught) {
+    // `xdotool search` exits with 1 when no window matches; a driver that is missing or fails otherwise is no answer.
+    if ((caught as {code?: unknown}).code === 1) {
+      return undefined;
+    }
+    throw caught;
   }
 }
 
