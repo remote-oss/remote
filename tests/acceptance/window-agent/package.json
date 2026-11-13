@@ -32,7 +32,8 @@
   ],
   "enabledApiProposals": [
     "tunnels",
-    "resolvers"
+    "resolvers",
+    "terminalSelection"
   ],
   "main": "./extension.cjs"
 }
