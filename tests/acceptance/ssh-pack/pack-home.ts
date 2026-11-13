@@ -1,5 +1,6 @@
 import {mkdirSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
+import {readFileSync} from 'node:fs';
 import {variable} from '../windows/harness.ts';
 
 /** The run's HOME for the ssh-pack launches, as the launch gives it to the editor. */
@@ -10,10 +11,16 @@ export function packHome(): string {
 /** The two lines of the client's SSH configuration the rows write: a host and its name. */
 const CONFIG_LINES = ['Host f2007-local', '  HostName f2007-local.invalid'];
 
-/** Writes the client's `~/.ssh/config` as the two-line file the rows read, and gives its path. */
+/**
+ * Writes the client's `~/.ssh/config`: the run's own configuration, which reaches the harness host, then the two-line host
+ * of the rows. Gives its path.
+ */
 export function writeClientSshConfig(): string {
   const file = path.join(packHome(), '.ssh', 'config');
   mkdirSync(path.dirname(file), {recursive: true});
-  writeFileSync(file, `${CONFIG_LINES.join('\n')}\n`);
+  writeFileSync(
+    file,
+    `${readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8')}\n${CONFIG_LINES.join('\n')}\n`,
+  );
   return file;
 }

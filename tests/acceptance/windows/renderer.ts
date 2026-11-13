@@ -2280,6 +2280,33 @@ export async function statusBarText(
   );
 }
 
+/**
+ * Opens the "Extension Pack" tab of the extension page shown in window `name` and gives the names of the extensions it
+ * lists, in order, once the list has shown or after 5 s.
+ */
+export async function extensionPackTabOf(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `(async () => {
+      const tab = [...document.querySelectorAll('.extension-editor .navbar .action-label')].find(each => (each.textContent ?? '').trim().toLowerCase() === 'extension pack');
+      if (tab === undefined) {
+        return [];
+      }
+      for (const type of ['mousedown', 'mouseup', 'click']) {
+        tab.dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, button: 0}));
+      }
+      for (let attempt = 0; attempt < 25; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        const names = [...document.querySelectorAll('.extension-editor .extension-list-item .name, .extension-editor .monaco-list-row .name')].map(each => each.textContent ?? '');
+        if (names.length > 0) {
+          return names;
+        }
+      }
+      return [];
+    })()`,
+  );
+}
+
 /** The language mode the status bar of window `name` shows for the active editor: "Plain Text", "SSH Config" and so on; empty when it shows none. */
 export function languageModeOf(name: string): Promise<string> {
   return statusBarText(name, 'status.editor.mode');

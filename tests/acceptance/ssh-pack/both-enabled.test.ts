@@ -12,6 +12,7 @@ import {pickShown} from '../windows/explorer-home.ts';
 import {
   chooseQuickPickItem,
   editorTabs,
+  extensionPackTabOf,
   extensionPageOf,
   extensionsViewSections,
   languageModeOf,
@@ -50,6 +51,7 @@ describe('the extension and both companions enabled (card #2499)', function () {
     const found: Record<string, unknown> = {};
     try {
       found.page = await extensionPageOf(window, 'Remote - SSH');
+      found.packTab = await extensionPackTabOf(window);
       await startInWindow(window, 'opensshremotes.openConfigFile');
       const picked = await pickShown(window);
       found.picker = picked;

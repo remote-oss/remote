@@ -1528,6 +1528,8 @@ export function launchesOf(root: string): Launch[] {
       settings: {
         'window.title': '[${rootName}]${remoteName}',
         'window.dialogStyle': 'custom',
+        // The default, so that the picker of Open SSH Configuration File lists the user's own file; the rows set it themselves.
+        'remote.SSH.configFile': '',
       },
       environment: {
         ...STAND_IN_GALLERY,
