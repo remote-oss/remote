@@ -16,7 +16,9 @@ import {
 } from '../windows/harness.ts';
 import {closePick, pickShown} from '../windows/explorer-home.ts';
 import {
+  answerInputBox,
   chooseQuickPickItem,
+  dialogOf,
   extensionPackTabOf,
   extensionPageOf,
   extensionsViewSections,
@@ -169,9 +171,9 @@ describe('the extension and both companions enabled (card #2499)', function () {
 
   it('F-2007 (c2499-measure-ssh): the remote config file opened in an SSH window', async () => {
     const found: Record<string, unknown> = {};
-    let ssh = '';
+    let remote = '';
     try {
-      ssh = 'pack-ssh';
+      remote = 'pack-ssh';
       await onHostAs('harness', 'mkdir', '-p', '/home/harness/pack-ssh');
       void inWindow(
         'local',
@@ -180,24 +182,24 @@ describe('the extension and both companions enabled (card #2499)', function () {
       );
       await waitFor(
         'the SSH window to connect',
-        async () => (await windowState(ssh)).remoteAuthority !== null,
+        async () => (await windowState(remote)).remoteAuthority !== null,
         120_000,
       );
-      found.authority = (await windowState(ssh)).remoteAuthority;
-      await inWindow(
-        ssh,
-        'vscode.open',
-        'vscode-remote://ssh-remote+harness/home/harness/.ssh/config',
-      );
+      found.authority = (await windowState(remote)).remoteAuthority;
+      await startInWindow(remote, 'workbench.action.files.openFile');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      found.dialog = await pickShown(remote);
+      await answerInputBox(remote, '/home/harness/.remote/config');
       await new Promise(resolve => setTimeout(resolve, 4000));
-      found.mode = await languageModeOf(ssh);
-      found.tokens = await lineTokensOf(ssh, 'Host');
-      found.notifications = await notifications(ssh);
+      found.dialogAfter = await dialogOf(remote);
+      found.mode = await languageModeOf(remote);
+      found.tokens = await lineTokensOf(remote, 'Host');
+      found.notifications = await notifications(remote);
     } catch (caught) {
       found.failure = String(caught);
     } finally {
-      if (ssh !== '') {
-        await closeWindow(ssh).catch(() => undefined);
+      if (remote !== '') {
+        await closeWindow(remote).catch(() => undefined);
       }
     }
     throw new Error(`MEASURED ${JSON.stringify(found)}`);
