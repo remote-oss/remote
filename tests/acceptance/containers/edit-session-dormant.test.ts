@@ -6,7 +6,7 @@ import {
   withWindow,
 } from '../windows/authoring-support.ts';
 import {
-  notificationCentre,
+  noticesOnceSettled,
   paletteRows,
   rememberPage,
 } from '../windows/renderer.ts';
@@ -51,7 +51,7 @@ describe('the edit-session entries are dormant (card containers-156)', function 
           palette: palette.filter(entry => entry.includes(CONTINUE_ROW)),
           continuing: continuing.filter(entry => entry.includes(CONTINUE_ROW)),
           indicator: indicator.filter(entry => entry.includes(CONTINUE_ROW)),
-          notices: await notificationCentre(window),
+          notices: await noticesOnceSettled(window),
           lines: containersLog()
             .slice(before)
             .filter(text => /edit.?session|Container Volume/i.test(text)),

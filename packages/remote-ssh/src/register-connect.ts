@@ -39,10 +39,10 @@ import {registerWindowLabel} from './surfaces/label-formatter.ts';
 import type {Translate} from './surfaces/strings.ts';
 import {openWebUiHandler} from './surfaces/web-ui-command.ts';
 import type {Logger} from 'lib-log';
-import {
-  clearHintsHandler,
-  type HintStoreState,
-} from './diagnostics/clear-hints-command.ts';
+import {clearHintsHandler} from './diagnostics/clear-hints-command.ts';
+import type {HintStore} from './diagnostics/hint-store.ts';
+import {hintStoreKeyOf} from './diagnostics/hint-store-key.ts';
+import {type ConfirmedState, timerDelay} from './state/confirmed-update.ts';
 
 /** What the connect's registration needs of the editor. */
 export interface ConnectRegistrationHost {
@@ -57,7 +57,7 @@ export interface ConnectRegistrationHost {
   openExternal(address: string): PromiseLike<boolean>;
   translate: Translate;
   /** The extension's global state, where the hint store's key lives. */
-  globalState: HintStoreState;
+  globalState: ConfirmedState<HintStore>;
   /** The window's log the clear command writes to. */
   logger: Logger;
   /** The non-modal notices the maintenance commands show. */
@@ -201,7 +201,14 @@ export async function registerConnect(
           resolver === undefined ? 'none' : assembly.connector.serverPort(),
         openExternal: address => host.openExternal(address),
       }),
-      clearAllSessionHints: clearHintsHandler(host.globalState, host.logger),
+      clearAllSessionHints: clearHintsHandler(
+        hintStoreKeyOf(host.globalState, {
+          delay: timerDelay,
+          logger: host.logger,
+        }),
+        () => new Date(),
+        host.logger,
+      ),
     },
   );
   const details = host.commands.registerCommand(
@@ -215,8 +222,10 @@ export async function registerConnect(
   return {
     registration: registration.kind,
     currentAlias: () => {
-      const target = resolver?.currentConnection()?.decodedTarget.target;
-      return target !== undefined && 'kind' in target ? hostAlias(target) : '';
+      const decoded = resolver?.currentConnection()?.decodedTarget;
+      return decoded !== undefined && 'kind' in decoded.target
+        ? hostAlias(decoded.target) || decoded.rawHostString
+        : '';
     },
     activeConnection: () => {
       const current = resolver?.currentConnection();

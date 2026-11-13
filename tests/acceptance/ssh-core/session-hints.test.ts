@@ -327,9 +327,10 @@ describe('the session record of every resolve (card connect-135)', function () {
       const mark = recordLines().length;
       const logMark = connectionLog().length;
       await inWindow('c135-d1', CLEAR);
+      // The clear writes an empty store that says when it was cleared: the record list is empty, as the accessor reads it.
       await waitFor(
         'the records to be gone',
-        async () => !('remote.ssh.hints' in (await extensionState())),
+        () => hintRecords().length === 0,
         60_000,
       );
       deepStrictEqual(

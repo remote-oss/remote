@@ -47,7 +47,7 @@ async function registered(
   seen: Seen;
   registration: Awaited<ReturnType<typeof registerConnect>>;
   recording: ReturnType<typeof recordingResolverEditor>;
-  state: Array<[string, undefined]>;
+  state: Array<[string, unknown]>;
   sink: MemorySink;
 }> {
   const seen: Seen = {
@@ -73,7 +73,7 @@ async function registered(
         seen.revealed += 1;
       },
     );
-  const state: Array<[string, undefined]> = [];
+  const state: Array<[string, unknown]> = [];
   const sink = new MemorySink();
   const logger = createLogger(sink, {minimumLevel: (): Level => 'info'});
   const machine = nodeMachineOf(
@@ -162,6 +162,7 @@ async function registered(
       },
       translate: template => template,
       globalState: {
+        get: () => undefined,
         update: (key, value) => {
           state.push([key, value]);
           return Promise.resolve();
@@ -624,5 +625,15 @@ describe("the connect's registration", () => {
       .catch(() => undefined);
     await Promise.resolve();
     deepStrictEqual(registration.currentAlias(), 'devbox');
+  });
+
+  it('F-2205 AC-32, BR-7: a link whose host part is empty names the typed text, since there is no host to name', async () => {
+    const {registration, recording} = await registered(true);
+    void recording
+      .registered()
+      ?.resolve('ssh-remote+u@', {resolveAttempt: 1})
+      .catch(() => undefined);
+    await Promise.resolve();
+    deepStrictEqual(registration.currentAlias(), 'u@');
   });
 });

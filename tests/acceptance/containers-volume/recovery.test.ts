@@ -16,11 +16,13 @@ import {
   waitFor,
   windowState,
 } from '../windows/harness.ts';
+import {closeWindowsBut, openWindowNames} from './leftover-windows.ts';
 import {openMemoryWindow} from '../windows/folder-windows.ts';
 import {
   acceptQuickPick,
   answerDialog,
   dialogOf,
+  pressEscape,
   quickPickOf,
   quickPickRows,
   typeInQuickPick,
@@ -31,7 +33,7 @@ import {
   containersWith,
   dockerLines,
   removeClone,
-} from '../windows/volume-clones.ts';
+} from './volume-clones.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -75,12 +77,17 @@ async function startClone(source: string): Promise<void> {
   await acceptQuickPick(local);
 }
 
-/** Clones `source` until its build fails, then asks the dialog for the recovery container and waits for the window. */
+/** Asks the failure dialog of the clone window `folder` for the recovery container and waits for the window. */
+async function recover(folder: string): Promise<void> {
+  await answerDialog(folder, RECOVERY);
+  await connectedToContainer(folder, 900_000);
+}
+
+/** Clones `source` until its build fails, then recovers its window `folder`. */
 async function reachRecovery(source: string, folder: string): Promise<void> {
   await startClone(source);
   await waitForDialog(folder, 900_000);
-  await answerDialog(folder, RECOVERY);
-  await connectedToContainer(folder, 900_000);
+  await recover(folder);
 }
 
 /** The recovery containers of the volume, in any state, as ids. */
@@ -104,6 +111,29 @@ async function inspected(container: string, format: string): Promise<string> {
   return stdout.trim();
 }
 
+/** The volumes container `container` mounts, as `<name> <destination>`: the clone's, and the `vscode` cache at `/vscode`. */
+async function mountsOf(container: string): Promise<{
+  clones: string;
+  cache: string;
+}> {
+  const mounts = (
+    await inspected(
+      container,
+      '{{range .Mounts}}{{.Name}}={{.Destination}} {{end}}',
+    )
+  )
+    .trim()
+    .split(' ')
+    .filter(each => each !== '');
+  return {
+    clones: mounts
+      .filter(each => !each.endsWith('=/vscode'))
+      .map(each => each.split('=')[0])
+      .join(' '),
+    cache: mounts.filter(each => each.endsWith('=/vscode')).join(' '),
+  };
+}
+
 describe('The recovery container (card containers-160, part A)', function () {
   this.timeout(2_400_000);
   let repository: BrokenRepository;
@@ -114,6 +144,15 @@ describe('The recovery container (card containers-160, part A)', function () {
     settingsBefore = readUserSettings();
     await removeClone(repository.url);
     await removeClone(repository.otherUrl);
+  });
+
+  // A row closes its windows at its end; one that fails before then would leave them for the rows after it.
+  let kept: string[] = [];
+  beforeEach(() => {
+    kept = openWindowNames();
+  });
+  afterEach(async () => {
+    await closeWindowsBut(kept, pressEscape);
   });
 
   after(async () => {
@@ -178,16 +217,14 @@ describe('The recovery container (card containers-160, part A)', function () {
       '-c',
       'git --version; docker version 2>&1; true',
     ]);
-    const mounted = await inspected(
-      String(container),
-      '{{range .Mounts}}{{.Name}} {{end}}',
-    );
+    const mounted = await mountsOf(String(container));
     const state = await windowState(FIRST);
     const first = {
       count: (await recoveryContainers(volume)).length,
       remoteName: state.remoteName,
       image: await inspected(String(container), '{{.Config.Image}}'),
-      mounted: mounted.trim(),
+      clones: mounted.clones,
+      cache: mounted.cache,
       hasGit: tools.stdout.includes('git version'),
       hasClient: tools.stdout.includes('Client:'),
       noDaemon: tools.stdout.includes(
@@ -209,7 +246,8 @@ describe('The recovery container (card containers-160, part A)', function () {
           count: 1,
           remoteName: 'dev-container',
           image: 'vsc-volume-bootstrap:latest',
-          mounted: volume,
+          clones: volume,
+          cache: 'vscode=/vscode',
           hasGit: true,
           hasClient: true,
           noDaemon: true,
@@ -293,28 +331,29 @@ describe('The recovery container (card containers-160, part A)', function () {
   it('F-0410 AC-16 (concurrency): two windows recovering two volumes at once each get a container that mounts only its own volume', async () => {
     await removeClone(repository.url);
     await removeClone(repository.otherUrl);
-    await Promise.all([
-      reachRecovery(repository.url, FIRST),
-      reachRecovery(repository.otherUrl, SECOND),
-    ]);
+    // The editor reuses a window already open on the in-memory folder, so each clone runs up to its dialog, which leaves
+    // that folder, before the next window opens; the two recoveries then run at the same time.
+    for (const [source, folder] of [
+      [repository.url, FIRST],
+      [repository.otherUrl, SECOND],
+    ] as const) {
+      await startClone(source);
+      await waitForDialog(folder, 900_000);
+    }
+    await Promise.all([FIRST, SECOND].map(recover));
     const mounts = await Promise.all(
       [repository.url, repository.otherUrl].map(async source => {
         const volume = await volumeOf(source);
         const containers = await recoveryContainers(volume);
         return {
           containers: containers.length,
-          mounted: (
-            await inspected(
-              String(containers[0]),
-              '{{range .Mounts}}{{.Name}} {{end}}',
-            )
-          ).trim(),
+          clones: (await mountsOf(String(containers[0]))).clones,
           volume,
         };
       }),
     );
     deepStrictEqual(
-      mounts.map(each => [each.containers, each.mounted === each.volume]),
+      mounts.map(each => [each.containers, each.clones === each.volume]),
       [
         [1, true],
         [1, true],

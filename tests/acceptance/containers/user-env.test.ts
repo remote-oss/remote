@@ -6,6 +6,8 @@ import {promisify} from 'node:util';
 import {
   closeWindow,
   connectedToContainer,
+  containersLog,
+  containersLogSince,
   devContainerFolder,
   devContainersOf,
   inWindow,
@@ -20,6 +22,7 @@ import {
   dialogOf,
   notifications,
   terminalText,
+  toastsOnceSettled,
   typeInTerminal,
 } from '../windows/renderer.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
@@ -187,6 +190,15 @@ async function taskOutput(name: string): Promise<string> {
   return resultAfter(name, 'task');
 }
 
+/** The lines of a reconnect that say which path it took: the container's state, the blocking run, the timing and remoteEnv. */
+function reconnectPath(lines: readonly string[]): string[] {
+  return lines.filter(line =>
+    /already running|newly started|blocking run|Resolving Remote|Starting container|remoteEnv/.test(
+      line,
+    ),
+  );
+}
+
 describe('F-0416 the remote environment (card containers-42, group B)', function () {
   this.timeout(900_000);
 
@@ -299,19 +311,24 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       const containerId = await containerOf(folder);
       const names = ['MY_CONTAINER_VAR2', 'MY_REMOTE_VAR3'];
       const before = await printed(name, 'before', names);
+      const mark = containersLog().length;
       await relaunch(name, {environment: {F0416_LOCAL_VAR: 'changed-local'}});
       await connectedToContainer(name);
       const after = await printed(name, 'after', names);
       const plain = await execEnvOf(containerId, 'MY_CONTAINER_VAR2');
-      deepStrictEqual(
-        [before, after, plain, await devContainersOf(folder)],
-        [
-          ['hello-local', 'hello-local'],
-          ['hello-local', 'changed-local'],
-          'hello-local',
-          [containerId],
-        ],
-      );
+      const seen = [before, after, plain, await devContainersOf(folder)];
+      const expected = [
+        ['hello-local', 'hello-local'],
+        ['hello-local', 'changed-local'],
+        'hello-local',
+        [containerId],
+      ];
+      if (JSON.stringify(seen) !== JSON.stringify(expected)) {
+        console.log(
+          `x17 mismatch, the second reconnect's path:\n${reconnectPath(containersLogSince(mark)).join('\n')}`,
+        );
+      }
+      deepStrictEqual(seen, expected);
       await closeWindow(name);
     } finally {
       // The rows after this one expect the variable unset in the editor.
@@ -642,8 +659,13 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       await typeInTerminal(name, `printf 'term:%s\\n' "\${NULL_VAR-unset}"\n`);
       const terminal = await resultAfter(name, 'term');
       const plain = await execEnvOf(containerId, 'NULL_VAR');
+      const shown = await terminalBuffer(name);
       await closeWindow(name);
-      deepStrictEqual([task, terminal, plain], ['unset', 'unset', 'x']);
+      deepStrictEqual(
+        [task, terminal, plain],
+        ['unset', 'unset', 'x'],
+        `the terminal of ${name} shows: ${JSON.stringify(shown)}`,
+      );
     } finally {
       await cleanUp(folder);
     }
@@ -661,7 +683,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       const name = await reopened(folder);
       const atConnect = {
         dialog: await dialogOf(name),
-        notices: await notifications(name),
+        notices: await toastsOnceSettled(name),
       };
       await inWindow(name, 'workbench.action.terminal.new');
       await waitFor(
