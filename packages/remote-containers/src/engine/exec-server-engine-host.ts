@@ -104,14 +104,24 @@ export function execServerEngineHost(
         done();
       },
     });
+    let ended = false;
+    const exited = command.onExit.then(
+      exit => exit.status,
+      () => undefined,
+    );
     function stop(): void {
       stdin.end();
       void stdout.processId
         .then(processId =>
-          processId === undefined ? undefined : server.kill(processId),
+          processId === undefined || ended ? undefined : server.kill(processId),
         )
         .catch(() => undefined);
     }
+    // Once the command has exited its id may name another process, so a later stop only ends the input.
+    void exited.then(() => {
+      ended = true;
+      options.cancellation.removeEventListener('abort', stop);
+    });
     if (options.cancellation.aborted) {
       stop();
     }
@@ -124,10 +134,7 @@ export function execServerEngineHost(
       stdin,
       stdout: stdout.output,
       stderr: stderr.output,
-      exited: command.onExit.then(
-        exit => exit.status,
-        () => undefined,
-      ),
+      exited,
       kill: stop,
     };
     return {kind: 'spawned', process};

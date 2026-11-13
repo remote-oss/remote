@@ -347,6 +347,33 @@ describe('the Docker CLI on the exec server’s host (card containers-174)', () 
     );
   });
 
+  it('a run that has ended kills nothing when its signal is aborted later or it is killed, since its id may name another process by then', async () => {
+    const scene = sceneOf();
+    const controller = new AbortController();
+    const outcome = await execServerEngineHost(scene.server, 'docker').run(
+      ['version'],
+      {kind: 'none'},
+      {cancellation: controller.signal},
+    );
+    controller.abort();
+    const later = sceneOf();
+    const spawned = await execServerEngineHost(later.server, 'docker').spawn(
+      ['version'],
+      {cancellation: NEVER},
+    );
+    if (spawned.kind === 'spawned') {
+      spawned.process.stdin.end();
+      await spawned.process.exited;
+      await settled();
+      spawned.process.kill();
+    }
+    await settled();
+    deepStrictEqual(
+      [outcome.kind, scene.killed, later.killed],
+      ['ran', [], []],
+    );
+  });
+
   it('a process whose exit never comes back, because the connection went, ends with no status, and a stream whose end rejects still ends', async () => {
     const stdout = hostStream();
     const stderr = hostStream();
