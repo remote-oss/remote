@@ -412,5 +412,14 @@
     "owner": "triton",
     "evidence": 42476121959,
     "added": "2026-11-13"
+  },
+  {
+    "launch": "preconnect",
+    "file": "preconnect/failures.test.ts",
+    "title": "F-2108 AC-23 (retry-remembered): after Don't Ask Again on a failing script, Retry runs it with no dialog",
+    "card": 2458,
+    "owner": "dike",
+    "evidence": 42218054216,
+    "added": "2026-11-13"
   }
 ]
