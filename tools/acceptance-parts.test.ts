@@ -41,6 +41,32 @@ function suiteFiles(suite: string): string[] {
     : [];
 }
 
+/**
+ * The table's entries that no run can match: a label no launch has, or a file that its plain launch does not run. A
+ * split or a rename leaves one behind, its minutes then count for nothing, and the new files count as unmeasured. It
+ * is a row's helper, not the tool's, so that a change to it reaches no launch.
+ */
+function staleEntriesOf(
+  table: PartsTable,
+  launches: readonly Launch[],
+  suiteFiles: (suite: string) => string[],
+): string[] {
+  const byLabel = new Map(launches.map(launch => [launch.label, launch]));
+  return Object.entries(table.minutes).flatMap(([label, measured]) => {
+    const launch = byLabel.get(label);
+    if (launch === undefined) {
+      return [`${label}: no launch has this label`];
+    }
+    if (typeof measured !== 'object' || launch.kind !== 'plain') {
+      return [];
+    }
+    const files = new Set(launch.files ?? suiteFiles(launch.suite));
+    return Object.keys(measured)
+      .filter(file => !files.has(file))
+      .map(file => `${label}: ${file} is not a file of the launch`);
+  });
+}
+
 describe('acceptance-parts (card tooling-159)', () => {
   it('tooling-159: the time limit is twice the minutes and ten more, at least thirty', () => {
     deepStrictEqual([0, 9, 10, 14.2, 49.2].map(limitOf), [30, 30, 30, 39, 109]);
@@ -209,6 +235,35 @@ describe('acceptance-parts (card tooling-159)', () => {
         remote: 1.5,
       },
     });
+  });
+
+  it('tooling-194: a table entry no run can match is named: a label no launch has, and a file its plain launch does not run', () => {
+    const table: PartsTable = {
+      targetMinutes: 15,
+      minutes: {
+        local: 9,
+        gone: 4,
+        long: {'l1.test.ts': 12, 'split.test.ts': 30},
+        boxes: {'b1.test.ts': 2, 'b3.test.ts': 1},
+      },
+    };
+    deepStrictEqual(staleEntriesOf(table, LAUNCHES, suiteFiles), [
+      'gone: no launch has this label',
+      'long: split.test.ts is not a file of the launch',
+      'boxes: b3.test.ts is not a file of the launch',
+    ]);
+  });
+
+  it("tooling-194: the repository's table names only labels its launches have and files they run", () => {
+    const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
+    deepStrictEqual(
+      staleEntriesOf(
+        table,
+        launchesOf(REPOSITORY_ROOT),
+        suiteFilesIn(REPOSITORY_ROOT),
+      ),
+      [],
+    );
   });
 
   it("tooling-159: the repository's parts make every launch but the genuine ones, each test file of a split launch exactly once, the same parts each time", () => {

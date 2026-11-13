@@ -147,7 +147,15 @@ jobs:
           LAUNCHES: ${{ inputs.launches }}
         run: |
           if [ -n "$LAUNCHES" ] && [ "$LAUNCHES" != all ]; then
-            parts=$(jq -cn --arg launches "$LAUNCHES" '[{name: $launches, launches: $launches, minutes: 180}]')
+            # the part's name goes into its job's name and its concurrency group, and a group too long for GitHub
+            # (somewhere past 335 characters: 479 launches characters made no job) leaves the job uncreated; a long
+            # list is named by its first 60 characters and how many entries follow
+            parts=$(jq -cn --arg launches "$LAUNCHES" '[{
+              name: (if ($launches | length) <= 100 then $launches
+                else ($launches | split(",")) as $entries
+                  | ($entries[0] | if length > 60 then .[0:60] + "…" else . end)
+                    + (if ($entries | length) > 1 then " and \($entries | length - 1) more" else "" end) end),
+              launches: $launches, minutes: 180}]')
           else
             parts=$(node tools/acceptance-parts.ts --matrix)
           fi
@@ -385,6 +393,32 @@ jobs:
       - if: always()
         run: pnpm acceptance:clean
 
+  # The dev container CLI the package ships, its bridge and its launcher, against the runner's own Docker: the suite in
+  # tests/acceptance/containers-cli (no editor). It runs when acceptance (server lifecycle) does: every pull request from
+  # this repository that is not a draft and not docs only, a dispatch that runs checks, and the tag of a release. A
+  # list of the paths that reach the suite would miss what its sources import (athena on #2333).
+  acceptance-containers-cli:
+    name: acceptance (containers-cli)
+    needs: changes
+    if: >-
+      !cancelled() && !inputs.launches-only && needs.changes.result != 'failure' && github.event_name != 'schedule' &&
+      !(github.event_name == 'push' && github.ref_type == 'branch') && (github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
+      needs.changes.outputs.docs-only != 'true'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15 # the suite takes seconds once built; a fresh runner also builds and pulls one image
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # the suite skips its container rows when Docker does not answer, so the job stops here instead
+      - run: docker version --format 'Docker {{.Server.Version}}'
+      - run: pnpm test:acceptance:containers-cli
+
   # A pull request from this repository runs the VSCodium launches its change selects, at most six, and a failing row
   # blocks its merge, since the gate needs this job. A larger selection gets a notice and runs by a dispatch at the head,
   # or under the acceptance-full label, here when the label is on the pull request and in acceptance-full.yml when it
@@ -569,6 +603,7 @@ jobs:
       - acceptance-server
       - acceptance-host-variants
       - acceptance-real-server
+      - acceptance-containers-cli
       - acceptance-vscodium
       - acceptance-vscodium-containers
       - acceptance-pr
@@ -581,7 +616,7 @@ jobs:
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
-          echo "changes vscodium-plan checks unit quality slice-1 server host-variants real-server vscodium vscodium-containers pr-launches genuine: $RESULTS"
+          echo "changes vscodium-plan checks unit quality slice-1 server host-variants real-server containers-cli vscodium vscodium-containers pr-launches genuine: $RESULTS"
       - name: A failed or cancelled job, or a fork's pull request, fails the gate
         if: >-
           contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||

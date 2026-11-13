@@ -1,0 +1,425 @@
+[
+  {
+    "launch": "containers-a",
+    "file": "containers/connect-reading.test.ts",
+    "title": "F-0408 AC-14 (ruling-1557-tolerance): reopening a folder whose container runs connects, by the log’s Resolving Remote, and shows S087, each within 1.5 s (athena’s ruling on #1204 for the spec’s 1 s), with no Starting container and no Starting VS Code Server in the log",
+    "card": 2414,
+    "owner": "daedalus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-a",
+    "file": "containers/connect-reading.test.ts",
+    "title": "F-0408 AC-15 (c68-pull): an image that is not local is pulled inside the Starting container step, and no notification, suffix, title or editor names the pull",
+    "card": 2418,
+    "owner": "hestia",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-a",
+    "file": "containers/dockerfile.test.ts",
+    "title": "F-0415 AC-7, AC-8, AC-9 (gate-row-6): the create hooks run once, a restart runs the start and attach hooks and initializeCommand again, and a reload runs the attach hook and initializeCommand but not the start hook",
+    "card": 2206,
+    "owner": "daedalus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-a",
+    "file": "containers/extensions.test.ts",
+    "title": "F-0505 AC-1, AC-12, AC-34 (gate-row-12): an id of the configuration is installed in the new container without holding the window, and a malformed id beside it is no notice",
+    "card": 2206,
+    "owner": "daedalus",
+    "evidence": 43018061687,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-a",
+    "file": "containers/image-build.test.ts",
+    "title": "F-0412 AC-9 (i9): a cacheFrom that names a local tag nobody pushed does not stop the build, and no dialog or notice shows",
+    "card": 2206,
+    "owner": "hestia",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-a",
+    "file": "containers/open-folder-virtual.test.ts",
+    "title": "F-0403 AC-28 (c71-untitled): in an untitled workspace core asks whether to save the workspace configuration before the window changes; Cancel leaves the window and creates nothing, and Don’t Save reloads the same window into one container",
+    "card": 2432,
+    "owner": "themis",
+    "evidence": 42218054216,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/reopen-command.test.ts",
+    "title": "F-0101 AC-21 (c74-indicator-menu): the remote indicator’s pick in a dev container window has its placeholder, its first item, Rebuild Container, focused",
+    "card": 2082,
+    "owner": "selene",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/resolve-reload.test.ts",
+    "title": "F-0502 AC-13 (c43-oncreate-once): a container stopped and started again, then reconnected by a reload, does not run its onCreateCommand again",
+    "card": 2449,
+    "owner": "dike",
+    "evidence": 42476121959,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/resolve-reload.test.ts",
+    "title": "F-0502 AC-31 (c43-reload): Reload Window reuses the running server on the same port within 2 s, logs the container as already running, and reconnects under the same title and indicator",
+    "card": 2449,
+    "owner": "dike",
+    "evidence": 42476121959,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/user-env.test.ts",
+    "title": "F-0416 AC-27 (c74-task-probe): a shell task prints neither probe variable for none, only the interactive one for interactiveShell, only the login one for loginShell, and both by default",
+    "card": 2429,
+    "owner": "hestia",
+    "evidence": 42367771624,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/user-env.test.ts",
+    "title": "F-0416 AC-44 (c74-null-remote-env): a remoteEnv null unsets an image variable in a task and in the terminal, and a plain docker exec still has it",
+    "card": 2429,
+    "owner": "hestia",
+    "evidence": 42820396583,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-podman",
+    "file": "containers-podman/podman.test.ts",
+    "title": "F-0201 AC-4 (podman-storage): with dockerPath podman, Reopen creates the container and the vscode volume in Podman’s storage only, with the three labels, and the window connects",
+    "card": 2319,
+    "owner": "proteus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-podman",
+    "file": "containers-podman/podman.test.ts",
+    "title": "podman smoke: Rebuild Container makes a new container and keeps the vscode volume",
+    "card": 2319,
+    "owner": "proteus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-podman",
+    "file": "containers-podman/podman.test.ts",
+    "title": "podman smoke: a Dockerfile’s RUN step has run in the container",
+    "card": 2319,
+    "owner": "proteus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-podman",
+    "file": "containers-podman/podman.test.ts",
+    "title": "podman smoke: a folder with a Dockerfile opens in a container",
+    "card": 2319,
+    "owner": "proteus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-podman",
+    "file": "containers-podman/podman.test.ts",
+    "title": "podman smoke: a reload connects to the same container, and the vscode volume that is there is not reported as a failure",
+    "card": 2319,
+    "owner": "proteus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-ports",
+    "file": "containers-ports/attributes.test.ts",
+    "title": "F-1101 AC-12 (rebuild): a changed attribute is not in effect after a reload, and is after a rebuild",
+    "card": 2450,
+    "owner": "daedalus",
+    "evidence": 42367771624,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-view",
+    "file": "containers-view/targets-row-actions.test.ts",
+    "title": "F-0902 AC-24 (last-user): the Remove confirmation adds S373 for each volume and folder no other container uses, in mount order, not for one another container mounts and not for the vscode volume",
+    "card": 2129,
+    "owner": "themis",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/clone.test.ts",
+    "title": "F-0701 AC-10, AC-33 (c151-no-branch-part): a branch that doesn’t exist fails with S193 and git’s text, leaves its volume an empty folder, and Close Remote leaves an empty local window",
+    "card": 2425,
+    "owner": "triton",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/clone.test.ts",
+    "title": "F-0701 AC-14 (c151-reuse-part): the same URL again reuses its volume and its dev container: nothing is cloned or built again",
+    "card": 2263,
+    "owner": "daedalus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/explore-volume.test.ts",
+    "title": "F-0705 AC-13, AC-32 (c155-stop): when the window goes the container stops within about 30 s and is not removed",
+    "card": 2263,
+    "owner": "daedalus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/explore-volume.test.ts",
+    "title": "F-0705 AC-8, AC-11, AC-12, AC-17, AC-29 (c155-explore): a plain volume opens as root with the volume at /volume and no Docker socket, in Restricted Mode, the same volume again runs the same container, and another volume gets its own",
+    "card": 2263,
+    "owner": "daedalus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/explore-volume.test.ts",
+    "title": "F-0705 AC-8b (c155-vscode): exploring the vscode volume itself mounts it at /volume and at /vscode",
+    "card": 2263,
+    "owner": "daedalus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/recovery.test.ts",
+    "title": "F-0410 AC-14, AC-16c: a clone whose build fails offers four buttons, and More Actions picks five items with no container, the recovery one second",
+    "card": 2263,
+    "owner": "daedalus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/recovery.test.ts",
+    "title": "F-0410 AC-15: Close Remote leaves a plain empty local window",
+    "card": 2263,
+    "owner": "daedalus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/recovery.test.ts",
+    "title": "F-0410 AC-16 (concurrency): two windows recovering two volumes at once each get a container that mounts only its own volume",
+    "card": 2263,
+    "owner": "daedalus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/recovery.test.ts",
+    "title": "F-0410 AC-16, AC-16a, AC-16b: the recovery button connects a container of the bootstrap image on the volume, with Git and a docker client but no daemon, and a second start restarts the same container",
+    "card": 2263,
+    "owner": "daedalus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/recovery.test.ts",
+    "title": "F-0410 AC-28: a stopped container with the labels of another temp root is left as it is, and a new one is made",
+    "card": 2263,
+    "owner": "daedalus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/recovery.test.ts",
+    "title": "F-0410 AC-29: a stopped recovery container is restarted on its own image after the bootstrap image setting changed",
+    "card": 2263,
+    "owner": "daedalus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/volume.test.ts",
+    "title": "F-0419 AC-37 (v1): a non-root remote user connects on a fresh volume (contracts §5.2); the shared folders are root 0777 and the commit folder is the user’s 0755",
+    "card": 2263,
+    "owner": "daedalus",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "default-ports",
+    "file": "default-ports/port-source.test.ts",
+    "title": "F-2507 AC-43 (own-ports-process): with the user value process, nothing is forwarded for 60 s after a connect, a reload, and a close and reconnect",
+    "card": 2254,
+    "owner": "themis",
+    "evidence": 41922676078,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "explorer-folders",
+    "file": "explorer-folders/commands.test.ts",
+    "title": "F-5002 AC-6, AC-11, AC-16 (keys-plain): a key bound to each command with no argument changes no window, title, indicator, file or history row, shows no dialog, leaves the window usable and adds no state key of the extension",
+    "card": 2420,
+    "owner": "themis",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "explorer-folders",
+    "file": "explorer-folders/commands.test.ts",
+    "title": "F-5002 AC-7, AC-16 (keys-bogus): the same keys with the argument \"bogus-f5002\" and with {} change nothing",
+    "card": 2420,
+    "owner": "themis",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "preconnect",
+    "file": "preconnect/other.test.ts",
+    "title": "F-2108 AC-35 (deleted): a confirmed script that was deleted fails with the read's detail and no dialog, and its entry stays",
+    "card": 2232,
+    "owner": "dike",
+    "evidence": 42218054216,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "preconnect",
+    "file": "preconnect/remembered.test.ts",
+    "title": "F-2108 AC-13, AC-14 (changed): changed contents ask again with the message that says so; Allow keeps asking and Don't Ask Again stops it",
+    "card": 2232,
+    "owner": "dike",
+    "evidence": 42624951292,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "preconnect",
+    "file": "preconnect/basics.test.ts",
+    "title": "F-2108 AC-11, AC-12 (remember): Don't Ask Again runs it, and another window to another alias runs it with no dialog, the settings file unchanged",
+    "card": 2232,
+    "owner": "dike",
+    "evidence": 42820396583,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "ssh-core",
+    "file": "ssh-core/session-hints.test.ts",
+    "title": "F-2605 AC-17 (c135-record): a failed attempt keeps 25 environment hints in order, its error hint with a number, and the log hint",
+    "card": 2326,
+    "owner": "iris",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "trust",
+    "file": "trust/agent-link.test.ts",
+    "title": "F-2311 AC-24 (c99-trust-terminal): after the refusal, a new terminal asks again, and when that is cancelled it opens in Restricted Mode with SSH_AUTH_SOCK as the link and the keys listed",
+    "card": 2254,
+    "owner": "themis",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "web-ui",
+    "file": "web-ui/web-ui.test.ts",
+    "title": "F-2509 AC-21 (nothing-written): running it changes no settings, keybindings, stored state or file of the client or the host",
+    "card": 2413,
+    "owner": "proteus",
+    "evidence": 42624951292,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "preconnect",
+    "file": "preconnect/remembered.test.ts",
+    "title": "F-2108 AC-39 (touched): a confirmed script whose modification time changed, with the same contents, runs with no dialog",
+    "card": 2232,
+    "owner": "dike",
+    "evidence": 43018061687,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/volume.test.ts",
+    "title": "F-0419 AC-25 (s25): a commit folder with only a stray file in it makes the setup dialog with Opening Remote..., a running container on the volume and an unchanged listing, for a second folder too",
+    "card": 2263,
+    "owner": "daedalus",
+    "evidence": 42820396583,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "containers-volume",
+    "file": "containers-volume/volume.test.ts",
+    "title": "F-0419 AC-26 (s26): a vscode volume of 1 MiB makes the setup dialog with Opening Remote..., and the container runs with the volume at /vscode",
+    "card": 2263,
+    "owner": "daedalus",
+    "evidence": 42820396583,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "default-ports",
+    "file": "default-ports/port-source.test.ts",
+    "title": "F-2507 AC-43 (own-ports-output): with the default source, nothing is forwarded for 60 s after a connect, a reload, and a close and reconnect",
+    "card": 2254,
+    "owner": "themis",
+    "evidence": 42367771624,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "default-ports",
+    "file": "default-ports/forward-entries.test.ts",
+    "title": "F-2507 AC-8 (c83-reload-time): after a reload the default listens again within about five seconds of the resolver returning",
+    "card": 2443,
+    "owner": "themis",
+    "evidence": 42624951292,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "default-ports",
+    "file": "default-ports/forward-entries.test.ts",
+    "title": "F-2507 AC-9, AC-37 (c83-stop-reload): a default row offers Set Port Label, Stop Forwarding Port, Copy Local Address, Open in Browser and Preview in Editor; stopped it has no listener and no row, until the next reload forwards it again",
+    "card": 2443,
+    "owner": "themis",
+    "evidence": 42624951292,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "windows",
+    "file": "windows/forward-port.test.ts",
+    "title": "F-2507 AC-18: a port forwarded in a connected window reaches the host's port",
+    "card": 2404,
+    "owner": "triton",
+    "evidence": 42476121959,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "preconnect",
+    "file": "preconnect/failures.test.ts",
+    "title": "F-2108 AC-23 (retry-remembered): after Don't Ask Again on a failing script, Retry runs it with no dialog",
+    "card": 2458,
+    "owner": "dike",
+    "evidence": 42218054216,
+    "added": "2026-11-13"
+  }
+]

@@ -128,6 +128,7 @@ import {
   userDataFolderOf,
   writeStandIns,
 } from './acceptance-plain.ts';
+import {knownRedsJudge} from './known-reds.ts';
 import {
   isMainModule,
   REPOSITORY_ROOT,
@@ -1518,6 +1519,7 @@ export async function runLaunches(
   },
   lock: LaunchLock = NO_LOCK,
   baseContainers: Readonly<Partial<Record<HostBase, string>>> = {},
+  judge: (exitCode: number, launch: Launch) => number = exitCode => exitCode,
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   // The harness host starts with the update service's name pinned to the download host.
@@ -1539,7 +1541,8 @@ export async function runLaunches(
       await lock.take();
     }
     try {
-      exitCodes.push(await runAttempts(launch));
+      const exitCode = await runAttempts(launch);
+      exitCodes.push(launch === undefined ? exitCode : judge(exitCode, launch));
     } finally {
       if (locked) {
         lock.release();
@@ -1788,6 +1791,7 @@ export async function runAcceptance(
           },
         ),
         baseContainersOf({...variables}),
+        knownRedsJudge(root, runFolder, process.env),
       )),
     );
     exitCode = exitCodes.find(code => code !== 0) ?? 0;

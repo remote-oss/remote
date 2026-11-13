@@ -88,6 +88,8 @@ F-6502's action.
 
 ### D3 path-mapper
 
+> Amended 2026-11-12 (brief-wsl-commands §2, §3): `toWindows` is added; a pure pre-check accepts only a drive form or a WSL share; every path argument follows `--`; the share host is a parameter (`\\wsl$` before build 21354), replacing "output never uses `wsl$`"; S047 is D12's, from `pathTranslationAvailable`, and a failed `wslpath` is silent.
+
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
 | `toDistro` | Windows path, target distro | `{distro, linuxPath}`. A `\\wsl.localhost\<d>\…` or `\\wsl$\<d>\…` path gives `<d>` and `/…` without a process. A drive path runs `wslpath -u` in the target distro, honouring the automount root (F-6204 BR-1) | `notTranslatable` (STR:S047 per F-6204 Q1, **provisional**), D1 failures |
@@ -124,6 +126,8 @@ Rule: D4 passes A's shared H1 contract suite on the D4f fake.
 
 ### D5 distro-proxy and D5r wsl-relay-dialer
 
+> Superseded 2026-11-12 by D5h (`ruling-2348-proxy-helper`, brief-wsl-connect §4): a detached lib-helper helper holds the listener, so a window's close doesn't end the others' connections (F-6201 AC-29, AC-30). The token is never in the claim record; the relay text is inline, not `relay.js` through the drive mount.
+
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
 | `D5r.dial` | distro, `{port}` in the distro, cancellation | a duplex stream: the standard input and output of one D1 `exec` running `<server dir>/node` with `relay.js` and the port | `relayFailed` with the D1 kind |
@@ -145,6 +149,8 @@ Rules:
 Never: listen on anything but `127.0.0.1`; pass the connection token through the rendezvous file.
 
 ### D6 connect-engine (the connector behind `wsl.resolver-front`)
+
+> Amended 2026-11-12: the run list is brief-wsl-connect §1 and the failure kinds are its §5 table, which closes "as A defines".
 
 Input: B's connect input `{target: {distro, outer?}, rawHostString, attempt, isReconnection, windowId,
 windowWorkspace}` and the phase sink.
@@ -189,6 +195,8 @@ Never: show UI itself except F-6103's modal through its port; interpret B's pres
 
 ### D7 wsl-server-adapter
 
+> Amended 2026-11-12 (brief-wsl-connect §2, §3): the Alpine `libstdc++` probe runs before unpack and blocks (F-6302 AC-5), reversing "never blocking"; the setup file is sourced once per sequence; the start options add `useHostProxy`, `--disable-telemetry` and the licence switch; the platform record is written when the probe maps the platform; the script-less start has no in-distro fallback.
+
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
 | `policy` | the profile, settings snapshot (`remote.WSL.experimental.scriptLessStartup`, `remote.WSL.fileWatcher.polling`, `remote.WSL.fileWatcher.pollingInterval`), distro version | the lib-server parameters below | none |
@@ -219,26 +227,18 @@ Rules:
 
 ### D7b background-download
 
-The mechanism is area A's V10 server-prefetch and the `prefetch` field of the policy record
-(`../transport-and-server/contracts.md`, PR #35), agreed with `remote-architect-worker-1` on 2026-10-06. D7b supplies
-the remote-wsl row: `prefetch: onProductUpdate`, setting `remote.WSL.downloadInBackground`.
+> Replaced 2026-11-12 (`ruling-2348-no-update-signal`, brief-wsl-connect §2). No extension API reports an update the
+> editor has detected, so nothing is prefetched and area A's V10 is not wired for WSL. The earlier `wire` operation, the
+> `prefetch: onProductUpdate` row, `lastUpdateCheck` and the lock file are withdrawn.
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `wire` | the policy row, the settings snapshot, the window's lifetime | V10 started or stopped as the setting changes (F-6301 6.6 steps 3, 4) | none raised |
-| `recordUse` | platform | updates `usageTime.<platform>` after a connect, for V10's 14-day window | none |
+| `announce` | the settings snapshot at activation | with `remote.WSL.downloadInBackground` on, one log line that nothing is prefetched in the background | none raised |
+| `recordUse` | platform | sets `usageTime.<platform>` when the probe maps the platform, even if the start then fails (F-6302 7.E5) | none |
 
-Behaviour as V10 defines it:
-- the setting and core's `update.mode` gate it;
-- a 30 s tick and an hourly feed check;
-- a source must resolve through P3 before any feed request;
-- `skipUnaccepted` for the licence;
-- a per-user lock file next to the kept cache;
-- silent, log lines only (F-6301 BR-13).
-
-State in global state (our id): `lastUpdateCheck` and `usageTime.<platform>`. The reference's `downloadInProgress`
-flag is replaced by V10's lock file, because global state is per profile, not per user. F-6301 BR-13 calls those keys
-internal, not a contract.
+- `usageTime.<platform>` is the one per-connect write F-6201 AC-23 names. Nothing reads it while no background download
+  exists; it stays so that the stored state is the spec's.
+- No other state: no `lastUpdateCheck`, no `downloadInProgress`, no lock file. F-6301 BR-13 calls those keys internal.
 
 ### D8 shell-handoff (`scripts/wslCode.sh`, shipped text)
 
@@ -270,6 +270,8 @@ stock VS Code launcher looks for another id, which is an upstream matter (lead, 
 
 ### D9 nested-route (**provisional**, dossier question 3)
 
+> Final 2026-11-12 as D9a and D9b (brief-wsl-targets-and-interop §3): R-89 and F-6701 BR-8 settle dossier question 3. `ConnectInput.execServer` is lib-authority's; the server is streamed over the exec server.
+
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
 | `remoteSpawner` | `outer: DecodedTarget` | a D1 spawner whose processes run on the outer host through the outer resolver's exec facility (the `resolvers` exec-server surface that B parked for containers F-1302) | `outerUnavailable` (F-6201 7.E6) |
@@ -292,6 +294,8 @@ BR-7). B's `wsl.package` renders the notification and calls `dismissForever` for
 
 ### D11 env-rendezvous
 
+> Amended 2026-11-12 (brief-wsl-commands §7): the record lives in a private per-user directory, mode 0600, owner and mode checked before the take; the exclusions are `PWD`, `OLDPWD`, `SHLVL`, `_`, `WSL_INTEROP`, `WSLENV`; the key includes the outer authority.
+
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
 | `put` (by D8, in the distro) | distro, folder or workspace path, the exported environment | a record under the distro user's temporary folder, R-27 prefix, mode 0600 | none (a failed write means no hand-over) |
@@ -309,6 +313,8 @@ Rules:
 Never: log the values; keep the record after `take`.
 
 ### D12 wsl-commands (engine side)
+
+> Amended 2026-11-12 (brief-wsl-commands): D12 owns F-6204; D12e starts `explorer.exe`; an untitled workspace is refused before the picker (`ruling-2348-untitled-workspace`), replacing the provisional option (a).
 
 | Command | Engine result handed to B or a port | Spec |
 |---|---|---|

@@ -1824,9 +1824,24 @@ export async function waitFor(
   milliseconds: number,
 ): Promise<void> {
   const deadline = Date.now() + milliseconds;
-  while (!(await check())) {
+  for (;;) {
+    let notYet = '';
+    try {
+      if (await check()) {
+        return;
+      }
+    } catch (caught) {
+      // A check that throws an error carrying `notYet` says it cannot tell yet (a read that found a writer in the middle of
+      // its write): that is the check not holding, not the wait ending.
+      if ((caught as {notYet?: unknown}).notYet !== true) {
+        throw caught;
+      }
+      notYet = (caught as Error).message;
+    }
     if (Date.now() > deadline) {
-      throw new Error(`timed out waiting for ${description}`);
+      throw new Error(
+        `timed out waiting for ${description}${notYet === '' ? '' : ` (the last check could not tell: ${notYet})`}`,
+      );
     }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
