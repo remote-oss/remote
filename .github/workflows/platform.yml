@@ -57,19 +57,24 @@ jobs:
         run: |
           wsl --install Ubuntu-24.04 --no-launch --web-download
           wsl -d Ubuntu-24.04 -u root -- sh -c 'apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io docker-buildx 2>&1 | tail -2'
-          # the packaged service (Ubuntu under WSL runs systemd), with a TCP listener on the distro's loopback only: the
-          # Docker API is unauthenticated and root there, and WSL2's localhost forwarding carries it to Windows' 127.0.0.1
-          wsl -d Ubuntu-24.04 -u root -- sh -c 'mkdir -p /etc/systemd/system/docker.service.d && printf "[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock\n" > /etc/systemd/system/docker.service.d/tcp.conf && systemctl daemon-reload && systemctl restart docker && systemctl is-active docker'
+          # the packaged service (Ubuntu under WSL runs systemd), with a TCP listener on the distro's own address. The
+          # Windows CLI reaches it there directly: through WSL2's localhost forwarding a `docker run`'s attached output
+          # was lost while its exit status came through (#2505). The Docker API is unauthenticated and root, and the
+          # address is on WSL's host-only virtual switch, reachable from this runner alone
+          wsl -d Ubuntu-24.04 -u root -- sh -c 'mkdir -p /etc/systemd/system/docker.service.d && printf "[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock\n" > /etc/systemd/system/docker.service.d/tcp.conf && systemctl daemon-reload && systemctl restart docker && systemctl is-active docker'
           # a wsl.exe that stays, so the distro and its engine outlive this step
           Start-Process wsl.exe -WindowStyle Hidden -ArgumentList '-d', 'Ubuntu-24.04', '--', 'sleep', 'infinity'
+          $engine = (wsl -d Ubuntu-24.04 --exec hostname -I).Trim().Split(' ')[0]
           $up = $false
           for ($i = 0; $i -lt 60 -and -not $up; $i++) {
             Start-Sleep 2
-            docker -H tcp://127.0.0.1:2375 version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}' 2>$null
+            docker -H "tcp://${engine}:2375" version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}' 2>$null
             $up = $LASTEXITCODE -eq 0
           }
           if (-not $up) { wsl -d Ubuntu-24.04 -u root -- sh -c 'systemctl status docker --no-pager | tail -15'; exit 1 }
-          "DOCKER_HOST=tcp://127.0.0.1:2375" >> $env:GITHUB_ENV
+          "DOCKER_HOST=tcp://${engine}:2375" >> $env:GITHUB_ENV
+          # the harness passes its bind-mounted folders to the engine as the distro's /mnt paths
+          "HARNESS_ENGINE_WSL=1" >> $env:GITHUB_ENV
       # the image's Docker CLI has no buildx plugin, and the harness builds its images with `docker build --load`
       - name: Docker's buildx plugin for the Windows CLI
         run: |
