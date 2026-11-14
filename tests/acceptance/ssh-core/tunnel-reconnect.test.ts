@@ -70,7 +70,7 @@ describe('the tunnel of a window across reconnects (card coverage-79)', function
   /** Forwards `FIRST_PORT` by hand in a window, brings the window back with `bringBack`, and gives what it then shows. */
   async function afterwards(
     name: string,
-    bringBack: () => Promise<void>,
+    bringBack: () => Promise<unknown>,
   ): Promise<[string, number, string]> {
     await connectedWith(name, 'harness', {});
     await forwardByHand(name, FIRST_PORT);

@@ -17,6 +17,7 @@ import {
   readUserSettings,
   recordLines,
   relaunch,
+  startInWindow,
   restoreUserSettings,
   userSettings,
   variable,
@@ -142,25 +143,11 @@ describe('the recent folders under a target (card coverage-122)', function () {
   }
 
   /**
-   * The launch's own window as it stands open now: after a relaunch it is a new start of a new editor, and the only open
-   * empty window, since a row's window carries its folder's name. The driver a row takes from here.
-   */
-  function launchWindow(): string {
-    const name = windowNames().find(
-      each => each.startsWith('empty-') && isOpen(each),
-    );
-    if (name === undefined) {
-      throw new Error('no launch window is open to serve as the driver');
-    }
-    return name;
-  }
-
-  /**
    * Seeds the SSH companion's folder history with `hosts`, the whole history: the relaunch restarts the launch's
    * editor and writes it between the stop and the start, so the earlier rows' entries are wiped, and reopens the
    * window on its folder. The view is shown in the window again. The relaunch stops the launch's whole editor, so the
-   * driver is the new start's own window and is re-found here, or the rows after this one send their commands to a dead
-   * window.
+   * driver is the new start's own window, which the relaunch names in its answer, or the rows after this one send
+   * their commands to a dead window.
    */
   async function seedHistory(
     window: string,
@@ -169,7 +156,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
       entries: ReadonlyArray<{path: string; kind: 'folder' | 'workspace'}>;
     }>,
   ): Promise<void> {
-    await relaunch(window, {
+    const own = await relaunch(window, {
       environment: {},
       globalState: {
         extension: 'remote-oss.remote-ssh',
@@ -177,7 +164,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
       },
     });
     const before = driver;
-    driver = launchWindow();
+    driver = own;
     console.log(
       `the launch's own window stands after the relaunch: ${driver} (it was ${before})`,
     );
@@ -1010,7 +997,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
             each.description.includes(target),
         );
       }
-      await inWindow(window, 'workbench.action.openRecent');
+      await startInWindow(window, 'workbench.action.openRecent');
       await waitFor(
         `the recent list of window ${window} to hold the visited folder`,
         holds,
@@ -1025,7 +1012,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
       );
       await rowMenuAction(window, VIEW, 'c122-core-a', REMOVE);
       await foldersSettled(window, 'harness', [], `${HOME}/c122-core-`);
-      await inWindow(window, 'workbench.action.openRecent');
+      await startInWindow(window, 'workbench.action.openRecent');
       await waitFor(
         `the recent list of window ${window} to keep the removed folder`,
         holds,
@@ -1084,7 +1071,18 @@ describe('the recent folders under a target (card coverage-122)', function () {
         (await historyOf(driver)).harness?.filter(entry =>
           entry.path.startsWith(`${HOME}/c122-rer-`),
         ) ?? [];
-      await inWindow(opened, 'workbench.action.reloadWindow');
+      try {
+        await inWindow(opened, 'workbench.action.reloadWindow');
+      } catch (error) {
+        console.log(
+          `window ${opened} answered the reload with ${String(error)}: its last events are ` +
+            `${JSON.stringify(windowEvents(opened).slice(-15))}, its state is ` +
+            `${JSON.stringify(await windowState(opened).catch(() => 'unreachable'))}, ` +
+            `its open pick is ${JSON.stringify(await quickPickFacts(opened).catch(() => 'unreachable'))}, ` +
+            `its notifications are ${JSON.stringify(await notifications(opened).catch(() => 'unreachable'))}`,
+        );
+        throw error;
+      }
       await waitFor(
         `window ${opened} to reconnect after its reload`,
         async () => {
@@ -1246,7 +1244,10 @@ describe('the recent folders under a target (card coverage-122)', function () {
           await moveFocusAway(name);
         });
         await press(keyNumber, async name => {
+          // The label click that focuses the host row also toggles it (VS Code core tree [oss]): the twistie opens
+          // it again, so the key press and the folder-row click after stand on the host as it stood before.
           await clickRowLabel(name, VIEW, 'harness');
+          await toggleRow(name, VIEW, 'harness');
         });
         await press(keyNumber, async name => {
           await clickRowLabel(name, VIEW, 'c122-kbd-a');
@@ -1289,11 +1290,20 @@ describe('the recent folders under a target (card coverage-122)', function () {
         'workbench.action.openSettings',
         '@ext:remote-oss',
       );
-      await waitFor(
-        `the two settings of the extension in the editor of window ${window}`,
-        async () => (await settingsItems(window)).length === 2,
-        30_000,
-      );
+      try {
+        await waitFor(
+          `the two settings of the extension in the editor of window ${window}`,
+          async () => (await settingsItems(window)).length === 2,
+          30_000,
+        );
+      } catch (error) {
+        console.log(
+          `the settings editor of window ${window} stood at ` +
+            `${JSON.stringify(await settingsItems(window).catch(() => 'unreadable'))} ` +
+            `under the title ${JSON.stringify(await windowTitle(window).catch(() => 'unreadable'))}`,
+        );
+        throw error;
+      }
       const items = await settingsItems(window);
       const sort = items.find(each =>
         each.title.includes('Folders Sort Order'),
@@ -1620,6 +1630,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
       );
       await inWindow(empty, 'workbench.view.remote');
       await titleAction(empty, VIEW, REFRESH);
+      await foldersSettled(empty, 'harness', [target], `${HOME}/c122-es-`);
       deepStrictEqual(
         [
           (await folderRowsOf(empty, 'harness')).map(each => each.description),
@@ -1813,21 +1824,29 @@ describe('the recent folders under a target (card coverage-122)', function () {
         await userSettings({'remote-explorer.collapseRecentFolders': value});
         const window = await viewWindowIn(label);
         try {
-          await waitFor(
-            `the hosts of window ${label} to stand at their start`,
-            async () => {
-              const rows = (await viewRows(window, VIEW)) ?? [];
-              return (
-                rows.some(
-                  entry => entry.level === 2 && entry.label === 'harness',
-                ) &&
-                rows.some(
-                  entry => entry.level === 2 && entry.label === 'refused',
-                )
-              );
-            },
-            30_000,
-          );
+          try {
+            await waitFor(
+              `the hosts of window ${label} to stand at their start`,
+              async () => {
+                const rows = (await viewRows(window, VIEW)) ?? [];
+                return (
+                  rows.some(
+                    entry => entry.level === 2 && entry.label === 'harness',
+                  ) &&
+                  rows.some(
+                    entry => entry.level === 2 && entry.label === 'refused',
+                  )
+                );
+              },
+              30_000,
+            );
+          } catch (error) {
+            console.log(
+              `window ${label} stood at ${JSON.stringify(await viewRows(window, VIEW).catch(() => 'unreadable'))} ` +
+                `while the setting held ${JSON.stringify(value)}`,
+            );
+            throw error;
+          }
           return [
             await hostExpanded(window, 'harness'),
             await hostExpanded(window, 'refused'),

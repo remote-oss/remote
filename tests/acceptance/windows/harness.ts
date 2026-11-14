@@ -959,7 +959,7 @@ export async function reloadingCommand(
  * Restarts the launch's editor with `environment` added to its own (a `null` removes a variable), writes
  * `globalState`'s entries into the extension's entry of the profile's global state between the stop and the start, and
  * reopens window `name` on what it showed, a folder or a workspace file, remote or not: the editor opens the launch's
- * own window, and this opens the target from it. Resolves once window `name` has activated its agent again. Only a plain
+ * own window, and this opens the target from it. Resolves once window `name` has activated its agent again, with the name of the launch's own window in the restarted editor. Only a plain
  * launch can: its harness answers, and a launch of the runner fails here.
  */
 export async function relaunch(
@@ -972,7 +972,7 @@ export async function relaunch(
       entries: Readonly<Record<string, unknown>>;
     };
   },
-): Promise<void> {
+): Promise<string> {
   const folder = process.env.REMOTE_OSS_ACCEPTANCE_RELAUNCH;
   if (folder === undefined || folder === '') {
     throw new Error('relaunch is for plain launches');
@@ -1026,6 +1026,7 @@ export async function relaunch(
     () => countOf(name, 'activated') > before,
     120_000,
   );
+  return own;
 }
 
 /**
