@@ -27,7 +27,8 @@
     },
     {
       "id": "wslFeatureInstalled",
-      "setter": "coreAndExtension"
+      "setter": "coreAndExtension",
+      "settingModule": "src/nested/outer-context.ts"
     }
   ],
   "infoLineCommands": [],
