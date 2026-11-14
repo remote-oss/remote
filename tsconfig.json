@@ -158,6 +158,12 @@
       "path": "tests/acceptance/ssh-askpass"
     },
     {
+      "path": "tests/acceptance/ssh-askpass-env"
+    },
+    {
+      "path": "tests/acceptance/ssh-askpass-space"
+    },
+    {
       "path": "tests/acceptance/ssh-containers"
     },
     {

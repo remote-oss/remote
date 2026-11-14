@@ -1,5 +1,5 @@
 /**
- * @fileoverview What the rows of the `ssh-askpass` launch share (F-2309): the stand-in askpass program the editor's
+ * @fileoverview What the rows of the `ssh-askpass` launches share (F-2309): the stand-in askpass program the editor's
  * `SSH_ASKPASS` names, the recorder that comes before `ssh` on the editor's PATH, and the watch of a window that
  * connects for a VS Code input.
  */
@@ -15,17 +15,23 @@ import {
 import {spawnSync} from 'node:child_process';
 import path from 'node:path';
 import {
+  connectionLog,
   connectedWithin,
   hostPassword,
   openWindow,
   userSettings,
   variable,
-} from '../windows/harness.ts';
-import {inputBoxOf, quickPickOf} from '../windows/renderer.ts';
+} from './harness.ts';
+import {inputBoxOf, quickPickOf} from './renderer.ts';
 
 /** The folder the launch's `SSH_ASKPASS` and `PATH` name. */
 function askpassFolder(): string {
   return path.join(variable('HARNESS_RUN_FOLDER'), 'askpass-bin');
+}
+
+/** The `ssh` recorder, for a launch whose `PATH` does not name it: the value of `remote.SSH.path`. */
+export function recorderPath(): string {
+  return path.join(askpassFolder(), 'ssh');
 }
 
 /** The file the stand-in askpass appends one line to for each call. */
@@ -274,4 +280,21 @@ export function useOwnConfig(): Record<string, unknown> {
       OWN_ALIASES.map(alias => [alias, 'linux']),
     ),
   };
+}
+
+/** The `Permission denied (…).` line ssh wrote to the run's log last: the reason the dialog carries. */
+function sshDenial(): string {
+  const lines = connectionLog().flatMap(line => {
+    const found = /Permission denied \([^)]*\)\./.exec(line);
+    return found === null ? [] : [found[0]];
+  });
+  return lines.at(-1) ?? '<no Permission denied line in the log>';
+}
+
+/** The dialog's text for a denial of the alias `alias`: ssh's own line, which must list the password method. */
+export function deniedDetails(alias: string): string {
+  const denial = sshDenial();
+  return /\bpassword\b/.test(denial)
+    ? `Could not establish connection to "${alias}": ${denial}`
+    : `<the denial lists no password: ${denial}>`;
 }
