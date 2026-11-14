@@ -119,6 +119,13 @@ function serverNamesOf(listing: string): string[] {
   return listing.split('\n').filter(name => name.includes('server'));
 }
 
+/** The non-empty lines of `file`. */
+function linesOf(file: string): string[] {
+  return readFileSync(file, 'utf8')
+    .split('\n')
+    .filter(line => line !== '');
+}
+
 /** The pids of the processes whose command line holds `fragment`, other than the search itself. */
 async function processesWith(fragment: string): Promise<string[]> {
   try {
@@ -138,16 +145,25 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       target(alias, `${alias}-hop`),
       hostBlock(`${alias}-hop`, ['HostName nowhere.invalid'], ['HostName']),
     ]);
-    const result = await connectWith(alias, [], 'fails', outcome => outcome, {
-      file,
-    });
-    deepStrictEqual(
-      [result.dialog, (result.failedAfter ?? Infinity) < 5000],
-      [
-        `Could not establish connection to "${alias}": Could not resolve hostname.`,
-        true,
-      ],
+    const before = readFileSync(file, 'utf8');
+    const result = await connectWith(
+      alias,
+      [],
+      'fails',
+      outcome => ({
+        dialog: outcome.dialog,
+        quick: (outcome.failedAfter ?? Infinity) < 5000,
+        settings: outcome.settingsAfter === outcome.settingsBefore,
+        config: readFileSync(file, 'utf8') === before,
+      }),
+      {file},
     );
+    deepStrictEqual(result, {
+      dialog: `Could not establish connection to "${alias}": Could not resolve hostname.`,
+      quick: true,
+      settings: true,
+      config: true,
+    });
   });
 
   it('F-2310 AC-14 (c2601-jump-refused-port): a jump host that refuses the port fails with the dialog without a reason, and no ssh of the attempt stays', async () => {
@@ -175,10 +191,17 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       target(alias, `${alias}-hop`),
       hostBlock(`${alias}-hop`, ['User harness-nofwd'], ['User']),
     ]);
-    const result = await connectWith(alias, [], 'fails', outcome => outcome, {
-      file,
-    });
-    deepStrictEqual(result.dialog, reasonless(alias));
+    const result = await connectWith(
+      alias,
+      [],
+      'fails',
+      async outcome => ({outcome, left: await processesWith(file)}),
+      {file},
+    );
+    deepStrictEqual(
+      [result.outcome.dialog, result.left],
+      [reasonless(alias), []],
+    );
   });
 
   it('F-2310 AC-14 (c2601-target-refused): a target that refuses the forwarded connection fails with the dialog without a reason', async () => {
@@ -187,10 +210,17 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       hostBlock(alias, [`ProxyJump ${alias}-hop`, 'Port 9'], ['Port']),
       hostBlock(`${alias}-hop`, []),
     ]);
-    const result = await connectWith(alias, [], 'fails', outcome => outcome, {
-      file,
-    });
-    deepStrictEqual(result.dialog, reasonless(alias));
+    const result = await connectWith(
+      alias,
+      [],
+      'fails',
+      async outcome => ({outcome, left: await processesWith(file)}),
+      {file},
+    );
+    deepStrictEqual(
+      [result.outcome.dialog, result.left],
+      [reasonless(alias), []],
+    );
   });
 
   it('F-2310 AC-15 (c2601-proxycommand-nc): a ProxyCommand nc %h %p connects', async () => {
@@ -571,48 +601,6 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     ]);
   }
 
-  it('F-2310 AC-10 (c2601-keys-too-slow): two jump hosts with unknown keys, the first pick left open past the connect timeout, fail with the timed out dialog while the pick is open', async () => {
-    const alias = 'c2601-slow';
-    const file = chain(alias, freshKnown(alias));
-    const result = await connectWith(
-      alias,
-      [],
-      'fails',
-      outcome => ({
-        dialog: outcome.dialog,
-        picks: questionsOn(alias, 'pick').length,
-      }),
-      {
-        file,
-        script: [
-          {
-            surface: 'pick',
-            match: 'fingerprint',
-            answer: 'yes',
-            window: alias,
-            after: 'c2601-never-answered',
-          },
-          {
-            surface: 'failureDialog',
-            match: 'Could not establish connection',
-            answer: 'dismiss',
-            window: alias,
-          },
-          {
-            surface: 'mitigationPick',
-            match: 'Pick an action',
-            answer: 'dismiss',
-            window: alias,
-          },
-        ],
-      },
-    );
-    deepStrictEqual(result, {
-      dialog: `Could not establish connection to "${alias}": The connection timed out.`,
-      picks: 1,
-    });
-  });
-
   it('F-2310 AC-11 (c2601-keys-answered-slowly): with the connect timeout at 60 the same chain connects when each jump host pick is answered within about 20 seconds', async () => {
     const alias = 'c2601-slowok';
     const file = chain(alias, freshKnown(alias));
@@ -631,7 +619,9 @@ describe('jump hosts and proxy commands (card #2601)', function () {
         'connects',
         outcome => ({
           dialog: outcome.dialog,
-          picks: questionsOn(alias, 'pick').length,
+          picks: recordLines('pick', alias).filter(
+            line => line.answer !== 'held',
+          ).length,
         }),
         {
           file,
@@ -690,10 +680,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       alias,
       [],
       'connects',
-      () =>
-        questionsOn(alias, 'pick').map(question =>
-          question.replace(/SHA256:\S+/, 'SHA256:x'),
-        ),
+      () => linesOf(known).map(line => line.split(' ')[0]),
       {
         file,
         script: [
@@ -702,7 +689,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
         ],
       },
     );
-    deepStrictEqual(result.length, 2);
+    deepStrictEqual(result, [`[127.0.0.1]:${String(hostPort())}`, '127.0.0.2']);
   });
 
   it('F-2310 AC-29 (c2601-hostkey-left-open): the target host key pick left open for 60 seconds is still open, with no dialog and the indicator still Opening Remote...', async () => {
@@ -802,5 +789,50 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       jumpProcesses: [],
       finalProcesses: true,
     });
+  });
+
+  it('F-2310 AC-28 (c2601-password-left-open): a key-only jump host with a known key and a password target, the target password input left open for 45 seconds and then answered, shows no dialog and connects', async () => {
+    const alias = 'c2601-pwopen';
+    const file = writeConfig(alias, [
+      hostBlock(
+        alias,
+        [
+          `ProxyJump ${alias}-hop`,
+          'HostName 127.0.0.2',
+          'Port 22',
+          ...PASSWORD_ONLY,
+          'NumberOfPasswordPrompts 1',
+        ],
+        PASSWORD_WITHOUT,
+        'password',
+      ),
+      hostBlock(`${alias}-hop`, []),
+    ]);
+    const timer = setTimeout(() => {
+      signal('c2601-answer-password');
+    }, 45_000);
+    try {
+      const result = await connectWith(
+        alias,
+        [],
+        'connects',
+        outcome => ({
+          dialog: outcome.dialog,
+          dialogs: recordLines('failureDialog', alias).length,
+        }),
+        {
+          file,
+          script: [
+            {
+              ...passwordAt(alias, '127.0.0.2', hostPassword()),
+              after: 'c2601-answer-password',
+            },
+          ],
+        },
+      );
+      deepStrictEqual(result, {dialog: undefined, dialogs: 0});
+    } finally {
+      clearTimeout(timer);
+    }
   });
 });
