@@ -39,6 +39,23 @@ describe('probe: AI-on palette (card #2520)', function () {
           }
           await new Promise(resolve => setTimeout(resolve, 5_000));
         }
+        let afterReload = 'not needed';
+        if (!seen.includes('Y')) {
+          await reloadWindow(window);
+          const items = (await paletteItems(window, 'SSH')).map(item =>
+            item.trim(),
+          );
+          afterReload = items.includes(SIDEBAR)
+            ? 'Y'
+            : `n${String(items.length)}`;
+          if (afterReload !== 'Y') {
+            await new Promise(resolve => setTimeout(resolve, 10_000));
+            const later = (await paletteItems(window, 'SSH')).map(item =>
+              item.trim(),
+            );
+            afterReload += later.includes(SIDEBAR) ? '+Y10s' : '+n10s';
+          }
+        }
         const registered = (
           await commandsOf(window, 'workbench.action.chat')
         ).filter(commandId =>
