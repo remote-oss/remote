@@ -486,8 +486,8 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
         script: [
           {
             surface: 'pick',
-            match: 'has fingerprint',
-            answer: {label: 'Continue'},
+            match: 'fingerprint',
+            answer: 'yes',
             window: alias,
           },
         ],
@@ -527,5 +527,33 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
       {without: ['StrictHostKeyChecking', 'UserKnownHostsFile']},
     );
     deepStrictEqual(result, {written: '', questions: 0});
+  });
+
+  it('F-2109 AC-8 (c2593-other-key-type): a keyword that makes ssh select a host key type the known-hosts file lacks shows the dialog about the changed host key', async () => {
+    const alias = 'c2593-keytype';
+    const known = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.known`);
+    writeFileSync(
+      known,
+      execFileSync(
+        'ssh-keyscan',
+        ['-t', 'ed25519', '-p', String(hostPort()), '127.0.0.1'],
+        {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        },
+      ),
+    );
+    const result = await connectWith(
+      alias,
+      ['HostKeyAlgorithms ecdsa-sha2-nistp256', `UserKnownHostsFile ${known}`],
+      'fails',
+      async (outcome, file) => ({outcome, plain: await plainSsh(file, alias)}),
+      {without: ['UserKnownHostsFile']},
+    );
+    deepStrictEqual(
+      result.outcome.dialog,
+      'Could not establish connection to "c2593-keytype": Remote host key has changed, port forwarding is disabled.',
+      result.plain.stderr,
+    );
   });
 });

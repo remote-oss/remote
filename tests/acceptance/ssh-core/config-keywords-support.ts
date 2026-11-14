@@ -138,6 +138,16 @@ export async function connectWith<Result>(
       },
       file,
     );
+  } catch (caught) {
+    const seen = recordLines(undefined, name)
+      .map(
+        line =>
+          `${line.surface}: ${line.question.slice(0, 80)} -> ${line.answer}`,
+      )
+      .join('\n');
+    throw new Error(`${String(caught)}\nwhat the window asked:\n${seen}`, {
+      cause: caught,
+    });
   } finally {
     await closeWindow(name).catch(() => undefined);
     restoreUserSettings(saved);
