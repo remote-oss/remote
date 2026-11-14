@@ -18,7 +18,7 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import {SECOND_ENGINE_IMAGE} from '../../../tools/acceptance-second-engine.ts';
 import {rowsWhen, VIEW} from './dev-containers-view.ts';
-import {pulledWithRetries} from './image-pull.ts';
+import {pulledWithRetries, retryablePull} from './image-pull.ts';
 import {
   inWindow,
   restoreUserSettings,
@@ -85,23 +85,32 @@ let enginePulled: Promise<number> | undefined;
 
 /**
  * The second engine's image on this machine's own daemon: an image the daemon holds is used as it is, and otherwise it
- * is pulled by its digest with three tries, so that a registry's passing 5xx fails no row (#2525).
+ * is pulled by its digest, with three tries when the registry fails in passing, so that a registry's 5xx fails no row
+ * (#2525). A pull that fails is forgotten, so the next row tries again (#2530).
  */
 function engineImageHeld(): Promise<number> {
-  enginePulled ??= localDocker('image', 'inspect', SECOND_ENGINE_IMAGE).then(
-    () => 0,
-    () =>
-      pulledWithRetries(
-        async () => {
-          await localDocker('pull', '--quiet', SECOND_ENGINE_IMAGE);
-        },
-        ENGINE_PULL_ATTEMPTS,
+  enginePulled ??= (async () => {
+    try {
+      return await localDocker('image', 'inspect', SECOND_ENGINE_IMAGE).then(
+        () => 0,
         () =>
-          new Promise(resolve =>
-            setTimeout(resolve, ENGINE_PULL_PAUSE_MILLISECONDS),
+          pulledWithRetries(
+            async () => {
+              await localDocker('pull', '--quiet', SECOND_ENGINE_IMAGE);
+            },
+            ENGINE_PULL_ATTEMPTS,
+            () =>
+              new Promise(resolve =>
+                setTimeout(resolve, ENGINE_PULL_PAUSE_MILLISECONDS),
+              ),
+            retryablePull,
           ),
-      ),
-  );
+      );
+    } catch (error) {
+      enginePulled = undefined;
+      throw error;
+    }
+  })();
   return enginePulled;
 }
 
