@@ -6,7 +6,7 @@ import {
   restoreUserSettings,
 } from '../windows/harness.ts';
 import {paletteItems} from '../windows/palette.ts';
-import {closeQuietly, localWindowWithAi} from './support.ts';
+import {closeQuietly, localWindowWithAi, storageKeys} from './support.ts';
 
 const SIDEBAR = 'Chat Agent Sessions: Show Agent Sessions Sidebar';
 
@@ -62,7 +62,7 @@ describe('probe: AI-on palette (card #2520)', function () {
           /AgentSessionsSidebar|showAgentSessions/i.test(commandId),
         );
         lines.push(
-          `#${String(attempt)} +${String(Date.now() - started)}ms off=${offSeen} on=${seen.join(',')} afterReload=${afterReload} setting=${JSON.stringify(await settingIn(window, 'chat.disableAIFeatures'))} sidebarCommandRegistered=${JSON.stringify(registered)}`,
+          `#${String(attempt)} +${String(Date.now() - started)}ms off=${offSeen} on=${seen.join(',')} afterReload=${afterReload} setting=${JSON.stringify(await settingIn(window, 'chat.disableAIFeatures'))} sidebarCommandRegistered=${JSON.stringify(registered)} storage=${JSON.stringify(storageKeys().filter(key => /chat|agent|copilot|entitle|setup/i.test(key)))}`,
         );
       } finally {
         await closeQuietly(window);
