@@ -1960,6 +1960,25 @@ export interface UserSettingsOptions {
   readBack?: 'window' | 'file';
 }
 
+/**
+ * The window whose agent answers for the user's settings, which every window reads from the same file: `local` while
+ * it is open, and otherwise the first open window with no remote (the launch's reloaded local window has another name,
+ * and the old one's agent no longer answers), or any open window.
+ */
+function settingsWindow(): string {
+  if (isOpen('local')) {
+    return 'local';
+  }
+  const open = windowNames().filter(isOpen);
+  const withoutRemote = open.find(
+    name =>
+      windowEvents(name)
+        .filter(each => each.event === 'state')
+        .at(-1)?.remoteAuthority === null,
+  );
+  return withoutRemote ?? open[0] ?? 'local';
+}
+
 /** A value as text with the keys of its objects in order, so that two values compare as their JSON does whatever order they were written in. */
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) {
@@ -1991,10 +2010,13 @@ async function readBackOfSetting(
       `the local window to read ${key} as ${canonicalJson(value)}${readBack === 'file' ? ' (in the user settings)' : ''}`,
       async () => {
         if (value === undefined || readBack === 'file') {
-          return (await userScopeHolds('local', key)) === (value !== undefined);
+          return (
+            (await userScopeHolds(settingsWindow(), key)) ===
+            (value !== undefined)
+          );
         }
         // The user's own value, not `get`'s: for an object setting with defaults the merged value never equals what was written.
-        read = await userValueIn('local', key);
+        read = await userValueIn(settingsWindow(), key);
         return canonicalJson(read) === canonicalJson(value);
       },
       30_000,
