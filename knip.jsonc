@@ -153,6 +153,7 @@
     "ssh-add",
     "ssh-agent",
     "ssh-keygen",
+    "ssh-keyscan",
     "ss",
   ],
   "ignoreDependencies": [
