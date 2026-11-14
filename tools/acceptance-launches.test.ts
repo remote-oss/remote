@@ -141,6 +141,7 @@ function labelsFromExplorer(): string[] {
   return [
     'wsl-linux',
     'wsl-linux-web',
+    'wsl',
     'wsl-linux-standdown',
     'explorer',
     'explorer-alone',
@@ -295,7 +296,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, x11-noxauth, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, passphrase-late, login-shells, preconnect, default-ports, no-proposals, the three wsl-linux launches, the nine explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, x11-noxauth, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, passphrase-late, login-shells, preconnect, default-ports, no-proposals, cli-path, the two wsl-linux launches, wsl, wsl-linux-standdown, the nine explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -400,7 +401,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-30, tooling-33, containers-09, connect-81: only the explorer launches install the explorer, the wsl-linux launches WSL and the containers launches Dev Containers, they, the trust launches, terminal-login, login-shells, agent-notmp and default-ports open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
+  it('tooling-30, tooling-33, containers-09, connect-81: only the explorer launches install the explorer, the wsl-linux launches and wsl WSL and the containers launches Dev Containers, they, the trust launches, terminal-login, login-shells, agent-notmp and default-ports open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' &&
@@ -430,6 +431,7 @@ describe('the launches of the VSCodium run', () => {
         ['ssh-containers', ['remote-oss.remote-containers'], true, undefined],
         ['wsl-linux', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl-linux-web', ['remote-oss.remote-wsl'], true, undefined],
+        ['wsl', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl-linux-standdown', ['remote-oss.remote-wsl'], true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
         [
@@ -1056,7 +1058,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-51, connect-84, containers-101, tooling-168: socket-prime (a part of socket), the containers-podman launch, cli-path, the ports and install primers and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
+  it('tooling-51, connect-84, containers-101, tooling-168, #2355: socket-prime (a part of socket), the containers-podman launch, cli-path, wsl, the ports and install primers and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
     deepStrictEqual(
       launches
         .filter(
@@ -1068,6 +1070,7 @@ describe('the launches of the VSCodium run', () => {
       [
         'socket-prime',
         'cli-path',
+        'wsl',
         'containers-podman',
         'ports-reuse-prime',
         'install-install-present-prime',

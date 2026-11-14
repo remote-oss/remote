@@ -6,7 +6,7 @@
  *
  * Every Docker object of a run carries the run's label, so the clean-up removes only what one run made: its
  * containers, forced, its network and its image tag. What is already gone is not an error, and the shared machine is
- * never pruned.
+ * never pruned. On a Windows client it also unregisters the WSL distros the run imported, which are named after it.
  */
 
 import {randomBytes, randomInt} from 'node:crypto';
@@ -14,6 +14,7 @@ import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {stopRunHelpers} from './acceptance-helper-stop.ts';
+import {sweepRunDistros} from './acceptance-wsl.ts';
 import {base32Of} from './one-time-code.ts';
 import {checked, type CommandRunner, runCommand} from './command-runner.ts';
 import {HOST_BASE_VARIANTS, type HostBase} from './host-variants.ts';
@@ -676,6 +677,18 @@ if (isMainModule(import.meta.url)) {
     if (runCommand('podman', ['ps', '--quiet']).status === 0) {
       cleanPodmanRun(runCommand, runId, Number.POSITIVE_INFINITY);
     }
+  } catch (error) {
+    console.error(`acceptance: ${messageOf(error)}`);
+    process.exitCode = 1;
+  }
+  // The WSL distros a killed `wsl` run imported hold none of its Docker objects, so they go even when those did not.
+  try {
+    sweepRunDistros(
+      runCommand,
+      process.platform,
+      runId,
+      console.log.bind(console),
+    );
   } catch (error) {
     console.error(`acceptance: ${messageOf(error)}`);
     process.exitCode = 1;
