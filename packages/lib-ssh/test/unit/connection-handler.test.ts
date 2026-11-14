@@ -240,7 +240,23 @@ describe('connection handler (contracts §4 S9)', () => {
       );
     });
 
-    it('#2598 (F-2109 AC-12): a command that writes no line end joins its text to the first protocol line, which is then logged and not read as the protocol', async () => {
+    it('#2603 (F-2109 AC-12): the bootstrap prints a line end before its marker, so the last words of a command that wrote none are a line of their own, logged, and the marker is read', async () => {
+      await send(1, {type: 'connect'});
+      const client = spawner.started[0];
+      client?.output('out-marker');
+      client?.output('\nLAYER1-READY\n');
+      deepStrictEqual(
+        [
+          events.filter(
+            event => (event as {type?: string}).type === 'localCommandLines',
+          ),
+          eventTypes().includes('connected'),
+        ],
+        [[{type: 'localCommandLines', lines: ['out-marker']}], true],
+      );
+    });
+
+    it('#2598 (F-2109 AC-12): a marker that shares its line with text, as a host whose bootstrap printed no line end in front of it would write it, is logged and not read as the protocol', async () => {
       await send(1, {type: 'connect'});
       const client = spawner.started[0];
       client?.output('out-marker');
