@@ -1,4 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
+import {createLogger} from 'lib-log';
+import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {RemotePlatform} from '../../src/pipeline/platform.ts';
 import {
   createTermsSteps,
@@ -33,18 +35,22 @@ interface Calls {
   announced: RemotePlatform[];
   /** The order of the announcements and the writes. */
   order: string[];
+  /** What the steps said in the log. */
+  logged: () => string[];
 }
 
 function stepsFor(
   changes: Partial<TermsSettings>,
   answer?: RemotePlatform,
 ): {calls: Calls; steps: ReturnType<typeof createTermsSteps>} {
+  const sink = new MemorySink();
   const calls: Calls = {
     asked: [],
     variants: [],
     written: [],
     announced: [],
     order: [],
+    logged: () => sink.lines.map(line => line.message),
   };
   return {
     calls,
@@ -64,6 +70,7 @@ function stepsFor(
         calls.order.push('write');
         return Promise.resolve();
       },
+      logger: createLogger(sink, {minimumLevel: () => 'debug'}),
     }),
   };
 }
@@ -136,6 +143,36 @@ describe('remembering the platform', () => {
     const {steps, calls} = stepsFor({});
     await steps.rememberPlatform(INPUT, 'linux');
     deepStrictEqual(calls.written, []);
+  });
+
+  it('#2555: the log says a platform is being written and was written, for the host and the platform', async () => {
+    const {steps, calls} = stepsFor({useLocalServer: false});
+    await steps.rememberPlatform(INPUT, 'linux');
+    deepStrictEqual(calls.logged(), [
+      'the platform linux of host devbox is being written to the settings',
+      'the platform linux of host devbox was written to the settings',
+    ]);
+  });
+
+  it('#2555: the log says why nothing was written: the shared connection is on, or the setting already holds the platform', async () => {
+    const shared = stepsFor({});
+    await shared.steps.rememberPlatform(INPUT, 'linux');
+    const held = stepsFor({
+      useLocalServer: false,
+      remotePlatform: {devbox: 'linux'},
+    });
+    await held.steps.rememberPlatform(INPUT, 'linux');
+    deepStrictEqual(
+      [shared.calls.logged(), held.calls.logged()],
+      [
+        [
+          'the platform of host devbox was not written to the settings: the shared connection is on',
+        ],
+        [
+          'the platform of host devbox was not written to the settings: it already holds linux',
+        ],
+      ],
+    );
   });
 
   it('F-2206 5.2: a set write announces the stored platform, before the write', async () => {

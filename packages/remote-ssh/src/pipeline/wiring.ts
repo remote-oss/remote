@@ -151,7 +151,7 @@ export interface WiringPorts {
   tunnels: TunnelOpener;
   /** Resolves with what ended the wait before the default forwards are read: the window has its remote settings by then. */
   defaultRead(): Promise<ReadSignal>;
-  terms: TermsStepDependencies;
+  terms: Omit<TermsStepDependencies, 'logger'>;
   /** Whether the workspace is trusted, and when it becomes so: a failed lookup of the terminal mode waits for it. */
   trust: Pick<DefaultReadEvents, 'isTrusted' | 'onTrustGranted'>;
   /** The client step's dependencies, apart from this connect's state and what the settings give. */
@@ -343,6 +343,7 @@ export function stepsOf(
   const terms = createTermsSteps({
     ...ports.terms,
     pickPlatform: prompting(ports.terms.pickPlatform),
+    logger: ports.logger,
   });
   const locateDependencies: LocateStepDependencies = {
     ...ports.locate,

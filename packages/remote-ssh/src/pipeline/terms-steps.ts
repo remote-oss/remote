@@ -4,6 +4,7 @@
  * and the write to `remote.SSH.remotePlatform`.
  */
 
+import type {Logger} from 'lib-log';
 import type {PlatformPickVariant} from '../connect/platform-picker.ts';
 import {hostAlias} from './host-settings.ts';
 import {
@@ -35,6 +36,8 @@ export interface TermsStepDependencies {
   announcePlatform: (platform: RemotePlatform) => void;
   /** Sets the exact key for the alias in `remote.SSH.remotePlatform`. */
   writePlatform: (alias: string, platform: RemotePlatform) => Promise<void>;
+  /** Where the step says whether it wrote the platform the host reported, and why not. */
+  logger: Logger;
 }
 
 type TermsStepNames =
@@ -87,15 +90,22 @@ export function createTermsSteps(
       ),
     rememberPlatform: async (input, reported) => {
       const alias = hostAlias(input.target);
-      const write = platformWrite(
-        dependencies.settings(),
-        alias,
-        PLATFORM_OF_PROBE[reported],
-      );
+      const settings = dependencies.settings();
+      const write = platformWrite(settings, alias, PLATFORM_OF_PROBE[reported]);
       if (write.kind === 'set') {
+        dependencies.logger.debug(
+          `the platform ${write.platform} of host ${alias} is being written to the settings`,
+        );
         dependencies.announcePlatform(write.platform);
         await dependencies.writePlatform(alias, write.platform);
+        dependencies.logger.debug(
+          `the platform ${write.platform} of host ${alias} was written to the settings`,
+        );
+        return;
       }
+      dependencies.logger.debug(
+        `the platform of host ${alias} was not written to the settings: ${settings.useLocalServer ? 'the shared connection is on' : `it already holds ${PLATFORM_OF_PROBE[reported]}`}`,
+      );
     },
   };
 }
