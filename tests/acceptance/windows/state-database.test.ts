@@ -108,11 +108,12 @@ describe('the state database reader (card tooling-207)', function () {
     const committedAt = await Promise.race([writer.committed, late]);
     clearTimeout(timer);
     writer.process.kill();
-    // The read's own contract is to wait for up to its bound (a read that ran past it would have thrown), so only that
-    // it saw the commit and waited past 5 s is asserted; the times say where a slow one went (#2584).
+    // The read's contract is to wait for up to its own bound and then throw, so the upper bound asserted is that bound
+    // and a few seconds of slack for a loaded machine, not a time chosen for this writer; the times say where a slow
+    // one went (#2584).
     deepStrictEqual(
-      [seen, waited > 5000],
-      [['before', 'held'], true],
+      [seen, waited > 5000, waited <= readBoundMilliseconds() + 5000],
+      [['before', 'held'], true, true],
       `the read waited ${String(waited)} ms; the writer held its transaction ${String(writer.heldAt - started)} ms from the read's start and ${committedAt > 0 ? `committed ${String(committedAt - started)} ms from it` : committedAt === 0 ? 'ended without a commit line' : 'printed no commit within 10 s of the read'}`,
     );
   });
