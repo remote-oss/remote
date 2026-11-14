@@ -63,8 +63,8 @@ export interface TunnelStepDependencies {
   limits: WaitLimits;
   /** The dialer through the connection's SOCKS relay on `socksPort`; the extension gives lib-forwarding's `socksDialer`. */
   dialerFor(socksPort: number): Dialer;
-  /** The window's port on this machine's loopback, none of `excluded`, or why none is free. */
-  chooseLocalPort(excluded?: ReadonlySet<number>): Promise<PortChoice>;
+  /** The window's port on this machine's loopback, or why none is free. */
+  chooseLocalPort(): Promise<PortChoice>;
   /** The window's environment for the connection that is being set up. */
   environment(): WindowEnvironment;
   /** The login terminals of the editor. */
@@ -191,7 +191,8 @@ function relayNotOpenedDetail(
   >,
 ): string {
   if (outcome.kind === 'listenFailed') {
-    return `the window tunnel did not open: its local port could not be listened on: ${outcome.detail}`;
+    const code = outcome.code === undefined ? '' : ` (${outcome.code})`;
+    return `the window tunnel did not open: its local port could not be listened on: ${outcome.detail}${code}`;
   }
   return 'the window tunnel did not open: no probe of its port worked before the bound';
 }
@@ -538,9 +539,6 @@ function refusalLine(
     : "the relay cannot be reached and the connection's ssh has ended: not a refused forward";
 }
 
-/** How many ports the window tunnel's relay is tried on, when the one the search found is taken before it listens. */
-const LISTEN_ATTEMPTS = 3;
-
 /** The failure of a connect that was cancelled while the tunnel was being opened. */
 const CANCELLED: TunnelResult = {kind: 'failed', failure: {kind: 'cancelled'}};
 
@@ -565,6 +563,12 @@ export function openTunnelStep(
     if (path !== 'socks') {
       return openTerminalTunnel(dependencies, path, given);
     }
+    const chosen = await dependencies.chooseLocalPort();
+    if (!('port' in chosen)) {
+      return notOpenedFor(chosen);
+    }
+    onSettingUp?.();
+    const localPort = chosen.port;
     const dialer = dependencies.dialerFor(lease.socksPort);
     let connectionLost = false;
     const stopNotices = lease.onNotice(notice => {
@@ -572,60 +576,28 @@ export function openTunnelStep(
         connectionLost = true;
       }
     });
-    let outcome: Awaited<ReturnType<typeof openRelayTunnel>>;
-    const failedPorts = new Set<number>();
-    try {
-      // A port the search found free can be taken before the relay listens on it: that listen is tried again on another port, never one that failed in this connect.
-      for (let attempt = 1; ; attempt += 1) {
-        const chosen = await dependencies.chooseLocalPort(failedPorts);
-        if (!('port' in chosen)) {
-          return notOpenedFor(chosen);
-        }
-        if (attempt === 1) {
-          onSettingUp?.();
-        }
-        outcome = await openRelayTunnel({
-          dialer,
-          local: dependencies.local,
-          scheduler: dependencies.scheduler,
-          target: {kind: 'port', port: portOf(server)},
-          localPort: chosen.port,
-          limits: dependencies.limits,
-          onLine: line => {
-            dependencies.logger.info(line);
-          },
-          onWaiting,
-          // One check at the end of the run of closed probes: when its fact does not hold, the probing goes on to the bound.
-          confirmRefusal: async cause => {
-            const fact =
-              cause === 'closedBeforeReply'
-                ? await serverListens(
-                    lease.channel,
-                    portOf(server),
-                    cancellation,
-                  )
-                : !connectionLost;
-            dependencies.logger.info(refusalLine(cause, fact, portOf(server)));
-            return fact === true;
-          },
-        });
-        if (
-          outcome.kind === 'listenFailed' &&
-          outcome.code === 'EADDRINUSE' &&
-          attempt < LISTEN_ATTEMPTS &&
-          !isAborted(cancellation)
-        ) {
-          failedPorts.add(chosen.port);
-          dependencies.logger.info(
-            `the window port ${String(chosen.port)} was taken after the search found it free (${outcome.detail}); choosing another (attempt ${String(attempt + 1)} of ${String(LISTEN_ATTEMPTS)})`,
-          );
-          continue;
-        }
-        break;
-      }
-    } finally {
-      stopNotices();
-    }
+    const outcome = await openRelayTunnel({
+      dialer,
+      local: dependencies.local,
+      scheduler: dependencies.scheduler,
+      target: {kind: 'port', port: portOf(server)},
+      localPort,
+      limits: dependencies.limits,
+      onLine: line => {
+        dependencies.logger.info(line);
+      },
+      onWaiting,
+      // One check at the end of the run of closed probes: when its fact does not hold, the probing goes on to the bound.
+      confirmRefusal: async cause => {
+        const fact =
+          cause === 'closedBeforeReply'
+            ? await serverListens(lease.channel, portOf(server), cancellation)
+            : !connectionLost;
+        dependencies.logger.info(refusalLine(cause, fact, portOf(server)));
+        return fact === true;
+      },
+    });
+    stopNotices();
     if (outcome.kind === 'relayRefused') {
       dependencies.forwardRefused();
       return {kind: 'failed', failure: refusedFailure(dependencies)};

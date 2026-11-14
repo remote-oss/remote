@@ -1,6 +1,6 @@
 /**
- * @fileoverview Finds a free local port: the first probed port that answers free, in a range or by random
- * candidates, within a time budget. Probing goes through a prober; this module never binds.
+ * @fileoverview Finds a free local port: the first probed port that refuses a connection, in a range or by
+ * random candidates, within a time budget. Probing goes through a prober; this module never binds.
  */
 import type {PortRange} from './range.ts';
 
@@ -12,10 +12,8 @@ export interface PortProber {
   probe(port: number): Promise<ProbeAnswer>;
 }
 
-/** The options a port search runs under; all but `excluded` have defaults. */
+/** The options a port search runs under; all three have defaults. */
 export interface FindOptions {
-  /** Ports never probed nor returned, such as ones that failed to listen after a search found them free. */
-  excluded?: ReadonlySet<number> | undefined;
   timeBudgetMilliseconds?: number;
   now?: () => number;
   randomPort?: () => number;
@@ -23,7 +21,6 @@ export interface FindOptions {
 
 /** The options with every default filled in, as the search functions run. */
 interface FilledOptions {
-  excluded: ReadonlySet<number>;
   timeBudgetMilliseconds: number;
   now: () => number;
   randomPort: () => number;
@@ -48,7 +45,6 @@ function randomPort(): number {
 /** The options with their defaults filled in: 3000 ms, Date.now, and a random ephemeral port. */
 function withDefaults(options: FindOptions | undefined): FilledOptions {
   return {
-    excluded: options?.excluded ?? new Set<number>(),
     timeBudgetMilliseconds:
       options?.timeBudgetMilliseconds ?? DEFAULT_BUDGET_MILLISECONDS,
     now: options?.now ?? Date.now,
@@ -69,9 +65,6 @@ async function searchRange(
   for (let port = range.first; port <= range.last; port += 1) {
     if (options.now() - start >= options.timeBudgetMilliseconds) {
       return {failure: 'noFreePort'};
-    }
-    if (options.excluded.has(port)) {
-      continue;
     }
     const answer = await prober.probe(port);
     if (answer === 'refused') {
@@ -98,9 +91,6 @@ async function searchRandom(
       return {failure: 'noFreePort'};
     }
     const candidate = options.randomPort();
-    if (options.excluded.has(candidate)) {
-      continue;
-    }
     const answer = await prober.probe(candidate);
     if (answer === 'refused') {
       return {port: candidate};

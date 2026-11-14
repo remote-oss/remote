@@ -246,7 +246,6 @@ async function chooseLocalPort(
   prober: PortProber,
   settingValue: unknown,
   logger: Logger,
-  excluded?: ReadonlySet<number>,
 ): Promise<PortChoice> {
   const parsed = parseRange(settingValue);
   if ('none' in parsed && parsed.reason !== 'empty') {
@@ -255,7 +254,7 @@ async function chooseLocalPort(
     );
   }
   const range = 'range' in parsed ? parsed.range : undefined;
-  const found = await findFreePort(prober, range, {excluded});
+  const found = await findFreePort(prober, range);
   if ('port' in found) {
     return {port: found.port};
   }
@@ -289,14 +288,11 @@ export function wiringPortsOf(
     revealLoginTerminals: () => switchOf(settings, 'showLoginTerminal'),
   };
   /** A loopback port for the window, the tunnel's or the CLI bridge's, in the preferred range when one is free. */
-  function chooseWindowPort(
-    excluded?: ReadonlySet<number>,
-  ): Promise<PortChoice> {
+  function chooseWindowPort(): Promise<PortChoice> {
     return chooseLocalPort(
       machine.prober,
       valueOf(settings, 'preferredLocalPortRange'),
       logger,
-      excluded,
     );
   }
   const processEnvironment = definedEnvironment(machine.processEnvironment);

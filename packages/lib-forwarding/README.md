@@ -21,7 +21,7 @@ free. It is bundled into the extensions that use it and never published on its o
 - `factoryFor(init)` gives the tunnel factory of a connection: it forwards ports through the dialer, lists them, and
   after a reconnection runs them over the new dialer on the same local ports, reporting the ones the new connection
   could not reach. Its features are private forwards without elevation.
-- Probing goes through a `PortProber`; the search itself never binds. The real prober listens on the loopback port and closes it at once, the call the window tunnel makes, so the two agree. `FakeProber` under `src/testing/`
+- Probing goes through a `PortProber`; the library never binds and never dials. `FakeProber` under `src/testing/`
   answers from a port map and records the probed ports in order.
 
 ## For maintainers
