@@ -622,10 +622,18 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
         await inWindow('c121-live', 'opensshremotes.cleanLocalServer');
         await waitFor(
           'the reconnection of c121-live',
-          () =>
-            connectionLog()
-              .slice(mark)
-              .some(each => each.includes('reconnection')),
+          () => {
+            const later = connectionLog().slice(mark);
+            const start = later.findIndex(each =>
+              each.includes('reconnection'),
+            );
+            return (
+              start >= 0 &&
+              later
+                .slice(start)
+                .some(each => each.startsWith('Resolved ssh-remote+harness'))
+            );
+          },
           120_000,
         );
         const record = connectionLog().slice(mark);
