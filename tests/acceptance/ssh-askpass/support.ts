@@ -237,3 +237,41 @@ export function knowHostKey(name: string): void {
   }).stdout;
   writeFileSync(knownHostsOf(name), scanned);
 }
+
+/** The aliases of the rows' own SSH configuration: the password account, with a known or an asked host key, no timeout of its own. */
+export const OWN_ALIASES = ['askpass-pw', 'askpass-ask'] as const;
+
+/**
+ * Writes the SSH configuration of the rows that need an alias with no `ConnectTimeout` of its own (the extension
+ * takes the host's value when the configuration has one), and says the platform of each alias, and gives the settings
+ * that point the editor at it.
+ */
+export function useOwnConfig(): Record<string, unknown> {
+  const folder = variable('HARNESS_RUN_FOLDER');
+  const config = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8');
+  const port = /^\s+Port (\d+)$/m.exec(config)?.[1];
+  if (port === undefined) {
+    throw new Error('the run’s SSH configuration names no port');
+  }
+  const lines = OWN_ALIASES.flatMap(alias => [
+    `Host ${alias}`,
+    '  HostName 127.0.0.1',
+    `  Port ${port}`,
+    '  User harness-pw',
+    '  IdentityAgent none',
+    '  PubkeyAuthentication no',
+    '  PreferredAuthentications password',
+    '  NumberOfPasswordPrompts 1',
+    `  StrictHostKeyChecking ${alias === 'askpass-ask' ? 'ask' : 'accept-new'}`,
+    `  UserKnownHostsFile ${knownHostsOf(alias)}`,
+    '',
+  ]);
+  const file = path.join(folder, 'askpass-ssh-config');
+  writeFileSync(file, `${lines.join('\n')}\n`);
+  return {
+    'remote.SSH.configFile': file,
+    'remote.SSH.remotePlatform': Object.fromEntries(
+      OWN_ALIASES.map(alias => [alias, 'linux']),
+    ),
+  };
+}

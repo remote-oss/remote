@@ -24,17 +24,13 @@ import {
   forgetHostKey,
   knowHostKey,
   passwordRule,
+  useOwnConfig,
   withSettings,
   writeStandIns,
 } from './support.ts';
 
 /** The setting of the feature. */
 const EXTERNAL = 'remote.SSH.externalSSH_ASKPASS';
-
-/** The platform of the password host, so that the platform question of F-2206 is not asked first. */
-const PLATFORMS = {
-  'remote.SSH.remotePlatform': {password: 'linux', 'password-ask': 'linux'},
-};
 
 /** The buttons of the failure dialog of F-2601. */
 const BUTTONS = ['Retry', 'More Actions...', 'Close Remote'];
@@ -67,10 +63,10 @@ describe('the failures of a login through the user’s own askpass program (card
   });
 
   it('F-2309 AC-12 (c2596-program-cancels): with a known host key and a program that exits non-zero, the failure dialog names the permission denial and no VS Code input shows', async () => {
-    knowHostKey('password');
-    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    knowHostKey('askpass-pw');
+    await withSettings({[EXTERNAL]: true, ...useOwnConfig()});
     answering([{match: 'password', answer: '', status: 1}]);
-    await openWindow('password', 'as1');
+    await openWindow('askpass-pw', 'as1');
     const dialog = await waitForDialog('as1', 120_000);
     deepStrictEqual(
       {
@@ -80,9 +76,9 @@ describe('the failures of a login through the user’s own askpass program (card
       },
       {
         dialog: {
-          message:
-            'Could not establish connection to "password": Permission denied (password).',
-          details: '',
+          message: '',
+          details:
+            'Could not establish connection to "askpass-pw": Permission denied (password).',
           buttons: BUTTONS,
         },
         inputs: [],
@@ -92,17 +88,17 @@ describe('the failures of a login through the user’s own askpass program (card
   });
 
   it('F-2309 AC-26 (c2596-host-key-cancelled): with an unknown host key and a program that cancels the question, the failure dialog has no reason and no VS Code input shows', async () => {
-    forgetHostKey('password_ask');
-    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    forgetHostKey('askpass-ask');
+    await withSettings({[EXTERNAL]: true, ...useOwnConfig()});
     answering([{match: 'continue connecting', answer: '', status: 1}]);
-    await openWindow('password-ask', 'as1');
+    await openWindow('askpass-ask', 'as1');
     const dialog = await waitForDialog('as1', 120_000);
     deepStrictEqual(
       {dialog, inputs: await inputsShown('as1')},
       {
         dialog: {
-          message: 'Could not establish connection to "password-ask".',
-          details: '',
+          message: '',
+          details: 'Could not establish connection to "askpass-ask".',
           buttons: BUTTONS,
         },
         inputs: [],
@@ -111,10 +107,10 @@ describe('the failures of a login through the user’s own askpass program (card
   });
 
   it('F-2309 AC-14 (c2596-wrong-answer): a program that answers wrongly gives the failure dialog after ssh gives up, with no fallback input, and a Retry with a corrected program connects', async () => {
-    knowHostKey('password');
-    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    knowHostKey('askpass-pw');
+    await withSettings({[EXTERNAL]: true, ...useOwnConfig()});
     answering([{match: 'password', answer: 'not-the-password'}]);
-    await openWindow('password', 'as1');
+    await openWindow('askpass-pw', 'as1');
     const dialog = await waitForDialog('as1', 120_000);
     const inputs = await inputsShown('as1');
     answering([passwordRule()]);
@@ -125,9 +121,9 @@ describe('the failures of a login through the user’s own askpass program (card
       {dialog, inputs},
       {
         dialog: {
-          message:
-            'Could not establish connection to "password": Permission denied (password).',
-          details: '',
+          message: '',
+          details:
+            'Could not establish connection to "askpass-pw": Permission denied (password).',
           buttons: BUTTONS,
         },
         inputs: [],
@@ -136,26 +132,26 @@ describe('the failures of a login through the user’s own askpass program (card
   });
 
   it('F-2309 AC-20 (c2596-no-answer): a program that does not answer within the connect timeout gives the timed-out dialog and no VS Code input', async () => {
-    knowHostKey('password');
-    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    knowHostKey('askpass-pw');
+    await withSettings({[EXTERNAL]: true, ...useOwnConfig()});
     answering([
       {match: 'password', answer: hostPasswordOf(), delayMilliseconds: 90_000},
     ]);
     const began = Date.now();
-    await openWindow('password', 'as1');
+    await openWindow('askpass-pw', 'as1');
     const dialog = await waitForDialog('as1', 120_000);
     const seconds = (Date.now() - began) / 1000;
     deepStrictEqual(
       {
         dialog,
         inputs: await inputsShown('as1'),
-        within: seconds >= 15 && seconds <= 60,
+        within: seconds >= 15 && seconds <= 30,
       },
       {
         dialog: {
-          message:
-            'Could not establish connection to "password": Connecting with SSH timed out.',
-          details: '',
+          message: '',
+          details:
+            'Could not establish connection to "askpass-pw": Connecting with SSH timed out.',
           buttons: BUTTONS,
         },
         inputs: [],
@@ -166,23 +162,23 @@ describe('the failures of a login through the user’s own askpass program (card
   });
 
   it('F-2309 AC-20 (c2596-no-answer-part): with remote.SSH.connectTimeout 30 the timed-out dialog comes after about that time, so the setting and not the alias’s own ConnectTimeout is the wait', async () => {
-    knowHostKey('password');
+    knowHostKey('askpass-pw');
     await withSettings({
       [EXTERNAL]: true,
       'remote.SSH.connectTimeout': 30,
-      ...PLATFORMS,
+      ...useOwnConfig(),
     });
     answering([
       {match: 'password', answer: hostPasswordOf(), delayMilliseconds: 120_000},
     ]);
     const began = Date.now();
-    await openWindow('password', 'as1');
+    await openWindow('askpass-pw', 'as1');
     const dialog = await waitForDialog('as1', 150_000);
     const seconds = (Date.now() - began) / 1000;
     deepStrictEqual(
-      [dialog.message, seconds >= 30 && seconds <= 45],
+      [dialog.details, seconds >= 30 && seconds <= 45],
       [
-        'Could not establish connection to "password": Connecting with SSH timed out.',
+        'Could not establish connection to "askpass-pw": Connecting with SSH timed out.',
         true,
       ],
       `the dialog came ${String(seconds)} s after the window opened`,
@@ -190,17 +186,17 @@ describe('the failures of a login through the user’s own askpass program (card
   });
 
   it('F-2309 AC-21 (c2596-slow-answer): a program that takes 25 s with remote.SSH.connectTimeout 60 connects with its answer and no VS Code input', async () => {
-    knowHostKey('password');
+    knowHostKey('askpass-pw');
     await withSettings({
       [EXTERNAL]: true,
       'remote.SSH.connectTimeout': 60,
-      ...PLATFORMS,
+      ...useOwnConfig(),
     });
     answering([
       {match: 'password', answer: hostPasswordOf(), delayMilliseconds: 25_000},
     ]);
     const {watchedConnect} = await import('./support.ts');
-    const watched = await watchedConnect('password', 'as1', 150_000);
+    const watched = await watchedConnect('askpass-pw', 'as1', 150_000);
     deepStrictEqual(
       {connected: watched.connected, inputs: watched.inputs},
       {connected: true, inputs: []},

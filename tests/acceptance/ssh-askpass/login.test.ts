@@ -8,12 +8,18 @@ import {deepStrictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
+  connectedWithin,
+  inWindow,
+  nextEmptyWindow,
   onHostAs,
   readUserSettings,
+  reloadWindow,
   restoreUserSettings,
   terminalsOf,
+  userSettings,
   variable,
 } from '../windows/harness.ts';
+import {dialogOf, notifications, statusBarText} from '../windows/renderer.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {
   answering,
@@ -230,4 +236,43 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
       );
     });
   }
+
+  it('F-2309 AC-9 (c2596-setting-change): changing the setting in a connected window shows no notification or reload prompt, and a reload that reuses the local server performs no login', async () => {
+    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    answering([passwordRule()]);
+    await watchedConnect('password', 'as1', 120_000);
+    const called = askpassCalls().length;
+    await userSettings({[EXTERNAL]: false});
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const shown = {
+      notifications: await notifications('as1'),
+      dialog: await dialogOf('as1'),
+    };
+    await reloadWindow('as1');
+    await connectedWithin('as1', 120_000);
+    deepStrictEqual(
+      {shown, loginsAfterReload: askpassCalls().length - called},
+      {shown: {notifications: [], dialog: undefined}, loginsAfterReload: 0},
+      recorded(),
+    );
+  });
+
+  it('F-2309 AC-11 (c2596-new-window): a New Window on Active Host connects without calling the program again', async () => {
+    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    answering([passwordRule()]);
+    await watchedConnect('password', 'as1', 120_000);
+    const called = askpassCalls().length;
+    const opened = await nextEmptyWindow(() =>
+      inWindow('as1', 'opensshremotes.openEmptyWindowOnCurrentHost'),
+    );
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    deepStrictEqual(
+      {
+        indicator: await statusBarText(opened, 'status.host'),
+        newCalls: askpassCalls().length - called,
+      },
+      {indicator: 'SSH: password', newCalls: 0},
+      recorded(),
+    );
+  });
 });

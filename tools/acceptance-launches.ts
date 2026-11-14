@@ -475,10 +475,13 @@ const CONTAINERS_B_FILES: readonly string[] = [
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
 
 /**
- * The launches that may set `remote.SSH.configFile` themselves, by label: `ssh-agents`, whose rows name their own files. Every other launch uses the run's
+ * The launches that may set `remote.SSH.configFile` themselves, by label: `ssh-agents` and `ssh-askpass`, whose rows name their own files. Every other launch uses the run's
  * ssh_config, which the harness hosts reach.
  */
-export const CONFIG_FILE_LAUNCHES: readonly string[] = ['ssh-agents'];
+export const CONFIG_FILE_LAUNCHES: readonly string[] = [
+  'ssh-agents',
+  'ssh-askpass',
+];
 
 /** The token for the run's folder, which a launch's settings and environment may name. */
 const RUN_FOLDER_TOKEN = '<run>';
