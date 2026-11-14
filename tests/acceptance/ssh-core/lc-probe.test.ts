@@ -28,7 +28,7 @@ describe('probe: LocalCommand output (card #2598)', function () {
       found.push(
         `== ${mode}: ${String(seen.length)} log lines; lines naming a marker:`,
         ...seen.filter(line => /marker/.test(line)),
-        `-- the [ssh] lines (${String(seen.filter(line => line.includes('[ssh]')).length}):`,
+        `-- the [ssh] lines (${seen.filter(line => line.includes('[ssh]')).length.toString()}):`,
         ...seen.filter(line => line.includes('[ssh]')).slice(0, 12),
       );
     }
