@@ -9,8 +9,10 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
+import {spawnSync} from 'node:child_process';
 import path from 'node:path';
 import {
   connectedWithin,
@@ -211,4 +213,27 @@ export async function watchedConnect(
   }
   await waiting;
   return {connected: state.connected, inputs};
+}
+
+/** The known-hosts file of the alias `name` in the run's SSH configuration. */
+export function knownHostsOf(name: string): string {
+  return path.join(variable('HARNESS_RUN_FOLDER'), `known_hosts_${name}`);
+}
+
+/** Empties the known-hosts file of the alias `name`, so that its host key is unknown. */
+export function forgetHostKey(name: string): void {
+  rmSync(knownHostsOf(name), {force: true});
+}
+
+/** Puts the host key of the SSH host into the known-hosts file of the alias `name`, so that the key is known. */
+export function knowHostKey(name: string): void {
+  const config = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8');
+  const port = /^\s+Port (\d+)$/m.exec(config)?.[1];
+  if (port === undefined) {
+    throw new Error('the run’s SSH configuration names no port');
+  }
+  const scanned = spawnSync('ssh-keyscan', ['-p', port, '127.0.0.1'], {
+    encoding: 'utf8',
+  }).stdout;
+  writeFileSync(knownHostsOf(name), scanned);
 }
