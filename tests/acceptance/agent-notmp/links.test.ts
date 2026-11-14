@@ -137,7 +137,7 @@ describe('F-2311, an account that may not create links in /tmp (card coverage-99
       const reloadLines = connectionLog({withTimes: true})
         .slice(logged)
         .filter(line =>
-          /connect|forward|socket|link|helper|resolv/i.test(line),
+          /connect|forward|socket|link|helper|resolv|record/i.test(line),
         );
       const links = await hostLinks();
       const target = (
