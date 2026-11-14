@@ -57,15 +57,20 @@ async function showedPalette(name: string): Promise<void> {
     state.shown = true;
   } catch (caught) {
     await sampling;
-    const terminals = await terminalFacts(name);
+    // The pages and the events come first: asking for the terminals focuses and clears one, and adds events of its own.
+    const pages = await pageFocusFacts().catch((reading: unknown) => [
+      `unreadable: ${String(reading)}`,
+    ]);
     const events = windowEvents(name)
       .slice(-14)
       .map(
         entry =>
           `${entry.event}${entry.id === undefined ? '' : `#${entry.id.slice(-4)}`}${entry.terminal === undefined ? '' : `:${String(entry.terminal)}`}@${String(entry.time - sent)}`,
       );
+    // A window that does not answer must not replace the palette's own error.
+    const terminals = await terminalFacts(name).catch(() => undefined);
     throw new Error(
-      `${String(caught)}; pages ${JSON.stringify(await pageFocusFacts())}; the quick input and focus in the first seconds (ms from the command) ${JSON.stringify(trail)}; terminals ${JSON.stringify(terminals.terminals)}, active ${JSON.stringify(terminals.active)}; the agent's events, with the terminals it saw open or become active (ms from the command, which was sent at 0) ${JSON.stringify(events)}`,
+      `${String(caught)}; pages ${JSON.stringify(pages)}; the quick input and focus in the first seconds (ms from the command) ${JSON.stringify(trail)}; terminals ${JSON.stringify(terminals?.terminals ?? '(unreadable)')}, active ${JSON.stringify(terminals?.active ?? '(unreadable)')}; the agent's events, with the terminals it saw open or become active (ms from the command, which was sent at 0) ${JSON.stringify(events)}`,
       {cause: caught},
     );
   }
