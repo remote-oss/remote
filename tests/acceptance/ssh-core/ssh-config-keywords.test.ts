@@ -9,8 +9,13 @@ import {execFileSync} from 'node:child_process';
 import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
+  appendScript,
+  connectedWithin,
   connectionLog,
   hostPort,
+  inWindow,
+  reloadWindow,
+  waitFor,
   recordLines,
   variable,
 } from '../windows/harness.ts';
@@ -25,6 +30,35 @@ const CIPHER_LINES = [
 
 /** The buttons of the failure dialog, as the other rows of the suite name them. */
 const FAILURE_BUTTONS = ['Close Remote', 'Retry', 'More Actions...'];
+
+/** The non-empty lines of `file`, none when it does not exist. */
+function linesOf(file: string): string[] {
+  return existsSync(file)
+    ? readFileSync(file, 'utf8')
+        .split('\n')
+        .filter(line => line !== '')
+    : [];
+}
+
+/** The aliases the host pick of Connect to Host... lists, read in the local window with the pick dismissed. */
+async function hostsListed(): Promise<string[]> {
+  const before = recordLines('hostPick', 'local').length;
+  appendScript([
+    {
+      surface: 'hostPick',
+      match: 'Select configured SSH host',
+      answer: 'dismiss',
+      window: 'local',
+    },
+  ]);
+  await inWindow('local', 'opensshremotes.openEmptyWindow');
+  await waitFor(
+    'the host pick',
+    () => recordLines('hostPick', 'local').length > before,
+    60_000,
+  );
+  return recordLines('hostPick', 'local').at(-1)?.items?.slice(0, -2) ?? [];
+}
 
 /** `text` with the alias of its row replaced by `c2593`, so that the texts of two rows can be compared. */
 function asBase(text: string, alias: string): string {
@@ -64,11 +98,13 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
       [
         result.plain.status,
         asBase(result.outcome.indicator, 'c2593-algs'),
+        asBase(result.outcome.title, 'c2593-algs'),
         result.outcome.progress.map(title => asBase(title, 'c2593-algs')),
       ],
       [
         0,
         asBase(baseline.indicator, 'c2593-base'),
+        asBase(baseline.title, 'c2593-base'),
         baseline.progress.map(title => asBase(title, 'c2593-base')),
       ],
     );
@@ -108,12 +144,14 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
         result.outcome.indicator,
         result.outcome.toasts,
         result.negotiate,
+        (result.outcome.failedAfter ?? Infinity) < 2000,
       ],
       [
         'Could not establish connection to "c2593-quiet-cipher".',
         FAILURE_BUTTONS,
         'Disconnected from SSH: c2593-quiet-cipher',
         [],
+        true,
         true,
       ],
     );
@@ -156,13 +194,17 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
         result.plain,
         result.outcome.dialog,
         result.outcome.buttons,
+        result.outcome.indicator,
         result.outcome.toasts,
+        (result.outcome.failedAfter ?? Infinity) < 2000,
       ],
       [
         255,
         'Could not establish connection to "c2593-revoked".',
         FAILURE_BUTTONS,
+        'Disconnected from SSH: c2593-revoked',
         [],
+        true,
       ],
     );
   });
@@ -206,11 +248,23 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
         badOption: connectionLog().some(line =>
           line.includes('Bad configuration option'),
         ),
+        listed: await hostsListed(),
       }),
+      {hosts: ['c2593-second']},
     );
     deepStrictEqual(
-      [result.plain.status, result.outcome.dialog, result.badOption],
-      [255, 'Could not establish connection to "c2593-unknown".', true],
+      [
+        result.plain.status,
+        result.outcome.dialog,
+        result.badOption,
+        result.listed,
+      ],
+      [
+        255,
+        'Could not establish connection to "c2593-unknown".',
+        true,
+        ['c2593-unknown', 'c2593-second'],
+      ],
     );
   });
 
@@ -252,19 +306,30 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
       deepStrictEqual(result, true);
     });
 
-    it(`F-2109 AC-12, AC-18 (c2593-localcommand-${mode}): PermitLocalCommand runs the LocalCommand once in ${mode} mode`, async () => {
+    it(`F-2109 AC-12, AC-18 (c2593-localcommand-${mode}): PermitLocalCommand runs the LocalCommand once in ${mode} mode with the tokens expanded, its output in the log, and its failing exit leaves the connection working${mode === 'server' ? ', and a reload does not run it again' : ''}`, async () => {
       const alias = `c2593-lc-${mode}`;
       const output = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.out`);
-      const lines = await connectWith(
+      const result = await connectWith(
         alias,
-        ['PermitLocalCommand yes', `LocalCommand echo "%n" >> ${output}`],
+        [
+          'PermitLocalCommand yes',
+          `LocalCommand echo "%n" >> ${output}; echo c2593-local-output-%n; exit 3`,
+        ],
         'connects',
-        () =>
-          existsSync(output)
-            ? readFileSync(output, 'utf8')
-                .split('\n')
-                .filter(line => line !== '')
-            : [],
+        async () => {
+          const once = linesOf(output);
+          if (mode === 'server') {
+            await reloadWindow(alias);
+            await connectedWithin(alias, 120_000);
+          }
+          return {
+            once,
+            afterReload: linesOf(output),
+            logged: connectionLog().some(line =>
+              line.includes(`c2593-local-output-${alias}`),
+            ),
+          };
+        },
         {
           settings: {
             ...settings,
@@ -272,7 +337,11 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
           },
         },
       );
-      deepStrictEqual(lines, [alias]);
+      deepStrictEqual(result, {
+        once: [alias],
+        afterReload: [alias],
+        logged: true,
+      });
     });
   }
 

@@ -21,7 +21,7 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {dismissals} from '../windows/maintenance.ts';
-import {notifications, statusItem} from '../windows/renderer.ts';
+import {notifications, statusItem, windowTitle} from '../windows/renderer.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -41,6 +41,7 @@ export function entryFile(
   alias: string,
   extra: readonly string[],
   without: readonly string[] = [],
+  hosts: readonly string[] = [],
 ): string {
   const file = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.config`);
   writeFileSync(
@@ -51,6 +52,7 @@ export function entryFile(
         line => !without.includes(line.trim().split(' ')[0] ?? ''),
       ),
       ...extra.map(line => `  ${line}`),
+      ...hosts.flatMap(host => ['', `Host ${host}`, '  HostName 127.0.0.1']),
       '',
     ].join('\n'),
   );
@@ -79,6 +81,10 @@ export interface Outcome {
   dialog: string | undefined;
   buttons: string[] | undefined;
   progress: string[];
+  /** The window's title. */
+  title: string;
+  /** Milliseconds from the first progress line to the failure dialog; undefined when there was no dialog. */
+  failedAfter: number | undefined;
   /** The text of the user settings right after the row set them, and when the connect ended. */
   settingsBefore: string | undefined;
   settingsAfter: string | undefined;
@@ -88,6 +94,8 @@ export interface Outcome {
 export interface ConnectOptions {
   settings?: Readonly<Record<string, unknown>>;
   without?: readonly string[];
+  /** Aliases of further hosts the file holds after the entry. */
+  hosts?: readonly string[];
   script?: Parameters<typeof appendScript>[0];
 }
 
@@ -105,7 +113,7 @@ export async function connectWith<Result>(
   body: (outcome: Outcome, file: string) => Result | Promise<Result>,
   options: ConnectOptions = {},
 ): Promise<Result> {
-  const file = entryFile(name, extra, options.without);
+  const file = entryFile(name, extra, options.without, options.hosts);
   const saved = readUserSettings();
   await userSettings({'remote.SSH.configFile': file, ...options.settings});
   const settingsBefore = readUserSettings();
@@ -133,6 +141,13 @@ export async function connectWith<Result>(
         progress: recordLines('progress', name)
           .filter(line => line.time >= mark)
           .map(line => line.question),
+        title: await windowTitle(name),
+        failedAfter:
+          dialog === undefined
+            ? undefined
+            : dialog.time -
+              (recordLines('progress', name).find(line => line.time >= mark)
+                ?.time ?? mark),
         settingsBefore,
         settingsAfter: readUserSettings(),
       },
