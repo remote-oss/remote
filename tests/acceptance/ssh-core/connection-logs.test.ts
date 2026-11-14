@@ -561,7 +561,6 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
   });
 
   it("F-2003 AC-12 (c121-trace-server): a fresh connect at trace keeps ssh's verbose lines, more than the same fresh connect at debug, and the host's remoteagent.log holds trace entries", async () => {
-    this.timeout(600_000);
     const saved = readUserSettings();
     let serverTrace = 0;
     const counts: Array<{debug1: number}> = [];
@@ -602,7 +601,7 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
     } finally {
       restoreUserSettings(saved);
     }
-  });
+  }).timeout(600_000);
 
   it('F-2003 AC-13 (c121-live-trace): a reconnection after the user setting changes to trace without a reload carries the trace additions', async () => {
     const saved = readUserSettings();

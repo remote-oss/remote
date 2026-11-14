@@ -4367,7 +4367,6 @@ export async function settingRow(
   );
 }
 
-
 /** The value the control of the first setting of the Settings editor of window `name` shows; empty when it shows none. */
 export async function settingControlOf(name: string): Promise<string> {
   return (
