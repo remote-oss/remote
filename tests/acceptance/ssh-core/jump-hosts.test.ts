@@ -546,7 +546,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     deepStrictEqual(result, {before: 2, after: 2});
   });
 
-  /** The password hop at the harness host's published port and the chain `ProxyJump a,b` of a row that asks every host key. */
+  /** The chain `ProxyJump a,b` of a row that asks every host key; no ConnectTimeout, which ssh would apply to the jump hosts' own handshakes. */
   function chain(alias: string, known: string): string {
     return writeConfig(alias, [
       hostBlock(
@@ -557,13 +557,16 @@ describe('jump hosts and proxy commands (card #2601)', function () {
           'Port 22',
           ...askLines(known),
         ],
-        ['Port', 'HostName', ...ASK_WITHOUT],
+        ['Port', 'HostName', 'ConnectTimeout', ...ASK_WITHOUT],
       ),
-      hostBlock(`${alias}-first`, askLines(known), ASK_WITHOUT),
+      hostBlock(`${alias}-first`, askLines(known), [
+        'ConnectTimeout',
+        ...ASK_WITHOUT,
+      ]),
       hostBlock(
         `${alias}-second`,
         ['HostName 127.0.0.3', 'Port 22', ...askLines(known)],
-        ['Port', 'HostName', ...ASK_WITHOUT],
+        ['Port', 'HostName', 'ConnectTimeout', ...ASK_WITHOUT],
       ),
     ]);
   }
@@ -752,6 +755,12 @@ describe('jump hosts and proxy commands (card #2601)', function () {
 
   it('F-2310 AC-36 (c2601-jump-leaves-no-server): the account of the jump host has no server folder and runs no server process, while the final account has both', async () => {
     const alias = 'c2601-noserver';
+    await onHostAs(
+      'harness-pw',
+      'sh',
+      '-c',
+      'rm -rf "$HOME"/.*server*; pkill -u harness-pw -f '[v]scodium-server'; true',
+    );
     const file = writeConfig(alias, [
       hostBlock(
         alias,
