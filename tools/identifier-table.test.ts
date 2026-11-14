@@ -194,6 +194,24 @@ describe('identifier-table', () => {
       );
     });
 
+    it('wsl-07: carries a coreAndExtension context key into the table', () => {
+      const [contextKeys] = tableKinds(
+        syntheticSources({
+          declared: {
+            contextKeys: [
+              {id: 'remote-x.installed', setter: 'coreAndExtension'},
+            ],
+          },
+        }),
+      );
+      deepStrictEqual(
+        contextKeys?.entries,
+        new Map([
+          ['installed', {id: 'remote-x.installed', setter: 'coreAndExtension'}],
+        ]),
+      );
+    });
+
     it('adds the stand-down kind with the named key', () => {
       const kinds = tableKinds(
         syntheticSources({

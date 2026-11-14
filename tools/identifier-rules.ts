@@ -207,10 +207,12 @@ function gatingProblems(
 ): string[] {
   const {manifest, declared} = sources;
   const problems: string[] = [];
+  const entries = [
+    ...manifest.menuEntries,
+    ...(declared.gateAlsoKinds === true ? manifest.contributionEntries : []),
+  ];
   // An entry hidden with `when: "false"` shows nothing, so it cannot duplicate an entry of the extension it stands down for.
-  for (const entry of manifest.menuEntries.filter(
-    candidate => candidate.when !== 'false',
-  )) {
+  for (const entry of entries.filter(candidate => candidate.when !== 'false')) {
     const when = entry.when ?? '';
     if (declared.ungated.some(exemption => exempts(exemption, entry))) {
       if (occurrences(when, standingDownKey) > 0) {
@@ -239,7 +241,7 @@ function gatingProblems(
     }
   }
   for (const ungated of declared.ungated) {
-    if (!manifest.menuEntries.some(entry => exempts(ungated, entry))) {
+    if (!entries.some(entry => exempts(ungated, entry))) {
       problems.push(
         `ungated names ${ungated.menu} entry '${ungated.item}', which the manifest does not contribute`,
       );
