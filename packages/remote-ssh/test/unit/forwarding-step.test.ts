@@ -368,12 +368,48 @@ describe('the forwarding plans of a connect', () => {
       [sink.lines.map(line => line.message), terminals],
       [
         [
+          'the connection record: none, so this is a new connection',
           'agent forwarding: an agent socket was found, and the window links to it',
           'X11 forwarding: none (settingOff)',
         ],
         [],
       ],
     );
+  });
+
+  it('#2566: the log says whether the connection has a stored record, and with which kind of agent link', async () => {
+    const told: string[] = [];
+    for (const stored of [
+      {...RECORD, agentLink: {kind: 'none', reason: 'settingOff'}},
+      {...RECORD},
+      {
+        ...RECORD,
+        agentLink: {
+          kind: 'link',
+          linkPath: '/tmp/vscode-ssh-auth-sock-7',
+          target: '/tmp/ssh-first/agent.9',
+        },
+      },
+    ] as const) {
+      const {dependencies, sink} = forwardingOf({draws: [42]});
+      await plansOf(
+        dependencies,
+        channelWith(['/tmp/vscode-ssh-auth-sock-7']),
+        hostWith(AGENT_SOCKET, ''),
+        stored,
+      );
+      told.push(
+        sink.lines
+          .map(line => line.message)
+          .filter(message => message.startsWith('the connection record'))
+          .join(),
+      );
+    }
+    deepStrictEqual(told, [
+      'the connection record: stored, with an agent link of kind none',
+      'the connection record: stored, with no agent link',
+      'the connection record: stored, with an agent link of kind link',
+    ]);
   });
 
   it('F-2312 R6: a display plan is told in the log', async () => {
@@ -386,6 +422,7 @@ describe('the forwarding plans of a connect', () => {
     deepStrictEqual(
       sink.lines.map(line => line.message),
       [
+        'the connection record: none, so this is a new connection',
         'agent forwarding: none (settingOff)',
         'X11 forwarding: a forwarded display was found',
       ],

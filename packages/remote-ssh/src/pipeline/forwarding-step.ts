@@ -133,6 +133,11 @@ export async function planForwarding(
   if (agentLink.kind === 'link') {
     dependencies.windowLink.path = agentLink.linkPath;
   }
+  dependencies.logger.info(
+    stored === undefined
+      ? 'the connection record: none, so this is a new connection'
+      : `the connection record: stored, with ${stored.agentLink === undefined ? 'no agent link' : `an agent link of kind ${stored.agentLink.kind}`}`,
+  );
   dependencies.logger.info(agentLine(agentLink));
   dependencies.logger.info(displayLine(display));
   return {agentLink, display};
