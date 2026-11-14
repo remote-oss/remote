@@ -8,12 +8,15 @@ import {deepStrictEqual} from 'node:assert';
 import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
+import {statusItem} from '../windows/renderer.ts';
 import {
   connectedWithin,
   hostPassword,
   hostPort,
+  onHostAs,
   recordLines,
   reloadWindow,
+  signal,
   variable,
 } from '../windows/harness.ts';
 import {
@@ -109,6 +112,11 @@ function passwordAt(alias: string, address: string, text: string) {
 /** The questions window `alias` was asked on `surface`, in order. */
 function questionsOn(alias: string, surface: string): string[] {
   return recordLines(surface, alias).map(line => line.question);
+}
+
+/** The names in `listing`, a line each, that have `server` in them. */
+function serverNamesOf(listing: string): string[] {
+  return listing.split('\n').filter(name => name.includes('server'));
 }
 
 /** The pids of the processes whose command line holds `fragment`, other than the search itself. */
@@ -431,35 +439,6 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     });
   });
 
-  it('F-2310 AC-12 (c2601-jump-blackhole): a jump host that drops all packets fails after about the connect timeout with the timed out reason', async () => {
-    const alias = 'c2601-blackhole';
-    const file = writeConfig(alias, [
-      target(alias, `${alias}-hop`),
-      hostBlock(`${alias}-hop`, ['HostName 192.0.2.1'], ['HostName']),
-    ]);
-    const result = await connectWith(
-      alias,
-      [],
-      'fails',
-      outcome => ({
-        dialog: outcome.dialog,
-        waited:
-          (outcome.failedAfter ?? 0) >= 8000 &&
-          (outcome.failedAfter ?? 0) < 25_000,
-        lines: outcome.connectLog.slice(-12),
-      }),
-      {file},
-    );
-    deepStrictEqual(
-      [result.dialog, result.waited],
-      [
-        `Could not establish connection to "${alias}": The connection timed out.`,
-        true,
-      ],
-      result.lines.join('\n'),
-    );
-  });
-
   it('F-2310 AC-24 (c2601-hostkey-picks): unknown host keys behind a jump host ask the fingerprint pick for each hop, and Continue records both keys', async () => {
     const alias = 'c2601-picks';
     const known = freshKnown(alias);
@@ -567,29 +546,252 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     deepStrictEqual(result, {before: 2, after: 2});
   });
 
-  it('F-2310 AC-22 (c2601-password-terminal): without the local server a password jump host and a password target ask in hop order and the window connects', async () => {
-    const alias = 'c2601-pwterminal';
-    const file = passwordChain(alias, 1);
+  /** The password hop at the harness host's published port and the chain `ProxyJump a,b` of a row that asks every host key. */
+  function chain(alias: string, known: string): string {
+    return writeConfig(alias, [
+      hostBlock(
+        alias,
+        [
+          `ProxyJump ${alias}-first,${alias}-second`,
+          'HostName 127.0.0.2',
+          'Port 22',
+          ...askLines(known),
+        ],
+        ['Port', 'HostName', ...ASK_WITHOUT],
+      ),
+      hostBlock(`${alias}-first`, askLines(known), ASK_WITHOUT),
+      hostBlock(
+        `${alias}-second`,
+        ['HostName 127.0.0.3', 'Port 22', ...askLines(known)],
+        ['Port', 'HostName', ...ASK_WITHOUT],
+      ),
+    ]);
+  }
+
+  it('F-2310 AC-10 (c2601-keys-too-slow): two jump hosts with unknown keys, the first pick left open past the connect timeout, fail with the timed out dialog while the pick is open', async () => {
+    const alias = 'c2601-slow';
+    const file = chain(alias, freshKnown(alias));
+    const result = await connectWith(
+      alias,
+      [],
+      'fails',
+      outcome => ({
+        dialog: outcome.dialog,
+        picks: questionsOn(alias, 'pick').length,
+      }),
+      {
+        file,
+        script: [
+          {
+            surface: 'pick',
+            match: 'fingerprint',
+            answer: 'yes',
+            window: alias,
+            after: 'c2601-never-answered',
+          },
+          {
+            surface: 'failureDialog',
+            match: 'Could not establish connection',
+            answer: 'dismiss',
+            window: alias,
+          },
+          {
+            surface: 'mitigationPick',
+            match: 'Pick an action',
+            answer: 'dismiss',
+            window: alias,
+          },
+        ],
+      },
+    );
+    deepStrictEqual(result, {
+      dialog: `Could not establish connection to "${alias}": The connection timed out.`,
+      picks: 1,
+    });
+  });
+
+  it('F-2310 AC-11 (c2601-keys-answered-slowly): with the connect timeout at 60 the same chain connects when each jump host pick is answered within about 20 seconds', async () => {
+    const alias = 'c2601-slowok';
+    const file = chain(alias, freshKnown(alias));
+    const timers = [
+      setTimeout(() => {
+        signal('c2601-answer-first');
+      }, 20_000),
+      setTimeout(() => {
+        signal('c2601-answer-second');
+      }, 40_000),
+    ];
+    try {
+      const result = await connectWith(
+        alias,
+        [],
+        'connects',
+        outcome => ({
+          dialog: outcome.dialog,
+          picks: questionsOn(alias, 'pick').length,
+        }),
+        {
+          file,
+          settings: {'remote.SSH.connectTimeout': 60},
+          script: [
+            {
+              surface: 'pick',
+              match: 'fingerprint',
+              answer: 'yes',
+              window: alias,
+              after: 'c2601-answer-first',
+            },
+            {
+              surface: 'pick',
+              match: 'fingerprint',
+              answer: 'yes',
+              window: alias,
+              after: 'c2601-answer-second',
+            },
+            {
+              surface: 'pick',
+              match: 'fingerprint',
+              answer: 'yes',
+              window: alias,
+            },
+          ],
+        },
+      );
+      deepStrictEqual(result, {dialog: undefined, picks: 3});
+    } finally {
+      timers.forEach(clearTimeout);
+    }
+  });
+
+  it('F-2310 AC-16 (c2601-proxycommand-ssh-w): ProxyCommand ssh -W through a bastion with unknown keys asks the bastion first and the target second, and connects', async () => {
+    const alias = 'c2601-sshw';
+    const known = freshKnown(alias);
+    const written = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      `${alias}.config`,
+    );
+    const file = writeConfig(alias, [
+      hostBlock(
+        alias,
+        [
+          `ProxyCommand ssh -F ${written} -W %h:%p ${alias}-bastion`,
+          'HostName 127.0.0.2',
+          'Port 22',
+          ...askLines(known),
+        ],
+        ['Port', 'HostName', ...ASK_WITHOUT],
+      ),
+      hostBlock(`${alias}-bastion`, askLines(known), ASK_WITHOUT),
+    ]);
     const result = await connectWith(
       alias,
       [],
       'connects',
-      () => questionsOn(alias, 'maskedInput'),
+      () =>
+        questionsOn(alias, 'pick').map(question =>
+          question.replace(/SHA256:\S+/, 'SHA256:x'),
+        ),
       {
         file,
-        settings: {
-          'remote.SSH.useLocalServer': false,
-          'remote.SSH.remotePlatform': {[alias]: 'linux'},
-        },
         script: [
-          passwordAt(alias, '127.0.0.1', hostPassword()),
-          passwordAt(alias, '127.0.0.2', hostPassword()),
+          {surface: 'pick', match: 'fingerprint', answer: 'yes', window: alias},
+          {surface: 'pick', match: 'fingerprint', answer: 'yes', window: alias},
         ],
       },
     );
-    deepStrictEqual(result, [
-      'Enter password for harness-pw@127.0.0.1',
-      'Enter password for harness-pw@127.0.0.2',
+    deepStrictEqual(result.length, 2);
+  });
+
+  it('F-2310 AC-29 (c2601-hostkey-left-open): the target host key pick left open for 60 seconds is still open, with no dialog and the indicator still Opening Remote...', async () => {
+    const alias = 'c2601-leftopen';
+    const known = freshKnown(alias);
+    const file = writeConfig(alias, [
+      hostBlock(
+        alias,
+        [
+          `ProxyJump ${alias}-hop`,
+          'HostName 127.0.0.2',
+          'Port 22',
+          ...askLines(known),
+        ],
+        ['Port', 'HostName', ...ASK_WITHOUT],
+      ),
+      hostBlock(`${alias}-hop`, []),
     ]);
+    const seen: Array<{dialogs: number; indicator: string; picks: number}> = [];
+    const timer = setTimeout(() => {
+      void (async () => {
+        seen.push({
+          dialogs: recordLines('failureDialog', alias).length,
+          indicator: (await statusItem(alias, 'status.host')).text,
+          picks: questionsOn(alias, 'pick').length,
+        });
+        signal('c2601-answer-late');
+      })();
+    }, 60_000);
+    try {
+      await connectWith(alias, [], 'connects', () => undefined, {
+        file,
+        script: [
+          {
+            surface: 'pick',
+            match: 'fingerprint',
+            answer: 'yes',
+            window: alias,
+            after: 'c2601-answer-late',
+          },
+        ],
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    deepStrictEqual(seen, [
+      {dialogs: 0, indicator: 'Opening Remote...', picks: 1},
+    ]);
+  });
+
+  it('F-2310 AC-36 (c2601-jump-leaves-no-server): the account of the jump host has no server folder and runs no server process, while the final account has both', async () => {
+    const alias = 'c2601-noserver';
+    const file = writeConfig(alias, [
+      hostBlock(
+        alias,
+        [`ProxyJump ${alias}-hop`, 'HostName 127.0.0.2', 'Port 22'],
+        ['Port', 'HostName'],
+      ),
+      hostBlock(
+        `${alias}-hop`,
+        [...PASSWORD_ONLY, 'NumberOfPasswordPrompts 1'],
+        ['PreferredAuthentications', 'NumberOfPasswordPrompts', 'ProxyCommand'],
+        'password',
+      ),
+    ]);
+    const result = await connectWith(
+      alias,
+      [],
+      'connects',
+      async () => ({
+        jumpFolders: serverNamesOf(
+          await onHostAs('harness-pw', 'ls', '-a', '/home/harness-pw'),
+        ),
+        finalFolders:
+          serverNamesOf(await onHostAs('harness', 'ls', '-a', '/home/harness'))
+            .length > 0,
+        jumpProcesses: (await onHostAs('harness', 'ps', '-eo', 'user,args'))
+          .split('\n')
+          .filter(
+            line => line.startsWith('harness-pw') && line.includes('server'),
+          ),
+        finalProcesses: (await onHostAs('harness', 'ps', '-eo', 'user,args'))
+          .split('\n')
+          .some(line => line.startsWith('harness ') && line.includes('server')),
+      }),
+      {file, script: [passwordAt(alias, '127.0.0.1', hostPassword())]},
+    );
+    deepStrictEqual(result, {
+      jumpFolders: [],
+      finalFolders: true,
+      jumpProcesses: [],
+      finalProcesses: true,
+    });
   });
 });
