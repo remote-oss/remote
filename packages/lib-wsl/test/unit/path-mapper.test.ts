@@ -193,6 +193,38 @@ describe('D3: toWindows', () => {
     });
   });
 
+  const dotted = [
+    [
+      'a .. segment is resolved before the path is put on the share',
+      '/home/me/../you',
+      '\\\\wsl.localhost\\Ubuntu\\home\\you',
+    ],
+    [
+      'a . segment and a doubled slash are dropped',
+      '/home/./me//docs',
+      '\\\\wsl.localhost\\Ubuntu\\home\\me\\docs',
+    ],
+    [
+      '.. above the root stays at the root, so no other distro can be named',
+      '/../../Other/x',
+      '\\\\wsl.localhost\\Ubuntu\\Other\\x',
+    ],
+    ['the root alone is the share root', '/..', '\\\\wsl.localhost\\Ubuntu\\'],
+  ] as const;
+  for (const [label, linuxPath, share] of dotted) {
+    it(`#2515: ${label}`, async () => {
+      const {result} = await windowsOf(
+        {
+          kind: 'exits',
+          stdout: utf8Output('\\\\wsl.localhost\\Other\\anything\n'),
+          status: 0,
+        },
+        linuxPath,
+      );
+      deepStrictEqual(result, {kind: 'mapped', windowsPath: share});
+    });
+  }
+
   const unusable = [
     ['another UNC host', '\\\\server\\share\n', 0],
     ['a control character', 'C:\\a\u0007b\n', 0],

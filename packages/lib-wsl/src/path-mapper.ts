@@ -4,6 +4,7 @@
  * automount root.
  */
 
+import {posix} from 'node:path';
 import {
   distroToShare,
   parseWslpathOutput,
@@ -91,24 +92,18 @@ export function createPathMapper(runner: WslRunner): PathMapper {
 
   return {
     toDistro: async (windowsPath, distro, cancellation) => {
-      const form = translatableWindowsPath(windowsPath);
-      if (form === 'other') {
+      const share = shareToDistro(windowsPath);
+      if (share.kind === 'share') {
+        return {
+          kind: 'mapped',
+          mapped: {distro: share.distro, linuxPath: share.linuxPath},
+        };
+      }
+      if (translatableWindowsPath(windowsPath) !== 'drive') {
         return {
           kind: 'notTranslatable',
           detail: `${windowsPath} is neither a drive path nor a path on a distro's share`,
         };
-      }
-      if (form === 'share') {
-        const share = shareToDistro(windowsPath);
-        return share.kind === 'share'
-          ? {
-              kind: 'mapped',
-              mapped: {distro: share.distro, linuxPath: share.linuxPath},
-            }
-          : {
-              kind: 'notTranslatable',
-              detail: `${windowsPath} is no share path`,
-            };
       }
       const answer = await questionOf(distro, '-u', windowsPath, cancellation);
       if (answer.kind !== 'line') {
@@ -135,7 +130,11 @@ export function createPathMapper(runner: WslRunner): PathMapper {
       if (SHARE_FORM.test(answer.line)) {
         return {
           kind: 'mapped',
-          windowsPath: distroToShare(distro, linuxPath, shareHost),
+          windowsPath: distroToShare(
+            distro,
+            posix.normalize(linuxPath),
+            shareHost,
+          ),
         };
       }
       return DRIVE_FORM.test(answer.line) && !/\p{Cc}/u.test(answer.line)
