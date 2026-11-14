@@ -11,10 +11,29 @@ import {
 /** How long the palette's list must read the same, in milliseconds, before it counts as settled. */
 const SETTLE_MILLISECONDS = 600;
 
-/** Reads the pages' quick input and focus every 250 ms for 3 s after `sent`, into `trail`, so that a palette that shows and goes can be told from one that never shows. */
-async function sampleQuickInput(sent: number, trail: string[]): Promise<void> {
-  for (let reads = 0; reads < 12; reads += 1) {
-    await new Promise(resolve => setTimeout(resolve, 250));
+/** How often the pages' quick input and focus are read while a palette is awaited, in milliseconds. */
+const SAMPLE_INTERVAL_MILLISECONDS = 250;
+
+/** How many reads at most, so that the trail of a palette that does not show covers about 3 s. */
+const SAMPLE_COUNT = 12;
+
+/**
+ * Reads the pages' quick input and focus every `SAMPLE_INTERVAL_MILLISECONDS` after `sent`, into `trail`, until
+ * `state.shown` is set or `SAMPLE_COUNT` reads are made, so that a palette that shows and goes can be told from one that
+ * never shows. A palette that shows stops it: it costs at most the read in flight.
+ */
+async function sampleQuickInput(
+  sent: number,
+  trail: string[],
+  state: {shown: boolean},
+): Promise<void> {
+  for (let reads = 0; reads < SAMPLE_COUNT; reads += 1) {
+    await new Promise(resolve =>
+      setTimeout(resolve, SAMPLE_INTERVAL_MILLISECONDS),
+    );
+    if (state.shown) {
+      return;
+    }
     const facts = await pageFocusFacts().catch((caught: unknown) => [
       String(caught),
     ]);
@@ -30,10 +49,12 @@ async function sampleQuickInput(sent: number, trail: string[]): Promise<void> {
 async function showedPalette(name: string): Promise<void> {
   const sent = Date.now();
   const trail: string[] = [];
+  const state = {shown: false};
   await startInWindow(name, 'workbench.action.showCommands');
-  const sampling = sampleQuickInput(sent, trail);
+  const sampling = sampleQuickInput(sent, trail, state);
   try {
     await waitForQuickPick(name, 30_000);
+    state.shown = true;
   } catch (caught) {
     await sampling;
     const terminals = await terminalFacts(name);
@@ -41,10 +62,10 @@ async function showedPalette(name: string): Promise<void> {
       .slice(-14)
       .map(
         entry =>
-          `${entry.event}${entry.id === undefined ? '' : `#${entry.id.slice(-4)}`}@${String(entry.time - sent)}`,
+          `${entry.event}${entry.id === undefined ? '' : `#${entry.id.slice(-4)}`}${entry.terminal === undefined ? '' : `:${String(entry.terminal)}`}@${String(entry.time - sent)}`,
       );
     throw new Error(
-      `${String(caught)}; pages ${JSON.stringify(await pageFocusFacts())}; the quick input and focus in the first seconds (ms from the command) ${JSON.stringify(trail)}; terminals ${JSON.stringify(terminals.terminals)}, active ${JSON.stringify(terminals.active)}; the agent's events (ms from the command) ${JSON.stringify(events)}`,
+      `${String(caught)}; pages ${JSON.stringify(await pageFocusFacts())}; the quick input and focus in the first seconds (ms from the command) ${JSON.stringify(trail)}; terminals ${JSON.stringify(terminals.terminals)}, active ${JSON.stringify(terminals.active)}; the agent's events, with the terminals it saw open or become active (ms from the command, which was sent at 0) ${JSON.stringify(events)}`,
       {cause: caught},
     );
   }
