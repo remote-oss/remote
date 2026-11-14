@@ -79,6 +79,9 @@ export interface Outcome {
   dialog: string | undefined;
   buttons: string[] | undefined;
   progress: string[];
+  /** The text of the user settings right after the row set them, and when the connect ended. */
+  settingsBefore: string | undefined;
+  settingsAfter: string | undefined;
 }
 
 /** What a row may change of its connect: settings it sets, keywords of the harness entry it leaves out, answers it scripts. */
@@ -105,6 +108,7 @@ export async function connectWith<Result>(
   const file = entryFile(name, extra, options.without);
   const saved = readUserSettings();
   await userSettings({'remote.SSH.configFile': file, ...options.settings});
+  const settingsBefore = readUserSettings();
   const mark = Date.now();
   try {
     appendScript(options.script ?? dismissals(name));
@@ -129,6 +133,8 @@ export async function connectWith<Result>(
         progress: recordLines('progress', name)
           .filter(line => line.time >= mark)
           .map(line => line.question),
+        settingsBefore,
+        settingsAfter: readUserSettings(),
       },
       file,
     );
@@ -141,4 +147,15 @@ export async function connectWith<Result>(
 /** The failure dialogs window `name` showed from `mark` (milliseconds) on. */
 function shownFrom(name: string, mark: number) {
   return recordLines('failureDialog', name).filter(line => line.time >= mark);
+}
+
+/** Whether the client's `ssh` knows the keyword line `keyword`; a row for a newer keyword skips on a client that does not. */
+export async function clientKnows(keyword: string): Promise<boolean> {
+  const file = entryFile('c2593-probe', [keyword]);
+  try {
+    await execFileAsync('ssh', ['-G', '-F', file, 'c2593-probe']);
+    return true;
+  } catch {
+    return false;
+  }
 }

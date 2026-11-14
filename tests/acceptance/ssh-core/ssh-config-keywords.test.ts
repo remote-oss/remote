@@ -6,7 +6,7 @@
 
 import {deepStrictEqual} from 'node:assert';
 import {execFileSync} from 'node:child_process';
-import {existsSync, readFileSync} from 'node:fs';
+import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   connectionLog,
@@ -14,7 +14,7 @@ import {
   recordLines,
   variable,
 } from '../windows/harness.ts';
-import {connectWith, plainSsh} from './config-keywords-support.ts';
+import {clientKnows, connectWith, plainSsh} from './config-keywords-support.ts';
 
 const CIPHER_LINES = [
   'Ciphers aes256-ctr',
@@ -167,7 +167,10 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
     );
   });
 
-  it('F-2109 AC-7 (c2593-refuse): RefuseConnection shows the dialog without a reason, the text is not shown and the log holds ssh’s line', async () => {
+  it('F-2109 AC-7 (c2593-refuse): RefuseConnection shows the dialog without a reason, the text is not shown and the log holds ssh’s line', async function () {
+    if (!(await clientKnows('RefuseConnection "c2593-refused-text"'))) {
+      this.skip();
+    }
     const result = await connectWith(
       'c2593-refuse',
       ['RefuseConnection "c2593-refused-text"'],
@@ -351,7 +354,10 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
     );
   });
 
-  it('F-2109 AC-19 (c2593-weak-no-pq): the same with WarnWeakCrypto no-pq-kex', async () => {
+  it('F-2109 AC-19 (c2593-weak-no-pq): the same with WarnWeakCrypto no-pq-kex', async function () {
+    if (!(await clientKnows('WarnWeakCrypto no-pq-kex'))) {
+      this.skip();
+    }
     const result = await connectWith(
       'c2593-weak-no-pq',
       ['KexAlgorithms curve25519-sha256', 'WarnWeakCrypto no-pq-kex'],
@@ -408,5 +414,118 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
         ],
       ],
     ]);
+  });
+
+  it('F-2109 AC-6 (c2593-retry): Retry on the failure dialog reloads the window, which fails the same way', async () => {
+    const alias = 'c2593-retry';
+    const questions = await connectWith(
+      alias,
+      ['Ciphers 3des-cbc'],
+      'fails',
+      () => recordLines('failureDialog', alias).map(line => line.question),
+      {
+        script: [
+          {
+            surface: 'failureDialog',
+            match: 'Could not establish connection',
+            answer: {button: 'Retry'},
+            window: alias,
+          },
+          {
+            surface: 'failureDialog',
+            match: 'Could not establish connection',
+            answer: 'dismiss',
+            window: alias,
+          },
+          {
+            surface: 'mitigationPick',
+            match: 'Pick an action',
+            answer: 'dismiss',
+            window: alias,
+          },
+        ],
+      },
+    );
+    deepStrictEqual(questions.slice(0, 2), [
+      'Could not establish connection to "c2593-retry".',
+      'Could not establish connection to "c2593-retry".',
+    ]);
+  });
+
+  it('F-2109 AC-17 (c2593-nothing-written): a connect with keywords writes no setting and shows no notification of its own', async () => {
+    const result = await connectWith(
+      'c2593-nothing',
+      ['LogLevel ERROR', 'Compression yes', 'LogVerbose kex.c:*'],
+      'connects',
+      outcome => outcome,
+    );
+    deepStrictEqual(
+      [result.settingsAfter, result.toasts],
+      [result.settingsBefore, []],
+    );
+  });
+
+  it('F-2109 AC-14 (c2593-hashed): HashKnownHosts yes with a host missing from the known-hosts file connects once the key question is answered yes, and ssh writes one hashed line', async () => {
+    const alias = 'c2593-hashed';
+    const known = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.known`);
+    writeFileSync(known, '');
+    const lines = await connectWith(
+      alias,
+      [
+        'HashKnownHosts yes',
+        'StrictHostKeyChecking ask',
+        `UserKnownHostsFile ${known}`,
+      ],
+      'connects',
+      () =>
+        readFileSync(known, 'utf8')
+          .split('\n')
+          .filter(line => line !== ''),
+      {
+        without: ['BatchMode', 'StrictHostKeyChecking', 'UserKnownHostsFile'],
+        script: [
+          {
+            surface: 'pick',
+            match: 'has fingerprint',
+            answer: {label: 'Continue'},
+            window: alias,
+          },
+        ],
+      },
+    );
+    deepStrictEqual([lines.length, lines[0]?.startsWith('|1|')], [1, true]);
+  });
+
+  it('F-2109 AC-14 (c2593-knownhostscommand): KnownHostsCommand supplying the key connects with no question and writes nothing', async () => {
+    const alias = 'c2593-khc';
+    const known = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.known`);
+    const keys = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.keys`);
+    writeFileSync(known, '');
+    writeFileSync(
+      keys,
+      execFileSync(
+        'ssh-keyscan',
+        ['-t', 'ed25519', '-p', String(hostPort()), '127.0.0.1'],
+        {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        },
+      ),
+    );
+    const result = await connectWith(
+      alias,
+      [
+        'StrictHostKeyChecking yes',
+        `UserKnownHostsFile ${known}`,
+        `KnownHostsCommand /bin/cat ${keys}`,
+      ],
+      'connects',
+      () => ({
+        written: readFileSync(known, 'utf8'),
+        questions: recordLines('pick', alias).length,
+      }),
+      {without: ['StrictHostKeyChecking', 'UserKnownHostsFile']},
+    );
+    deepStrictEqual(result, {written: '', questions: 0});
   });
 });
