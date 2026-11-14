@@ -476,6 +476,19 @@ describe('the step that opens the window tunnel', () => {
     });
   });
 
+  it('#2585: the error code of a failed listen is in the log line, after the listen error', async () => {
+    const {open, local} = stepWith({listen: 'fail'});
+    local.listenFailureCode = 'EADDRINUSE';
+    deepStrictEqual(await open(), {
+      kind: 'failed',
+      failure: {
+        kind: 'unknown',
+        logDetail:
+          'the window tunnel did not open: its local port could not be listened on: port 50000 is in use (EADDRINUSE)',
+      },
+    });
+  });
+
   /** An open tunnel with the onClosed listener it heard, for the rows of the end's contract. */
   async function openedWithHeard() {
     const {open, local} = stepWith();

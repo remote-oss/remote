@@ -41,7 +41,8 @@ export type WindowTunnelOutcome =
   | {kind: 'relayRefused'; cause: 'closedBeforeReply' | 'unreachable'}
   /** The port accepted a connection and closed it at once: the host refuses the forward the session set up. */
   | {kind: 'forwardRefused'}
-  | {kind: 'listenFailed'; detail: string};
+  /** The listen failed; `code` is the system error code (such as EADDRINUSE) when the failure had one. */
+  | {kind: 'listenFailed'; detail: string; code?: string | undefined};
 
 /** Everything a relay tunnel is made from. */
 export interface RelayTunnelRequest {
@@ -241,6 +242,7 @@ export async function openRelayTunnel(
     return {
       kind: 'listenFailed',
       detail: caught instanceof Error ? caught.message : String(caught),
+      code: (caught as NodeJS.ErrnoException | undefined)?.code,
     };
   }
   let closeRan = false;

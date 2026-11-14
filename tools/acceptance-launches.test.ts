@@ -14,6 +14,7 @@ import {
   needsDevContainerImage,
   HOST_CASE_SUITES,
   type HostCase,
+  WINDOW_PORT_RANGE,
   hostCases,
   hostSetupOf,
   portFreeCommand,
@@ -1986,7 +1987,10 @@ describe('the launch with no runner', () => {
           kind: 'plain',
           suite: 'login-shells',
           debuggingPort: true,
-          settings: {'window.title': '[${rootName}]'},
+          settings: {
+            'window.title': '[${rootName}]',
+            'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
+          },
         },
       ],
     );
@@ -2299,6 +2303,24 @@ describe('the platform cases (card coverage-12)', () => {
         'containers-index-broken',
         'containers-index-down',
       ],
+    );
+  });
+
+  it('#2585, #2586: login-shells and default-ports give the window a port range below the 32768 where the client’s ephemeral range starts, and only the failing connect that tests a busy range sets one besides', () => {
+    const [first, last] = WINDOW_PORT_RANGE.split('-').map(Number);
+    deepStrictEqual(
+      [
+        (first ?? 0) > 1023 && (last ?? 65535) < 32768,
+        launchesOf(REPOSITORY_ROOT)
+          .filter(
+            launch =>
+              settingsOfLaunch(launch)?.[
+                'remote.SSH.preferredLocalPortRange'
+              ] !== undefined,
+          )
+          .map(launch => launch.label),
+      ],
+      [true, ['failure-port-range-busy', 'login-shells', 'default-ports']],
     );
   });
 });
