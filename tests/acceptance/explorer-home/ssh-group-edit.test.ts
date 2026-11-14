@@ -152,6 +152,7 @@ describe('the configuration file opened from the SSH group (card coverage-102, p
         EDITOR_SAVE_MILLISECONDS,
       );
       const pushes = companionCalls(HOSTS_CHANGED).slice(pushed);
+      console.log(`MEASURE2612 issued->write ${String(saved - issued)} ms; pushes after write ${JSON.stringify(pushes.map(push => push.time - saved))} ms; pushes after issue ${JSON.stringify(pushes.map(push => push.time - issued))} ms`);
       writeFileSync(file, 'Host typed-one\nHost external-one\n');
       await new Promise(resolve =>
         setTimeout(resolve, OTHER_PROGRAM_MILLISECONDS),
