@@ -7,11 +7,12 @@ import {DatabaseSync} from 'node:sqlite';
 import {waitFor} from './harness.ts';
 import {readBoundMilliseconds, readStateDatabase} from './state-database.ts';
 
-/** The writer a row holds: its process, when it held the transaction and when it committed (its own clock, 0 until it does). */
+/** The writer a row holds: its process, when it held the transaction and when it commits (its own clock). */
 interface Writer {
   process: ChildProcess;
   heldAt: number;
-  committedAt: () => number;
+  /** Resolves with the commit's time on the writer's clock when it prints it, or 0 when the writer ends without. */
+  committed: Promise<number>;
 }
 
 /** Holds an exclusive write transaction on `file` for `milliseconds` in another process, and resolves once it holds it. */
@@ -27,22 +28,23 @@ function holder(file: string, milliseconds: number): Promise<Writer> {
   const child = spawn(process.execPath, ['-e', script, file], {
     stdio: ['ignore', 'pipe', 'inherit'],
   });
-  let committed = 0;
   return new Promise((resolve, reject) => {
+    const committed = new Promise<number>(settled => {
+      child.once('exit', () => {
+        settled(0);
+      });
+      child.stdout.on('data', (chunk: Buffer) => {
+        const done = /committed (\d+)/.exec(String(chunk))?.[1];
+        if (done !== undefined) {
+          settled(Number(done));
+        }
+      });
+    });
     child.once('error', reject);
     child.stdout.on('data', (chunk: Buffer) => {
-      const text = String(chunk);
-      const held = /held (\d+)/.exec(text)?.[1];
-      const done = /committed (\d+)/.exec(text)?.[1];
-      if (done !== undefined) {
-        committed = Number(done);
-      }
+      const held = /held (\d+)/.exec(String(chunk))?.[1];
       if (held !== undefined) {
-        resolve({
-          process: child,
-          heldAt: Number(held),
-          committedAt: () => committed,
-        });
+        resolve({process: child, heldAt: Number(held), committed});
       }
     });
   });
@@ -98,14 +100,20 @@ describe('the state database reader (card tooling-207)', function () {
     const started = Date.now();
     const seen = readStateDatabase(file, keys);
     const waited = Date.now() - started;
-    const ended = Date.now();
+    // The read blocks this process, so the writer's lines are read only now: its commit is waited for, up to 10 s.
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<number>(resolve => {
+      timer = setTimeout(resolve, 10_000, -1);
+    });
+    const committedAt = await Promise.race([writer.committed, late]);
+    clearTimeout(timer);
     writer.process.kill();
     // The read's own contract is to wait for up to its bound (a read that ran past it would have thrown), so only that
     // it saw the commit and waited past 5 s is asserted; the times say where a slow one went (#2584).
     deepStrictEqual(
       [seen, waited > 5000],
       [['before', 'held'], true],
-      `the read waited ${String(waited)} ms; the writer held its transaction ${String(writer.heldAt - started)} ms from the read's start and committed ${writer.committedAt() === 0 ? 'after the read ended' : `${String(writer.committedAt() - started)} ms from it`} (the read ended ${String(ended - started)} ms from it)`,
+      `the read waited ${String(waited)} ms; the writer held its transaction ${String(writer.heldAt - started)} ms from the read's start and ${committedAt > 0 ? `committed ${String(committedAt - started)} ms from it` : committedAt === 0 ? 'ended without a commit line' : 'printed no commit within 10 s of the read'}`,
     );
   });
 
