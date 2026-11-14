@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   closeWindow,
+  connectionLog,
   type ForwardedTunnel,
   inWindow,
   nextEmptyWindow,
@@ -14,11 +15,14 @@ import {
   tunnelsOf,
   userSettings,
   waitFor,
+  windowState,
 } from '../windows/harness.ts';
 import {
   notificationButtons,
   notificationCentre,
   notifications,
+  statusBarItemIds,
+  statusBarText,
   statusItem,
 } from '../windows/renderer.ts';
 import {answering} from '../windows/forward-support.ts';
@@ -188,20 +192,62 @@ const OWN_PORTS_READ_MILLISECONDS = 5000;
 /** What the forwarded-ports status item says while nothing is forwarded or detected ([oss] remoteExplorer.ts). */
 const NO_PORTS = 'No Ports Forwarded';
 
+/** What `read` gives, or the text of what it threw or that it gave nothing in 10 s, so that a read of a failure report never replaces the failure. */
+async function attempt(read: () => Promise<unknown>): Promise<unknown> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<string>(resolve => {
+    timer = setTimeout(resolve, 10_000, 'no answer in 10 s');
+  });
+  try {
+    return await Promise.race([read(), late]);
+  } catch (caught) {
+    return `the read failed: ${String(caught)}`;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * What tells a forwarded-ports item that was drawn late from one that is not there, for the wait's failure to name
+ * (#2254): the status bar's item ids and the text of that item, the window's state and its tunnels as the Ports view
+ * holds them, and the log's forwarding lines with their times.
+ */
+async function portsItemFacts(name: string): Promise<string> {
+  const facts = {
+    statusBarItems: await attempt(() => statusBarItemIds(name)),
+    forwardedPortsText: await attempt(() =>
+      statusBarText(name, 'status.forwardedPorts'),
+    ),
+    state: await attempt(() => windowState(name)),
+    tunnels: await attempt(() => tunnelsOf(name)),
+    forwardingLog: connectionLog({withTimes: true})
+      .filter(line => /forward|Resolved ssh-remote|tunnel/i.test(line))
+      .slice(-30),
+  };
+  return JSON.stringify(facts);
+}
+
 /** The accessible label of window `name`'s forwarded-ports item, once core has drawn it (up to 15 s after the connect). */
 async function forwardedPortsLabel(name: string): Promise<string> {
   let label: string | undefined;
-  await waitFor(
-    `window ${name} to draw its forwarded-ports item`,
-    async () => {
-      label = await statusItem(name, 'status.forwardedPorts').then(
-        item => item.ariaLabel,
-        () => undefined,
-      );
-      return label !== undefined;
-    },
-    15_000,
-  );
+  try {
+    await waitFor(
+      `window ${name} to draw its forwarded-ports item`,
+      async () => {
+        label = await statusItem(name, 'status.forwardedPorts').then(
+          item => item.ariaLabel,
+          () => undefined,
+        );
+        return label !== undefined;
+      },
+      15_000,
+    );
+  } catch (caught) {
+    throw new Error(
+      `${caught instanceof Error ? caught.message : String(caught)}; what the window held: ${await portsItemFacts(name)}`,
+      {cause: caught},
+    );
+  }
   return label ?? '';
 }
 

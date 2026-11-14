@@ -636,6 +636,8 @@ export interface HostCase {
   settingsTail?: string;
   /** The ports a non-product listener holds on the host before the connect. */
   holders?: number[];
+  /** The port the case expects the server to listen on: a number, or `random` for any port outside the ranges. */
+  port?: number | 'random';
   /** Keeps the previous launch's server, running, and its files on the host, so the case reuses them. */
   keepServer?: boolean;
   /** Keeps the previous launch's files on the host but stops its server. */
@@ -749,6 +751,23 @@ export function hostCaseLabel(
 }
 
 /**
+ * The command that waits, up to thirty seconds, until no socket of the host has `port` as its local port in a state
+ * that keeps a server from binding it (TIME_WAIT does not: a server sets SO_REUSEADDR), and, when one still does, prints
+ * the sockets that hold it and fails: a precondition of the case that the host does not meet is a fact of the host, not
+ * a red row (#2563).
+ */
+export function portFreeCommand(port: number): string {
+  const local = `netstat -tan | awk '$4 ~ /:${String(port)}$/ && $6 != "TIME_WAIT"'`;
+  return (
+    'for i in $(seq 1 120); do ' +
+    `${local} | grep -q . || exit 0; ` +
+    'sleep 0.25; done; ' +
+    `echo "port ${String(port)} is still in use on the host:"; ` +
+    `netstat -tanp | awk '$4 ~ /:${String(port)}$/'; exit 1`
+  );
+}
+
+/**
  * The host setup of a host case, in the order the run runs it: free the held ports; stop the server unless the case
  * keeps it; remove the suite's folders unless the case keeps the server or its files; hold the case's ports, each
  * waited on as it starts; then the case's own commands. The brackets keep `pkill` from matching the `sh -c` that runs
@@ -770,6 +789,13 @@ export function hostSetupOf(
     entries.push({command: `rm -rf ${suite.removed.join(' ')}`});
   }
   const holders = hostCase.holders ?? [];
+  if (
+    typeof hostCase.port === 'number' &&
+    hostCase.keepServer !== true &&
+    !holders.includes(hostCase.port)
+  ) {
+    entries.push({command: portFreeCommand(hostCase.port)});
+  }
   for (const holder of holders) {
     entries.push({
       command: `nc -lk -p ${String(holder)} -s 127.0.0.1 -e /bin/true`,
