@@ -26,8 +26,10 @@ const PLATFORMS = {'remote.SSH.remotePlatform': {password: 'linux'}};
 
 /** The environments of the `ssh` that logged in to the alias `password`. */
 function logins() {
-  return sshEnvironments().filter(each =>
-    each.arguments.split(' ').includes('password'),
+  return sshEnvironments().filter(
+    each =>
+      each.arguments.split(' ').includes('password') &&
+      !each.arguments.includes(' -G '),
   );
 }
 

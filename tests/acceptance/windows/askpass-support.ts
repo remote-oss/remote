@@ -22,7 +22,7 @@ import {
   userSettings,
   variable,
 } from './harness.ts';
-import {inputBoxOf, quickPickOf} from './renderer.ts';
+import {inputBoxOf, pressEscape, quickPickOf} from './renderer.ts';
 
 /** The folder the launch's `SSH_ASKPASS` and `PATH` name. */
 function askpassFolder(): string {
@@ -218,6 +218,10 @@ export async function watchedConnect(
     await new Promise(resolve => setTimeout(resolve, 300));
   }
   await waiting;
+  if (!state.connected) {
+    // The input a window waits on blocks its close for two minutes, so the row that watched it dismisses it.
+    await pressEscape(name).catch(() => undefined);
+  }
   return {connected: state.connected, inputs};
 }
 

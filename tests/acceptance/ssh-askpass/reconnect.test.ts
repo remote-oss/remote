@@ -16,6 +16,7 @@ import {
   chooseQuickPickRow,
   inputBoxOf,
   pageText,
+  pressEscape,
   quickPickOf,
   statusBarText,
   waitForQuickPick,
@@ -104,6 +105,7 @@ describe('the user’s own askpass program at a reconnection (card #2596, F-2309
       {required: ['force'], newCalls: 0},
       recorded(),
     );
+    await pressEscape('as1').catch(() => undefined);
   });
 
   it('F-2309 AC-13 (c2596-reconnect-fails): a program that fails at the reconnection of a connected window gives core’s "Cannot reconnect. Please reload the window." and no VS Code input', async () => {
