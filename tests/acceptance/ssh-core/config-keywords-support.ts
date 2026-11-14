@@ -25,9 +25,6 @@ import {notifications, statusItem} from '../windows/renderer.ts';
 
 const execFileAsync = promisify(execFile);
 
-/** The alias of every entry the rows write. */
-export const ALIAS = 'c2593';
-
 /** The lines of the run's `Host harness` block, without its `Host` line. */
 function harnessLines(): string[] {
   const lines = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8').split(
@@ -39,16 +36,13 @@ function harnessLines(): string[] {
   return rest.slice(0, end === -1 ? rest.length : end);
 }
 
-/** Writes the file `label` of the run with the entry of {@link ALIAS}: the harness host's lines, then `extra`. */
-export function entryFile(label: string, extra: readonly string[]): string {
-  const file = path.join(
-    variable('HARNESS_RUN_FOLDER'),
-    `c2593-${label}.config`,
-  );
+/** Writes the file of the run for alias `alias` with its entry: the harness host's lines, then `extra`. */
+export function entryFile(alias: string, extra: readonly string[]): string {
+  const file = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.config`);
   writeFileSync(
     file,
     [
-      `Host ${ALIAS}`,
+      `Host ${alias}`,
       ...harnessLines(),
       ...extra.map(line => `  ${line}`),
       '',
@@ -60,9 +54,10 @@ export function entryFile(label: string, extra: readonly string[]): string {
 /** What plain `ssh -F <file> <alias> true` did: its exit status and what it wrote to stderr. */
 export async function plainSsh(
   file: string,
+  alias: string,
 ): Promise<{status: number; stderr: string}> {
   try {
-    await execFileAsync('ssh', ['-F', file, ALIAS, 'true']);
+    await execFileAsync('ssh', ['-F', file, alias, 'true']);
     return {status: 0, stderr: ''};
   } catch (caught) {
     const failure = caught as {code?: number; stderr?: string};
@@ -84,7 +79,7 @@ export interface Outcome {
 const DIALOG_MILLISECONDS = 120_000;
 
 /**
- * Connects window `name` to the entry written from `extra` with the setting pointing at its file, waits for the window to
+ * Connects window `name`, whose name is also the alias of its entry, to the entry written from `extra` with the setting pointing at its file, waits for the window to
  * connect or for its failure dialog, and gives what `body` makes of it before the window closes and the settings return.
  */
 export async function connectWith<Result>(
@@ -92,14 +87,15 @@ export async function connectWith<Result>(
   extra: readonly string[],
   expectation: 'connects' | 'fails',
   body: (outcome: Outcome, file: string) => Result | Promise<Result>,
+  settings: Readonly<Record<string, unknown>> = {},
 ): Promise<Result> {
   const file = entryFile(name, extra);
   const saved = readUserSettings();
-  await userSettings({'remote.SSH.configFile': file});
+  await userSettings({'remote.SSH.configFile': file, ...settings});
   const mark = Date.now();
   try {
     appendScript(dismissals(name));
-    await openWindow(ALIAS, name);
+    await openWindow(name, name);
     if (expectation === 'connects') {
       await connectedWithin(name, 120_000);
     } else {
