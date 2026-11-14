@@ -101,6 +101,7 @@ function surfacesWith(
     troubleshooting: {
       enabled: () => true,
       createTerminal: () => ({show: () => undefined, dispose: () => undefined}),
+      revealLog: () => undefined,
       texts: () => ({
         heading: 'heading',
         leadIn: 'lead',
