@@ -1441,3 +1441,25 @@ describe('the manifest rows of slices 1 and 2', () => {
     );
   });
 });
+
+describe('the manifest beside core’s agent hosts (card #2500, F-2008 AC-11, BR-1)', () => {
+  const CORE_COMMANDS =
+    /^(workbench\.action\.sessions\.|workbench\.action\.chat\.forgetSSHHostKey$|sessions\.remoteAgentHost\.add$)/;
+  const CORE_SETTINGS =
+    /^(chat\.remoteAgentHost|chat\.sshRemoteAgentHostCommand|chat\.agentHost\.)/;
+
+  it('F-2008 AC-11 (c2500-ids): no contributed command id is one of core’s agent-host ids and no configuration key is under core’s agent-host settings', () => {
+    const contributes = manifest().contributes;
+    deepStrictEqual(
+      {
+        commands: (contributes?.commands ?? [])
+          .map(entry => String(entry.command))
+          .filter(identifier => CORE_COMMANDS.test(identifier)),
+        settings: Object.keys(
+          contributes?.configuration?.properties ?? {},
+        ).filter(key => CORE_SETTINGS.test(key)),
+      },
+      {commands: [], settings: []},
+    );
+  });
+});

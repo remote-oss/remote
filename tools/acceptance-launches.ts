@@ -168,6 +168,7 @@ export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
   ['remote-oss.remote-explorer', 'remote-explorer'],
   ['remote-oss.remote-containers', 'remote-containers'],
   ['remote-oss.vscode-remote-extensionpack', 'vscode-remote-extensionpack'],
+  ['remote-oss.remote-wsl', 'remote-wsl'],
 ]);
 
 /** What a launch the renderer helpers read needs: the debugging port, and window titles they can find a window by. */
@@ -462,10 +463,10 @@ const CONTAINERS_B_FILES: readonly string[] = [
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
 
 /**
- * The launches that may set `remote.SSH.configFile` themselves, by label: none yet. Every other launch uses the run's
+ * The launches that may set `remote.SSH.configFile` themselves, by label: `ssh-agents`, whose rows name their own files. Every other launch uses the run's
  * ssh_config, which the harness hosts reach.
  */
-export const CONFIG_FILE_LAUNCHES: readonly string[] = [];
+export const CONFIG_FILE_LAUNCHES: readonly string[] = ['ssh-agents'];
 
 /** The token for the run's folder, which a launch's settings and environment may name. */
 const RUN_FOLDER_TOKEN = '<run>';
@@ -1080,6 +1081,26 @@ export function launchesOf(root: string): Launch[] {
     },
     // The core features of the editor in a window on the SSH host, read through the renderer.
     {...RENDERER_LAUNCH, label: 'ssh-core', suite: 'ssh-core'},
+    // Remote - SSH beside the core editor's own SSH agent hosts: AI features start off, and core's agent-host keys sit in the
+    // settings at their defaults. The empty script makes Remote - SSH show its real pickers, in the run's own home.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-agents',
+      suite: 'ssh-agents',
+      settings: {
+        'window.title': '[${rootName}]${remoteName}',
+        'window.dialogStyle': 'custom',
+        'chat.disableAIFeatures': true,
+        'chat.remoteAgentHostsEnabled': true,
+        'chat.remoteAgentHosts': [],
+        'chat.sshRemoteAgentHostCommand': '',
+        'chat.agentHost.forwardSSHAgent': false,
+      },
+      environment: {
+        HOME: '<run>/home-agents',
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+      },
+    },
     // Dev Containers beside Remote - SSH, in a window on the SSH host: the commands that edit a configuration where it lives.
     {
       ...RENDERER_LAUNCH,
@@ -1104,6 +1125,34 @@ export function launchesOf(root: string): Launch[] {
       suite: 'cli-path',
       cliSource: true,
       namedOnly: true,
+    },
+    // WSL on Linux: its commands stay out of the way where WSL cannot run, in a desktop window, in the browser build
+    // the editor stands in for with `remote.extensionKind`, and beside the other WSL extension, where it stands down.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'wsl-linux',
+      suite: 'wsl',
+      files: ['activation.test.ts'],
+      withExtensions: ['remote-oss.remote-wsl'],
+    },
+    {
+      ...RENDERER_LAUNCH,
+      label: 'wsl-linux-web',
+      suite: 'wsl',
+      files: ['activation-web.test.ts'],
+      withExtensions: ['remote-oss.remote-wsl'],
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.extensionKind': {'remote-oss.remote-wsl': ['web']},
+      },
+    },
+    {
+      ...RENDERER_LAUNCH,
+      label: 'wsl-linux-standdown',
+      suite: 'wsl',
+      files: ['activation-standdown.test.ts'],
+      withExtensions: ['remote-oss.remote-wsl'],
+      standIns: ['ms-vscode-remote.remote-wsl'],
     },
     {...EXPLORER_LAUNCH, label: 'explorer', suite: 'explorer'},
     {

@@ -6,7 +6,7 @@
 
 import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {userSettingsFile, variable, windowNames} from './harness.ts';
+import {userSettingsFile, variable, waitFor, windowNames} from './harness.ts';
 import {activations} from './folder-windows.ts';
 import {folderRowsOf, HOME} from './explorer-folders.ts';
 import {
@@ -53,8 +53,12 @@ export const FOLDERS = ['c5002-b', 'c5002-a'].map(name => `${HOME}/${name}`);
 /** The extension's identifier, which no state key of a command's invocation may equal (F-5901). */
 const EXTENSION_ID = 'remote-oss.remote-explorer';
 
-/** The state keys of the profile's global state database that equal the extension's identifier. */
-export function stateKeys(): string[] {
+/**
+ * The state keys of the profile's global state database that equal the extension's identifier. The editor's write
+ * transaction can stay open for seconds (main's run 43392313193 met one of at least 6 s, #2477), so the read carries on
+ * from a busy writer until `milliseconds` have passed, each attempt short.
+ */
+export async function stateKeys(milliseconds = 30_000): Promise<string[]> {
   const file = path.join(
     variable('HARNESS_USER_DATA'),
     'User/globalStorage/state.vscdb',
@@ -62,13 +66,25 @@ export function stateKeys(): string[] {
   if (!existsSync(file)) {
     return [];
   }
-  return readStateDatabase(file, database =>
-    (
-      database
-        .prepare('SELECT key FROM ItemTable WHERE key = ?')
-        .all(EXTENSION_ID) as Array<{key: string}>
-    ).map(entry => entry.key),
+  let keys: string[] = [];
+  await waitFor(
+    'the profile state database to be readable',
+    () => {
+      keys = readStateDatabase(
+        file,
+        database =>
+          (
+            database
+              .prepare('SELECT key FROM ItemTable WHERE key = ?')
+              .all(EXTENSION_ID) as Array<{key: string}>
+          ).map(entry => entry.key),
+        1000,
+      );
+      return true;
+    },
+    milliseconds,
   );
+  return keys;
 }
 
 /** Everything the rows compare before and after a key: the window, its text and files, and the history rows. */

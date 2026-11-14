@@ -107,9 +107,27 @@ describe('closeWindow (card tooling-84, #1505)', () => {
     await harness.closeWindow(NAME, 5_000);
   });
 
-  it('tooling-84: a window that neither deactivates nor exits fails after the wait, naming its extension host', async () => {
+  it('tooling-84, #2482: a window that neither deactivates nor exits fails after the wait, naming its extension host and what its agent shows', async () => {
     await rejects(harness.closeWindow(NAME, 1_000), {
-      message: `timed out waiting for window ${NAME} to deactivate: its extension host ${String(extensionHost.pid)} is still running`,
+      message: new RegExp(
+        `^timed out waiting for window ${NAME} to deactivate: its extension host ${String(extensionHost.pid)} is still running; the close was not accepted by the window's agent; running commands: \\[\\]; its last events: \\[\\]; its recorded processes: \\["${String(extensionHost.pid)} [A-Z] \\([a-z ]+\\) parent \\d+"\\]$`,
+        'u',
+      ),
+    });
+  });
+
+  it('#2482: the failure names a command the agent accepted that has not ended, and the last events with their ages', async () => {
+    writeFileSync(
+      path.join(folder, `${NAME}.commands.jsonl`),
+      `${JSON.stringify({id: 'earlier', command: 'workbench.action.terminal.new'})}\n`,
+    );
+    writeFileSync(
+      path.join(folder, `${NAME}.events.jsonl`),
+      `${JSON.stringify({event: 'accepted', id: 'earlier', time: Date.now()})}\n`,
+    );
+    await rejects(harness.closeWindow(NAME, 1_000), {
+      message:
+        /the close was not accepted by the window's agent; running commands: \["workbench\.action\.terminal\.new accepted \d+ s ago"\]; its last events: \["accepted workbench\.action\.terminal\.new \d+ s ago"\]; /u,
     });
   });
 

@@ -65,6 +65,8 @@ function stepWith(
     warned?: boolean;
     /** Whether ssh reported, in this connect, that the host's sshd prohibited a forward. */
     prohibited?: boolean;
+    /** How listening on the window's port ends: it works, or fails as a port in use does. */
+    listen?: 'work' | 'fail';
   } = {},
 ): {
   open: () => ReturnType<ReturnType<typeof openTunnelStep>['openTunnel']>;
@@ -79,7 +81,7 @@ function stepWith(
   loseConnection: () => void;
 } {
   const clock = new FakeClock();
-  const local = new FakeLocalPort();
+  const local = new FakeLocalPort(options.listen ?? 'work');
   const dialer = new FakeDialer(options.dialScript ?? ['work']);
   const socksPorts: number[] = [];
   const refused: number[] = [];
@@ -454,7 +456,23 @@ describe('the step that opens the window tunnel', () => {
     }
     deepStrictEqual(await pending, {
       kind: 'failed',
-      failure: {kind: 'unknown'},
+      failure: {
+        kind: 'unknown',
+        logDetail:
+          'the window tunnel did not open: no probe of its port worked before the bound',
+      },
+    });
+  });
+
+  it('#2510: a window port that cannot be listened on fails with no reason for the dialog and the listen error for the log', async () => {
+    const {open} = stepWith({listen: 'fail'});
+    deepStrictEqual(await open(), {
+      kind: 'failed',
+      failure: {
+        kind: 'unknown',
+        logDetail:
+          'the window tunnel did not open: its local port could not be listened on: port 50000 is in use',
+      },
     });
   });
 

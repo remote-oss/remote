@@ -72,6 +72,17 @@
       "noDownloadProgress": true
     },
     {
+      "label": "noexec-layout",
+      "cite": "F-2008 AC-9 (c2500-noexec-layout)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.useExecServer": false
+      },
+      "outcome": "connected",
+      "installedIn": "/home/harness/.vscodium-server-insiders",
+      "hostLacks": ["/home/harness/.vscodium-server-insiders/cli"]
+    },
+    {
       "label": "download-unreachable",
       "cite": "F-2403 AC-9, AC-26, F-3902 AC-7 (download-unreachable)",
       "settings": {

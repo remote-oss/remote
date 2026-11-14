@@ -18,6 +18,7 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import {SECOND_ENGINE_IMAGE} from '../../../tools/acceptance-second-engine.ts';
 import {rowsWhen, VIEW} from './dev-containers-view.ts';
+import {pulledWithRetries} from './image-pull.ts';
 import {
   inWindow,
   restoreUserSettings,
@@ -73,6 +74,35 @@ export async function dockerWith(
 /** The output of `docker` run with `parameters` on this machine's own daemon, whatever context the launch has made current. */
 function localDocker(...parameters: string[]): Promise<string> {
   return dockerWith({}, '--context', 'default', ...parameters);
+}
+
+/** How many times the second engine's image is pulled before its rows fail, and the wait between two tries. */
+const ENGINE_PULL_ATTEMPTS = 3;
+const ENGINE_PULL_PAUSE_MILLISECONDS = 10_000;
+
+/** This process's pull of the second engine's image, made once. */
+let enginePulled: Promise<number> | undefined;
+
+/**
+ * The second engine's image on this machine's own daemon: an image the daemon holds is used as it is, and otherwise it
+ * is pulled by its digest with three tries, so that a registry's passing 5xx fails no row (#2525).
+ */
+function engineImageHeld(): Promise<number> {
+  enginePulled ??= localDocker('image', 'inspect', SECOND_ENGINE_IMAGE).then(
+    () => 0,
+    () =>
+      pulledWithRetries(
+        async () => {
+          await localDocker('pull', '--quiet', SECOND_ENGINE_IMAGE);
+        },
+        ENGINE_PULL_ATTEMPTS,
+        () =>
+          new Promise(resolve =>
+            setTimeout(resolve, ENGINE_PULL_PAUSE_MILLISECONDS),
+          ),
+      ),
+  );
+  return enginePulled;
 }
 
 /** A second Docker daemon of the run, in a container of its own, and the one container only it holds. */
@@ -149,6 +179,7 @@ export async function secondEngine(
   const name = runScopedName(`c133-${kind}`);
   const marker = runScopedName(`c133${kind}only`);
   const port = withTls ? '2376' : '2375';
+  await engineImageHeld();
   await localDocker(
     'run',
     '-d',
@@ -383,6 +414,7 @@ export async function sshEngine(
   } = {},
 ): Promise<SshEngine> {
   await writeSshClient();
+  await engineImageHeld();
   imageBuilt ??= localDocker(
     'build',
     '--quiet',

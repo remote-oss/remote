@@ -26,6 +26,10 @@ const PHASE_IDS: Readonly<Record<PhaseName, FailureStringId | undefined>> = {
   opened: undefined,
   runningPreconnectScript: 'S118',
   serverDownloadPercent: undefined,
+  startingSubsystem: undefined,
+  unpackingPercent: undefined,
+  downloadingInDistro: undefined,
+  unpackingServer: undefined,
 };
 
 /** The title the progress starts with, naming the host as the user wrote it. */

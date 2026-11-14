@@ -2,8 +2,12 @@
 # never on a pull request, so no fork's code reaches a hosted runner from here, and with no secret.
 #
 # - windows-2025: the Windows client. WSL2 gives the Linux side: an Ubuntu 24.04 distro whose Docker engine runs the
-#   SSH hosts and the dev containers, reached from Windows over WSL2's localhost forwarding (the Windows engine of the
-#   image runs Windows containers only). VSCodium answers on its debugging port there.
+#   SSH hosts and the dev containers (the Windows engine of the image runs Windows containers only). The launches
+#   reach that engine through tools/engine-stand-in.ts on 127.0.0.1, which forwards to the distro's own address and
+#   takes the client's drive paths as bind sources, as Docker Desktop's engine does, so the job's containers rows run
+#   against that stand-in for Docker Desktop (reading-2511-desktop-stand-in); the other steps reach it at the distro's
+#   address. The hosts' and containers' published ports are reached over WSL2's localhost forwarding.
+#   VSCodium answers on its debugging port there.
 # - macos-15-intel: the macOS client, with colima's Docker for linux/x86_64 (about 10 minutes to start).
 #
 # Each job runs `node tools/acceptance.ts --editor vscodium` for its launch list and leaves the run's summary in the job
@@ -57,19 +61,28 @@ jobs:
         run: |
           wsl --install Ubuntu-24.04 --no-launch --web-download
           wsl -d Ubuntu-24.04 -u root -- sh -c 'apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io docker-buildx 2>&1 | tail -2'
-          # the packaged service (Ubuntu under WSL runs systemd), with a TCP listener on the distro's loopback only: the
-          # Docker API is unauthenticated and root there, and WSL2's localhost forwarding carries it to Windows' 127.0.0.1
-          wsl -d Ubuntu-24.04 -u root -- sh -c 'mkdir -p /etc/systemd/system/docker.service.d && printf "[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock\n" > /etc/systemd/system/docker.service.d/tcp.conf && systemctl daemon-reload && systemctl restart docker && systemctl is-active docker'
-          # a wsl.exe that stays, so the distro and its engine outlive this step
+          # a wsl.exe that stays, so the distro, its address and its engine outlive this step
           Start-Process wsl.exe -WindowStyle Hidden -ArgumentList '-d', 'Ubuntu-24.04', '--', 'sleep', 'infinity'
+          # the distro's own address on WSL's virtual switch, which only this runner reaches; anything but a private
+          # address ends the job, since the engine's API is unauthenticated and root
+          $engine = (wsl -d Ubuntu-24.04 --exec hostname -I).Trim().Split(' ')[0]
+          if ($engine -notmatch '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)') { "the distro's address $engine is not private"; exit 1 }
+          # in NAT mode only: mirrored mode shares the host's interfaces, so the address would no longer be host-only
+          $networking = (wsl -d Ubuntu-24.04 --exec wslinfo --networking-mode).Trim()
+          if ($networking -ne 'nat') { "WSL's networking mode is '$networking', not nat"; exit 1 }
+          # the packaged service (Ubuntu under WSL runs systemd), with a TCP listener on that address alone. The Windows
+          # CLI reaches it there directly: through WSL2's localhost forwarding a `docker run`'s attached output was lost
+          # while its exit status came through (#2505)
+          $unit = "[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://${engine}:2375 --containerd=/run/containerd/containerd.sock\n"
+          wsl -d Ubuntu-24.04 -u root -- sh -c "mkdir -p /etc/systemd/system/docker.service.d && printf '$unit' > /etc/systemd/system/docker.service.d/tcp.conf && systemctl daemon-reload && systemctl restart docker && systemctl is-active docker"
           $up = $false
           for ($i = 0; $i -lt 60 -and -not $up; $i++) {
             Start-Sleep 2
-            docker -H tcp://127.0.0.1:2375 version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}' 2>$null
+            docker -H "tcp://${engine}:2375" version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}' 2>$null
             $up = $LASTEXITCODE -eq 0
           }
           if (-not $up) { wsl -d Ubuntu-24.04 -u root -- sh -c 'systemctl status docker --no-pager | tail -15'; exit 1 }
-          "DOCKER_HOST=tcp://127.0.0.1:2375" >> $env:GITHUB_ENV
+          "DOCKER_HOST=tcp://${engine}:2375" >> $env:GITHUB_ENV
       # the image's Docker CLI has no buildx plugin, and the harness builds its images with `docker build --load`
       - name: Docker's buildx plugin for the Windows CLI
         run: |
@@ -93,8 +106,35 @@ jobs:
           Set-Service ssh-agent -StartupType Manual
           Start-Service ssh-agent
           Get-Service ssh-agent | Format-Table -AutoSize Name, Status, StartType
+      # Docker Desktop's engine takes a Windows client's drive paths as bind sources, and the distro's engine does not,
+      # so the launches reach it through a stand-in on 127.0.0.1 that rewrites them to the distro's /mnt paths and logs
+      # each rewrite (reading-2511-desktop-stand-in). A process started in one step is gone by the next, so the stand-in
+      # lives in this step, and the other steps use the engine's own address.
       - name: The launches
-        run: pnpm test:acceptance:vscodium --launches $env:LAUNCHES
+        run: |
+          $addressFile = Join-Path $env:RUNNER_TEMP 'engine-stand-in.address'
+          $standInLog = Join-Path $env:RUNNER_TEMP 'engine-stand-in.log'
+          $standIn = Start-Process node -PassThru -NoNewWindow -RedirectStandardOutput $standInLog -RedirectStandardError "$standInLog.err" -ArgumentList (Join-Path $env:GITHUB_WORKSPACE 'tools/engine-stand-in.ts'), '--engine', $env:DOCKER_HOST, '--address-file', $addressFile
+          # the file exists a moment before the address is in it, so the wait is for the address itself
+          $address = ''
+          for ($i = 0; $i -lt 30 -and $address -notmatch '^tcp://127\.0\.0\.1:\d+$'; $i++) {
+            Start-Sleep 1
+            $address = "$(Get-Content $addressFile -Raw -ErrorAction SilentlyContinue)".Trim()
+          }
+          if ($address -notmatch '^tcp://127\.0\.0\.1:\d+$') { "no stand-in address in $addressFile`: '$address'"; Get-Content $standInLog, "$standInLog.err" -ErrorAction SilentlyContinue; exit 1 }
+          $engine = $env:DOCKER_HOST
+          $env:DOCKER_HOST = $address
+          "the engine stand-in: $env:DOCKER_HOST, in front of $engine"
+          docker version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}'
+          if ($LASTEXITCODE -ne 0) { Get-Content $standInLog, "$standInLog.err" -ErrorAction SilentlyContinue; exit 1 }
+          pnpm test:acceptance:vscodium --launches $env:LAUNCHES
+          $launched = $LASTEXITCODE
+          Stop-Process -InputObject $standIn -ErrorAction SilentlyContinue
+          "the engine stand-in's log, every bind source it rewrote among it:"
+          Get-Content $standInLog, "$standInLog.err" -ErrorAction SilentlyContinue
+          $rewritten = @(Select-String -Path $standInLog -SimpleMatch ' -> ').Count
+          "The Windows launches ended with exit code ${launched}. Their containers rows reach the engine through tools/engine-stand-in.ts, a stand-in for Docker Desktop's engine endpoint (reading-2511-desktop-stand-in), which rewrote $rewritten bind sources to the distro's /mnt paths.`n" >> $env:GITHUB_STEP_SUMMARY
+          exit $launched
       - if: always()
         run: pnpm acceptance:clean
 

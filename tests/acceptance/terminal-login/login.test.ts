@@ -25,6 +25,7 @@ import {
   notifications,
   panelShown,
   quickPickOf,
+  statusBarText,
   terminalFocused,
   toastLinkTitles,
   terminalSpans,
@@ -579,13 +580,21 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
     const name = await connectedByTerminal('c82-uninstall-hidden');
     await setUserSetting(SHOW_TERMINAL, false);
     await killHost(name, 'password');
-    await waitFor(
-      'the password quick input',
-      async () =>
-        (await quickPickOf(name))?.placeholder.startsWith('Enter password') ===
-        true,
-      60_000,
-    );
+    try {
+      await waitFor(
+        'the password quick input',
+        async () =>
+          (await quickPickOf(name))?.placeholder.startsWith(
+            'Enter password',
+          ) === true,
+        60_000,
+      );
+    } catch (caught) {
+      throw new Error(
+        `${String(caught)}; the quick input: ${JSON.stringify((await quickPickOf(name))?.placeholder)}, the terminals: ${JSON.stringify(await terminalNames(name))}, the indicator: ${JSON.stringify(await statusBarText(name, 'status.host'))}`,
+        {cause: caught},
+      );
+    }
     const hidden = {
       tabs: await tabNames(name),
       quick: (await quickPickOf(name))?.placeholder,

@@ -337,6 +337,7 @@
     "install-local-off-offline": 0.2,
     "install-local-ssh-proxy": 0.3,
     "install-local-unknown-mode": 0.3,
+    "install-noexec-layout": 0.3,
     "install-nofetch-local": 0.3,
     "install-nofetch-restore": 0.3,
     "install-scp-missing": 0.2,

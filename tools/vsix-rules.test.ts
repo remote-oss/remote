@@ -280,13 +280,14 @@ describe('vsix-rules', () => {
     );
   });
 
-  it('tooling-95: the shipped ids are the release one and 0.2 set', () => {
+  it('tooling-95: the shipped ids are the release one and 0.2 set, and WSL', () => {
     deepStrictEqual(SHIPPED_EXTENSION_IDS, [
       'remote-oss.remote-containers',
       'remote-oss.remote-ssh',
       'remote-oss.remote-ssh-edit',
       'remote-oss.remote-explorer',
       'remote-oss.vscode-remote-extensionpack',
+      'remote-oss.remote-wsl',
     ]);
   });
 });

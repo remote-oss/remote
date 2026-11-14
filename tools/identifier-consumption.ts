@@ -266,13 +266,13 @@ function entryOf(
   };
 }
 
-/** Whether the table's entry is one the check decides: the R2 kinds, with role and setter where they filter. */
+/** Whether the table's entry is one the check decides: the R2 kinds, with role and setter where they filter: a context key the extension sets, alone or with the editor. */
 function isCheckedEntry(table: string, entry: RawEntry): boolean {
   if (table === 'internalCommands') {
     return entry.role === 'served';
   }
   if (table === 'contextKeys') {
-    return entry.setter === 'extension';
+    return entry.setter === 'extension' || entry.setter === 'coreAndExtension';
   }
   return ['settings', 'commands', 'views', 'runtimeCommands'].includes(table);
 }

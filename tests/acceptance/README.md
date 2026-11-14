@@ -122,6 +122,7 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 - `default-ports`: a plain launch with the renderer helpers, whose settings forward one default port; `default-ports/*.test.ts` opens windows and reads the local end of a port, the window's tunnels (`tunnelsOf`, the agent's `acceptance.agent.tunnels` over `workspace.tunnels`), a setting's default in the window (`settingDefaultIn`) and core's notifications.
 
 - `ssh-core`: a plain launch with the renderer helpers and no setting of its own; `ssh-core/*.test.ts` opens windows on the SSH host and reads the core features of the editor in them (terminals first) through the renderer, F-2508's rows.
+- `ssh-agents`: a plain launch with the renderer helpers, AI features off, core's four agent-host keys at their defaults and a home of the run's own (`<run>/home-agents`); `ssh-agents/*.test.ts` writes the SSH files of that home and shows Remote - SSH beside core's own SSH agent hosts from outside, F-2008's rows. It may set `remote.SSH.configFile` itself.
 
 - `ssh-containers`: a plain launch with the renderer helpers, Dev Containers installed beside Remote - SSH, and the run's registry and templates; `ssh-containers/*.test.ts` opens windows on the SSH host and runs Dev Containers' commands in them, which edit a configuration where it lives (F-0807's rows). It is in the `containers` group.
 

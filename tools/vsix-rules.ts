@@ -6,13 +6,14 @@
 
 import {EDITOR_ENGINE} from './editor-floor.ts';
 
-/** The extensions release 1 and 0.2 ship, by `${publisher}.${name}`. */
+/** The extensions release 1 and 0.2 ship, and WSL, by `${publisher}.${name}`. */
 export const SHIPPED_EXTENSION_IDS: readonly string[] = [
   'remote-oss.remote-containers',
   'remote-oss.remote-ssh',
   'remote-oss.remote-ssh-edit',
   'remote-oss.remote-explorer',
   'remote-oss.vscode-remote-extensionpack',
+  'remote-oss.remote-wsl',
 ];
 
 /**
