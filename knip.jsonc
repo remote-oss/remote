@@ -146,7 +146,14 @@
     "tools/acceptance-file-times.ts": ["exports"],
   },
   // System tools the tests and checks run, which no package provides.
-  "ignoreBinaries": ["pwsh", "shellcheck", "ssh-add", "ssh-agent", "ss"],
+  "ignoreBinaries": [
+    "pwsh",
+    "shellcheck",
+    "ssh-add",
+    "ssh-agent",
+    "ssh-keygen",
+    "ss",
+  ],
   "ignoreDependencies": [
     // The editor provides it to the acceptance tests at run time; @types/vscode types it.
     "vscode",

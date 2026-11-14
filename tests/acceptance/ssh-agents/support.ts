@@ -43,7 +43,7 @@ export interface AgentFiles {
 }
 
 /** The home the launch gives the editor. */
-export function agentsHome(): string {
+function agentsHome(): string {
   return path.join(variable('HARNESS_RUN_FOLDER'), 'home-agents');
 }
 
