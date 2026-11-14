@@ -91,6 +91,8 @@ export interface AgentEvent {
   defaultValue?: unknown;
   /** Whether the user's settings hold a value for the setting, as `setting` reports it: a key holding `null` reads as no value, as an absent one does. */
   inUserScope?: boolean;
+  /** The value the user's settings hold for the setting, as `setting` reports it (not merged with the default, as `value` is for an object): null for none. */
+  userValue?: unknown;
   /** Where a forwarded port is reachable on this machine, as the editor gave it. */
   localAddress?: string | {host: string; port: number};
   remotePort?: number;
@@ -1935,8 +1937,17 @@ export function readUserSettings(): string | undefined {
   return existsSync(file) ? readFileSync(file, 'utf8') : undefined;
 }
 
+/** The user settings keys a row has written or restored over, which a settle waits on the window to read as the file holds them now. */
+const touchedKeys = new Set<string>();
+
 /** Puts the launch's user settings file back to the bytes `readUserSettings` gave, or removes it when it had none. */
 export function restoreUserSettings(bytes: string | undefined): void {
+  const before = readUserSettings();
+  if (before !== undefined) {
+    for (const key of Object.keys(JSON.parse(before) as object)) {
+      touchedKeys.add(key);
+    }
+  }
   if (bytes === undefined) {
     rmSync(userSettingsFile(), {force: true});
   } else {
@@ -1944,16 +1955,115 @@ export function restoreUserSettings(bytes: string | undefined): void {
   }
 }
 
-/** Rewrites the launch's user settings with `change` applied to them, which the editor picks up; then waits 1 s. */
+/** How a write of {@link userSettings} is confirmed: `window` (the default) waits until the local window reads each key as written; `file` is for a key shown to be unreadable there, and its comment says why: it shows only that a value is there, so it is for adding or removing a key, never for changing one that is already set. */
+export interface UserSettingsOptions {
+  readBack?: 'window' | 'file';
+}
+
+/** A value as text with the keys of its objects in order, so that two values compare as their JSON does whatever order they were written in. */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(',')}]`;
+  }
+  if (typeof value === 'object' && value !== null) {
+    return `{${Object.entries(value)
+      .sort(([first], [second]) => (first < second ? -1 : 1))
+      .map(([key, each]) => `${JSON.stringify(key)}:${canonicalJson(each)}`)
+      .join(',')}}`;
+  }
+  return value === undefined ? 'undefined' : JSON.stringify(value);
+}
+
+/**
+ * Waits, up to 30 s, until the local window reads the user setting `key` as written. With `window` (the default) that
+ * is its own value (as none for `undefined`), in canonical JSON; with `file`, for a key shown to be unreadable that way,
+ * only that the user's settings hold a value for it (or none for `undefined`) as the window reads them. The failure
+ * names the key, the value written and, for `window`, the value read.
+ */
+async function readBackOfSetting(
+  key: string,
+  value: unknown,
+  readBack: 'window' | 'file',
+): Promise<void> {
+  let read: unknown;
+  try {
+    await waitFor(
+      `the local window to read ${key} as ${canonicalJson(value)}${readBack === 'file' ? ' (in the user settings)' : ''}`,
+      async () => {
+        if (value === undefined || readBack === 'file') {
+          return (await userScopeHolds('local', key)) === (value !== undefined);
+        }
+        // The user's own value, not `get`'s: for an object setting with defaults the merged value never equals what was written.
+        read = await userValueIn('local', key);
+        return canonicalJson(read) === canonicalJson(value);
+      },
+      30_000,
+    );
+  } catch (caught) {
+    throw new Error(
+      `${caught instanceof Error ? caught.message : 'the wait failed'}; the value written: ${canonicalJson(value)}${readBack === 'file' ? '' : `; the value read: ${canonicalJson(read)}`}`,
+      {cause: caught},
+    );
+  }
+}
+
+/**
+ * Waits, up to 30 s a key, until the local window reads as its user value, for each key a row has written or restored
+ * over, what the file holds now (none for a key it lacks): the wait that follows a `restoreUserSettings`, whose rewrite
+ * the editor picks up later than the next command may run.
+ */
+async function settledOnFile(): Promise<void> {
+  const file = userSettingsFile();
+  const held = existsSync(file)
+    ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)
+    : {};
+  for (const key of touchedKeys) {
+    await readBackOfSetting(key, held[key], 'window');
+  }
+}
+
+/**
+ * Rewrites the launch's user settings with `change` applied to them, and waits until the local window reads each changed
+ * key back as written (30 s a key, 100 ms apart), instead of a sleep the editor may outlast on a loaded machine. A call
+ * made before the local window's agent has activated waits for it first, as a command to the window does. An empty
+ * `change` waits until the window reads the file as it is now, which is what a row that restored the settings needs.
+ */
 export async function userSettings(
   change: Readonly<Record<string, unknown>>,
+  options: UserSettingsOptions = {},
 ): Promise<void> {
   const file = userSettingsFile();
   const current = existsSync(file)
     ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)
     : {};
+  if (options.readBack === 'file') {
+    for (const [key, value] of Object.entries(change)) {
+      // Presence says nothing of a change from one value to another: the old one already holds.
+      if (
+        value !== undefined &&
+        key in current &&
+        canonicalJson(current[key]) !== canonicalJson(value)
+      ) {
+        throw new Error(
+          `userSettings with readBack 'file' cannot show that ${key} changed from ${canonicalJson(current[key])} to ${canonicalJson(value)}: it shows only that a value is there, so use the default read-back`,
+        );
+      }
+    }
+  }
   writeFileSync(file, JSON.stringify({...current, ...change}, null, 2));
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  for (const key of Object.keys(change)) {
+    touchedKeys.add(key);
+  }
+  await waitUntil('window local to activate its agent', () =>
+    windowEvents('local').some(each => each.event === 'activated'),
+  );
+  if (Object.keys(change).length === 0) {
+    await settledOnFile();
+    return;
+  }
+  for (const [key, value] of Object.entries(change)) {
+    await readBackOfSetting(key, value, options.readBack ?? 'window');
+  }
 }
 
 /** What window `name` found of its terminals when asked for the active one's buffer. */
@@ -2018,6 +2128,14 @@ export async function userScopeHolds(
   return (
     (await reported(name, 'setting', 'acceptance.agent.setting', settingId))
       ?.inUserScope === true
+  );
+}
+
+/** The value the user's settings hold for the setting `settingId`, as window `name` reads it: the user's own, not merged with the setting's default; null for none. */
+async function userValueIn(name: string, settingId: string): Promise<unknown> {
+  return (
+    (await reported(name, 'setting', 'acceptance.agent.setting', settingId))
+      ?.userValue ?? null
   );
 }
 
