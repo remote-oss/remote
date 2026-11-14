@@ -1937,8 +1937,17 @@ export function readUserSettings(): string | undefined {
   return existsSync(file) ? readFileSync(file, 'utf8') : undefined;
 }
 
+/** The user settings keys a row has written or restored over, which a settle waits on the window to read as the file holds them now. */
+const touchedKeys = new Set<string>();
+
 /** Puts the launch's user settings file back to the bytes `readUserSettings` gave, or removes it when it had none. */
 export function restoreUserSettings(bytes: string | undefined): void {
+  const before = readUserSettings();
+  if (before !== undefined) {
+    for (const key of Object.keys(JSON.parse(before) as object)) {
+      touchedKeys.add(key);
+    }
+  }
   if (bytes === undefined) {
     rmSync(userSettingsFile(), {force: true});
   } else {
@@ -1999,9 +2008,25 @@ async function readBackOfSetting(
 }
 
 /**
+ * Waits, up to 30 s a key, until the local window reads as its user value, for each key a row has written or restored
+ * over, what the file holds now (none for a key it lacks): the wait that follows a `restoreUserSettings`, whose rewrite
+ * the editor picks up later than the next command may run.
+ */
+async function settledOnFile(): Promise<void> {
+  const file = userSettingsFile();
+  const held = existsSync(file)
+    ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)
+    : {};
+  for (const key of touchedKeys) {
+    await readBackOfSetting(key, held[key], 'window');
+  }
+}
+
+/**
  * Rewrites the launch's user settings with `change` applied to them, and waits until the local window reads each changed
  * key back as written (30 s a key, 100 ms apart), instead of a sleep the editor may outlast on a loaded machine. A call
- * made before the local window's agent has activated waits for it first, as a command to the window does.
+ * made before the local window's agent has activated waits for it first, as a command to the window does. An empty
+ * `change` waits until the window reads the file as it is now, which is what a row that restored the settings needs.
  */
 export async function userSettings(
   change: Readonly<Record<string, unknown>>,
@@ -2026,12 +2051,16 @@ export async function userSettings(
     }
   }
   writeFileSync(file, JSON.stringify({...current, ...change}, null, 2));
-  if (Object.keys(change).length === 0) {
-    return;
+  for (const key of Object.keys(change)) {
+    touchedKeys.add(key);
   }
   await waitUntil('window local to activate its agent', () =>
     windowEvents('local').some(each => each.event === 'activated'),
   );
+  if (Object.keys(change).length === 0) {
+    await settledOnFile();
+    return;
+  }
   for (const [key, value] of Object.entries(change)) {
     await readBackOfSetting(key, value, options.readBack ?? 'window');
   }
