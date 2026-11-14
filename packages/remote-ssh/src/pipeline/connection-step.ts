@@ -86,9 +86,11 @@ export function openConnectionStep(
   dependencies: ConnectionStepDependencies,
 ): ConnectSteps['openConnection'] {
   return async (input, terms, cancellation) => {
+    const hostString =
+      input.connectionKey ?? payloadOf(sshTargetOf(input.target));
     const acquired = await dependencies.acquire({
       ...dependencies.requestFor(input, terms),
-      hostString: input.connectionKey ?? payloadOf(sshTargetOf(input.target)),
+      hostString,
       cancellation,
     });
     if (acquired.kind === 'refused') {
@@ -146,6 +148,11 @@ export function openConnectionStep(
     // A connection another window set up is reused as it is: the platform its record names decides the channel, not an
     // entry of the settings.
     const record = outcome.sharedRecord ?? undefined;
+    dependencies.logger.trace(
+      record === undefined
+        ? `the stored data has no record of host ${hostString}`
+        : `the stored data has a record of host ${hostString}: ${record.operatingSystem}`,
+    );
     const reused =
       record === undefined
         ? terms

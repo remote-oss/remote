@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import type {ConnectInput, ConnectPhase, FailureHint} from 'lib-authority';
 import type {TransferPhase} from 'lib-server';
+import type {Level} from 'lib-log';
 import type {FailureHint as SshFailureHint} from 'lib-ssh';
 import type {ConnectOptions, PhaseEvent} from '../../src/pipeline/connect.ts';
 import {connectorOf, type SshConnector} from '../../src/pipeline/connector.ts';
@@ -37,6 +38,7 @@ function connectorFor(
   changes: Partial<ConnectSteps> = {},
   terminalMode: () => boolean = () => false,
   resolveEnded?: (hints: readonly FailureHint[]) => void,
+  level: Level = 'info',
 ): {
   connector: SshConnector;
   recording: Recording;
@@ -44,7 +46,7 @@ function connectorFor(
   environments: Array<Readonly<Record<string, string>>>;
   logged: () => string[];
 } {
-  const {recording, options, logSink} = setup();
+  const {recording, options, logSink} = setup(level);
   const revealed: string[] = [];
   const environments: Array<Readonly<Record<string, string>>> = [];
   return {
@@ -91,6 +93,54 @@ describe('the connector over the connect pipeline', () => {
     const {connector, environments} = connectorFor();
     await connector.connect(HOST_INPUT);
     deepStrictEqual(environments, [{}]);
+  });
+
+  describe('F-2003 BR-9 item 2 (#2538): the terminal environments update is a line at trace', () => {
+    /** The lines about the terminal environments that a connect wrote at `level`. */
+    async function environmentLines(
+      level: Level,
+      changes: Partial<ConnectSteps> = {},
+    ): Promise<string[]> {
+      const {connector, logged} = connectorFor(
+        changes,
+        () => false,
+        undefined,
+        level,
+      );
+      await connector.connect(HOST_INPUT);
+      return logged().filter(line => line.includes('terminal environments'));
+    }
+
+    it('names the variables the window’s terminals got, never their values', async () => {
+      deepStrictEqual(
+        await environmentLines('trace', {
+          planForwarding: () => Promise.resolve(LINKED),
+        }),
+        ['the terminal environments were updated: SSH_AUTH_SOCK, DISPLAY'],
+      );
+    });
+
+    it('says there were none when the plans set no variable', async () => {
+      deepStrictEqual(await environmentLines('trace'), [
+        'the terminal environments were updated: no variables',
+      ]);
+    });
+
+    it('writes nothing about them at debug', async () => {
+      deepStrictEqual(
+        await environmentLines('debug', {
+          planForwarding: () => Promise.resolve(LINKED),
+        }),
+        [],
+      );
+    });
+
+    it('writes nothing about them for a connect that fails, which leaves the variables as they were', async () => {
+      deepStrictEqual(
+        await environmentLines('trace', {openTunnel: tunnelFails}),
+        [],
+      );
+    });
   });
 
   it("F-2311 7.E6: a connect that fails leaves the window's terminal variables as they were", async () => {
