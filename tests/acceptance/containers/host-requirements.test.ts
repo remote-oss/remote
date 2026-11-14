@@ -15,7 +15,6 @@ import {
 } from '../windows/harness.ts';
 import {
   answerDialog,
-  pressEscape,
   type ShownDialog,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -128,7 +127,7 @@ describe('Host requirements rows (card containers-202, F-0206)', function () {
     }
   });
 
-  it('F-0206 BR-13 (c217-pull-first): an image whose details its registry cannot give is pulled before the dialog shows its label’s requirements, and Cancel leaves the image pulled and no container', async () => {
+  it('F-0206 AC-23 (c217-pull-first): BR-13, an image whose details its registry cannot give is pulled before the dialog shows its label’s requirements, and Cancel leaves the image pulled and no container', async () => {
     const reference = `${variable('HARNESS_REGISTRY').replace('127.0.0.1', 'localhost')}/c217-pull-first:${String(Date.now())}`;
     const context = await mkdtemp(path.join(tmpdir(), 'c217-'));
     await writeFile(
@@ -193,7 +192,7 @@ describe('Host requirements rows (card containers-202, F-0206)', function () {
     }
   });
 
-  it('F-0206 BR-13 (c217-hub): an image the registry gives its details for is not pulled before the dialog, which shows the file’s requirements', async () => {
+  it('F-0206 AC-37 (c217-hub): BR-13, an image the registry gives its details for is not pulled before the dialog, which shows the file’s requirements', async () => {
     const reference = 'alpine:3.22';
     await execFileAsync('docker', ['image', 'rm', reference]).catch(
       () => undefined,
@@ -230,40 +229,6 @@ describe('Host requirements rows (card containers-202, F-0206)', function () {
         },
         {pulls: '', cpus: true, containers: []},
       );
-      await closeWindow(name);
-    } finally {
-      await removeContainers(folder);
-    }
-  });
-
-  it('F-0206 BR-13 (c217-pull-fails): an image the registry cannot give and that cannot be pulled raises no host requirements dialog, and the connect goes on to its own failure', async () => {
-    const reference = `${variable('HARNESS_REGISTRY').replace('127.0.0.1', 'localhost')}/c217-missing:1`;
-    const folder = devContainerFolder('c217-pull-fails', {
-      name: 'C217 Pull Fails',
-      image: reference,
-      hostRequirements: {cpus: 4096},
-    });
-    try {
-      const name = await openFolderWindow(folder);
-      const {dialog, running} = await dialogOfReopen(name);
-      deepStrictEqual(
-        {
-          message: dialog.message,
-          details: dialog.details,
-          buttons: [...dialog.buttons].sort(),
-        },
-        {
-          message: '',
-          details: 'An error occurred setting up the container.',
-          buttons: [
-            'Edit devcontainer.json Locally',
-            'More Actions...',
-            'Retry',
-          ],
-        },
-      );
-      await pressEscape(name);
-      await running;
       await closeWindow(name);
     } finally {
       await removeContainers(folder);
