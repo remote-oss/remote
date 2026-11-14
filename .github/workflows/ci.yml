@@ -502,6 +502,15 @@ jobs:
           df -h / | tail -1
       - if: contains(matrix.part.launches, '@containers') || contains(matrix.part.launches, 'containers-podman')
         run: tools/install-podman
+      # the pinned OpenSSH client of the ssh-newclient launch (tools/install-openssh), cached under its version and digest;
+      # the harness finds it built, and builds it itself when this step did not run
+      - if: contains(matrix.part.launches, 'ssh-newclient') || contains(matrix.part.launches, '@ssh')
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/remote-oss
+          key: openssh-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/install-openssh') }}
+      - if: contains(matrix.part.launches, 'ssh-newclient') || contains(matrix.part.launches, '@ssh')
+        run: tools/install-openssh
       # the buildx plugin when the machine's Docker has none (the harness builds with `docker build --load`)
       - run: tools/install-buildx
       - run: tools/start-display
