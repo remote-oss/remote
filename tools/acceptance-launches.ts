@@ -177,6 +177,13 @@ export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
 ]);
 
 /** What a launch the renderer helpers read needs: the debugging port, and window titles they can find a window by. */
+/**
+ * The window's local ports for the launches whose rows connect many windows in a row (#2585, #2586): below the client's
+ * ephemeral port range, which on Linux starts at 32768, so no outgoing connection of the client holds a port the search
+ * judges free by connecting. Without a range the search picks from 49152 up, inside it.
+ */
+export const WINDOW_PORT_RANGE = '20000-20999';
+
 const RENDERER_LAUNCH = {
   kind: 'plain',
   debuggingPort: true,
@@ -1032,7 +1039,15 @@ export function launchesOf(root: string): Launch[] {
       },
     },
     // Its rows read the window's title and remote indicator, as the renderer helpers do.
-    {...RENDERER_LAUNCH, label: 'login-shells', suite: 'login-shells'},
+    {
+      ...RENDERER_LAUNCH,
+      label: 'login-shells',
+      suite: 'login-shells',
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
+      },
+    },
     {
       label: 'preconnect',
       kind: 'plain',
@@ -1078,6 +1093,7 @@ export function launchesOf(root: string): Launch[] {
       suite: 'default-ports',
       settings: {
         ...RENDERER_LAUNCH.settings,
+        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
         'remote.SSH.defaultForwardedPorts': [
           {name: 'web', remotePort: 8632, localPort: 18632},
         ],
