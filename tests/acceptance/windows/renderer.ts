@@ -2972,6 +2972,53 @@ export async function waitForDialogElsewhere(
   );
 }
 
+/**
+ * Waits until a page that carries window `name`'s title shows a dialog, and gives the dialog and the page's address.
+ * Two pages can carry one name, a window that came back beside the one that was there, and the window's own state
+ * does not tell them apart while a dialog keeps its agent from reporting; the page that shows the dialog is the one.
+ */
+export async function waitForDialogOfName(
+  name: string,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<DialogElsewhere> {
+  return settled(
+    () => `a dialog in a page that carries the name of window ${name}`,
+    async () => {
+      for (const page of await pages()) {
+        const address = page.webSocketDebuggerUrl;
+        if (
+          address !== undefined &&
+          titlesOfName(name, [page.title]).length > 0
+        ) {
+          const dialog = await evaluateAt<ShownDialog | null>(
+            address,
+            `page ${page.title}`,
+            DIALOG_EXPRESSION,
+          ).catch(() => null);
+          if (dialog !== null) {
+            return {dialog, address};
+          }
+        }
+      }
+      return undefined;
+    },
+    milliseconds,
+  );
+}
+
+/** The whole text of the dialog open in the page at `address`, or `undefined` when none is. */
+export async function dialogTextAt(
+  address: string,
+): Promise<string | undefined> {
+  return (
+    (await evaluateAt<string | null>(
+      address,
+      `page ${address}`,
+      `document.querySelector('${DIALOG_BOX}')?.textContent ?? null`,
+    )) ?? undefined
+  );
+}
+
 /** Clicks the button `label` of the dialog open in the page at `address`. */
 export async function answerDialogAt(
   address: string,
