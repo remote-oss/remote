@@ -54,31 +54,35 @@ describe('the user’s askpass setting with an empty SSH_ASKPASS and SSH_ASKPASS
     await closeAllButLocal();
   });
 
-  for (const [title, value] of [
-    ['AC-7 (c2596-empty), AC-16 (c2596-never) with the setting true', true],
-    ['AC-16 (c2596-never) with the setting false', false],
-  ] as const) {
-    it(`F-2309 ${title}: the password is asked in the VS Code input, and ssh runs with the extension’s own askpass and SSH_ASKPASS_REQUIRE=force`, async () => {
-      await withSettings({[EXTERNAL]: value, ...PLATFORMS});
-      answering([passwordRule()]);
-      const watched = await watchedConnect('password', 'as1', 40_000);
-      const forced = logins().filter(
-        each => each.SSH_ASKPASS_REQUIRE !== 'never',
-      );
-      deepStrictEqual(
-        {
-          inputs: watched.inputs.map(label =>
-            label.includes('Enter password for'),
-          ),
-          called: askpassCalls().length,
-          own: forced.map(each => each.SSH_ASKPASS !== ''),
-          required: forced.map(each => each.SSH_ASKPASS_REQUIRE),
-        },
-        {inputs: [true], called: 0, own: [true], required: ['force']},
-        recorded(),
-      );
-    });
+  /** The row of a login that is the extension's own: the input shows, and ssh runs with its askpass and `force`. */
+  async function ownLoginRow(value: boolean): Promise<void> {
+    await withSettings({[EXTERNAL]: value, ...PLATFORMS});
+    answering([passwordRule()]);
+    const watched = await watchedConnect('password', 'as1', 40_000);
+    const forced = logins().filter(
+      each => each.SSH_ASKPASS_REQUIRE !== 'never',
+    );
+    deepStrictEqual(
+      {
+        inputs: watched.inputs.map(label =>
+          label.includes('Enter password for'),
+        ),
+        called: askpassCalls().length,
+        own: forced.map(each => each.SSH_ASKPASS !== ''),
+        required: forced.map(each => each.SSH_ASKPASS_REQUIRE),
+      },
+      {inputs: [true], called: 0, own: [true], required: ['force']},
+      recorded(),
+    );
   }
+
+  it('F-2309 AC-7, AC-16 (c2596-empty-never): with the setting true the password is asked in the VS Code input, and ssh runs with the extension’s own askpass and SSH_ASKPASS_REQUIRE=force', async () => {
+    await ownLoginRow(true);
+  });
+
+  it('F-2309 AC-16 (c2596-never-off): with the setting false the password is asked in the VS Code input, and ssh runs with the extension’s own askpass and SSH_ASKPASS_REQUIRE=force', async () => {
+    await ownLoginRow(false);
+  });
 
   it('F-2309 AC-8 (c2596-terminal-inherited): in terminal mode the behaviour is the same with the setting true and false, and ssh keeps the inherited SSH_ASKPASS and SSH_ASKPASS_REQUIRE', async () => {
     const seen: Array<{inputs: string[]; env: string[]}> = [];
