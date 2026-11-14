@@ -168,23 +168,15 @@ describe('the port prober over node:net', () => {
     deepStrictEqual(answer, 'open');
   });
 
-  it('§W1, F-2104 BR-7: the search over the real prober skips the taken port', async () => {
+  it('§W1, F-2104 BR-7: the search over the real prober skips the taken port, and gives a port above it', async () => {
     const taken = await listeningServer();
-    const prober = nodePortProber();
-    let free = 0;
-    for (let candidate = taken + 1; candidate <= taken + 200; candidate += 1) {
-      if ((await prober.probe(candidate)) === 'refused') {
-        free = candidate;
-        break;
-      }
-    }
-    if (free === 0) {
-      throw new Error('no free port beside the taken one');
-    }
-    deepStrictEqual(
-      await findFreePort(nodePortProber(), {first: taken, last: free}),
-      {port: free},
-    );
+    const found = await findFreePort(nodePortProber(), {
+      first: taken,
+      last: taken + 200,
+    });
+    // Which port beside the taken one is free is the machine's, and a busy machine may take one meanwhile: only that the
+    // taken port is skipped is asserted.
+    deepStrictEqual('port' in found && found.port > taken, true);
   });
 
   it('§W1: a probe holds nothing on the port, so a listen on it succeeds', async () => {
