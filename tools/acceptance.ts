@@ -29,6 +29,7 @@ import {
   prepareRunDistros,
   type RunWslDistros,
 } from './acceptance-wsl.ts';
+import {pinnedSshClient} from './acceptance-ssh-client.ts';
 import {staleRefusal} from './acceptance-stale.ts';
 import {ghcrLayer, prepareRunTemplates} from './acceptance-templates.ts';
 import {spawn} from 'node:child_process';
@@ -273,6 +274,8 @@ export interface HarnessVariables {
   HARNESS_REGISTRY?: string;
   /** The `wsl` launch's distros by role (installed, wsl2, wsl1) as JSON, when a chosen launch asks for them. */
   HARNESS_WSL_DISTROS?: string;
+  /** The path of the pinned OpenSSH client's `ssh`, for a run with a launch that asks for it (card #2600). */
+  HARNESS_SSH_CLIENT?: string;
   /** The run's registry as its templates' ids name it (`localhost:<port>`), when a chosen launch asks for templates. */
   HARNESS_TEMPLATE_REGISTRY?: string;
   /** The URL of the run's template index on the download host, when a chosen launch asks for templates; harness-only. */
@@ -389,6 +392,8 @@ export interface HarnessDependencies {
     runId: string,
     runFolder: string,
   ) => Promise<RunWslDistros>;
+  /** The pinned OpenSSH client's path, built once (tools/install-openssh), for a launch with `sshClient: 'pinned'`. */
+  pinnedSshClient: () => string;
   /** Publishes the run's templates into the registry at `address` and writes the run's index; the run's dev container image names its `mini` template; gives the templates' registry. */
   prepareTemplates: (
     root: string,
@@ -1371,6 +1376,9 @@ async function prepare(
   if (wslDistros !== undefined) {
     stops.push(() => wslDistros.unregister());
   }
+  const sshClient = chosen.some(launch => launch.sshClient === 'pinned')
+    ? dependencies.pinnedSshClient()
+    : undefined;
   const templateRegistry =
     registry !== undefined && chosen.some(launch => launch.templates === true)
       ? await dependencies.prepareTemplates(
@@ -1404,6 +1412,7 @@ async function prepare(
     ...(wslDistros === undefined
       ? {}
       : {HARNESS_WSL_DISTROS: JSON.stringify(wslDistros.distros)}),
+    ...(sshClient === undefined ? {} : {HARNESS_SSH_CLIENT: sshClient}),
     ...(templateRegistry === undefined || templateIndex === undefined
       ? {}
       : {
@@ -2894,6 +2903,12 @@ if (isMainModule(import.meta.url)) {
             runId,
             MINIROOTFS,
             url => downloadWithRetry(url),
+            console.error.bind(console),
+          ),
+        pinnedSshClient: () =>
+          pinnedSshClient(
+            runCommand,
+            REPOSITORY_ROOT,
             console.error.bind(console),
           ),
         startRegistry: runId =>

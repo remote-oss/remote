@@ -273,6 +273,11 @@ class FakeHarness implements HarnessDependencies {
     });
   };
 
+  readonly pinnedSshClient = (): string => {
+    this.calls.push('pinned ssh client built');
+    return '/cache/remote-oss/openssh-10.6p2-9ae44872090c/bin/ssh';
+  };
+
   readonly prepareTemplates = (
     root: string,
     runFolder: string,

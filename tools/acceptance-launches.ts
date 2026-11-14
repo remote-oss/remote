@@ -42,6 +42,12 @@ interface LaunchCommon {
    */
   wslDistros?: true;
   /**
+   * Whether the launch's Remote - SSH runs the pinned OpenSSH client (`tools/install-openssh`, card #2600) through
+   * `remote.SSH.path`, which its settings name as `${HARNESS_SSH_CLIENT}`: the run builds the client once and passes its
+   * path as HARNESS_SSH_CLIENT, and a run that cannot build it refuses the launch.
+   */
+  sshClient?: 'pinned';
+  /**
    * Whether the run publishes its templates into its registry and serves its template index for this launch; it starts
    * the registry too. The index is REMOTE_OSS_TEMPLATE_INDEX, and the registry as the templates name it
    * HARNESS_TEMPLATE_REGISTRY.
@@ -524,7 +530,10 @@ export function withRunTokens<Value>(
   );
 }
 
-/** The harness variables a launch's settings and host setup may name, as `${<name>}`: the download host's bases (a WSL distro's too), its port and its certificate file. */
+/**
+ * The harness variables a launch's settings and host setup may name, as `${<name>}`: the download host's bases (a WSL
+ * distro's too), its port and its certificate file, and the pinned OpenSSH client's path.
+ */
 const HARNESS_BASE_NAMES: readonly string[] = [
   'HARNESS_DOWNLOADS_HTTP',
   'HARNESS_DOWNLOADS_HTTPS',
@@ -533,6 +542,7 @@ const HARNESS_BASE_NAMES: readonly string[] = [
   'HARNESS_DOWNLOADS_PORT',
   'HARNESS_DOWNLOADS_CERTIFICATE',
   'HARNESS_DOWNLOADS_DISTRO_BASE',
+  'HARNESS_SSH_CLIENT',
 ];
 
 /**
