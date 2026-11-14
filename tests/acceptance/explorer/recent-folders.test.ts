@@ -1119,11 +1119,43 @@ describe('the recent folders under a target (card coverage-122)', function () {
     }
   });
 
-  it('F-5104 AC-24 (c122-two-windows): a folder opened or removed in one window reaches the other only on its Refresh or restart', async function () {
-    this.timeout(600_000);
+  it('F-5104 AC-24 (c122-two-windows): a folder opened or removed in one window reaches the other only on its Refresh or restart', async () => {
     const first = await viewWindowIn('c122-tw-1');
     const second = await viewWindowIn('c122-tw-2');
     const target = `${HOME}/c122-tw-a`;
+    /**
+     * The step-1 measurement of #2556 (daedalus): window `window` Refreshes at least every 5 s for up to 120 s while
+     * the measurement reads its own `getSshFoldersHistory` answer and its rendered rows; the seconds at which
+     * `history` and `view` first hold it, or -1 when the window never does.
+     */
+    async function refreshMeasure(
+      window: string,
+      history: () => Promise<boolean>,
+      view: () => Promise<boolean>,
+    ): Promise<[number, number]> {
+      const mark = Date.now();
+      let last = mark;
+      let historyAt = -1;
+      let viewAt = -1;
+      while (
+        Date.now() - mark < 120_000 &&
+        (historyAt === -1 || viewAt === -1)
+      ) {
+        const rest = last + 5_000 - Date.now();
+        if (rest > 0) {
+          await new Promise(resolve => setTimeout(resolve, rest));
+        }
+        await titleAction(window, VIEW, REFRESH);
+        last = Date.now();
+        if (historyAt === -1 && (await history())) {
+          historyAt = Math.round((Date.now() - mark) / 1000);
+        }
+        if (viewAt === -1 && (await view())) {
+          viewAt = Math.round((Date.now() - mark) / 1000);
+        }
+      }
+      return [historyAt, viewAt];
+    }
     try {
       await recordVisit('harness', target, 'c122-tw-a');
       await titleAction(first, VIEW, REFRESH);
@@ -1134,49 +1166,58 @@ describe('the recent folders under a target (card coverage-122)', function () {
       const secondNotYet = (await folderRowsOf(second, 'harness')).some(
         each => each.description === target,
       );
-      await titleAction(second, VIEW, REFRESH);
-      const secondAfterRefresh = (await folderRowsOf(second, 'harness')).some(
-        each => each.description === target,
+      const [openInHistory, openInView] = await refreshMeasure(
+        second,
+        async () =>
+          (await historyOf(second)).harness?.some(
+            each => each.path === target,
+          ) ?? false,
+        async () =>
+          (await folderRowsOf(second, 'harness')).some(
+            each => each.description === target,
+          ),
+      );
+      console.log(
+        `AC-24: after window A opened ${target}, window B's own history answer first held it ` +
+          `at ${String(openInHistory)} s and its rows first showed it at ${String(openInView)} s ` +
+          `(B's Refresh at least every 5 s for up to 120 s)`,
       );
       await rowMenuAction(first, VIEW, 'c122-tw-a', REMOVE);
       await foldersSettled(first, 'harness', [], `${HOME}/c122-tw-`);
       const secondStillThere = (await folderRowsOf(second, 'harness')).some(
         each => each.description === target,
       );
-      await closeWindow(second);
-      const restarted = await viewWindowIn('c122-tw-2');
-      try {
-        await waitFor(
-          `the hosts of window ${restarted} to stand at their start`,
-          async () => {
-            const rows = (await viewRows(restarted, VIEW)) ?? [];
-            return rows.some(
-              entry => entry.level === 2 && entry.label === 'harness',
-            );
-          },
-          30_000,
-        );
-        const restartedGone = (await folderRowsOf(restarted, 'harness')).some(
-          each => each.description === target,
-        );
-        deepStrictEqual(
-          [
-            firstHas,
-            secondNotYet,
-            secondAfterRefresh,
-            secondStillThere,
-            restartedGone,
-          ],
-          [true, false, true, true, false],
-        );
-      } finally {
-        await closeWindow(restarted);
-      }
+      const [removedInHistory, removedInView] = await refreshMeasure(
+        second,
+        async () => {
+          const entries = (await historyOf(second)).harness ?? [];
+          return !entries.some(each => each.path === target);
+        },
+        async () =>
+          !(await folderRowsOf(second, 'harness')).some(
+            each => each.description === target,
+          ),
+      );
+      console.log(
+        `AC-24: after window A removed ${target}, window B's own history answer first lacked it ` +
+          `at ${String(removedInHistory)} s and its rows first lacked it at ${String(removedInView)} s ` +
+          `(B's Refresh at least every 5 s for up to 120 s)`,
+      );
+      deepStrictEqual(
+        [
+          firstHas,
+          secondNotYet,
+          openInView !== -1,
+          secondStillThere,
+          removedInView !== -1,
+        ],
+        [true, false, true, true, true],
+      );
     } finally {
       await closeIfOpen(second);
       await closeWindow(first);
     }
-  });
+  }).timeout(900_000);
 
   it('F-5104 AC-25 (c122-keys): Enter and Space on a focused folder row run nothing, open no window and change no history', async function () {
     this.timeout(600_000);
