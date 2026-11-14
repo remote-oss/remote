@@ -77,7 +77,8 @@ export const FORWARDING_PROHIBITED_HINT: FailureHint = {
 /**
  * Classifies the error lines of one run, in the order `ssh` wrote them. Only the lines before `Authenticated to` are
  * ssh's own diagnostics: a login's startup files run after it, and what they print is remote text. So every rule reads
- * that window, in its anchored form. The four rules for failures ssh reports after authentication (forwarding
+ * that window; the two timeout forms are the only ones not anchored: the exact, case-sensitive timeout text counts
+ * wherever it stands in a line. The four rules for failures ssh reports after authentication (forwarding
  * prohibited or disabled, a broken pipe, a closed connection) also read the later lines, only when ssh itself exited
  * with 255. A run in which no authentication was seen has no window to cut: all its lines count.
  */

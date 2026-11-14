@@ -1,7 +1,9 @@
 /**
  * @fileoverview The forms `ssh` writes on its error output that the classifier recognises, and what each one means.
  * A form is a regular expression anchored at the start of a line: a text in the middle of a line, such as remote text a
- * startup file prints, is not ssh's message.
+ * startup file prints, is not ssh's message. The two timeout forms are the exception: a reason comes from ssh's error
+ * text containing the exact, case-sensitive "Connection timed out" or "Operation timed out" anywhere in a line, so
+ * those two match the contained text.
  */
 
 /** A failure kind, closed: every failure maps to exactly one. */
@@ -83,13 +85,15 @@ export const NETWORK_RULES: readonly NetworkRule[] = [
     kind: 'unreachable',
     reason: 'S142',
   },
+  // The timeout text counts anywhere in the line, case-sensitive - not only the anchored "connect to host" line, so
+  // "Connection timed out during banner exchange" gives the reason too.
   {
-    pattern: connectError('Connection timed out'),
+    pattern: /Connection timed out/,
     kind: 'timeout',
     reason: 'S137',
   },
   {
-    pattern: connectError('Operation timed out'),
+    pattern: /Operation timed out/,
     kind: 'timeout',
     reason: 'S140',
   },

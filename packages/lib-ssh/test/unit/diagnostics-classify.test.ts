@@ -234,6 +234,76 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
     );
   });
 
+  it('F-2105.BR-10: the banner-exchange timeout line names its reason', () => {
+    deepStrictEqual(
+      classifyRun(
+        ['Connection timed out during banner exchange'],
+        255,
+        'connection',
+        'shared',
+      ),
+      offline('timeout', 'S137'),
+    );
+  });
+
+  it('F-2105.BR-10: the kex read timeout line names its reason', () => {
+    deepStrictEqual(
+      classifyRun(
+        ['kex_exchange_identification: read: Connection timed out'],
+        255,
+        'connection',
+        'shared',
+      ),
+      offline('timeout', 'S137'),
+    );
+  });
+
+  it('F-2105.BR-10: the banner-exchange operation timeout line names its reason', () => {
+    deepStrictEqual(
+      classifyRun(
+        ['Operation timed out during banner exchange'],
+        255,
+        'connection',
+        'shared',
+      ),
+      offline('timeout', 'S140'),
+    );
+  });
+
+  it('F-2105.AC-14: the other-case text gives no timeout reason', () => {
+    deepStrictEqual(
+      classifyRun(
+        ['ssh: connect to host h port 22: Connection Timed Out'],
+        255,
+        'connection',
+        'shared',
+      ),
+      classifyRun([], 255, 'connection', 'shared'),
+    );
+  });
+
+  it('F-2105.AC-14: the lower-case text gives no timeout reason', () => {
+    deepStrictEqual(
+      classifyRun(['operation timed out'], 255, 'connection', 'shared'),
+      classifyRun([], 255, 'connection', 'shared'),
+    );
+  });
+
+  it('F-2105.BR-10: a denied line beside a timeout line still gives the permission-denied result', () => {
+    deepStrictEqual(
+      classifyRun(
+        [
+          'h@h: Permission denied (publickey).',
+          'Connection timed out during banner exchange',
+        ],
+        255,
+        'connection',
+        'shared',
+      ),
+      denied('Permission denied (publickey).'),
+    );
+  });
+
   it('F-2603.BR-3: a missing route names its reason', () => {
     deepStrictEqual(
       classifyRun(
@@ -986,6 +1056,7 @@ describe('endWithFullStop (the closing full stop of a reason text)', () => {
     'Authenticated to 127.0.0.1 ([127.0.0.1]:22) using "publickey".';
 
   const AFTER_AUTHENTICATION = [
+    'ssh: connect to host h port 22: Connection timed out',
     'curl: (28) Connection timed out after 5001 milliseconds',
     'ERROR: Your fridge is not running: Permission denied (fridge)',
     'backup.sh: Could not resolve hostname nas',
@@ -1099,7 +1170,6 @@ describe('endWithFullStop (the closing full stop of a reason text)', () => {
       'configuration file unreadable',
       "motd: Can't open user config file x: Permission denied",
     ],
-    ['network', 'motd: ssh: connect to host h port 22: Connection timed out'],
     ['host name', 'motd: hostname contains invalid characters'],
   ] as const) {
     it(`ADR-0010: the ${form} form counts only at the start of a line`, () => {
@@ -1109,6 +1179,18 @@ describe('endWithFullStop (the closing full stop of a reason text)', () => {
       );
     });
   }
+
+  it('F-2105.BR-10: the timeout text counts wherever it stands in the line, even with other text before it', () => {
+    deepStrictEqual(
+      classifyRun(
+        ['motd: ssh: connect to host h port 22: Connection timed out'],
+        255,
+        'connection',
+        'shared',
+      ),
+      offline('timeout', 'S137'),
+    );
+  });
 
   for (const [form, line] of [
     ['forwarding prohibited', `motd: ${PROHIBITED_LINE}`],
