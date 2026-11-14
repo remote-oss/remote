@@ -11,7 +11,6 @@ import path from 'node:path';
 import {
   appendScript,
   connectedWithin,
-  connectionLog,
   hostPort,
   inWindow,
   reloadWindow,
@@ -140,7 +139,7 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
       'fails',
       outcome => ({
         outcome,
-        negotiate: connectionLog().some(line =>
+        negotiate: outcome.log.some(line =>
           line.includes('Unable to negotiate'),
         ),
       }),
@@ -228,9 +227,7 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
       async (outcome, file) => ({
         outcome,
         plain: await plainSsh(file, 'c2593-refuse'),
-        logged: connectionLog().some(line =>
-          line.includes('c2593-refused-text'),
-        ),
+        logged: outcome.log.some(line => line.includes('c2593-refused-text')),
       }),
     );
     deepStrictEqual(
@@ -253,7 +250,7 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
       async (outcome, file) => ({
         outcome,
         plain: await plainSsh(file, 'c2593-unknown'),
-        badOption: connectionLog().some(line =>
+        badOption: outcome.log.some(line =>
           line.includes('Bad configuration option'),
         ),
         listed: await hostsListed(),
@@ -319,7 +316,7 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
       alias,
       ['LogVerbose kex.c:*,packet.c:*'],
       'connects',
-      () => connectionLog().filter(line => /debug[23]:/.test(line)).length > 0,
+      outcome => outcome.log.some(line => /debug[23]:/.test(line)),
       {
         settings: {
           ...settings,

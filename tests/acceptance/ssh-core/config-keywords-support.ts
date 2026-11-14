@@ -12,6 +12,7 @@ import {
   appendScript,
   closeWindow,
   connectedWithin,
+  connectionLog,
   openWindow,
   readUserSettings,
   recordLines,
@@ -81,6 +82,8 @@ export interface Outcome {
   dialog: string | undefined;
   buttons: string[] | undefined;
   progress: string[];
+  /** The lines the connection log gained from the start of this connect, and no earlier ones. */
+  log: string[];
   /** The window's title. */
   title: string;
   /** Milliseconds from the first progress line to the failure dialog; undefined when there was no dialog. */
@@ -118,6 +121,7 @@ export async function connectWith<Result>(
   await userSettings({'remote.SSH.configFile': file, ...options.settings});
   const settingsBefore = readUserSettings();
   const mark = Date.now();
+  const logMark = connectionLog().length;
   try {
     appendScript(options.script ?? dismissals(name));
     await openWindow(name, name);
@@ -141,6 +145,7 @@ export async function connectWith<Result>(
         progress: recordLines('progress', name)
           .filter(line => line.time >= mark)
           .map(line => line.question),
+        log: connectionLog().slice(logMark),
         title: await windowTitle(name),
         failedAfter:
           dialog === undefined
