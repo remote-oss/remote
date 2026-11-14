@@ -399,8 +399,9 @@ const SERVER_TREE_FUNCTIONS: readonly string[] = [
  * The sweep reaches a server's extension host and file watcher, which outlive a main process that ended. A process that
  * is not a server, such as the CLI's `command-shell` and its supervisor, which run the CLI file, is left alone. A
  * `grep` over the processes' command lines picks the candidates, run by `find` in as few batches as the argument limit
- * allows (a host without `find` hands every command line to one `grep`), so the sweep costs a handful of processes
- * however many the host runs, and only the candidates get the exact check.
+ * allows, each batch ending well whether or not it matched, so that `find` itself failing, or missing, is what hands every
+ * command line to one `grep` instead; the sweep costs a handful of processes however many the host runs, and only the
+ * candidates get the exact check.
  */
 const STOP_FUNCTIONS: readonly string[] = [
   'stop_servers() {',
@@ -413,11 +414,8 @@ const STOP_FUNCTIONS: readonly string[] = [
   '    fi',
   '    kill "$SERVER_PID" 2>/dev/null',
   '  done',
-  '  if have find; then',
-  '    SERVER_CANDIDATES=$(find /proc -mindepth 2 -maxdepth 2 -path \'/proc/[0-9]*/cmdline\' -exec grep -alsF -e "$DATA_DIR/bin/" -e "$DATA_DIR/cli/servers/" {} + 2>/dev/null)',
-  '  else',
+  '  SERVER_CANDIDATES=$(find /proc -mindepth 2 -maxdepth 2 -path \'/proc/[0-9]*/cmdline\' -exec sh -c \'FIRST=$1 SECOND=$2; shift 2; grep -alsF -e "$FIRST" -e "$SECOND" "$@"; exit 0\' sh "$DATA_DIR/bin/" "$DATA_DIR/cli/servers/" {} + 2>/dev/null) ||',
   '    SERVER_CANDIDATES=$(grep -alsF -e "$DATA_DIR/bin/" -e "$DATA_DIR/cli/servers/" /proc/[0-9]*/cmdline 2>/dev/null)',
-  '  fi',
   '  for PROC_FILE in $SERVER_CANDIDATES; do',
   '    PROC_DIR=${PROC_FILE%/cmdline}',
   '    SERVER_PID=${PROC_DIR#/proc/}',
