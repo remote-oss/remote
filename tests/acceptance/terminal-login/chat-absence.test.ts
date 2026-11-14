@@ -80,6 +80,51 @@ async function paletteListed(
   return true;
 }
 
+/**
+ * F-2606 AC-25 with `remote.SSH.experimental.chat` set to `value`: the clear command is listed, a refused connect's
+ * dialog has no Copilot button, the chat input offers no row, and the settings file marks the key.
+ */
+async function chatAbsenceRow(value: boolean): Promise<void> {
+  const saved = readUserSettings();
+  const name = `chat-harness-${String(value)}`;
+  let opened = false;
+  try {
+    await userSettings({
+      [EXPERIMENTAL_CHAT]: value,
+      ['chat.disableAIFeatures']: false,
+      ['remote.SSH.remotePlatform']: {...PLATFORMS},
+    });
+    await openHarnessWindow(name);
+    opened = true;
+    await connected(name);
+    const listed = await paletteListed(
+      name,
+      'Clear previous session',
+      CLEAR_COMMAND,
+    );
+    const refused = openRefusedWindow(`chat-refused-${String(value)}`);
+    const dialog = await waitForDialog(refused, 120_000);
+    const copilot = [...dialog.buttons].includes('Diagnose with Copilot');
+    await closeWindow(refused);
+    const offered = await chatOffersRemote(name);
+    await runFromPalette(name, 'Preferences: Open Settings (UI)');
+    await runFromPalette(name, 'Preferences: Open User Settings (JSON)');
+    const marked = await lineMarkedUnnecessary(
+      name,
+      'remote.SSH.experimental.chat',
+    );
+    deepStrictEqual(
+      {listed, copilot, offered, marked},
+      {listed: true, copilot: false, offered: false, marked: true},
+    );
+  } finally {
+    if (opened) {
+      await closeWindow(name);
+    }
+    restoreUserSettings(saved);
+  }
+}
+
 describe('the absence of the chat participant (card connect-137)', function () {
   this.timeout(300_000);
 
@@ -93,46 +138,9 @@ describe('the absence of the chat participant (card connect-137)', function () {
     }
   });
 
-  for (const value of [false, true]) {
-    it(`F-2606 AC-25: with remote.SSH.experimental.chat ${String(value)}, the clear command is listed, the dialog has no Copilot button, the chat input offers no row, and the settings file marks the key`, async () => {
-      const saved = readUserSettings();
-      const name = `chat-harness-${String(value)}`;
-      let opened = false;
-      try {
-        await userSettings({
-          [EXPERIMENTAL_CHAT]: value,
-          ['chat.disableAIFeatures']: false,
-          ['remote.SSH.remotePlatform']: {...PLATFORMS},
-        });
-        await openHarnessWindow(name);
-        opened = true;
-        await connected(name);
-        const listed = await paletteListed(
-          name,
-          'Clear previous session',
-          CLEAR_COMMAND,
-        );
-        const refused = openRefusedWindow(`chat-refused-${String(value)}`);
-        const dialog = await waitForDialog(refused, 120_000);
-        const copilot = [...dialog.buttons].includes('Diagnose with Copilot');
-        await closeWindow(refused);
-        const offered = await chatOffersRemote(name);
-        await runFromPalette(name, 'Preferences: Open Settings (UI)');
-        await runFromPalette(name, 'Preferences: Open User Settings (JSON)');
-        const marked = await lineMarkedUnnecessary(
-          name,
-          'remote.SSH.experimental.chat',
-        );
-        deepStrictEqual(
-          {listed, copilot, offered, marked},
-          {listed: true, copilot: false, offered: false, marked: true},
-        );
-      } finally {
-        if (opened) {
-          await closeWindow(name);
-        }
-        restoreUserSettings(saved);
-      }
-    });
-  }
+  it('F-2606 AC-25: with remote.SSH.experimental.chat false, the clear command is listed, the dialog has no Copilot button, the chat input offers no row, and the settings file marks the key', () =>
+    chatAbsenceRow(false));
+
+  it('F-2606 AC-25: with remote.SSH.experimental.chat true, the clear command is listed, the dialog has no Copilot button, the chat input offers no row, and the settings file marks the key', () =>
+    chatAbsenceRow(true));
 });

@@ -134,6 +134,14 @@ export function storageKeys(): string[] {
 /** How many local windows the rows opened, which numbers their folders. */
 let localWindows = 0;
 
+/** Whether a window with AI features off was opened by a row of this launch; the launch's own first window does not count. */
+let aiOffWindowOpened = false;
+
+/** Whether a row of this launch has opened a window with AI features off (card #2520). */
+export function aiOffWindowOpenedEarlier(): boolean {
+  return aiOffWindowOpened;
+}
+
 /**
  * Opens a new local window on a folder of its own, with AI features on or off, and gives its name. The setting is
  * written first, so the new window starts with it. A window with a folder has a title of its own, which the renderer
@@ -141,6 +149,7 @@ let localWindows = 0;
  */
 export async function localWindowWithAi(enabled: boolean): Promise<string> {
   await userSettings({'chat.disableAIFeatures': !enabled});
+  aiOffWindowOpened = aiOffWindowOpened || !enabled;
   localWindows += 1;
   const folder = path.join(
     variable('HARNESS_RUN_FOLDER'),
@@ -199,4 +208,18 @@ export async function paletteItemsWith(
     items = await paletteItems(name, text);
   }
   return items;
+}
+
+/** The titles of core's agent-host commands, which the palette never lists for "SSH". */
+export const AGENT_HOST_TITLES = [
+  'Connect to Remote Agent Host via SSH',
+  'Add Remote Agent Host...',
+  'Forget SSH Host Key',
+  'Agents: Add New SSH Host...',
+  'Agents: Configure SSH Hosts...',
+];
+
+/** What an item of the list is: its label, without the keybinding or the source core adds. */
+export function titlesOf(items: readonly string[]): string[] {
+  return items.map(item => item.trim());
 }

@@ -24,6 +24,11 @@ import {
   startRunRegistry,
   SYSTEM_CLOCK,
 } from './acceptance-registry.ts';
+import {
+  MINIROOTFS,
+  prepareRunDistros,
+  type RunWslDistros,
+} from './acceptance-wsl.ts';
 import {staleRefusal} from './acceptance-stale.ts';
 import {ghcrLayer, prepareRunTemplates} from './acceptance-templates.ts';
 import {spawn} from 'node:child_process';
@@ -136,6 +141,10 @@ import {
   resolveBinary,
   sortedEntries,
 } from './repository.ts';
+
+/** How many times the run folder's removal tries again on a Windows lock, and the wait between two tries. */
+const RUN_FOLDER_REMOVE_RETRIES = 10;
+const RUN_FOLDER_REMOVE_DELAY_MILLISECONDS = 500;
 
 /** The port mapping and the real runner, re-exported for the tests. */
 export {mappedPort} from './acceptance-run.ts';
@@ -262,6 +271,8 @@ export interface HarnessVariables {
   HARNESS_ENGINE_IMAGE?: string;
   /** The address (`host:port`) of the run's registry, when a chosen launch asks for one; VSCodium run only. */
   HARNESS_REGISTRY?: string;
+  /** The `wsl` launch's distros by role (installed, wsl2, wsl1) as JSON, when a chosen launch asks for them. */
+  HARNESS_WSL_DISTROS?: string;
   /** The run's registry as its templates' ids name it (`localhost:<port>`), when a chosen launch asks for templates. */
   HARNESS_TEMPLATE_REGISTRY?: string;
   /** The URL of the run's template index on the download host, when a chosen launch asks for templates; harness-only. */
@@ -300,6 +311,8 @@ export interface HarnessVariables {
   HARNESS_DOWNLOADS_LICENSED?: string;
   HARNESS_DOWNLOADS_LOCAL?: string;
   HARNESS_DOWNLOADS_LOG?: string;
+  /** The base a WSL 2 distro reaches the host at over HTTP, on a Windows run only; a WSL 1 distro uses HARNESS_DOWNLOADS_LOCAL. */
+  HARNESS_DOWNLOADS_DISTRO_BASE?: string;
   /** The run's download host certificate file, and the address of the fixture Feature tarball it serves on the runner's `localhost`. */
   HARNESS_DOWNLOADS_CERTIFICATE?: string;
   HARNESS_FEATURE_TARBALL_URL?: string;
@@ -371,6 +384,11 @@ export interface HarnessDependencies {
   startAgent: (socket: string) => Started;
   /** Starts the run's registry for a launch that asks for one; the VSCodium run only. */
   startRegistry: (runId: string) => Promise<RunRegistry>;
+  /** Imports the run's own WSL distros for a launch that asks for them, on a Windows client only. */
+  prepareWslDistros: (
+    runId: string,
+    runFolder: string,
+  ) => Promise<RunWslDistros>;
   /** Publishes the run's templates into the registry at `address` and writes the run's index; the run's dev container image names its `mini` template; gives the templates' registry. */
   prepareTemplates: (
     root: string,
@@ -1347,6 +1365,12 @@ async function prepare(
   if (registry !== undefined) {
     stops.push(() => registry.stop());
   }
+  const wslDistros = chosen.some(launch => launch.wslDistros === true)
+    ? await dependencies.prepareWslDistros(runId, runFolder)
+    : undefined;
+  if (wslDistros !== undefined) {
+    stops.push(() => wslDistros.unregister());
+  }
   const templateRegistry =
     registry !== undefined && chosen.some(launch => launch.templates === true)
       ? await dependencies.prepareTemplates(
@@ -1377,6 +1401,9 @@ async function prepare(
     ...(podman ? {HARNESS_ENGINE: 'podman' as const} : {}),
     ...(engineImage === undefined ? {} : {HARNESS_ENGINE_IMAGE: engineImage}),
     ...(registry === undefined ? {} : {HARNESS_REGISTRY: registry.address}),
+    ...(wslDistros === undefined
+      ? {}
+      : {HARNESS_WSL_DISTROS: JSON.stringify(wslDistros.distros)}),
     ...(templateRegistry === undefined || templateIndex === undefined
       ? {}
       : {
@@ -1928,7 +1955,14 @@ export async function runAcceptance(
         exitCode = exitCode === 0 ? 1 : exitCode;
       }
     }
-    rmSync(runFolder, {recursive: true, force: true});
+    // On a Windows client a file of the run folder can be held for a moment after its last user ends (a container's
+    // bind through WSL letting go), and rmSync then fails with EPERM or EBUSY at once unless it may try again.
+    rmSync(runFolder, {
+      recursive: true,
+      force: true,
+      maxRetries: RUN_FOLDER_REMOVE_RETRIES,
+      retryDelay: RUN_FOLDER_REMOVE_DELAY_MILLISECONDS,
+    });
     removeBundles(root);
   }
   return exitCode;
@@ -2852,6 +2886,16 @@ if (isMainModule(import.meta.url)) {
         windowAgentVsix: packageWindowAgent,
         languagePackVsix: packageLanguagePack,
         startAgent: startRunAgent,
+        prepareWslDistros: (runId, runFolder) =>
+          prepareRunDistros(
+            runCommand,
+            process.platform,
+            runFolder,
+            runId,
+            MINIROOTFS,
+            url => downloadWithRetry(url),
+            console.error.bind(console),
+          ),
         startRegistry: runId =>
           startRunRegistry(runCommand, SYSTEM_CLOCK, runId),
         prepareTemplates: (root, runFolder, address, devContainerImage) =>

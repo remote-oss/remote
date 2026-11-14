@@ -187,6 +187,10 @@ export async function startStandIn(
     const upstream = request(
       {...engine, method: incoming.method, path: incoming.url, headers},
       answer => {
+        if (outgoing.destroyed) {
+          answer.destroy();
+          return;
+        }
         outgoing.writeHead(Number(answer.statusCode), answer.rawHeaders);
         outgoing.flushHeaders();
         pipeline(answer, outgoing, () => undefined);

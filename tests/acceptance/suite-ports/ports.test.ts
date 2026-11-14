@@ -4,7 +4,13 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {recordLines} from '../suite/harness.ts';
 import casesFile from './cases.json' with {type: 'json'};
-import {containerAddress, listenAddress, reaches, serverPort} from './ports.ts';
+import {
+  containerAddress,
+  listenAddress,
+  portFacts,
+  reaches,
+  serverPort,
+} from './ports.ts';
 
 /** One ports case of the run, as tests/acceptance/suite-ports/cases.json lists it. */
 interface PortsCase {
@@ -51,11 +57,15 @@ describe(`the ports case "${portsCase?.label ?? 'unknown'}" of the VSCodium run`
 
   if (portsCase?.port !== undefined) {
     it(`${portsCase.cite}: the server listens on the case's port`, async () => {
-      strictEqual(
+      const listened = await serverPort();
+      const holds =
         portsCase.port === 'random'
-          ? portOutsideRanges(await serverPort())
-          : (await serverPort()) === portsCase.port,
+          ? portOutsideRanges(listened)
+          : listened === portsCase.port;
+      strictEqual(
+        holds,
         true,
+        holds ? undefined : await portFacts(portsCase.port ?? 0, listened),
       );
     });
   }
