@@ -5,7 +5,7 @@
 
 import type {Failed} from 'lib-authority';
 import type {ChannelFailure, HostChannel} from 'lib-host';
-import {createLogger} from 'lib-log';
+import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {
   CliServeParams,
@@ -406,8 +406,8 @@ export function emptyRecording(): Recording {
   };
 }
 
-/** An empty recording and the options of one connect that record its phases, with the sink its log writes to. */
-export function setup(): {
+/** An empty recording and the options of one connect that record its phases, with the sink its log writes to, at `level`. */
+export function setup(level: Level = 'info'): {
   recording: Recording;
   options: ConnectOptions;
   logSink: MemorySink;
@@ -424,7 +424,7 @@ export function setup(): {
       },
       maximumReconnectionAttempts: null,
       preconnectMilliseconds: 1000,
-      logger: createLogger(logSink, {minimumLevel: () => 'info'}),
+      logger: createLogger(logSink, {minimumLevel: () => level}),
       serve: {commit: 'c1', quality: 'insider'},
       useExecServer: true,
     },
