@@ -37,7 +37,7 @@ export interface PromptEditor {
    * cancelled it or the signal ended it.
    */
   maskedInput(
-    request: {placeholder: string},
+    request: {placeholder: string; message?: string},
     cancellation: AbortSignal,
   ): Promise<string | undefined>;
   /** The text for the display language of a template. */
@@ -74,6 +74,40 @@ export interface AttachedPromptSurface {
   dispose(): void;
 }
 
+/** The lines of ssh's `-v` output, which are for the log and never a message to the user. */
+const DEBUG_LINE = /^debug[123]: /;
+
+/**
+ * What ssh said since the last answer to a masked question. A masked question asked again with the placeholder of the
+ * one answered last has ssh's last line that is not a debug line as its message; every other question has none. The
+ * line is shown as ssh wrote it: ssh writes it before the connection token exists, so there is nothing in it to mask.
+ */
+class RetryMessage {
+  private answered: string | undefined;
+  private lastLine: string | undefined;
+
+  /** Takes in ssh's error-stream lines, in the order they came. */
+  hear(lines: readonly string[]): void {
+    for (const written of lines) {
+      const line = written.endsWith('\r') ? written.slice(0, -1) : written;
+      if (line !== '' && !DEBUG_LINE.test(line)) {
+        this.lastLine = line;
+      }
+    }
+  }
+
+  /** The message of a masked question with `placeholder`, or undefined when it has none. */
+  messageFor(placeholder: string): string | undefined {
+    return placeholder === this.answered ? this.lastLine : undefined;
+  }
+
+  /** Notes that the masked question with `placeholder` was answered: the lines before the answer say nothing of the next question. */
+  answer(placeholder: string): void {
+    this.answered = placeholder;
+    this.lastLine = undefined;
+  }
+}
+
 /** The text of a prompt part in the display language. */
 function describe(editor: PromptEditor, text: PromptText): string {
   return textOf(text, editor.translate);
@@ -81,19 +115,23 @@ function describe(editor: PromptEditor, text: PromptText): string {
 
 /**
  * Shows one question as the classifier chooses (a pick for a host key, a masked input otherwise) and gives the user's
- * answer, or nothing when it was dismissed, the signal ended it, or the editor could not show it.
+ * answer, or nothing when it was dismissed, the signal ended it, or the editor could not show it. A masked input has a
+ * message only where `retry` has heard ssh's lines and an answer to the same question; the default has heard
+ * nothing, so the terminal mode's questions have none.
  */
 export async function askQuestion(
   editor: PromptEditor,
   text: string,
   displayHost: string,
   cancellation: AbortSignal,
+  retry = new RetryMessage(),
 ): Promise<string | undefined> {
   try {
     return await askUser(
       editor,
       classifyPrompt(text, displayHost),
       cancellation,
+      retry,
     );
   } catch {
     // An editor that cannot show the question is the same as a user who dismissed it.
@@ -106,12 +144,19 @@ async function askUser(
   editor: PromptEditor,
   surface: PromptSurface,
   cancellation: AbortSignal,
+  retry: RetryMessage,
 ): Promise<string | undefined> {
   if (surface.surface === 'maskedInput') {
-    return editor.maskedInput(
-      {placeholder: describe(editor, surface.placeholder)},
+    const placeholder = describe(editor, surface.placeholder);
+    const message = retry.messageFor(placeholder);
+    const typed = await editor.maskedInput(
+      message === undefined ? {placeholder} : {placeholder, message},
       cancellation,
     );
+    if (typed !== undefined) {
+      retry.answer(placeholder);
+    }
+    return typed;
   }
   return editor.pick(
     {
@@ -133,6 +178,7 @@ export function attachPromptSurface(
   options: PromptSurfaceOptions,
 ): AttachedPromptSurface {
   const open = new Map<number, AbortController>();
+  const retry = new RetryMessage();
 
   function settle(promptId: number, answer: string | undefined): void {
     options.logger.info(answer === undefined ? DISMISSED_LINE : ANSWERED_LINE);
@@ -152,6 +198,7 @@ export function attachPromptSurface(
       text,
       options.displayHost,
       controller.signal,
+      retry,
     );
     open.delete(promptId);
     if (!controller.signal.aborted) {
@@ -178,11 +225,13 @@ export function attachPromptSurface(
         open.get(notice.promptId)?.abort();
         open.delete(notice.promptId);
         break;
+      case 'sshLines':
+        retry.hear(notice.lines);
+        break;
       case 'waitingForOtherWindow':
       case 'ownerChanged':
       case 'loginOwned':
       case 'loginStarted':
-      case 'sshLines':
         break;
       default:
         takeDownAll();
