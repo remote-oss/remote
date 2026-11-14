@@ -155,12 +155,18 @@ describe('acceptance-parts (card tooling-159)', () => {
     );
   });
 
-  it('tooling-159, tooling-168: host cases pack by their minutes like any group, a primer stays with its case, and a launch of the CLI-source editor is left out', () => {
+  it('tooling-159, tooling-168, #2355: host cases pack by their minutes like any group, a primer stays with its case, and a launch of the CLI-source editor or with WSL distros is left out', () => {
     const launches: Launch[] = [
       {label: 'case-one', runner: 'runner-remote', suite: 'suite-ports'},
       {label: 'case-two-prime', runner: 'runner-remote', suite: 'suite-ports'},
       {label: 'case-two', runner: 'runner-remote', suite: 'suite-ports'},
       {label: 'cli-copy', kind: 'plain', suite: 'cli-copy', cliSource: true},
+      {
+        label: 'distros',
+        runner: 'runner-remote',
+        suite: 'suite-ports',
+        wslDistros: true,
+      },
     ];
     deepStrictEqual(
       partsOfTable(
@@ -173,6 +179,7 @@ describe('acceptance-parts (card tooling-159)', () => {
             'case-two-prime': 5,
             'case-two': 10,
             'cli-copy': 1,
+            distros: 1,
           },
         },
         suiteFiles,
@@ -266,7 +273,7 @@ describe('acceptance-parts (card tooling-159)', () => {
     );
   });
 
-  it("tooling-159: the repository's parts make every launch but the genuine ones, each test file of a split launch exactly once, the same parts each time", () => {
+  it("tooling-159, #2355: the repository's parts make every launch but the genuine ones, cli-path and wsl, each test file of a split launch exactly once, the same parts each time", () => {
     const launches = launchesOf(REPOSITORY_ROOT);
     const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
     const parts = partsOfTable(launches, table, suiteFilesIn(REPOSITORY_ROOT));
@@ -291,6 +298,7 @@ describe('acceptance-parts (card tooling-159)', () => {
       '@explorer',
       '@containers',
       '!cli-path',
+      '!wsl',
     ]);
     deepStrictEqual(
       [

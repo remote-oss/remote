@@ -23,10 +23,10 @@ export const MINIROOTFS: PinnedFile = {
 };
 
 /** The distro the Windows job installs: WSL 2, and the default. */
-export const INSTALLED_DISTRO = 'Ubuntu-24.04';
+const INSTALLED_DISTRO = 'Ubuntu-24.04';
 
 /** The start of every distro a run imports, which the clean-up sweeps. */
-export const RUN_DISTRO_PREFIX = 'acceptance-';
+const RUN_DISTRO_PREFIX = 'acceptance-';
 
 /** The distros the `wsl` launch's rows use, by role; the rows read them from HARNESS_WSL_DISTROS. */
 export interface WslDistros {
@@ -94,7 +94,7 @@ export function staleDistros(listed: readonly ListedDistro[]): string[] {
 }
 
 /** Throws unless `bytes` have the digest `pinned` names. */
-export function checkPinned(bytes: Uint8Array, pinned: PinnedFile): void {
+function checkPinned(bytes: Uint8Array, pinned: PinnedFile): void {
   const digest = createHash('sha256').update(bytes).digest('hex');
   if (digest !== pinned.sha256) {
     throw new Error(

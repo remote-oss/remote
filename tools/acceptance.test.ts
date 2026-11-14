@@ -1577,7 +1577,7 @@ describe('acceptance', () => {
             client: 'vscodium',
           },
           containersOnly('ssh-containers'),
-          ...['wsl-linux', 'wsl-linux-web', 'wsl-linux-standdown'].map(
+          ...['wsl-linux', 'wsl-linux-web', 'wsl', 'wsl-linux-standdown'].map(
             label => ({
               folder: path.join('/run', `extensions-${label}`),
               files: [
