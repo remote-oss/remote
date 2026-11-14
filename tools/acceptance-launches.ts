@@ -1147,6 +1147,23 @@ export function launchesOf(root: string): Launch[] {
         REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
       },
     },
+    // The user's own SSH_ASKPASS program: the editor's environment names the run's stand-in askpass and puts the
+    // run's ssh recorder first on the PATH, and the extension's own inputs are real, so a row sees which of the two
+    // answered. The stand-ins are written into `<run>/askpass-bin` by the suite's `before` hook.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-askpass',
+      suite: 'ssh-askpass',
+      settings: {
+        'window.title': '[${rootName}]${remoteName}',
+        'window.dialogStyle': 'custom',
+      },
+      environment: {
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+        SSH_ASKPASS: '<run>/askpass-bin/answer',
+        PATH: '<run>/askpass-bin:<path>',
+      },
+    },
     // Dev Containers beside Remote - SSH, in a window on the SSH host: the commands that edit a configuration where it lives.
     {
       ...RENDERER_LAUNCH,
