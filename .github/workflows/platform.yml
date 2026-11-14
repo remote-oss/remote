@@ -115,10 +115,15 @@ jobs:
           $addressFile = Join-Path $env:RUNNER_TEMP 'engine-stand-in.address'
           $standInLog = Join-Path $env:RUNNER_TEMP 'engine-stand-in.log'
           $standIn = Start-Process node -PassThru -NoNewWindow -RedirectStandardOutput $standInLog -RedirectStandardError "$standInLog.err" -ArgumentList (Join-Path $env:GITHUB_WORKSPACE 'tools/engine-stand-in.ts'), '--engine', $env:DOCKER_HOST, '--address-file', $addressFile
-          for ($i = 0; $i -lt 30 -and -not (Test-Path $addressFile); $i++) { Start-Sleep 1 }
-          if (-not (Test-Path $addressFile)) { Get-Content $standInLog, "$standInLog.err" -ErrorAction SilentlyContinue; exit 1 }
+          # the file exists a moment before the address is in it, so the wait is for the address itself
+          $address = ''
+          for ($i = 0; $i -lt 30 -and $address -notmatch '^tcp://127\.0\.0\.1:\d+$'; $i++) {
+            Start-Sleep 1
+            $address = "$(Get-Content $addressFile -Raw -ErrorAction SilentlyContinue)".Trim()
+          }
+          if ($address -notmatch '^tcp://127\.0\.0\.1:\d+$') { "no stand-in address in $addressFile`: '$address'"; Get-Content $standInLog, "$standInLog.err" -ErrorAction SilentlyContinue; exit 1 }
           $engine = $env:DOCKER_HOST
-          $env:DOCKER_HOST = (Get-Content $addressFile).Trim()
+          $env:DOCKER_HOST = $address
           "the engine stand-in: $env:DOCKER_HOST, in front of $engine"
           docker version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}'
           if ($LASTEXITCODE -ne 0) { Get-Content $standInLog, "$standInLog.err" -ErrorAction SilentlyContinue; exit 1 }
@@ -128,7 +133,7 @@ jobs:
           "the engine stand-in's log, every bind source it rewrote among it:"
           Get-Content $standInLog, "$standInLog.err" -ErrorAction SilentlyContinue
           $rewritten = @(Select-String -Path $standInLog -SimpleMatch ' -> ').Count
-          "The Windows containers rows ran against tools/engine-stand-in.ts, a stand-in for Docker Desktop's engine endpoint (reading-2511-desktop-stand-in): it rewrote $rewritten bind sources to the distro's /mnt paths.`n" >> $env:GITHUB_STEP_SUMMARY
+          "The Windows launches ended with exit code ${launched}. Their containers rows reach the engine through tools/engine-stand-in.ts, a stand-in for Docker Desktop's engine endpoint (reading-2511-desktop-stand-in), which rewrote $rewritten bind sources to the distro's /mnt paths.`n" >> $env:GITHUB_STEP_SUMMARY
           exit $launched
       - if: always()
         run: pnpm acceptance:clean

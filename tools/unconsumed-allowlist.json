@@ -121,12 +121,132 @@
       "decision": "F-0207 BR-14 (2026-11-04): contributed; its effect belongs to the relays' cards (F-1003, F-1007, F-1008)"
     },
     {
+      "package": "remote-wsl",
+      "kind": "module",
+      "key": "src/activation/development-build.ts",
+      "card": "#2375",
+      "slice": "remote-wsl",
+      "decision": "pkg-1 builds the development-build guard; its caller is the resolver front (con-4, #2375), which removes this entry"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "contextKeys",
+      "key": "noWSLPath",
+      "card": "#2387",
+      "slice": "remote-wsl",
+      "decision": "the manifest's clauses test wsl.noWSLPath; cmd-6 (#2387) sets it and removes this entry"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "contextKeys",
+      "key": "openInNewWindow",
+      "card": "#2365",
+      "slice": "remote-wsl",
+      "decision": "the reference's remote-indicator clauses test wsl.openInNewWindow (F-7901 2.3, F-6701), and no spec says when it is set (F-6001 3.1: no scenario set it), so nothing sets it (R-60)"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "module",
+      "key": "src/text/neutral-text.ts",
+      "card": "#2386",
+      "slice": "remote-wsl",
+      "decision": "the one neutraliser for outside text (brief-remote-wsl section 2 item 4); its first user, cmd-5 (#2386), removes this entry"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "settings",
+      "key": "debug",
+      "card": "#2367",
+      "slice": "remote-wsl",
+      "decision": "pkg-3 (#2367) reads remote.WSL.debug for the daemon file and removes this entry"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "settings",
+      "key": "downloadInBackground",
+      "card": "#2378",
+      "slice": "remote-wsl",
+      "decision": "con-7 (#2378) reads it for the server's source and removes this entry"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "settings",
+      "key": "polling",
+      "card": "#2379",
+      "slice": "remote-wsl",
+      "decision": "con-8 (#2379) passes file-watcher polling to the server and removes this entry"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "settings",
+      "key": "pollingInterval",
+      "card": "#2379",
+      "slice": "remote-wsl",
+      "decision": "con-8 (#2379) passes the polling interval to the server and removes this entry"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "settings",
+      "key": "scriptLessStartup",
+      "card": "#2379",
+      "slice": "remote-wsl",
+      "decision": "con-8 (#2379) chooses the script-less start from it and removes this entry"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "settings",
+      "key": "serverDownloadUrlTemplate",
+      "card": "#2378",
+      "slice": "remote-wsl",
+      "decision": "con-7 (#2378) reads the download template and removes this entry"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "settings",
+      "key": "useShellEnvironment",
+      "card": "#2377",
+      "slice": "remote-wsl",
+      "decision": "con-6 (#2377) hands the shell environment to the window from it and removes this entry"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "settings",
+      "key": "wsl1ConnectionMethod",
+      "card": "#2365",
+      "slice": "remote-wsl",
+      "decision": "deprecated and read by nothing (F-6304, F-7901 2.2): declared so a user's settings.json keeps the key"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "settings",
+      "key": "wsl2ConnectionMethod",
+      "card": "#2365",
+      "slice": "remote-wsl",
+      "decision": "deprecated and read by nothing (F-6304, F-7901 2.2): declared so a user's settings.json keeps the key"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "views",
+      "key": "targetsWsl",
+      "card": "#2394",
+      "slice": "remote-wsl",
+      "decision": "tgt-2 (#2394) registers the WSL Targets tree and removes this entry"
+    },
+    {
       "package": "remote-containers",
       "kind": "module",
       "key": "src/engine/exec-server-engine-host.ts",
       "card": "#2071",
       "slice": "containers release 1",
       "decision": "brief-remote-ssh-engines §3.1 (2026-11-04): part (a)'s engine host over the exec server; the nested resolve wires it"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "contextKeys",
+      "key": "wslFeatureInstalled",
+      "card": "#2396",
+      "slice": "remote-wsl",
+      "decision": "core sets it on a Windows desktop, and only D9b (the outer-context module, tgt-4 #2396) may set it in the extension (ruling-2348-shared-context-key); D9b isn't built, so nothing in the package sets it yet"
     }
   ]
 }

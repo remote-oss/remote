@@ -512,6 +512,9 @@ const LAUNCH_ORDER = [
   'ssh-agents',
   'ssh-containers',
   'no-proposals',
+  'wsl-linux',
+  'wsl-linux-web',
+  'wsl-linux-standdown',
   'explorer',
   'explorer-alone',
   'explorer-trust',
@@ -606,6 +609,10 @@ describe('acceptance', () => {
     workspace.write(
       'packages/remote-explorer/package.json',
       JSON.stringify({engines: {vscode: '^1.139.0'}}),
+    );
+    workspace.write(
+      'packages/remote-wsl/package.json',
+      JSON.stringify({engines: {vscode: '^1.125.0'}}),
     );
     workspace.write(
       'tests/acceptance/fixtures/stand-ins/remote-oss.remote-ssh/package.json',
@@ -1522,8 +1529,9 @@ describe('acceptance', () => {
   });
 
   describe('installsOf (card tooling-30)', () => {
-    it('tooling-30, containers-09, connect-84: the run installs once into its folder, once into each explorer and containers launch’s folder with its own extension, and once into each genuine launch’s folder', () => {
+    it('tooling-30, containers-09, connect-84: the run installs once into its folder, once into each WSL, explorer and containers launch’s folder with its own extension, and once into each genuine launch’s folder', () => {
       workspace.write('dist/remote-explorer-0.0.0.vsix', '');
+      workspace.write('dist/remote-wsl-0.0.0.vsix', '');
       workspace.write('dist/remote-containers-0.1.0.vsix', '');
       workspace.write('dist/vscode-remote-extensionpack-0.1.0.vsix', '');
       /** The install of a launch that has the containers extension and nothing else beside the run's. */
@@ -1552,6 +1560,17 @@ describe('acceptance', () => {
             client: 'vscodium',
           },
           containersOnly('ssh-containers'),
+          ...['wsl-linux', 'wsl-linux-web', 'wsl-linux-standdown'].map(
+            label => ({
+              folder: path.join('/run', `extensions-${label}`),
+              files: [
+                '/dist/remote-ssh.vsix',
+                '/run/window-agent.vsix',
+                path.join(workspace.root, 'dist', 'remote-wsl-0.0.0.vsix'),
+              ],
+              client: 'vscodium',
+            }),
+          ),
           ...[
             'explorer',
             'explorer-alone',
