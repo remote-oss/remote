@@ -158,8 +158,14 @@ function textPlaces(): SecretPlace[] {
       ),
     },
     {hostLog: true},
-    {host: '/home/harness-2fa', excluded: ['.google_authenticator']},
-    {host: '/home/harness-expired'},
+    // A six-digit code can occur by chance in the minified bundles the server's archive unpacks into
+    // .vscodium-server-insiders/bin (#2516); the accounts have no other folder named bin.
+    {
+      host: '/home/harness-2fa',
+      excluded: ['.google_authenticator'],
+      excludedFolders: ['bin'],
+    },
+    {host: '/home/harness-expired', excludedFolders: ['bin']},
   ];
 }
 
