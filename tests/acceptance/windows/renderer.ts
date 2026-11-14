@@ -4526,6 +4526,33 @@ export async function settingRow(
   );
 }
 
+/** The value the control of the first setting of the Settings editor of window `name` shows; empty when it shows none. */
+export async function settingControlOf(name: string): Promise<string> {
+  return (
+    (await evaluate<string | null>(
+      name,
+      `(() => {
+        const select = document.querySelector('.settings-editor .setting-item-control select');
+        return select === null ? null : (select.selectedOptions[0]?.textContent ?? '');
+      })()`,
+    )) ?? ''
+  );
+}
+
+/** The option values of the dropdown of the first setting of the Settings editor of window `name`; empty when its control is no dropdown. */
+export async function settingControlOptions(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `(() => {
+      const select = document.querySelector('.settings-editor .setting-item-control select');
+      if (select === null) {
+        return [];
+      }
+      return [...select.options].map(option => option.value);
+    })()`,
+  );
+}
+
 /** The accessible labels of the terminal tabs of window `name` that carry a warning icon: each names the terminal and core's reason for the mark. */
 export async function markedTerminalTabs(name: string): Promise<string[]> {
   return evaluate<string[]>(
