@@ -389,6 +389,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
       }
       const dialog = await countdownIn(name, 60_000);
       const indicator = await statusBarText(name, 'status.host');
+      const reloadMark = containersLog().length;
       const began = Date.now();
       await answerDialog(name, 'Reload Window');
       await connectedToContainer(name);
@@ -412,17 +413,21 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
         started: logSince(mark).includes('Starting VS Code Server'),
       };
       await closeWindow(name);
-      deepStrictEqual(state, {
-        numbered: true,
-        scheduled: [true, true, true, true, true, true, true],
-        everyThirty: true,
-        tail: true,
-        countdown: true,
-        indicator: 'Reconnecting to Dev Container: c43-five...',
-        withinEightSeconds: true,
-        newPort: true,
-        started: true,
-      });
+      deepStrictEqual(
+        state,
+        {
+          numbered: true,
+          scheduled: [true, true, true, true, true, true, true],
+          everyThirty: true,
+          tail: true,
+          countdown: true,
+          indicator: 'Reconnecting to Dev Container: c43-five...',
+          withinEightSeconds: true,
+          newPort: true,
+          started: true,
+        },
+        `the reload took ${String(seconds)} s from the click to the connected window; the log since the click: ${JSON.stringify(logSince(reloadMark).filter(line => /Resolving Remote|Starting container|Starting VS Code Server|server listening|lifecycle commands finished|Reading configuration/.test(line)))}`,
+      );
     } finally {
       await removeContainers(folder);
     }
