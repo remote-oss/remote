@@ -8,6 +8,7 @@ import {deepStrictEqual} from 'node:assert';
 import {readUserSettings, restoreUserSettings} from '../windows/harness.ts';
 import {paletteItems} from '../windows/palette.ts';
 import {
+  aiOffWindowOpenedEarlier,
   AGENT_HOST_TITLES,
   closeQuietly,
   localWindowWithAi,
@@ -31,6 +32,11 @@ describe('the palette with AI features on beside core’s SSH agent hosts (card 
   });
 
   it('F-2008 AC-2 (c2500-palette-on): with AI features on, the "SSH" list is the AI-off list of the launch’s first window plus the agent sessions sidebar, with no agent-host title', async () => {
+    if (aiOffWindowOpenedEarlier()) {
+      throw new Error(
+        'an AI-off window opened earlier in this launch; AC-2 needs a fresh editor (#2520)',
+      );
+    }
     const offList = titlesOf(await paletteItems('local', 'SSH'));
     const window = await localWindowWithAi(true);
     let onList: string[];
