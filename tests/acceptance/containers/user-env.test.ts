@@ -10,6 +10,7 @@ import {
   containersLogSince,
   devContainerFolder,
   devContainersOf,
+  environmentOf,
   inWindow,
   reloadWindow,
   relaunch,
@@ -325,8 +326,13 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
         [containerId],
       ];
       if (JSON.stringify(seen) !== JSON.stringify(expected)) {
+        const hostValues = [
+          await environmentOf(name, 'MY_CONTAINER_VAR2'),
+          await environmentOf(name, 'MY_REMOTE_VAR3'),
+        ];
+        const again = await printed(name, 'again', names);
         console.log(
-          `x17 mismatch, the second reconnect's path:\n${reconnectPath(containersLogSince(mark)).join('\n')}\nthe whole log since the second relaunch:\n${containersLogSince(mark).join('\n')}\nthe window's last events: ${JSON.stringify(windowEvents(name).slice(-8))}`,
+          `x17 mismatch, the second reconnect's path:\n${reconnectPath(containersLogSince(mark)).join('\n')}\nthe whole log since the second relaunch:\n${containersLogSince(mark).join('\n')}\nthe window's last events: ${JSON.stringify(windowEvents(name).slice(-8))}\nthe remote extension host's values of the two variables: ${JSON.stringify(hostValues)}\na new terminal's values of them: ${JSON.stringify(again)}`,
         );
       }
       deepStrictEqual(seen, expected);
