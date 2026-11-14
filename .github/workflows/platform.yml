@@ -2,8 +2,9 @@
 # never on a pull request, so no fork's code reaches a hosted runner from here, and with no secret.
 #
 # - windows-2025: the Windows client. WSL2 gives the Linux side: an Ubuntu 24.04 distro whose Docker engine runs the
-#   SSH hosts and the dev containers, reached from Windows over WSL2's localhost forwarding (the Windows engine of the
-#   image runs Windows containers only). VSCodium answers on its debugging port there.
+#   SSH hosts and the dev containers (the Windows engine of the image runs Windows containers only). The Docker CLI
+#   reaches that engine at the distro's own address; the hosts' and containers' published ports are reached over
+#   WSL2's localhost forwarding. VSCodium answers on its debugging port there.
 # - macos-15-intel: the macOS client, with colima's Docker for linux/x86_64 (about 10 minutes to start).
 #
 # Each job runs `node tools/acceptance.ts --editor vscodium` for its launch list and leaves the run's summary in the job
@@ -57,19 +58,30 @@ jobs:
         run: |
           wsl --install Ubuntu-24.04 --no-launch --web-download
           wsl -d Ubuntu-24.04 -u root -- sh -c 'apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io docker-buildx 2>&1 | tail -2'
-          # the packaged service (Ubuntu under WSL runs systemd), with a TCP listener on the distro's loopback only: the
-          # Docker API is unauthenticated and root there, and WSL2's localhost forwarding carries it to Windows' 127.0.0.1
-          wsl -d Ubuntu-24.04 -u root -- sh -c 'mkdir -p /etc/systemd/system/docker.service.d && printf "[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock\n" > /etc/systemd/system/docker.service.d/tcp.conf && systemctl daemon-reload && systemctl restart docker && systemctl is-active docker'
-          # a wsl.exe that stays, so the distro and its engine outlive this step
+          # a wsl.exe that stays, so the distro, its address and its engine outlive this step
           Start-Process wsl.exe -WindowStyle Hidden -ArgumentList '-d', 'Ubuntu-24.04', '--', 'sleep', 'infinity'
+          # the distro's own address on WSL's virtual switch, which only this runner reaches; anything but a private
+          # address ends the job, since the engine's API is unauthenticated and root
+          $engine = (wsl -d Ubuntu-24.04 --exec hostname -I).Trim().Split(' ')[0]
+          if ($engine -notmatch '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)') { "the distro's address $engine is not private"; exit 1 }
+          # in NAT mode only: mirrored mode shares the host's interfaces, so the address would no longer be host-only
+          $networking = (wsl -d Ubuntu-24.04 --exec wslinfo --networking-mode).Trim()
+          if ($networking -ne 'nat') { "WSL's networking mode is '$networking', not nat"; exit 1 }
+          # the packaged service (Ubuntu under WSL runs systemd), with a TCP listener on that address alone. The Windows
+          # CLI reaches it there directly: through WSL2's localhost forwarding a `docker run`'s attached output was lost
+          # while its exit status came through (#2505)
+          $unit = "[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://${engine}:2375 --containerd=/run/containerd/containerd.sock\n"
+          wsl -d Ubuntu-24.04 -u root -- sh -c "mkdir -p /etc/systemd/system/docker.service.d && printf '$unit' > /etc/systemd/system/docker.service.d/tcp.conf && systemctl daemon-reload && systemctl restart docker && systemctl is-active docker"
           $up = $false
           for ($i = 0; $i -lt 60 -and -not $up; $i++) {
             Start-Sleep 2
-            docker -H tcp://127.0.0.1:2375 version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}' 2>$null
+            docker -H "tcp://${engine}:2375" version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}' 2>$null
             $up = $LASTEXITCODE -eq 0
           }
           if (-not $up) { wsl -d Ubuntu-24.04 -u root -- sh -c 'systemctl status docker --no-pager | tail -15'; exit 1 }
-          "DOCKER_HOST=tcp://127.0.0.1:2375" >> $env:GITHUB_ENV
+          "DOCKER_HOST=tcp://${engine}:2375" >> $env:GITHUB_ENV
+          # the harness passes its bind-mounted folders to the engine as the distro's /mnt paths
+          "HARNESS_ENGINE_WSL=1" >> $env:GITHUB_ENV
       # the image's Docker CLI has no buildx plugin, and the harness builds its images with `docker build --load`
       - name: Docker's buildx plugin for the Windows CLI
         run: |

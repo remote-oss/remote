@@ -918,6 +918,36 @@ void standDown.contextKey;
       ]);
     });
 
+    describe('a context key the editor and the extension both set (card #2489)', () => {
+      const SHARED_TABLE = `export const contextKeys = {
+  installed: {id: 'remote-x.installed', setter: 'coreAndExtension'},
+} as const;
+`;
+
+      it('reports one that no production source consumes', async () => {
+        addPackage('remote-x', SHARED_TABLE, {'a.ts': 'export {};\n'});
+        deepStrictEqual((await check()).problems, [
+          'packages/remote-x: contextKeys installed (remote-x.installed) is contributed but no production source consumes it',
+        ]);
+      });
+
+      it('passes one that a production source consumes', async () => {
+        addPackage('remote-x', SHARED_TABLE, {
+          'a.ts':
+            "import {contextKeys} from './identifiers.generated.ts';\n\nvoid contextKeys.installed;\n",
+        });
+        deepStrictEqual((await check()).problems, []);
+      });
+
+      it('passes an allowlisted one that stays unconsumed', async () => {
+        addPackage('remote-x', SHARED_TABLE, {'a.ts': 'export {};\n'});
+        deepStrictEqual(
+          (await check([entry('contextKeys', 'installed')])).problems,
+          [],
+        );
+      });
+    });
+
     it('leaves out a core context key and a called internal command (#674 R2)', async () => {
       addPackage('remote-x', UNCHECKED_TABLE, {
         'a.ts':

@@ -144,15 +144,6 @@
     "added": "2026-11-13"
   },
   {
-    "launch": "containers-volume",
-    "file": "containers-volume/volume.test.ts",
-    "title": "F-0419 AC-36 (s36): two windows that start Reopen in Container together make one vscode volume, both connect with no dialog, and the platform has one commit folder",
-    "card": 2469,
-    "owner": "daedalus",
-    "evidence": 43369951852,
-    "added": "2026-11-13"
-  },
-  {
     "launch": "ssh-core",
     "file": "ssh-core/forwarding-disabled.test.ts",
     "title": "F-2604 AC-15 (c85-reload): after a reload of the failed window with the local server running the refusal fails the connect again, and the log does not repeat the setting line",

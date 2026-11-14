@@ -20,6 +20,7 @@ import {
   CUSTOM_FEATURES_NAMESPACE,
   CUSTOM_NAMESPACE,
   type CustomFeatureCollection,
+  engineFolderOf,
   featureMetadataText,
   ghcrLayer,
   type MirroredTemplate,
@@ -445,6 +446,35 @@ describe('the run templates', () => {
           other.annotations,
         ],
         [undefined, original.config, original.layers, {'other.key': 'y'}],
+      );
+    });
+
+    it("#2505: a folder is the engine's own path, and a drive path becomes the WSL distro's /mnt path of its long form only on a WSL engine", () => {
+      const asked: string[] = [];
+      function longPathOf(folder: string): string {
+        asked.push(folder);
+        return 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\run\\oras';
+      }
+      const shortPath = 'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\run\\oras';
+      deepStrictEqual(
+        [
+          engineFolderOf(shortPath, {}, longPathOf),
+          engineFolderOf(shortPath, {HARNESS_ENGINE_WSL: '1'}, longPathOf),
+          engineFolderOf(
+            '/tmp/run/oras',
+            {HARNESS_ENGINE_WSL: '1'},
+            longPathOf,
+          ),
+          engineFolderOf('/tmp/run/oras', {}),
+          asked,
+        ],
+        [
+          shortPath,
+          '/mnt/c/Users/runneradmin/AppData/Local/Temp/run/oras',
+          '/tmp/run/oras',
+          '/tmp/run/oras',
+          [shortPath],
+        ],
       );
     });
 
