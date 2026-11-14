@@ -160,5 +160,14 @@
     "owner": "iris",
     "evidence": 43429964938,
     "added": "2026-11-13"
+  },
+  {
+    "launch": "terminal-login",
+    "file": "terminal-login/chat-absence.test.ts",
+    "title": "F-2606 AC-25: with remote.SSH.experimental.chat true, the clear command is listed, the dialog has no Copilot button, the chat input offers no row, and the settings file marks the key",
+    "card": 2424,
+    "owner": "iris",
+    "evidence": 42367771624,
+    "added": "2026-11-14"
   }
 ]
