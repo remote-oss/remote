@@ -530,6 +530,7 @@ export function withHelpersAsTests(
 const PACKAGE_EXTENSIONS: ReadonlyMap<string, string> = new Map([
   ['remote-containers', 'remote-oss.remote-containers'],
   ['remote-explorer', 'remote-oss.remote-explorer'],
+  ['remote-wsl', 'remote-oss.remote-wsl'],
 ]);
 
 /** The folder of the acceptance tests' own package. */

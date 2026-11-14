@@ -108,6 +108,21 @@ function plainIds(identifiers: readonly string[]): Map<string, TableValue> {
   return new Map(identifiers.map(identifier => [identifier, identifier]));
 }
 
+/**
+ * The authorities keyed for naming: an authority too short to name on its own (`wsl`) is named with the word
+ * `authority` after it (`wslAuthority`), and its value stays the authority itself.
+ */
+function authorityIds(authorities: readonly string[]): Map<string, TableValue> {
+  return new Map(
+    authorities.map(authority => [
+      isUsableName(nameFromSegments(authority, 1))
+        ? authority
+        : `${authority}-authority`,
+      authority,
+    ]),
+  );
+}
+
 /** The kinds of a package's table, in a fixed order, leaving out every empty kind. */
 export function tableKinds(sources: PackageSources): TableKind[] {
   const {manifest, declared} = sources;
@@ -186,7 +201,7 @@ export function tableKinds(sources: PackageSources): TableKind[] {
     tableKind(
       'authorities',
       'The authorities of the `onResolveRemoteAuthority:` activation events.',
-      plainIds(manifest.authorities),
+      authorityIds(manifest.authorities),
     ),
     tableKind(
       'languages',

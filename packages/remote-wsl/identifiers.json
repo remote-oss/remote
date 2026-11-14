@@ -1,0 +1,65 @@
+{
+  "source": "remote-oss/remote-wsl#11 (F-7901)",
+  "standsDownFor": "ms-vscode-remote.remote-wsl",
+  "standingDownKey": "wsl.standingDown",
+  "gateAlsoKinds": true,
+  "namespaces": {
+    "commands": ["remote-wsl."],
+    "settings": ["remote.WSL.", "remote.WSL1.", "remote.WSL2."],
+    "contextKeys": ["wsl.", "wslFeatureInstalled"]
+  },
+  "contextKeys": [
+    {
+      "id": "wsl.standingDown",
+      "setter": "extension"
+    },
+    {
+      "id": "wsl.openInNewWindow",
+      "setter": "extension"
+    },
+    {
+      "id": "wsl.noWSLPath",
+      "setter": "extension"
+    },
+    {
+      "id": "wsl.noWSLDistrosInstalled",
+      "setter": "extension"
+    },
+    {
+      "id": "wslFeatureInstalled",
+      "setter": "coreAndExtension"
+    }
+  ],
+  "infoLineCommands": [],
+  "runtimeCommands": [
+    {
+      "id": "remote-wsl.newWindow",
+      "purpose": "the activation event of a new WSL window asked for from outside the editor; registered so that it is found, and does nothing visible"
+    },
+    {
+      "id": "remote-wsl.newWindowForDistro",
+      "purpose": "the activation event of a new WSL window of a named distro asked for from outside the editor; registered so that it is found, and does nothing visible"
+    },
+    {
+      "id": "remote-wsl.connectToWSLDefault",
+      "purpose": "the button \"Connect to WSL (default distro)\" of the walkthrough's second step, which connects to the default distro and completes that step"
+    }
+  ],
+  "internal": [],
+  "invented": [
+    {
+      "id": "remote.WSL.serverDownloadUrlTemplate",
+      "kind": "settings",
+      "spec": "F-6301",
+      "date": "2026-11-03"
+    },
+    {
+      "id": "wsl.standingDown",
+      "kind": "contextKeys",
+      "spec": "F-7901",
+      "date": "2026-11-03"
+    }
+  ],
+  "settingPairs": [],
+  "ungated": []
+}
