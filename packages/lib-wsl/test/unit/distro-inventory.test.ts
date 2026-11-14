@@ -353,6 +353,34 @@ describe('D2: a listener that throws (card #2515)', () => {
   });
 });
 
+describe('D2: the port that hears a listener fail (card #2515)', () => {
+  it('#2515: each exception of a listener reaches onListenerError, and the other listeners still run', async () => {
+    let text = LIST;
+    const fake = fakeWsl(() => printing(text));
+    const heard: unknown[] = [];
+    const inventory = createDistroInventory({
+      runner: createWslRunner(fake),
+      windowsBuild: undefined,
+      onListenerError: error => {
+        heard.push(error);
+      },
+    });
+    const failure = new Error('the first listener fails');
+    const called: string[] = [];
+    inventory.onDidChange(() => {
+      called.push('first');
+      throw failure;
+    });
+    inventory.onDidChange(() => {
+      called.push('second');
+    });
+    await inventory.distros({includeDockerDesktop: true}, NEVER);
+    text = LIST_WITH_DOCKER;
+    await inventory.distros({includeDockerDesktop: true}, NEVER);
+    deepStrictEqual([heard, called], [[failure], ['first', 'second']]);
+  });
+});
+
 describe('D2: the online catalogue', () => {
   it('F-6102 (D2): gives the rows sorted by friendly name, from --list --online', async () => {
     const {inventory, fake} = inventoryOver({});

@@ -86,6 +86,11 @@ export interface DistroInventory {
 export interface DistroInventoryPorts {
   runner: WslRunner;
   windowsBuild: number | undefined;
+  /**
+   * Hears the exception of a listener of `onDidChange`: the other listeners are called and the read still gives its
+   * rows. Without it the exception is dropped.
+   */
+  onListenerError?: (error: unknown) => void;
 }
 
 type ListOutcome =
@@ -131,7 +136,7 @@ function sameRows(
 export function createDistroInventory(
   ports: DistroInventoryPorts,
 ): DistroInventory {
-  const {runner, windowsBuild} = ports;
+  const {runner, windowsBuild, onListenerError} = ports;
   const listeners = new Set<() => void>();
   let reading: SharedRead | undefined;
   let previous: readonly DistroRow[] | undefined;
@@ -225,8 +230,8 @@ export function createDistroInventory(
       for (const listener of [...listeners]) {
         try {
           listener();
-        } catch {
-          // A listener's failure is its own: the other listeners are called and the read still gives its rows.
+        } catch (error) {
+          onListenerError?.(error);
         }
       }
     }
