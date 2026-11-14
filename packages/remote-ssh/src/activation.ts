@@ -114,8 +114,8 @@ export type ActivationResult =
   | {
       kind: 'serving';
       logger: Logger;
-      /** Reveals the log channel, as Show Log does. */
-      revealLog(): void;
+      /** Reveals the log channel, as Show Log does; `preserveFocus` leaves the focus where it is. */
+      revealLog(preserveFocus?: boolean): void;
       /** How many lines the log channel holds now. */
       logMark(): number;
       /** The log channel's text from its `from`-th line on. */
@@ -197,8 +197,8 @@ export async function activateRemoteSsh(
   return {
     kind: 'serving',
     logger: logChannel.logger,
-    revealLog: () => {
-      logChannel.reveal();
+    revealLog: preserveFocus => {
+      logChannel.reveal(preserveFocus);
     },
     logMark: () => logChannel.mark(),
     logText: from => logChannel.text(from),

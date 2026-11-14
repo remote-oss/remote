@@ -121,6 +121,18 @@ describe('the log channel', () => {
     deepStrictEqual(channel.reveals, [false, false]);
   });
 
+  it('#2537: a reveal that preserves the focus shows the channel and leaves the focus where it is', () => {
+    const {port, channel} = recordingPort();
+    const logChannel = openLogChannel(
+      port,
+      ENVIRONMENT,
+      () => 'debug',
+      () => 0,
+    );
+    logChannel.reveal(true);
+    deepStrictEqual(channel.reveals, [true]);
+  });
+
   it('keeps the text of its lines from the first, one to a line, as the channel shows them', () => {
     const {port, channel} = recordingPort();
     const logChannel = openLogChannel(

@@ -12,6 +12,7 @@ import {
   messageCellOf,
 } from 'lib-ssh';
 import {escapeControls, type Logger} from 'lib-log';
+import type {ResolveOutcome} from '../pipeline/connector.ts';
 import type {SessionHint} from './hint-store.ts';
 import {DISABLED_LINE, NO_HINTS_LINE, summaryLines} from './session-summary.ts';
 
@@ -112,13 +113,23 @@ export interface TroubleshootingPorts {
     make: (sink: TerminalSink) => TablePty,
   ): TroubleshootingTerminal;
   texts(): TroubleshootingTexts;
+  /** Shows the panel with the extension's log channel selected; `preserveFocus` leaves the keyboard where it is. */
+  revealLog(preserveFocus: boolean): void;
   logger: Logger;
 }
 
 /** The check over an attempt's error hints, and the one terminal it keeps. */
 export interface Troubleshooting {
-  /** Runs the check once for an attempt whose resolve step has ended. `modal` says a dialog will take the keyboard. */
-  check(hints: readonly SessionHint[], modal: boolean): void;
+  /**
+   * Runs the check once for an attempt whose resolve step has ended. `modal` says a dialog will take the keyboard.
+   * A connect that failed and has no troubleshooting table shows the log channel instead; one that worked or was
+   * cancelled shows neither.
+   */
+  check(
+    hints: readonly SessionHint[],
+    modal: boolean,
+    outcome: ResolveOutcome,
+  ): void;
 }
 
 /** The rows of the table for the error hints among `hints`, in the order they were recorded. */
@@ -144,7 +155,7 @@ export function troubleshootingOf(
   const {logger} = ports;
   let current: TroubleshootingTerminal | undefined;
   return {
-    check: (hints, modal) => {
+    check: (hints, modal, outcome) => {
       const rows = rowsOf(hints);
       if (!ports.enabled()) {
         logger.info(DISABLED_LINE);
@@ -152,6 +163,9 @@ export function troubleshootingOf(
       }
       if (rows.length === 0) {
         logger.info(NO_HINTS_LINE);
+        if (outcome === 'failed') {
+          ports.revealLog(modal);
+        }
         return;
       }
       summaryLines(rows).forEach(line => {
