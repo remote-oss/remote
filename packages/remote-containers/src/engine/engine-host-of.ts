@@ -3,7 +3,12 @@
  * read for every command, so a setting changed since the last one applies without a reload.
  */
 
-import {distroToShare, mountToWindows, shareToDistro} from 'lib-wsl';
+import {
+  distroToShare,
+  mountToWindows,
+  shareHostFor,
+  shareToDistro,
+} from 'lib-wsl';
 
 /** What the window is. */
 export interface EngineWindow {
@@ -88,5 +93,5 @@ export function engineHostOf(
 export function labelFolderOf(choice: DistroChoice, distro: string): string {
   return choice.chosenBy === 'settings'
     ? choice.folder
-    : distroToShare(distro, choice.folder);
+    : distroToShare(distro, choice.folder, shareHostFor(undefined));
 }

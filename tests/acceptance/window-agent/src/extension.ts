@@ -10,6 +10,7 @@ import {
   recordWindowName,
   windowNameOf,
 } from './window-name.ts';
+import {readSelection} from './terminal-selection.ts';
 
 /** How often the agent looks for a new command, in milliseconds. */
 const POLL_MILLISECONDS = 200;
@@ -190,13 +191,14 @@ function activeTabOf(
   return {uri: current.input.uri.toString(), preview: current.isPreview};
 }
 
-/** The editor commands that copy the active terminal's whole buffer to the clipboard, in order. */
-const COPY_STEPS = [
+/** The editor commands that select the active terminal's whole buffer, in order. */
+const SELECT_STEPS = [
   'workbench.action.terminal.focus',
   'workbench.action.terminal.selectAll',
-  'workbench.action.terminal.copySelection',
-  'workbench.action.terminal.clearSelection',
 ];
+
+/** The command that takes the selection away again. */
+const CLEAR_STEP = 'workbench.action.terminal.clearSelection';
 
 /** How long a copy step may take before the read gives up and names it. */
 const COPY_STEP_MILLISECONDS = 10_000;
@@ -541,7 +543,7 @@ export function activate(context: vscode.ExtensionContext): void {
           });
           return;
         }
-        for (const step of COPY_STEPS) {
+        for (const step of SELECT_STEPS) {
           const finished = await settledWithin(
             vscode.commands.executeCommand(step),
             COPY_STEP_MILLISECONDS,
@@ -557,19 +559,19 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
           }
         }
-        let copied: string | undefined;
-        const read = await settledWithin(
-          Promise.resolve(vscode.env.clipboard.readText()).then(text => {
-            copied = text;
-          }),
+        // Reading the selection asks nothing of the clipboard, which the machine shares between windows, and makes no copy
+        // for core to complain about when nothing is selected.
+        const selection = readSelection(vscode.window.activeTerminal);
+        await settledWithin(
+          vscode.commands.executeCommand(CLEAR_STEP),
           COPY_STEP_MILLISECONDS,
         );
         report(agentFolder, name, {
           event: 'terminalBuffer',
-          text: read ? (copied ?? '') : null,
+          text: selection.kind === 'text' ? selection.text : null,
           terminals,
           active,
-          ...(read ? {} : {stuck: 'clipboard.readText'}),
+          ...(selection.kind === 'text' ? {} : {stuck: 'terminalSelection'}),
         });
       },
     ),

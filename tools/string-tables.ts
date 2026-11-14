@@ -168,7 +168,7 @@ function nlsProblems(
 }
 
 /** The source files of a package that ship: the TypeScript files under src, without tests, fixtures and test doubles. */
-function shippedSources(directory: string, relative = 'src'): string[] {
+export function shippedSources(directory: string, relative = 'src'): string[] {
   const folder = path.join(directory, relative);
   if (!existsSync(folder)) {
     return [];
@@ -205,7 +205,7 @@ function untranslatedProblems(
  * The package folders whose code runs in `folder`'s l10n context: the folder itself and every workspace library it
  * depends on, directly or through another library.
  */
-function closureFolders(root: string, folder: string): string[] {
+export function closureFolders(root: string, folder: string): string[] {
   const seen = new Set<string>([folder]);
   const queue = [folder];
   for (const current of queue) {

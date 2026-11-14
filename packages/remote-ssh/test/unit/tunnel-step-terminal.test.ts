@@ -364,6 +364,29 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     deepStrictEqual([logins.length, questions], [0, []]);
   });
 
+  it('#2457, reading-2457-echo-line: an answer typed at a recognised prompt of the SSH Tunnel terminal is not in the log, shown or hidden, and the next line is', async () => {
+    for (const reveal of [true, false]) {
+      const {open, opened, sink} = stepWith({reveal});
+      void open();
+      await settled();
+      opened().write(
+        'Are you sure you want to continue connecting (yes/no/[fingerprint])? yes\r\n',
+      );
+      opened().write("alex@dev's password: \r\nWarning: Permanently added h\n");
+      await settled();
+      deepStrictEqual(
+        sink.lines
+          .map(line => line.message)
+          .filter(message => message.startsWith('[ssh] ')),
+        [
+          '[ssh] Are you sure you want to continue connecting (yes/no/[fingerprint])? [answer not logged]',
+          "[ssh] alex@dev's password: [answer not logged]",
+          '[ssh] Warning: Permanently added h',
+        ],
+      );
+    }
+  });
+
   it('F-2003 BR-8: every line of the SSH Tunnel terminal is logged as ssh’s, including a refused channel', async () => {
     const {open, opened, sink} = stepWith();
     void open();
@@ -383,16 +406,70 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     );
   });
 
-  it('F-2104 7.E10: the terminal ending before the success line fails without a reason', async () => {
+  it('F-2104 7.E10, #2456: the terminal ending before the success line fails without a reason and names the exit in the log detail', async () => {
     const {open, opened} = stepWith();
     const pending = open();
     await settled();
     opened().end(255);
     deepStrictEqual(await pending, {
       kind: 'failed',
-      failure: {kind: 'unknown'},
+      failure: {
+        kind: 'unknown',
+        logDetail:
+          'the tunnel ssh ended before its forwards were ready: exit code 255, no output',
+      },
     });
   });
+
+  for (const [title, output, code, reason, detail] of [
+    [
+      'an exit code after some output',
+      'ssh: connect to host 127.0.0.1 port 22: Connection refused\n',
+      255,
+      'process',
+      'exit code 255',
+    ],
+    [
+      'no exit code and no output, the process ending',
+      '',
+      undefined,
+      'process',
+      'ended without an exit code, no output',
+    ],
+    [
+      'no exit code from an end the editor could not name',
+      'x',
+      undefined,
+      'unknown',
+      'ended without an exit code',
+    ],
+    ['a close by the user', 'x', undefined, 'user', 'ended by the window'],
+    [
+      'a close by the extension',
+      '',
+      undefined,
+      'extension',
+      'ended by the window, no output',
+    ],
+    ['a close at shutdown', 'x', undefined, 'shutdown', 'ended by the window'],
+  ] as const) {
+    it(`#2456: the log detail of ${title} is "${detail}"`, async () => {
+      const {open, opened} = stepWith();
+      const pending = open();
+      await settled();
+      if (output !== '') {
+        opened().write(output);
+      }
+      opened().end(code, reason);
+      deepStrictEqual(await pending, {
+        kind: 'failed',
+        failure: {
+          kind: 'unknown',
+          logDetail: `the tunnel ssh ended before its forwards were ready: ${detail}`,
+        },
+      });
+    });
+  }
 
   /** A second-ssh step whose tunnel ssh printed the forward-failure line and then the success line. */
   async function forwardFailed(options: Parameters<typeof stepWith>[0] = {}) {

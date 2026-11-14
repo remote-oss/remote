@@ -1,4 +1,5 @@
 import type {LogLine, Sink} from '../logger.ts';
+import {escapeControls} from '../escape-controls.ts';
 import type {EditorLogPort} from './editor-port.ts';
 import {defaultFormat} from './channel-sink.ts';
 
@@ -37,7 +38,7 @@ export function createTerminalSink(
 
   return {
     write(line: LogLine): void {
-      const text = render(line);
+      const text = escapeControls(render(line));
       buffer.push(text);
       if (writer !== undefined) {
         writer.write(`${text}\r\n`);

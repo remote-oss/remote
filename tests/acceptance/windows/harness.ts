@@ -29,6 +29,7 @@ import {runCommand} from '../../../tools/command-runner.ts';
 import {oneTimeCode} from '../../../tools/one-time-code.ts';
 import {filesHolding} from '../../../tools/secret-search.ts';
 import {processIdsOf} from '../../../tools/process-ids.ts';
+import {runWithinWait} from './state-database.ts';
 import {
   descendantRootOf,
   processStatOf,
@@ -41,6 +42,7 @@ import {
   signalFile,
   type AppendedEntry,
 } from '../../../tools/script-file.ts';
+import {editorFolderOf} from './editor-folder.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -370,7 +372,11 @@ export function totpCode(moment = Date.now()): string {
 /** A place a secret search looks in: a client folder or file, a host folder (searched as root), or the host's log. */
 export type SecretPlace =
   | {client: string; accepted?: (file: string) => boolean}
-  | {host: string; excluded?: readonly string[]}
+  | {
+      host: string;
+      excluded?: readonly string[];
+      excludedFolders?: readonly string[];
+    }
   | {hostLog: true};
 
 /** One file a secret search found a value in: the place, and the file under it. Never the value. */
@@ -382,7 +388,8 @@ export interface SecretHit {
 /**
  * The files of `places` that hold any of `values`. A client place is read in Node, following no link; a host folder is
  * searched as root with `grep -rlF` (no hit is grep's status 1; another failure throws with grep's error), skipping
- * devices and pipes and the file names `excluded`; the host's log is both streams of `docker logs`.
+ * devices and pipes, the file names `excluded` and the folders named `excludedFolders`; the host's log is both
+ * streams of `docker logs`.
  */
 export function secretHits(
   values: readonly string[],
@@ -406,6 +413,7 @@ export function secretHits(
         '-D',
         'skip',
         ...(place.excluded ?? []).map(name => `--exclude=${name}`),
+        ...(place.excludedFolders ?? []).map(name => `--exclude-dir=${name}`),
         ...values.flatMap(value => ['-e', value]),
         '--',
         place.host,
@@ -1030,7 +1038,7 @@ export function withLogTail(message: string, lines: readonly string[]): string {
 }
 
 /** What the remote indicator reads while a window resolves its remote: core's text for the state before the connection is made. */
-const RESOLVING_INDICATOR = 'Opening Remote...';
+export const RESOLVING_INDICATOR = 'Opening Remote...';
 
 /**
  * Resolves once window `name` is connected to its container: it reads its workspace folder through the container's file
@@ -1054,9 +1062,9 @@ export async function connectedToContainer(
           }
           // The renderer module imports this one, so it is loaded when it is needed.
           const {statusBarText} = await import('./renderer.ts');
-          return (
-            (await statusBarText(name, 'status.host')) !== RESOLVING_INDICATOR
-          );
+          // An item that is not drawn yet reads as an empty text, which is no connection either.
+          const indicator = await statusBarText(name, 'status.host');
+          return indicator !== '' && indicator !== RESOLVING_INDICATOR;
         } catch {
           return false;
         }
@@ -1156,7 +1164,7 @@ export async function devContainersOf(folder: string): Promise<string[]> {
     '--all',
     '--quiet',
     '--filter',
-    `label=devcontainer.local_folder=${folder}`,
+    `label=devcontainer.local_folder=${editorFolderOf(folder)}`,
     '--filter',
     `label=remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
   ]);
@@ -1355,8 +1363,72 @@ export async function closeWindow(
         (extensionHost !== undefined && processIsGone(extensionHost)),
       milliseconds,
     );
+  } catch (caught) {
+    throw new Error(
+      `${caught instanceof Error ? caught.message : String(caught)}; ${closeStateOf(name, commandId)}`,
+      {cause: caught},
+    );
   } finally {
     withdrawUnaccepted(name, commandId);
+  }
+}
+
+/**
+ * What a window that did not close shows of itself, for the failure to name (#2482): whether its agent accepted the
+ * close, the commands it accepted that have not ended, the last of its events, and each process that recorded itself
+ * as the window's with its state and parent. A host that outlives the close may be a stale one of an earlier start of
+ * the window, or the current one that never got the command; these tell the two apart.
+ */
+function closeStateOf(name: string, commandId: string): string {
+  try {
+    const now = Date.now();
+    const events = windowEvents(name);
+    const commands = linesOf<{id: string; command?: string}>(
+      agentFile(name, 'commands'),
+    );
+    function nameOf(commandIdentifier: string | undefined): string {
+      return (
+        commands.find(each => each.id === commandIdentifier)?.command ??
+        'a command'
+      );
+    }
+    const ended = new Set(
+      events
+        .filter(each => each.event === 'done' || each.event === 'failed')
+        .map(each => each.id),
+    );
+    const running = events
+      .filter(each => each.event === 'accepted' && !ended.has(each.id))
+      .map(
+        each =>
+          `${nameOf(each.id)} accepted ${String(Math.round((now - each.time) / 1000))} s ago`,
+      );
+    const last = events
+      .slice(-5)
+      .map(
+        each =>
+          `${each.event}${each.id === undefined ? '' : ` ${nameOf(each.id)}`} ${String(Math.round((now - each.time) / 1000))} s ago`,
+      );
+    const pids = variable('REMOTE_OSS_ACCEPTANCE_WINDOWS');
+    const processes = readdirSync(pids)
+      .filter(file => readFileSync(path.join(pids, file), 'utf8') === name)
+      .map(file => {
+        const status = (() => {
+          try {
+            return readFileSync(`/proc/${file}/status`, 'utf8');
+          } catch {
+            return '';
+          }
+        })();
+        const state = /^State:\s*(.*)$/mu.exec(status)?.[1];
+        const parent = /^PPid:\s*(\d+)$/mu.exec(status)?.[1];
+        return state === undefined
+          ? `${file} gone`
+          : `${file} ${state} parent ${parent ?? 'unknown'}`;
+      });
+    return `the close was ${events.some(each => each.id === commandId && each.event === 'accepted') ? 'accepted' : 'not accepted'} by the window's agent; running commands: ${JSON.stringify(running)}; its last events: ${JSON.stringify(last)}; its recorded processes: ${JSON.stringify(processes)}`;
+  } catch (caught) {
+    return `the window's state could not be read: ${String(caught)}`;
   }
 }
 
@@ -1827,7 +1899,7 @@ export async function waitFor(
   for (;;) {
     let notYet = '';
     try {
-      if (await check()) {
+      if (await runWithinWait(check)) {
         return;
       }
     } catch (caught) {
@@ -2078,7 +2150,7 @@ export async function connectedWithin(
   }
 }
 
-/** What the host and this machine hold when a window did not connect: the host's listeners and server processes, the last lines of its sshd's log, and this machine's listeners. */
+/** What the host and this machine hold when a window did not connect: the host's listeners and server processes, the last lines of its sshd's log, this machine's listeners, and the last lines of the launch's connection log. */
 async function connectState(): Promise<string> {
   function read(
     what: Promise<{stdout: string; stderr: string}>,
@@ -2108,7 +2180,8 @@ async function connectState(): Promise<string> {
     ),
     read(execFileAsync('ss', ['-ltnp'])),
   ]);
-  return `the host's listeners and processes:\n${listening}\nthe last lines of the host's sshd log:\n${sshdLog}\nthis machine's listeners:\n${here}`;
+  const connect = connectionLog().slice(-40).join('\n');
+  return `the host's listeners and processes:\n${listening}\nthe last lines of the host's sshd log:\n${sshdLog}\nthis machine's listeners:\n${here}\nthe last lines of the launch's connection log:\n${connect}`;
 }
 
 /** Waits until no connection helper of the run runs, for up to `milliseconds`. */

@@ -34,12 +34,13 @@ import {
   PromptReader,
   type ConnectWaitSettings,
   type TunnelSession,
+  type TerminalEnd,
   type TerminalLogin,
 } from 'lib-ssh';
 import {isAborted, portOf} from './connect.ts';
 import {clientRefusal, ofClassification} from './failure.ts';
 import {busyRangeReason, type PortChoice} from './port-choice.ts';
-import {logSshLines} from './ssh-log.ts';
+import {logSshLines, withoutAnswer} from './ssh-log.ts';
 import type {
   ConnectInput,
   ConnectionLease,
@@ -170,6 +171,31 @@ function notOpenedFor(
     : NOT_OPENED;
 }
 
+/** What the log says of a tunnel terminal that ended before its forwards were ready: how it ended, and whether it printed. */
+function endedDetail(end: TerminalEnd): string {
+  let ending = 'ended without an exit code';
+  if (end.code !== undefined) {
+    ending = `exit code ${String(end.code)}`;
+  } else if (end.reason !== 'process' && end.reason !== 'unknown') {
+    ending = 'ended by the window';
+  }
+  const output = end.hadOutput ? '' : ', no output';
+  return `the tunnel ssh ended before its forwards were ready: ${ending}${output}`;
+}
+
+/** What the log says of a window tunnel that did not open and had told the log nothing of why. */
+function relayNotOpenedDetail(
+  outcome: Exclude<
+    Awaited<ReturnType<typeof openRelayTunnel>>,
+    {kind: 'open'} | {kind: 'relayRefused'}
+  >,
+): string {
+  if (outcome.kind === 'listenFailed') {
+    return `the window tunnel did not open: its local port could not be listened on: ${outcome.detail}`;
+  }
+  return 'the window tunnel did not open: no probe of its port worked before the bound';
+}
+
 /** What the step gives when it opens a tunnel. */
 type TunnelResult = Awaited<ReturnType<ConnectSteps['openTunnel']>>;
 
@@ -281,7 +307,7 @@ async function openTerminalTunnel(
   });
   // The tunnel's terminal holds nothing but ssh, so all of its lines are ssh's own.
   const sshOutput = new LineSplitter(line => {
-    logSshLines(dependencies.logger, [line], undefined);
+    logSshLines(dependencies.logger, [withoutAnswer(line)], undefined);
     const refusal = clientRefusal(line);
     if (refusal !== undefined) {
       refuse?.(refusal);
@@ -351,7 +377,10 @@ async function openTerminalTunnel(
         };
   }
   if (gate.kind === 'ended') {
-    return NOT_OPENED;
+    return {
+      kind: 'failed',
+      failure: {kind: 'unknown', logDetail: endedDetail(gate.end)},
+    };
   }
   onWaiting();
   const opening = openForwardedTunnel({
@@ -573,7 +602,10 @@ export function openTunnelStep(
       return {kind: 'failed', failure: refusedFailure(dependencies)};
     }
     if (outcome.kind !== 'open') {
-      return NOT_OPENED;
+      return {
+        kind: 'failed',
+        failure: {kind: 'unknown', logDetail: relayNotOpenedDetail(outcome)},
+      };
     }
     const {extensionHostEnv, environmentTunnels} = dependencies.environment();
     let closeRan = false;

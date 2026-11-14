@@ -152,6 +152,9 @@
       "path": "tests/acceptance/ssh-core"
     },
     {
+      "path": "tests/acceptance/ssh-agents"
+    },
+    {
       "path": "tests/acceptance/ssh-containers"
     },
     {
@@ -162,6 +165,9 @@
     },
     {
       "path": "tests/acceptance/explorer"
+    },
+    {
+      "path": "tests/acceptance/wsl"
     },
     {
       "path": "tests/acceptance/explorer-alone"

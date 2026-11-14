@@ -27,6 +27,20 @@ const FAILED_SETUP = {
   buttons: ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
 };
 
+/** The dialog of a mount the engine refused with its bind words: F-0410's S018 with the same buttons. */
+const BIND_REFUSAL_DIALOG = {
+  ...FAILED_SETUP,
+  details:
+    'A mount config is invalid. Make sure it has the right format and a source folder that exists on the machine where the Docker daemon is running.',
+};
+
+/** The rule the product applies to the words of a refused mount (cli-lines.ts): a bind-type refusal decides the S018 dialog, and every other refusal the S034. */
+const BIND_REFUSAL =
+  /^(?:docker: )?Error response from daemon: invalid mount config for type "bind": /u;
+
+/** The `--mount` value the dev container CLI presents for the row's mount object: the object names `src` and `dst`, the CLI reads `type`, `source` and `target`, so the value is `type=bind,dst=undefined` ([devcontainers-cli], `generateMountCommand`). */
+const MOUNT_SPEC = 'type=bind,dst=undefined';
+
 /** Opens a window on a folder over `image`, reopens it in a container, and gives the window, the folder and the dialog that shows. */
 async function failedOn(
   label: string,
@@ -48,19 +62,39 @@ describe('The image label that cannot be used, and the one that is odd (card cov
 
   beforeEach(noWindowLeft);
 
-  it('F-0306 AC-30 (c112-bad-mount): a label whose only mount is a {type, src, dst} object ends in the generic setup dialog and leaves no container', async () => {
+  it('F-0306 AC-30 (c112-bad-mount): a label whose only mount is a {type, src, dst} object ends in the dialog its engine refusal decides and leaves no container', async () => {
     const mount = JSON.parse(
       '{"type": "bind", "src": "/c112-source", "dst": "/c112-target"}',
     ) as unknown;
     const image = await imageWithLabel('c112-bad-mount', [{mounts: [mount]}]);
+    let engineText: string;
+    try {
+      await docker(
+        'create',
+        '--name',
+        'c112-bad-mount',
+        '--mount',
+        MOUNT_SPEC,
+        image,
+        'true',
+      );
+      engineText = 'the engine accepted the mount';
+    } catch (error) {
+      engineText = String((error as {stderr?: string}).stderr ?? error).trim();
+    }
+    console.log(`c112-bad-mount: the engine said ${engineText}`);
     const {name, folder, dialog} = await failedOn('c112-bad-mount', image);
     try {
       deepStrictEqual(
         [dialog, await devContainersOf(folder)],
-        [FAILED_SETUP, []],
+        [
+          BIND_REFUSAL.test(engineText) ? BIND_REFUSAL_DIALOG : FAILED_SETUP,
+          [],
+        ],
       );
     } finally {
       await closeWindow(name).catch(() => undefined);
+      await docker('rm', '--force', 'c112-bad-mount').catch(() => undefined);
       await docker('rmi', '--force', image).catch(() => undefined);
     }
   });

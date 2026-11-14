@@ -15,6 +15,15 @@
       }
     },
     {
+      "label": "install-present-prime",
+      "cite": "the primer of its case (install-present-prime)",
+      "primer": true,
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}"
+      },
+      "outcome": "connected"
+    },
+    {
       "label": "install-present",
       "cite": "F-2403 AC-7 (install-present)",
       "settings": {
@@ -25,7 +34,17 @@
       "noStages": ["Downloading VS Code Server", "Installing VS Code Server"],
       "requests": {
         "count": 0
-      }
+      },
+      "needs": "install-present-prime"
+    },
+    {
+      "label": "install-present-stopped-prime",
+      "cite": "the primer of its case (install-present-stopped-prime)",
+      "primer": true,
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}"
+      },
+      "outcome": "connected"
     },
     {
       "label": "install-present-stopped",
@@ -38,7 +57,8 @@
       "noStages": ["Downloading VS Code Server", "Installing VS Code Server"],
       "requests": {
         "count": 0
-      }
+      },
+      "needs": "install-present-stopped-prime"
     },
     {
       "label": "install-fresh-legacy",
@@ -50,6 +70,17 @@
       "outcome": "connected",
       "stages": ["Downloading VS Code Server", "Installing VS Code Server"],
       "noDownloadProgress": true
+    },
+    {
+      "label": "noexec-layout",
+      "cite": "F-2008 AC-9 (c2500-noexec-layout)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.useExecServer": false
+      },
+      "outcome": "connected",
+      "installedIn": "/home/harness/.vscodium-server-insiders",
+      "hostLacks": ["/home/harness/.vscodium-server-insiders/cli"]
     },
     {
       "label": "download-unreachable",
@@ -158,6 +189,18 @@
       "leftovers": "/home/harness/.vscodium-server-insiders"
     },
     {
+      "label": "install-repaired-prime",
+      "cite": "the primer of its case (install-repaired-prime)",
+      "primer": true,
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/junk/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "off"
+      },
+      "setup": ["rm -f /home/harness/.wgetrc"],
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\": Failed to install the VS Code Server."
+    },
+    {
       "label": "install-repaired",
       "cite": "F-2403 AC-22 (install-repaired)",
       "settings": {
@@ -165,7 +208,8 @@
       },
       "keepFiles": true,
       "outcome": "connected",
-      "installedIn": "/home/harness/.vscodium-server-insiders"
+      "installedIn": "/home/harness/.vscodium-server-insiders",
+      "needs": "install-repaired-prime"
     },
     {
       "label": "licence-update-service",

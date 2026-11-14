@@ -21,6 +21,7 @@ import {
   rowMenuAction,
   waitForDialog,
 } from './renderer.ts';
+import {editorFolderOf} from './editor-folder.ts';
 
 /** The name of the view. */
 export const VIEW = 'Dev Containers';
@@ -95,7 +96,7 @@ export async function made(
     container,
     ...runLabelArguments(),
     '--label',
-    `devcontainer.local_folder=${path.join(variable('HARNESS_RUN_FOLDER'), base)}`,
+    `devcontainer.local_folder=${editorFolderOf(path.join(variable('HARNESS_RUN_FOLDER'), base))}`,
     ...(options.extra ?? []),
     variable('HARNESS_DEVCONTAINER_IMAGE'),
     ...command,

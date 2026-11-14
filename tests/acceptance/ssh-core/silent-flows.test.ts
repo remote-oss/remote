@@ -76,9 +76,13 @@ async function footprintOf(window: string): Promise<Footprint> {
     toasts: await notifications(window),
     centre: await notificationCentre(window),
     logLines: connectionLog().length,
+    // Without SQLite's rollback journal of the editor's own state database, by its name: it exists only while a write is
+    // open, and is the editor's; a file of the extension's that ends the same way would still show.
     storage: readdirSync(
       path.join(variable('HARNESS_USER_DATA'), 'User', 'globalStorage'),
-    ).sort(),
+    )
+      .filter(name => name !== 'state.vscdb-journal')
+      .sort(),
     commands: await commandsOfEach(window),
     settings: await settingTitles(window),
     palette,
@@ -143,8 +147,15 @@ describe('the extension in the core flows of an SSH window (card connect-125)', 
         // What the window shows when the wait ends tells a program that did not start (a pick, a dialog) from one whose
         // output did not reach the console.
         const shown = await pageText(folder).catch(() => '(unreadable)');
+        // Then the Debug Console is asked for, so that a program that ran while another panel was shown reads
+        // differently from a session that never started.
+        await startInWindow(folder, 'workbench.debug.action.toggleRepl').catch(
+          () => undefined,
+        );
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        const revealed = await pageText(folder).catch(() => '(unreadable)');
         throw new Error(
-          `${String(caught)}; the window shows (its last 1500 characters): ${JSON.stringify(shown.slice(-1500))}`,
+          `${String(caught)}; the window shows (its last 1500 characters): ${JSON.stringify(shown.slice(-1500))}; after Debug Console was asked for, the program's line is ${revealed.includes(`c125-ran-on-${host}`) ? 'there' : 'not there'} and the window shows (its last 600 characters): ${JSON.stringify(revealed.slice(-600))}`,
           {cause: caught},
         );
       });

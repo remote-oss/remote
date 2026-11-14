@@ -53,11 +53,13 @@
         "no-proposals/*.test.ts",
         "default-ports/*.test.ts",
         "ssh-core/*.test.ts",
+        "ssh-agents/*.test.ts",
         "ssh-containers/*.test.ts",
         "terminal-pick/*.test.ts",
         "preconnect/*.test.ts",
         "explorer/*.test.ts",
         "explorer-alone/*.test.ts",
+        "wsl/*.test.ts",
         "explorer-trust/*.test.ts",
         "explorer-trust-pickers/*.test.ts",
         "explorer-home/*.test.ts",
@@ -145,7 +147,14 @@
     "tools/acceptance-file-times.ts": ["exports"],
   },
   // System tools the tests and checks run, which no package provides.
-  "ignoreBinaries": ["pwsh", "shellcheck", "ssh-add", "ssh-agent", "ss"],
+  "ignoreBinaries": [
+    "pwsh",
+    "shellcheck",
+    "ssh-add",
+    "ssh-agent",
+    "ssh-keygen",
+    "ss",
+  ],
   "ignoreDependencies": [
     // The editor provides it to the acceptance tests at run time; @types/vscode types it.
     "vscode",

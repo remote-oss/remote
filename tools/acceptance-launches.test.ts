@@ -24,6 +24,7 @@ import {
   withHarnessBases,
   withRunTokens,
 } from './acceptance-launches.ts';
+import {chosenLaunches} from './acceptance.ts';
 import {UPDATE_SERVICE_NAME} from './acceptance-downloads.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
@@ -138,6 +139,9 @@ function hostLaunchLabels(): string[] {
 /** The labels of the launches from the explorer ones on, in their order. */
 function labelsFromExplorer(): string[] {
   return [
+    'wsl-linux',
+    'wsl-linux-web',
+    'wsl-linux-standdown',
     'explorer',
     'explorer-alone',
     'explorer-trust',
@@ -291,7 +295,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, x11-noxauth, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, passphrase-late, login-shells, preconnect, default-ports, no-proposals, the nine explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, x11-noxauth, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, passphrase-late, login-shells, preconnect, default-ports, no-proposals, the three wsl-linux launches, the nine explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -324,6 +328,7 @@ describe('the launches of the VSCodium run', () => {
         'agent-notmp',
         'default-ports',
         'ssh-core',
+        'ssh-agents',
         'ssh-containers',
         'no-proposals',
         'cli-path',
@@ -395,7 +400,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-30, tooling-33, containers-09, connect-81: only the explorer launches install the explorer and the containers launches Dev Containers, they, the trust launches, terminal-login, login-shells, agent-notmp and default-ports open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
+  it('tooling-30, tooling-33, containers-09, connect-81: only the explorer launches install the explorer, the wsl-linux launches WSL and the containers launches Dev Containers, they, the trust launches, terminal-login, login-shells, agent-notmp and default-ports open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' &&
@@ -421,7 +426,11 @@ describe('the launches of the VSCodium run', () => {
         ['agent-notmp', undefined, true, undefined],
         ['default-ports', undefined, true, undefined],
         ['ssh-core', undefined, true, undefined],
+        ['ssh-agents', undefined, true, undefined],
         ['ssh-containers', ['remote-oss.remote-containers'], true, undefined],
+        ['wsl-linux', ['remote-oss.remote-wsl'], true, undefined],
+        ['wsl-linux-web', ['remote-oss.remote-wsl'], true, undefined],
+        ['wsl-linux-standdown', ['remote-oss.remote-wsl'], true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
         [
           'explorer-alone',
@@ -1047,7 +1056,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-51, connect-84, containers-101, tooling-168: socket-prime (a part of socket), the containers-podman launch, cli-path and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
+  it('tooling-51, connect-84, containers-101, tooling-168: socket-prime (a part of socket), the containers-podman launch, cli-path, the ports and install primers and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
     deepStrictEqual(
       launches
         .filter(
@@ -1060,6 +1069,10 @@ describe('the launches of the VSCodium run', () => {
         'socket-prime',
         'cli-path',
         'containers-podman',
+        'ports-reuse-prime',
+        'install-install-present-prime',
+        'install-install-present-stopped-prime',
+        'install-install-repaired-prime',
         'genuine',
         'genuine-licensed',
         'ssh-no-proposals',
@@ -1291,6 +1304,7 @@ describe('the launches of the VSCodium run', () => {
         'agent-notmp',
         'default-ports',
         'ssh-core',
+        'ssh-agents',
         'ssh-containers',
         ...labelsFromExplorer(),
       ],
@@ -1616,6 +1630,124 @@ describe('the install cases (card coverage-17)', () => {
         'suite-install',
         {HARNESS_INSTALL_CASE: hostCase.label},
       ]),
+    );
+  });
+
+  /** Writes the install cases `cases` into a temporary workspace and gives the error text of reading them. */
+  function errorOfCases(cases: unknown[]): string {
+    const workspace = new TemporaryWorkspace('primers');
+    try {
+      workspace.write('tests/acceptance/suite-install/cases.json', {cases});
+      try {
+        hostCases(workspace.root, 'suite-install');
+      } catch (error) {
+        return (error as Error).message;
+      }
+      return '';
+    } finally {
+      workspace.remove();
+    }
+  }
+
+  const BASIC = {cite: 'c', settings: {}, outcome: 'connected'};
+
+  it('tooling-168: naming a case that needs a primer makes the primer right before it, and no selection makes the primer alone', () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    function labels(selected: string[]): string[] {
+      return (chosenLaunches(launches, selected) as Launch[]).map(
+        launch => launch.label,
+      );
+    }
+    deepStrictEqual(
+      [
+        labels(['install-install-present']),
+        labels(['install-install-present-stopped']),
+        labels(['install-install-repaired']),
+        labels(['all', '!install-install-present']).filter(label =>
+          label.endsWith('-prime'),
+        ),
+        labels(['install-install-present', '!install-install-present']),
+        labels(['install-install-present-prime']),
+      ],
+      [
+        ['install-install-present-prime', 'install-install-present'],
+        [
+          'install-install-present-stopped-prime',
+          'install-install-present-stopped',
+        ],
+        ['install-install-repaired-prime', 'install-install-repaired'],
+        [],
+        [],
+        ['install-install-present-prime'],
+      ],
+    );
+  });
+
+  it('tooling-168: a primer is a launch of its case, named only, listed right before it', () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    const primers = launches.filter(
+      launch =>
+        launch.label.startsWith('install-') && launch.label.endsWith('-prime'),
+    );
+    deepStrictEqual(
+      primers.map(launch => [
+        launch.label,
+        launch.namedOnly,
+        launch.partOf,
+        launches[launches.indexOf(launch) + 1]?.label,
+      ]),
+      [
+        [
+          'install-install-present-prime',
+          true,
+          'install-install-present',
+          'install-install-present',
+        ],
+        [
+          'install-install-present-stopped-prime',
+          true,
+          'install-install-present-stopped',
+          'install-install-present-stopped',
+        ],
+        [
+          'install-install-repaired-prime',
+          true,
+          'install-install-repaired',
+          'install-install-repaired',
+        ],
+      ],
+    );
+  });
+
+  it('tooling-168: a case that needs a primer that is not listed right before it is refused', () => {
+    deepStrictEqual(
+      [
+        errorOfCases([{label: 'a', ...BASIC, needs: 'missing'}]),
+        errorOfCases([
+          {label: 'p', ...BASIC, primer: true},
+          {label: 'x', ...BASIC},
+          {label: 'a', ...BASIC, needs: 'p'},
+        ]),
+        errorOfCases([
+          {label: 'p', ...BASIC},
+          {label: 'a', ...BASIC, needs: 'p'},
+        ]),
+      ],
+      [
+        'the suite-install case "a" needs "missing", which must be the primer case listed right before it',
+        'the suite-install primer "p" must be listed right before the case that needs it',
+        'the suite-install case "a" needs "p", which must be the primer case listed right before it',
+      ],
+    );
+  });
+
+  it('tooling-168: a primer that no case needs is refused', () => {
+    strictEqual(
+      errorOfCases([
+        {label: 'p', ...BASIC, primer: true},
+        {label: 'a', ...BASIC},
+      ]),
+      'the suite-install primer "p" must be listed right before the case that needs it',
     );
   });
 

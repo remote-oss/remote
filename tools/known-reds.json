@@ -1,15 +1,6 @@
 [
   {
     "launch": "containers-a",
-    "file": "containers/connect-reading.test.ts",
-    "title": "F-0408 AC-14 (ruling-1557-tolerance): reopening a folder whose container runs connects, by the log’s Resolving Remote, and shows S087, each within 1.5 s (athena’s ruling on #1204 for the spec’s 1 s), with no Starting container and no Starting VS Code Server in the log",
-    "card": 2414,
-    "owner": "daedalus",
-    "evidence": 43225659271,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "containers-a",
     "file": "containers/open-folder-virtual.test.ts",
     "title": "F-0403 AC-28 (c71-untitled): in an untitled workspace core asks whether to save the workspace configuration before the window changes; Cancel leaves the window and creates nothing, and Don’t Save reloads the same window into one container",
     "card": 2432,
@@ -153,12 +144,21 @@
     "added": "2026-11-13"
   },
   {
-    "launch": "containers-volume",
-    "file": "containers-volume/volume.test.ts",
-    "title": "F-0419 AC-36 (s36): two windows that start Reopen in Container together make one vscode volume, both connect with no dialog, and the platform has one commit folder",
-    "card": 2469,
-    "owner": "daedalus",
-    "evidence": 43369951852,
+    "launch": "ssh-core",
+    "file": "ssh-core/forwarding-disabled.test.ts",
+    "title": "F-2604 AC-15 (c85-reload): after a reload of the failed window with the local server running the refusal fails the connect again, and the log does not repeat the setting line",
+    "card": 2484,
+    "owner": "dike",
+    "evidence": 43429964938,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "windows",
+    "file": "windows/active-host.test.ts",
+    "title": "F-2303 AC-4, AC-5, AC-6, AC-7: from a connected window a new empty window opens on the same host, connects with no login and no question, and leaves the first alone",
+    "card": 2462,
+    "owner": "iris",
+    "evidence": 43429964938,
     "added": "2026-11-13"
   }
 ]

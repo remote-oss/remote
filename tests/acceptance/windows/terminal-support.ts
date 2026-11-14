@@ -3,7 +3,14 @@
  * window opened on the host with a terminal in it.
  */
 
-import {inWindow, openWindow, waitFor} from './harness.ts';
+import {
+  connectionLog,
+  inWindow,
+  openWindow,
+  terminalNames,
+  waitFor,
+  windowState,
+} from './harness.ts';
 import {terminalText, typeInTerminal} from './renderer.ts';
 
 /** How many prompts the shell of window `window`'s terminal has printed: lines with the prompt's `$`, at the start of the line (dash's bare `$ `) or after a space (`~/folder $ `), whatever follows it. */
@@ -28,10 +35,29 @@ async function waitForTerminal(
 ): Promise<void> {
   await waitFor(description, check, 40_000).catch(async (caught: unknown) => {
     throw new Error(
-      `${String(caught)}; the terminal shows: ${JSON.stringify(await terminalTail(window))}`,
+      `${String(caught)}; the terminal shows: ${JSON.stringify(await terminalTail(window))}; the window's terminals: ${await withinTenSeconds(terminalNames(window))}; the window's remote: ${await withinTenSeconds(windowState(window).then(state => state.remoteName))}; the extension's log ends: ${JSON.stringify(connectionLog().slice(-8))}`,
       {cause: caught},
     );
   });
+}
+
+/** What `read` gives as text within ten seconds, for a failure to name; what is undefined, does not come in time or fails says so. */
+async function withinTenSeconds(read: Promise<unknown>): Promise<string> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<string>(resolve => {
+    timer = setTimeout(resolve, 10_000, '(not read in 10 s)');
+  });
+  try {
+    return await Promise.race([
+      read.then(
+        value => (value === undefined ? '(nothing)' : JSON.stringify(value)),
+        () => '(unreadable)',
+      ),
+      timeout,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
