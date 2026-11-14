@@ -759,7 +759,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       'harness-pw',
       'sh',
       '-c',
-      'rm -rf "$HOME"/.*server*; pkill -u harness-pw -f '[v]scodium-server'; true',
+      'rm -rf "$HOME"/.*server*; pkill -u harness-pw -f "[v]scodium-server"; true',
     );
     const file = writeConfig(alias, [
       hostBlock(
