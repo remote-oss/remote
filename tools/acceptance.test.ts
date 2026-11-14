@@ -527,6 +527,7 @@ const LAUNCH_ORDER = [
   'default-ports',
   'ssh-core',
   'ssh-agents',
+  'ssh-askpass',
   'ssh-containers',
   'no-proposals',
   'wsl-linux',

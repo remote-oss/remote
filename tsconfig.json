@@ -155,6 +155,9 @@
       "path": "tests/acceptance/ssh-agents"
     },
     {
+      "path": "tests/acceptance/ssh-askpass"
+    },
+    {
       "path": "tests/acceptance/ssh-containers"
     },
     {
