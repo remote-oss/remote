@@ -133,7 +133,7 @@ interface CliWiring {
   local: LocalPort;
   scheduler: Scheduler;
   /** The bridge's loopback port, chosen as the tunnel's is; nothing when none is free. */
-  chooseLocalPort(): Promise<PortChoice>;
+  chooseLocalPort(excluded?: ReadonlySet<number>): Promise<PortChoice>;
   newSecret(): string;
   presenter: FailurePresenter;
   /** The driver of the server download's notification of one bridge's first `serve`. */

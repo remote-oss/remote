@@ -169,6 +169,8 @@ export class FakeLocalPort implements LocalPort {
   readonly probes: FakeConnection[] = [];
   /** The ports whose listening was closed, in order. */
   readonly closedPorts: number[] = [];
+  /** The system error code a failed listen carries, when it has one. */
+  listenFailureCode: string | undefined = undefined;
   private readonly listeners = new Map<number, (connection: Duplex) => void>();
   private readonly failures = new Map<number, (detail: string) => void>();
   private readonly listenAnswer: Answer;
@@ -190,7 +192,11 @@ export class FakeLocalPort implements LocalPort {
     onFailure: (detail: string) => void,
   ): Promise<Listening> {
     if (this.listenAnswer === 'fail') {
-      return Promise.reject(new Error(`port ${String(port)} is in use`));
+      const failure: NodeJS.ErrnoException = new Error(
+        `port ${String(port)} is in use`,
+      );
+      failure.code = this.listenFailureCode;
+      return Promise.reject(failure);
     }
     this.listened.push(port);
     this.listeners.set(port, onConnection);

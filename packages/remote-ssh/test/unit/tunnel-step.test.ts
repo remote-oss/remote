@@ -90,6 +90,8 @@ function stepWith(
   loseConnection: () => void;
   /** How many times the step asked the search for a port. */
   searches: number[];
+  /** The ports the step excluded in each of its searches. */
+  excludedSeen: number[][];
 } {
   const clock = new FakeClock();
   const busyListens = options.busyListens ?? 0;
@@ -103,11 +105,11 @@ function stepWith(
     ): ReturnType<FakeLocalPort['listen']> {
       if (busyLeft > 0) {
         busyLeft -= 1;
-        return Promise.reject(
-          new Error(
-            `listen EADDRINUSE: address already in use 127.0.0.1:${String(port)}`,
-          ),
+        const failure: NodeJS.ErrnoException = new Error(
+          `listen EADDRINUSE: address already in use 127.0.0.1:${String(port)}`,
         );
+        failure.code = 'EADDRINUSE';
+        return Promise.reject(failure);
       }
       return super.listen(port, onConnection, onFailure);
     }
@@ -120,6 +122,7 @@ function stepWith(
   const socksPorts: number[] = [];
   const refused: number[] = [];
   const searches: number[] = [];
+  const excludedSeen: number[][] = [];
   const sink = new MemorySink();
   const port = 'port' in options ? options.port : 50000;
   const choice: PortChoice =
@@ -138,8 +141,9 @@ function stepWith(
       socksPorts.push(socksPort);
       return dialer;
     },
-    chooseLocalPort: () => {
+    chooseLocalPort: excluded => {
       searches.push(1);
+      excludedSeen.push([...(excluded ?? [])]);
       if (searches.length > 1 && options.laterBusyRange !== undefined) {
         return Promise.resolve({busyRange: options.laterBusyRange});
       }
@@ -203,6 +207,7 @@ function stepWith(
       recording.notice?.({type: 'transportLost'});
     },
     searches,
+    excludedSeen,
   };
 }
 
@@ -419,7 +424,16 @@ describe('the step that opens the window tunnel', () => {
     );
   });
 
-  it('#2585: each retry is told to the log, without the port', async () => {
+  it('#2585: each search excludes every port that failed before it', async () => {
+    const {open, excludedSeen} = stepWith({
+      ports: [50000, 50001, 50002],
+      busyListens: 2,
+    });
+    await open();
+    deepStrictEqual(excludedSeen, [[], [50000], [50000, 50001]]);
+  });
+
+  it('#2585: each retry is told to the log, with the port and the error', async () => {
     const {open, sink} = stepWith({
       ports: [50000, 50001, 50002],
       busyListens: 2,
@@ -428,10 +442,10 @@ describe('the step that opens the window tunnel', () => {
     deepStrictEqual(
       sink.lines
         .map(line => line.message)
-        .filter(message => message.startsWith('the window port was taken')),
+        .filter(message => message.includes('after the search found it free')),
       [
-        'the window port was taken after the search found it free; choosing another (attempt 2 of 3)',
-        'the window port was taken after the search found it free; choosing another (attempt 3 of 3)',
+        `the window port 50000 was taken after the search found it free (${TAKEN}:50000); choosing another (attempt 2 of 3)`,
+        `the window port 50001 was taken after the search found it free (${TAKEN}:50001); choosing another (attempt 3 of 3)`,
       ],
     );
   });
@@ -457,7 +471,7 @@ describe('the step that opens the window tunnel', () => {
     );
   });
 
-  it('#2585: a listen that fails for another reason is not tried again', async () => {
+  it('#2585: a listen that fails with no code of a port in use is not tried again', async () => {
     const {open, searches} = stepWith({listen: 'fail'});
     await open();
     deepStrictEqual(searches.length, 1);

@@ -63,8 +63,8 @@ export interface TunnelStepDependencies {
   limits: WaitLimits;
   /** The dialer through the connection's SOCKS relay on `socksPort`; the extension gives lib-forwarding's `socksDialer`. */
   dialerFor(socksPort: number): Dialer;
-  /** The window's port on this machine's loopback, or why none is free. */
-  chooseLocalPort(): Promise<PortChoice>;
+  /** The window's port on this machine's loopback, none of `excluded`, or why none is free. */
+  chooseLocalPort(excluded?: ReadonlySet<number>): Promise<PortChoice>;
   /** The window's environment for the connection that is being set up. */
   environment(): WindowEnvironment;
   /** The login terminals of the editor. */
@@ -541,9 +541,6 @@ function refusalLine(
 /** How many ports the window tunnel's relay is tried on, when the one the search found is taken before it listens. */
 const LISTEN_ATTEMPTS = 3;
 
-/** What the failed listen of a port that is in use says. */
-const PORT_TAKEN = /EADDRINUSE/;
-
 /** The failure of a connect that was cancelled while the tunnel was being opened. */
 const CANCELLED: TunnelResult = {kind: 'failed', failure: {kind: 'cancelled'}};
 
@@ -576,10 +573,11 @@ export function openTunnelStep(
       }
     });
     let outcome: Awaited<ReturnType<typeof openRelayTunnel>>;
+    const failedPorts = new Set<number>();
     try {
-      // A port the search found free can be taken before the relay listens on it: that listen is tried again on another port.
+      // A port the search found free can be taken before the relay listens on it: that listen is tried again on another port, never one that failed in this connect.
       for (let attempt = 1; ; attempt += 1) {
-        const chosen = await dependencies.chooseLocalPort();
+        const chosen = await dependencies.chooseLocalPort(failedPorts);
         if (!('port' in chosen)) {
           return notOpenedFor(chosen);
         }
@@ -613,12 +611,13 @@ export function openTunnelStep(
         });
         if (
           outcome.kind === 'listenFailed' &&
-          PORT_TAKEN.test(outcome.detail) &&
+          outcome.code === 'EADDRINUSE' &&
           attempt < LISTEN_ATTEMPTS &&
           !isAborted(cancellation)
         ) {
+          failedPorts.add(chosen.port);
           dependencies.logger.info(
-            `the window port was taken after the search found it free; choosing another (attempt ${String(attempt + 1)} of ${String(LISTEN_ATTEMPTS)})`,
+            `the window port ${String(chosen.port)} was taken after the search found it free (${outcome.detail}); choosing another (attempt ${String(attempt + 1)} of ${String(LISTEN_ATTEMPTS)})`,
           );
           continue;
         }

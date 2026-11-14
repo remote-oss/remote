@@ -153,4 +153,22 @@ describe('findFreePort (card forwarding-01 table)', () => {
     const outcome = await findFreePort(prober, undefined, options);
     deepStrictEqual([outcome, prober.probed], [{failure: 'noFreePort'}, []]);
   });
+
+  it('an excluded port in the range is never probed, and the next free one wins', async () => {
+    const prober = new FakeProber({40000: 'refused', 40001: 'refused'});
+    const outcome = await findFreePort(prober, RANGE, {
+      excluded: new Set([40000]),
+    });
+    deepStrictEqual([outcome, prober.probed], [{port: 40001}, [40001]]);
+  });
+
+  it('an excluded random candidate is never probed, and the next candidate is tried', async () => {
+    const prober = new FakeProber({52001: 'refused'});
+    const sequence = [52000, 52001];
+    const outcome = await findFreePort(prober, undefined, {
+      excluded: new Set([52000]),
+      randomPort: () => sequence.shift() ?? 0,
+    });
+    deepStrictEqual([outcome, prober.probed], [{port: 52001}, [52001]]);
+  });
 });

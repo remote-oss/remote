@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {createConnection, createServer, Socket, type Server} from 'node:net';
+import {createConnection, createServer, Server} from 'node:net';
 import {
   findFreePort,
   nodePortProber,
@@ -51,6 +51,18 @@ describe('the port prober over node:net', () => {
     return error;
   }
 
+  /** A server whose listen does as `onListen` says instead of binding. */
+  function scriptedServer(onListen: (server: Server) => void): () => Server {
+    return () => {
+      const server = new Server();
+      server.listen = (() => {
+        onListen(server);
+        return server;
+      }) as Server['listen'];
+      return server;
+    };
+  }
+
   afterEach(() => {
     for (const server of servers.splice(0)) {
       server.close();
@@ -62,110 +74,106 @@ describe('the port prober over node:net', () => {
     deepStrictEqual(await nodePortProber().probe(port), 'open');
   });
 
-  it('§W1: a port that stopped listening answers refused', async () => {
+  it("§W1: a port held by a connected client socket answers open, as the relay's listen would fail", async () => {
     const port = await listeningServer();
-    const server = servers.at(-1);
-    if (server === undefined) {
-      throw new Error('the test server is missing');
-    }
+    const client = createConnection({host: '127.0.0.1', port});
     await new Promise<void>(resolve => {
-      server.close(() => {
-        resolve();
-      });
+      client.once('connect', resolve);
     });
+    const clientPort = client.localPort;
+    servers.at(-1)?.close();
+    const answer = await nodePortProber().probe(clientPort ?? 0);
+    client.destroy();
+    deepStrictEqual(answer, 'open');
+  });
+
+  it('§W1: a port that stopped listening answers refused', async () => {
+    const port = await releasedPort();
     deepStrictEqual(await nodePortProber().probe(port), 'refused');
   });
 
-  it('§W1: an open probe is seen by the listener, and the probe closes it', async () => {
-    const port = await listeningServer();
-    const server = servers.at(-1);
-    if (server === undefined) {
-      throw new Error('the test server is missing');
-    }
-    const seen: string[] = [];
-    const sawClose = new Promise<void>(resolve => {
-      server.on('connection', socket => {
-        seen.push('connect');
-        socket.on('close', () => {
-          seen.push('close');
-          resolve();
-        });
-      });
+  it('§W1: a probe holds nothing on the port, so a listen on it succeeds', async () => {
+    const port = await releasedPort();
+    const answer = await nodePortProber().probe(port);
+    const server = createServer();
+    servers.push(server);
+    await new Promise<void>(resolve => {
+      server.listen(port, '127.0.0.1', resolve);
     });
-    await nodePortProber().probe(port);
-    await sawClose;
-    deepStrictEqual(seen, ['connect', 'close']);
+    deepStrictEqual([portOf(server), answer], [port, 'refused']);
   });
 
   it('§W1: a probe that never answers times out after the timer', async () => {
-    const answer = await proberOver(() => new Socket(), 20).probe(1025);
+    const answer = await proberOver(
+      scriptedServer(() => undefined),
+      20,
+    ).probe(1025);
     deepStrictEqual(answer, 'timedOut');
   });
 
   it('§W1: an error that arrives after the timeout changes nothing', async () => {
-    const socket = new Socket();
-    const answer = await proberOver(() => {
-      setTimeout(() => {
-        socket.emit('error', errorWith('EACCES'));
-      }, 40);
-      return socket;
-    }, 20).probe(1025);
+    const answer = await proberOver(
+      scriptedServer(server => {
+        setTimeout(() => {
+          server.emit('error', errorWith('EACCES'));
+        }, 40);
+      }),
+      20,
+    ).probe(1025);
     deepStrictEqual(answer, 'timedOut');
   });
 
-  it('§W1: a socket error other than a refusal answers error', async () => {
-    const socket = new Socket();
-    const answer = await proberOver(() => {
-      queueMicrotask(() => {
-        socket.emit('error', errorWith('EACCES'));
-      });
-      return socket;
-    }, 5000).probe(1025);
+  it('§W1: an error other than an address in use answers error', async () => {
+    const answer = await proberOver(
+      scriptedServer(server => {
+        queueMicrotask(() => {
+          server.emit('error', errorWith('EACCES'));
+        });
+      }),
+      5000,
+    ).probe(1025);
     deepStrictEqual(answer, 'error');
   });
 
-  it('§W1: a refusal answers once, and a later error changes nothing', async () => {
-    const socket = new Socket();
-    const answer = await proberOver(() => {
-      queueMicrotask(() => {
-        socket.emit('error', errorWith('ECONNREFUSED'));
+  it('§W1: an address in use answers once, and a later error changes nothing', async () => {
+    const answer = await proberOver(
+      scriptedServer(server => {
         queueMicrotask(() => {
-          socket.emit('error', errorWith('EACCES'));
+          server.emit('error', errorWith('EADDRINUSE'));
+          queueMicrotask(() => {
+            server.emit('error', errorWith('EACCES'));
+          });
         });
-      });
-      return socket;
-    }, 5000).probe(1025);
-    deepStrictEqual(answer, 'refused');
+      }),
+      5000,
+    ).probe(1025);
+    deepStrictEqual(answer, 'open');
   });
 
   it('§W1: errors before and after the timer are both heard', async () => {
-    const socket = new Socket();
-    const answer = await proberOver(() => {
-      setTimeout(() => {
-        socket.emit('error', errorWith('EACCES'));
-      }, 10);
-      setTimeout(() => {
-        socket.emit('error', errorWith('ECONNRESET'));
-      }, 30);
-      return socket;
-    }, 20).probe(1025);
+    const answer = await proberOver(
+      scriptedServer(server => {
+        setTimeout(() => {
+          server.emit('error', errorWith('EACCES'));
+        }, 10);
+        setTimeout(() => {
+          server.emit('error', errorWith('ECONNRESET'));
+        }, 30);
+      }),
+      20,
+    ).probe(1025);
     deepStrictEqual(answer, 'error');
   });
 
-  it('§W1: an error after an open answer is heard', async () => {
-    const port = await listeningServer();
-    const sockets: Socket[] = [];
-    const answer = await proberOver(rawPort => {
-      const socket = createConnection({host: '127.0.0.1', port: rawPort});
-      sockets.push(socket);
-      return socket;
-    }, 5000).probe(port);
-    const socket = sockets[0];
-    if (socket === undefined) {
-      throw new Error('the probe socket is missing');
-    }
-    socket.emit('error', errorWith('EACCES'));
-    deepStrictEqual(answer, 'open');
+  it('§W1: an error after a free answer is heard', async () => {
+    const servers2: Server[] = [];
+    const answer = await proberOver(() => {
+      const server = createServer();
+      servers2.push(server);
+      return server;
+    }, 5000).probe(await releasedPort());
+    servers2[0]?.emit('error', errorWith('EACCES'));
+    deepStrictEqual(answer, 'refused');
   });
 
   it('§W1, F-2104 BR-7: the search over the real prober skips the taken port', async () => {
@@ -184,24 +192,6 @@ describe('the port prober over node:net', () => {
     deepStrictEqual(
       await findFreePort(nodePortProber(), {first: taken, last: free}),
       {port: free},
-    );
-  });
-
-  it('§W1: a probe holds nothing on the port, so a listen on it succeeds', async () => {
-    const port = await releasedPort();
-    const answer = await nodePortProber().probe(port);
-    const server = createServer();
-    servers.push(server);
-    await new Promise<void>(resolve => {
-      server.listen(port, '127.0.0.1', resolve);
-    });
-    const address = server.address();
-    deepStrictEqual(
-      [
-        typeof address === 'object' && address !== null ? address.port : -1,
-        answer,
-      ],
-      [port, 'refused'],
     );
   });
 
