@@ -152,10 +152,25 @@ describe('the session troubleshooting terminal (card connect-136, F-2605)', () =
     deepStrictEqual([revealed, terminals.length], [[], 1]);
   });
 
-  it('#2537: with the setting off a failure only says so in the log and reveals nothing', () => {
-    const {check, revealed} = scene(false);
-    check([], true, 'failed');
-    deepStrictEqual(revealed, []);
+  it('#2537, reading-2537-reveal-without-analysis: with the setting off a failure says so in the log and reveals the log channel, with or without an error hint, behind a dialog; a connection or a cancel reveals nothing', () => {
+    const failed = scene(false);
+    failed.check([], true, 'failed');
+    const failedWithHint = scene(false);
+    failedWithHint.check([OFFLINE], true, 'failed');
+    const worked = scene(false);
+    worked.check([], true, 'succeeded');
+    const cancelled = scene(false);
+    cancelled.check([OFFLINE], true, 'cancelled');
+    deepStrictEqual(
+      [
+        failed.revealed,
+        failed.logged(),
+        failedWithHint.revealed,
+        worked.revealed,
+        cancelled.revealed,
+      ],
+      [[true], [DISABLED_LINE], [true], [], []],
+    );
   });
 
   it('F-2605.AC-11, AC-26: with the setting off the log says so and no terminal opens', () => {
