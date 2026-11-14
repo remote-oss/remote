@@ -176,7 +176,12 @@ describe('the recent folders under a target (card coverage-122)', function () {
         entries: {'folder.history.v1': {hosts}},
       },
     });
+    const before = driver;
     driver = launchWindow();
+    console.log(
+      `the launch's own window stands after the relaunch: ${driver} (it was ${before})`,
+    );
+    await inWindow(driver, 'acceptance.agent.activeEditorText');
     await inWindow(window, 'workbench.view.remote');
   }
 
