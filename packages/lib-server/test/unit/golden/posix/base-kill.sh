@@ -114,7 +114,11 @@ stop_servers() {
     fi
     kill "$SERVER_PID" 2>/dev/null
   done
-  SERVER_CANDIDATES=$(grep -alsF -e "$DATA_DIR/bin/" -e "$DATA_DIR/cli/servers/" /proc/[0-9]*/cmdline 2>/dev/null)
+  if have find; then
+    SERVER_CANDIDATES=$(find /proc -mindepth 2 -maxdepth 2 -path '/proc/[0-9]*/cmdline' -exec grep -alsF -e "$DATA_DIR/bin/" -e "$DATA_DIR/cli/servers/" {} + 2>/dev/null)
+  else
+    SERVER_CANDIDATES=$(grep -alsF -e "$DATA_DIR/bin/" -e "$DATA_DIR/cli/servers/" /proc/[0-9]*/cmdline 2>/dev/null)
+  fi
   for PROC_FILE in $SERVER_CANDIDATES; do
     PROC_DIR=${PROC_FILE%/cmdline}
     SERVER_PID=${PROC_DIR#/proc/}

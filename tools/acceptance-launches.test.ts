@@ -16,6 +16,7 @@ import {
   type HostCase,
   hostCases,
   hostSetupOf,
+  portFreeCommand,
   type Launch,
   launchLabelled,
   runnerLaunches,
@@ -1506,6 +1507,7 @@ describe('the ports cases', () => {
           "pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; " +
           'sleep 0.5; done; exit 1',
       },
+      {command: portFreeCommand(45001)},
       {command: 'nc -lk -p 45000 -s 127.0.0.1 -e /bin/true', detach: true},
       {command: 'nc -lk -p 45002 -s 127.0.0.1 -e /bin/true', detach: true},
       {
@@ -1530,8 +1532,42 @@ describe('the ports cases', () => {
     ]);
   });
 
-  it('coverage-13: a case with no holders frees only the server', () => {
-    deepStrictEqual(hostSetupOf(caseOf('range'), PORTS_SUITE).length, 2);
+  it('coverage-13: a case with no holders and a random port frees only the server', () => {
+    deepStrictEqual(hostSetupOf(caseOf('bind-all'), PORTS_SUITE).length, 2);
+  });
+
+  it('#2563: a case that expects a port waits, after the server is gone and before anything is held, until that port is free', () => {
+    deepStrictEqual(
+      hostSetupOf(caseOf('bind-all-range'), PORTS_SUITE).map(
+        entry => entry.command === portFreeCommand(46000),
+      ),
+      [false, false, true],
+    );
+  });
+
+  it('#2563: a case that keeps its server, or holds the port it expects, does not wait for the port', () => {
+    deepStrictEqual(
+      [
+        hostSetupOf(caseOf('reuse'), PORTS_SUITE).length,
+        hostSetupOf({...caseOf('range-held'), port: 45000}, PORTS_SUITE).filter(
+          entry => entry.command.startsWith('for i in $(seq 1 120)'),
+        ).length,
+      ],
+      [1, 0],
+    );
+  });
+
+  it('#2563: the wait ignores TIME_WAIT, gives up after thirty seconds, and then names the sockets that hold the port and fails', () => {
+    deepStrictEqual(
+      portFreeCommand(46000),
+      [
+        'for i in $(seq 1 120); do ',
+        'netstat -tan | awk \'$4 ~ /:46000$/ && $6 != "TIME_WAIT"\' | grep -q . || exit 0; ',
+        'sleep 0.25; done; ',
+        'echo "port 46000 is still in use on the host:"; ',
+        "netstat -tanp | awk '$4 ~ /:46000$/'; exit 1",
+      ].join(''),
+    );
   });
 
   it('coverage-13: a label outside its form is refused', () => {
