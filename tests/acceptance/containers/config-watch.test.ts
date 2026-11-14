@@ -96,7 +96,7 @@ describe('the rebuild prompt when the configuration changes (card coverage-106)'
         300_000,
       );
       await connectedToContainer(name, 300_000);
-      const sequence = indicators.stop();
+      const sequence = await indicators.stop();
       const [second = ''] = await devContainersOf(folder);
       const environment = await docker(
         'inspect',

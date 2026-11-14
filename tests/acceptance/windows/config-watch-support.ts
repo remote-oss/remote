@@ -178,22 +178,36 @@ export async function toastWhen(
   return found;
 }
 
-/** Samples the remote indicator of window `name` until stopped, and gives the distinct texts it showed, in order. */
-export function sampledIndicator(name: string): {stop(): string[]} {
+/**
+ * Samples the remote indicator of window `name` until stopped, and gives the distinct texts it showed, in order. Stopping
+ * reads the indicator once more, so that the last text is the one it shows at that moment and not the one the last
+ * sample, up to 200 ms before, saw.
+ */
+export function sampledIndicator(name: string): {stop(): Promise<string[]>} {
   const texts: string[] = [];
+  let stopped = false;
+  function note(text: string): void {
+    if (text !== '' && texts.at(-1) !== text) {
+      texts.push(text);
+    }
+  }
   const timer = setInterval(() => {
+    // A sample still being read when the sampler stops is older than the last reading and is left out.
     statusBarText(name, 'status.host').then(
       text => {
-        if (text !== '' && texts.at(-1) !== text) {
-          texts.push(text);
+        if (!stopped) {
+          note(text);
         }
       },
       () => undefined,
     );
   }, 200);
   return {
-    stop: () => {
+    stop: async () => {
       clearInterval(timer);
+      const last = await statusBarText(name, 'status.host');
+      stopped = true;
+      note(last);
       return texts;
     },
   };
