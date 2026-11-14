@@ -239,7 +239,7 @@ export function knowHostKey(name: string): void {
 }
 
 /** The aliases of the rows' own SSH configuration: the password account, with a known or an asked host key, no timeout of its own. */
-export const OWN_ALIASES = ['askpass-pw', 'askpass-ask'] as const;
+const OWN_ALIASES = ['askpass-pw', 'askpass-ask'] as const;
 
 /**
  * Writes the SSH configuration of the rows that need an alias with no `ConnectTimeout` of its own (the extension
