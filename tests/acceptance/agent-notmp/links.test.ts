@@ -122,6 +122,13 @@ describe('F-2311, an account that may not create links in /tmp (card coverage-99
         async () => (await hostLinks()).length > 0,
         30_000,
       ).catch(() => undefined);
+      // The reload can forward a new socket and drop the old one, so the link is compared with the socket forwarded now.
+      await waitFor(
+        'one forwarded socket after the reload',
+        async () => (await forwardedSockets()).length === 1,
+        30_000,
+      ).catch(() => undefined);
+      const live = await forwardedSockets();
       const links = await hostLinks();
       const target = (
         await onHostAs(USER, 'readlink', links[0]?.split(' ')[1] ?? '').catch(
@@ -138,13 +145,13 @@ describe('F-2311, an account that may not create links in /tmp (card coverage-99
         {
           count: links.length,
           newName: linked !== refused && links[0]?.endsWith(` ${linked}`),
-          sameSocket: forwarded.length === 1 && target === forwarded[0],
+          sameSocket: live.length === 1 && target === live[0],
           listsKey: (await listedKeys('c99-notmp-back')).includes(
             await fingerprintOf(keyFile()),
           ),
         },
         {count: 1, newName: true, sameSocket: true, listsKey: true},
-        `${links.join(',')} -> ${target} (forwarded ${forwarded.join(',')})`,
+        `${links.join(',')} -> ${target} (forwarded before the reload ${forwarded.join(',')}, now ${live.join(',')})`,
       );
     } finally {
       await closeWindow('c99-notmp-back').catch(() => undefined);
