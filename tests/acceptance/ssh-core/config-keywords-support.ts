@@ -38,7 +38,7 @@ function harnessLines(): string[] {
 }
 
 /** Writes the file of the run for alias `alias` with its entry: the harness host's lines, then `extra`. */
-export function entryFile(
+function entryFile(
   alias: string,
   extra: readonly string[],
   without: readonly string[] = [],
