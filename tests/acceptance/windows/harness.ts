@@ -72,9 +72,13 @@ export interface AgentEvent {
     | 'environment'
     | 'called'
     | 'editorText'
-    | 'linkOpened';
+    | 'linkOpened'
+    | 'terminalOpened'
+    | 'activeTerminalChanged';
   time: number;
   id?: string;
+  /** The name of the terminal a `terminalOpened` or `activeTerminalChanged` event concerns; null when none is active. */
+  terminal?: string | null;
   message?: string;
   remoteName?: string | null;
   remoteAuthority?: string | null;
