@@ -26,26 +26,27 @@ import {notifications, statusItem, windowTitle} from '../windows/renderer.ts';
 
 const execFileAsync = promisify(execFile);
 
-/** The lines of the run's `Host harness` block, without its `Host` line. */
-function harnessLines(): string[] {
+/** The lines of the run's block of host `base`, without its `Host` line. */
+function blockLines(base: string): string[] {
   const lines = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8').split(
     '\n',
   );
-  const start = lines.indexOf('Host harness');
+  const start = lines.indexOf(`Host ${base}`);
   const rest = lines.slice(start + 1);
   const end = rest.findIndex(line => !line.startsWith(' '));
   return rest.slice(0, end === -1 ? rest.length : end);
 }
 
-/** The block of host `alias`: the harness host's lines but those of `without`, then `extra`. */
+/** The block of host `alias`: the lines of the run's block `base` but those of `without`, then `extra`. */
 export function hostBlock(
   alias: string,
   extra: readonly string[],
   without: readonly string[] = [],
+  base = 'harness',
 ): string[] {
   return [
     `Host ${alias}`,
-    ...harnessLines().filter(
+    ...blockLines(base).filter(
       line => !without.includes(line.trim().split(' ')[0] ?? ''),
     ),
     ...extra.map(line => `  ${line}`),
@@ -56,7 +57,7 @@ export function hostBlock(
 /** Writes the file `name` of the run from `blocks`, each the lines of a `Host` block, and gives its path. */
 export function writeConfig(
   name: string,
-  blocks: readonly (readonly string[])[],
+  blocks: ReadonlyArray<readonly string[]>,
 ): string {
   const file = path.join(variable('HARNESS_RUN_FOLDER'), `${name}.config`);
   writeFileSync(file, blocks.flat().join('\n'));

@@ -5,8 +5,10 @@
 
 import {execFile} from 'node:child_process';
 import {deepStrictEqual} from 'node:assert';
+import {writeFileSync} from 'node:fs';
+import path from 'node:path';
 import {promisify} from 'node:util';
-import {hostPort, recordLines} from '../windows/harness.ts';
+import {hostPort, recordLines, variable} from '../windows/harness.ts';
 import {
   connectWith,
   hostBlock,
@@ -26,6 +28,32 @@ function target(alias: string, jump: string): string[] {
   return hostBlock(alias, [`ProxyJump ${jump}`, 'Port 22'], ['Port']);
 }
 
+/** The `ssh` lines of a row whose host keys are unknown: it asks, and its known-hosts file is `known`. */
+function askLines(known: string): string[] {
+  return ['StrictHostKeyChecking ask', `UserKnownHostsFile ${known}`];
+}
+
+/** The keywords of the harness block that `ASK` replaces. */
+const ASK_WITHOUT = [
+  'BatchMode',
+  'StrictHostKeyChecking',
+  'UserKnownHostsFile',
+];
+
+/** An empty known-hosts file of the run for row `alias`. */
+function freshKnown(alias: string): string {
+  const file = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.known`);
+  writeFileSync(file, '');
+  return file;
+}
+
+/** What window `alias` asked, in order: surface, question and answer. */
+function asked(alias: string): string[] {
+  return recordLines(undefined, alias).map(
+    line => `${line.surface}|${line.question.slice(0, 140)}|${line.answer}`,
+  );
+}
+
 /** The pids of the processes whose command line holds `fragment`, other than the search itself. */
 async function processesWith(fragment: string): Promise<string[]> {
   try {
@@ -39,26 +67,40 @@ async function processesWith(fragment: string): Promise<string[]> {
 describe('jump hosts and proxy commands (card #2601)', function () {
   this.timeout(300_000);
 
-  it('PROBE c2601-probe: what a window asks with unknown keys behind a jump host', async () => {
-    const alias = 'c2601-probe';
+  it('PROBE c2601-probe-keys: what a window asks with unknown keys behind a jump host', async () => {
+    const alias = 'c2601-probekeys';
+    const known = freshKnown(alias);
     const file = writeConfig(alias, [
-      target(alias, `${alias}-hop`),
-      hostBlock(`${alias}-hop`, []),
+      hostBlock(
+        alias,
+        [`ProxyJump ${alias}-hop`, 'Port 22', ...askLines(known)],
+        ASK_WITHOUT,
+      ),
+      hostBlock(`${alias}-hop`, askLines(known), ASK_WITHOUT),
     ]);
-    const result = await connectWith(
-      alias,
-      [],
-      'fails',
-      outcome => ({
-        asked: recordLines(undefined, alias).map(
-          line =>
-            `${line.surface}|${line.question.slice(0, 120)}|${line.answer}`,
-        ),
-        outcome,
-      }),
-      {file, without: [], script: []},
-    );
-    deepStrictEqual(result.asked, [], 'PROBE');
+    const result = await connectWith(alias, [], 'fails', () => asked(alias), {
+      file,
+      script: [],
+    });
+    deepStrictEqual(result, [], 'PROBE');
+  });
+
+  it('PROBE c2601-probe-password: what a window asks with a password jump host and a password target', async () => {
+    const alias = 'c2601-probepw';
+    const file = writeConfig(alias, [
+      hostBlock(
+        alias,
+        [`ProxyJump ${alias}-hop`, 'Port 22'],
+        ['Port', 'HostName', 'ProxyCommand'],
+        'password',
+      ),
+      hostBlock(`${alias}-hop`, [], [], 'password'),
+    ]);
+    const result = await connectWith(alias, [], 'fails', () => asked(alias), {
+      file,
+      script: [],
+    });
+    deepStrictEqual(result, [], 'PROBE');
   });
 
   it('F-2310 AC-13 (c2601-jump-unresolved): a jump host whose name does not resolve fails at once with the resolve reason', async () => {
