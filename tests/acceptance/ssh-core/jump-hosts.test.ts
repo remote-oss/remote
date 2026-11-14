@@ -3,12 +3,17 @@
  * ProxyCommand, each written to a file of its own, plain ssh against it where the criterion names it, then a window.
  */
 
-import {execFile} from 'node:child_process';
+import {execFile, execFileSync} from 'node:child_process';
 import {deepStrictEqual} from 'node:assert';
-import {writeFileSync} from 'node:fs';
+import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
-import {hostPort, recordLines, variable} from '../windows/harness.ts';
+import {
+  hostPassword,
+  hostPort,
+  recordLines,
+  variable,
+} from '../windows/harness.ts';
 import {
   connectWith,
   hostBlock,
@@ -47,11 +52,61 @@ function freshKnown(alias: string): string {
   return file;
 }
 
-/** What window `alias` asked, in order: surface, question and answer. */
-function asked(alias: string): string[] {
-  return recordLines(undefined, alias).map(
-    line => `${line.surface}|${line.question.slice(0, 140)}|${line.answer}`,
-  );
+/** What is wrong with the password hosts of a row: only passwords are tried, three times for a jump that is told so. */
+const PASSWORD_ONLY = [
+  'PubkeyAuthentication no',
+  'PreferredAuthentications password',
+];
+
+/** The keywords of the run's `password` block that a row sets itself. */
+const PASSWORD_WITHOUT = [
+  'PreferredAuthentications',
+  'NumberOfPasswordPrompts',
+  'HostName',
+  'Port',
+  'ProxyCommand',
+];
+
+/**
+ * The file of a row with a password jump host (the harness host at its published port) and a password target behind it
+ * (the host's own sshd, at 127.0.0.2 inside, so that its prompt names another address than the jump host's).
+ */
+function passwordChain(alias: string, prompts: number): string {
+  return writeConfig(alias, [
+    hostBlock(
+      alias,
+      [
+        `ProxyJump ${alias}-hop`,
+        'HostName 127.0.0.2',
+        'Port 22',
+        ...PASSWORD_ONLY,
+        'NumberOfPasswordPrompts 1',
+      ],
+      PASSWORD_WITHOUT,
+      'password',
+    ),
+    hostBlock(
+      `${alias}-hop`,
+      [...PASSWORD_ONLY, `NumberOfPasswordPrompts ${String(prompts)}`],
+      PASSWORD_WITHOUT,
+      'password',
+    ),
+  ]);
+}
+
+/** The answer of the script to a password input that names `address`. */
+function passwordAt(alias: string, address: string, text: string) {
+  return {
+    surface: 'maskedInput',
+    match: `harness-pw@${address}`,
+    answer: {text},
+    window: alias,
+  } as const;
+}
+
+/** The questions window `alias` was asked on `surface`, in order. */
+function questionsOn(alias: string, surface: string): string[] {
+  return recordLines(surface, alias).map(line => line.question);
 }
 
 /** The pids of the processes whose command line holds `fragment`, other than the search itself. */
@@ -66,42 +121,6 @@ async function processesWith(fragment: string): Promise<string[]> {
 
 describe('jump hosts and proxy commands (card #2601)', function () {
   this.timeout(300_000);
-
-  it('PROBE c2601-probe-keys: what a window asks with unknown keys behind a jump host', async () => {
-    const alias = 'c2601-probekeys';
-    const known = freshKnown(alias);
-    const file = writeConfig(alias, [
-      hostBlock(
-        alias,
-        [`ProxyJump ${alias}-hop`, 'Port 22', ...askLines(known)],
-        ASK_WITHOUT,
-      ),
-      hostBlock(`${alias}-hop`, askLines(known), ASK_WITHOUT),
-    ]);
-    const result = await connectWith(alias, [], 'fails', () => asked(alias), {
-      file,
-      script: [],
-    });
-    deepStrictEqual(result, [], 'PROBE');
-  });
-
-  it('PROBE c2601-probe-password: what a window asks with a password jump host and a password target', async () => {
-    const alias = 'c2601-probepw';
-    const file = writeConfig(alias, [
-      hostBlock(
-        alias,
-        [`ProxyJump ${alias}-hop`, 'Port 22'],
-        ['Port', 'HostName', 'ProxyCommand'],
-        'password',
-      ),
-      hostBlock(`${alias}-hop`, [], [], 'password'),
-    ]);
-    const result = await connectWith(alias, [], 'fails', () => asked(alias), {
-      file,
-      script: [],
-    });
-    deepStrictEqual(result, [], 'PROBE');
-  });
 
   it('F-2310 AC-13 (c2601-jump-unresolved): a jump host whose name does not resolve fails at once with the resolve reason', async () => {
     const alias = 'c2601-nores';
@@ -288,5 +307,231 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       {file},
     );
     deepStrictEqual([result.plain, result.outcome.dialog], [0, undefined]);
+  });
+
+  it('F-2310 AC-5, AC-26 (c2601-password-chain): a password jump host and a password target ask for their passwords in hop order, the window connects, and the extension writes no setting and no configuration entry', async () => {
+    const alias = 'c2601-pwchain';
+    const file = passwordChain(alias, 1);
+    const before = readFileSync(file, 'utf8');
+    const result = await connectWith(
+      alias,
+      [],
+      'connects',
+      outcome => ({
+        asked: questionsOn(alias, 'maskedInput'),
+        settings: outcome.settingsAfter === outcome.settingsBefore,
+        config: readFileSync(file, 'utf8') === before,
+      }),
+      {
+        file,
+        script: [
+          passwordAt(alias, '127.0.0.1', hostPassword()),
+          passwordAt(alias, '127.0.0.2', hostPassword()),
+        ],
+      },
+    );
+    deepStrictEqual(result, {
+      asked: [
+        'Enter password for harness-pw@127.0.0.1',
+        'Enter password for harness-pw@127.0.0.2',
+      ],
+      settings: true,
+      config: true,
+    });
+  });
+
+  it('F-2310 AC-7 (c2601-password-wrong): a wrong password at the jump host asks again with the same placeholder and the message that the permission was denied', async () => {
+    const alias = 'c2601-pwwrong';
+    const file = passwordChain(alias, 3);
+    const result = await connectWith(
+      alias,
+      [],
+      'connects',
+      () =>
+        recordLines('maskedInput', alias).map(line => [
+          line.question,
+          line.detail,
+        ]),
+      {
+        file,
+        script: [
+          passwordAt(alias, '127.0.0.1', 'wrong'),
+          passwordAt(alias, '127.0.0.1', hostPassword()),
+          passwordAt(alias, '127.0.0.2', hostPassword()),
+        ],
+      },
+    );
+    deepStrictEqual(result, []);
+  });
+
+  it('F-2310 AC-8 (c2601-password-three-wrong): three wrong passwords at the jump host fail with the permission dialog and its three buttons', async () => {
+    const alias = 'c2601-pw3';
+    const file = passwordChain(alias, 3);
+    const result = await connectWith(
+      alias,
+      [],
+      'fails',
+      outcome => ({
+        dialog: outcome.dialog,
+        buttons: outcome.buttons,
+        asked: questionsOn(alias, 'maskedInput').length,
+      }),
+      {
+        file,
+        settings: {'remote.SSH.connectTimeout': 120},
+        script: [
+          passwordAt(alias, '127.0.0.1', 'wrong1'),
+          passwordAt(alias, '127.0.0.1', 'wrong2'),
+          passwordAt(alias, '127.0.0.1', 'wrong3'),
+          {
+            surface: 'failureDialog',
+            match: 'Could not establish connection',
+            answer: 'dismiss',
+            window: alias,
+          },
+          {
+            surface: 'mitigationPick',
+            match: 'Pick an action',
+            answer: 'dismiss',
+            window: alias,
+          },
+        ],
+      },
+    );
+    deepStrictEqual(result, {
+      dialog: `Could not establish connection to "${alias}": Permission denied (password).`,
+      buttons: ['Close Remote', 'Retry', 'More Actions...'],
+      asked: 3,
+    });
+  });
+
+  it('F-2310 AC-9 (c2601-password-escape): Escape on the jump host input asks nothing more for that hop and the permission dialog follows within about a second', async () => {
+    const alias = 'c2601-pwescape';
+    const file = passwordChain(alias, 3);
+    const result = await connectWith(
+      alias,
+      [],
+      'fails',
+      outcome => ({
+        dialog: outcome.dialog,
+        asked: questionsOn(alias, 'maskedInput'),
+        quick:
+          recordLines('maskedInput', alias).length === 1 &&
+          (outcome.failedAfter ?? Infinity) < 5000,
+      }),
+      {file},
+    );
+    deepStrictEqual(result, {
+      dialog: `Could not establish connection to "${alias}": Permission denied (password).`,
+      asked: ['Enter password for harness-pw@127.0.0.1'],
+      quick: true,
+    });
+  });
+
+  it('F-2310 AC-12 (c2601-jump-blackhole): a jump host that drops all packets fails after about the connect timeout with the timed out reason', async () => {
+    const alias = 'c2601-blackhole';
+    const file = writeConfig(alias, [
+      target(alias, `${alias}-hop`),
+      hostBlock(`${alias}-hop`, ['HostName 192.0.2.1'], ['HostName']),
+    ]);
+    const result = await connectWith(
+      alias,
+      [],
+      'fails',
+      outcome => ({
+        dialog: outcome.dialog,
+        waited:
+          (outcome.failedAfter ?? 0) >= 8000 &&
+          (outcome.failedAfter ?? 0) < 25_000,
+      }),
+      {file},
+    );
+    deepStrictEqual(result, {
+      dialog: `Could not establish connection to "${alias}": The connection timed out.`,
+      waited: true,
+    });
+  });
+
+  it('F-2310 AC-24 (c2601-hostkey-picks): unknown host keys behind a jump host ask the fingerprint pick for each hop, and Continue records both keys', async () => {
+    const alias = 'c2601-picks';
+    const known = freshKnown(alias);
+    const file = writeConfig(alias, [
+      hostBlock(
+        alias,
+        [
+          `ProxyJump ${alias}-hop`,
+          'HostName 127.0.0.2',
+          'Port 22',
+          ...askLines(known),
+        ],
+        ['Port', 'HostName', ...ASK_WITHOUT],
+      ),
+      hostBlock(`${alias}-hop`, askLines(known), ASK_WITHOUT),
+    ]);
+    const result = await connectWith(
+      alias,
+      [],
+      'connects',
+      () => ({
+        picks: questionsOn(alias, 'pick').map(question =>
+          question.replace(/SHA256:\S+/, 'SHA256:x'),
+        ),
+        recorded: readFileSync(known, 'utf8')
+          .split('\n')
+          .filter(line => line !== '').length,
+      }),
+      {
+        file,
+        script: [
+          {surface: 'pick', match: 'fingerprint', answer: 'yes', window: alias},
+          {surface: 'pick', match: 'fingerprint', answer: 'yes', window: alias},
+        ],
+      },
+    );
+    deepStrictEqual(result, {
+      picks: [
+        `"${alias}" has fingerprint "SHA256:x".`,
+        `"${alias}" has fingerprint "SHA256:x".`,
+      ],
+      recorded: 2,
+    });
+  });
+
+  it('F-2310 AC-19 (c2601-hostkey-changed): a known-hosts line for the jump host that does not match its key fails with the changed host key dialog', async () => {
+    const alias = 'c2601-changed';
+    const known = freshKnown(alias);
+    const keyFile = `${known}.key`;
+    execFileSync('ssh-keygen', [
+      '-q',
+      '-t',
+      'ed25519',
+      '-N',
+      '',
+      '-f',
+      keyFile,
+    ]);
+    writeFileSync(
+      known,
+      `[127.0.0.1]:${String(hostPort())} ${readFileSync(`${keyFile}.pub`, 'utf8')}`,
+    );
+    const file = writeConfig(alias, [
+      target(alias, `${alias}-hop`),
+      hostBlock(
+        `${alias}-hop`,
+        [`UserKnownHostsFile ${known}`],
+        ['UserKnownHostsFile'],
+      ),
+    ]);
+    const result = await connectWith(
+      alias,
+      [],
+      'fails',
+      outcome => outcome.dialog,
+      {file},
+    );
+    deepStrictEqual(
+      result,
+      `Could not establish connection to "${alias}": Remote host key has changed, port forwarding is disabled.`,
+    );
   });
 });
