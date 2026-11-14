@@ -142,9 +142,25 @@ describe('the recent folders under a target (card coverage-122)', function () {
   }
 
   /**
+   * The launch's own window as it stands open now: after a relaunch it is a new start of a new editor, and the only open
+   * empty window, since a row's window carries its folder's name. The driver a row takes from here.
+   */
+  function launchWindow(): string {
+    const name = windowNames().find(
+      each => each.startsWith('empty-') && isOpen(each),
+    );
+    if (name === undefined) {
+      throw new Error('no launch window is open to serve as the driver');
+    }
+    return name;
+  }
+
+  /**
    * Seeds the SSH companion's folder history with `hosts`, the whole history: the relaunch restarts the launch's
    * editor and writes it between the stop and the start, so the earlier rows' entries are wiped, and reopens the
-   * window on its folder. The view is shown in the window again.
+   * window on its folder. The view is shown in the window again. The relaunch stops the launch's whole editor, so the
+   * driver is the new start's own window and is re-found here, or the rows after this one send their commands to a dead
+   * window.
    */
   async function seedHistory(
     window: string,
@@ -160,6 +176,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
         entries: {'folder.history.v1': {hosts}},
       },
     });
+    driver = launchWindow();
     await inWindow(window, 'workbench.view.remote');
   }
 
