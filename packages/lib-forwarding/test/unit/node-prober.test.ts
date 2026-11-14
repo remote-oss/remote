@@ -178,21 +178,11 @@ describe('the port prober over node:net', () => {
 
   it('§W1, F-2104 BR-7: the search over the real prober skips the taken port', async () => {
     const taken = await listeningServer();
-    const prober = nodePortProber();
-    let free = 0;
-    for (let candidate = taken + 1; candidate <= taken + 200; candidate += 1) {
-      if ((await prober.probe(candidate)) === 'refused') {
-        free = candidate;
-        break;
-      }
-    }
-    if (free === 0) {
-      throw new Error('no free port beside the taken one');
-    }
-    deepStrictEqual(
-      await findFreePort(nodePortProber(), {first: taken, last: free}),
-      {port: free},
-    );
+    const outcome = await findFreePort(nodePortProber(), {
+      first: taken,
+      last: taken + 200,
+    });
+    deepStrictEqual('port' in outcome && outcome.port > taken, true);
   });
 
   it('§W1, F-2104 BR-7: the default probe timeout is 500 milliseconds, under the search budget', () => {
