@@ -26,6 +26,15 @@ const STARTUP_BUTTONS = [
   'Yes, I trust the authors',
 ];
 
+/** What `read` gives, or the text of what it threw, so that a read of a failure report never replaces the failure. */
+async function attempt(read: () => unknown): Promise<unknown> {
+  try {
+    return await read();
+  } catch (caught) {
+    return `the read failed: ${String(caught)}`;
+  }
+}
+
 describe('the trust launch (card tooling-33)', function () {
   this.timeout(300000);
 
@@ -33,8 +42,19 @@ describe('the trust launch (card tooling-33)', function () {
     await openWindow('harness', 's1');
     const trusted = await isTrusted('s1');
     const shown = await waitForDialog('s1').catch(async (caught: unknown) => {
+      const held = {
+        trustedNow: await attempt(() => isTrusted('s1')),
+        state: await attempt(() => windowState('s1')),
+        events: await attempt(() =>
+          windowEvents('s1').map(
+            event => `${event.event}@${String(event.time)}`,
+          ),
+        ),
+        page: await attempt(async () => (await pageText('s1')).slice(0, 400)),
+        connectionLog: await attempt(() => connectionLog().slice(-12)),
+      };
       throw new Error(
-        `${String(caught)}; trusted when opened ${String(trusted)}, now ${String(await isTrusted('s1'))}; state ${JSON.stringify(await windowState('s1'))}; events ${JSON.stringify(windowEvents('s1').map(event => `${event.event}@${String(event.time)}`))}; page ${JSON.stringify((await pageText('s1')).slice(0, 400))}; connection log ${JSON.stringify(connectionLog().slice(-12))}`,
+        `${String(caught)}; trusted when opened ${String(trusted)}; ${JSON.stringify(held)}`,
         {cause: caught},
       );
     });
