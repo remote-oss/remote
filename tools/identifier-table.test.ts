@@ -287,6 +287,21 @@ describe('identifier-table', () => {
     });
   });
 
+  describe('authorities', () => {
+    it('name an authority by its words, and one too short to name alone with the word authority after it, keeping its value', () => {
+      const source = tableSource(
+        syntheticSources({manifest: {authorities: ['ssh-remote', 'wsl']}}),
+      );
+      deepStrictEqual(
+        [
+          source?.includes('sshRemote: "ssh-remote"'),
+          source?.includes('wslAuthority: "wsl"'),
+        ],
+        [true, true],
+      );
+    });
+  });
+
   describe('runtime commands', () => {
     it('are written as a plain table named by their last segment', () => {
       strictEqual(

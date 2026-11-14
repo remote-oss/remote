@@ -167,6 +167,9 @@
       "path": "tests/acceptance/explorer"
     },
     {
+      "path": "tests/acceptance/wsl"
+    },
+    {
       "path": "tests/acceptance/explorer-alone"
     },
     {

@@ -403,7 +403,20 @@ importers:
         specifier: ^9.3.2
         version: 9.3.2
 
-  packages/remote-wsl: {}
+  packages/remote-wsl:
+    dependencies:
+      lib-identifiers:
+        specifier: workspace:*
+        version: link:../lib-identifiers
+      lib-log:
+        specifier: workspace:*
+        version: link:../lib-log
+      lib-standdown:
+        specifier: workspace:*
+        version: link:../lib-standdown
+      lib-wsl:
+        specifier: workspace:*
+        version: link:../lib-wsl
 
   tests/acceptance:
     dependencies:
