@@ -178,6 +178,7 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
         state.requirementQueries.push('containerRequirements');
         return Promise.resolve(state.containerRequired);
       },
+      imageMissing: () => Promise.resolve(undefined),
       readText: () => Promise.resolve(state.configText),
       confirm: (message, detail, acceptLabel) => {
         state.requirementDialogs.push([message, detail, acceptLabel]);

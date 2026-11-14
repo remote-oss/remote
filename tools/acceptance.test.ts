@@ -94,6 +94,7 @@ import {
   suiteFilesIn,
 } from './acceptance-parts.ts';
 import type {RunRegistry} from './acceptance-registry.ts';
+import {runDistros, type RunWslDistros} from './acceptance-wsl.ts';
 import {STOP_PROGRAM} from './acceptance-helper-stop.ts';
 import {acceptanceRunId} from './acceptance-run.ts';
 import type {CommandRunner} from './command-runner.ts';
@@ -251,6 +252,22 @@ class FakeHarness implements HarnessDependencies {
       address: '127.0.0.1:5000',
       stop: () => {
         this.calls.push('registry stopped');
+        return Promise.resolve();
+      },
+    });
+  };
+
+  readonly prepareWslDistros = (
+    runId: string,
+    runFolder: string,
+  ): Promise<RunWslDistros> => {
+    this.calls.push(
+      `wsl distros prepared ${runId} ${path.basename(runFolder)}`,
+    );
+    return Promise.resolve({
+      distros: runDistros(runId),
+      unregister: () => {
+        this.calls.push('wsl distros unregistered');
         return Promise.resolve();
       },
     });
@@ -1560,7 +1577,7 @@ describe('acceptance', () => {
             client: 'vscodium',
           },
           containersOnly('ssh-containers'),
-          ...['wsl-linux', 'wsl-linux-web', 'wsl-linux-standdown'].map(
+          ...['wsl-linux', 'wsl-linux-web', 'wsl', 'wsl-linux-standdown'].map(
             label => ({
               folder: path.join('/run', `extensions-${label}`),
               files: [
