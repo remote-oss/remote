@@ -1,5 +1,6 @@
 import {
   commandsOf,
+  settingIn,
   readUserSettings,
   restoreUserSettings,
 } from '../windows/harness.ts';
@@ -16,15 +17,20 @@ describe('probe: AI-on palette (card #2520)', function () {
     const lines: string[] = [];
     for (let attempt = 1; attempt <= 10; attempt += 1) {
       const started = Date.now();
+      const off = await localWindowWithAi(false);
+      let offSeen: string;
+      try {
+        const items = (await paletteItems(off, 'SSH')).map(item => item.trim());
+        offSeen = items.includes(SIDEBAR) ? 'Y' : `n${String(items.length)}`;
+      } finally {
+        await closeQuietly(off);
+      }
       const window = await localWindowWithAi(true);
       try {
-        const registered = (
-          await commandsOf(window, 'workbench.action.chat')
-        ).filter(commandId => /ession/i.test(commandId));
         const seen: string[] = [];
         for (let read = 1; read <= 8; read += 1) {
-          const items = (await paletteItems(window, 'Agent Sessions')).map(
-            item => item.trim(),
+          const items = (await paletteItems(window, 'SSH')).map(item =>
+            item.trim(),
           );
           seen.push(items.includes(SIDEBAR) ? 'Y' : `n${String(items.length)}`);
           if (items.includes(SIDEBAR)) {
@@ -32,11 +38,13 @@ describe('probe: AI-on palette (card #2520)', function () {
           }
           await new Promise(resolve => setTimeout(resolve, 5_000));
         }
-        const sessionsCommands = (
+        const registered = (
           await commandsOf(window, 'workbench.action.chat')
-        ).length;
+        ).filter(commandId =>
+          /AgentSessionsSidebar|showAgentSessions/i.test(commandId),
+        );
         lines.push(
-          `#${String(attempt)} +${String(Date.now() - started)}ms reads=${seen.join(',')} registeredSessionCommands=${JSON.stringify(registered)} chatCommands=${String(sessionsCommands)}`,
+          `#${String(attempt)} +${String(Date.now() - started)}ms off=${offSeen} on=${seen.join(',')} setting=${JSON.stringify(await settingIn(window, 'chat.disableAIFeatures'))} sidebarCommandRegistered=${JSON.stringify(registered)}`,
         );
       } finally {
         await closeQuietly(window);
