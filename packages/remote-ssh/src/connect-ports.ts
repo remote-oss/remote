@@ -336,6 +336,8 @@ export function wiringPortsOf(
       settings: () => termsSettingsOf(settings),
       pickPlatform: surfaces.pickPlatform,
       writePlatform: surfaces.writePlatform,
+      logger,
+      scheduler: machine.scheduler,
       announcePlatform: platform => {
         announcePlatform(
           {
