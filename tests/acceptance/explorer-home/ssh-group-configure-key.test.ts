@@ -19,6 +19,8 @@ import {
   readUserSettings,
   restoreUserSettings,
   userSettings,
+  windowEvents,
+  windowState,
 } from '../windows/harness.ts';
 import {
   actionTooltip,
@@ -68,10 +70,15 @@ describe('Open SSH Config File by a key (card explorer-11, F-5002 AC-17)', funct
           );
           const pick = await quickPickFacts(window).catch(() => 'unreadable');
           const notices = await notifications(window).catch(() => 'unreadable');
+          const state = await windowState(window).catch(() => 'unreachable');
+          const events = windowEvents(window).slice(-15);
           console.log(
             `AC-17: ${String(seconds)} s after keybindings.json was written, ` +
               `the button's tooltip stood at ${JSON.stringify(tooltip)}, the focused element at ${JSON.stringify(focused)}, ` +
               `the pick at ${JSON.stringify(pick)} and the notifications at ${JSON.stringify(notices)}`,
+          );
+          console.log(
+            `AC-17: the window's state stood at ${JSON.stringify(state)} and its last events at ${JSON.stringify(events)}`,
           );
           if (tooltip.includes('Ctrl+Alt+J')) {
             await pressControlAlt(window, 'j');
