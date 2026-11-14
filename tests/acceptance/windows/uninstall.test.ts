@@ -139,6 +139,37 @@ function passwordHostName(): string {
   );
 }
 
+/**
+ * What tells a server process that appeared after a snapshot (a child the server starts late) from one the uninstall
+ * left, for the failure of a row that compares two snapshots to name (#2569): each process that appeared or ended with
+ * its parent, its age and its command line. Nothing when the two are the same.
+ */
+async function processFacts(
+  before: readonly number[],
+  after: readonly number[],
+): Promise<string | undefined> {
+  const appeared = after.filter(processId => !before.includes(processId));
+  const ended = before.filter(processId => !after.includes(processId));
+  if (appeared.length === 0 && ended.length === 0) {
+    return undefined;
+  }
+  try {
+    const listing = (await onHost('ps', '-o', 'pid,ppid,etime,args')).split(
+      '\n',
+    );
+    function lineOf(processId: number): string {
+      return (
+        listing
+          .find(line => line.trim().startsWith(`${String(processId)} `))
+          ?.trim() ?? 'gone'
+      );
+    }
+    return `processes that appeared since the snapshot: ${JSON.stringify(appeared.map(processId => `${String(processId)} -> ${lineOf(processId)}`))}; processes that ended: ${JSON.stringify(ended.map(processId => `${String(processId)} -> ${lineOf(processId)}`))}`;
+  } catch (caught) {
+    return `processes that appeared: ${appeared.join(', ')}, ended: ${ended.join(', ')}; their command lines could not be read: ${String(caught)}`;
+  }
+}
+
 describe('Uninstall VS Code Server (card coverage-40)', function () {
   this.timeout(900_000);
 
@@ -642,14 +673,16 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
         platformAnswer('windows'),
       ]);
       await new Promise(resolve => setTimeout(resolve, 2000));
+      const observed = await serverProcesses();
       deepStrictEqual(
         [
           servers.length > 0,
           surfacesSince(mark, 'local'),
-          await serverProcesses(),
+          observed,
           await existsOnHost(DATA_FOLDER),
         ],
         [true, ['hostPick', 'platformPick'], servers, true],
+        await processFacts(servers, observed),
       );
       await closeAllButLocal();
     });
