@@ -257,6 +257,79 @@ describe('D2: the distros', () => {
   });
 });
 
+describe('D2: the cancellation of the callers that share a list read', () => {
+  const options = {includeDockerDesktop: false};
+
+  it('F-6102 (D2): a caller that aborts leaves with cancelled at once, and the caller that joined the same read still gets the rows from one process', async () => {
+    const {inventory, fake} = inventoryOver({});
+    const leaving = new AbortController();
+    const first = inventory.distros(options, leaving.signal);
+    const second = inventory.distros(options, NEVER);
+    leaving.abort();
+    const [left, stayed] = await Promise.all([first, second]);
+    deepStrictEqual(
+      [
+        left.kind === 'failed' ? left.failure.kind : left.kind,
+        stayed.kind,
+        fake.started.length,
+      ],
+      ['cancelled', 'rows', 1],
+    );
+  });
+
+  it('F-6102 (D2): when every caller of a read has aborted the process is cancelled, and a later call starts a new one', async () => {
+    const {inventory, fake} = inventoryOver({
+      list: {kind: 'printsUntilKilled', lines: []},
+    });
+    const first = new AbortController();
+    const second = new AbortController();
+    const waits = [
+      inventory.distros(options, first.signal),
+      inventory.distros(options, second.signal),
+    ];
+    first.abort();
+    second.abort();
+    const results = await Promise.all(waits);
+    const later = inventory.distros(options, AbortSignal.abort());
+    deepStrictEqual(
+      [
+        results.map(each =>
+          each.kind === 'failed' ? each.failure.kind : each.kind,
+        ),
+        fake.started.length,
+        (await later).kind,
+        fake.started.length,
+      ],
+      [['cancelled', 'cancelled'], 1, 'failed', 1],
+    );
+  });
+
+  it('F-6102 (D2): a call whose signal is already aborted starts no process and does not cancel the read another caller waits for', async () => {
+    const {inventory, fake} = inventoryOver({});
+    const waiting = inventory.distros(options, NEVER);
+    const refused = await inventory.distros(options, AbortSignal.abort());
+    const rows = await waiting;
+    deepStrictEqual(
+      [
+        refused.kind === 'failed' ? refused.failure.kind : refused.kind,
+        rows.kind,
+        fake.started.length,
+      ],
+      ['cancelled', 'rows', 1],
+    );
+  });
+
+  it('F-6102 (D2): a call after the cancelled read finished starts a new read that gives the rows', async () => {
+    const {inventory, fake} = inventoryOver({});
+    const leaving = new AbortController();
+    const cancelled = inventory.distros(options, leaving.signal);
+    leaving.abort();
+    await cancelled;
+    const again = await inventory.distros(options, NEVER);
+    deepStrictEqual([again.kind, fake.started.length], ['rows', 2]);
+  });
+});
+
 describe('D2: the online catalogue', () => {
   it('F-6102 (D2): gives the rows sorted by friendly name, from --list --online', async () => {
     const {inventory, fake} = inventoryOver({});

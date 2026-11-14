@@ -97,6 +97,19 @@ type ListOutcome =
       readonly detail: string;
     };
 
+/** A list read that callers share: its outcome, the cancellation of the process, and how many callers still wait for it. */
+interface SharedRead {
+  readonly outcome: Promise<ListOutcome>;
+  readonly controller: AbortController;
+  waiting: number;
+}
+
+/** What a caller gets when it stops waiting for the list. */
+const CANCELLED_WAIT: RunFailed = {
+  kind: 'failed',
+  failure: {kind: 'cancelled', detail: 'cancelled while the list was read'},
+};
+
 /** Whether two lists have the same rows: names, default marks, states and versions, in order. */
 function sameRows(
   left: readonly DistroRow[],
@@ -120,7 +133,7 @@ export function createDistroInventory(
 ): DistroInventory {
   const {runner, windowsBuild} = ports;
   const listeners = new Set<() => void>();
-  let reading: Promise<ListOutcome> | undefined;
+  let reading: SharedRead | undefined;
   let previous: readonly DistroRow[] | undefined;
 
   async function readList(cancellation: AbortSignal): Promise<ListOutcome> {
@@ -149,15 +162,53 @@ export function createDistroInventory(
       : {...listFailed, detail: `the list is not readable: ${parsed.reason}`};
   }
 
-  /** The list read that runs now, or a new one. */
+  /**
+   * The list read that runs now, or a new one. Each caller waits under its own cancellation: a caller that aborts leaves
+   * with `cancelled` at once, and the read itself is cancelled only when every caller that joined it has left.
+   */
   function sharedList(cancellation: AbortSignal): Promise<ListOutcome> {
-    if (reading === undefined) {
-      const started = readList(cancellation).finally(() => {
-        reading = undefined;
-      });
+    if (cancellation.aborted) {
+      return Promise.resolve(CANCELLED_WAIT);
+    }
+    let read = reading;
+    if (read === undefined || read.controller.signal.aborted) {
+      const controller = new AbortController();
+      const started: SharedRead = {
+        outcome: readList(controller.signal).finally(() => {
+          if (reading === started) {
+            reading = undefined;
+          }
+        }),
+        controller,
+        waiting: 0,
+      };
+      read = started;
       reading = started;
     }
-    return reading;
+    const joined = read;
+    joined.waiting += 1;
+    return new Promise(resolve => {
+      let waiting = true;
+      function leave(): void {
+        waiting = false;
+        joined.waiting -= 1;
+        cancellation.removeEventListener('abort', abandon);
+      }
+      function abandon(): void {
+        leave();
+        resolve(CANCELLED_WAIT);
+        if (joined.waiting === 0) {
+          joined.controller.abort();
+        }
+      }
+      cancellation.addEventListener('abort', abandon, {once: true});
+      void joined.outcome.then(outcome => {
+        if (waiting) {
+          leave();
+          resolve(outcome);
+        }
+      });
+    });
   }
 
   async function distros(

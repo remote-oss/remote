@@ -153,12 +153,21 @@
     "added": "2026-11-13"
   },
   {
-    "launch": "explorer-folders",
-    "file": "explorer-folders/commands.test.ts",
-    "title": "F-5002 AC-6, AC-11, AC-16 (keys-plain): a key bound to each command with no argument changes no window, title, indicator, file or history row, shows no dialog, leaves the window usable and adds no state key of the extension",
-    "card": 2477,
-    "owner": "themis",
-    "evidence": 43392313193,
+    "launch": "ssh-core",
+    "file": "ssh-core/forwarding-disabled.test.ts",
+    "title": "F-2604 AC-15 (c85-reload): after a reload of the failed window with the local server running the refusal fails the connect again, and the log does not repeat the setting line",
+    "card": 2484,
+    "owner": "dike",
+    "evidence": 43429964938,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "windows",
+    "file": "windows/active-host.test.ts",
+    "title": "F-2303 AC-4, AC-5, AC-6, AC-7: from a connected window a new empty window opens on the same host, connects with no login and no question, and leaves the first alone",
+    "card": 2462,
+    "owner": "iris",
+    "evidence": 43429964938,
     "added": "2026-11-13"
   }
 ]

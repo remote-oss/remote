@@ -231,6 +231,14 @@
       "card": "#2394",
       "slice": "remote-wsl",
       "decision": "tgt-2 (#2394) registers the WSL Targets tree and removes this entry"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/engine/exec-server-engine-host.ts",
+      "card": "#2071",
+      "slice": "containers release 1",
+      "decision": "brief-remote-ssh-engines §3.1 (2026-11-04): part (a)'s engine host over the exec server; the nested resolve wires it"
     }
   ]
 }
