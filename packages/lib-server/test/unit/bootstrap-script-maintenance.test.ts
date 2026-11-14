@@ -4,9 +4,12 @@
 
 import {deepStrictEqual} from 'node:assert';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readdirSync,
+  readFileSync,
+  rmSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
@@ -29,6 +32,54 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(
         existsSync(path.join(host.home, '.server-data', 'bin')),
         false,
+      );
+    });
+
+    it('F-2411.BR-3: kill stops a server whose candidates find hands to grep in two batches, as it does past the argument limit', async () => {
+      runScript(host, single('install'), parametersFor());
+      runScript(host, single('start'), parametersFor());
+      const pidFile = path.join(
+        host.home,
+        '.server-data',
+        '.abc1230000000000000000000000000000000000.pid',
+      );
+      const serverPid = Number(readFileSync(pidFile, 'utf8').trim());
+      const batches = path.join(host.home, 'grep-batches');
+      const findFile = path.join(host.tools, 'find');
+      rmSync(findFile);
+      writeFileSync(
+        findFile,
+        [
+          '#!/bin/sh',
+          'while [ "$1" != -exec ]; do shift; done',
+          'shift',
+          'PROGRAM=$1 FLAGS=$2 FIRST=$4 SECOND=$6',
+          'set -- /proc/[0-9]*/cmdline',
+          'HALF=$(($# / 2))',
+          'INDEX=0 LOWER= UPPER=',
+          'for FILE in "$@"; do',
+          '  INDEX=$((INDEX + 1))',
+          '  if [ "$INDEX" -le "$HALF" ]; then LOWER="$LOWER $FILE"; else UPPER="$UPPER $FILE"; fi',
+          'done',
+          `for BATCH in "$LOWER" "$UPPER"; do echo batch >>'${batches}'; "$PROGRAM" "$FLAGS" -e "$FIRST" -e "$SECOND" $BATCH; done`,
+          'exit 0',
+        ].join('\n'),
+      );
+      chmodSync(findFile, 0o755);
+      runScript(host, single('kill'), parametersFor());
+      // A signal returns before the process has exited: wait up to 5 s for it to be gone.
+      let alive = true;
+      for (let attempt = 0; attempt < 50 && alive; attempt++) {
+        try {
+          process.kill(serverPid, 0);
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch {
+          alive = false;
+        }
+      }
+      deepStrictEqual(
+        [readFileSync(batches, 'utf8').trim().split('\n').length, alive],
+        [2, false],
       );
     });
 
