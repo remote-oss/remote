@@ -8,7 +8,12 @@ import {deepStrictEqual} from 'node:assert';
 import {execFileSync} from 'node:child_process';
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {connectionLog, hostPort, variable} from '../windows/harness.ts';
+import {
+  connectionLog,
+  hostPort,
+  recordLines,
+  variable,
+} from '../windows/harness.ts';
 import {connectWith, plainSsh} from './config-keywords-support.ts';
 
 const CIPHER_LINES = [
@@ -20,6 +25,11 @@ const CIPHER_LINES = [
 
 /** The buttons of the failure dialog, as the other rows of the suite name them. */
 const FAILURE_BUTTONS = ['Close Remote', 'Retry', 'More Actions...'];
+
+/** `text` with the alias of its row replaced by `c2593`, so that the texts of two rows can be compared. */
+function asBase(text: string, alias: string): string {
+  return text.replaceAll(alias, 'c2593');
+}
 
 /** The modes of the extension: the local connection server, and one `ssh` of its own per window. */
 const MODES = [
@@ -53,12 +63,14 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
     deepStrictEqual(
       [
         result.plain.status,
-        result.outcome.indicator,
-        result.outcome.progress.map(title =>
-          title.replace('c2593-algs', 'c2593-base'),
-        ),
+        asBase(result.outcome.indicator, 'c2593-algs'),
+        result.outcome.progress.map(title => asBase(title, 'c2593-algs')),
       ],
-      [0, baseline.indicator, baseline.progress],
+      [
+        0,
+        asBase(baseline.indicator, 'c2593-base'),
+        baseline.progress.map(title => asBase(title, 'c2593-base')),
+      ],
     );
   });
 
@@ -100,7 +112,7 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
       [
         'Could not establish connection to "c2593-quiet-cipher".',
         FAILURE_BUTTONS,
-        'Disconnected from SSH',
+        'Disconnected from SSH: c2593-quiet-cipher',
         [],
         true,
       ],
@@ -176,6 +188,7 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
         result.logged,
       ],
       [255, 'Could not establish connection to "c2593-refuse".', [], true],
+      result.plain.stderr,
     );
   });
 
@@ -226,7 +239,12 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
         'connects',
         () =>
           connectionLog().filter(line => /debug[23]:/.test(line)).length > 0,
-        {...settings, 'remote.SSH.remotePlatform': {[alias]: 'linux'}},
+        {
+          settings: {
+            ...settings,
+            'remote.SSH.remotePlatform': {[alias]: 'linux'},
+          },
+        },
       );
       deepStrictEqual(result, true);
     });
@@ -244,9 +262,151 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
                 .split('\n')
                 .filter(line => line !== '')
             : [],
-        {...settings, 'remote.SSH.remotePlatform': {[alias]: 'linux'}},
+        {
+          settings: {
+            ...settings,
+            'remote.SSH.remotePlatform': {[alias]: 'linux'},
+          },
+        },
       );
       deepStrictEqual(lines, [alias]);
     });
   }
+
+  it('F-2109 AC-9 (c2593-canon-fails): canonicalization with CanonicalizeFallbackLocal no and an alias that does not resolve shows the dialog without a reason', async () => {
+    const result = await connectWith(
+      'c2593-canon-fails',
+      ['CanonicalizeHostname yes', 'CanonicalizeFallbackLocal no'],
+      'fails',
+      async (outcome, file) => ({
+        outcome,
+        plain: await plainSsh(file, 'c2593-canon-fails'),
+      }),
+      {without: ['HostName']},
+    );
+    deepStrictEqual(
+      [result.plain.status, result.outcome.dialog],
+      [255, 'Could not establish connection to "c2593-canon-fails".'],
+      result.plain.stderr,
+    );
+  });
+
+  it('F-2109 AC-9 (c2593-canon-address): the same canonicalization keywords with HostName set to an address connect', async () => {
+    const result = await connectWith(
+      'c2593-canon-address',
+      ['CanonicalizeHostname yes', 'CanonicalizeFallbackLocal no'],
+      'connects',
+      async (outcome, file) => ({
+        outcome,
+        plain: (await plainSsh(file, 'c2593-canon-address')).status,
+      }),
+    );
+    deepStrictEqual(
+      [result.plain, result.outcome.toasts, result.outcome.dialog],
+      [0, [], undefined],
+    );
+  });
+
+  it('F-2109 AC-16 (c2593-harmless): the harmless keywords of the specification together connect as without them', async () => {
+    const result = await connectWith(
+      'c2593-harmless',
+      [
+        'CASignatureAlgorithms ssh-ed25519',
+        'RequiredRSASize 1024',
+        'TCPKeepAlive yes',
+        'IPQoS lowdelay throughput',
+        'EscapeChar ~',
+        'VerifyHostKeyDNS no',
+        'GSSAPIAuthentication no',
+        'GSSAPIDelegateCredentials no',
+        'HostbasedAuthentication no',
+        'RekeyLimit 1M 20s',
+      ],
+      'connects',
+      async (outcome, file) => ({
+        outcome,
+        plain: await plainSsh(file, 'c2593-harmless'),
+      }),
+    );
+    deepStrictEqual(
+      [result.plain.status, result.outcome.toasts, result.outcome.dialog],
+      [0, [], undefined],
+      result.plain.stderr,
+    );
+  });
+
+  it('F-2109 AC-19 (c2593-weak-default): KexAlgorithms restricted to a non-post-quantum method the server offers, with WarnWeakCrypto at its default, connects with no notification and no dialog', async () => {
+    const result = await connectWith(
+      'c2593-weak-default',
+      ['KexAlgorithms curve25519-sha256'],
+      'connects',
+      async (outcome, file) => ({
+        outcome,
+        plain: (await plainSsh(file, 'c2593-weak-default')).status,
+      }),
+    );
+    deepStrictEqual(
+      [result.plain, result.outcome.toasts, result.outcome.dialog],
+      [0, [], undefined],
+    );
+  });
+
+  it('F-2109 AC-19 (c2593-weak-no-pq): the same with WarnWeakCrypto no-pq-kex', async () => {
+    const result = await connectWith(
+      'c2593-weak-no-pq',
+      ['KexAlgorithms curve25519-sha256', 'WarnWeakCrypto no-pq-kex'],
+      'connects',
+      async (outcome, file) => ({
+        outcome,
+        plain: await plainSsh(file, 'c2593-weak-no-pq'),
+      }),
+    );
+    deepStrictEqual(
+      [result.plain.status, result.outcome.toasts, result.outcome.dialog],
+      [0, [], undefined],
+      result.plain.stderr,
+    );
+  });
+
+  it('F-2109 AC-6 (c2593-more-actions): More Actions... on the failure dialog lists the actions that help resolve the problem', async () => {
+    const alias = 'c2593-more';
+    const result = await connectWith(
+      alias,
+      ['Ciphers 3des-cbc'],
+      'fails',
+      () =>
+        recordLines('mitigationPick', alias).map(line => [
+          line.question,
+          line.items,
+        ]),
+      {
+        script: [
+          {
+            surface: 'failureDialog',
+            match: 'Could not establish connection',
+            answer: {button: 'More Actions...'},
+            window: alias,
+          },
+          {
+            surface: 'mitigationPick',
+            match: 'Pick an action',
+            answer: 'dismiss',
+            window: alias,
+          },
+        ],
+      },
+    );
+    deepStrictEqual(result, [
+      [
+        'Pick an action to help resolve the problem.',
+        [
+          'Reload Window',
+          'Open Recent...',
+          'Open Documentation',
+          'Open SSH Configuration File',
+          'Open Settings',
+        ],
+      ],
+    ]);
+  });
 });

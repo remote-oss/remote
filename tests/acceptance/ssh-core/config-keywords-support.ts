@@ -37,13 +37,19 @@ function harnessLines(): string[] {
 }
 
 /** Writes the file of the run for alias `alias` with its entry: the harness host's lines, then `extra`. */
-export function entryFile(alias: string, extra: readonly string[]): string {
+export function entryFile(
+  alias: string,
+  extra: readonly string[],
+  without: readonly string[] = [],
+): string {
   const file = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.config`);
   writeFileSync(
     file,
     [
       `Host ${alias}`,
-      ...harnessLines(),
+      ...harnessLines().filter(
+        line => !without.includes(line.trim().split(' ')[0] ?? ''),
+      ),
       ...extra.map(line => `  ${line}`),
       '',
     ].join('\n'),
@@ -75,6 +81,13 @@ export interface Outcome {
   progress: string[];
 }
 
+/** What a row may change of its connect: settings it sets, keywords of the harness entry it leaves out, answers it scripts. */
+export interface ConnectOptions {
+  settings?: Readonly<Record<string, unknown>>;
+  without?: readonly string[];
+  script?: Parameters<typeof appendScript>[0];
+}
+
 /** The time a failing connect has to show its dialog. */
 const DIALOG_MILLISECONDS = 120_000;
 
@@ -87,14 +100,14 @@ export async function connectWith<Result>(
   extra: readonly string[],
   expectation: 'connects' | 'fails',
   body: (outcome: Outcome, file: string) => Result | Promise<Result>,
-  settings: Readonly<Record<string, unknown>> = {},
+  options: ConnectOptions = {},
 ): Promise<Result> {
-  const file = entryFile(name, extra);
+  const file = entryFile(name, extra, options.without);
   const saved = readUserSettings();
-  await userSettings({'remote.SSH.configFile': file, ...settings});
+  await userSettings({'remote.SSH.configFile': file, ...options.settings});
   const mark = Date.now();
   try {
-    appendScript(dismissals(name));
+    appendScript(options.script ?? dismissals(name));
     await openWindow(name, name);
     if (expectation === 'connects') {
       await connectedWithin(name, 120_000);
