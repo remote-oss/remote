@@ -10,6 +10,7 @@ import {
   containersLogSince,
   devContainerFolder,
   devContainersOf,
+  environmentOf,
   inWindow,
   reloadWindow,
   relaunch,
@@ -17,6 +18,7 @@ import {
   terminalBuffer,
   variable,
   waitFor,
+  windowEvents,
 } from '../windows/harness.ts';
 import {
   dialogOf,
@@ -182,6 +184,33 @@ async function printed(
   return values;
 }
 
+/**
+ * What `read` gives, or the text of its failure, within `milliseconds`: a read made to explain a mismatch must not
+ * replace the mismatch with its own error, nor hold it back for ever.
+ */
+async function attempt<Value>(
+  read: () => Promise<Value>,
+  milliseconds = 10_000,
+): Promise<Value | string> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      read(),
+      new Promise<string>(resolve => {
+        timer = setTimeout(
+          resolve,
+          milliseconds,
+          `no answer within ${String(milliseconds)} ms`,
+        );
+      }),
+    ]);
+  } catch (caught) {
+    return `failed: ${String(caught)}`;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Runs the task `probe` of window `name` and gives the text it printed after `task:`. */
 async function taskOutput(name: string): Promise<string> {
   void inWindow(name, 'workbench.action.tasks.runTask', 'probe').catch(
@@ -324,8 +353,13 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
         [containerId],
       ];
       if (JSON.stringify(seen) !== JSON.stringify(expected)) {
+        const hostValues = [
+          await attempt(() => environmentOf(name, 'MY_CONTAINER_VAR2')),
+          await attempt(() => environmentOf(name, 'MY_REMOTE_VAR3')),
+        ];
+        const again = await attempt(() => printed(name, 'again', names));
         console.log(
-          `x17 mismatch, the second reconnect's path:\n${reconnectPath(containersLogSince(mark)).join('\n')}`,
+          `x17 mismatch, the second reconnect's path:\n${reconnectPath(containersLogSince(mark)).join('\n')}\nthe whole log since the second relaunch:\n${containersLogSince(mark).join('\n')}\nthe window's last events: ${JSON.stringify(windowEvents(name).slice(-8))}\nthe remote extension host's values of the two variables: ${JSON.stringify(hostValues)}\na new terminal's values of them: ${JSON.stringify(again)}`,
         );
       }
       deepStrictEqual(seen, expected);
