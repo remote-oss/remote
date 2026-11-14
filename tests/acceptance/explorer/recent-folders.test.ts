@@ -710,7 +710,11 @@ describe('the recent folders under a target (card coverage-122)', function () {
           state.workspaceFile,
           state.remoteAuthority,
         ],
-        ['y (Workspace) [SSH: harness]', target, 'ssh-remote+harness'],
+        [
+          '[y (Workspace) [SSH: harness]]SSH: harness',
+          `vscode-remote://ssh-remote%2Bharness${target}`,
+          'ssh-remote+harness',
+        ],
       );
     } finally {
       await closeIfOpen('c122-wsc');
@@ -992,6 +996,11 @@ describe('the recent folders under a target (card coverage-122)', function () {
       );
       const recentBefore = await holds();
       await pressEscape(window);
+      await waitFor(
+        `the recent quick pick of window ${window} to close`,
+        async () => (await quickPickFacts(window)) === undefined,
+        15_000,
+      );
       await rowMenuAction(window, VIEW, 'c122-core-a', REMOVE);
       await foldersSettled(window, 'harness', [], `${HOME}/c122-core-`);
       await inWindow(window, 'workbench.action.openRecent');
@@ -1002,6 +1011,11 @@ describe('the recent folders under a target (card coverage-122)', function () {
       );
       const recentAfterRemove = await holds();
       await pressEscape(window);
+      await waitFor(
+        `the recent quick pick of window ${window} to close`,
+        async () => (await quickPickFacts(window)) === undefined,
+        15_000,
+      );
       const beforeClear = (await folderRowsOf(window, 'harness')).map(
         each => each.description,
       );
@@ -1390,8 +1404,8 @@ describe('the recent folders under a target (card coverage-122)', function () {
         ],
         [
           [opened],
-          'z (Workspace) [SSH: harness]',
-          target,
+          '[z (Workspace) [SSH: harness]]SSH: harness',
+          `vscode-remote://ssh-remote%2Bharness${target}`,
           [actingBefore.remoteAuthority, actingBefore.folders],
           [],
         ],
@@ -1422,6 +1436,12 @@ describe('the recent folders under a target (card coverage-122)', function () {
         `window ${opened} to stand on ssh-remote+harness`,
         async () =>
           (await windowState(opened)).remoteAuthority === 'ssh-remote+harness',
+        120_000,
+      );
+      await waitFor(
+        `the history of harness to re-record ${target} at the front`,
+        async () =>
+          ((await historyOf(driver)).harness ?? [])[0]?.path === target,
         120_000,
       );
       const recorded = (await historyOf(driver)).harness ?? [];
@@ -1558,15 +1578,17 @@ describe('the recent folders under a target (card coverage-122)', function () {
         'acceptance.agent.openWindow',
         'vscode-remote://ssh-remote+harness',
       );
-      empty = windowNames().find(name => !before.includes(name)) ?? '';
       await waitFor(
-        `the empty window ${empty} to connect to harness`,
+        `an empty window to connect to harness`,
         async () => {
+          const name = windowNames().find(each => !before.includes(each));
+          if (name === undefined) {
+            return false;
+          }
+          empty = name;
           try {
             return (
-              empty !== '' &&
-              (await windowState(empty)).remoteAuthority ===
-                'ssh-remote+harness'
+              (await windowState(name)).remoteAuthority === 'ssh-remote+harness'
             );
           } catch {
             return false;
