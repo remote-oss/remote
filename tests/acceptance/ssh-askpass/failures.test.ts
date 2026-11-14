@@ -89,10 +89,9 @@ describe('the failures of a login through the user’s own askpass program (card
         inputs: [],
         called: true,
       },
-      JSON.stringify({
-        title: await windowTitle('as1'),
-        indicator: await statusBarText('as1', 'status.host'),
-      }),
+    );
+    process.stdout.write(
+      `AC27 ${JSON.stringify({title: await windowTitle('as1'), indicator: await statusBarText('as1', 'status.host')})}\n`,
     );
   });
 
