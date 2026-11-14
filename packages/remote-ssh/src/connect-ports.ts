@@ -578,14 +578,14 @@ export function connectAssemblyOf(
     },
     terminalMode: () => terminalModeOf(surfaces.settings),
     applyTerminalEnvironment: surfaces.applyTerminalEnvironment,
-    resolveEnded: hints => {
+    resolveEnded: (hints, outcome) => {
       hints.forEach(hint => {
         surfaces.hints.record(hint);
       });
       // The step's text ends with a rule: the log hint keeps it, and the summary of the check follows it.
       watch.logger.info(STEP_RULE);
       surfaces.hints.end();
-      surfaces.troubleshooting.check(surfaces.hints.errors(), true);
+      surfaces.troubleshooting.check(surfaces.hints.errors(), true, outcome);
     },
   });
   const {translate} = surfaces;

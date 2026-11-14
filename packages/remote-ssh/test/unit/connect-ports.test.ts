@@ -29,6 +29,7 @@ import {settings as SETTINGS} from '../../src/identifiers.generated.ts';
 import {
   type ConnectorDependencies,
   connectorOf,
+  type ResolveOutcome,
 } from '../../src/pipeline/connector.ts';
 import {
   connectionSettingsOf,
@@ -487,7 +488,9 @@ describe("the assembled ports' settings", () => {
   it('connect-135: the end of a resolve step gives the failure’s hints to the recorder, and then ends the record', () => {
     const {surfaces, machine, recorded} = assemblyInputs({});
     const events: string[] = [];
-    let ended: ((hints: readonly FailureHint[]) => void) | undefined;
+    let ended:
+      | ((hints: readonly FailureHint[], outcome: ResolveOutcome) => void)
+      | undefined;
     connectAssemblyOf(
       {
         ...surfaces,
@@ -514,10 +517,11 @@ describe("the assembled ports' settings", () => {
         return connectorOf(dependencies);
       },
     );
-    ended?.([
-      {status: 'OfflineError', message: 'm', mitigations: [], resources: []},
-    ]);
-    ended?.([]);
+    ended?.(
+      [{status: 'OfflineError', message: 'm', mitigations: [], resources: []}],
+      'failed',
+    );
+    ended?.([], 'succeeded');
     deepStrictEqual(events, [
       'record OfflineError',
       'end',

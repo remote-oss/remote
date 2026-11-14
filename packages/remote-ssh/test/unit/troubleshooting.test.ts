@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {SessionHint} from '../../src/diagnostics/hint-store.ts';
+import type {ResolveOutcome} from '../../src/pipeline/connector.ts';
 import {
   outputLogLinks,
   rowsOf,
@@ -51,6 +52,7 @@ function scene(enabled = true) {
     shown: boolean[];
     disposed: boolean;
   }> = [];
+  const revealed: boolean[] = [];
   const ports: TroubleshootingPorts = {
     enabled: () => enabled,
     createTerminal: make => {
@@ -76,14 +78,22 @@ function scene(enabled = true) {
       };
     },
     texts: () => TEXTS,
+    revealLog: preserveFocus => {
+      revealed.push(preserveFocus);
+    },
     logger: createLogger(sink, {minimumLevel: () => 'debug'}),
   };
   const checking = troubleshootingOf(ports);
   return {
-    check: (hints: readonly SessionHint[], modal: boolean): void => {
-      checking.check(hints, modal);
+    check: (
+      hints: readonly SessionHint[],
+      modal: boolean,
+      outcome: ResolveOutcome = 'failed',
+    ): void => {
+      checking.check(hints, modal, outcome);
     },
     terminals,
+    revealed,
     logged: () => sink.lines.map(line => line.message),
   };
 }
@@ -115,6 +125,37 @@ describe('the session troubleshooting terminal (card connect-136, F-2605)', () =
     const {check, logged, terminals} = scene();
     check([ENVIRONMENT], true);
     deepStrictEqual([logged(), terminals.length], [[NO_HINTS_LINE], 0]);
+  });
+
+  it('#2537, F-2003 AC-8: a failure with no error hint reveals the log channel once, with the keyboard left where it is behind a dialog, and takes it when no dialog is shown', () => {
+    const behind = scene();
+    behind.check([ENVIRONMENT], true, 'failed');
+    const alone = scene();
+    alone.check([], false, 'failed');
+    deepStrictEqual(
+      [behind.revealed, alone.revealed, behind.terminals.length],
+      [[true], [false], 0],
+    );
+  });
+
+  it('#2537, F-2003 BR-3: a connection that worked or was cancelled, with no error hint, reveals nothing', () => {
+    const worked = scene();
+    worked.check([], true, 'succeeded');
+    const cancelled = scene();
+    cancelled.check([ENVIRONMENT], true, 'cancelled');
+    deepStrictEqual([worked.revealed, cancelled.revealed], [[], []]);
+  });
+
+  it('#2537: a failure with an error hint shows the terminal and does not reveal the log channel', () => {
+    const {check, revealed, terminals} = scene();
+    check([OFFLINE], true, 'failed');
+    deepStrictEqual([revealed, terminals.length], [[], 1]);
+  });
+
+  it('#2537: with the setting off a failure only says so in the log and reveals nothing', () => {
+    const {check, revealed} = scene(false);
+    check([], true, 'failed');
+    deepStrictEqual(revealed, []);
   });
 
   it('F-2605.AC-11, AC-26: with the setting off the log says so and no terminal opens', () => {
