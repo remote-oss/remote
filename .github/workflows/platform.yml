@@ -83,8 +83,6 @@ jobs:
           }
           if (-not $up) { wsl -d Ubuntu-24.04 -u root -- sh -c 'systemctl status docker --no-pager | tail -15'; exit 1 }
           "DOCKER_HOST=tcp://${engine}:2375" >> $env:GITHUB_ENV
-          # the harness passes its bind-mounted folders to the engine as the distro's /mnt paths
-          "HARNESS_ENGINE_WSL=1" >> $env:GITHUB_ENV
       # the image's Docker CLI has no buildx plugin, and the harness builds its images with `docker build --load`
       - name: Docker's buildx plugin for the Windows CLI
         run: |
