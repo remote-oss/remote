@@ -10,12 +10,39 @@ import {
   readlinkSync,
   statSync,
 } from 'node:fs';
+import {AsyncLocalStorage} from 'node:async_hooks';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {DatabaseSync} from 'node:sqlite';
 
-/** How long a read may take in all, in milliseconds: the editor's writer keeps its journal for a moment while it writes. */
-const STATE_READ_MILLISECONDS = 5000;
+/**
+ * How long a read made inside a wait may take in all, in milliseconds: the wait asks again and has its own bound, so
+ * one ask need not outlast the editor's writer.
+ */
+const WAITED_READ_MILLISECONDS = 5000;
+
+/**
+ * How long a read made outside any wait may take in all, in milliseconds. The editor's writer keeps its journal for
+ * as long as its write transaction is open, and that has run past the 5 s a read first had: at least 6.7 s in main's
+ * run 43392313193 (keys-plain, #2477) and again in train 2's run 43496216688 (c85-line); a read outside a wait has
+ * nothing to ask again, so it carries on for the 30 s the rows' own waits use.
+ */
+const DIRECT_READ_MILLISECONDS = 30_000;
+
+/** Set for the checks of a wait (`waitFor`), whose reads ask again by themselves. */
+const insideWait = new AsyncLocalStorage<true>();
+
+/** Runs `action`, whose reads (its own and those of what it awaits) are asked inside a wait. */
+export function runWithinWait<Result>(action: () => Result): Result {
+  return insideWait.run(true, action);
+}
+
+/** How long a read that names no bound of its own may take: the short one inside a wait, the long one outside. */
+export function readBoundMilliseconds(): number {
+  return insideWait.getStore() === true
+    ? WAITED_READ_MILLISECONDS
+    : DIRECT_READ_MILLISECONDS;
+}
 
 /** The pause between two attempts, in milliseconds. */
 const PAUSE_MILLISECONDS = 100;
@@ -150,13 +177,13 @@ class StateNotYet extends Error {
  * read is sound only while no writer is between its first write and its commit: the database file changes only at the
  * commit, after the writer's rollback journal exists. So an attempt reads only when the journal is absent before and
  * after it and the database file is the same size and age after it as before; otherwise it pauses and tries again. The
- * attempts end after {@link STATE_READ_MILLISECONDS}, and the failure then names why the last one gave up, the files
+ * attempts end after {@link readBoundMilliseconds} (or the bound the caller names), and the failure then names why the last one gave up, the files
  * beside the database with their ages, the processes holding them open and its journal mode.
  */
 export function readStateDatabase<Result>(
   file: string,
   read: (database: DatabaseSync) => Result,
-  milliseconds = STATE_READ_MILLISECONDS,
+  milliseconds = readBoundMilliseconds(),
 ): Result {
   const journal = `${file}-journal`;
   const deadline = Date.now() + milliseconds;
