@@ -244,7 +244,7 @@ describe('what is written to the remote platform setting', () => {
         'devbox',
         'linux',
       ),
-      {kind: 'none'},
+      {kind: 'none', reason: 'alreadyHeld'},
     );
   });
 
@@ -262,6 +262,7 @@ describe('what is written to the remote platform setting', () => {
   it('nothing is written with the shared connection on', () => {
     deepStrictEqual(platformWrite(settings(), 'devbox', 'linux'), {
       kind: 'none',
+      reason: 'sharedConnection',
     });
   });
 

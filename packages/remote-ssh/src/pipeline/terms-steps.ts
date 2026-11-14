@@ -104,7 +104,7 @@ export function createTermsSteps(
         return;
       }
       dependencies.logger.debug(
-        `the platform of host ${alias} was not written to the settings: ${settings.useLocalServer ? 'the shared connection is on' : `it already holds ${PLATFORM_OF_PROBE[reported]}`}`,
+        `the platform of host ${alias} was not written to the settings: ${write.reason === 'sharedConnection' ? 'the shared connection is on' : `it already holds ${PLATFORM_OF_PROBE[reported]}`}`,
       );
     },
   };

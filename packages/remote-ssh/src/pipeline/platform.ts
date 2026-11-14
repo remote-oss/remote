@@ -121,7 +121,8 @@ export function platformOfRecord(
 
 /** What to write to `remote.SSH.remotePlatform` after a connect worked: nothing, or the exact key with the platform. */
 export type PlatformWrite =
-  {kind: 'none'} | {kind: 'set'; platform: RemotePlatform};
+  | {kind: 'none'; reason: 'sharedConnection' | 'alreadyHeld'}
+  | {kind: 'set'; platform: RemotePlatform};
 
 /**
  * The write after a successful connect with the shared connection off: the exact key for the host is set to the
@@ -134,12 +135,14 @@ export function platformWrite(
   reported: RemotePlatform,
 ): PlatformWrite {
   if (settings.useLocalServer) {
-    return {kind: 'none'};
+    return {kind: 'none', reason: 'sharedConnection'};
   }
   const entries = settings.remotePlatform;
   const held =
     typeof entries === 'object' && entries !== null && !Array.isArray(entries)
       ? (entries as Record<string, unknown>)[host]
       : undefined;
-  return held === reported ? {kind: 'none'} : {kind: 'set', platform: reported};
+  return held === reported
+    ? {kind: 'none', reason: 'alreadyHeld'}
+    : {kind: 'set', platform: reported};
 }
