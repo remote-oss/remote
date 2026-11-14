@@ -3,7 +3,11 @@ import type {ConnectInput, ConnectPhase, FailureHint} from 'lib-authority';
 import type {TransferPhase} from 'lib-server';
 import type {FailureHint as SshFailureHint} from 'lib-ssh';
 import type {ConnectOptions, PhaseEvent} from '../../src/pipeline/connect.ts';
-import {connectorOf, type SshConnector} from '../../src/pipeline/connector.ts';
+import {
+  connectorOf,
+  type ResolveOutcome,
+  type SshConnector,
+} from '../../src/pipeline/connector.ts';
 import type {ConnectSteps} from '../../src/pipeline/steps.ts';
 import {
   endTunnel,
@@ -36,7 +40,10 @@ function connectorOptions(
 function connectorFor(
   changes: Partial<ConnectSteps> = {},
   terminalMode: () => boolean = () => false,
-  resolveEnded?: (hints: readonly FailureHint[]) => void,
+  resolveEnded?: (
+    hints: readonly FailureHint[],
+    outcome: ResolveOutcome,
+  ) => void,
 ): {
   connector: SshConnector;
   recording: Recording;
@@ -332,6 +339,51 @@ describe('the connector over the connect pipeline', () => {
     });
     await throwing.connect(HOST_INPUT).catch(() => undefined);
     deepStrictEqual(told, [[hint], [], []]);
+  });
+
+  it('#2537: the resolve step’s end tells how it ended: succeeded for a connection, failed for a failure and for a connect that throws, cancelled when the connect was cancelled', async () => {
+    const outcomes: ResolveOutcome[] = [];
+    function record(...ended: [readonly FailureHint[], ResolveOutcome]): void {
+      outcomes.push(ended[1]);
+    }
+    await connectorFor({}, () => false, record).connector.connect(HOST_INPUT);
+    await connectorFor(
+      {
+        openTunnel: () =>
+          Promise.resolve({
+            kind: 'failed' as const,
+            failure: {kind: 'channelClosed' as const, hints: []},
+          }),
+      },
+      () => false,
+      record,
+    ).connector.connect(HOST_INPUT);
+    await connectorOf({
+      stepsFor: () => {
+        throw new Error('broken');
+      },
+      terminalMode: () => false,
+      options: connectorOptions(setup().options),
+      revealLog: () => undefined,
+      applyTerminalEnvironment: () => undefined,
+      resolveEnded: record,
+    })
+      .connect(HOST_INPUT)
+      .catch(() => undefined);
+    const window: {connector?: SshConnector} = {};
+    const cancelled = connectorFor(
+      {
+        rememberPlatform: () => {
+          window.connector?.cancel();
+          return Promise.resolve();
+        },
+      },
+      () => false,
+      record,
+    );
+    window.connector = cancelled.connector;
+    await cancelled.connector.connect(HOST_INPUT);
+    deepStrictEqual(outcomes, ['succeeded', 'failed', 'failed', 'cancelled']);
   });
 
   it('contracts §3.2: a cancel after a connect releases the connection once', async () => {

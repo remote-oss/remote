@@ -38,6 +38,9 @@ import type {SshTarget} from 'lib-ssh';
 import {sshTargetOf} from './host-settings.ts';
 import type {ConnectInput, ConnectSteps} from './steps.ts';
 
+/** How a connect's resolve step ended: it connected, it failed, or it was cancelled (the user's Cancel or the window's end). */
+export type ResolveOutcome = 'succeeded' | 'failed' | 'cancelled';
+
 /** What the connector is made of. */
 export interface ConnectorDependencies {
   /** Makes the steps of one connect, so what they share lives for that connect alone. */
@@ -50,8 +53,11 @@ export interface ConnectorDependencies {
   revealLog(): void;
   /** Makes these the only variables the window's terminals get from the extension, for the connect that worked. */
   applyTerminalEnvironment(variables: Readonly<Record<string, string>>): void;
-  /** Told when a connect's resolve step has ended, with the hints of its failure, none when it worked. */
-  resolveEnded?: (hints: readonly FailureHint[]) => void;
+  /** Told when a connect's resolve step has ended, with the hints of its failure (none when it worked) and how it ended. */
+  resolveEnded?: (
+    hints: readonly FailureHint[],
+    outcome: ResolveOutcome,
+  ) => void;
 }
 
 /** A set of listeners that each hear an event; one that throws does not keep it from the others. */
@@ -306,10 +312,20 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
           onPhase,
         });
       } catch (caught) {
-        dependencies.resolveEnded?.([]);
+        dependencies.resolveEnded?.(
+          [],
+          controller.signal.aborted ? 'cancelled' : 'failed',
+        );
         throw caught;
       }
-      dependencies.resolveEnded?.('release' in result ? [] : result.hints);
+      dependencies.resolveEnded?.(
+        'release' in result ? [] : result.hints,
+        controller.signal.aborted
+          ? 'cancelled'
+          : 'release' in result
+            ? 'succeeded'
+            : 'failed',
+      );
       if ('release' in result && controller.signal.aborted) {
         // The window was torn down while the server started or the tunnel opened: give the connection back.
         result.release();
