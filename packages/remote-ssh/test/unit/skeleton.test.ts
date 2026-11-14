@@ -1463,3 +1463,32 @@ describe('the manifest beside core’s agent hosts (card #2500, F-2008 AC-11, BR
     );
   });
 });
+
+describe('the setting of the external askpass (card #2596, F-2309 AC-1)', () => {
+  it('F-2309 AC-1 (c2596-setting): remote.SSH.externalSSH_ASKPASS is a boolean, false by default, of application scope with no tags, and its markdown description is the exact text of the specification', () => {
+    const property =
+      manifest().contributes?.configuration?.properties?.[
+        'remote.SSH.externalSSH_ASKPASS'
+      ];
+    const key = nlsKey(property?.markdownDescription);
+    deepStrictEqual(
+      {
+        type: property?.type,
+        default: property?.default,
+        scope: property?.scope,
+        tags: property?.tags,
+        plainDescription: property?.description,
+        markdown: key === null ? undefined : englishTable()[key],
+      },
+      {
+        type: 'boolean',
+        default: false,
+        scope: 'application',
+        tags: undefined,
+        plainDescription: undefined,
+        markdown:
+          "**Experimental:** In local server mode (enabled with `#remote.SSH.useLocalServer#`) Remote - SSH uses SSH_ASKPASS to set VS Code as the application to handle authentication requests; this makes prompts for input show up inside VS Code. However, if you have an external application to handle authentication, such as an YubiKey, you may want to set SSH_ASKPASS to your application instead. If you enable this setting then Remote - SSH won't override your existing SSH_ASKPASS value if one exists.",
+      },
+    );
+  });
+});

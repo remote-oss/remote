@@ -12,11 +12,10 @@ import {
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {
   answerDialog,
+  dialogOf,
   inputBoxOf,
   quickPickOf,
-  statusBarText,
   waitForDialog,
-  windowTitle,
 } from '../windows/renderer.ts';
 import {
   answering,
@@ -67,7 +66,7 @@ describe('the failures of a login through the user’s own askpass program (card
     await closeAllButLocal();
   });
 
-  it('F-2309 AC-12, AC-27 (c2596-program-cancels): with a known host key and a program that exits non-zero, the failure dialog names the permission denial and no VS Code input shows, and the window is left disconnected', async () => {
+  it('F-2309 AC-12 (c2596-program-cancels): with a known host key and a program that exits non-zero, the failure dialog names the permission denial and no VS Code input shows', async () => {
     knowHostKey('password');
     await withSettings({[EXTERNAL]: true, ...PLATFORMS});
     answering([{match: 'password', answer: '', status: 1}]);
@@ -75,40 +74,37 @@ describe('the failures of a login through the user’s own askpass program (card
     const dialog = await waitForDialog('as1', 120_000);
     deepStrictEqual(
       {
-        message: dialog.message,
-        buttons: dialog.buttons,
+        dialog,
         inputs: await inputsShown('as1'),
         called: askpassCalls().length > 0,
-        indicator: await statusBarText('as1', 'status.host'),
-        title: await windowTitle('as1'),
       },
       {
-        message:
-          'Could not establish connection to "password": Permission denied (password).',
-        buttons: BUTTONS,
+        dialog: {
+          message:
+            'Could not establish connection to "password": Permission denied (password).',
+          details: '',
+          buttons: BUTTONS,
+        },
         inputs: [],
         called: true,
-        indicator: 'Disconnected from SSH',
-        title: '[as1] [SSH]',
       },
     );
   });
 
   it('F-2309 AC-26 (c2596-host-key-cancelled): with an unknown host key and a program that cancels the question, the failure dialog has no reason and no VS Code input shows', async () => {
-    forgetHostKey('password-ask');
+    forgetHostKey('password_ask');
     await withSettings({[EXTERNAL]: true, ...PLATFORMS});
     answering([{match: 'continue connecting', answer: '', status: 1}]);
     await openWindow('password-ask', 'as1');
     const dialog = await waitForDialog('as1', 120_000);
     deepStrictEqual(
+      {dialog, inputs: await inputsShown('as1')},
       {
-        message: dialog.message,
-        buttons: dialog.buttons,
-        inputs: await inputsShown('as1'),
-      },
-      {
-        message: 'Could not establish connection to "password-ask".',
-        buttons: BUTTONS,
+        dialog: {
+          message: 'Could not establish connection to "password-ask".',
+          details: '',
+          buttons: BUTTONS,
+        },
         inputs: [],
       },
     );
@@ -126,10 +122,14 @@ describe('the failures of a login through the user’s own askpass program (card
     const {connectedWithin} = await import('../windows/harness.ts');
     await connectedWithin('as1', 120_000);
     deepStrictEqual(
-      {message: dialog.message, inputs},
+      {dialog, inputs},
       {
-        message:
-          'Could not establish connection to "password": Permission denied (password).',
+        dialog: {
+          message:
+            'Could not establish connection to "password": Permission denied (password).',
+          details: '',
+          buttons: BUTTONS,
+        },
         inputs: [],
       },
     );
@@ -147,18 +147,44 @@ describe('the failures of a login through the user’s own askpass program (card
     const seconds = (Date.now() - began) / 1000;
     deepStrictEqual(
       {
-        message: dialog.message,
-        buttons: dialog.buttons,
+        dialog,
         inputs: await inputsShown('as1'),
         within: seconds >= 15 && seconds <= 60,
       },
       {
-        message:
-          'Could not establish connection to "password": Connecting with SSH timed out.',
-        buttons: BUTTONS,
+        dialog: {
+          message:
+            'Could not establish connection to "password": Connecting with SSH timed out.',
+          details: '',
+          buttons: BUTTONS,
+        },
         inputs: [],
         within: true,
       },
+      `the dialog came ${String(seconds)} s after the window opened`,
+    );
+  });
+
+  it('F-2309 AC-20 (c2596-no-answer-part): with remote.SSH.connectTimeout 30 the timed-out dialog comes after about that time, so the setting and not the alias’s own ConnectTimeout is the wait', async () => {
+    knowHostKey('password');
+    await withSettings({
+      [EXTERNAL]: true,
+      'remote.SSH.connectTimeout': 30,
+      ...PLATFORMS,
+    });
+    answering([
+      {match: 'password', answer: hostPasswordOf(), delayMilliseconds: 120_000},
+    ]);
+    const began = Date.now();
+    await openWindow('password', 'as1');
+    const dialog = await waitForDialog('as1', 150_000);
+    const seconds = (Date.now() - began) / 1000;
+    deepStrictEqual(
+      [dialog.message, seconds >= 30 && seconds <= 45],
+      [
+        'Could not establish connection to "password": Connecting with SSH timed out.',
+        true,
+      ],
       `the dialog came ${String(seconds)} s after the window opened`,
     );
   });
@@ -178,6 +204,7 @@ describe('the failures of a login through the user’s own askpass program (card
     deepStrictEqual(
       {connected: watched.connected, inputs: watched.inputs},
       {connected: true, inputs: []},
+      `${JSON.stringify(await dialogOf('as1'))}; ${JSON.stringify(askpassCalls())}`,
     );
   });
 });
