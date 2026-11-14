@@ -1,12 +1,31 @@
 import {
   commandsOf,
   settingIn,
+  variable,
   readUserSettings,
   reloadWindow,
   restoreUserSettings,
 } from '../windows/harness.ts';
+import path from 'node:path';
+import {readStateDatabase} from '../windows/state-database.ts';
 import {paletteItems} from '../windows/palette.ts';
-import {closeQuietly, localWindowWithAi, storageKeys} from './support.ts';
+import {closeQuietly, localWindowWithAi} from './support.ts';
+
+/** The values of the chat keys that decide whether chat is enabled, as the application storage holds them. */
+function valuesOf(): Record<string, string> {
+  const rows = readStateDatabase(
+    path.join(variable('HARNESS_USER_DATA'), 'User/globalStorage/state.vscdb'),
+    database =>
+      database
+        .prepare(
+          "SELECT key, value FROM ItemTable WHERE key IN ('chat.setupContext','workbench.panel.chat.hidden','chat.hasByokModels.lastKnown')",
+        )
+        .all() as Array<{key: string; value: string}>,
+  );
+  return Object.fromEntries(
+    rows.map(row => [row.key, row.value.slice(0, 200)]),
+  );
+}
 
 const SIDEBAR = 'Chat Agent Sessions: Show Agent Sessions Sidebar';
 
@@ -20,9 +39,11 @@ describe('probe: AI-on palette (card #2520)', function () {
       const started = Date.now();
       const off = await localWindowWithAi(false);
       let offSeen: string;
+      let offValues: Record<string, string>;
       try {
         const items = (await paletteItems(off, 'SSH')).map(item => item.trim());
         offSeen = items.includes(SIDEBAR) ? 'Y' : `n${String(items.length)}`;
+        offValues = valuesOf();
       } finally {
         await closeQuietly(off);
       }
@@ -62,7 +83,7 @@ describe('probe: AI-on palette (card #2520)', function () {
           /AgentSessionsSidebar|showAgentSessions/i.test(commandId),
         );
         lines.push(
-          `#${String(attempt)} +${String(Date.now() - started)}ms off=${offSeen} on=${seen.join(',')} afterReload=${afterReload} setting=${JSON.stringify(await settingIn(window, 'chat.disableAIFeatures'))} sidebarCommandRegistered=${JSON.stringify(registered)} storage=${JSON.stringify(storageKeys().filter(key => /chat|agent|copilot|entitle|setup/i.test(key)))}`,
+          `#${String(attempt)} +${String(Date.now() - started)}ms off=${offSeen} on=${seen.join(',')} afterReload=${afterReload} setting=${JSON.stringify(await settingIn(window, 'chat.disableAIFeatures'))} sidebarCommandRegistered=${JSON.stringify(registered)} offValues=${JSON.stringify(offValues)} onValues=${JSON.stringify(valuesOf())}`,
         );
       } finally {
         await closeQuietly(window);
