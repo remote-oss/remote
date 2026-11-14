@@ -212,6 +212,35 @@ describe('identifier-table', () => {
       );
     });
 
+    it('#2494: carries the settingModule of a key beside its setter', () => {
+      const [contextKeys] = tableKinds(
+        syntheticSources({
+          declared: {
+            contextKeys: [
+              {
+                id: 'remote-x.installed',
+                setter: 'coreAndExtension',
+                settingModule: 'src/outer-context.ts',
+              },
+            ],
+          },
+        }),
+      );
+      deepStrictEqual(
+        contextKeys?.entries,
+        new Map([
+          [
+            'installed',
+            {
+              id: 'remote-x.installed',
+              setter: 'coreAndExtension',
+              settingModule: 'src/outer-context.ts',
+            },
+          ],
+        ]),
+      );
+    });
+
     it('adds the stand-down kind with the named key', () => {
       const kinds = tableKinds(
         syntheticSources({

@@ -42,6 +42,16 @@ export const PRECONNECT_MILLISECONDS = 5 * 60 * 1000;
 /** How long one check of an `ssh` program, run with `-V`, may take. */
 export const CLIENT_CHECK_MILLISECONDS = 30 * 1000;
 
+/**
+ * How long the editor's update of `remote.SSH.remotePlatform` may take before the write counts as failed: ten seconds,
+ * for a write that is local to the machine and normally takes milliseconds, so that one that never settles is a line in
+ * the log and a retry and not a silence.
+ */
+export const PLATFORM_WRITE_MILLISECONDS = 10 * 1000;
+
+/** The pause before the one retry of that write, so that the editor's settings have time to settle. */
+export const PLATFORM_RETRY_PAUSE_MILLISECONDS = 1000;
+
 /** The connect timeout of a host whose configuration sets 0, which waits on the system's own limit. */
 export const HOST_ZERO_TIMEOUT_SECONDS = 600;
 

@@ -918,6 +918,44 @@ void standDown.contextKey;
       ]);
     });
 
+    describe('a context key with one setting module (card #2494)', () => {
+      const MODULE_TABLE = `export const contextKeys = {
+  installed: {id: 'remote-x.installed', setter: 'coreAndExtension', settingModule: 'src/setter.ts'},
+  connected: {id: 'remote-x.connected', setter: 'extension'},
+} as const;
+`;
+      const USE_INSTALLED =
+        "import {contextKeys} from './identifiers.generated.ts';\n\nvoid contextKeys.installed;\n";
+      const USE_CONNECTED =
+        "import {contextKeys} from './identifiers.generated.ts';\n\nvoid contextKeys.connected;\n";
+
+      it('passes a reference from the setting module, which consumes the key', async () => {
+        addPackage('remote-x', MODULE_TABLE, {
+          'setter.ts': USE_INSTALLED,
+          'other.ts': USE_CONNECTED,
+        });
+        deepStrictEqual((await check()).problems, []);
+      });
+
+      it('reports a reference from another production file, naming both files', async () => {
+        addPackage('remote-x', MODULE_TABLE, {
+          'setter.ts': USE_INSTALLED,
+          'other.ts': `${USE_INSTALLED}${USE_CONNECTED}`,
+        });
+        deepStrictEqual((await check()).problems, [
+          'packages/remote-x: contextKeys.installed is set only by src/setter.ts, but src/other.ts references it',
+        ]);
+      });
+
+      it('leaves a key of the extension alone, referenced from every file', async () => {
+        addPackage('remote-x', MODULE_TABLE, {
+          'setter.ts': `${USE_INSTALLED}${USE_CONNECTED}`,
+          'other.ts': USE_CONNECTED,
+        });
+        deepStrictEqual((await check()).problems, []);
+      });
+    });
+
     describe('a context key the editor and the extension both set (card #2489)', () => {
       const SHARED_TABLE = `export const contextKeys = {
   installed: {id: 'remote-x.installed', setter: 'coreAndExtension'},

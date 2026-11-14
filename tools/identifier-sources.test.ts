@@ -393,6 +393,29 @@ describe('identifier-sources', () => {
       );
     });
 
+    it('#2494: reads a settingModule beside the setter', () => {
+      deepStrictEqual(
+        declaredOf({
+          source: 'x#1',
+          standsDownFor: 'r',
+          contextKeys: [
+            {
+              id: 'remote-x.installed',
+              setter: 'coreAndExtension',
+              settingModule: 'src/outer-context.ts',
+            },
+          ],
+        }).contextKeys,
+        [
+          {
+            id: 'remote-x.installed',
+            setter: 'coreAndExtension',
+            settingModule: 'src/outer-context.ts',
+          },
+        ],
+      );
+    });
+
     it('wsl-07: fails on a gateAlsoKinds that is not a boolean', () => {
       throws(
         () =>

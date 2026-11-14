@@ -119,6 +119,22 @@ export function platformOfRecord(
     : 'unknown';
 }
 
+/** The platform the exact key of `host` holds in `remote.SSH.remotePlatform`; none when it holds no platform. */
+export function storedPlatformOf(
+  remotePlatform: unknown,
+  host: string,
+): RemotePlatform | undefined {
+  if (
+    typeof remotePlatform !== 'object' ||
+    remotePlatform === null ||
+    Array.isArray(remotePlatform)
+  ) {
+    return undefined;
+  }
+  const held = (remotePlatform as Record<string, unknown>)[host];
+  return isPlatform(held) ? held : undefined;
+}
+
 /** What to write to `remote.SSH.remotePlatform` after a connect worked: nothing, or the exact key with the platform. */
 export type PlatformWrite =
   {kind: 'none'} | {kind: 'set'; platform: RemotePlatform};
@@ -136,10 +152,7 @@ export function platformWrite(
   if (settings.useLocalServer) {
     return {kind: 'none'};
   }
-  const entries = settings.remotePlatform;
-  const held =
-    typeof entries === 'object' && entries !== null && !Array.isArray(entries)
-      ? (entries as Record<string, unknown>)[host]
-      : undefined;
-  return held === reported ? {kind: 'none'} : {kind: 'set', platform: reported};
+  return storedPlatformOf(settings.remotePlatform, host) === reported
+    ? {kind: 'none'}
+    : {kind: 'set', platform: reported};
 }

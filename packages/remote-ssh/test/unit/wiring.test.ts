@@ -235,6 +235,8 @@ function portsOf(
       pickPlatform: () => Promise.resolve(undefined),
       writePlatform: () => Promise.resolve(),
       announcePlatform: () => undefined,
+      logger,
+      scheduler: seen.clock.scheduler(),
     },
     locate: {
       settingValue: () => '',
