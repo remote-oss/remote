@@ -191,7 +191,8 @@ function relayNotOpenedDetail(
   >,
 ): string {
   if (outcome.kind === 'listenFailed') {
-    return `the window tunnel did not open: its local port could not be listened on: ${outcome.detail}`;
+    const code = outcome.code === undefined ? '' : ` (${outcome.code})`;
+    return `the window tunnel did not open: its local port could not be listened on: ${outcome.detail}${code}`;
   }
   return 'the window tunnel did not open: no probe of its port worked before the bound';
 }
