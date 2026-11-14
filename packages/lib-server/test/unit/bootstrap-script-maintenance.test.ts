@@ -9,6 +9,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   rmSync,
   utimesSync,
   writeFileSync,
@@ -74,9 +75,10 @@ describe('the POSIX bootstrap script', () => {
         findFile,
         [
           '#!/bin/sh',
+          'case " $* " in *" -maxdepth 0 "*) exit 0 ;; esac',
           'while [ "$1" != -exec ]; do shift; done',
           'shift',
-          'BATCH_SCRIPT=$3 FIRST=$5 SECOND=$6',
+          'PROGRAM=$1 FLAGS=$2 FIRST=$4 SECOND=$6',
           'set -- /proc/[0-9]*/cmdline',
           'HALF=$(($# / 2))',
           'INDEX=0 LOWER= UPPER=',
@@ -84,7 +86,7 @@ describe('the POSIX bootstrap script', () => {
           '  INDEX=$((INDEX + 1))',
           '  if [ "$INDEX" -le "$HALF" ]; then LOWER="$LOWER $FILE"; else UPPER="$UPPER $FILE"; fi',
           'done',
-          `for BATCH in "$LOWER" "$UPPER"; do echo batch >>'${batches}'; sh -c "$BATCH_SCRIPT" sh "$FIRST" "$SECOND" $BATCH; done`,
+          `for BATCH in "$LOWER" "$UPPER"; do echo batch >>'${batches}'; "$PROGRAM" "$FLAGS" -e "$FIRST" -e "$SECOND" $BATCH; done`,
           'exit 0',
         ].join('\n'),
       );
@@ -108,6 +110,41 @@ describe('the POSIX bootstrap script', () => {
       chmodSync(findFile, 0o755);
       runScript(host, single('kill'), parametersFor());
       deepStrictEqual(await stillRunning(serverPid), false);
+    });
+
+    it('F-2411.BR-3: kill keeps the candidates find listed when find then exits non-zero, as processes ending during its walk make it, and runs no grep over the glob', async () => {
+      const serverPid = sweptServer();
+      const findFile = path.join(host.tools, 'find');
+      rmSync(findFile);
+      writeFileSync(
+        findFile,
+        [
+          '#!/bin/sh',
+          'case " $* " in *" -maxdepth 0 "*) exit 0 ;; esac',
+          `echo /proc/${String(serverPid)}/cmdline`,
+          "echo 'find: /proc/1/cmdline: No such file or directory' >&2",
+          'exit 1',
+        ].join('\n'),
+      );
+      chmodSync(findFile, 0o755);
+      const grepFile = path.join(host.tools, 'grep');
+      const realGrep = readlinkSync(grepFile);
+      const globCalls = path.join(host.home, 'glob-greps');
+      rmSync(grepFile);
+      writeFileSync(
+        grepFile,
+        [
+          '#!/bin/sh',
+          `case " $* " in *" /proc/"*) echo glob >>'${globCalls}' ;; esac`,
+          `exec '${realGrep}' "$@"`,
+        ].join('\n'),
+      );
+      chmodSync(grepFile, 0o755);
+      runScript(host, single('kill'), parametersFor());
+      deepStrictEqual(
+        [await stillRunning(serverPid), existsSync(globCalls)],
+        [false, false],
+      );
     });
 
     it('F-2411.BR-3: kill on a host without find still stops the server, its candidates read by one grep', async () => {
