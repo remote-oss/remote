@@ -4258,6 +4258,25 @@ export async function activeSideBar(name: string): Promise<string> {
     `document.querySelector('.activitybar .action-item.checked .action-label')?.getAttribute('aria-label') ?? ''`,
   );
 }
+/** The element that holds the focus in window `name`: its tag, class and aria label, joined with spaces; the empty string when the body does. */
+export async function focusedElement(name: string): Promise<string> {
+  return evaluate<string>(
+    name,
+    `(() => {
+      const element = document.activeElement;
+      if (element === null || element === document.body) {
+        return '';
+      }
+      return [
+        element.tagName.toLowerCase(),
+        typeof element.className === 'string' ? element.className : '',
+        element.getAttribute('aria-label') ?? '',
+      ]
+        .filter(part => part !== '')
+        .join(' ');
+    })()`,
+  );
+}
 
 /** Types `folder` into window `name`'s folder dialog and confirms it, as Enter does with no item focused. */
 export function answerFolderDialog(
