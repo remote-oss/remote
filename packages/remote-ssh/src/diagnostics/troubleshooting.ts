@@ -122,8 +122,9 @@ export interface TroubleshootingPorts {
 export interface Troubleshooting {
   /**
    * Runs the check once for an attempt whose resolve step has ended. `modal` says a dialog will take the keyboard.
-   * A connect that failed and has no troubleshooting table shows the log channel instead; one that worked or was
-   * cancelled shows neither.
+   * A connect that failed and has no troubleshooting table, because it has no error hint or because the setting is
+   * off, shows the log channel instead (reading-2537-reveal-without-analysis); one that worked or was cancelled shows
+   * neither.
    */
   check(
     hints: readonly SessionHint[],
@@ -159,6 +160,9 @@ export function troubleshootingOf(
       const rows = rowsOf(hints);
       if (!ports.enabled()) {
         logger.info(DISABLED_LINE);
+        if (outcome === 'failed') {
+          ports.revealLog(modal);
+        }
         return;
       }
       if (rows.length === 0) {
