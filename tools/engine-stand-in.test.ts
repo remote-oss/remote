@@ -363,6 +363,41 @@ describe('the engine stand-in in front of a WSL engine (card #2511)', () => {
     }
   });
 
+  it('#2530: a client that leaves before the engine answers leaves the stand-in up, and the next request is answered', async () => {
+    await closed(engine.server);
+    const held: ServerResponse[] = [];
+    engine = await fakeEngine((asked, response) => {
+      if (asked.url === '/slow') {
+        held.push(response);
+        return;
+      }
+      response.end('OK');
+    });
+    const patient = await startStandIn(
+      {host: '127.0.0.1', port: engine.port},
+      {report: line => lines.push(line), longPathOf},
+    );
+    try {
+      const {port} = new URL(patient.address);
+      const client = connect(Number(port), '127.0.0.1');
+      await new Promise<void>(resolve => client.once('connect', resolve));
+      client.write('GET /slow HTTP/1.1\r\nHost: engine\r\n\r\n');
+      while (held.length === 0) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      client.destroy();
+      await new Promise(resolve => setTimeout(resolve, 50));
+      held[0]?.end('late');
+      await new Promise(resolve => setTimeout(resolve, 50));
+      deepStrictEqual(await through(patient.address, 'GET', '/next'), {
+        status: 200,
+        body: 'OK',
+      });
+    } finally {
+      await patient.close();
+    }
+  });
+
   it('#2511: an engine that resets the connection after its headers ends the client’s response', async () => {
     await closed(engine.server);
     engine = await fakeEngine((asked, response) => {

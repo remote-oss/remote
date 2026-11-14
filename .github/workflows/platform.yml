@@ -117,11 +117,12 @@ jobs:
           $standIn = Start-Process node -PassThru -NoNewWindow -RedirectStandardOutput $standInLog -RedirectStandardError "$standInLog.err" -ArgumentList (Join-Path $env:GITHUB_WORKSPACE 'tools/engine-stand-in.ts'), '--engine', $env:DOCKER_HOST, '--address-file', $addressFile
           # the file exists a moment before the address is in it, so the wait is for the address itself
           $address = ''
-          for ($i = 0; $i -lt 30 -and $address -notmatch '^tcp://127\.0\.0\.1:\d+$'; $i++) {
+          # and ends early when the stand-in has exited without writing one
+          for ($i = 0; $i -lt 30 -and $address -notmatch '^tcp://127\.0\.0\.1:\d+$' -and -not $standIn.HasExited; $i++) {
             Start-Sleep 1
             $address = "$(Get-Content $addressFile -Raw -ErrorAction SilentlyContinue)".Trim()
           }
-          if ($address -notmatch '^tcp://127\.0\.0\.1:\d+$') { "no stand-in address in $addressFile`: '$address'"; Get-Content $standInLog, "$standInLog.err" -ErrorAction SilentlyContinue; exit 1 }
+          if ($address -notmatch '^tcp://127\.0\.0\.1:\d+$') { "no stand-in address in $addressFile`: '$address' (the stand-in exited: $($standIn.HasExited))"; Get-Content $standInLog, "$standInLog.err" -ErrorAction SilentlyContinue; exit 1 }
           $engine = $env:DOCKER_HOST
           $env:DOCKER_HOST = $address
           "the engine stand-in: $env:DOCKER_HOST, in front of $engine"

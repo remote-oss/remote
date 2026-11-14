@@ -137,6 +137,10 @@ import {
   sortedEntries,
 } from './repository.ts';
 
+/** How many times the run folder's removal tries again on a Windows lock, and the wait between two tries. */
+const RUN_FOLDER_REMOVE_RETRIES = 10;
+const RUN_FOLDER_REMOVE_DELAY_MILLISECONDS = 500;
+
 /** The port mapping and the real runner, re-exported for the tests. */
 export {mappedPort} from './acceptance-run.ts';
 export {runCommand} from './command-runner.ts';
@@ -1928,7 +1932,14 @@ export async function runAcceptance(
         exitCode = exitCode === 0 ? 1 : exitCode;
       }
     }
-    rmSync(runFolder, {recursive: true, force: true});
+    // On a Windows client a file of the run folder can be held for a moment after its last user ends (a container's
+    // bind through WSL letting go), and rmSync then fails with EPERM or EBUSY at once unless it may try again.
+    rmSync(runFolder, {
+      recursive: true,
+      force: true,
+      maxRetries: RUN_FOLDER_REMOVE_RETRIES,
+      retryDelay: RUN_FOLDER_REMOVE_DELAY_MILLISECONDS,
+    });
     removeBundles(root);
   }
   return exitCode;
