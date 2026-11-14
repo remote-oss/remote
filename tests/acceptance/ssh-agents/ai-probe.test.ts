@@ -1,9 +1,7 @@
-import {execFileSync} from 'node:child_process';
 import {
   commandsOf,
   readUserSettings,
   restoreUserSettings,
-  variable,
 } from '../windows/harness.ts';
 import {paletteItems} from '../windows/palette.ts';
 import {closeQuietly, localWindowWithAi} from './support.ts';
@@ -16,9 +14,6 @@ describe('probe: AI-on palette (card #2520)', function () {
   it('probe: the AI-on palette over many new windows', async () => {
     const saved = readUserSettings();
     const lines: string[] = [];
-    lines.push(
-      `editor version: ${execFileSync(variable('HARNESS_VSCODIUM_EXECUTABLE'), ['--version']).toString().split('\n').join(' | ')}`,
-    );
     for (let attempt = 1; attempt <= 10; attempt += 1) {
       const started = Date.now();
       const window = await localWindowWithAi(true);
