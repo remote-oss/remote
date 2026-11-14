@@ -3,8 +3,9 @@
  * chosen configuration asks for. Stage one reads the configuration file's own text, for commands whose workspace is not
  * trusted yet and that therefore read nothing the configuration names; stage two takes the merged configuration the
  * CLI gave. Either stage adds what the label of the folder's existing container records. When the daemon's figures cannot
- * be read, or the merged read gave none, the step reads the file and goes on; when the merged read gave none because an image configuration's image is not in the engine's store (the CLI's pull failed), the step logs why and checks nothing. "Continue" goes on unchanged, with no limit
- * applied; "Cancel" ends the command.
+ * be read, or the merged read gave none, the step reads the file and goes on; when the merged read gave none because an
+ * image configuration's image is not in the engine's store (the CLI's pull failed), the step logs why and checks
+ * nothing. "Continue" goes on unchanged, with no limit applied; "Cancel" ends the command.
  */
 
 import type {Logger} from 'lib-log';

@@ -343,7 +343,8 @@ export async function daemonFigures(
 
 /**
  * Why `image` is not in the engine's local store: the first line of the failing inspect's message. None when the image
- * is local, or when the engine could not be asked or did not answer in time.
+ * is local, or when the engine could not be asked or did not answer in time. The name goes after `--`, so one that
+ * starts with a dash is a name and not an option; it is the configuration's own text, with no `${...}` substituted.
  */
 export async function imageMissingReason(
   dependencies: PreflightDependencies,
@@ -354,7 +355,7 @@ export async function imageMissingReason(
   const result = await resultOf(
     dependencies,
     base,
-    ['image', 'inspect', '--format', '{{.Id}}', image],
+    ['image', 'inspect', '--format', '{{.Id}}', '--', image],
     cancellation,
   );
   if (result?.kind !== 'ran' || result.timedOut || result.status === 0) {
