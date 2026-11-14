@@ -239,6 +239,14 @@
       "card": "#2071",
       "slice": "containers release 1",
       "decision": "brief-remote-ssh-engines §3.1 (2026-11-04): part (a)'s engine host over the exec server; the nested resolve wires it"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "contextKeys",
+      "key": "wslFeatureInstalled",
+      "card": "#2396",
+      "slice": "remote-wsl",
+      "decision": "core sets it on a Windows desktop, and only D9b (the outer-context module, tgt-4 #2396) may set it in the extension (ruling-2348-shared-context-key); D9b isn't built, so nothing in the package sets it yet"
     }
   ]
 }
