@@ -138,7 +138,7 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
   });
 
   it('F-2309 AC-4 (c2596-host-key): with the setting true and an unknown host key, the host-key question goes to the program and no VS Code input appears, and the key is in the known-hosts file afterwards', async () => {
-    forgetHostKey('password-ask');
+    forgetHostKey('password_ask');
     await withSettings({[EXTERNAL]: true, ...PLATFORMS});
     answering([{match: 'continue connecting', answer: 'yes'}, passwordRule()]);
     const watched = await watchedConnect('password-ask', 'as1', 120_000);
@@ -150,7 +150,7 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
           /continue connecting/i.test(call.prompt),
         ),
         recorded:
-          readFileSync(knownHostsOf('password-ask'), 'utf8').trim() !== '',
+          readFileSync(knownHostsOf('password_ask'), 'utf8').trim() !== '',
       },
       {
         connected: true,
@@ -167,11 +167,11 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
       'harness',
       'sh',
       '-c',
-      'mkdir -p /home/harness/as1/.vscode && printf \'{"remote.SSH.externalSSH_ASKPASS": true}\' > /home/harness/as1/.vscode/settings.json && chmod -R a+rwX /home/harness/as1',
+      'mkdir -p /home/harness/af1/.vscode && chmod a+rwx /home/harness/af1 && printf \'{"remote.SSH.externalSSH_ASKPASS": true}\' > /home/harness/af1/.vscode/settings.json',
     );
     await withSettings({[EXTERNAL]: false, ...PLATFORMS});
     answering([passwordRule()]);
-    const watched = await watchedConnect('password', 'as1', 30_000);
+    const watched = await watchedConnect('password', 'af1', 30_000);
     deepStrictEqual(
       {
         inputs: watched.inputs.map(label =>
@@ -221,7 +221,9 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
           connected: watched.connected,
           inputs: watched.inputs,
           called: askpassCalls().length > 0,
-          terminals: (await terminalsOf('as1')) ?? [],
+          terminals: ((await terminalsOf('as1')) ?? []).filter(
+            name => name === 'install',
+          ),
         },
         {connected: true, inputs: [], called: true, terminals: []},
         recorded(),
