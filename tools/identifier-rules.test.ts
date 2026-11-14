@@ -159,6 +159,65 @@ describe('identifier-rules', () => {
     });
   });
 
+  describe('the setting module of a shared context key (card #2494)', () => {
+    /** The problems of a package whose one declared context key is `contextKey`. */
+    function problemsOf(contextKey: {
+      id: string;
+      setter: 'extension' | 'core' | 'coreAndExtension';
+      settingModule?: string;
+    }): string[] {
+      return checkPackageRules(
+        syntheticSources({declared: {contextKeys: [contextKey]}}),
+      ).problems;
+    }
+
+    it('passes a coreAndExtension key with a module below src', () => {
+      deepStrictEqual(
+        problemsOf({
+          id: 'remote-x.installed',
+          setter: 'coreAndExtension',
+          settingModule: 'src/nested/outer-context.ts',
+        }),
+        [],
+      );
+    });
+
+    it('reports a coreAndExtension key without a settingModule', () => {
+      deepStrictEqual(
+        problemsOf({id: 'remote-x.installed', setter: 'coreAndExtension'}),
+        [
+          "context key 'remote-x.installed' is set by the editor and the extension, so it needs a settingModule",
+        ],
+      );
+    });
+
+    it('reports a settingModule on a key of another setter', () => {
+      deepStrictEqual(
+        problemsOf({
+          id: 'remote-x.connected',
+          setter: 'extension',
+          settingModule: 'src/connected.ts',
+        }),
+        [
+          "context key 'remote-x.connected' names a settingModule but its setter is 'extension', not 'coreAndExtension'",
+        ],
+      );
+    });
+
+    it('reports a settingModule that is not a path src/<file>.ts', () => {
+      deepStrictEqual(
+        problemsOf({
+          id: 'remote-x.installed',
+          setter: 'coreAndExtension',
+          settingModule: 'lib/outer-context.js',
+        }),
+        [
+          "context key 'remote-x.installed' names settingModule 'lib/outer-context.js', which is not a path src/<file>.ts of the package",
+        ],
+      );
+    });
+  });
+
   describe('runtime commands', () => {
     const showDetails = {id: 'opensshremotes.showDetails', purpose: 'p'};
 
