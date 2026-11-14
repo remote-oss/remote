@@ -11,7 +11,7 @@ import {readBoundMilliseconds, readStateDatabase} from './state-database.ts';
 interface Writer {
   process: ChildProcess;
   heldAt: number;
-  /** Resolves with the commit's time on the writer's clock when it prints it, or 0 when the writer ends without. */
+  /** Resolves with the commit's time on the writer's clock when it prints it, or 0 when the writer's output closes without one. */
   committed: Promise<number>;
 }
 
@@ -30,7 +30,7 @@ function holder(file: string, milliseconds: number): Promise<Writer> {
   });
   return new Promise((resolve, reject) => {
     const committed = new Promise<number>(settled => {
-      child.once('exit', () => {
+      child.once('close', () => {
         settled(0);
       });
       child.stdout.on('data', (chunk: Buffer) => {
