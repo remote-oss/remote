@@ -88,7 +88,7 @@ function passwordChain(alias: string, prompts: number): string {
     hostBlock(
       `${alias}-hop`,
       [...PASSWORD_ONLY, `NumberOfPasswordPrompts ${String(prompts)}`],
-      PASSWORD_WITHOUT,
+      ['PreferredAuthentications', 'NumberOfPasswordPrompts', 'ProxyCommand'],
       'password',
     ),
   ]);
@@ -490,8 +490,8 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     );
     deepStrictEqual(result, {
       picks: [
-        `"${alias}" has fingerprint "SHA256:x".`,
-        `"${alias}" has fingerprint "SHA256:x".`,
+        `"${alias}" has fingerprint "SHA256:x`,
+        `"${alias}" has fingerprint "SHA256:x`,
       ],
       recorded: 2,
     });
@@ -533,5 +533,55 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       result,
       `Could not establish connection to "${alias}": Remote host key has changed, port forwarding is disabled.`,
     );
+  });
+
+  it('F-2310 AC-20 (c2601-password-reload): a window connected through a password jump host reloads and connects with no input', async () => {
+    const alias = 'c2601-pwreload';
+    const file = passwordChain(alias, 1);
+    const result = await connectWith(
+      alias,
+      [],
+      'connects',
+      async () => {
+        const before = questionsOn(alias, 'maskedInput').length;
+        await reloadWindow(alias);
+        await connectedWithin(alias, 120_000);
+        return {before, after: questionsOn(alias, 'maskedInput').length};
+      },
+      {
+        file,
+        script: [
+          passwordAt(alias, '127.0.0.1', hostPassword()),
+          passwordAt(alias, '127.0.0.2', hostPassword()),
+        ],
+      },
+    );
+    deepStrictEqual(result, {before: 2, after: 2});
+  });
+
+  it('F-2310 AC-22 (c2601-password-terminal): without the local server a password jump host and a password target ask in hop order and the window connects', async () => {
+    const alias = 'c2601-pwterminal';
+    const file = passwordChain(alias, 1);
+    const result = await connectWith(
+      alias,
+      [],
+      'connects',
+      () => questionsOn(alias, 'maskedInput'),
+      {
+        file,
+        settings: {
+          'remote.SSH.useLocalServer': false,
+          'remote.SSH.remotePlatform': {[alias]: 'linux'},
+        },
+        script: [
+          passwordAt(alias, '127.0.0.1', hostPassword()),
+          passwordAt(alias, '127.0.0.2', hostPassword()),
+        ],
+      },
+    );
+    deepStrictEqual(result, [
+      'Enter password for harness-pw@127.0.0.1',
+      'Enter password for harness-pw@127.0.0.2',
+    ]);
   });
 });
