@@ -397,7 +397,9 @@ const SERVER_TREE_FUNCTIONS: readonly string[] = [
  * Stop the servers of the data folder: those of a direct install, whose process ids are recorded in it and whose command
  * lines hold `bin/`, and every process of a server tree, found by the file it runs being under `bin/` or `cli/servers/`.
  * The sweep reaches a server's extension host and file watcher, which outlive a main process that ended. A process that
- * is not a server, such as the CLI's `command-shell` and its supervisor, which run the CLI file, is left alone.
+ * is not a server, such as the CLI's `command-shell` and its supervisor, which run the CLI file, is left alone. One
+ * `grep` over every process's command line picks the candidates, so the sweep costs one process however many the
+ * host runs, and only the candidates get the exact check.
  */
 const STOP_FUNCTIONS: readonly string[] = [
   'stop_servers() {',
@@ -410,7 +412,9 @@ const STOP_FUNCTIONS: readonly string[] = [
   '    fi',
   '    kill "$SERVER_PID" 2>/dev/null',
   '  done',
-  '  for PROC_DIR in /proc/[0-9]*; do',
+  '  SERVER_CANDIDATES=$(grep -alsF -e "$DATA_DIR/bin/" -e "$DATA_DIR/cli/servers/" /proc/[0-9]*/cmdline 2>/dev/null)',
+  '  for PROC_FILE in $SERVER_CANDIDATES; do',
+  '    PROC_DIR=${PROC_FILE%/cmdline}',
   '    SERVER_PID=${PROC_DIR#/proc/}',
   '    [ "$SERVER_PID" != "$$" ] || continue',
   '    is_server_tree_process "$SERVER_PID" "$DATA_DIR/bin/" ||',
