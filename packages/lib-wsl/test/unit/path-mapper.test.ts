@@ -44,6 +44,7 @@ describe('D3: the path mapper’s process half', () => {
       '--exec',
       'wslpath',
       '-u',
+      '--',
       'C:\\Users\\me',
     ]);
   });
@@ -83,6 +84,26 @@ describe('D3: the path mapper’s process half', () => {
     deepStrictEqual(mapped.kind, 'notTranslatable');
   });
 
+  it('F-6204 (reading-2348-share-host): a path that is neither a drive path nor on a share is not translatable and starts no process', async () => {
+    const {fake, mapper} = mapperOver({kind: 'exits', status: 0});
+    const mapped = await mapper.toDistro(
+      '\\\\localhost\\C$\\x',
+      'Ubuntu',
+      NEVER,
+    );
+    deepStrictEqual([mapped.kind, fake.started.length], ['notTranslatable', 0]);
+  });
+
+  it('F-6204: a wslpath output that does not start with / is not translatable', async () => {
+    const {mapper} = mapperOver({
+      kind: 'exits',
+      stdout: utf8Output('C:Users\n'),
+      status: 0,
+    });
+    const mapped = await mapper.toDistro('C:\\Users', 'Ubuntu', NEVER);
+    deepStrictEqual(mapped.kind, 'notTranslatable');
+  });
+
   it('cw01 toDistro: a wslpath that fails is not translatable, with its status named', async () => {
     const {mapper} = mapperOver({
       kind: 'exits',
@@ -104,6 +125,99 @@ describe('D3: the path mapper’s process half', () => {
     const mapped = await mapper.toDistro('C:\\x', 'Ubuntu', NEVER);
     deepStrictEqual(
       mapped.kind === 'failed' ? mapped.failure.kind : mapped.kind,
+      'spawnFailed',
+    );
+  });
+});
+
+describe('D3: toWindows', () => {
+  async function windowsOf(
+    behaviour: FakeRun,
+    linuxPath = '/home/me',
+    host: 'wsl$' | 'wsl.localhost' = 'wsl.localhost',
+  ) {
+    const {fake, mapper} = mapperOver(behaviour);
+    const result = await mapper.toWindows('Ubuntu', linuxPath, host, NEVER);
+    return {fake, result};
+  }
+
+  it('F-6204: a relative path is not translatable and starts no process', async () => {
+    const {fake, result} = await windowsOf(
+      {kind: 'exits', status: 0},
+      'home/me',
+    );
+    deepStrictEqual([result.kind, fake.started.length], ['notTranslatable', 0]);
+  });
+
+  it('F-6204: wslpath -w is asked in the distro with -- before the path', async () => {
+    const {fake} = await windowsOf({
+      kind: 'exits',
+      stdout: utf8Output('C:\\Users\n'),
+      status: 0,
+    });
+    deepStrictEqual(fake.started[0]?.programArguments, [
+      '-d',
+      'Ubuntu',
+      '--cd',
+      '~',
+      '--exec',
+      'wslpath',
+      '-w',
+      '--',
+      '/home/me',
+    ]);
+  });
+
+  it('F-6204: a drive form is the result as printed', async () => {
+    const {result} = await windowsOf({
+      kind: 'exits',
+      stdout: utf8Output('C:\\Users\\me\n'),
+      status: 0,
+    });
+    deepStrictEqual(result, {kind: 'mapped', windowsPath: 'C:\\Users\\me'});
+  });
+
+  it('F-6203 (reading-2348-share-host): a share form is rebuilt from the call’s inputs, whatever distro, host or folder it names', async () => {
+    const {result} = await windowsOf(
+      {
+        kind: 'exits',
+        stdout: utf8Output('\\\\WSL$\\Other\\elsewhere\n'),
+        status: 0,
+      },
+      '/home/me',
+      'wsl$',
+    );
+    deepStrictEqual(result, {
+      kind: 'mapped',
+      windowsPath: '\\\\wsl$\\Ubuntu\\home\\me',
+    });
+  });
+
+  const unusable = [
+    ['another UNC host', '\\\\server\\share\n', 0],
+    ['a control character', 'C:\\a\u0007b\n', 0],
+    ['two lines', 'C:\\a\nC:\\b\n', 0],
+    ['no line', '', 0],
+    ['a non-zero status', 'C:\\a\n', 1],
+  ] as const;
+  for (const [label, printed, status] of unusable) {
+    it(`F-6204: ${label} is not translatable`, async () => {
+      const {result} = await windowsOf({
+        kind: 'exits',
+        stdout: utf8Output(printed),
+        status,
+      });
+      deepStrictEqual(result.kind, 'notTranslatable');
+    });
+  }
+
+  it('F-6204: a failure of the runner is passed on', async () => {
+    const {result} = await windowsOf({
+      kind: 'failsToStart',
+      error: {code: 'EMFILE', message: 'too many open files'},
+    });
+    deepStrictEqual(
+      result.kind === 'failed' ? result.failure.kind : result.kind,
       'spawnFailed',
     );
   });

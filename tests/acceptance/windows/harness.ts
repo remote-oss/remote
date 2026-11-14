@@ -42,6 +42,7 @@ import {
   signalFile,
   type AppendedEntry,
 } from '../../../tools/script-file.ts';
+import {editorFolderOf} from './editor-folder.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -371,7 +372,11 @@ export function totpCode(moment = Date.now()): string {
 /** A place a secret search looks in: a client folder or file, a host folder (searched as root), or the host's log. */
 export type SecretPlace =
   | {client: string; accepted?: (file: string) => boolean}
-  | {host: string; excluded?: readonly string[]}
+  | {
+      host: string;
+      excluded?: readonly string[];
+      excludedFolders?: readonly string[];
+    }
   | {hostLog: true};
 
 /** One file a secret search found a value in: the place, and the file under it. Never the value. */
@@ -383,7 +388,8 @@ export interface SecretHit {
 /**
  * The files of `places` that hold any of `values`. A client place is read in Node, following no link; a host folder is
  * searched as root with `grep -rlF` (no hit is grep's status 1; another failure throws with grep's error), skipping
- * devices and pipes and the file names `excluded`; the host's log is both streams of `docker logs`.
+ * devices and pipes, the file names `excluded` and the folders named `excludedFolders`; the host's log is both
+ * streams of `docker logs`.
  */
 export function secretHits(
   values: readonly string[],
@@ -407,6 +413,7 @@ export function secretHits(
         '-D',
         'skip',
         ...(place.excluded ?? []).map(name => `--exclude=${name}`),
+        ...(place.excludedFolders ?? []).map(name => `--exclude-dir=${name}`),
         ...values.flatMap(value => ['-e', value]),
         '--',
         place.host,
@@ -1157,7 +1164,7 @@ export async function devContainersOf(folder: string): Promise<string[]> {
     '--all',
     '--quiet',
     '--filter',
-    `label=devcontainer.local_folder=${folder}`,
+    `label=devcontainer.local_folder=${editorFolderOf(folder)}`,
     '--filter',
     `label=remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
   ]);

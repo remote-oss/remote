@@ -14,7 +14,6 @@ import {
   readdirSync,
   readFileSync,
   writeFileSync,
-  realpathSync,
 } from 'node:fs';
 import path from 'node:path';
 import {checked, type CommandRunner} from './command-runner.ts';
@@ -286,26 +285,6 @@ export function orasArguments(
   ];
 }
 
-/**
- * The folder `folder` as the Docker engine sees it. On a Windows client whose engine runs in a WSL distro
- * (`HARNESS_ENGINE_WSL=1`, as platform.yml sets), a drive path is the distro's `/mnt/<drive>/…` path of its long form;
- * otherwise the folder is the engine's own path as it is.
- */
-export function engineFolderOf(
-  folder: string,
-  environment: Readonly<Record<string, string | undefined>>,
-  longPathOf: (folder: string) => string = realpathSync.native,
-): string {
-  if (
-    environment.HARNESS_ENGINE_WSL !== '1' ||
-    !/^[A-Za-z]:[\\/]/.test(folder)
-  ) {
-    return folder;
-  }
-  const long = longPathOf(folder);
-  return `/mnt/${long.charAt(0).toLowerCase()}${long.slice(2).replaceAll('\\', '/')}`;
-}
-
 /** Where a run keeps its templates' work: the sources it publishes. */
 function runTemplatesFolder(runFolder: string): string {
   return path.join(runFolder, 'templates');
@@ -480,7 +459,7 @@ export async function prepareRunTemplates(
       'docker',
       orasArguments(
         ['manifest', 'push', '--plain-http', reference, `/work/${name}.json`],
-        {folder: engineFolderOf(pushed, process.env)},
+        {folder: pushed},
       ),
     );
   }

@@ -2,9 +2,12 @@
 # never on a pull request, so no fork's code reaches a hosted runner from here, and with no secret.
 #
 # - windows-2025: the Windows client. WSL2 gives the Linux side: an Ubuntu 24.04 distro whose Docker engine runs the
-#   SSH hosts and the dev containers (the Windows engine of the image runs Windows containers only). The Docker CLI
-#   reaches that engine at the distro's own address; the hosts' and containers' published ports are reached over
-#   WSL2's localhost forwarding. VSCodium answers on its debugging port there.
+#   SSH hosts and the dev containers (the Windows engine of the image runs Windows containers only). The launches
+#   reach that engine through tools/engine-stand-in.ts on 127.0.0.1, which forwards to the distro's own address and
+#   takes the client's drive paths as bind sources, as Docker Desktop's engine does, so the job's containers rows run
+#   against that stand-in for Docker Desktop (reading-2511-desktop-stand-in); the other steps reach it at the distro's
+#   address. The hosts' and containers' published ports are reached over WSL2's localhost forwarding.
+#   VSCodium answers on its debugging port there.
 # - macos-15-intel: the macOS client, with colima's Docker for linux/x86_64 (about 10 minutes to start).
 #
 # Each job runs `node tools/acceptance.ts --editor vscodium` for its launch list and leaves the run's summary in the job
@@ -80,8 +83,6 @@ jobs:
           }
           if (-not $up) { wsl -d Ubuntu-24.04 -u root -- sh -c 'systemctl status docker --no-pager | tail -15'; exit 1 }
           "DOCKER_HOST=tcp://${engine}:2375" >> $env:GITHUB_ENV
-          # the harness passes its bind-mounted folders to the engine as the distro's /mnt paths
-          "HARNESS_ENGINE_WSL=1" >> $env:GITHUB_ENV
       # the image's Docker CLI has no buildx plugin, and the harness builds its images with `docker build --load`
       - name: Docker's buildx plugin for the Windows CLI
         run: |
@@ -105,8 +106,30 @@ jobs:
           Set-Service ssh-agent -StartupType Manual
           Start-Service ssh-agent
           Get-Service ssh-agent | Format-Table -AutoSize Name, Status, StartType
+      # Docker Desktop's engine takes a Windows client's drive paths as bind sources, and the distro's engine does not,
+      # so the launches reach it through a stand-in on 127.0.0.1 that rewrites them to the distro's /mnt paths and logs
+      # each rewrite (reading-2511-desktop-stand-in). A process started in one step is gone by the next, so the stand-in
+      # lives in this step, and the other steps use the engine's own address.
       - name: The launches
-        run: pnpm test:acceptance:vscodium --launches $env:LAUNCHES
+        run: |
+          $addressFile = Join-Path $env:RUNNER_TEMP 'engine-stand-in.address'
+          $standInLog = Join-Path $env:RUNNER_TEMP 'engine-stand-in.log'
+          $standIn = Start-Process node -PassThru -NoNewWindow -RedirectStandardOutput $standInLog -RedirectStandardError "$standInLog.err" -ArgumentList (Join-Path $env:GITHUB_WORKSPACE 'tools/engine-stand-in.ts'), '--engine', $env:DOCKER_HOST, '--address-file', $addressFile
+          for ($i = 0; $i -lt 30 -and -not (Test-Path $addressFile); $i++) { Start-Sleep 1 }
+          if (-not (Test-Path $addressFile)) { Get-Content $standInLog, "$standInLog.err" -ErrorAction SilentlyContinue; exit 1 }
+          $engine = $env:DOCKER_HOST
+          $env:DOCKER_HOST = (Get-Content $addressFile).Trim()
+          "the engine stand-in: $env:DOCKER_HOST, in front of $engine"
+          docker version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}'
+          if ($LASTEXITCODE -ne 0) { Get-Content $standInLog, "$standInLog.err" -ErrorAction SilentlyContinue; exit 1 }
+          pnpm test:acceptance:vscodium --launches $env:LAUNCHES
+          $launched = $LASTEXITCODE
+          Stop-Process -InputObject $standIn -ErrorAction SilentlyContinue
+          "the engine stand-in's log, every bind source it rewrote among it:"
+          Get-Content $standInLog, "$standInLog.err" -ErrorAction SilentlyContinue
+          $rewritten = @(Select-String -Path $standInLog -SimpleMatch ' -> ').Count
+          "The Windows containers rows ran against tools/engine-stand-in.ts, a stand-in for Docker Desktop's engine endpoint (reading-2511-desktop-stand-in): it rewrote $rewritten bind sources to the distro's /mnt paths.`n" >> $env:GITHUB_STEP_SUMMARY
+          exit $launched
       - if: always()
         run: pnpm acceptance:clean
 

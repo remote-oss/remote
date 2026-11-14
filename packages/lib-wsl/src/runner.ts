@@ -14,6 +14,14 @@ import type {
   WslSession,
 } from './process-port.ts';
 
+/**
+ * Whether the exit status `status` is the 32-bit code `expected`: Windows exit codes are 32-bit, which a shell reads
+ * signed (-1) and a child process may report unsigned (4294967295).
+ */
+export function exitStatusIs(status: number, expected: number): boolean {
+  return (status | 0) === expected;
+}
+
 /** Why a run of `wsl.exe` did not give its result. */
 export type WslFailureKind =
   | 'wslMissing'
@@ -110,6 +118,15 @@ export interface WslRunner {
   locate(): Promise<{kind: 'located'; path: string} | RunFailed>;
   /** Runs a management verb and decodes its output. */
   manage(request: ManageRequest): Promise<ManageRan | RunFailed>;
+  /**
+   * Sets the default distro with `%SystemRoot%\\System32\\wslconfig.exe /setdefault <name>`, for the builds whose
+   * `wsl.exe` has no such verb. There is no PATH fallback: without a system root, or without that file, it is
+   * `wslMissing`. The output is decoded as `manage` decodes it.
+   */
+  setDefaultByWslconfig(
+    name: string,
+    cancellation: AbortSignal,
+  ): Promise<ManageRan | RunFailed>;
   /**
    * Starts a program in a distro and gives the process, after the checks and with the argument list that `exec` uses.
    * Cancelling `request.cancellation` ends it.
@@ -283,21 +300,13 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
     });
   }
 
-  async function manage(
-    request: ManageRequest,
+  /** Runs the program at `path` with `programArguments` to its end and decodes its output, or says why it did not. */
+  async function runDecoded(
+    path: string,
+    programArguments: readonly string[],
+    cancellation: AbortSignal,
   ): Promise<ManageRan | RunFailed> {
-    if (request.cancellation.aborted) {
-      return failed('cancelled', 'cancelled before the run');
-    }
-    const located = await locate();
-    if (located.kind === 'failed') {
-      return located;
-    }
-    const started = await start(
-      located.path,
-      [...VERB_ARGUMENTS[request.verb], ...request.operands],
-      session.environment,
-    );
+    const started = await start(path, programArguments, session.environment);
     if (started.kind === 'failed') {
       return started;
     }
@@ -310,18 +319,57 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
       output = joined(output, chunk);
     });
     handle.endInput();
-    const ending = await supervise(handle, request.cancellation);
+    const ending = await supervise(handle, cancellation);
     if (ending.kind === 'cancelled') {
-      return failed('cancelled', 'cancelled while wsl.exe ran');
+      return failed('cancelled', 'cancelled while the program ran');
     }
-    const text = decodeManagementOutput(output);
     if (ending.status === undefined) {
-      return failed('spawnFailed', 'wsl.exe ended by a signal');
+      return failed('spawnFailed', 'the program ended by a signal');
     }
-    if (ending.status !== 0 && UNKNOWN_VERB.test(text)) {
-      return failed('wslNeedsUpdate', text.trim());
+    return {
+      kind: 'ran',
+      text: decodeManagementOutput(output),
+      status: ending.status,
+    };
+  }
+
+  async function manage(
+    request: ManageRequest,
+  ): Promise<ManageRan | RunFailed> {
+    if (request.cancellation.aborted) {
+      return failed('cancelled', 'cancelled before the run');
     }
-    return {kind: 'ran', text, status: ending.status};
+    const located = await locate();
+    if (located.kind === 'failed') {
+      return located;
+    }
+    const finished = await runDecoded(
+      located.path,
+      [...VERB_ARGUMENTS[request.verb], ...request.operands],
+      request.cancellation,
+    );
+    return finished.kind === 'ran' &&
+      finished.status !== 0 &&
+      UNKNOWN_VERB.test(finished.text)
+      ? failed('wslNeedsUpdate', finished.text.trim())
+      : finished;
+  }
+
+  async function setDefaultByWslconfig(
+    name: string,
+    cancellation: AbortSignal,
+  ): Promise<ManageRan | RunFailed> {
+    if (cancellation.aborted) {
+      return failed('cancelled', 'cancelled before the run');
+    }
+    const program =
+      session.systemRoot === undefined
+        ? undefined
+        : `${session.systemRoot}\\System32\\wslconfig.exe`;
+    if (program === undefined || !(await files.exists(program))) {
+      return failed('wslMissing', 'wslconfig.exe is not in System32');
+    }
+    return runDecoded(program, ['/setdefault', name], cancellation);
   }
 
   /** The arguments that run the program in the distro. */
@@ -534,5 +582,11 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
     return outcome;
   }
 
-  return {locate, manage, start: startProcess, exec};
+  return {
+    locate,
+    manage,
+    setDefaultByWslconfig,
+    start: startProcess,
+    exec,
+  };
 }
