@@ -8,6 +8,8 @@ import {deepStrictEqual} from 'node:assert';
 import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
+import {dismissals} from '../windows/maintenance.ts';
+import {answerInputBox, inputBoxOf, pressEscape} from '../windows/renderer.ts';
 import {
   connectedWithin,
   hostPassword,
@@ -15,6 +17,7 @@ import {
   recordLines,
   reloadWindow,
   variable,
+  waitFor,
 } from '../windows/harness.ts';
 import {
   connectWith,
@@ -104,6 +107,25 @@ function passwordAt(alias: string, address: string, text: string) {
     answer: {text},
     window: alias,
   } as const;
+}
+
+/** Waits until window `name` shows an input whose placeholder is `placeholder` (and whose message holds `message`), and gives it. */
+async function untilInput(name: string, placeholder: string, message = '') {
+  await waitFor(
+    `the input ${placeholder} of ${name}`,
+    async () => {
+      const shown = await inputBoxOf(name);
+      return (
+        shown?.placeholder === placeholder && shown.message.includes(message)
+      );
+    },
+    90_000,
+  );
+  const shown = await inputBoxOf(name);
+  if (shown === undefined) {
+    throw new Error(`the input of ${name} closed`);
+  }
+  return shown;
 }
 
 /** The questions window `alias` was asked on `surface`, in order. */
@@ -342,28 +364,40 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     });
   });
 
-  it('F-2310 AC-7 (c2601-password-wrong): a wrong password at the jump host asks again with the same placeholder and the message that the permission was denied', async () => {
+  it('F-2310 AC-7 (c2601-password-wrong): a wrong password at the jump host re-opens the input with the same placeholder and the message that the permission was denied', async () => {
     const alias = 'c2601-pwwrong';
     const file = passwordChain(alias, 3);
-    const result = await connectWith(
-      alias,
-      [],
-      'connects',
-      () =>
-        recordLines('maskedInput', alias).map(line => [
-          line.question,
-          line.detail,
-        ]),
-      {
-        file,
-        script: [
-          passwordAt(alias, '127.0.0.1', 'wrong'),
-          passwordAt(alias, '127.0.0.1', hostPassword()),
-          passwordAt(alias, '127.0.0.2', hostPassword()),
-        ],
+    const seen: Array<{placeholder: string; message: string | undefined}> = [];
+    await connectWith(alias, [], 'fails', () => undefined, {
+      file,
+      script: dismissals(alias),
+      during: async name => {
+        const first = await untilInput(
+          name,
+          'Enter password for harness-pw@127.0.0.1',
+        );
+        seen.push({placeholder: first.placeholder, message: first.message});
+        await answerInputBox(name, 'wrong');
+        const second = await untilInput(
+          name,
+          'Enter password for harness-pw@127.0.0.1',
+          'Permission denied',
+        );
+        seen.push({placeholder: second.placeholder, message: second.message});
+        await pressEscape(name);
       },
-    );
-    deepStrictEqual(result, []);
+    });
+    deepStrictEqual(seen, [
+      {
+        placeholder: 'Enter password for harness-pw@127.0.0.1',
+        message: "Press 'Enter' to confirm your input or 'Escape' to cancel",
+      },
+      {
+        placeholder: 'Enter password for harness-pw@127.0.0.1',
+        message:
+          "Permission denied, please try again. (Press 'Enter' to confirm or 'Escape' to cancel)",
+      },
+    ]);
   });
 
   it('F-2310 AC-8 (c2601-password-three-wrong): three wrong passwords at the jump host fail with the permission dialog and its three buttons', async () => {
@@ -401,7 +435,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       },
     );
     deepStrictEqual(result, {
-      dialog: `Could not establish connection to "${alias}": Permission denied (password).`,
+      dialog: `Could not establish connection to "${alias}": Permission denied (password,keyboard-interactive).`,
       buttons: ['Close Remote', 'Retry', 'More Actions...'],
       asked: 3,
     });
@@ -410,22 +444,31 @@ describe('jump hosts and proxy commands (card #2601)', function () {
   it('F-2310 AC-9 (c2601-password-escape): Escape on the jump host input asks nothing more for that hop and the permission dialog follows within about a second', async () => {
     const alias = 'c2601-pwescape';
     const file = passwordChain(alias, 3);
+    let escapedAt = 0;
     const result = await connectWith(
       alias,
       [],
       'fails',
-      outcome => ({
+      async outcome => ({
         dialog: outcome.dialog,
-        asked: questionsOn(alias, 'maskedInput'),
-        quick:
-          recordLines('maskedInput', alias).length === 1 &&
-          (outcome.failedAfter ?? Infinity) < 5000,
+        asked: questionsOn(alias, 'maskedInput').length,
+        input: await inputBoxOf(alias),
+        quick: (outcome.dialogTime ?? Infinity) - escapedAt < 3000,
       }),
-      {file},
+      {
+        file,
+        script: dismissals(alias),
+        during: async name => {
+          await untilInput(name, 'Enter password for harness-pw@127.0.0.1');
+          escapedAt = Date.now();
+          await pressEscape(name);
+        },
+      },
     );
     deepStrictEqual(result, {
-      dialog: `Could not establish connection to "${alias}": Permission denied (password).`,
-      asked: ['Enter password for harness-pw@127.0.0.1'],
+      dialog: `Could not establish connection to "${alias}": Permission denied (password,keyboard-interactive).`,
+      asked: 1,
+      input: undefined,
       quick: true,
     });
   });
@@ -450,6 +493,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     );
     deepStrictEqual(result, {
       dialog: `Could not establish connection to "${alias}": The connection timed out.`,
+      sshLines: [],
       waited: true,
     });
   });

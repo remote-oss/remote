@@ -101,6 +101,8 @@ export interface Outcome {
   progress: string[];
   /** The lines the connection log gained from the start of this connect, and no earlier ones. */
   connectLog: string[];
+  /** When the failure dialog was shown, in milliseconds since the epoch. */
+  dialogTime: number | undefined;
   /** The window's title. */
   title: string;
   /** Milliseconds from the first progress line to the failure dialog; undefined when there was no dialog. */
@@ -119,6 +121,8 @@ export interface ConnectOptions {
   script?: Parameters<typeof appendScript>[0];
   /** A file the row wrote itself, in place of the entry written from `extra`. */
   file?: string;
+  /** What the row does in the window once it is opened, before it waits for the connect or the dialog. */
+  during?: (name: string) => Promise<unknown>;
 }
 
 /** The time a failing connect has to show its dialog. */
@@ -145,6 +149,7 @@ export async function connectWith<Result>(
   try {
     appendScript(options.script ?? dismissals(name));
     await openWindow(name, name);
+    await options.during?.(name);
     if (expectation === 'connects') {
       await connectedWithin(name, 120_000);
     } else {
@@ -166,6 +171,7 @@ export async function connectWith<Result>(
           .filter(line => line.time >= mark)
           .map(line => line.question),
         connectLog: connectionLog().slice(logMark),
+        dialogTime: dialog?.time,
         title: await windowTitle(name),
         failedAfter:
           dialog === undefined
@@ -185,9 +191,13 @@ export async function connectWith<Result>(
           `${line.surface}: ${line.question.slice(0, 80)} -> ${line.answer}`,
       )
       .join('\n');
-    throw new Error(`${String(caught)}\nwhat the window asked:\n${seen}`, {
-      cause: caught,
-    });
+    const tail = connectionLog().slice(logMark).slice(-40).join('\n');
+    throw new Error(
+      `${String(caught)}\nwhat the window asked:\n${seen}\nthe log of the connect:\n${tail}`,
+      {
+        cause: caught,
+      },
+    );
   } finally {
     await closeWindow(name).catch(() => undefined);
     restoreUserSettings(saved);
