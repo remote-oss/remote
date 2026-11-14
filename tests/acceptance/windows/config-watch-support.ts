@@ -205,7 +205,7 @@ export function sampledIndicator(name: string): {stop(): Promise<string[]>} {
   return {
     stop: async () => {
       clearInterval(timer);
-      const last = await statusBarText(name, 'status.host');
+      const last = await statusBarText(name, 'status.host').catch(() => '');
       stopped = true;
       note(last);
       return texts;
