@@ -933,10 +933,17 @@ function packFeatureTarball(
   ]);
 }
 
+/** `file` with forward slashes, as the variables carry a path on every client, Windows included. */
+export function forwardSlashes(file: string): string {
+  return file.replaceAll('\\', '/');
+}
+
 /**
  * The harness variables of a download host: its bases as the harness host and as the editor reach it, its log, the
  * certificate file the CLI of a launch can trust, and the address of the fixture Feature's tarball on the runner's own
- * `localhost`.
+ * `localhost`. With `distroAddress`, the Windows side's address a WSL 2 distro reaches the host at, its HTTP base. There is no
+ * HTTPS base: the run's certificate holds DNS names and no IP address, so a client in the distro would refuse it. A row in a WSL 1 distro uses `HARNESS_DOWNLOADS_LOCAL` (the loopback, over HTTP) instead, since WSL 1
+ * shares Windows' network stack.
  */
 export function downloadVariables(
   host: Pick<DownloadHost, 'httpPort' | 'httpsPort'>,
@@ -947,8 +954,14 @@ export function downloadVariables(
     platform: string;
     release: Pick<ServerRelease, 'tagName' | 'commit'>;
   },
+  distroAddress?: string,
 ): Record<string, string> {
   return {
+    ...(distroAddress === undefined
+      ? {}
+      : {
+          HARNESS_DOWNLOADS_DISTRO_BASE: `http://${distroAddress}:${String(host.httpPort)}`,
+        }),
     ...(earlier === undefined
       ? {}
       : {
@@ -1177,12 +1190,13 @@ export async function startRunDownloads(
   return {
     variables: downloadVariables(
       host,
-      logFile,
-      tlsLogFile,
-      certificate.certificateFile,
+      forwardSlashes(logFile),
+      forwardSlashes(tlsLogFile),
+      forwardSlashes(certificate.certificateFile),
       earlier === undefined
         ? undefined
         : {platform: platforms[0], release: earlier},
+      clientPlatform === 'win32' ? reach.containerAddress : undefined,
     ),
     containerAddress: reach.containerAddress,
     stop: () => host.stop(),

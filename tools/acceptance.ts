@@ -304,6 +304,8 @@ export interface HarnessVariables {
   HARNESS_DOWNLOADS_LICENSED?: string;
   HARNESS_DOWNLOADS_LOCAL?: string;
   HARNESS_DOWNLOADS_LOG?: string;
+  /** The base a WSL 2 distro reaches the host at over HTTP, on a Windows run only; a WSL 1 distro uses HARNESS_DOWNLOADS_LOCAL. */
+  HARNESS_DOWNLOADS_DISTRO_BASE?: string;
   /** The run's download host certificate file, and the address of the fixture Feature tarball it serves on the runner's `localhost`. */
   HARNESS_DOWNLOADS_CERTIFICATE?: string;
   HARNESS_FEATURE_TARBALL_URL?: string;

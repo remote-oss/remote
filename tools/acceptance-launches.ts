@@ -512,7 +512,7 @@ export function withRunTokens<Value>(
   );
 }
 
-/** The harness variables a launch's settings and host setup may name, as `${<name>}`: the download host's bases, its port and its certificate file. */
+/** The harness variables a launch's settings and host setup may name, as `${<name>}`: the download host's bases (a WSL distro's too), its port and its certificate file. */
 const HARNESS_BASE_NAMES: readonly string[] = [
   'HARNESS_DOWNLOADS_HTTP',
   'HARNESS_DOWNLOADS_HTTPS',
@@ -520,6 +520,7 @@ const HARNESS_BASE_NAMES: readonly string[] = [
   'HARNESS_DOWNLOADS_LOCAL',
   'HARNESS_DOWNLOADS_PORT',
   'HARNESS_DOWNLOADS_CERTIFICATE',
+  'HARNESS_DOWNLOADS_DISTRO_BASE',
 ];
 
 /**
