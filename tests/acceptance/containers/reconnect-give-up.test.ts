@@ -394,6 +394,9 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
       await answerDialog(name, 'Reload Window');
       await connectedToContainer(name);
       const seconds = (Date.now() - began) / 1000;
+      console.log(
+        `c43 five diag: reload took ${String(seconds)} s; log: ${JSON.stringify(logSince(reloadMark).filter(line => /Resolving Remote|Starting container|Starting VS Code Server|server listening|lifecycle commands finished|Reading configuration/.test(line)))}`,
+      );
       const gaps = gapsOf(arrivals);
       const state = {
         numbered: numbersOf(logSince(mark))
