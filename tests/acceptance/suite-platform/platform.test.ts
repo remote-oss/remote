@@ -1,5 +1,5 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
-import {readFileSync} from 'node:fs';
+import {readFileSync, statSync} from 'node:fs';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import {hostPlatformLine} from '../../../packages/remote-ssh/src/diagnostics/log-content.ts';
@@ -71,6 +71,22 @@ function platformEntries(text: string): Array<[string, string]> | undefined {
   return value === undefined
     ? undefined
     : Object.entries(value as Record<string, string>);
+}
+
+/**
+ * What tells a late write of the platform setting from one that never came, for the row's failure to name: how long ago
+ * the settings file last changed, how much of the connect's log was written since, and the log's platform lines (#2555).
+ */
+function platformWriteFacts(): string {
+  try {
+    const changedAgo = Date.now() - statSync(settingsFile).mtimeMs;
+    const platformLines = connectionLog()
+      .filter(line => /platform/i.test(line))
+      .slice(-8);
+    return `the platform setting did not reach the case's value within 10 s; the settings file last changed ${String(Math.round(changedAgo))} ms ago; the log's platform lines: ${JSON.stringify(platformLines)}; the settings file holds ${JSON.stringify(readFileSync(settingsFile, 'utf8').slice(0, 600))}`;
+  } catch (caught) {
+    return `the platform setting did not reach the case's value; its facts could not be read: ${String(caught)}`;
+  }
 }
 
 /** The record once the case's window has finished with its questions, waiting up to 90 s for the last one. */
@@ -162,6 +178,7 @@ describe(`the platform case "${label}" of the VSCodium run`, () => {
     deepStrictEqual(
       expected === 'bytes' ? readFileSync(settingsFile, 'utf8') : found,
       expected === 'bytes' ? readFileSync(givenFile, 'utf8') : wanted,
+      platformWriteFacts(),
     );
   });
 
