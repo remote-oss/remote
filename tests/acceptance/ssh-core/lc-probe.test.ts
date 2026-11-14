@@ -1,3 +1,4 @@
+import {terminalFacts} from '../windows/harness.ts';
 import {connectWith} from './config-keywords-support.ts';
 
 describe('probe: LocalCommand output (card #2598)', function () {
@@ -14,7 +15,16 @@ describe('probe: LocalCommand output (card #2598)', function () {
           `LocalCommand echo out-marker-${mode}; echo err-marker-${mode} >&2; exit 3`,
         ],
         'connects',
-        outcome => outcome.connectLog,
+        async outcome => [
+          ...outcome.connectLog,
+          ...`TERMINAL ${JSON.stringify((await terminalFacts(alias)).terminals)}`.split(
+            '\n',
+          ),
+          ...((await terminalFacts(alias)).text ?? '(no text)')
+            .split('\n')
+            .slice(0, 40)
+            .map(line => `TERMINALTEXT ${line}`),
+        ],
         {
           settings:
             mode === 'terminal'
@@ -27,7 +37,7 @@ describe('probe: LocalCommand output (card #2598)', function () {
       );
       found.push(
         `== ${mode}: ${String(seen.length)} log lines; lines naming a marker:`,
-        ...seen.filter(line => /marker/.test(line)),
+        ...seen.filter(line => /marker|TERMINAL/.test(line)),
         `-- the [ssh] lines (${seen.filter(line => line.includes('[ssh]')).length.toString()}):`,
         ...seen.filter(line => line.includes('[ssh]')).slice(0, 12),
       );
