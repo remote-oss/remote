@@ -638,12 +638,23 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
               traceLines: record.some(each =>
                 each.startsWith('[ssh] debug1: '),
               ),
+              storedRecord: record.some(each =>
+                each.startsWith('the stored data has'),
+              ),
+              environments: record.some(each =>
+                each.startsWith('the terminal environments were updated'),
+              ),
             },
-            {reconnected: true, traceLines: true},
+            {
+              reconnected: true,
+              traceLines: true,
+              storedRecord: true,
+              environments: true,
+            },
           );
         } catch (caught) {
           throw new Error(
-            `${(caught as Error).message}: the reconnection record holds ${JSON.stringify(record.slice(0, 15))}`,
+            `${(caught as Error).message}: the reconnection record holds ${JSON.stringify(record.filter(each => !each.startsWith('Searched for ssh')).slice(0, 60))}`,
             {cause: caught},
           );
         }
