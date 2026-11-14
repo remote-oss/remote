@@ -8,16 +8,26 @@ import {deepStrictEqual} from 'node:assert';
 import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
-import {statusItem} from '../windows/renderer.ts';
+import {linesSince, runWith} from '../windows/maintenance.ts';
+import {answerDialog, statusItem, waitForDialog} from '../windows/renderer.ts';
 import {
+  appendScript,
   connectedWithin,
+  cutHostNetwork,
+  hostAnswer,
   hostPassword,
   hostPort,
   onHostAs,
   recordLines,
+  readUserSettings,
   reloadWindow,
+  restoreHostNetwork,
+  restoreUserSettings,
   signal,
+  userSettings,
   variable,
+  waitFor,
+  windowEvents,
 } from '../windows/harness.ts';
 import {
   connectWith,
@@ -834,5 +844,277 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     } finally {
       clearTimeout(timer);
     }
+  });
+
+  /** The remote indicator of window `alias`. */
+  async function indicatorOf(alias: string): Promise<string> {
+    return (await statusItem(alias, 'status.host')).text;
+  }
+
+  /** Waits until the remote indicator of window `alias` starts with `text`, and gives the milliseconds it took from `since`. */
+  async function indicatorAfter(
+    alias: string,
+    text: string,
+    since: number,
+  ): Promise<number> {
+    await waitFor(
+      `the indicator of ${alias} to start with ${text}`,
+      async () => (await indicatorOf(alias)).startsWith(text),
+      120_000,
+    );
+    return Date.now() - since;
+  }
+
+  it('F-2310 AC-25 (c2601-jump-reconnect-key): a window connected through a key-only jump host whose network is cut shows Reconnecting after about 20 seconds, and returns to SSH: <alias> without a reload and without input', async () => {
+    const alias = 'c2601-rekey';
+    const file = writeConfig(alias, [
+      target(alias, `${alias}-hop`),
+      hostBlock(`${alias}-hop`, []),
+    ]);
+    const result = await connectWith(
+      alias,
+      [],
+      'connects',
+      async () => {
+        const activations = windowEvents(alias).filter(
+          each => each.event === 'activated',
+        ).length;
+        const asked = recordLines(undefined, alias).length;
+        const cutAt = Date.now();
+        cutHostNetwork();
+        let reconnecting: number;
+        try {
+          reconnecting = await indicatorAfter(
+            alias,
+            'Reconnecting to SSH',
+            cutAt,
+          );
+        } finally {
+          restoreHostNetwork();
+        }
+        await connectedWithin(alias, 180_000);
+        return {
+          reconnectingAfter: Math.round(reconnecting / 1000),
+          indicator: await indicatorOf(alias),
+          reloads:
+            windowEvents(alias).filter(each => each.event === 'activated')
+              .length - activations,
+          inputs:
+            recordLines('maskedInput', alias).length +
+            recordLines('pick', alias).length,
+          asked: recordLines(undefined, alias).length - asked,
+        };
+      },
+      {file},
+    );
+    deepStrictEqual(result, {
+      reconnectingAfter: 21,
+      indicator: `SSH: ${alias}`,
+      reloads: 0,
+      inputs: 0,
+      asked: 0,
+    });
+  });
+
+  it('F-2310 AC-30 (c2601-jump-reconnect-password): a window connected through a password jump host asks the jump host and then the target for their passwords when the host comes back, and returns to SSH: <alias> without a reload', async () => {
+    const alias = 'c2601-repw';
+    const file = passwordChain(alias, 1);
+    const result = await connectWith(
+      alias,
+      [],
+      'connects',
+      async () => {
+        const activations = windowEvents(alias).filter(
+          each => each.event === 'activated',
+        ).length;
+        const asked = recordLines('maskedInput', alias).length;
+        appendScript([
+          {...passwordAt(alias, '127.0.0.1', hostPassword())},
+          {...passwordAt(alias, '127.0.0.2', hostPassword())},
+        ]);
+        const cutAt = Date.now();
+        cutHostNetwork();
+        try {
+          await indicatorAfter(alias, 'Reconnecting to SSH', cutAt);
+        } finally {
+          restoreHostNetwork();
+        }
+        await connectedWithin(alias, 180_000);
+        return {
+          indicator: await indicatorOf(alias),
+          reloads:
+            windowEvents(alias).filter(each => each.event === 'activated')
+              .length - activations,
+          asked: recordLines('maskedInput', alias)
+            .slice(asked)
+            .map(line => line.question),
+        };
+      },
+      {
+        file,
+        script: [
+          passwordAt(alias, '127.0.0.1', hostPassword()),
+          passwordAt(alias, '127.0.0.2', hostPassword()),
+        ],
+      },
+    );
+    deepStrictEqual(result, {
+      indicator: `SSH: ${alias}`,
+      reloads: 0,
+      asked: [
+        'Enter password for harness-pw@127.0.0.1',
+        'Enter password for harness-pw@127.0.0.2',
+      ],
+    });
+  });
+
+  it('F-2310 AC-31 (c2601-jump-reconnect-cancel): cancelling the jump host input of a reconnection stops it with core’s Cannot reconnect dialog and the indicator Disconnected from SSH', async () => {
+    const alias = 'c2601-recancel';
+    const file = passwordChain(alias, 1);
+    const result = await connectWith(
+      alias,
+      [],
+      'connects',
+      async () => {
+        appendScript([
+          {
+            surface: 'maskedInput',
+            match: 'harness-pw@127.0.0.1',
+            answer: 'dismiss',
+            window: alias,
+          },
+        ]);
+        const cutAt = Date.now();
+        cutHostNetwork();
+        try {
+          await indicatorAfter(alias, 'Reconnecting to SSH', cutAt);
+        } finally {
+          restoreHostNetwork();
+        }
+        const dialog = await waitForDialog(alias, 180_000);
+        const indicator = await indicatorOf(alias);
+        await answerDialog(alias, 'Cancel');
+        return {details: dialog.details, indicator};
+      },
+      {
+        file,
+        script: [
+          passwordAt(alias, '127.0.0.1', hostPassword()),
+          passwordAt(alias, '127.0.0.2', hostPassword()),
+        ],
+      },
+    );
+    deepStrictEqual(result, {
+      details: 'Cannot reconnect. Please reload the window.',
+      indicator: `Disconnected from SSH: ${alias}`,
+    });
+  });
+
+  it('F-2310 AC-33 (c2601-retry-platform): without the local server and a jump alias whose first attempt failed, Retry asks the platform pick again', async () => {
+    const alias = 'c2601-replatform';
+    const file = writeConfig(alias, [
+      target(alias, `${alias}-hop`),
+      hostBlock(`${alias}-hop`, ['Port 9'], ['Port']),
+    ]);
+    const result = await connectWith(
+      alias,
+      [],
+      'fails',
+      () => recordLines('platformPick', alias).length,
+      {
+        file,
+        settings: {'remote.SSH.useLocalServer': false},
+        script: [
+          {
+            surface: 'platformPick',
+            match: 'platform',
+            answer: 'linux',
+            window: alias,
+          },
+          {
+            surface: 'failureDialog',
+            match: 'Could not establish connection',
+            answer: {button: 'Retry'},
+            window: alias,
+          },
+          {
+            surface: 'platformPick',
+            match: 'platform',
+            answer: 'linux',
+            window: alias,
+          },
+          {
+            surface: 'failureDialog',
+            match: 'Could not establish connection',
+            answer: 'dismiss',
+            window: alias,
+          },
+          {
+            surface: 'mitigationPick',
+            match: 'Pick an action',
+            answer: 'dismiss',
+            window: alias,
+          },
+        ],
+      },
+    );
+    deepStrictEqual(result, 2);
+  });
+
+  it('F-2310 AC-27 (c2601-kill-password-jump): Kill VS Code Server on Host... on a password jump alias asks the per-hop passwords and tells that the server was killed', async () => {
+    const alias = 'c2601-killpw';
+    const file = passwordChain(alias, 1);
+    const saved = readUserSettings();
+    await userSettings({'remote.SSH.configFile': file});
+    try {
+      const mark = await runWith('local', 'opensshremotes.cleanRemoteServer', [
+        hostAnswer('local', {label: alias}),
+        passwordAt('local', '127.0.0.1', hostPassword()),
+        passwordAt('local', '127.0.0.2', hostPassword()),
+        {surface: 'notice', match: 'VS Code Server on', answer: 'dismiss'},
+      ]);
+      const lines = linesSince(mark, 'local');
+      deepStrictEqual(
+        [
+          lines
+            .filter(line => line.surface === 'maskedInput')
+            .map(line => line.question),
+          lines
+            .filter(line => line.surface === 'notice')
+            .map(line => line.question),
+        ],
+        [
+          [
+            'Enter password for harness-pw@127.0.0.1',
+            'Enter password for harness-pw@127.0.0.2',
+          ],
+          [`Killed VS Code Server on ${alias}.`],
+        ],
+      );
+    } finally {
+      restoreUserSettings(saved);
+    }
+  });
+
+  it('F-2310 AC-21 (c2601-server-copy): with the server fetched by the client and copied to the target, a password jump host asks its password a second time for the copy, and the window connects', async () => {
+    const alias = 'c2601-copy';
+    const file = passwordChain(alias, 1);
+    const result = await connectWith(
+      alias,
+      [],
+      'connects',
+      () => questionsOn(alias, 'maskedInput'),
+      {
+        file,
+        settings: {'remote.SSH.localServerDownload': 'always'},
+        script: [
+          passwordAt(alias, '127.0.0.1', hostPassword()),
+          passwordAt(alias, '127.0.0.2', hostPassword()),
+          passwordAt(alias, '127.0.0.1', hostPassword()),
+          passwordAt(alias, '127.0.0.2', hostPassword()),
+        ],
+      },
+    );
+    deepStrictEqual(result, []);
   });
 });
