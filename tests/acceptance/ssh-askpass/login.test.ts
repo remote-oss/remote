@@ -19,6 +19,8 @@ import {
   userSettings,
   variable,
 } from '../windows/harness.ts';
+import {changedKeys, extensionState} from '../windows/global-state.ts';
+import {passphrase} from '../windows/key-windows.ts';
 import {dialogOf, notifications, statusBarText} from '../windows/renderer.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {
@@ -39,7 +41,11 @@ const EXTERNAL = 'remote.SSH.externalSSH_ASKPASS';
 
 /** The platform of the password host, so that the platform question of F-2206 is not asked first. */
 const PLATFORMS = {
-  'remote.SSH.remotePlatform': {password: 'linux', 'password-ask': 'linux'},
+  'remote.SSH.remotePlatform': {
+    password: 'linux',
+    'password-ask': 'linux',
+    passkey: 'linux',
+  },
 };
 
 /** The user's program, which the launch's `SSH_ASKPASS` names. */
@@ -113,7 +119,7 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
     );
   });
 
-  it('F-2309 AC-6, AC-29 (c2596-setting-off): with the setting false (the default) and SSH_ASKPASS set, the window asks for the password in a VS Code input, the user’s program is never called, and the login ssh runs with the extension’s own askpass and SSH_ASKPASS_REQUIRE=force', async () => {
+  it('F-2309 AC-6, AC-18, AC-29 (c2596-setting-off): with the setting false (the default) and SSH_ASKPASS set, the window asks for the password in a VS Code input, the user’s program is never called, and the login ssh runs with the extension’s own askpass and SSH_ASKPASS_REQUIRE=force', async () => {
     await withSettings({[EXTERNAL]: false, ...PLATFORMS});
     answering([passwordRule()]);
     const watched = await watchedConnect('password', 'as1', 30_000);
@@ -273,6 +279,35 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
       },
       {indicator: 'SSH: password', newCalls: 0},
       recorded(),
+    );
+  });
+
+  it('F-2309 AC-5 (c2596-passphrase): with the setting true and a host that takes only a key with a passphrase, the passphrase is asked of the program and no VS Code passphrase input appears', async () => {
+    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    answering([{match: 'passphrase', answer: passphrase()}]);
+    const watched = await watchedConnect('passkey', 'ak1', 120_000);
+    deepStrictEqual(
+      {
+        connected: watched.connected,
+        inputs: watched.inputs,
+        asked: askpassCalls().map(call => /passphrase/i.test(call.prompt)),
+      },
+      {connected: true, inputs: [], asked: [true]},
+      recorded(),
+    );
+  });
+
+  it('F-2309 AC-28 (c2596-nothing-stored): after a login through the user’s program the extension’s global state holds no entry of this feature', async () => {
+    const before = await extensionState();
+    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    answering([passwordRule()]);
+    await watchedConnect('password', 'as1', 120_000);
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const after = await extensionState();
+    deepStrictEqual(
+      Object.keys(after).filter(key => /askpass|external/i.test(key)),
+      [],
+      JSON.stringify({changed: changedKeys(before, after), after}),
     );
   });
 });

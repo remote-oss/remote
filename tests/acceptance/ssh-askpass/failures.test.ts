@@ -4,10 +4,13 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
+import {renameSync} from 'node:fs';
+import path from 'node:path';
 import {
   openWindow,
   readUserSettings,
   restoreUserSettings,
+  variable,
 } from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {
@@ -15,7 +18,9 @@ import {
   dialogOf,
   inputBoxOf,
   quickPickOf,
+  statusBarText,
   waitForDialog,
+  windowTitle,
 } from '../windows/renderer.ts';
 import {
   answering,
@@ -90,7 +95,41 @@ describe('the failures of a login through the user’s own askpass program (card
         inputs: [],
         called: true,
       },
+      JSON.stringify({
+        title: await windowTitle('as1'),
+        indicator: await statusBarText('as1', 'status.host'),
+      }),
     );
+  });
+
+  it('F-2309 AC-15 (c2596-missing-program): with SSH_ASKPASS naming a file that is not there, the failure dialog has the permission denial, no word about SSH_ASKPASS and no VS Code input', async () => {
+    knowHostKey('askpass-pw');
+    await withSettings({[EXTERNAL]: true, ...useOwnConfig()});
+    answering([passwordRule()]);
+    const program = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'askpass-bin',
+      'answer',
+    );
+    renameSync(program, `${program}.away`);
+    try {
+      await openWindow('askpass-pw', 'as1');
+      const dialog = await waitForDialog('as1', 120_000);
+      deepStrictEqual(
+        {
+          dialog,
+          inputs: await inputsShown('as1'),
+          called: askpassCalls().length,
+        },
+        {
+          dialog: {message: '', details: DENIED, buttons: BUTTONS},
+          inputs: [],
+          called: 0,
+        },
+      );
+    } finally {
+      renameSync(`${program}.away`, program);
+    }
   });
 
   it('F-2309 AC-26 (c2596-host-key-cancelled): with an unknown host key and a program that cancels the question, the failure dialog has no reason and no VS Code input shows', async () => {
