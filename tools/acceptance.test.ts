@@ -528,6 +528,8 @@ const LAUNCH_ORDER = [
   'ssh-core',
   'ssh-agents',
   'ssh-askpass',
+  'ssh-askpass-env',
+  'ssh-askpass-space',
   'ssh-containers',
   'no-proposals',
   'wsl-linux',

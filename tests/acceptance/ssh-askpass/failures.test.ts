@@ -26,26 +26,20 @@ import {
   answering,
   askpassCalls,
   clearRecords,
+  deniedDetails,
   forgetHostKey,
   knowHostKey,
   passwordRule,
   useOwnConfig,
   withSettings,
   writeStandIns,
-} from './support.ts';
+} from '../windows/askpass-support.ts';
 
 /** The setting of the feature. */
 const EXTERNAL = 'remote.SSH.externalSSH_ASKPASS';
 
 /** The buttons of the failure dialog of F-2601. */
 const BUTTONS = ['Retry', 'More Actions...', 'Close Remote'];
-
-/**
- * The failure's text: ssh ends it with the methods the host's sshd still offers, and the harness's sshd offers both
- * password and keyboard-interactive, whatever the client asks for, so the list has both (the spec's host offers one).
- */
-const DENIED =
-  'Could not establish connection to "askpass-pw": Permission denied (password,keyboard-interactive).';
 
 /** What a window shows of VS Code inputs at the moment. */
 async function inputsShown(window: string): Promise<string[]> {
@@ -89,7 +83,7 @@ describe('the failures of a login through the user’s own askpass program (card
       {
         dialog: {
           message: '',
-          details: DENIED,
+          details: deniedDetails('askpass-pw'),
           buttons: BUTTONS,
         },
         inputs: [],
@@ -122,7 +116,11 @@ describe('the failures of a login through the user’s own askpass program (card
           called: askpassCalls().length,
         },
         {
-          dialog: {message: '', details: DENIED, buttons: BUTTONS},
+          dialog: {
+            message: '',
+            details: deniedDetails('askpass-pw'),
+            buttons: BUTTONS,
+          },
           inputs: [],
           called: 0,
         },
@@ -167,7 +165,7 @@ describe('the failures of a login through the user’s own askpass program (card
       {
         dialog: {
           message: '',
-          details: DENIED,
+          details: deniedDetails('askpass-pw'),
           buttons: BUTTONS,
         },
         inputs: [],
@@ -239,7 +237,7 @@ describe('the failures of a login through the user’s own askpass program (card
     answering([
       {match: 'password', answer: hostPasswordOf(), delayMilliseconds: 25_000},
     ]);
-    const {watchedConnect} = await import('./support.ts');
+    const {watchedConnect} = await import('../windows/askpass-support.ts');
     const watched = await watchedConnect('askpass-pw', 'as1', 150_000);
     deepStrictEqual(
       {connected: watched.connected, inputs: watched.inputs},

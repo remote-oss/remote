@@ -34,7 +34,7 @@ import {
   watchedConnect,
   withSettings,
   writeStandIns,
-} from './support.ts';
+} from '../windows/askpass-support.ts';
 
 /** The setting of the feature. */
 const EXTERNAL = 'remote.SSH.externalSSH_ASKPASS';
