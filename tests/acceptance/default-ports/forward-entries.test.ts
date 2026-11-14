@@ -422,7 +422,20 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
         }
       }
       const seconds = (Date.now() - began) / 1000;
-      deepStrictEqual([listening, seconds <= 7], [true, true]);
+      deepStrictEqual(
+        [listening, seconds <= 7],
+        [true, true],
+        `the default listened ${String(seconds)} s after the resolver returned (bound 7 s, ${listening ? 'it did listen' : 'it never did in 20 s'}); the log since the reload, with times: ${JSON.stringify(
+          connectionLog({withTimes: true})
+            .slice(mark)
+            .filter(line =>
+              /Resolved ssh-remote|default forward|forward|listening|window connection|port/i.test(
+                line,
+              ),
+            )
+            .slice(-20),
+        )}`,
+      );
     } finally {
       await closeWindow('c83-a8');
     }
