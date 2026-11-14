@@ -183,6 +183,19 @@ function endedDetail(end: TerminalEnd): string {
   return `the tunnel ssh ended before its forwards were ready: ${ending}${output}`;
 }
 
+/** What the log says of a window tunnel that did not open and had told the log nothing of why. */
+function relayNotOpenedDetail(
+  outcome: Exclude<
+    Awaited<ReturnType<typeof openRelayTunnel>>,
+    {kind: 'open'} | {kind: 'relayRefused'}
+  >,
+): string {
+  if (outcome.kind === 'listenFailed') {
+    return `the window tunnel did not open: its local port could not be listened on: ${outcome.detail}`;
+  }
+  return 'the window tunnel did not open: no probe of its port worked before the bound';
+}
+
 /** What the step gives when it opens a tunnel. */
 type TunnelResult = Awaited<ReturnType<ConnectSteps['openTunnel']>>;
 
@@ -589,7 +602,10 @@ export function openTunnelStep(
       return {kind: 'failed', failure: refusedFailure(dependencies)};
     }
     if (outcome.kind !== 'open') {
-      return NOT_OPENED;
+      return {
+        kind: 'failed',
+        failure: {kind: 'unknown', logDetail: relayNotOpenedDetail(outcome)},
+      };
     }
     const {extensionHostEnv, environmentTunnels} = dependencies.environment();
     let closeRan = false;
