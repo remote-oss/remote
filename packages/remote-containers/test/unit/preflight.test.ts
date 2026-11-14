@@ -8,6 +8,7 @@ import type {
 } from '../../src/engine/engine-host.ts';
 import {
   containerRequirements,
+  imageMissingReason,
   contextEndpoint,
   contextState,
   currentContext,
@@ -704,6 +705,84 @@ describe('the queries of the host requirements check (card containers-202)', () 
         scene.argvs,
       ],
       [undefined, []],
+    );
+  });
+
+  it('F-0206 BR-13: an image the engine does not hold gives the first line of the inspect’s message, and a local image or no docker gives none', async () => {
+    const INSPECT = 'image inspect --format {{.Id}} -- r/i:1';
+    function reason(answers: Record<string, EngineRunOutcome>) {
+      return imageMissingReason(
+        sceneOf(answers).dependencies,
+        undefined,
+        'r/i:1',
+        NEVER_ABORTED,
+      );
+    }
+    deepStrictEqual(
+      [
+        await reason({
+          [INSPECT]: finished(1, '', 'Error: No such image: r/i:1\nmore\n'),
+        }),
+        await reason({[INSPECT]: finished(1, '', '')}),
+        await reason({[INSPECT]: finished(0, 'sha256:abc\n')}),
+        await imageMissingReason(
+          sceneOf({}, {values: ['tools/dk']}).dependencies,
+          undefined,
+          'r/i:1',
+          NEVER_ABORTED,
+        ),
+      ],
+      ['Error: No such image: r/i:1', 'exit status 1', undefined, undefined],
+    );
+  });
+
+  it('F-0206 BR-13: an image that starts with a dash or holds an unsubstituted ${...} reaches the inspect as a name after the end of the options, and is reported as missing', async () => {
+    const dashed = sceneOf({
+      'image inspect --format {{.Id}} -- --all': finished(
+        1,
+        '',
+        'Error: No such image: --all\n',
+      ),
+    });
+    const variable = sceneOf({
+      'image inspect --format {{.Id}} -- ${localEnv:IMAGE}': finished(
+        1,
+        '',
+        'Error: No such image: ${localEnv:IMAGE}\n',
+      ),
+    });
+    deepStrictEqual(
+      [
+        await imageMissingReason(
+          dashed.dependencies,
+          undefined,
+          '--all',
+          NEVER_ABORTED,
+        ),
+        await imageMissingReason(
+          variable.dependencies,
+          undefined,
+          '${localEnv:IMAGE}',
+          NEVER_ABORTED,
+        ),
+        dashed.argvs,
+        variable.argvs,
+      ],
+      [
+        'Error: No such image: --all',
+        'Error: No such image: ${localEnv:IMAGE}',
+        [['image', 'inspect', '--format', '{{.Id}}', '--', '--all']],
+        [
+          [
+            'image',
+            'inspect',
+            '--format',
+            '{{.Id}}',
+            '--',
+            '${localEnv:IMAGE}',
+          ],
+        ],
+      ],
     );
   });
 

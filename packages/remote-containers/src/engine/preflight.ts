@@ -342,6 +342,30 @@ export async function daemonFigures(
 }
 
 /**
+ * Why `image` is not in the engine's local store: the first line of the failing inspect's message. None when the image
+ * is local, or when the engine could not be asked or did not answer in time. The name goes after `--`, so one that
+ * starts with a dash is a name and not an option; it is the configuration's own text, with no `${...}` substituted.
+ */
+export async function imageMissingReason(
+  dependencies: PreflightDependencies,
+  base: string | undefined,
+  image: string,
+  cancellation: AbortSignal,
+): Promise<string | undefined> {
+  const result = await resultOf(
+    dependencies,
+    base,
+    ['image', 'inspect', '--format', '{{.Id}}', '--', image],
+    cancellation,
+  );
+  if (result?.kind !== 'ran' || result.timedOut || result.status === 0) {
+    return undefined;
+  }
+  const [first = ''] = result.stderr.trim().split('\n');
+  return first === '' ? `exit status ${String(result.status)}` : first;
+}
+
+/**
  * What the label of the container made for the folder and the configuration records of the daemon's requirements; none
  * when there is no such container or the label can't be read.
  */
