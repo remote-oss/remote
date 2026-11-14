@@ -941,8 +941,8 @@ export function forwardSlashes(file: string): string {
 /**
  * The harness variables of a download host: its bases as the harness host and as the editor reach it, its log, the
  * certificate file the CLI of a launch can trust, and the address of the fixture Feature's tarball on the runner's own
- * `localhost`. With `distroAddress`, the Windows side's address a WSL 2 distro reaches the host at, its HTTP and HTTPS
- * bases too. A row in a WSL 1 distro uses `HARNESS_DOWNLOADS_LOCAL` (the loopback, over HTTP) instead, since WSL 1
+ * `localhost`. With `distroAddress`, the Windows side's address a WSL 2 distro reaches the host at, its HTTP base. There is no
+ * HTTPS base: the run's certificate holds DNS names and no IP address, so a client in the distro would refuse it. A row in a WSL 1 distro uses `HARNESS_DOWNLOADS_LOCAL` (the loopback, over HTTP) instead, since WSL 1
  * shares Windows' network stack.
  */
 export function downloadVariables(
@@ -961,7 +961,6 @@ export function downloadVariables(
       ? {}
       : {
           HARNESS_DOWNLOADS_DISTRO_BASE: `http://${distroAddress}:${String(host.httpPort)}`,
-          HARNESS_DOWNLOADS_DISTRO_HTTPS: `https://${distroAddress}:${String(host.httpsPort)}`,
         }),
     ...(earlier === undefined
       ? {}

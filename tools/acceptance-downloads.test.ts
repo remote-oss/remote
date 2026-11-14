@@ -1245,13 +1245,13 @@ describe('the download host in the run', () => {
       deepStrictEqual(
         [
           base === `http://127.0.0.2:${String(port)}`,
-          windows.variables.HARNESS_DOWNLOADS_DISTRO_HTTPS?.startsWith(
-            'https://127.0.0.2:',
+          Object.keys(windows.variables).filter(name =>
+            name.includes('DISTRO'),
           ),
           bodies,
           Object.keys(linux.variables).filter(name => name.includes('DISTRO')),
         ],
-        [true, true, ['glibc', 'musl'], []],
+        [true, ['HARNESS_DOWNLOADS_DISTRO_BASE'], ['glibc', 'musl'], []],
       );
     } finally {
       rmSync(root, {recursive: true, force: true});
@@ -1457,7 +1457,6 @@ describe('the download host in the run', () => {
     deepStrictEqual(withDistro, {
       ...without,
       HARNESS_DOWNLOADS_DISTRO_BASE: 'http://172.29.32.1:8080',
-      HARNESS_DOWNLOADS_DISTRO_HTTPS: 'https://172.29.32.1:8443',
     });
   });
 
