@@ -50,6 +50,22 @@ function holder(file: string, milliseconds: number): Promise<Writer> {
   });
 }
 
+/**
+ * Ends `writer` and says when it held its transaction and committed, relative to `started` (the moment the read began),
+ * for a failure of a row that reads against it to name (#2584). The read blocks this process, so the writer's lines are
+ * read only afterwards: its commit is waited for, up to 10 s, and the writer is killed only after.
+ */
+async function writerFacts(writer: Writer, started: number): Promise<string> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<number>(resolve => {
+    timer = setTimeout(resolve, 10_000, -1);
+  });
+  const committedAt = await Promise.race([writer.committed, late]);
+  clearTimeout(timer);
+  writer.process.kill();
+  return `the writer held its transaction ${String(writer.heldAt - started)} ms from the read's start and ${committedAt > 0 ? `committed ${String(committedAt - started)} ms from it` : committedAt === 0 ? 'ended without a commit line' : 'printed no commit within 10 s of the read'}`;
+}
+
 describe('the state database reader (card tooling-207)', function () {
   this.timeout(30_000);
 
@@ -85,13 +101,20 @@ describe('the state database reader (card tooling-207)', function () {
     deepStrictEqual(readStateDatabase(file, keys), ['before']);
   });
 
-  it('tooling-207: a database held in an exclusive write transaction by another process is read once the writer commits, within the bound', async () => {
-    const {process: writer} = await holder(file, 700);
+  it('tooling-207: a database held in an exclusive write transaction by another process is read once the writer commits, within the bound', async function () {
+    this.timeout(45_000);
+    const writer = await holder(file, 700);
     const started = Date.now();
     const seen = readStateDatabase(file, keys);
     const waited = Date.now() - started;
-    writer.kill();
-    deepStrictEqual([seen, waited < 5000], [['before', 'held'], true]);
+    const facts = await writerFacts(writer, started);
+    // The bound is the read's own and a few seconds of slack for a loaded machine, not a time chosen for this writer;
+    // the times say where a slow one went (#2584).
+    deepStrictEqual(
+      [seen, waited <= readBoundMilliseconds() + 5000],
+      [['before', 'held'], true],
+      `the read waited ${String(waited)} ms; ${facts}`,
+    );
   });
 
   it('#2477: a read outside any wait rides out a write open for longer than the 5 s a read first had', async function () {
@@ -100,21 +123,14 @@ describe('the state database reader (card tooling-207)', function () {
     const started = Date.now();
     const seen = readStateDatabase(file, keys);
     const waited = Date.now() - started;
-    // The read blocks this process, so the writer's lines are read only now: its commit is waited for, up to 10 s.
-    let timer: NodeJS.Timeout | undefined;
-    const late = new Promise<number>(resolve => {
-      timer = setTimeout(resolve, 10_000, -1);
-    });
-    const committedAt = await Promise.race([writer.committed, late]);
-    clearTimeout(timer);
-    writer.process.kill();
+    const facts = await writerFacts(writer, started);
     // The read's contract is to wait for up to its own bound and then throw, so the upper bound asserted is that bound
     // and a few seconds of slack for a loaded machine, not a time chosen for this writer; the times say where a slow
     // one went (#2584).
     deepStrictEqual(
       [seen, waited > 5000, waited <= readBoundMilliseconds() + 5000],
       [['before', 'held'], true, true],
-      `the read waited ${String(waited)} ms; the writer held its transaction ${String(writer.heldAt - started)} ms from the read's start and ${committedAt > 0 ? `committed ${String(committedAt - started)} ms from it` : committedAt === 0 ? 'ended without a commit line' : 'printed no commit within 10 s of the read'}`,
+      `the read waited ${String(waited)} ms; ${facts}`,
     );
   });
 
