@@ -121,8 +121,6 @@ export interface ConnectOptions {
   script?: Parameters<typeof appendScript>[0];
   /** A file the row wrote itself, in place of the entry written from `extra`. */
   file?: string;
-  /** What the row does in the window once it is opened, before it waits for the connect or the dialog. */
-  during?: (name: string) => Promise<unknown>;
 }
 
 /** The time a failing connect has to show its dialog. */
@@ -149,7 +147,6 @@ export async function connectWith<Result>(
   try {
     appendScript(options.script ?? dismissals(name));
     await openWindow(name, name);
-    await options.during?.(name);
     if (expectation === 'connects') {
       await connectedWithin(name, 120_000);
     } else {
