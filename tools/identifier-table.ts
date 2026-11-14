@@ -137,7 +137,13 @@ export function tableKinds(sources: PackageSources): TableKind[] {
   const contextKeys = new Map<string, TableValue>(
     declared.contextKeys.map(contextKey => [
       contextKey.id,
-      {id: contextKey.id, setter: contextKey.setter},
+      {
+        id: contextKey.id,
+        setter: contextKey.setter,
+        ...(contextKey.settingModule === undefined
+          ? {}
+          : {settingModule: contextKey.settingModule}),
+      },
     ]),
   );
   const standingDownKey = declared.standingDownKey;

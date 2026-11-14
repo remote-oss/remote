@@ -70,6 +70,8 @@ export interface ManifestIdentifiers {
 interface DeclaredContextKey {
   id: string;
   setter: 'extension' | 'core' | 'coreAndExtension';
+  /** For a `coreAndExtension` key: the one module of the package, relative to it, that may set it. */
+  settingModule?: string;
 }
 
 /** An id core sees but the manifest does not contribute. */
@@ -462,12 +464,19 @@ export function readDeclared(file: string, where: string): DeclaredIdentifiers {
     contextKeys: declared
       .field('contextKeys')
       .optionalItems()
-      .map(entry => ({
-        id: entry.onlyFields(['id', 'setter']).field('id').string(),
-        setter: entry
-          .field('setter')
-          .oneOf(['extension', 'core', 'coreAndExtension'] as const),
-      })),
+      .map(entry => {
+        const cursor = entry.onlyFields(['id', 'setter', 'settingModule']);
+        const settingModule = cursor.field('settingModule');
+        return {
+          id: cursor.field('id').string(),
+          setter: cursor
+            .field('setter')
+            .oneOf(['extension', 'core', 'coreAndExtension'] as const),
+          ...(settingModule.isAbsent()
+            ? {}
+            : {settingModule: settingModule.string()}),
+        };
+      }),
     infoLineCommands: declared
       .field('infoLineCommands')
       .optionalItems()
