@@ -32,7 +32,14 @@ export type PhaseName =
   /** The resolve's first visible stage, which has no text: the progress opens with the title alone. */
   | 'opened'
   | 'runningPreconnectScript'
-  | 'serverDownloadPercent';
+  | 'serverDownloadPercent'
+  /** The probe that starts the distro before its server is installed. */
+  | 'startingSubsystem'
+  /** Unpacking the server archive; the stage carries `percent`. */
+  | 'unpackingPercent'
+  /** Downloading the server archive in the distro; the stage carries `percent`. */
+  | 'downloadingInDistro'
+  | 'unpackingServer';
 
 /** The latest the progress opens after a resolve starts. */
 const PROGRESS_FALLBACK_MILLISECONDS = 1500;
@@ -48,6 +55,13 @@ export interface ConnectPhase {
   details?: boolean;
   /** Sets the text the progress shows without opening it; a stage that is not quiet opens it. */
   quiet?: true;
+  /**
+   * The bar's position from 0 to 100 that the connector names, for a family with `barFromConnector`: only the connector
+   * knows whether this connect downloaded.
+   */
+  barPosition?: number;
+  /** The title the progress opens with, for a family with `titleFromConnector`. */
+  progressTitle?: string;
 }
 
 /** What the connector is asked to connect to. */
@@ -197,8 +211,35 @@ export interface ResolverOptions {
   determinateStages?: boolean;
   /** The text of a stage, in the display language and the extension's wording. */
   titleOf(phase: ConnectPhase, target: DecodedTarget): string;
-  /** The title the progress starts with. */
+  /** The title the progress starts with; a family with `titleFromConnector` is never asked. */
   startTitle(target: DecodedTarget): string;
+  /**
+   * Whether an authority of this family that the registry calls malformed, a bad outer hop included, is answered with
+   * the editor's handled error and nothing more: no connector call, no stage, no progress and no presenter. An authority
+   * of another family stays unhandled.
+   */
+  malformedHandled?: boolean;
+  /**
+   * Whether a stage whose text is empty is reported as an empty message, so that the progress shows its title alone. A
+   * family that leaves it off adds no report for such a stage.
+   */
+  emptyStageClearsText?: boolean;
+  /**
+   * Whether the bar is the connector's: each report carries the increment from the bar shown so far to the stage's `barPosition`
+   * (never a negative one), and a stage without `barPosition` adds none, so the bar is indefinite until the first. It replaces
+   * `determinateStages`.
+   */
+  barFromConnector?: boolean;
+  /**
+   * Whether the progress takes its title from the connector: it opens only once a stage has carried a `progressTitle`,
+   * at the later of the delay and that stage, and keeps that title. A connect that ends first opens none.
+   */
+  titleFromConnector?: boolean;
+  /**
+   * Whether a failure for the presenter is presented before the connect's progress is released, so that the progress
+   * stays open behind the dialog and closes after the answer.
+   */
+  presentInsideProgress?: boolean;
   /**
    * How long after a resolve starts the progress opens, whatever the phases: a phase before it is remembered and the
    * progress opens at the delay with the latest title, and a connect that ends first opens none. A family that leaves it
@@ -407,11 +448,28 @@ export async function registerResolver(
     let shown:
       | {title: string; details: boolean; staged: boolean; stage: PhaseName}
       | undefined;
+    // The connector's bar: the highest position it named, and the sum of the increments reported so far.
+    let namedBar: number | undefined;
+    let barReported = 0;
+    // The title the first stage that carried one gave, and whether the progress is due, for `titleFromConnector`.
+    let progressTitle: string | undefined;
+    let progressDue = false;
     let report: ProgressUpdate | undefined;
     // The share of the bar added since the last report, and the download percent already counted.
     let unreported = 0;
     let downloaded = 0;
-    function incrementOf(): number | undefined {
+    function barIncrement(stageBar: number | undefined): number | undefined {
+      if (stageBar === undefined) {
+        return undefined;
+      }
+      const increment = Math.max(0, stageBar - barReported);
+      barReported += increment;
+      return increment;
+    }
+    function incrementOf(stageBar?: number): number | undefined {
+      if (options.barFromConnector === true) {
+        return barIncrement(stageBar);
+      }
       if (!options.determinateStages || shown?.staged !== true) {
         return undefined;
       }
@@ -428,8 +486,16 @@ export async function registerResolver(
     const settled = new Promise<void>(resolve => {
       releases.push(resolve);
     });
+    /** Whether a stage is reported: one with text, or an empty one for a family that clears the text with it. */
+    function reportable(title: string): boolean {
+      return title !== '' || options.emptyStageClearsText === true;
+    }
     function open(): void {
-      if (opened) {
+      progressDue = true;
+      if (
+        opened ||
+        (options.titleFromConnector === true && progressTitle === undefined)
+      ) {
         return;
       }
       opened = true;
@@ -437,7 +503,7 @@ export async function registerResolver(
       progressDone = editor.progress
         .withProgress(
           {
-            title: options.startTitle(decoded),
+            title: progressTitle ?? options.startTitle(decoded),
             cancellable: options.cancellable,
             onCancel: () => {
               connector.cancel('progress');
@@ -448,10 +514,16 @@ export async function registerResolver(
           },
           async update => {
             report = update;
-            // A stage with no message adds no step: an empty message would blank the text the progress shows.
-            if (shown !== undefined && shown.title !== '') {
+            // A stage with no message adds no step, unless the family clears the text with it: an empty message would
+            // blank the text the progress shows.
+            if (shown !== undefined && reportable(shown.title)) {
               reported = {title: shown.title, details: shown.details};
-              update(shown.title, shown.details, incrementOf(), shown.stage);
+              update(
+                shown.title,
+                shown.details,
+                incrementOf(namedBar),
+                shown.stage,
+              );
             }
             await settled;
           },
@@ -473,15 +545,25 @@ export async function registerResolver(
         staged: title !== '',
         stage: phase.name,
       };
+      if (phase.barPosition !== undefined) {
+        namedBar = Math.max(namedBar ?? 0, phase.barPosition);
+      }
+      const titledNow =
+        options.titleFromConnector === true &&
+        progressTitle === undefined &&
+        phase.progressTitle !== undefined;
+      if (titledNow) {
+        progressTitle = phase.progressTitle;
+      }
       if (phase.name === 'serverDownloadPercent') {
         const percent = phase.percent ?? 0;
         unreported += Math.max(0, percent - downloaded);
         downloaded = Math.max(downloaded, percent);
       }
       if (report !== undefined) {
-        const increment = incrementOf();
+        const increment = incrementOf(phase.barPosition);
         if (
-          shown.title !== '' &&
+          reportable(shown.title) &&
           (reported?.title !== shown.title ||
             reported.details !== shown.details ||
             increment !== undefined)
@@ -490,8 +572,9 @@ export async function registerResolver(
           report(shown.title, shown.details, increment, shown.stage);
         }
       } else if (
-        phase.quiet !== true &&
-        options.progressDelayMilliseconds === undefined
+        (phase.quiet !== true &&
+          options.progressDelayMilliseconds === undefined) ||
+        (titledNow && progressDue)
       ) {
         open();
       }
@@ -513,7 +596,14 @@ export async function registerResolver(
   /** The decoded target of an authority this host serves, or the editor's error for one it does not or while it is leaving. */
   function decodedFor(authority: string): DecodedTarget {
     const decoded = decodeAuthority(authority);
-    if ('malformed' in decoded || decoded.family !== options.family) {
+    if ('malformed' in decoded) {
+      throw editor.notAvailable(
+        undefined,
+        options.malformedHandled === true &&
+          decoded.malformed.family === options.family,
+      );
+    }
+    if (decoded.family !== options.family) {
       throw editor.notAvailable(undefined, false);
     }
     if (state.leaving) {
@@ -582,21 +672,32 @@ export async function registerResolver(
         listener(decoded);
       }
     }
-    let result: Connected | Failed;
-    try {
-      result = await connect(decoded, () =>
-        connector.connect(inputOf(decoded, context, isReconnection)),
-      );
-    } catch (caught) {
-      result = failureOfThrown(caught);
+    async function failedWith(failed: Failed): Promise<Error> {
+      applyAndAnnounce({kind: 'resolveFailed'});
+      return errorFor(failed, isReconnection);
     }
+    // For a family that presents inside the progress, the error is made while the progress is still open.
+    let presented: Error | undefined;
+    const result = await connect(decoded, async () => {
+      let answer: Connected | Failed;
+      try {
+        answer = await connector.connect(
+          inputOf(decoded, context, isReconnection),
+        );
+      } catch (caught) {
+        answer = failureOfThrown(caught);
+      }
+      if (options.presentInsideProgress === true && !isConnected(answer)) {
+        presented = await failedWith(answer);
+      }
+      return answer;
+    });
     if (isConnected(result)) {
       memory.connectedBefore = true;
       applyAndAnnounce({kind: 'resolveSucceeded'});
       return connectionOf(result, options.allowsTrust);
     }
-    applyAndAnnounce({kind: 'resolveFailed'});
-    throw await errorFor(result, isReconnection);
+    throw presented ?? (await failedWith(result));
   }
 
   function queued<Result>(work: () => Promise<Result>): Promise<Result> {
