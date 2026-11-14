@@ -337,11 +337,15 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
           },
         },
       );
-      deepStrictEqual(result, {
-        once: [alias],
-        afterReload: [alias],
-        logged: true,
-      });
+      deepStrictEqual(
+        result.logged,
+        true,
+        connectionLog()
+          .filter(line => /local|ssh\]/i.test(line))
+          .slice(-25)
+          .join('\n'),
+      );
+      deepStrictEqual([result.once, result.afterReload], [[alias], [alias]]);
     });
   }
 
