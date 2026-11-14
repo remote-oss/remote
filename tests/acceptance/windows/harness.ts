@@ -72,9 +72,13 @@ export interface AgentEvent {
     | 'environment'
     | 'called'
     | 'editorText'
-    | 'linkOpened';
+    | 'linkOpened'
+    | 'terminalOpened'
+    | 'activeTerminalChanged';
   time: number;
   id?: string;
+  /** The name of the terminal a `terminalOpened` or `activeTerminalChanged` event concerns; null when none is active. */
+  terminal?: string | null;
   message?: string;
   remoteName?: string | null;
   remoteAuthority?: string | null;
@@ -265,16 +269,22 @@ export function recordLines(surface?: string, window?: string): RecordLine[] {
   );
 }
 
-/** The lines of the log file named by `variableName`, without their time stamps; none before the first is written. */
-function logLinesOf(variableName: string): string[] {
+/** The lines of the log file named by `variableName` as written, with their time stamps; none before the first is written. */
+function stampedLogLinesOf(variableName: string): string[] {
   const file = variable(variableName);
   if (!existsSync(file)) {
     return [];
   }
   return readFileSync(file, 'utf8')
     .split('\n')
-    .filter(line => line !== '')
-    .map(line => line.slice(line.indexOf('] ') + 2));
+    .filter(line => line !== '');
+}
+
+/** The lines of the log file named by `variableName`, without their time stamps; none before the first is written. */
+function logLinesOf(variableName: string): string[] {
+  return stampedLogLinesOf(variableName).map(line =>
+    line.slice(line.indexOf('] ') + 2),
+  );
 }
 
 /** The folder the launch's editor keeps its state in, its logs included: one session folder per start of the editor, with `main.log` below it. */
@@ -282,9 +292,16 @@ export function editorLogsFolder(): string {
   return variable('HARNESS_EDITOR_LOGS');
 }
 
-/** The lines of the log the launch's extensions write, without their time stamps; none before the first is written. */
-export function connectionLog(): string[] {
-  return logLinesOf('REMOTE_OSS_ACCEPTANCE_LOG');
+/**
+ * The lines of the log the launch's extensions write, without their time stamps, or with them when `withTimes` is set,
+ * for a failure to show the order and the gaps of a race; none before the first is written.
+ */
+export function connectionLog({
+  withTimes = false,
+}: {withTimes?: boolean} = {}): string[] {
+  return withTimes
+    ? stampedLogLinesOf('REMOTE_OSS_ACCEPTANCE_LOG')
+    : logLinesOf('REMOTE_OSS_ACCEPTANCE_LOG');
 }
 
 /** One push that Remote Explorer's inbox received from Remote - SSH, as the explorer records it. */
@@ -2150,7 +2167,7 @@ export async function connectedWithin(
   }
 }
 
-/** What the host and this machine hold when a window did not connect: the host's listeners and server processes, the last lines of its sshd's log, this machine's listeners, and the last lines of the launch's connection log. */
+/** What the host and this machine hold when a window did not connect: the host's listeners and server processes, the last lines of its sshd's log, this machine's listeners, and the last lines of the launch's connection log with the time of each. */
 async function connectState(): Promise<string> {
   function read(
     what: Promise<{stdout: string; stderr: string}>,
@@ -2180,7 +2197,7 @@ async function connectState(): Promise<string> {
     ),
     read(execFileAsync('ss', ['-ltnp'])),
   ]);
-  const connect = connectionLog().slice(-40).join('\n');
+  const connect = connectionLog({withTimes: true}).slice(-40).join('\n');
   return `the host's listeners and processes:\n${listening}\nthe last lines of the host's sshd log:\n${sshdLog}\nthis machine's listeners:\n${here}\nthe last lines of the launch's connection log:\n${connect}`;
 }
 
