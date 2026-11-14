@@ -54,33 +54,6 @@
     "added": "2026-11-12"
   },
   {
-    "launch": "preconnect",
-    "file": "preconnect/other.test.ts",
-    "title": "F-2108 AC-35 (deleted): a confirmed script that was deleted fails with the read's detail and no dialog, and its entry stays",
-    "card": 2232,
-    "owner": "dike",
-    "evidence": 42218054216,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "preconnect",
-    "file": "preconnect/remembered.test.ts",
-    "title": "F-2108 AC-13, AC-14 (changed): changed contents ask again with the message that says so; Allow keeps asking and Don't Ask Again stops it",
-    "card": 2232,
-    "owner": "dike",
-    "evidence": 42624951292,
-    "added": "2026-11-12"
-  },
-  {
-    "launch": "preconnect",
-    "file": "preconnect/basics.test.ts",
-    "title": "F-2108 AC-11, AC-12 (remember): Don't Ask Again runs it, and another window to another alias runs it with no dialog, the settings file unchanged",
-    "card": 2232,
-    "owner": "dike",
-    "evidence": 42820396583,
-    "added": "2026-11-13"
-  },
-  {
     "launch": "ssh-core",
     "file": "ssh-core/session-hints.test.ts",
     "title": "F-2605 AC-17 (c135-record): a failed attempt keeps 25 environment hints in order, its error hint with a number, and the log hint",
@@ -88,15 +61,6 @@
     "owner": "iris",
     "evidence": 43225659271,
     "added": "2026-11-12"
-  },
-  {
-    "launch": "preconnect",
-    "file": "preconnect/remembered.test.ts",
-    "title": "F-2108 AC-39 (touched): a confirmed script whose modification time changed, with the same contents, runs with no dialog",
-    "card": 2232,
-    "owner": "dike",
-    "evidence": 43018061687,
-    "added": "2026-11-13"
   },
   {
     "launch": "default-ports",

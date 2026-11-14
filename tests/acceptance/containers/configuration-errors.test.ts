@@ -95,6 +95,12 @@ describe('F-0301 configuration errors (card containers-50)', function () {
       '.devcontainer/devcontainer.json': '',
     });
     const shown = await reopenToDialog(folder);
+    // The product opens the file while it shows the dialog, so the tab can come after the dialog does.
+    await waitFor(
+      'the configuration file open behind the dialog',
+      async () => (await editorTabs(shown.window)).length > 0,
+      30_000,
+    );
     const behind = await editorTabs(shown.window);
     await answerDialog(shown.window, 'Show Log');
     await shown.running.catch(() => undefined);
