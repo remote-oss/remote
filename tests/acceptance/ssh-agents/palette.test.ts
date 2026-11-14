@@ -12,10 +12,12 @@ import {
 } from '../windows/harness.ts';
 import {paletteItems, runFromPalette} from '../windows/palette.ts';
 import {
+  AGENT_HOST_TITLES,
   closeQuietly,
   localWindowWithAi,
   paletteItemsWith,
   pickerItems,
+  titlesOf,
 } from './support.ts';
 import {
   answerDialogAt,
@@ -23,22 +25,8 @@ import {
   waitForDialogElsewhere,
 } from '../windows/renderer.ts';
 
-/** The titles of core's agent-host commands, which the palette never lists for "SSH". */
-const AGENT_HOST_TITLES = [
-  'Connect to Remote Agent Host via SSH',
-  'Add Remote Agent Host...',
-  'Forget SSH Host Key',
-  'Agents: Add New SSH Host...',
-  'Agents: Configure SSH Hosts...',
-];
-
 /** The category the extension's commands show. */
 const CATEGORY = 'Remote-SSH:';
-
-/** What an item of the list is: its label, without the keybinding or the source core adds. */
-function titlesOf(items: readonly string[]): string[] {
-  return items.map(item => item.trim());
-}
 
 describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', function () {
   this.timeout(300_000);
