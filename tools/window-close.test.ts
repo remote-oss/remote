@@ -21,6 +21,7 @@ interface Harness {
     milliseconds?: number,
   ): Promise<'closed' | 'dismissed' | 'killed'>;
   isOpen(name: string): boolean;
+  connectionLog(options?: {withTimes?: boolean}): string[];
 }
 
 const NAME = 'w1';
@@ -129,6 +130,37 @@ describe('closeWindow (card tooling-84, #1505)', () => {
       message:
         /the close was not accepted by the window's agent; running commands: \["workbench\.action\.terminal\.new accepted \d+ s ago"\]; its last events: \["accepted workbench\.action\.terminal\.new \d+ s ago"\]; /u,
     });
+  });
+
+  it('#2490: the connection log read for a failure keeps the time of each line, and the one read for a row does not', () => {
+    const logFile = path.join(folder, 'connection.log');
+    writeFileSync(
+      logFile,
+      '[10:00:01.250] Resolving ssh-remote+harness, attempt 1\n\n[10:00:01.900] the connection helper exits with 0\n',
+    );
+    const previousLog = process.env.REMOTE_OSS_ACCEPTANCE_LOG;
+    process.env.REMOTE_OSS_ACCEPTANCE_LOG = logFile;
+    try {
+      deepStrictEqual(
+        [harness.connectionLog(), harness.connectionLog({withTimes: true})],
+        [
+          [
+            'Resolving ssh-remote+harness, attempt 1',
+            'the connection helper exits with 0',
+          ],
+          [
+            '[10:00:01.250] Resolving ssh-remote+harness, attempt 1',
+            '[10:00:01.900] the connection helper exits with 0',
+          ],
+        ],
+      );
+    } finally {
+      if (previousLog === undefined) {
+        delete process.env.REMOTE_OSS_ACCEPTANCE_LOG;
+      } else {
+        process.env.REMOTE_OSS_ACCEPTANCE_LOG = previousLog;
+      }
+    }
   });
 
   it('a close the window accepted stays as it is', async () => {
