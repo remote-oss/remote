@@ -200,3 +200,17 @@ export async function paletteItemsWith(
   }
   return items;
 }
+
+/** The titles of core's agent-host commands, which the palette never lists for "SSH". */
+export const AGENT_HOST_TITLES = [
+  'Connect to Remote Agent Host via SSH',
+  'Add Remote Agent Host...',
+  'Forget SSH Host Key',
+  'Agents: Add New SSH Host...',
+  'Agents: Configure SSH Hosts...',
+];
+
+/** What an item of the list is: its label, without the keybinding or the source core adds. */
+export function titlesOf(items: readonly string[]): string[] {
+  return items.map(item => item.trim());
+}
