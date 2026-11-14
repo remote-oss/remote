@@ -111,6 +111,8 @@ const REGISTER_COMMANDS = 'registerCommands';
 interface TableEntry {
   readonly key: string;
   readonly id: string;
+  /** For a context key the editor and the extension both set: the one module, relative to the package, that sets it. */
+  readonly settingModule?: string;
 }
 
 /** An entry of the generated file before the R2 filter: the id and, where the entry carries them, role and setter. */
@@ -119,6 +121,7 @@ interface RawEntry {
   readonly id: string;
   readonly role?: string;
   readonly setter?: string;
+  readonly settingModule?: string;
 }
 
 /** One exported const of the generated file: the table, its type, its keys, and its checked entries. */
@@ -146,6 +149,8 @@ interface PackageConsumption {
    * call whose third argument is a type parameter the pass-through can't resolve, file relative to the package.
    */
   readonly commandProblems: readonly string[];
+  /** One line per production file other than a key's setting module that references the key. */
+  readonly settingProblems: readonly string[];
 }
 
 /** Which allowlist entries a tag run holds to be wired: every package's, or one package's and its libraries'. */
@@ -248,12 +253,14 @@ function entryOf(
   let entryId: string | undefined;
   let role: string | undefined;
   let setter: string | undefined;
+  let settingModule: string | undefined;
   if (typescript.isStringLiteral(value)) {
     entryId = value.text;
   } else if (typescript.isObjectLiteralExpression(value)) {
     entryId = fieldOf(value, 'id');
     role = fieldOf(value, 'role');
     setter = fieldOf(value, 'setter');
+    settingModule = fieldOf(value, 'settingModule');
   }
   if (entryId === undefined) {
     return undefined;
@@ -263,6 +270,7 @@ function entryOf(
     id: entryId,
     ...(role === undefined ? {} : {role}),
     ...(setter === undefined ? {} : {setter}),
+    ...(settingModule === undefined ? {} : {settingModule}),
   };
 }
 
@@ -335,7 +343,13 @@ function tablesOf(
         }
         keys.add(entry.key);
         if (isCheckedEntry(declaration.name.text, entry)) {
-          entries.set(entry.key, {key: entry.key, id: entry.id});
+          entries.set(entry.key, {
+            key: entry.key,
+            id: entry.id,
+            ...(entry.settingModule === undefined
+              ? {}
+              : {settingModule: entry.settingModule}),
+          });
         }
         if (
           declaration.name.text === 'standDown' &&
@@ -1372,8 +1386,16 @@ function consumptionOf(root: string, folder: string): PackageConsumption {
   const consumed = new Set<string>();
   const notes = new Set<string>();
   const commandProblems = new Set<string>();
+  const settingProblems = new Set<string>();
   const passThroughArguments = passThroughArgumentsOf(files, checker);
+  const checkedEntries = new Map<string, TableEntry>();
+  for (const table of tables) {
+    for (const entry of table.entries.values()) {
+      checkedEntries.set(`${table.name} ${entry.key}`, entry);
+    }
+  }
   for (const file of files) {
+    const referenced = new Set<string>();
     const state: WalkState = {
       root,
       folder,
@@ -1382,12 +1404,22 @@ function consumptionOf(root: string, folder: string): PackageConsumption {
       productionFiles: files,
       commandArgumentStarts: commandArgumentStartsOf(file),
       passThroughArguments,
-      consumed,
+      consumed: referenced,
       notes,
       commandProblems,
       viewArgumentDepth: 0,
     };
     walkNode(state, file, file);
+    const relative = relativeToPackage(root, folder, file.fileName);
+    for (const kindKey of referenced) {
+      const settingModule = checkedEntries.get(kindKey)?.settingModule;
+      if (settingModule !== undefined && settingModule !== relative) {
+        settingProblems.add(
+          `packages/${folder}: ${kindKey.replace(' ', '.')} is set only by ${settingModule}, but ${relative} references it`,
+        );
+      }
+      consumed.add(kindKey);
+    }
   }
   // The stand-down key is set by lib-standdown from the standDown table's contextKey, so the matching contextKeys
   // entry is consumed even though no production source references it by name.
@@ -1404,18 +1436,13 @@ function consumptionOf(root: string, folder: string): PackageConsumption {
       }
     }
   }
-  const entries = new Map<string, TableEntry>();
-  for (const table of tables) {
-    for (const entry of table.entries.values()) {
-      entries.set(`${table.name} ${entry.key}`, entry);
-    }
-  }
   return {
     folder,
-    entries,
+    entries: checkedEntries,
     consumed,
     notes: [...notes].sort(),
     commandProblems: [...commandProblems].sort(),
+    settingProblems: [...settingProblems].sort(),
   };
 }
 
@@ -1665,6 +1692,9 @@ export async function checkConsumption(
   }
   commandLines.sort(sortByKey);
   problems.push(...commandLines.map(item => item.line));
+  for (const consumption of consumedOf.values()) {
+    problems.push(...consumption.settingProblems);
+  }
 
   const stale: SortableLine[] = [];
   const nameless: SortableLine[] = [];

@@ -123,6 +123,33 @@ function runtimeCommandProblems(sources: PackageSources): string[] {
   return problems;
 }
 
+/** A module path the check accepts: below the package's `src` folder, a TypeScript file. */
+const SETTING_MODULE_PATH = /^src\/.+\.ts$/;
+
+/** The context keys that name a setting module wrongly: a `coreAndExtension` key without one or with a bad path, and another setter's key with one. */
+function settingModuleProblems(sources: PackageSources): string[] {
+  const problems: string[] = [];
+  for (const contextKey of sources.declared.contextKeys) {
+    const {settingModule} = contextKey;
+    if (contextKey.setter === 'coreAndExtension') {
+      if (settingModule === undefined) {
+        problems.push(
+          `context key '${contextKey.id}' is set by the editor and the extension, so it needs a settingModule`,
+        );
+      } else if (!SETTING_MODULE_PATH.test(settingModule)) {
+        problems.push(
+          `context key '${contextKey.id}' names settingModule '${settingModule}', which is not a path src/<file>.ts of the package`,
+        );
+      }
+    } else if (settingModule !== undefined) {
+      problems.push(
+        `context key '${contextKey.id}' names a settingModule but its setter is '${contextKey.setter}', not 'coreAndExtension'`,
+      );
+    }
+  }
+  return problems;
+}
+
 function referenceProblems(sources: PackageSources): string[] {
   const {declared} = sources;
   const known = knownIds(sources);
@@ -260,6 +287,7 @@ export function checkPackageRules(sources: PackageSources): RuleOutcome {
       ...internalProblems(sources),
       ...runtimeCommandProblems(sources),
       ...referenceProblems(sources),
+      ...settingModuleProblems(sources),
       ...(standingDownKey === undefined
         ? []
         : gatingProblems(sources, standingDownKey)),
