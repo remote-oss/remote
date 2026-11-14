@@ -114,7 +114,9 @@ stop_servers() {
     fi
     kill "$SERVER_PID" 2>/dev/null
   done
-  for PROC_DIR in /proc/[0-9]*; do
+  SERVER_CANDIDATES=$(grep -alsF -e "$DATA_DIR/bin/" -e "$DATA_DIR/cli/servers/" /proc/[0-9]*/cmdline 2>/dev/null)
+  for PROC_FILE in $SERVER_CANDIDATES; do
+    PROC_DIR=${PROC_FILE%/cmdline}
     SERVER_PID=${PROC_DIR#/proc/}
     [ "$SERVER_PID" != "$$" ] || continue
     is_server_tree_process "$SERVER_PID" "$DATA_DIR/bin/" ||
