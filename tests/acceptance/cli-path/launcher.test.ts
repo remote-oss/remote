@@ -5,13 +5,14 @@
 
 import {deepStrictEqual} from 'node:assert';
 import {
+  closeContained,
   closeWindow,
   connectedWithin,
   onHostAs,
   openWindow,
 } from '../windows/harness.ts';
 import {runFromPalette} from '../windows/palette.ts';
-import {dialogOf} from '../windows/renderer.ts';
+import {dialogOf, pressEscape} from '../windows/renderer.ts';
 
 /** The server folder of the editor under test on the host. */
 const SERVER_FOLDER = '/home/harness/.vscodium-server-insiders';
@@ -39,14 +40,18 @@ describe('the launcher of the exec-server path (card #2500, F-2008)', function (
 
   it('F-2008 AC-15 (c2500-launcher): after the launcher is deleted and the server killed, the next connection installs the same launcher again and shows no error dialog', async () => {
     await openWindow('harness', 'f2008-launcher');
-    await connectedWithin('f2008-launcher', 120_000);
-    const launcher = launcherAmong(await namesInServerFolder());
-    await onHostAs('harness', 'rm', '-f', `${SERVER_FOLDER}/${launcher}`);
-    await runFromPalette(
-      'f2008-launcher',
-      'Remote-SSH: Kill Current VS Code Server',
-    );
-    await closeWindow('f2008-launcher');
+    let launcher: string;
+    try {
+      await connectedWithin('f2008-launcher', 120_000);
+      launcher = launcherAmong(await namesInServerFolder());
+      await onHostAs('harness', 'rm', '-f', `${SERVER_FOLDER}/${launcher}`);
+      await runFromPalette(
+        'f2008-launcher',
+        'Remote-SSH: Kill Current VS Code Server',
+      );
+    } finally {
+      await closeContained('f2008-launcher', pressEscape);
+    }
     await openWindow('harness', 'f2008-launcher-again');
     try {
       await connectedWithin('f2008-launcher-again', 120_000);

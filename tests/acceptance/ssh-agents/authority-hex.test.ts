@@ -9,7 +9,7 @@ describe('the hexadecimal authority of the ssh-agents suite (card #2500, F-2008 
         authorityHex({hostName: '127.0.0.1', user: 'me', port: 2222}),
       ],
       [
-        Buffer.from('{"hostName":"harness","user":"me"}').toString('hex'),
+        '7b22686f73744e616d65223a226861726e657373222c2275736572223a226d65227d',
         '7b22686f73744e616d65223a223132372e302e302e31222c2275736572223a226d65222c22706f7274223a323232327d',
       ],
     );
