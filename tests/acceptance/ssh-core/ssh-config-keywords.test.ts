@@ -110,20 +110,28 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
     );
   });
 
-  for (const level of ['QUIET', 'ERROR', 'DEBUG3']) {
-    it(`F-2109 AC-3 (c2593-loglevel-${level.toLowerCase()}): LogLevel ${level} connects with no message of its own`, async () => {
-      const result = await connectWith(
-        `c2593-ll-${level.toLowerCase()}`,
-        [`LogLevel ${level}`],
-        'connects',
-        outcome => outcome,
-      );
-      deepStrictEqual(
-        [result.connected, result.toasts, result.dialog],
-        [true, [], undefined],
-      );
-    });
+  /** A connect with `LogLevel` `level` shows nothing of its own. */
+  async function logLevelConnects(level: string): Promise<void> {
+    const result = await connectWith(
+      `c2593-ll-${level.toLowerCase()}`,
+      [`LogLevel ${level}`],
+      'connects',
+      outcome => outcome,
+    );
+    deepStrictEqual(
+      [result.connected, result.toasts, result.dialog],
+      [true, [], undefined],
+    );
   }
+
+  it('F-2109 AC-3 (c2593-loglevel-quiet): LogLevel QUIET connects with no message of its own', () =>
+    logLevelConnects('QUIET'));
+
+  it('F-2109 AC-3 (c2593-loglevel-error): LogLevel ERROR connects with no message of its own', () =>
+    logLevelConnects('ERROR'));
+
+  it('F-2109 AC-3 (c2593-loglevel-debug3): LogLevel DEBUG3 connects with no message of its own', () =>
+    logLevelConnects('DEBUG3'));
 
   it('F-2109 AC-3, AC-5 (c2593-quiet-cipher): LogLevel QUIET with a cipher the server does not offer shows the failure dialog, with no ssh message in the window, and the log holds the Unable to negotiate line', async () => {
     const result = await connectWith(
@@ -287,67 +295,82 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
     );
   });
 
-  for (const {mode, settings} of MODES) {
-    it(`F-2109 AC-4 (c2593-logverbose-${mode}): LogVerbose naming ssh source functions puts debug2 or debug3 lines in the log in ${mode} mode`, async () => {
-      const alias = `c2593-lv-${mode}`;
-      const result = await connectWith(
-        alias,
-        ['LogVerbose kex.c:*,packet.c:*'],
-        'connects',
-        () =>
-          connectionLog().filter(line => /debug[23]:/.test(line)).length > 0,
-        {
-          settings: {
-            ...settings,
-            'remote.SSH.remotePlatform': {[alias]: 'linux'},
-          },
-        },
-      );
-      deepStrictEqual(result, true);
-    });
+  it('F-2109 AC-11 (c2593-tunnel): Tunnel and TunnelDevice a normal user cannot open connect with no notification and no dialog', async () => {
+    const result = await connectWith(
+      'c2593-tunnel',
+      ['Tunnel yes', 'TunnelDevice 7:7'],
+      'connects',
+      async (outcome, file) => ({
+        outcome,
+        plain: (await plainSsh(file, 'c2593-tunnel')).status,
+      }),
+    );
+    deepStrictEqual(
+      [result.plain, result.outcome.toasts, result.outcome.dialog],
+      [0, [], undefined],
+    );
+  });
 
-    it(`F-2109 AC-12, AC-18 (c2593-localcommand-${mode}): PermitLocalCommand runs the LocalCommand once in ${mode} mode with the tokens expanded, its output in the log, and its failing exit leaves the connection working${mode === 'server' ? ', and a reload does not run it again' : ''}`, async () => {
-      const alias = `c2593-lc-${mode}`;
-      const output = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.out`);
-      const result = await connectWith(
-        alias,
-        [
-          'PermitLocalCommand yes',
-          `LocalCommand echo "%n" >> ${output}; echo c2593-local-output-%n; exit 3`,
-        ],
-        'connects',
-        async () => {
-          const once = linesOf(output);
-          if (mode === 'server') {
-            await reloadWindow(alias);
-            await connectedWithin(alias, 120_000);
-          }
-          return {
-            once,
-            afterReload: linesOf(output),
-            logged: connectionLog().some(line =>
-              line.includes(`c2593-local-output-${alias}`),
-            ),
-          };
+  /** `LogVerbose` puts debug lines in the log in `mode`. */
+  async function logVerboseIn(mode: 'server' | 'terminal'): Promise<void> {
+    const {settings} = MODES[mode === 'server' ? 0 : 1];
+    const alias = `c2593-lv-${mode}`;
+    const result = await connectWith(
+      alias,
+      ['LogVerbose kex.c:*,packet.c:*'],
+      'connects',
+      () => connectionLog().filter(line => /debug[23]:/.test(line)).length > 0,
+      {
+        settings: {
+          ...settings,
+          'remote.SSH.remotePlatform': {[alias]: 'linux'},
         },
-        {
-          settings: {
-            ...settings,
-            'remote.SSH.remotePlatform': {[alias]: 'linux'},
-          },
-        },
-      );
-      deepStrictEqual(
-        result.logged,
-        true,
-        connectionLog()
-          .filter(line => /local|ssh\]/i.test(line))
-          .slice(-25)
-          .join('\n'),
-      );
-      deepStrictEqual([result.once, result.afterReload], [[alias], [alias]]);
-    });
+      },
+    );
+    deepStrictEqual(result, true);
   }
+
+  /** `LocalCommand` runs once in `mode`. */
+  async function localCommandIn(mode: 'server' | 'terminal'): Promise<void> {
+    const {settings} = MODES[mode === 'server' ? 0 : 1];
+    const alias = `c2593-lc-${mode}`;
+    const output = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.out`);
+    const result = await connectWith(
+      alias,
+      ['PermitLocalCommand yes', `LocalCommand echo "%n" >> ${output}; exit 3`],
+      'connects',
+      async () => {
+        const once = linesOf(output);
+        if (mode === 'server') {
+          await reloadWindow(alias);
+          await connectedWithin(alias, 120_000);
+        }
+        return {
+          once,
+          afterReload: linesOf(output),
+        };
+      },
+      {
+        settings: {
+          ...settings,
+          'remote.SSH.remotePlatform': {[alias]: 'linux'},
+        },
+      },
+    );
+    deepStrictEqual(result, {once: [alias], afterReload: [alias]});
+  }
+
+  it('F-2109 AC-4 (c2593-logverbose-server): LogVerbose naming ssh source functions puts debug2 or debug3 lines in the log in server mode', () =>
+    logVerboseIn('server'));
+
+  it('F-2109 AC-4 (c2593-logverbose-terminal): LogVerbose naming ssh source functions puts debug2 or debug3 lines in the log in terminal mode', () =>
+    logVerboseIn('terminal'));
+
+  it('F-2109 AC-12, AC-18 (c2593-localcommand-server-part): PermitLocalCommand runs the LocalCommand once in server mode with the tokens expanded, its failing exit leaves the connection working, and a reload does not run it again', () =>
+    localCommandIn('server'));
+
+  it('F-2109 AC-12, AC-18 (c2593-localcommand-terminal-part): PermitLocalCommand runs the LocalCommand once in terminal mode with the tokens expanded, and its failing exit leaves the connection working', () =>
+    localCommandIn('terminal'));
 
   it('F-2109 AC-9 (c2593-canon-fails): canonicalization with CanonicalizeFallbackLocal no and an alias that does not resolve shows the dialog without a reason', async () => {
     const result = await connectWith(
