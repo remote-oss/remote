@@ -18,11 +18,41 @@ import {scriptFor, type ScriptParameters} from '../../src/index.ts';
 import {type FakeHost, parametersFor, runScript, single} from './fake-host.ts';
 import {installHostHooks, statusOf} from './bootstrap-script.fixture.ts';
 
+/** Whether the process is still running after up to 5 s: a signal returns before the process has exited. */
+async function stillRunning(processId: number): Promise<boolean> {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    try {
+      process.kill(processId, 0);
+    } catch {
+      return false;
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  return true;
+}
+
 describe('the POSIX bootstrap script', () => {
   let host: FakeHost;
   installHostHooks(made => {
     host = made;
   });
+
+  /**
+   * Installs and starts a server and returns its process id with its pid file removed, so that only the sweep over
+   * the command lines can find it.
+   */
+  function sweptServer(): number {
+    runScript(host, single('install'), parametersFor());
+    runScript(host, single('start'), parametersFor());
+    const pidFile = path.join(
+      host.home,
+      '.server-data',
+      '.abc1230000000000000000000000000000000000.pid',
+    );
+    const serverPid = Number(readFileSync(pidFile, 'utf8').trim());
+    rmSync(pidFile);
+    return serverPid;
+  }
 
   describe('kill, uninstall and cleanup', () => {
     it('F-2411.BR-3: kill stops the server and removes bin/', () => {
@@ -36,14 +66,7 @@ describe('the POSIX bootstrap script', () => {
     });
 
     it('F-2411.BR-3: kill stops a server whose candidates find hands to grep in two batches, as it does past the argument limit', async () => {
-      runScript(host, single('install'), parametersFor());
-      runScript(host, single('start'), parametersFor());
-      const pidFile = path.join(
-        host.home,
-        '.server-data',
-        '.abc1230000000000000000000000000000000000.pid',
-      );
-      const serverPid = Number(readFileSync(pidFile, 'utf8').trim());
+      const serverPid = sweptServer();
       const batches = path.join(host.home, 'grep-batches');
       const findFile = path.join(host.tools, 'find');
       rmSync(findFile);
@@ -67,20 +90,18 @@ describe('the POSIX bootstrap script', () => {
       );
       chmodSync(findFile, 0o755);
       runScript(host, single('kill'), parametersFor());
-      // A signal returns before the process has exited: wait up to 5 s for it to be gone.
-      let alive = true;
-      for (let attempt = 0; attempt < 50 && alive; attempt++) {
-        try {
-          process.kill(serverPid, 0);
-          await new Promise(resolve => setTimeout(resolve, 100));
-        } catch {
-          alive = false;
-        }
-      }
+      const alive = await stillRunning(serverPid);
       deepStrictEqual(
         [readFileSync(batches, 'utf8').trim().split('\n').length, alive],
         [2, false],
       );
+    });
+
+    it('F-2411.BR-3: kill on a host without find still stops the server, its candidates read by one grep', async () => {
+      const serverPid = sweptServer();
+      rmSync(path.join(host.tools, 'find'));
+      runScript(host, single('kill'), parametersFor());
+      deepStrictEqual(await stillRunning(serverPid), false);
     });
 
     it('F-2411.7.E6: kill with nothing installed is Ok', () => {
