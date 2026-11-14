@@ -140,6 +140,26 @@ function passwordHostName(): string {
 }
 
 /**
+ * The server processes once the list has stopped changing: the same list on two reads half a second apart, for up to
+ * 15 s. The windows closed before it leave their server-side extension hosts exiting for a moment, and a child the
+ * server starts late joins the list, so a snapshot taken at once can differ from the one 2 s later with nothing
+ * uninstalled (#2569).
+ */
+async function settledServerProcesses(): Promise<number[]> {
+  let last = await serverProcesses();
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const next = await serverProcesses();
+    if (JSON.stringify(next) === JSON.stringify(last)) {
+      return next;
+    }
+    last = next;
+  }
+  return last;
+}
+
+/**
  * What tells a server process that appeared after a snapshot (a child the server starts late) from one the uninstall
  * left, for the failure of a row that compares two snapshots to name (#2569): each process that appeared or ended with
  * its parent, its age and its command line. Nothing when the two are the same.
@@ -667,7 +687,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       await openConnected('u1', INSTALL_MILLISECONDS);
       // The pick is asked only for a host with no `remotePlatform` entry; the window above needed one.
       await setting('remote.SSH.remotePlatform', undefined);
-      const servers = await serverProcesses();
+      const servers = await settledServerProcesses();
       const mark = await uninstallWith('local', [
         pickHost('harness'),
         platformAnswer('windows'),
