@@ -41,7 +41,7 @@ describe('probe: AI-on palette (card #2520)', function () {
       let offSeen: string;
       let offValues: Record<string, string>;
       try {
-        const items = (await paletteItems(off, 'SSH')).map(item => item.trim());
+        const items = (await paletteItems(off, 'Agent Sessions')).map(item => item.trim());
         offSeen = items.includes(SIDEBAR) ? 'Y' : `n${String(items.length)}`;
         offValues = valuesOf();
       } finally {
@@ -51,7 +51,7 @@ describe('probe: AI-on palette (card #2520)', function () {
       try {
         const seen: string[] = [];
         for (let read = 1; read <= 3; read += 1) {
-          const items = (await paletteItems(window, 'SSH')).map(item =>
+          const items = (await paletteItems(window, 'Agent Sessions')).map(item =>
             item.trim(),
           );
           seen.push(items.includes(SIDEBAR) ? 'Y' : `n${String(items.length)}`);
@@ -63,7 +63,7 @@ describe('probe: AI-on palette (card #2520)', function () {
         let afterReload = 'not needed';
         if (!seen.includes('Y')) {
           await reloadWindow(window);
-          const items = (await paletteItems(window, 'SSH')).map(item =>
+          const items = (await paletteItems(window, 'Agent Sessions')).map(item =>
             item.trim(),
           );
           afterReload = items.includes(SIDEBAR)
@@ -71,7 +71,7 @@ describe('probe: AI-on palette (card #2520)', function () {
             : `n${String(items.length)}`;
           if (afterReload !== 'Y') {
             await new Promise(resolve => setTimeout(resolve, 10_000));
-            const later = (await paletteItems(window, 'SSH')).map(item =>
+            const later = (await paletteItems(window, 'Agent Sessions')).map(item =>
               item.trim(),
             );
             afterReload += later.includes(SIDEBAR) ? '+Y10s' : '+n10s';
