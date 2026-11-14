@@ -35,6 +35,13 @@ const EXTERNAL = 'remote.SSH.externalSSH_ASKPASS';
 /** The buttons of the failure dialog of F-2601. */
 const BUTTONS = ['Retry', 'More Actions...', 'Close Remote'];
 
+/**
+ * The failure's text: ssh ends it with the methods the host's sshd still offers, and the harness's sshd offers both
+ * password and keyboard-interactive, whatever the client asks for, so the list has both (the spec's host offers one).
+ */
+const DENIED =
+  'Could not establish connection to "askpass-pw": Permission denied (password,keyboard-interactive).';
+
 /** What a window shows of VS Code inputs at the moment. */
 async function inputsShown(window: string): Promise<string[]> {
   const input = await inputBoxOf(window);
@@ -77,8 +84,7 @@ describe('the failures of a login through the user’s own askpass program (card
       {
         dialog: {
           message: '',
-          details:
-            'Could not establish connection to "askpass-pw": Permission denied (password).',
+          details: DENIED,
           buttons: BUTTONS,
         },
         inputs: [],
@@ -122,8 +128,7 @@ describe('the failures of a login through the user’s own askpass program (card
       {
         dialog: {
           message: '',
-          details:
-            'Could not establish connection to "askpass-pw": Permission denied (password).',
+          details: DENIED,
           buttons: BUTTONS,
         },
         inputs: [],
