@@ -9,9 +9,11 @@ import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
+  connectedWithin,
   hostPassword,
   hostPort,
   recordLines,
+  reloadWindow,
   variable,
 } from '../windows/harness.ts';
 import {
