@@ -330,6 +330,29 @@ describe('D2: the cancellation of the callers that share a list read', () => {
   });
 });
 
+describe('D2: a listener that throws (card #2515)', () => {
+  it('#2515: every listener is called when one throws, and the read still gives its rows', async () => {
+    let text = LIST;
+    const fake = fakeWsl(() => printing(text));
+    const inventory = createDistroInventory({
+      runner: createWslRunner(fake),
+      windowsBuild: undefined,
+    });
+    const called: string[] = [];
+    inventory.onDidChange(() => {
+      called.push('first');
+      throw new Error('the first listener fails');
+    });
+    inventory.onDidChange(() => {
+      called.push('second');
+    });
+    await inventory.distros({includeDockerDesktop: true}, NEVER);
+    text = LIST_WITH_DOCKER;
+    const second = await inventory.distros({includeDockerDesktop: true}, NEVER);
+    deepStrictEqual([called, second.kind], [['first', 'second'], 'rows']);
+  });
+});
+
 describe('D2: the online catalogue', () => {
   it('F-6102 (D2): gives the rows sorted by friendly name, from --list --online', async () => {
     const {inventory, fake} = inventoryOver({});

@@ -4,6 +4,7 @@
  * automount root.
  */
 
+import {posix} from 'node:path';
 import {
   distroToShare,
   parseWslpathOutput,
@@ -135,7 +136,11 @@ export function createPathMapper(runner: WslRunner): PathMapper {
       if (SHARE_FORM.test(answer.line)) {
         return {
           kind: 'mapped',
-          windowsPath: distroToShare(distro, linuxPath, shareHost),
+          windowsPath: distroToShare(
+            distro,
+            posix.normalize(linuxPath),
+            shareHost,
+          ),
         };
       }
       return DRIVE_FORM.test(answer.line) && !/\p{Cc}/u.test(answer.line)

@@ -223,7 +223,11 @@ export function createDistroInventory(
     previous = outcome.rows;
     if (changed) {
       for (const listener of [...listeners]) {
-        listener();
+        try {
+          listener();
+        } catch {
+          // A listener's failure is its own: the other listeners are called and the read still gives its rows.
+        }
       }
     }
     const rows = filterDockerDesktop(
