@@ -22,7 +22,7 @@ on:
       windows-launches:
         description: The launches of the Windows job, joined by commas; none skips the job
         type: string
-        default: containers-a,containers-b,containers-trust,local,remote
+        default: containers-a,containers-b,containers-trust,local,remote,wsl
       macos-launches:
         description: The launches of the macOS job, joined by commas; none skips the job
         type: string
@@ -43,7 +43,7 @@ jobs:
       run:
         shell: pwsh
     env:
-      LAUNCHES: ${{ inputs.windows-launches || 'containers-a,containers-b,containers-trust,local,remote' }}
+      LAUNCHES: ${{ inputs.windows-launches || 'containers-a,containers-b,containers-trust,local,remote,wsl' }}
       WSL_UTF8: '1'
     steps:
       # the host images and their scripts are built in the WSL engine from this checkout, so they keep the repository's
@@ -135,8 +135,20 @@ jobs:
           $rewritten = @(Select-String -Path $standInLog -SimpleMatch ' -> ').Count
           "The Windows launches ended with exit code ${launched}. Their containers rows reach the engine through tools/engine-stand-in.ts, a stand-in for Docker Desktop's engine endpoint (reading-2511-desktop-stand-in), which rewrote $rewritten bind sources to the distro's /mnt paths.`n" >> $env:GITHUB_STEP_SUMMARY
           exit $launched
+      # The wsl launch unregisters the two distros it imported when it ends, pass or fail, and the clean-up those of a
+      # killed run; the names come from wsl.exe, in UTF-8 since WSL_UTF8 is set.
+      - name: The wsl launch's own distros are gone
+        if: always()
+        run: |
+          $left = @(wsl -l -q | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ -like 'acceptance-*' })
+          if ($left.Count -gt 0) { "the launches left WSL distros: $($left -join ', ')"; exit 1 }
       - if: always()
         run: pnpm acceptance:clean
+      - name: No acceptance distro is left after the clean-up
+        if: always()
+        run: |
+          $left = @(wsl -l -q | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ -like 'acceptance-*' })
+          if ($left.Count -gt 0) { "the clean-up left WSL distros: $($left -join ', ')"; exit 1 }
 
   macos:
     if: github.event_name == 'schedule' || inputs.macos-launches != 'none'

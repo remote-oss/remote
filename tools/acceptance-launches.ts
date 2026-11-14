@@ -37,6 +37,11 @@ interface LaunchCommon {
   /** Whether the run starts its registry for this launch; its address is HARNESS_REGISTRY. */
   registry?: true;
   /**
+   * Whether the run imports its own WSL distros for this launch, one at WSL 2 and one at WSL 1, beside the installed
+   * one; their names are HARNESS_WSL_DISTROS. Only a Windows client can, and another refuses the launch.
+   */
+  wslDistros?: true;
+  /**
    * Whether the run publishes its templates into its registry and serves its template index for this launch; it starts
    * the registry too. The index is REMOTE_OSS_TEMPLATE_INDEX, and the registry as the templates name it
    * HARNESS_TEMPLATE_REGISTRY.
@@ -1143,6 +1148,15 @@ export function launchesOf(root: string): Launch[] {
         ...RENDERER_LAUNCH.settings,
         'remote.extensionKind': {'remote-oss.remote-wsl': ['web']},
       },
+    },
+    {
+      ...RENDERER_LAUNCH,
+      label: 'wsl',
+      suite: 'wsl',
+      files: ['distros.test.ts'],
+      withExtensions: ['remote-oss.remote-wsl'],
+      namedOnly: true,
+      wslDistros: true,
     },
     {
       ...RENDERER_LAUNCH,
