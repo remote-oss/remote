@@ -1099,6 +1099,21 @@ export function launchesOf(root: string): Launch[] {
         REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
       },
     },
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-agents-alone',
+      suite: 'ssh-agents',
+      disabledExtensions: ['remote-oss.remote-ssh'],
+      settings: {
+        'window.title': '[${rootName}]${remoteName}',
+        'window.dialogStyle': 'custom',
+        'chat.disableAIFeatures': true,
+      },
+      environment: {
+        HOME: '<run>/home-agents',
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+      },
+    },
     // Dev Containers beside Remote - SSH, in a window on the SSH host: the commands that edit a configuration where it lives.
     {
       ...RENDERER_LAUNCH,
