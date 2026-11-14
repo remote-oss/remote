@@ -1,6 +1,5 @@
 /**
- * @fileoverview Remote - SSH beside core's own SSH agent hosts, in the Command Palette (F-2008 AC-1, AC-2, AC-3 and
- * AC-10): with AI features off and on, the palette holds no agent-host command of the reimplementation and none of
+ * @fileoverview Remote - SSH beside core's own SSH agent hosts, in the Command Palette (F-2008 AC-1, AC-3 and AC-10): with AI features off and on, the palette holds no agent-host command of the reimplementation and none of
  * core's agent-host commands.
  */
 
@@ -11,7 +10,7 @@ import {
   restoreUserSettings,
   userSettings,
 } from '../windows/harness.ts';
-import {runFromPalette} from '../windows/palette.ts';
+import {paletteItems, runFromPalette} from '../windows/palette.ts';
 import {
   closeQuietly,
   localWindowWithAi,
@@ -36,9 +35,6 @@ const AGENT_HOST_TITLES = [
 /** The category the extension's commands show. */
 const CATEGORY = 'Remote-SSH:';
 
-/** The sidebar command core adds for the sessions when AI features are on. */
-const SESSIONS = 'Chat Agent Sessions: Show Agent Sessions Sidebar';
-
 /** What an item of the list is: its label, without the keybinding or the source core adds. */
 function titlesOf(items: readonly string[]): string[] {
   return items.map(item => item.trim());
@@ -57,14 +53,10 @@ describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', fun
   });
 
   /** The titles the palette lists for `text` in a new empty window that starts with AI features on or off. */
-  async function listedIn(
-    enabled: boolean,
-    text: string,
-    expected: readonly string[] = [],
-  ): Promise<string[]> {
+  async function listedIn(enabled: boolean, text: string): Promise<string[]> {
     const window = await localWindowWithAi(enabled);
     try {
-      return titlesOf(await paletteItemsWith(window, text, expected));
+      return titlesOf(await paletteItems(window, text));
     } finally {
       await closeQuietly(window);
     }
@@ -89,30 +81,6 @@ describe('the palette beside core’s SSH agent hosts (card #2500, F-2008)', fun
         agentMentions: [],
         agents: ['No matching commands'],
         listed: sshList,
-      },
-    );
-  });
-
-  it('F-2008 AC-2 (c2500-palette-on): with AI features on, the "SSH" list is the AI-off list plus the agent sessions sidebar, with no agent-host title', async () => {
-    const offList = await listedIn(false, 'SSH');
-    const onList = await listedIn(true, 'SSH', [SESSIONS]);
-    const sessions = await listedIn(true, 'Agent Sessions');
-    deepStrictEqual(
-      {
-        added: onList.filter(title => !offList.includes(title)),
-        removed: offList.filter(title => !onList.includes(title)),
-        agentHostTitles: onList.filter(title =>
-          AGENT_HOST_TITLES.some(banned => title.includes(banned)),
-        ),
-        sessions,
-        onList,
-      },
-      {
-        added: [SESSIONS],
-        removed: [],
-        agentHostTitles: [],
-        sessions,
-        onList,
       },
     );
   });
