@@ -16,6 +16,8 @@ import {
   restoreUserSettings,
   userSettings,
   variable,
+  windowEvents,
+  windowState,
 } from '../windows/harness.ts';
 import {
   notifications,
@@ -85,9 +87,47 @@ describe('when the SSH group reads its hosts again (card coverage-25c, part b)',
     rmSync(missing, {force: true});
     const window = await viewWindow('refresh-hidden');
     try {
+      const settingsAt = Date.now();
       await userSettings({'remote.SSH.configFile': config});
       await titleAction(window, VIEW, 'Refresh');
-      await listing(window, ['before-host']);
+      try {
+        await listing(window, ['before-host']);
+      } catch (error) {
+        const seconds = Math.round((Date.now() - settingsAt) / 1000);
+        const first = await hostLabels(window).catch(() => 'unreadable');
+        const state = await windowState(window).catch(() => 'unreachable');
+        const events = windowEvents(window).slice(-15);
+        console.log(
+          `AC-28: ${String(seconds)} s after the settings named the config file, the list stood at ` +
+            `${JSON.stringify(first)}, the window's state at ${JSON.stringify(state)} and its last events at ${JSON.stringify(events)}`,
+        );
+        const startedAt = Date.now();
+        let found = -1;
+        let last = first;
+        const seen: string[] = [];
+        for (;;) {
+          await pause(4_000);
+          if (found !== -1 || Date.now() - startedAt >= 120_000) {
+            break;
+          }
+          await titleAction(window, VIEW, 'Refresh').catch(
+            () => 'a failed Refresh',
+          );
+          last = await hostLabels(window).catch(() => 'unreadable');
+          const standing = JSON.stringify(last);
+          if (!seen.includes(standing)) {
+            seen.push(standing);
+          }
+          if (standing === JSON.stringify(['before-host'])) {
+            found = Math.round((Date.now() - startedAt) / 1000);
+          }
+        }
+        console.log(
+          `AC-28: a Refresh at least every 5 s for up to 120 s held the list at ${JSON.stringify(first)} first and ` +
+            `${JSON.stringify(last)} last, listing exactly before-host first at ${String(found)} s; its lists were ${JSON.stringify(seen)}`,
+        );
+        throw error;
+      }
       await inWindow(window, SHOW_FILE_EXPLORER);
       appendFileSync(config, 'Host added-hidden\n');
       await inWindow(window, SHOW_REMOTE_EXPLORER);
