@@ -2,6 +2,7 @@ import {
   commandsOf,
   settingIn,
   readUserSettings,
+  reloadWindow,
   restoreUserSettings,
 } from '../windows/harness.ts';
 import {paletteItems} from '../windows/palette.ts';
@@ -28,7 +29,7 @@ describe('probe: AI-on palette (card #2520)', function () {
       const window = await localWindowWithAi(true);
       try {
         const seen: string[] = [];
-        for (let read = 1; read <= 8; read += 1) {
+        for (let read = 1; read <= 3; read += 1) {
           const items = (await paletteItems(window, 'SSH')).map(item =>
             item.trim(),
           );
@@ -44,7 +45,7 @@ describe('probe: AI-on palette (card #2520)', function () {
           /AgentSessionsSidebar|showAgentSessions/i.test(commandId),
         );
         lines.push(
-          `#${String(attempt)} +${String(Date.now() - started)}ms off=${offSeen} on=${seen.join(',')} setting=${JSON.stringify(await settingIn(window, 'chat.disableAIFeatures'))} sidebarCommandRegistered=${JSON.stringify(registered)}`,
+          `#${String(attempt)} +${String(Date.now() - started)}ms off=${offSeen} on=${seen.join(',')} afterReload=${afterReload} setting=${JSON.stringify(await settingIn(window, 'chat.disableAIFeatures'))} sidebarCommandRegistered=${JSON.stringify(registered)}`,
         );
       } finally {
         await closeQuietly(window);
