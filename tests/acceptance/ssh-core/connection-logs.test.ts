@@ -199,6 +199,12 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
     const name = await freshWindow();
     try {
       await inWindow(name, 'opensshremotes.showLog');
+      // The panel's reveal and focus are renderer effects: wait for the focus to land before reading it.
+      await waitFor(
+        'the Output panel to hold the keyboard focus after Show Log',
+        () => outputPanelFocused(name),
+        15_000,
+      );
       await windowState(name);
       deepStrictEqual(
         {
