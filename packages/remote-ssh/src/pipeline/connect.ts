@@ -656,8 +656,8 @@ async function runSteps(
   }
   const {endpoint} = started.server;
   if (endpoint.kind === 'port') {
-    await quietly('the shared record', () =>
-      lease.storeSharedRecord({
+    await quietly('the shared record', async () => {
+      const stored = await lease.storeSharedRecord({
         remotePort: endpoint.port,
         operatingSystem: host.operatingSystem,
         architecture: host.architecture,
@@ -665,7 +665,14 @@ async function runSteps(
         connectionToken: started.server.connectionToken,
         agentLink: forwarding.agentLink,
         display: forwarding.display,
-      }),
+      });
+      options.logger.info(
+        `the shared record was ${stored ? 'stored' : 'declined by the connection'}`,
+      );
+    });
+  } else {
+    options.logger.info(
+      `no shared record is stored: the server's endpoint is a ${endpoint.kind}`,
     );
   }
   void quietly('the platform setting', () =>

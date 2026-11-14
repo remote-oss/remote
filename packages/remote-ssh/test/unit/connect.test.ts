@@ -1556,6 +1556,53 @@ describe('the connect pipeline, what it keeps and gives back', () => {
     );
   });
 
+  it('#2566: the log says whether the shared record was stored, declined by the connection, or not stored for a socket endpoint', async () => {
+    const lines: string[][] = [];
+    for (const behaviour of ['stored', 'declined', 'socket'] as const) {
+      const {recording, options, logSink} = setup();
+      await connect(
+        INPUT,
+        steps(recording, {
+          ...(behaviour === 'socket'
+            ? {
+                start: () =>
+                  Promise.resolve({
+                    ...STARTED,
+                    server: {
+                      ...STARTED.server,
+                      endpoint: {kind: 'socket', path: '/tmp/code-x'},
+                    },
+                  }),
+              }
+            : {}),
+          ...(behaviour === 'declined'
+            ? {
+                openConnection: () =>
+                  Promise.resolve({
+                    kind: 'done',
+                    value: {
+                      ...leaseOf(recording),
+                      storeSharedRecord: () => Promise.resolve(false),
+                    },
+                  }),
+              }
+            : {}),
+        }),
+        options,
+      );
+      lines.push(
+        logSink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('shared record')),
+      );
+    }
+    deepStrictEqual(lines, [
+      ['the shared record was stored'],
+      ['the shared record was declined by the connection'],
+      ["no shared record is stored: the server's endpoint is a socket"],
+    ]);
+  });
+
   it('goes on when the shared record cannot be stored', async () => {
     const {recording, options} = setup();
     const result = await connect(

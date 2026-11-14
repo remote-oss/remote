@@ -139,6 +139,67 @@ function passwordHostName(): string {
   );
 }
 
+/**
+ * The server processes once the list has stopped changing: the same list on two reads half a second apart, for up to
+ * 15 s. The windows closed before it leave their server-side extension hosts exiting for a moment, and a child the
+ * server starts late joins the list, so a snapshot taken at once can differ from the one 2 s later with nothing
+ * uninstalled (#2569).
+ */
+async function settledServerProcesses(): Promise<number[]> {
+  let last = await serverProcesses();
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const next = await serverProcesses();
+    if (JSON.stringify(next) === JSON.stringify(last)) {
+      break;
+    }
+    last = next;
+  }
+  snapshotListing = await hostListing();
+  return last;
+}
+
+/** The host's processes with their parent, age and command line, as `ps` lists them; none when it cannot be read. */
+async function hostListing(): Promise<string[]> {
+  try {
+    return (await onHost('ps', '-o', 'pid,ppid,etime,args')).split('\n');
+  } catch {
+    return [];
+  }
+}
+
+/** The host's processes as they were when the last settled snapshot was taken, which names a process that ended since. */
+let snapshotListing: string[] = [];
+
+/** The line of `listing` for process `processId`, or `gone` when it holds none. */
+function lineOf(listing: readonly string[], processId: number): string {
+  return (
+    listing
+      .find(line => line.trim().startsWith(`${String(processId)} `))
+      ?.trim() ?? 'gone'
+  );
+}
+
+/**
+ * What tells a server process that appeared after a snapshot (a child the server starts late) from one that ended
+ * (an extension host still exiting), for the failure of a row that compares two snapshots to name (#2569): each
+ * process that appeared, as the host lists it now, and each that ended, as it was listed with the snapshot, with its
+ * parent, age and command line. Nothing when the two are the same.
+ */
+async function processFacts(
+  before: readonly number[],
+  after: readonly number[],
+): Promise<string | undefined> {
+  const appeared = after.filter(processId => !before.includes(processId));
+  const ended = before.filter(processId => !after.includes(processId));
+  if (appeared.length === 0 && ended.length === 0) {
+    return undefined;
+  }
+  const now = await hostListing();
+  return `processes that appeared since the snapshot, listed now: ${JSON.stringify(appeared.map(processId => `${String(processId)} -> ${lineOf(now, processId)}`))}; processes that ended, listed with the snapshot: ${JSON.stringify(ended.map(processId => `${String(processId)} -> ${lineOf(snapshotListing, processId)}`))}`;
+}
+
 describe('Uninstall VS Code Server (card coverage-40)', function () {
   this.timeout(900_000);
 
@@ -636,20 +697,22 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       await openConnected('u1', INSTALL_MILLISECONDS);
       // The pick is asked only for a host with no `remotePlatform` entry; the window above needed one.
       await setting('remote.SSH.remotePlatform', undefined);
-      const servers = await serverProcesses();
+      const servers = await settledServerProcesses();
       const mark = await uninstallWith('local', [
         pickHost('harness'),
         platformAnswer('windows'),
       ]);
       await new Promise(resolve => setTimeout(resolve, 2000));
+      const observed = await serverProcesses();
       deepStrictEqual(
         [
           servers.length > 0,
           surfacesSince(mark, 'local'),
-          await serverProcesses(),
+          observed,
           await existsOnHost(DATA_FOLDER),
         ],
         [true, ['hostPick', 'platformPick'], servers, true],
+        await processFacts(servers, observed),
       );
       await closeAllButLocal();
     });
