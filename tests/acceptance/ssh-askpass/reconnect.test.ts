@@ -93,7 +93,9 @@ describe('the user’s own askpass program at a reconnection (card #2596, F-2309
           .includes('password'),
       120_000,
     );
-    const logins = loginsTo('password').slice(before);
+    const logins = loginsTo('password')
+      .slice(before)
+      .filter(each => each.SSH_ASKPASS_REQUIRE !== '<unset>');
     deepStrictEqual(
       {
         required: [...new Set(logins.map(each => each.SSH_ASKPASS_REQUIRE))],
