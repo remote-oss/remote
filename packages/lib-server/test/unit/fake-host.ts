@@ -34,6 +34,7 @@ const REAL_TOOLS = [
   'cut',
   'date',
   'dirname',
+  'find',
   'grep',
   'gzip',
   'head',
