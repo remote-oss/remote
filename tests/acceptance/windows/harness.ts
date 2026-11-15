@@ -2016,7 +2016,7 @@ function canonicalJson(value: unknown): string {
  * only that the user's settings hold a value for it (or none for `undefined`) as the window reads them. The failure
  * names the key, the value written and, for `window`, the value read.
  */
-async function readBackOfSetting(
+export async function readBackOfSetting(
   key: string,
   value: unknown,
   readBack: 'window' | 'file',
