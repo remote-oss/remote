@@ -32,6 +32,7 @@ import {
   clickDialogButton,
   clickRowLabel,
   chooseSettingOption,
+  dialogOf,
   hoverRow,
   notifications,
   pressControlAltF,
@@ -1030,8 +1031,20 @@ describe('the recent folders under a target (card coverage-122)', function () {
       const beforeClear = (await folderRowsOf(window, 'harness')).map(
         each => each.description,
       );
-      await inWindow(window, 'workbench.action.clearRecentFiles');
+      // The clear stands core's confirmation dialog, and the command finishes only once it is answered: start it
+      // without waiting, answer, then wait for the command's done before the refresh.
+      await startInWindow(window, 'workbench.action.clearRecentFiles');
       await clickDialogButton(window, 'Clear');
+      await waitFor(
+        `the clear of window ${window} to finish`,
+        () =>
+          windowEvents(window).some(
+            each =>
+              each.event === 'done' &&
+              each.message === 'workbench.action.clearRecentFiles',
+          ),
+        120_000,
+      );
       await titleAction(window, VIEW, REFRESH);
       const afterClear = (await folderRowsOf(window, 'harness')).map(
         each => each.description,
@@ -1041,6 +1054,10 @@ describe('the recent folders under a target (card coverage-122)', function () {
         [true, true, beforeClear, beforeClear],
       );
     } finally {
+      // A failed assertion before the answer would leave the dialog up, and the close would queue behind it.
+      if ((await dialogOf(window)) !== undefined) {
+        await pressEscape(window);
+      }
       await closeWindow(window);
     }
   });
@@ -1332,10 +1349,12 @@ describe('the recent folders under a target (card coverage-122)', function () {
     const window = await viewWindowIn('c122-set');
     const saved = readUserSettings();
     try {
+      // The @ext: filter takes the extension's id, not the publisher: the settings editor shows the
+      // extension's own settings under it.
       await inWindow(
         window,
         'workbench.action.openSettings',
-        '@ext:remote-oss',
+        '@ext:remote-oss.remote-explorer',
       );
       try {
         await waitFor(

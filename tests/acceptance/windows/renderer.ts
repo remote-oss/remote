@@ -628,6 +628,8 @@ export async function viewRows(
             level: Number(row.getAttribute('aria-level')),
             // null across the protocol: a row without the attribute is not expanded.
             expanded: row.hasAttribute('aria-expanded') ? row.getAttribute('aria-expanded') === 'true' : null,
+            // The list's own index of the row: the virtualised list puts it on every row it renders.
+            index: Number(row.getAttribute('data-index')),
           }));
       const overflow = [...pane.querySelectorAll('*')].filter(el =>
         el.scrollHeight > el.clientHeight + 1 &&
@@ -637,18 +639,20 @@ export async function viewRows(
         overflow.every(other => other === el || !other.contains(el))
       );
       if (list === undefined) {
-        return read();
+        return read().map(({index, ...row}) => row);
       }
       const seen = new Map();
       const order = [];
       const collect = () => {
         for (const row of read()) {
-          const key = String(row.level) + ':' + row.label;
-          // The first reading wins: the read starts at the list's top, so a header the scrolled view
-          // pins again keeps the values of its first reading.
-          if (!seen.has(key)) {
-            order.push(key);
-            seen.set(key, row);
+          // The key is the list's own index of the row, not its level and label: two rows of one
+          // level and label are two rows of the list, and the level and label alone would merge
+          // them. The first reading wins: the read starts at the list's top, so a header the
+          // scrolled view pins again keeps the values of its first reading.
+          const {index, ...body} = row;
+          if (!seen.has(index)) {
+            order.push(index);
+            seen.set(index, body);
           }
         }
       };
