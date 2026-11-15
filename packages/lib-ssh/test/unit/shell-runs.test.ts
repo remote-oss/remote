@@ -8,6 +8,7 @@ import {
   type ShellRun,
   ShellRuns,
 } from '../../src/connection-server/shell-runs.ts';
+import {powershellCommandsFor} from '../../src/connection-server/powershell-session.ts';
 
 const SCRIPT: ShellRun = {
   script: 'echo hello',
@@ -49,6 +50,7 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
     runs = new ShellRuns({
       write: text => written.push(text),
       scheduler: clock.scheduler(),
+      interpreter: 'posixShell',
       newMarker: () => {
         markers += 1;
         return `m${String(markers)}`;
@@ -57,6 +59,19 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
         wedged += 1;
       },
     });
+  });
+
+  it('F-2701 5.0 step 5: a session of PowerShell writes each run as the loop reads it', () => {
+    const written: string[] = [];
+    const powershellRuns = new ShellRuns({
+      write: text => written.push(text),
+      scheduler: clock.scheduler(),
+      interpreter: 'powershell',
+      newMarker: () => 'p1',
+      onWedged: () => undefined,
+    });
+    void powershellRuns.execute(SCRIPT, () => undefined);
+    deepStrictEqual(written, [powershellCommandsFor('p1', SCRIPT)]);
   });
 
   describe('the commands of a run', () => {

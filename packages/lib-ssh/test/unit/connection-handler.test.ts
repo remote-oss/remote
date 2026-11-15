@@ -70,6 +70,7 @@ describe('connection handler (contracts §4 S9)', () => {
         displayHost: 'h.invalid',
         firstMessageMilliseconds: 5000,
       },
+      interpreter: 'posixShell',
       newMarker: () => {
         markers += 1;
         return `m${String(markers)}`;

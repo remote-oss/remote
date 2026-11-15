@@ -143,6 +143,7 @@ export function connectionRequestOf(
           displayHost: hostAlias(input.target),
           externalAskpass: settings.externalAskpass && userAskpass !== '',
           askpassFirstMessageMilliseconds: DEFAULT_FIRST_MESSAGE_MILLISECONDS,
+          hostPlatform: terms.platform,
         },
       };
     },
@@ -170,8 +171,13 @@ export function installRequestOf(
   connectWait: ConnectWaitSettings,
 ): SshRequest {
   const {remoteProgram} = connectionStart(
-    sessionStartFor(connectWait, goesOnAfterLoginTimeout(terms)),
+    sessionStartFor(
+      connectWait,
+      goesOnAfterLoginTimeout(terms),
+      terms.platform,
+    ),
     terms.remoteCommandInEffect,
+    terms.platform,
   );
   return {
     ...runBaseOf(input, terms, state, settings, environment),
