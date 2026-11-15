@@ -27,7 +27,9 @@ const GRACE = 'remote.SSH.reconnectionGraceTime';
 
 /** The process ids of the host's processes whose command line holds `pattern`, none when no process does. */
 async function processesOf(pattern: string): Promise<string[]> {
-  return (await onHost('pgrep', '-u', 'harness', '-f', pattern).catch(() => ''))
+  return (
+    await onHost('pgrep', '-u', 'harness', '-f', '--', pattern).catch(() => '')
+  )
     .split('\n')
     .filter(line => line !== '');
 }
