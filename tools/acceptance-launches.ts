@@ -42,6 +42,12 @@ interface LaunchCommon {
    */
   wslDistros?: true;
   /**
+   * Whether the launch's windows open the run's Windows SSH host, the alias `winhost`: Windows' OpenSSH Server on
+   * 127.0.0.1, which the platform workflow's Windows job starts and passes as HARNESS_WINHOST_*. Only a Windows client
+   * has it, and another refuses the launch.
+   */
+  windowsHost?: true;
+  /**
    * Whether the launch's Remote - SSH runs the pinned OpenSSH client (`tools/install-openssh`) through
    * `remote.SSH.path`, which its settings name as `${HARNESS_SSH_CLIENT}`: the run builds the client once and passes its
    * path as HARNESS_SSH_CLIENT, and a run that cannot build it refuses the launch.
@@ -1307,6 +1313,19 @@ export function launchesOf(root: string): Launch[] {
       withExtensions: ['remote-oss.remote-wsl'],
       namedOnly: true,
       wslDistros: true,
+    },
+    // A Windows SSH host: the platform workflow's Windows job runs Windows' OpenSSH Server on 127.0.0.1, and the
+    // launch's windows open it as `winhost`, its platform known so no pick is asked.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'windows-host',
+      suite: 'windows-host',
+      namedOnly: true,
+      windowsHost: true,
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.SSH.remotePlatform': {winhost: 'windows'},
+      },
     },
     {
       ...RENDERER_LAUNCH,

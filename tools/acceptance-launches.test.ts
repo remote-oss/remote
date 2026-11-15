@@ -147,6 +147,7 @@ function labelsFromExplorer(): string[] {
     'wsl-linux',
     'wsl-linux-web',
     'wsl',
+    'windows-host',
     'wsl-linux-standdown',
     'explorer',
     'explorer-alone',
@@ -445,6 +446,7 @@ describe('the launches of the VSCodium run', () => {
         ['wsl-linux', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl-linux-web', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl', ['remote-oss.remote-wsl'], true, undefined],
+        ['windows-host', undefined, true, undefined],
         ['wsl-linux-standdown', ['remote-oss.remote-wsl'], true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
         [
@@ -1088,6 +1090,7 @@ describe('the launches of the VSCodium run', () => {
         'socket-prime',
         'cli-path',
         'wsl',
+        'windows-host',
         'containers-podman',
         'ports-reuse-prime',
         'install-install-present-prime',

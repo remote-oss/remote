@@ -139,6 +139,7 @@ import {
   writeStandIns,
 } from './acceptance-plain.ts';
 import {knownRedsJudge} from './known-reds.ts';
+import {windowsHostBlock} from './acceptance-windows-host.ts';
 import {
   isMainModule,
   REPOSITORY_ROOT,
@@ -397,6 +398,8 @@ export interface HarnessDependencies {
   ) => Promise<RunWslDistros>;
   /** The pinned OpenSSH client's path, built once (tools/install-openssh), for a launch with `sshClient: 'pinned'`. */
   pinnedSshClient: () => string;
+  /** The `winhost` block of the run's ssh_config for the Windows SSH host of the platform workflow, on a Windows client only. */
+  windowsHostBlock: (runFolder: string) => Promise<string>;
   /** Publishes the run's templates into the registry at `address` and writes the run's index; the run's dev container image names its `mini` template; gives the templates' registry. */
   prepareTemplates: (
     root: string,
@@ -1265,6 +1268,9 @@ async function prepare(
       controlFolderOf(runFolder),
     ),
   );
+  if (chosen.some(launch => launch.windowsHost === true)) {
+    appendFileSync(configFile, await dependencies.windowsHostBlock(runFolder));
+  }
   writeUserSettings(runFolder, configFile);
   await waitForHost(dependencies, configFile);
   // A launch whose window connects to a host of another base gets that host beside the run's, one per base, with the
@@ -2933,6 +2939,12 @@ if (isMainModule(import.meta.url)) {
             MINIROOTFS,
             url => downloadWithRetry(url),
             console.error.bind(console),
+          ),
+        windowsHostBlock: runFolder =>
+          windowsHostBlock(
+            process.env,
+            process.platform,
+            path.join(runFolder, 'known_hosts'),
           ),
         pinnedSshClient: () =>
           pinnedSshClient(
