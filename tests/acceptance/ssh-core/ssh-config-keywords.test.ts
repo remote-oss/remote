@@ -151,7 +151,7 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
       [
         'Could not establish connection to "c2593-quiet-cipher".',
         FAILURE_BUTTONS,
-        'Disconnected from SSH: c2593-quiet-cipher',
+        'Disconnected from SSH',
         [],
         true,
         true,
@@ -204,7 +204,7 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
         255,
         'Could not establish connection to "c2593-revoked".',
         FAILURE_BUTTONS,
-        'Disconnected from SSH: c2593-revoked',
+        'Disconnected from SSH',
         [],
         true,
       ],

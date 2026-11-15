@@ -445,7 +445,8 @@ describe('the tunnel of a window that its host or its configuration refuses (car
             'Could not establish connection to "fwd-busy-exit".',
             BUTTONS,
             true,
-            'Disconnected from SSH: fwd-busy-exit',
+            // fwd-busy-exit has not connected in this profile yet, so core shows no host.
+            'Disconnected from SSH',
           ],
         );
       });
@@ -603,6 +604,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
           [
             'Could not establish connection to "fwd-busy-exit".',
             BUTTONS,
+            // c79-exit-busy-second connected fwd-busy-exit's server, so core holds its label from then on.
             'Disconnected from SSH: fwd-busy-exit',
           ],
         );
