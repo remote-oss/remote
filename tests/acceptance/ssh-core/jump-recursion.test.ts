@@ -46,12 +46,19 @@ async function sshOf(alias: string): Promise<string[]> {
 }
 
 /** How many ssh processes the wrapper lets an attempt start before it holds the next ones. */
-const BLOCK_AFTER = 6;
+const BLOCK_AFTER = 2;
 
-/** The ssh processes of `alias` that are left once they had ten seconds to end: none, when the attempt ended them. */
-async function waitUntilNone(alias: string): Promise<string[]> {
+/** The ssh processes of `alias` that are left once they had `seconds` to end: none, when the attempt ended them. */
+async function waitUntilNone(
+  alias: string,
+  seconds: number,
+): Promise<string[]> {
   let left = await sshOf(alias);
-  for (let attempt = 0; attempt < 20 && left.length > 0; attempt += 1) {
+  for (
+    let attempt = 0;
+    attempt < seconds * 2 && left.length > 0;
+    attempt += 1
+  ) {
     await new Promise(resolve => setTimeout(resolve, 500));
     left = await sshOf(alias);
   }
@@ -71,9 +78,10 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
   });
 
   /**
-   * The attempt of `mode` over the recursing configuration. With `blocking`, the wrapper holds every ssh it is asked to
-   * start after `BLOCK_AFTER` and the window is closed while they are held; otherwise it fails them, and the attempt
-   * ends with the dialog. Either way, no ssh process of the attempt is left.
+   * The attempt of `mode` over the recursing configuration. With `blocking`, the wrapper holds the ssh it is asked to
+   * start after `BLOCK_AFTER`, as a `sleep` with a marker in its arguments, so a chain of ssh processes is alive when
+   * the attempt ends with its dialog; otherwise it fails them after `START_LIMIT`. Either way, no ssh process of the
+   * attempt is left, and the held ones are ended at the row's end whatever its outcome.
    */
   async function recursionOf(
     mode: 'server' | 'terminal',
@@ -82,6 +90,7 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
   ): Promise<void> {
     const alias = `c2664-${mode}${blocking ? '-held' : ''}`;
     const jump = `jump-${alias}`;
+    const marker = `held-${alias}`;
     const runFolder = variable('HARNESS_RUN_FOLDER');
     const binFolder = path.join(runFolder, `ssh-path-${alias}`);
     const starts = path.join(runFolder, `ssh-starts-${alias}`);
@@ -96,7 +105,7 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
         `PATH="${binFolder}:$PATH"; export PATH`,
         `started=$(ls "${starts}" | wc -l)`,
         blocking
-          ? `if [ "$started" -ge ${String(BLOCK_AFTER)} ]; then exec -a "ssh held ${alias}" sleep 600; fi`
+          ? `if [ "$started" -ge ${String(BLOCK_AFTER)} ]; then exec -a "ssh-${marker}" sleep 600; fi`
           : `if [ "$started" -ge ${String(START_LIMIT)} ]; then echo "fork: Resource temporarily unavailable" >&2; exit 255; fi`,
         `: > "${starts}/$$"`,
         `exec -a ssh "${real}" "$@"`,
@@ -129,17 +138,6 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
     appendScript(dismissals(alias));
     await openWindow(alias, alias);
     try {
-      if (blocking) {
-        await waitFor(
-          'a held ssh',
-          async () => (await sshOf(alias)).some(line => line.includes('held')),
-          120_000,
-        );
-        await closeWindow(alias);
-        const left = await waitUntilNone(alias);
-        deepStrictEqual(left, []);
-        return;
-      }
       await waitFor(
         'the failure dialog',
         () =>
@@ -149,7 +147,11 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
       const dialog = recordLines('failureDialog', alias).find(
         line => line.time >= mark,
       );
-      const left = await waitUntilNone(alias);
+      if (blocking) {
+        deepStrictEqual(await waitUntilNone(alias, 5), []);
+        return;
+      }
+      const left = await waitUntilNone(alias, 10);
       deepStrictEqual(
         {
           question: dialog?.question,
@@ -164,6 +166,7 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
       );
     } finally {
       await closeWindow(alias).catch(() => undefined);
+      await execFileAsync('pkill', ['-f', '--', marker]).catch(() => undefined);
     }
   }
 
@@ -175,11 +178,11 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
     await recursionOf('terminal', {'remote.SSH.useLocalServer': false}, false);
   });
 
-  it('F-2310 AC-32 (c2664-held-server): in the local-server mode, when the recursion holds its ssh processes and the window is closed, no ssh process of the attempt stays', async () => {
+  it('card #2664 (c2664-held-chain-server): in the local-server mode, when the attempt ends with its chain of ssh processes alive, none of them is left within 5 s of the dialog', async () => {
     await recursionOf('server', {}, true);
   });
 
-  it('F-2310 AC-32 (c2664-held-terminal): in the terminal mode, when the recursion holds its ssh processes and the window is closed, no ssh process of the attempt stays', async () => {
+  it('card #2664 (c2664-held-chain-terminal): in the terminal mode, when the attempt ends with its chain of ssh processes alive, none of them is left within 5 s of the dialog', async () => {
     await recursionOf('terminal', {'remote.SSH.useLocalServer': false}, true);
   });
 });
