@@ -41,6 +41,7 @@ import {
   pressSpace,
   quickPickFacts,
   quickPickRows,
+  rememberPage,
   rowAction,
   rowContextMenu,
   rowContextMenuByKey,
@@ -1651,6 +1652,9 @@ describe('the recent folders under a target (card coverage-122)', function () {
       await foldersSettled(window, 'harness', [target], `${HOME}/c122-es-`);
       const before = windowNames();
       const historyBefore = await historyOf(driver);
+      // The new window is folder-less on the host, so its page is titled like the driver's; remembering the driver's
+      // page leaves the new window's page the one left among the titles it matches.
+      await rememberPage(driver);
       await inWindow(
         driver,
         'acceptance.agent.openWindow',
@@ -2059,6 +2063,9 @@ describe('the recent folders under a target (card coverage-122)', function () {
         },
         {hostKey: 'harness', entries: [{path: reachable, kind: 'folder'}]},
       ]);
+      // The relaunch stood the launch's own window on a new page, and the recovered one comes back folder-less beside
+      // it; remembering the launch's own page now leaves the recovered window's page the one left among the '[]' pages.
+      await rememberPage(driver);
       await userSettings({'window.dialogStyle': 'custom'});
       await titleAction(window, VIEW, REFRESH);
       await foldersSettled(window, 'nowhere', [first, second], `${HOME}/c122-`);
@@ -2102,33 +2109,9 @@ describe('the recent folders under a target (card coverage-122)', function () {
       );
       const recovered = await comesLocal();
       await inWindow(recovered, 'workbench.view.remote');
-      try {
-        await titleAction(recovered, VIEW, REFRESH);
-        await foldersSettled(
-          recovered,
-          'harness',
-          [reachable],
-          `${HOME}/c122-`,
-        );
-        await rowAction(recovered, VIEW, 'c122-un-c', CURRENT);
-      } catch (caught) {
-        // An ambiguous page ask names the open windows and their authorities, so a stray folder-less window
-        // is told from the recovered one standing twice in the page list.
-        const openNames = windowNames().filter(name => isOpen(name));
-        const authorities = await Promise.all(
-          openNames.map(
-            async name =>
-              `${name}:${
-                (await windowState(name).catch(() => undefined))
-                  ?.remoteAuthority ?? 'unreadable'
-              }`,
-          ),
-        );
-        throw new Error(
-          `${String(caught)}; the open windows are ${JSON.stringify(openNames)} with authorities ${JSON.stringify(authorities)}`,
-          {cause: caught},
-        );
-      }
+      await titleAction(recovered, VIEW, REFRESH);
+      await foldersSettled(recovered, 'harness', [reachable], `${HOME}/c122-`);
+      await rowAction(recovered, VIEW, 'c122-un-c', CURRENT);
       await waitFor(
         `window ${recoveredName} to stand on ssh-remote+harness`,
         async () =>
