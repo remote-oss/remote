@@ -221,7 +221,17 @@ async function typedHidden(
 ): Promise<{answer: string; theTypedTextShows: boolean}> {
   await untilText(window, 'code > ');
   await typeInTerminal(window, 'SECRET7\n');
-  await until('the command to write its answer', () => answerWritten(answer));
+  await until('the command to write its answer', () =>
+    answerWritten(answer),
+  ).catch(async (caught: unknown) => {
+    const held = existsSync(answer)
+      ? `holds ${JSON.stringify(readFileSync(answer, 'utf8'))}`
+      : 'does not exist';
+    throw new Error(
+      `${String(caught)}; the answer file ${held}; the terminal shows ${JSON.stringify((await terminalText(window)).slice(-300))}`,
+      {cause: caught},
+    );
+  });
   return {
     answer: readFileSync(answer, 'utf8'),
     theTypedTextShows: (await terminalText(window)).includes('SECRET7'),
