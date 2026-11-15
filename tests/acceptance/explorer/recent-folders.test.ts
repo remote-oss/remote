@@ -989,7 +989,10 @@ describe('the recent folders under a target (card coverage-122)', function () {
     this.timeout(600_000);
     const window = await viewWindowIn('c122-core');
     const target = `${HOME}/c122-core-a`;
+    const saved = readUserSettings();
     try {
+      // The clear stands core's confirmation dialog, so stand the custom dialog the reader can see.
+      await userSettings({'window.dialogStyle': 'custom'});
       await recordVisit('harness', target, 'c122-core-a');
       await titleAction(window, VIEW, REFRESH);
       await foldersSettled(window, 'harness', [target], `${HOME}/c122-core-`);
@@ -1032,8 +1035,9 @@ describe('the recent folders under a target (card coverage-122)', function () {
         each => each.description,
       );
       // The clear stands core's confirmation dialog, and the command finishes only once it is answered: start it
-      // without waiting, answer, then wait for the command's done before the refresh.
+      // without waiting, wait for the dialog to stand and answer it, then wait for the command's done before refresh.
       await startInWindow(window, 'workbench.action.clearRecentFiles');
+      await waitForDialog(window, 60_000);
       await clickDialogButton(window, 'Clear');
       await waitFor(
         `the clear of window ${window} to finish`,
@@ -1058,6 +1062,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
       if ((await dialogOf(window)) !== undefined) {
         await pressEscape(window);
       }
+      restoreUserSettings(saved);
       await closeWindow(window);
     }
   });
@@ -1403,9 +1408,9 @@ describe('the recent folders under a target (card coverage-122)', function () {
           written,
         ],
         [
-          'Remote-explorer: Folders Sort Order (Applies to all profiles)',
+          'Remote-explorer: Folders Sort Order(Applies to all profiles)',
           'Specifies the order in which to display folders under Remote targets in the Remote Explorer.',
-          'Remote-explorer: Collapse Recent Folders (Applies to all profiles)',
+          'Remote-explorer: Collapse Recent Folders(Applies to all profiles)',
           'Collapse the recent folders under Remote targets in the Remote Explorer.',
           true,
           true,
