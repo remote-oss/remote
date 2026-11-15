@@ -270,6 +270,30 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
     );
   });
 
+  it('F-2308.AC-11: in a terminal, the timeout text of a line a question wrote gives no timeout reason', () => {
+    deepStrictEqual(
+      classifyRun(
+        ['Proceed? Connection timed out during banner exchange'],
+        255,
+        'connection',
+        'terminal',
+      ),
+      classifyRun([], 255, 'connection', 'terminal'),
+    );
+  });
+
+  it("F-2105.AC-16: in a terminal, ssh's own connect-to-host timeout line names its reason", () => {
+    deepStrictEqual(
+      classifyRun(
+        ['ssh: connect to host h port 22: Connection timed out'],
+        255,
+        'connection',
+        'terminal',
+      ),
+      offline('timeout', 'S137'),
+    );
+  });
+
   it('F-2105.AC-14: the other-case text gives no timeout reason', () => {
     deepStrictEqual(
       classifyRun(

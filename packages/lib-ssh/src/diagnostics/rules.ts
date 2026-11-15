@@ -1,9 +1,9 @@
 /**
  * @fileoverview The forms `ssh` writes on its error output that the classifier recognises, and what each one means.
  * A form is a regular expression anchored at the start of a line: a text in the middle of a line, such as remote text a
- * startup file prints, is not ssh's message. The two timeout forms are the exception: a reason comes from ssh's error
- * text containing the exact, case-sensitive "Connection timed out" or "Operation timed out" anywhere in a line, so
- * those two match the contained text.
+ * startup file prints, is not ssh's message. The two timeout forms are the exception in the shared server's stream,
+ * where the exact, case-sensitive timeout text counts wherever it stands in a line; in a terminal's stream only the
+ * anchored forms count, because that stream also carries what a question or a proxy command wrote.
  */
 
 /** A failure kind, closed: every failure maps to exactly one. */
@@ -52,6 +52,9 @@ export type DiagnosticStringId =
   | 'S142'
   | 'S150';
 
+/** How the connection runs: through the shared local connection server, or in a terminal of its own. */
+export type ConnectionMode = 'shared' | 'terminal';
+
 /** A network form and the reason it gives, in priority order: when several match, the first listed wins. */
 export interface NetworkRule {
   pattern: RegExp;
@@ -67,47 +70,58 @@ function connectError(text: string): RegExp {
   return new RegExp(`^${OWN_PREFIX}connect to host \\S+ port \\d+: ${text}$`);
 }
 
-/** The network forms, highest priority first, whatever the order of the lines. */
-export const NETWORK_RULES: readonly NetworkRule[] = [
-  {
-    pattern: connectError('Network is unreachable'),
-    kind: 'unreachable',
-    reason: 'S094',
-  },
-  {
-    pattern: new RegExp(`^${OWN_PREFIX}Could not resolve hostname \\S+: `),
-    kind: 'unreachable',
-    reason: 'S032',
-  },
-  {
-    pattern:
-      /^(?:scp: )?(?:ssh: connect to host \S+ port \d+: )?The process tried to write to a nonexistent pipe/,
-    kind: 'unreachable',
-    reason: 'S142',
-  },
-  // The timeout text counts anywhere in the line, case-sensitive - not only the anchored "connect to host" line, so
-  // "Connection timed out during banner exchange" gives the reason too.
-  {
-    pattern: /Connection timed out/,
-    kind: 'timeout',
-    reason: 'S137',
-  },
-  {
-    pattern: /Operation timed out/,
-    kind: 'timeout',
-    reason: 'S140',
-  },
-  {
-    pattern: connectError('No route to host'),
-    kind: 'unreachable',
-    reason: 'S097',
-  },
-  {
-    pattern: connectError("Can't assign requested address"),
-    kind: 'unreachable',
-    reason: 'S014',
-  },
-];
+/**
+ * The network forms, highest priority first, whatever the order of the lines. The two timeout forms match the
+ * contained text only in the shared server's stream, where ssh appends them to more than one diagnostic; in a
+ * terminal's stream a question or a proxy command can write the same text in its own line, so only the anchored
+ * `connect to host` form gives the reason there.
+ */
+export function networkRules(mode: ConnectionMode): readonly NetworkRule[] {
+  return [
+    {
+      pattern: connectError('Network is unreachable'),
+      kind: 'unreachable',
+      reason: 'S094',
+    },
+    {
+      pattern: new RegExp(`^${OWN_PREFIX}Could not resolve hostname \\S+: `),
+      kind: 'unreachable',
+      reason: 'S032',
+    },
+    {
+      pattern:
+        /^(?:scp: )?(?:ssh: connect to host \S+ port \d+: )?The process tried to write to a nonexistent pipe/,
+      kind: 'unreachable',
+      reason: 'S142',
+    },
+    {
+      pattern:
+        mode === 'terminal'
+          ? connectError('Connection timed out')
+          : /Connection timed out/,
+      kind: 'timeout',
+      reason: 'S137',
+    },
+    {
+      pattern:
+        mode === 'terminal'
+          ? connectError('Operation timed out')
+          : /Operation timed out/,
+      kind: 'timeout',
+      reason: 'S140',
+    },
+    {
+      pattern: connectError('No route to host'),
+      kind: 'unreachable',
+      reason: 'S097',
+    },
+    {
+      pattern: connectError("Can't assign requested address"),
+      kind: 'unreachable',
+      reason: 'S014',
+    },
+  ];
+}
 
 /**
  * The other forms the classifier looks for, each anchored at the start of a line. A line is read after one trailing
