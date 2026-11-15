@@ -202,6 +202,7 @@ describe('Add New SSH Host and the server maintenance commands (card coverage-30
     }, 25);
     try {
       await openConnected('mt1');
+      throw new Error('forced for the proof');
     } catch (caught) {
       throw new Error(
         `${String(caught)}\n${await hookFacts(began, changes, trail)}`,
