@@ -1,10 +1,16 @@
 /**
- * @fileoverview The forwards of a connection: once core has the connection, one tunnel is opened per declared forward
- * over core's own tunnel service, and a notice is shown for each entry that starts with a dash. A tunnel that cannot be
- * opened is logged and dropped; nothing is shown for it.
+ * @fileoverview The forwards of a connection: once core has the connection, a notice is shown for each entry that
+ * starts with a dash, and once the port attributes the connection wrote are in effect in the window, one tunnel is
+ * opened per declared forward over core's own tunnel service. A tunnel that cannot be opened is logged and dropped;
+ * nothing is shown for it.
  */
 
+import type {Scheduler} from 'lib-helper';
 import type {Logger} from 'lib-log';
+import {
+  untilAttributesInEffect,
+  type AttributeEvents,
+} from './attributes-in-effect.ts';
 import {filled} from '../surfaces/filled.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {
@@ -31,13 +37,19 @@ export interface ForwarderPorts {
   tunnels: TunnelHost;
   /** Shows `text` as an error that blocks nothing and has no buttons. */
   showError(text: string): unknown;
-  logger: Pick<Logger, 'warn'>;
+  logger: Pick<Logger, 'warn' | 'info'>;
   translate: Translate;
+  /** The window's port attribute settings, which the forwards wait for. */
+  attributes: AttributeEvents;
+  scheduler: Scheduler;
 }
 
 /** The forwarder of the extension. */
 export interface Forwarder {
-  /** Opens the forwards `declared` names and shows the notices for its dashed entries; it never rejects. */
+  /**
+   * Shows the notices for the dashed entries of `declared`, waits for its port attributes to be in effect, and opens
+   * the forwards it names; it never rejects.
+   */
   forward(declared: DeclaredPorts | undefined): Promise<void>;
 }
 
@@ -55,6 +67,16 @@ export function forwarderOf(ports: ForwarderPorts): Forwarder {
       for (const written of dashed) {
         void ports.showError(
           filled(ports.translate, PORT_TEMPLATES.S278, [written]),
+        );
+      }
+      const wait = await untilAttributesInEffect(
+        declared.attributeSettings ?? {},
+        ports.attributes,
+        ports.scheduler,
+      );
+      if (wait === 'bound') {
+        ports.logger.info(
+          'the declared forwards open before the port attributes are in effect in the window',
         );
       }
       for (const {host, port} of forwards) {
