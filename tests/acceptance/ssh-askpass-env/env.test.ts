@@ -5,7 +5,11 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {readUserSettings, restoreUserSettings} from '../windows/harness.ts';
+import {
+  readUserSettings,
+  restoreUserSettings,
+  userSettings,
+} from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {
   answering,
@@ -14,7 +18,6 @@ import {
   passwordRule,
   sshEnvironments,
   watchedConnect,
-  withSettings,
   writeStandIns,
 } from '../windows/askpass-support.ts';
 
@@ -58,7 +61,7 @@ describe('the user’s askpass setting with an empty SSH_ASKPASS and SSH_ASKPASS
 
   /** The row of a login that is the extension's own: the input shows, and ssh runs with its askpass and `force`. */
   async function ownLoginRow(value: boolean): Promise<void> {
-    await withSettings({[EXTERNAL]: value, ...PLATFORMS});
+    await userSettings({[EXTERNAL]: value, ...PLATFORMS});
     answering([passwordRule()]);
     const watched = await watchedConnect('password', 'as1', 40_000);
     const forced = logins().filter(
@@ -90,7 +93,7 @@ describe('the user’s askpass setting with an empty SSH_ASKPASS and SSH_ASKPASS
     const seen: Array<{inputs: string[]; env: string[]}> = [];
     for (const value of [true, false]) {
       clearRecords();
-      await withSettings({
+      await userSettings({
         [EXTERNAL]: value,
         'remote.SSH.useLocalServer': false,
         ...PLATFORMS,

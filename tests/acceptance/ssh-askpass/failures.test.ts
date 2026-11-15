@@ -11,6 +11,9 @@ import {
   readUserSettings,
   restoreUserSettings,
   variable,
+  userSettings,
+  connectedWithin,
+  hostPassword,
 } from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {
@@ -29,7 +32,7 @@ import {
   knowHostKey,
   passwordRule,
   useOwnConfig,
-  withSettings,
+  watchedConnect,
   writeStandIns,
 } from '../windows/askpass-support.ts';
 
@@ -68,7 +71,7 @@ describe('the failures of a login through the user’s own askpass program (card
 
   it('F-2309 AC-12 (c2596-program-cancels): with a known host key and a program that exits non-zero, the failure dialog names the permission denial and no VS Code input shows', async () => {
     knowHostKey('askpass-pw');
-    await withSettings({[EXTERNAL]: true, ...useOwnConfig()});
+    await userSettings({[EXTERNAL]: true, ...useOwnConfig()});
     answering([{match: 'password', answer: '', status: 1}]);
     await openWindow('askpass-pw', 'as1');
     const dialog = await waitForDialog('as1', 120_000);
@@ -92,7 +95,7 @@ describe('the failures of a login through the user’s own askpass program (card
 
   it('F-2309 AC-15 (c2596-missing-program): with SSH_ASKPASS naming a file that is not there, the failure dialog has the permission denial, no word about SSH_ASKPASS and no VS Code input', async () => {
     knowHostKey('askpass-pw');
-    await withSettings({[EXTERNAL]: true, ...useOwnConfig()});
+    await userSettings({[EXTERNAL]: true, ...useOwnConfig()});
     answering([passwordRule()]);
     const program = path.join(
       variable('HARNESS_RUN_FOLDER'),
@@ -126,7 +129,7 @@ describe('the failures of a login through the user’s own askpass program (card
 
   it('F-2309 AC-26 (c2596-host-key-cancelled): with an unknown host key and a program that cancels the question, the failure dialog has no reason and no VS Code input shows', async () => {
     forgetHostKey('askpass-ask');
-    await withSettings({[EXTERNAL]: true, ...useOwnConfig()});
+    await userSettings({[EXTERNAL]: true, ...useOwnConfig()});
     answering([{match: 'continue connecting', answer: '', status: 1}]);
     await openWindow('askpass-ask', 'as1');
     const dialog = await waitForDialog('as1', 120_000);
@@ -145,14 +148,13 @@ describe('the failures of a login through the user’s own askpass program (card
 
   it('F-2309 AC-14 (c2596-wrong-answer): a program that answers wrongly gives the failure dialog after ssh gives up, with no fallback input, and a Retry with a corrected program connects', async () => {
     knowHostKey('askpass-pw');
-    await withSettings({[EXTERNAL]: true, ...useOwnConfig()});
+    await userSettings({[EXTERNAL]: true, ...useOwnConfig()});
     answering([{match: 'password', answer: 'not-the-password'}]);
     await openWindow('askpass-pw', 'as1');
     const dialog = await waitForDialog('as1', 120_000);
     const inputs = await inputsShown('as1');
     answering([passwordRule()]);
     await answerDialog('as1', 'Retry');
-    const {connectedWithin} = await import('../windows/harness.ts');
     await connectedWithin('as1', 120_000);
     deepStrictEqual(
       {dialog, inputs},
@@ -169,9 +171,9 @@ describe('the failures of a login through the user’s own askpass program (card
 
   it('F-2309 AC-20 (c2596-no-answer): a program that does not answer within the connect timeout gives the timed-out dialog and no VS Code input', async () => {
     knowHostKey('askpass-pw');
-    await withSettings({[EXTERNAL]: true, ...useOwnConfig()});
+    await userSettings({[EXTERNAL]: true, ...useOwnConfig()});
     answering([
-      {match: 'password', answer: hostPasswordOf(), delayMilliseconds: 90_000},
+      {match: 'password', answer: hostPassword(), delayMilliseconds: 90_000},
     ]);
     const began = Date.now();
     await openWindow('askpass-pw', 'as1');
@@ -197,15 +199,15 @@ describe('the failures of a login through the user’s own askpass program (card
     );
   });
 
-  it('F-2309 AC-20 (c2596-no-answer-part): with remote.SSH.connectTimeout 30 the timed-out dialog comes after about that time, so the setting and not the alias’s own ConnectTimeout is the wait', async () => {
+  it('F-2309 AC-20 (c2596-timeout-setting): with remote.SSH.connectTimeout 30 the timed-out dialog comes after about that time, so the setting and not the alias’s own ConnectTimeout is the wait', async () => {
     knowHostKey('askpass-pw');
-    await withSettings({
+    await userSettings({
       [EXTERNAL]: true,
       'remote.SSH.connectTimeout': 30,
       ...useOwnConfig(),
     });
     answering([
-      {match: 'password', answer: hostPasswordOf(), delayMilliseconds: 120_000},
+      {match: 'password', answer: hostPassword(), delayMilliseconds: 120_000},
     ]);
     const began = Date.now();
     await openWindow('askpass-pw', 'as1');
@@ -223,15 +225,14 @@ describe('the failures of a login through the user’s own askpass program (card
 
   it('F-2309 AC-21 (c2596-slow-answer): a program that takes 25 s with remote.SSH.connectTimeout 60 connects with its answer and no VS Code input', async () => {
     knowHostKey('askpass-pw');
-    await withSettings({
+    await userSettings({
       [EXTERNAL]: true,
       'remote.SSH.connectTimeout': 60,
       ...useOwnConfig(),
     });
     answering([
-      {match: 'password', answer: hostPasswordOf(), delayMilliseconds: 25_000},
+      {match: 'password', answer: hostPassword(), delayMilliseconds: 25_000},
     ]);
-    const {watchedConnect} = await import('../windows/askpass-support.ts');
     const watched = await watchedConnect('askpass-pw', 'as1', 150_000);
     deepStrictEqual(
       {connected: watched.connected, inputs: watched.inputs},
@@ -240,8 +241,3 @@ describe('the failures of a login through the user’s own askpass program (card
     );
   });
 });
-
-/** The password of the host's account, which a rule answers with. */
-function hostPasswordOf(): string {
-  return passwordRule().answer;
-}

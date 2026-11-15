@@ -32,7 +32,6 @@ import {
   passwordRule,
   sshEnvironments,
   watchedConnect,
-  withSettings,
   writeStandIns,
 } from '../windows/askpass-support.ts';
 
@@ -87,7 +86,7 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
   });
 
   it('F-2309 AC-2, AC-3 (c2596-user-program): with the setting true and SSH_ASKPASS naming a program that answers the password, a window on the password host connects with no VS Code input, and ssh runs with the user’s SSH_ASKPASS, the editor’s DISPLAY and no askpass variable of the extension’s', async () => {
-    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    await userSettings({[EXTERNAL]: true, ...PLATFORMS});
     answering([passwordRule()]);
     const watched = await watchedConnect('password', 'as1', 120_000);
     deepStrictEqual(
@@ -120,7 +119,7 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
   });
 
   it('F-2309 AC-6, AC-18, AC-29 (c2596-setting-off): with the setting false (the default) and SSH_ASKPASS set, the window asks for the password in a VS Code input, the user’s program is never called, and the login ssh runs with the extension’s own askpass and SSH_ASKPASS_REQUIRE=force', async () => {
-    await withSettings({[EXTERNAL]: false, ...PLATFORMS});
+    await userSettings({[EXTERNAL]: false, ...PLATFORMS});
     answering([passwordRule()]);
     const watched = await watchedConnect('password', 'as1', 30_000);
     const logins = sshEnvironments().filter(
@@ -151,7 +150,7 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
 
   it('F-2309 AC-4 (c2596-host-key): with the setting true and an unknown host key, the host-key question goes to the program and no VS Code input appears, and the key is in the known-hosts file afterwards', async () => {
     forgetHostKey('password_ask');
-    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    await userSettings({[EXTERNAL]: true, ...PLATFORMS});
     answering([{match: 'continue connecting', answer: 'yes'}, passwordRule()]);
     const watched = await watchedConnect('password-ask', 'as1', 120_000);
     deepStrictEqual(
@@ -181,7 +180,7 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
       '-c',
       'mkdir -p /home/harness/af1/.vscode && chmod a+rwx /home/harness/af1 && printf \'{"remote.SSH.externalSSH_ASKPASS": true}\' > /home/harness/af1/.vscode/settings.json',
     );
-    await withSettings({[EXTERNAL]: false, ...PLATFORMS});
+    await userSettings({[EXTERNAL]: false, ...PLATFORMS});
     answering([passwordRule()]);
     const watched = await watchedConnect('password', 'af1', 30_000);
     deepStrictEqual(
@@ -200,7 +199,7 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
   async function terminalModeRow(
     extra: Record<string, unknown>,
   ): Promise<void> {
-    await withSettings({[EXTERNAL]: true, ...PLATFORMS, ...extra});
+    await userSettings({[EXTERNAL]: true, ...PLATFORMS, ...extra});
     answering([passwordRule()]);
     const watched = await watchedConnect('password', 'as1', 40_000);
     deepStrictEqual(
@@ -219,7 +218,7 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
   async function unchangedLoginRow(
     extra: Record<string, unknown>,
   ): Promise<void> {
-    await withSettings({[EXTERNAL]: true, ...PLATFORMS, ...extra});
+    await userSettings({[EXTERNAL]: true, ...PLATFORMS, ...extra});
     answering([passwordRule()]);
     const watched = await watchedConnect('password', 'as1', 120_000);
     deepStrictEqual(
@@ -253,7 +252,7 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
   });
 
   it('F-2309 AC-9 (c2596-setting-change): changing the setting in a connected window shows no notification or reload prompt, and a reload that reuses the local server performs no login', async () => {
-    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    await userSettings({[EXTERNAL]: true, ...PLATFORMS});
     answering([passwordRule()]);
     await watchedConnect('password', 'as1', 120_000);
     const called = askpassCalls().length;
@@ -273,7 +272,7 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
   });
 
   it('F-2309 AC-11 (c2596-new-window): a New Window on Active Host connects without calling the program again', async () => {
-    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    await userSettings({[EXTERNAL]: true, ...PLATFORMS});
     answering([passwordRule()]);
     await watchedConnect('password', 'as1', 120_000);
     const called = askpassCalls().length;
@@ -292,7 +291,7 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
   });
 
   it('F-2309 AC-5 (c2596-passphrase): with the setting true and a host that takes only a key with a passphrase, the passphrase is asked of the program and no VS Code passphrase input appears', async () => {
-    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    await userSettings({[EXTERNAL]: true, ...PLATFORMS});
     answering([{match: 'passphrase', answer: passphrase()}]);
     const watched = await watchedConnect('passkey', 'ak1', 120_000);
     deepStrictEqual(
@@ -308,7 +307,7 @@ describe('the login through the user’s own askpass program (card #2596, F-2309
 
   it('F-2309 AC-28 (c2596-nothing-stored): after a login through the user’s program the extension’s global state holds no entry of this feature', async () => {
     const before = await extensionState();
-    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    await userSettings({[EXTERNAL]: true, ...PLATFORMS});
     answering([passwordRule()]);
     await watchedConnect('password', 'as1', 120_000);
     await new Promise(resolve => setTimeout(resolve, 3000));

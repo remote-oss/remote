@@ -8,6 +8,7 @@ import {
   openWindow,
   readUserSettings,
   restoreUserSettings,
+  userSettings,
 } from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {inputBoxOf, quickPickOf, waitForDialog} from '../windows/renderer.ts';
@@ -17,7 +18,6 @@ import {
   knowHostKey,
   sshEnvironments,
   useOwnConfig,
-  withSettings,
   writeStandIns,
 } from '../windows/askpass-support.ts';
 
@@ -41,7 +41,7 @@ describe('the user’s askpass setting with an SSH_ASKPASS of one space (card #2
 
   it('F-2309 AC-25 (c2596-space): with the setting true, no VS Code input appears and the failure dialog names the permission denial', async () => {
     knowHostKey('askpass-pw');
-    await withSettings({
+    await userSettings({
       'remote.SSH.externalSSH_ASKPASS': true,
       ...useOwnConfig(),
     });

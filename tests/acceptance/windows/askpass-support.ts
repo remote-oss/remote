@@ -19,7 +19,6 @@ import {
   connectedWithin,
   hostPassword,
   openWindow,
-  userSettings,
   variable,
 } from './harness.ts';
 import {inputBoxOf, pressEscape, quickPickOf} from './renderer.ts';
@@ -170,13 +169,6 @@ function linesOf<Line>(file: string): Line[] {
         .filter(line => line !== '')
         .map(line => JSON.parse(line) as Line)
     : [];
-}
-
-/** Sets `remote.SSH.externalSSH_ASKPASS`, with the other settings of a row, and waits for the window to read them. */
-export async function withSettings(
-  settings: Record<string, unknown>,
-): Promise<void> {
-  await userSettings(settings);
 }
 
 /** What a window that connected to the password alias showed of VS Code inputs while it did. */

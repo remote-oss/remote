@@ -28,7 +28,6 @@ import {
   passwordRule,
   sshEnvironments,
   watchedConnect,
-  withSettings,
   writeStandIns,
 } from '../windows/askpass-support.ts';
 
@@ -79,7 +78,7 @@ describe('the user’s own askpass program at a reconnection (card #2596, F-2309
   });
 
   it('F-2309 AC-10 (c2596-kill-server): a setting changed while connected applies to the login after Kill Local Connection Server: the extension’s own askpass asks in a VS Code input, and the program is not called', async () => {
-    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    await userSettings({[EXTERNAL]: true, ...PLATFORMS});
     answering([passwordRule()]);
     await watchedConnect('password', 'as1', 120_000);
     const before = loginsTo('password').length;
@@ -109,7 +108,7 @@ describe('the user’s own askpass program at a reconnection (card #2596, F-2309
   });
 
   it('F-2309 AC-13 (c2596-reconnect-fails): a program that fails at the reconnection of a connected window gives core’s "Cannot reconnect. Please reload the window." and no VS Code input', async () => {
-    await withSettings({[EXTERNAL]: true, ...PLATFORMS});
+    await userSettings({[EXTERNAL]: true, ...PLATFORMS});
     answering([passwordRule()]);
     await watchedConnect('password', 'as1', 120_000);
     answering([{match: 'password', answer: '', status: 1}]);
