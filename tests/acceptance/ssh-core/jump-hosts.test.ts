@@ -36,9 +36,16 @@ import {
   windowState,
 } from '../windows/harness.ts';
 import {
+  ASK_WITHOUT,
+  askLines,
   connectWith,
+  freshKnown,
+  harnessHostFingerprint,
   hostBlock,
   plainSsh,
+  questionsOn,
+  startHostSshd,
+  target,
   writeConfig,
 } from '../windows/config-keywords-support.ts';
 
@@ -47,30 +54,6 @@ const execFileAsync = promisify(execFile);
 /** The dialog without a reason that a failed connect of `alias` shows. */
 function reasonless(alias: string): string {
   return `Could not establish connection to "${alias}".`;
-}
-
-/** The target behind a jump host: the harness host's own sshd, at its port inside. */
-function target(alias: string, jump: string): string[] {
-  return hostBlock(alias, [`ProxyJump ${jump}`, 'Port 22'], ['Port']);
-}
-
-/** The `ssh` lines of a row whose host keys are unknown: it asks, and its known-hosts file is `known`. */
-function askLines(known: string): string[] {
-  return ['StrictHostKeyChecking ask', `UserKnownHostsFile ${known}`];
-}
-
-/** The keywords of the harness block that `ASK` replaces. */
-const ASK_WITHOUT = [
-  'BatchMode',
-  'StrictHostKeyChecking',
-  'UserKnownHostsFile',
-];
-
-/** An empty known-hosts file of the run for row `alias`. */
-function freshKnown(alias: string): string {
-  const file = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.known`);
-  writeFileSync(file, '');
-  return file;
 }
 
 /** What is wrong with the password hosts of a row: only passwords are tried, three times for a jump that is told so. */
@@ -137,21 +120,9 @@ function passwordAt(alias: string, address: string, text: string) {
   } as const;
 }
 
-/** The questions window `alias` was asked on `surface`, in order. */
-function questionsOn(alias: string, surface: string): string[] {
-  return recordLines(surface, alias).map(line => line.question);
-}
-
 /** The names in `listing`, a line each, that have `server` in them. */
 function serverNamesOf(listing: string): string[] {
   return listing.split('\n').filter(name => name.includes('server'));
-}
-
-/** The fingerprint (SHA256:...) of the public key file `publicKey` on the host. */
-async function fingerprintOf(publicKey: string): Promise<string | undefined> {
-  return (await onHostAs('harness', 'ssh-keygen', '-lf', publicKey)).split(
-    ' ',
-  )[1];
 }
 
 /** The non-empty lines of `file`. */
@@ -507,7 +478,6 @@ describe('jump hosts and proxy commands (card #2601)', function () {
   it('F-2310 AC-24 (c2614-hostkey-picks): unknown host keys behind a jump host ask the fingerprint pick for each hop, and Continue records both keys', async () => {
     const alias = 'c2614-picks';
     const port = 22022;
-    const folder = '/tmp/c2614-sshd';
     const known = freshKnown(alias);
     const file = writeConfig(alias, [
       hostBlock(
@@ -522,29 +492,11 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       ),
       hostBlock(`${alias}-hop`, askLines(known), ASK_WITHOUT),
     ]);
-    await onHostAs(
-      'harness',
-      'sh',
-      '-c',
-      `rm -rf ${folder}; mkdir -p ${folder} && ssh-keygen -q -t ed25519 -N '' -f ${folder}/hostkey && printf '%s\\n' 'HostKey ${folder}/hostkey' 'PidFile ${folder}/sshd.pid' 'UsePAM no' 'StrictModes no' 'AuthorizedKeysFile /home/harness/.ssh/authorized_keys' 'ListenAddress 127.0.0.1' > ${folder}/sshd_config && (setsid /usr/sbin/sshd -D -e -f ${folder}/sshd_config -p ${String(port)} > ${folder}/sshd.log 2>&1 < /dev/null &)`,
-    );
+    const second = await startHostSshd(port);
     const saved = readUserSettings();
     try {
-      await waitFor(
-        'the second sshd to listen',
-        async () =>
-          onHostAs(
-            'harness',
-            'sh',
-            '-c',
-            `nc -z 127.0.0.1 ${String(port)} && echo up`,
-          )
-            .then(text => text.includes('up'))
-            .catch(() => false),
-        30_000,
-      );
-      const jumpKey = await fingerprintOf('/etc/ssh/ssh_host_ed25519_key.pub');
-      const targetKey = await fingerprintOf(`${folder}/hostkey.pub`);
+      const jumpKey = await harnessHostFingerprint();
+      const targetKey = second.fingerprint;
       await userSettings({'remote.SSH.configFile': file});
       const next = await nextEmptyWindow(() =>
         inWindow('local', 'workbench.action.newWindow'),
@@ -580,12 +532,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       });
     } finally {
       restoreUserSettings(saved);
-      await onHostAs(
-        'harness',
-        'sh',
-        '-c',
-        `kill $(cat ${folder}/sshd.pid) 2>/dev/null; rm -rf ${folder}; true`,
-      );
+      await second.stop();
     }
   });
 
