@@ -9,7 +9,7 @@ import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {linesSince, runWith} from '../windows/maintenance.ts';
-import {notifications, statusItem} from '../windows/renderer.ts';
+import {dialogOf, notifications, statusItem} from '../windows/renderer.ts';
 import {
   appendScript,
   connectionLog,
@@ -1005,6 +1005,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       async () => {
         const asked = recordLines('maskedInput', alias).length;
         const logMark = connectionLog().length;
+        await userSettings({'window.dialogStyle': 'custom'});
         appendScript([
           {
             surface: 'maskedInput',
@@ -1026,6 +1027,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
           `MEASURED ${JSON.stringify({
             indicator: await indicatorOf(alias),
             toasts: await notifications(alias),
+            dialog: await dialogOf(alias),
             asked: recordLines('maskedInput', alias).length - asked,
             log: connectionLog()
               .slice(logMark)
