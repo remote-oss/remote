@@ -41,7 +41,6 @@ import {
   pressSpace,
   quickPickFacts,
   quickPickRows,
-  rememberPage,
   rowAction,
   rowContextMenu,
   rowContextMenuByKey,
@@ -2043,9 +2042,6 @@ describe('the recent folders under a target (card coverage-122)', function () {
     this.timeout(600_000);
     const saved = readUserSettings();
     const window = await viewWindowIn('c122-un');
-    // The failed window comes back local, folder-less, titled '[]' like the base window's; with the base window's page
-    // remembered, the recovered one is the one left among the '[]' pages when its own page is asked for.
-    await rememberPage('local');
     const first = `${HOME}/c122-un-a`;
     const second = `${HOME}/c122-un-b`;
     const reachable = `${HOME}/c122-un-c`;
@@ -2106,9 +2102,33 @@ describe('the recent folders under a target (card coverage-122)', function () {
       );
       const recovered = await comesLocal();
       await inWindow(recovered, 'workbench.view.remote');
-      await titleAction(recovered, VIEW, REFRESH);
-      await foldersSettled(recovered, 'harness', [reachable], `${HOME}/c122-`);
-      await rowAction(recovered, VIEW, 'c122-un-c', CURRENT);
+      try {
+        await titleAction(recovered, VIEW, REFRESH);
+        await foldersSettled(
+          recovered,
+          'harness',
+          [reachable],
+          `${HOME}/c122-`,
+        );
+        await rowAction(recovered, VIEW, 'c122-un-c', CURRENT);
+      } catch (caught) {
+        // An ambiguous page ask names the open windows and their authorities, so a stray folder-less window
+        // is told from the recovered one standing twice in the page list.
+        const openNames = windowNames().filter(name => isOpen(name));
+        const authorities = await Promise.all(
+          openNames.map(
+            async name =>
+              `${name}:${
+                (await windowState(name).catch(() => undefined))
+                  ?.remoteAuthority ?? 'unreadable'
+              }`,
+          ),
+        );
+        throw new Error(
+          `${String(caught)}; the open windows are ${JSON.stringify(openNames)} with authorities ${JSON.stringify(authorities)}`,
+          {cause: caught},
+        );
+      }
       await waitFor(
         `window ${recoveredName} to stand on ssh-remote+harness`,
         async () =>
