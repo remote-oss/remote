@@ -1,5 +1,5 @@
 /**
- * @fileoverview A catch-all ProxyJump that also applies to the jump alias (card #2664, F-2310 AC-32): the connect fails
+ * @fileoverview A catch-all ProxyJump that also applies to the jump alias (card #2664, F-2310 AC-32): the connect asks for no input, fails
  * with the reason-less failure dialog, and when it has failed no ssh process of the attempt is left. The ssh the product
  * starts is a wrapper that starts at most `START_LIMIT` ssh processes, because the runner's own process limit does not
  * hold for the user.
@@ -128,11 +128,17 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
           question: dialog?.question,
           left,
           limited: readdirSync(starts).length >= START_LIMIT,
+          asked: ['maskedInput', 'pick'].flatMap(surface =>
+            recordLines(surface, alias)
+              .filter(line => line.time >= mark)
+              .map(line => `${surface}: ${line.question}`),
+          ),
         },
         {
           question: `Could not establish connection to "${alias}".`,
           left: [],
           limited: true,
+          asked: [],
         },
       );
     } finally {
@@ -140,11 +146,11 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
     }
   }
 
-  it('F-2310 AC-32 (c2664-recursion-server): in the local-server mode, with a catch-all ProxyJump that applies to the jump alias, the dialog has no reason and no ssh process of the attempt stays', async () => {
+  it('F-2310 AC-32 (c2664-recursion-server): in the local-server mode, with a catch-all ProxyJump that applies to the jump alias, no input is asked, the dialog has no reason and no ssh process of the attempt stays', async () => {
     await recursionOf('server', {});
   });
 
-  it('F-2310 AC-32 (c2664-recursion-terminal): in the terminal mode, with a catch-all ProxyJump that applies to the jump alias, the dialog has no reason and no ssh process of the attempt stays', async () => {
+  it('F-2310 AC-32 (c2664-recursion-terminal): in the terminal mode, with a catch-all ProxyJump that applies to the jump alias, no input is asked, the dialog has no reason and no ssh process of the attempt stays', async () => {
     await recursionOf('terminal', {'remote.SSH.useLocalServer': false});
   });
 });
