@@ -106,7 +106,6 @@ function pickOne<Answer>(
 function askText(
   editor: Editor,
   placeholder: string,
-  message: string | undefined,
   cancellation: AbortSignal,
 ): Promise<string | undefined> {
   if (cancellation.aborted) {
@@ -115,9 +114,6 @@ function askText(
   return new Promise(settle => {
     const inputBox = editor.window.createInputBox();
     inputBox.placeholder = placeholder;
-    if (message !== undefined) {
-      inputBox.prompt = message;
-    }
     inputBox.password = true;
     inputBox.ignoreFocusOut = true;
     let typed: string | undefined;
@@ -307,7 +303,7 @@ export function promptEditorOf(
         cancellation,
       ),
     maskedInput: (request, cancellation) =>
-      askText(editor, request.placeholder, request.message, cancellation),
+      askText(editor, request.placeholder, cancellation),
     translate,
   };
 }
