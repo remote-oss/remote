@@ -924,6 +924,7 @@ describe('the launches of the VSCodium run', () => {
           {
             'window.title': '[${rootName}]',
             'security.workspace.trust.startupPrompt': 'once',
+            'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
           },
         ],
         [
@@ -932,6 +933,7 @@ describe('the launches of the VSCodium run', () => {
           {
             'window.title': '[${rootName}]',
             'remote.SSH.useLocalServer': false,
+            'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
             'remote.SSH.remotePlatform': {harness: 'linux', agentfwd: 'linux'},
           },
         ],
@@ -1291,7 +1293,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, login-shells, agent-notmp, default-ports, the explorer, trust and containers launches and every ports case', () => {
+  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, windows, login-shells, preconnect, agent-notmp, default-ports, the explorer, trust and containers launches and every ports case', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
@@ -1307,11 +1309,13 @@ describe('the launches of the VSCodium run', () => {
         'socket',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
+        'windows',
         'terminal-login',
         'passphrase-input',
         'terminal-odd',
         'passphrase-late',
         'login-shells',
+        'preconnect',
         'agent-notmp',
         'default-ports',
         'ssh-core',
@@ -1981,6 +1985,7 @@ describe('the launch with no runner', () => {
           label: 'windows',
           kind: 'plain',
           suite: 'windows',
+          settings: {'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE},
           environment: {REMOTE_OSS_SENTINEL: 'sent1nel-<run>'},
         },
       ],
@@ -2315,7 +2320,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('#2585, #2586: login-shells and default-ports give the window a port range below the 32768 where the client’s ephemeral range starts, and only the failing connect that tests a busy range sets one besides', () => {
+  it('#2585, #2586, #2616: the launches that connect many windows through the local server (windows, passphrase-input, login-shells, preconnect, default-ports, trust and trust-terminal) give the window a port range below the 32768 where the client’s ephemeral range starts, and only the failing connect that tests a busy range sets one besides', () => {
     const [first, last] = WINDOW_PORT_RANGE.split('-').map(Number);
     deepStrictEqual(
       [
@@ -2329,7 +2334,19 @@ describe('the platform cases (card coverage-12)', () => {
           )
           .map(launch => launch.label),
       ],
-      [true, ['failure-port-range-busy', 'login-shells', 'default-ports']],
+      [
+        true,
+        [
+          'failure-port-range-busy',
+          'windows',
+          'passphrase-input',
+          'login-shells',
+          'preconnect',
+          'default-ports',
+          'trust',
+          'trust-terminal',
+        ],
+      ],
     );
   });
 });

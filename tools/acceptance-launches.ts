@@ -992,6 +992,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'windows',
       kind: 'plain',
       suite: 'windows',
+      settings: {'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE},
       environment: {REMOTE_OSS_SENTINEL: 'sent1nel-<run>'},
     },
     // Terminal mode with the login terminal shown and the extension's own prompts (no script), read through the renderer.
@@ -1021,6 +1022,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'passphrase-input',
       suite: 'passphrase',
       settings: {
+        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
         // The remote name after the folder, as core's own label gives it.
         'window.title': '[${rootName}]${remoteName}',
         'window.dialogStyle': 'custom',
@@ -1083,6 +1085,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'preconnect',
       kind: 'plain',
       suite: 'preconnect',
+      settings: {'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE},
       // A variable of the editor's environment, which the script of a row reports it received.
       environment: {REMOTE_OSS_F2108_VARIABLE: 'f2108-<run>'},
     },
@@ -1359,6 +1362,7 @@ export function launchesOf(root: string): Launch[] {
         ...TRUST_LAUNCH.settings,
         // Core's default is never; the rows answer core's startup prompt, so this launch turns it on.
         'security.workspace.trust.startupPrompt': 'once',
+        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
       },
     },
     {
@@ -1368,6 +1372,7 @@ export function launchesOf(root: string): Launch[] {
       settings: {
         ...TRUST_LAUNCH.settings,
         'remote.SSH.useLocalServer': false,
+        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
         'remote.SSH.remotePlatform': {harness: 'linux', agentfwd: 'linux'},
       },
     },
