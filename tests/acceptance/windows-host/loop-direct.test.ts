@@ -4,7 +4,7 @@
  */
 
 import {execFileSync, spawn} from 'node:child_process';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   powershellCommandsFor,
@@ -103,16 +103,32 @@ async function measure(label: string, early: boolean, holdMilliseconds: number, 
 describe('the Windows session loop with its input kept open (card #2681, measurement)', function () {
   this.timeout(900_000);
 
-  it('measure the helper\'s spawn options one by one, under Windows PowerShell', async () => {
-    useShell(SHELLS.windowsPowershell);
-    const askpass = {SSH_ASKPASS: 'C:\\Windows\\System32\\cmd.exe', SSH_ASKPASS_REQUIRE: 'force', DISPLAY: ':0'};
-    await measure('plain', false, 5_000);
-    await measure('hide', false, 5_000, false, {hide: true});
-    await measure('dynamic', false, 5_000, false, {extra: ['-D', '127.0.0.1:53111']});
-    await measure('verbose', false, 5_000, false, {extra: ['-v']});
-    await measure('askpass', false, 5_000, false, {env: askpass});
-    await measure('all', false, 5_000, false, {hide: true, extra: ['-v', '-D', '127.0.0.1:53112'], env: askpass});
-  });
+  for (const hide of ['hide', 'show']) {
+    it(`measure the loop from a detached relay with no console (${hide})`, async () => {
+      useShell(SHELLS.windowsPowershell);
+      const frame = powershellCommandsFor('c2681mark', {
+        script: 'Write-Output "platform: $([Environment]::OSVersion.Platform)"',
+        environment: {},
+        inputBase64: null,
+      });
+      const outFile = path.join(variable('HARNESS_RUN_FOLDER'), `relay-${hide}.json`);
+      const relay = spawn(
+        process.execPath,
+        [
+          path.join(import.meta.dirname, 'detached-relay.mjs'),
+          outFile,
+          variable('HARNESS_SSH_CONFIG'),
+          powershellSessionStart().remoteProgram,
+          frame,
+          hide,
+        ],
+        {detached: true, stdio: 'ignore', windowsHide: true},
+      );
+      relay.unref();
+      await new Promise(resolve => setTimeout(resolve, 25_000));
+      console.log(`c2681-measure relay-${hide}: ${existsSync(outFile) ? readFileSync(outFile, 'utf8') : 'no file'}`);
+    });
+  }
 
   after(() => {
     useShell(SHELLS.windowsPowershell);
