@@ -460,6 +460,15 @@
       "unparsable.test.ts": 0.1,
       "x11.test.ts": 10.2
     },
+    "ssh-killed-12": {
+      "killed.test.ts": 6.3
+    },
+    "ssh-killed-13": {
+      "killed.test.ts": 9.4
+    },
+    "ssh-killed-14": {
+      "killed.test.ts": 5.5
+    },
     "ssh-newclient": {
       "jump-hosts-new-wording.test.ts": 0.7,
       "newer-keywords.test.ts": 1.6
