@@ -9,6 +9,7 @@ import {deepStrictEqual} from 'node:assert';
 import {
   editorProduct,
   onHost,
+  recordLines,
   connectedWithin,
   readUserSettings,
   reloadWindow,
@@ -19,10 +20,8 @@ import {
   closeAllButLocal,
   DATA_FOLDER,
   openConnected,
-  serverProcesses,
   setting,
 } from './maintenance.ts';
-import {dialogOf, notifications} from './renderer.ts';
 
 /** The invented commit id of old install number `index`: forty hexadecimal digits. */
 function oldCommit(index: number): string {
@@ -86,6 +85,28 @@ function indexes(first: number, count: number): string[] {
   );
 }
 
+/** The notices and failure dialogs window `name` showed, from the script's record: the launch has no renderer to read. */
+function shownBy(name: string): string[] {
+  return recordLines(undefined, name)
+    .filter(
+      line => line.surface === 'notice' || line.surface === 'failureDialog',
+    )
+    .map(line => line.surface);
+}
+
+/** The process id of the host's server itself (not its children), which a reload must not change. */
+async function serverMain(): Promise<string> {
+  return (
+    await onHost(
+      'pgrep',
+      '-u',
+      'harness',
+      '-f',
+      `${DATA_FOLDER}/bin/.*/out/server-main.js`,
+    ).catch(() => '')
+  ).trim();
+}
+
 describe('the clean-up of old server installs in the legacy mode (card #2651, F-2413)', function () {
   this.timeout(900_000);
   let saved: string | undefined;
@@ -128,16 +149,14 @@ describe('the clean-up of old server installs in the legacy mode (card #2651, F-
       {
         installs: await installsIn(DATA_FOLDER),
         side: await sideFilesIn(DATA_FOLDER),
-        notices: await notifications('cu-eight'),
-        dialog: await dialogOf('cu-eight'),
+        shown: shownBy('cu-eight'),
       },
       {
         installs: ['05', '06', '07', '08', 'current'].sort(),
         side: indexes(5, 4)
           .flatMap(index => [`${index}.log`, `${index}.pid`])
           .sort(),
-        notices: [],
-        dialog: undefined,
+        shown: [],
       },
     );
   });
@@ -160,15 +179,15 @@ describe('the clean-up of old server installs in the legacy mode (card #2651, F-
   it('F-2413 AC-17 (c2651-clean-reload): with a running server a reload after old installs were added deletes those beyond five and reuses the server', async () => {
     await freshCurrent();
     await openConnected('cu-reload', 180_000);
-    const servers = await serverProcesses();
+    const server = await serverMain();
     for (let index = 1; index <= 8; index += 1) {
       await makeOld(DATA_FOLDER, index, index);
     }
     await reloadWindow('cu-reload');
     await connectedWithin('cu-reload', 180_000);
     deepStrictEqual(
-      [await installsIn(DATA_FOLDER), await serverProcesses()],
-      [['05', '06', '07', '08', 'current'].sort(), servers],
+      [await installsIn(DATA_FOLDER), await serverMain()],
+      [['05', '06', '07', '08', 'current'].sort(), server],
     );
   });
 
@@ -184,7 +203,12 @@ describe('the clean-up of old server installs in the legacy mode (card #2651, F-
       `nohup flock -x '${lock}' sleep 600 >/dev/null 2>&1 &`,
     );
     await new Promise(resolve => setTimeout(resolve, 1500));
-    await openConnected('cu-locked', 180_000);
+    await userSettings({'remote.SSH.useFlock': true});
+    try {
+      await openConnected('cu-locked', 180_000);
+    } finally {
+      await userSettings({'remote.SSH.useFlock': undefined});
+    }
     deepStrictEqual(await installsIn(DATA_FOLDER), [
       '02',
       '05',
@@ -227,20 +251,21 @@ describe('the clean-up of old server installs in the legacy mode (card #2651, F-
     }
     await openConnected('cu-no-log', 180_000);
     deepStrictEqual(
-      [await installsIn(DATA_FOLDER), await dialogOf('cu-no-log')],
-      [['05', '06', '07', '08', 'current'].sort(), undefined],
+      [await installsIn(DATA_FOLDER), shownBy('cu-no-log')],
+      [['05', '06', '07', '08', 'current'].sort(), []],
     );
   });
 
   it('F-2413 AC-32 (c2651-clean-path): with serverInstallPath set the clean-up applies to the installs under that path and the installs in the home folder are not changed', async () => {
     const custom = '/home/harness/custom-clean';
+    const dataRoot = `${custom}/${editorProduct().serverDataFolderName}`;
     await freshCurrent();
     for (let index = 1; index <= 3; index += 1) {
       await makeOld(DATA_FOLDER, index, index);
     }
-    await onHost('mkdir', '-p', custom);
+    await onHost('mkdir', '-p', dataRoot);
     for (let index = 11; index <= 18; index += 1) {
-      await makeOld(custom, index, index - 10);
+      await makeOld(dataRoot, index, index - 10);
     }
     await userSettings({
       'remote.SSH.serverInstallPath': {harness: custom},
@@ -250,10 +275,10 @@ describe('the clean-up of old server installs in the legacy mode (card #2651, F-
       deepStrictEqual(
         {
           home: await installsIn(DATA_FOLDER),
-          custom: (await installsIn(custom)).length,
+          custom: (await installsIn(dataRoot)).length,
         },
         {home: ['01', '02', '03', 'current'], custom: 5},
-        `custom: ${JSON.stringify(await installsIn(custom))}`,
+        `custom: ${JSON.stringify(await installsIn(dataRoot))}`,
       );
     } finally {
       await userSettings({'remote.SSH.serverInstallPath': undefined});
