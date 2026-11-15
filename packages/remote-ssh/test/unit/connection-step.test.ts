@@ -285,6 +285,24 @@ describe('the connection step', () => {
     return ready.logged().filter(line => line.startsWith('[ssh] '));
   }
 
+  it('#2598 (F-2109 AC-12): the window logs a LocalCommand’s lines as the helper sends them, apart from ssh’s own, and not after the connection is given back', async () => {
+    const ready = fixture('acquired', undefined, 'info');
+    const pending = ready.connecting();
+    await settled();
+    ready.lease.emit({type: 'localCommandLines', lines: ['out-marker']});
+    ready.lease.emit({type: 'sshLines', lines: ['Warning: x']});
+    ready.lease.emit({type: 'connected', socksPort: 41000});
+    const connected = await pending;
+    if (connected.kind === 'done') {
+      connected.value.release();
+    }
+    ready.lease.emit({type: 'localCommandLines', lines: ['after the release']});
+    deepStrictEqual(
+      ready.logged().filter(line => /^\[(?:local command|ssh)\] /.test(line)),
+      ['[local command] out-marker', '[ssh] Warning: x'],
+    );
+  });
+
   it('F-2003 BR-6 item 6: the window logs each line once, in order', async () => {
     const ready = await hearing('trace', [['debug1: a', 'b'], ['c']]);
     deepStrictEqual(sshLogged(ready), [

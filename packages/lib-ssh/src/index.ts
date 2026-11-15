@@ -167,6 +167,7 @@ export {
   type StoredDisplay,
 } from './connection-server/messages.ts';
 export {LoginOwnership} from './connection-server/ownership.ts';
+export {LocalCommandLog} from './connection-server/local-command-log.ts';
 export {
   ConnectionHandler,
   type ConnectionHandlerOptions,

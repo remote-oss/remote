@@ -63,6 +63,45 @@ export function logSshLines(
   }
 }
 
+/** ssh's line that ends the time a `LocalCommand` runs in: it enters the session, which the client's `-v` always says. */
+const INTERACTIVE_SESSION_LINE = 'debug1: Entering interactive session.';
+
+/**
+ * Where a terminal line says ssh entered the session: the text in front of that line, which is the last words of a
+ * command that wrote no line end, or none when the line does not end so. A carriage return at its end is not part of it.
+ */
+export function beforeInteractiveSession(line: string): string | undefined {
+  const bare = line.replace(/\r$/, '');
+  return bare.endsWith(INTERACTIVE_SESSION_LINE)
+    ? bare.slice(0, bare.length - INTERACTIVE_SESSION_LINE.length)
+    : undefined;
+}
+
+/** Whether `line` is one of ssh's own debug lines, which the client's `-v` writes among a command's output. */
+export function isSshDebugLine(line: string): boolean {
+  return /^debug[123]: /.test(line);
+}
+
+/** The log line of a line a `LocalCommand` wrote to ssh's standard output: marked `[local command]`, the token masked. */
+export function localCommandEntry(
+  line: string,
+  token: string | undefined,
+): string {
+  const bare = line.endsWith('\r') ? line.slice(0, -1) : line;
+  return `[local command] ${masked(bare, token)}`;
+}
+
+/** Writes `lines` of a `LocalCommand`'s output to `logger`; the log is all they are for, and nothing reads them. */
+export function logLocalCommandLines(
+  logger: Pick<Logger, 'info'>,
+  lines: readonly string[],
+  token: string | undefined,
+): void {
+  for (const line of lines) {
+    logger.info(localCommandEntry(line, token));
+  }
+}
+
 /** What the log shows where a terminal echoed the answer to a prompt. */
 const ANSWER_NOT_LOGGED = '[answer not logged]';
 

@@ -27,6 +27,7 @@ const EVENTS: PlainData[] = [
   {type: 'waitingForOtherWindow'},
   {type: 'connected', socksPort: 41000},
   {type: 'transportLost'},
+  {type: 'localCommandLines', lines: ['out-marker', 'second']},
   {type: 'scriptLine', runId: 4, line: 'hello'},
   {type: 'spawnFailed', cause: 'clientVanished', detail: 'spawn ssh ENOENT'},
   {type: 'loginFailed', kind: 'unknown', hints: []},
@@ -68,6 +69,17 @@ describe('connection replies and events (contracts §4 S9)', () => {
     deepStrictEqual(
       EVENTS.map(body => readConnectionEvent(body)),
       EVENTS,
+    );
+  });
+
+  it('#2598: a localCommandLines event is read only when every line is a text', () => {
+    deepStrictEqual(
+      [
+        {type: 'localCommandLines', lines: 'one'},
+        {type: 'localCommandLines', lines: [1]},
+        {type: 'localCommandLines'},
+      ].map(body => readConnectionEvent(body)),
+      [undefined, undefined, undefined],
     );
   });
 
