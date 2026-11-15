@@ -346,7 +346,8 @@ export function registerLanguagePack(
  * rewrites it, neither atomically, when the crash-reporter keys are missing, and a launch that starts on a user-data
  * folder its earlier, stopped editor left reads the file as it stands, which a write still in flight leaves invalid,
  * and the launch's window shows the runtime-arguments notice for it. The keys stand in the file, written by temp and
- * rename, so the editor finds them and rewrites nothing, and the file the launch starts on parses whatever it met.
+ * rename, so the editor finds them and rewrites nothing, and the file the launch starts on parses whatever it met. A
+ * row that edits the file of its own and relaunches the editor stands the seed back over its edit.
  */
 export function preSeedArgv(runFolder: string, launch: Launch): void {
   const folder = userDataFolderOf(runFolder, launch);
