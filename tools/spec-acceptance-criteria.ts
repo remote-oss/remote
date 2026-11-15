@@ -265,7 +265,13 @@ export const SSH_RELEASE_TWO_FEATURES: readonly string[] = [
   'F-2408',
   'F-2413',
   'F-2504',
+  'F-2505',
+  'F-2506',
+  'F-2602',
+  'F-2603',
+  'F-2701',
   'F-2702',
+  'F-2703',
 ];
 
 /** The coverage file of Remote - SSH release 2. */
@@ -291,13 +297,13 @@ export const COVERAGE_SCOPES: readonly CoverageScope[] = [
 /**
  * The ids of the criteria of `feature` in an issue's body, in body order, each once: the lines that start with a
  * bold `<feature>.AC-<n>` after a list dash, the number with an optional lower-case letter (`AC-17b`) and the bold
- * text with an optional note after the id (`AC-35 (a note)`), unless the text after the bold starts
- * with `Removed` or `Merged into` (a criterion folded into another). A later line that only quotes an id does not
- * count.
+ * text with an optional note after the id (`AC-35 (a note)`), unless the text after the bold starts with `Removed`
+ * or `Merged into` (a criterion folded into another), possibly behind a parenthesised note (`(stub, revised by
+ * a later ruling) Removed: ...`). A later line that only quotes an id does not count.
  */
 export function acceptanceCriteriaOf(body: string, feature: string): string[] {
   const pattern = new RegExp(
-    `^- \\*\\*(${feature}\\.AC-\\d+[a-z]?)\\b[^*]*\\*\\*(?! *(?:Removed|Merged into))`,
+    `^- \\*\\*(${feature}\\.AC-\\d+[a-z]?)\\b[^*]*\\*\\*(?! *(?:\\([^)]*\\) )?(?:Removed|Merged into))`,
   );
   const found: string[] = [];
   for (const line of body.split('\n')) {
