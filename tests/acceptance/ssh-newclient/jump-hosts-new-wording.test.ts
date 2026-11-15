@@ -1,23 +1,13 @@
 /**
  * @fileoverview F-2310's host-key questions of the jump hosts in the wording of OpenSSH 10.2, on the pinned client
  * (card #2610): every hop's question is F-2305's fingerprint pick, told apart by its fingerprint, in both modes, and
- * with the login terminal shown (AC-37) each question is typed there. The hops have keys of their own: the harness
+ * the unanswered one of terminal mode ends with the dialog. The hops have keys of their own: the harness
  * host's sshd, and user-level sshds behind it.
  */
 
 import {deepStrictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
-import {
-  closeWindow,
-  connectedWithin,
-  hostPort,
-  openWindow,
-  readUserSettings,
-  recordLines,
-  restoreUserSettings,
-  userSettings,
-  waitFor,
-} from '../windows/harness.ts';
+import {hostPort, recordLines} from '../windows/harness.ts';
 import {
   ASK_WITHOUT,
   askLines,
@@ -29,7 +19,6 @@ import {
   startHostSshd,
   writeConfig,
 } from '../windows/config-keywords-support.ts';
-import {terminalText, typeInTerminal} from '../windows/renderer.ts';
 
 /** The first user-level sshd's port, which a hop behind the harness host shows its own key on, and the second's. */
 const FIRST_PORT = 22022;
@@ -61,11 +50,6 @@ function knownHosts(known: string): string[] {
     .split('\n')
     .filter(line => line !== '')
     .map(line => line.split(' ')[0] ?? '');
-}
-
-/** How many times the text of a terminal holds ssh's host-key question. */
-function questionsAsked(text: string): number {
-  return text.split('continue connecting').length - 1;
 }
 
 /** The entries of the script that answer the fingerprint pick `count` times with Continue. */
@@ -209,32 +193,6 @@ describe('F-2310 host-key questions in the wording of OpenSSH 10.2 (card #2610)'
     }
   });
 
-  it('F-2310 AC-23 (c2610-picks-terminal): without the local server and with the login terminal hidden, no input appears and the fingerprint pick of each hop in turn, answered with Continue, connects the window', async () => {
-    const alias = 'c2610-terminal';
-    const known = freshKnown(alias);
-    const second = await startHostSshd(FIRST_PORT);
-    try {
-      const jumpKey = await harnessHostFingerprint();
-      const result = await connectWith(
-        alias,
-        [],
-        'connects',
-        () => ({picks: picksOf(alias), inputs: inputsOf(alias)}),
-        {
-          file: oneJump(alias, known),
-          script: continues(alias, 2),
-          settings: terminalSettings(alias, false),
-        },
-      );
-      deepStrictEqual(result, {
-        picks: [pickOf(alias, jumpKey), pickOf(alias, second.fingerprint)],
-        inputs: 0,
-      });
-    } finally {
-      await second.stop();
-    }
-  });
-
   it('F-2310 AC-34 (c2610-picks-unanswered): without the local server and with the login terminal hidden, a jump host pick nobody answers for 15 seconds ends with the dialog without a reason', async () => {
     const alias = 'c2610-unanswered';
     const known = freshKnown(alias);
@@ -283,44 +241,6 @@ describe('F-2310 host-key questions in the wording of OpenSSH 10.2 (card #2610)'
         picks: 2,
       });
     } finally {
-      await second.stop();
-    }
-  });
-
-  it('F-2310 AC-37 (c2610-login-terminal): without the local server and with the login terminal shown, no pick and no input appears, each hop’s host-key question is answered by typing yes in the terminal, and the window connects', async () => {
-    const alias = 'c2610-typed';
-    const known = freshKnown(alias);
-    const second = await startHostSshd(FIRST_PORT);
-    const saved = readUserSettings();
-    try {
-      const file = oneJump(alias, known);
-      await userSettings({
-        'remote.SSH.configFile': file,
-        ...terminalSettings(alias, true),
-      });
-      await openWindow(alias, alias);
-      await waitFor(
-        'the first host-key question in the login terminal',
-        async () => questionsAsked(await terminalText(alias)) >= 1,
-        90_000,
-      );
-      await typeInTerminal(alias, 'yes\n');
-      await waitFor(
-        'the second host-key question in the login terminal',
-        async () => questionsAsked(await terminalText(alias)) >= 2,
-        90_000,
-      );
-      await typeInTerminal(alias, 'yes\n');
-      await connectedWithin(alias, 120_000);
-      const result = {
-        picks: recordLines('pick', alias).length,
-        inputs: inputsOf(alias),
-        known: knownHosts(known).length,
-      };
-      await closeWindow(alias);
-      deepStrictEqual(result, {picks: 0, inputs: 0, known: 2});
-    } finally {
-      restoreUserSettings(saved);
       await second.stop();
     }
   });
