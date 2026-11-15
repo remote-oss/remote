@@ -11,7 +11,50 @@ import {
   MODES,
   plainSsh,
 } from '../windows/config-keywords-support.ts';
-import {variable} from '../windows/harness.ts';
+import {
+  activeEditorOf,
+  activeEditorTextOf,
+  connectionLog,
+  dirtyDocumentsOf,
+  inWindow,
+  onHostAs,
+  recordLines,
+  variable,
+  waitFor,
+} from '../windows/harness.ts';
+import {editorHasFocus, statusItem} from '../windows/renderer.ts';
+
+/** The text the untitled editor of the reconnect row holds. */
+const UNSAVED = 'unsaved text of c2600';
+
+/** The longest the reconnect row waits for ssh to end and the window to connect again (the specification's VS-7 waits 400 s). */
+const DROP_MILLISECONDS = 420_000;
+
+/** A line the connection log gains once per connect of a window, the reconnection's included. */
+const CONNECTED_LINE = 'Remote server listening on port';
+
+/** How many connects the connection log holds so far. */
+function connects(): number {
+  return connectionLog().filter(line => line.includes(CONNECTED_LINE)).length;
+}
+
+/** The process id of the shell in the active terminal of window `name`, which the shell itself prints into a file of the host. */
+async function shellOf(name: string): Promise<string> {
+  const file = `/home/harness/c2600-shell-${String(Date.now())}`;
+  await inWindow(name, 'workbench.action.terminal.sendSequence', {
+    text: `echo $$ > ${file}.tmp && mv ${file}.tmp ${file}\n`,
+  });
+  let shell = '';
+  await waitFor(
+    `the shell of ${name} to write ${file}`,
+    async () => {
+      shell = (await onHostAs('harness', 'cat', file).catch(() => '')).trim();
+      return shell !== '';
+    },
+    30_000,
+  );
+  return shell;
+}
 
 describe('ssh_config keywords newer than the runners’ OpenSSH (card #2600)', function () {
   this.timeout(300_000);
@@ -94,6 +137,91 @@ describe('ssh_config keywords newer than the runners’ OpenSSH (card #2600)', f
       [result.plain.status, result.outcome.toasts, result.outcome.dialog],
       [0, [], undefined],
       result.plain.stderr,
+    );
+  });
+
+  it('F-2109 AC-15 (c2600-channel-timeout): when ssh ends after the connect (ChannelTimeout), the window reconnects by itself with no dialog, shows Reconnecting to SSH and then SSH again, and keeps the terminal’s shell, the unsaved text and the focus', async function () {
+    this.timeout(DROP_MILLISECONDS + 240_000);
+    const alias = 'c2600-timeout';
+    const result = await connectWith(
+      alias,
+      ['ChannelTimeout session=5s'],
+      'connects',
+      async () => {
+        await inWindow(alias, 'workbench.action.terminal.new');
+        const shellBefore = await shellOf(alias);
+        await inWindow(alias, 'acceptance.agent.openUntitled', UNSAVED);
+        await waitFor(
+          'the untitled editor to be unsaved',
+          async () => (await dirtyDocumentsOf(alias)).length > 0,
+          15_000,
+        );
+        const before = {
+          editor: await activeEditorOf(alias),
+          focused: await editorHasFocus(alias),
+        };
+        const mark = Date.now();
+
+        const connectsBefore = connects();
+        const indicators = new Set<string>();
+        await waitFor(
+          'ssh to end and the window to connect again',
+          async () => {
+            indicators.add((await statusItem(alias, 'status.host')).text);
+            return connects() > connectsBefore;
+          },
+          DROP_MILLISECONDS,
+        ).catch(() => undefined);
+        const reconnected = connects() > connectsBefore;
+        const droppedAfter = Math.round((Date.now() - mark) / 1000);
+        await waitFor(
+          'the indicator to read SSH again',
+          async () => {
+            const text = (await statusItem(alias, 'status.host')).text;
+            indicators.add(text);
+            return text === `SSH: ${alias}`;
+          },
+          30_000,
+        ).catch(() => undefined);
+        const after = {
+          editor: await activeEditorOf(alias),
+          focused: await editorHasFocus(alias),
+        };
+        return {
+          reconnected,
+          droppedAfter,
+          indicators: [...indicators].sort(),
+          dialogs: recordLines('failureDialog', alias)
+            .filter(line => line.time >= mark)
+            .map(line => line.question),
+          sameFocus: after.editor === before.editor && after.focused,
+          focusedBefore: before.focused,
+          text: await activeEditorTextOf(alias),
+          sameShell: (await shellOf(alias)) === shellBefore,
+          lastLines: connectionLog().slice(-8),
+        };
+      },
+    );
+    deepStrictEqual(
+      [
+        result.reconnected,
+        result.indicators,
+        result.dialogs,
+        result.focusedBefore,
+        result.sameFocus,
+        result.text,
+        result.sameShell,
+      ],
+      [
+        true,
+        [`Reconnecting to SSH: ${alias}...`, `SSH: ${alias}`],
+        [],
+        true,
+        true,
+        UNSAVED,
+        true,
+      ],
+      `ssh ended ${String(result.droppedAfter)} s after the wait began; the log's last lines: ${JSON.stringify(result.lastLines)}`,
     );
   });
 });
