@@ -158,8 +158,8 @@ describe('the connect of a folder that is not trusted, with the server on a sock
   }
 
   it('F-2410 AC-31 (st31-timeout): after a connect of the host that worked, with the trust request left open the indicator reads Disconnected with the host behind it, and after Trust Folder & Continue the dialog of the connect that timed out comes, from which Retry connects with no trust dialog', async () => {
-    // No connection is made while the trust request is open (7.E7): the host in the indicator is core's cached label of
-    // an earlier connect of the same authority (F-2502 BR-5), so the row makes that connect itself.
+    // No connection is made while the trust request is open: the host in the indicator is core's cached label of an
+    // earlier connect of the same authority, so the row makes that connect itself.
     const first = 'st31-first';
     appendScript([
       {
@@ -175,7 +175,7 @@ describe('the connect of a folder that is not trusted, with the server on a sock
     await connectedWithin(first, INSTALL_MILLISECONDS);
     await closeWindow(first);
     const cached = cachedLabelAuthorities().includes('ssh-remote+harness-zsh');
-    // The connect that worked remembered the host's platform (F-2206), so this window asks no platform pick.
+    // The connect that worked remembered the host's platform, so this window asks no platform pick.
     const window = 'st31';
     appendScript([
       {

@@ -26,7 +26,7 @@ import {
 } from '../windows/renderer.ts';
 
 /**
- * The password-only account spelt with its user: an authority of its own (F-2502 BR-8) that no connect that works uses,
+ * The password-only account spelt with its user: an authority of its own, as core counts authorities, that no connect that works uses,
  * so the editor holds no label of it when its first resolve runs.
  */
 const NEVER_CONNECTED = 'harness-pwonly@password-retry';

@@ -32,7 +32,7 @@ const TIMED_OUT =
   'Could not establish connection to "harness-bash": Connecting with SSH timed out.';
 
 /**
- * The harness-bash account spelt with its user: an authority of its own (F-2502 BR-8) that no connect that works uses,
+ * The harness-bash account spelt with its user: an authority of its own, as core counts authorities, that no connect that works uses,
  * so the editor never holds a label of it and a failed connect shows the window as one that never connected.
  */
 const NEVER_CONNECTED = 'harness-bash@harness-bash';
