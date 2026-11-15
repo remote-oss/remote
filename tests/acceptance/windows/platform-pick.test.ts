@@ -319,6 +319,47 @@ function withoutNotices(mark: number, window: string): string[] {
   return surfacesSince(mark, window).filter(surface => surface !== 'notice');
 }
 
+/** `value` as digits padded with zeros to `width`. */
+function padded(value: number, width: number): string {
+  return String(value).padStart(width, '0');
+}
+
+/** A time of day as the connection log stamps its lines: `HH:MM:SS.mmm`, on the runner's clock. */
+function clockOf(milliseconds: number): string {
+  const moment = new Date(milliseconds);
+  return `${padded(moment.getHours(), 2)}:${padded(moment.getMinutes(), 2)}:${padded(moment.getSeconds(), 2)}.${padded(moment.getMilliseconds(), 3)}`;
+}
+
+/**
+ * What a failed row of the kill names to tell when the connection ended against when the kill ran: the times of the
+ * row's steps, whether the window was connected before the command, and the lines the connection log and the
+ * window's record gained since the row opened its window, each with its time.
+ */
+function killTimeline(facts: {
+  connectedBefore: boolean;
+  servers: number;
+  times: {connected: number; escape: number; escaped: number};
+  logMark: number;
+  recordMark: number;
+}): string {
+  const {times} = facts;
+  return JSON.stringify(
+    {
+      connectedBefore: facts.connectedBefore,
+      servers: facts.servers,
+      connectedAt: clockOf(times.connected),
+      escapeAt: clockOf(times.escape),
+      escapedAt: clockOf(times.escaped),
+      record: linesSince(facts.recordMark, 'k26').map(
+        line => `${clockOf(line.time)} ${line.surface}: ${line.question}`,
+      ),
+      connectionLines: connectionLog({withTimes: true}).slice(facts.logMark),
+    },
+    null,
+    1,
+  );
+}
+
 describe('the remote platform pick of the commands and the reconnections (card coverage-94)', function () {
   this.timeout(900_000);
 
@@ -382,13 +423,19 @@ describe('the remote platform pick of the commands and the reconnections (card c
   });
 
   it('F-2206 AC-26 (c94-kill-current): Kill Current VS Code Server asks the platform in a connected window; after Escape the window stays connected with no dialog and no entry, and after Linux the kill completes with no entry', async () => {
+    const logMark = connectionLog().length;
+    const recordMark = recordLines().length;
     await connectedWithoutEntry('k26');
+    const times = {connected: Date.now(), escape: 0, escaped: 0};
     const servers = await serverProcesses();
+    const connectedBefore = await connected('k26');
+    times.escape = Date.now();
     const escape = await runWith(
       'k26',
       'opensshremotes.cleanCurrentRemoteServer',
       [pickFor('k26', 'dismiss')],
     );
+    times.escaped = Date.now();
     const escaped = [
       withoutNotices(escape, 'k26'),
       await connected('k26'),
@@ -402,18 +449,33 @@ describe('the remote platform pick of the commands and the reconnections (card c
     );
     await serversGoneWithin(servers, 10_000);
     const lines = linesSince(linux, 'k26');
-    deepStrictEqual(
-      [
-        escaped,
-        lines.map(line => line.surface).slice(0, 1),
-        lines.find(line => line.surface === 'notice')?.question,
-      ],
-      [
-        [['platformPick'], true, true, undefined],
-        ['platformPick'],
-        'Killed VS Code Server on harness.',
-      ],
-    );
+    try {
+      deepStrictEqual(
+        [
+          escaped,
+          lines.map(line => line.surface).slice(0, 1),
+          lines.find(line => line.surface === 'notice')?.question,
+        ],
+        [
+          [['platformPick'], true, true, undefined],
+          ['platformPick'],
+          'Killed VS Code Server on harness.',
+        ],
+      );
+    } catch (caught) {
+      throw new Error(
+        `${String(caught)}\nthe kill's timing against the connection (clock times of the runner): ${killTimeline(
+          {
+            connectedBefore,
+            servers: servers.length,
+            times,
+            logMark,
+            recordMark,
+          },
+        )}`,
+        {cause: caught},
+      );
+    }
   });
 
   it('F-2206 AC-27 (c94-reconnect): each reconnection of a window without an entry shows the pick again', async () => {
