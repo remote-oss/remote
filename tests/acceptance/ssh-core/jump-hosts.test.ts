@@ -550,13 +550,11 @@ describe('jump hosts and proxy commands (card #2601)', function () {
         inWindow('local', 'workbench.action.newWindow'),
       );
       // The command turns the window into a remote one, which ends the extension host before it can answer: it is started, not awaited.
-      appendScript(
-        [
-          hostAnswer(next, {label: alias}),
-          {surface: 'pick', match: 'fingerprint', answer: 'yes'},
-          {surface: 'pick', match: 'fingerprint', answer: 'yes'},
-        ].map(entry => ({...entry, window: next})),
-      );
+      appendScript([
+        hostAnswer(next, {label: alias}),
+        {surface: 'pick', match: 'fingerprint', answer: 'yes', window: next},
+        {surface: 'pick', match: 'fingerprint', answer: 'yes', window: next},
+      ]);
       await startInWindow(
         next,
         'opensshremotes.openEmptyWindowInCurrentWindow',
