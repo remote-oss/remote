@@ -323,8 +323,12 @@ export function createServerSteps(
     },
     probe: (input, lease, cancellation) =>
       probe(lease.channel, parametersFor({}), cancellation),
-    maintain: (input, lease, action, cancellation) =>
-      MAINTENANCE[action](lease.channel, parametersFor({}), cancellation),
+    maintain: (input, lease, action, cancellation, host) =>
+      MAINTENANCE[action](
+        lease.channel,
+        parametersFor({hostOperatingSystem: host?.operatingSystem}),
+        cancellation,
+      ),
     plan: (input, host, options) => {
       const platform = templatePlatformOf(host);
       const resolution = resolveServerArchive(

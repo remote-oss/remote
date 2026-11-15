@@ -1388,6 +1388,22 @@ describe('the connect pipeline, what it keeps and gives back', () => {
     );
   });
 
+  it('F-2413.BR-9: the clean-up gets the probed host, so it takes the locks as the install did', async () => {
+    const {recording, options} = setup();
+    const hosts: Array<string | undefined> = [];
+    await connect(
+      INPUT,
+      steps(recording, {
+        maintain: (input, lease, action, cancellation, host) => {
+          hosts.push(host?.operatingSystem);
+          return Promise.resolve({kind: 'done'});
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(hosts, ['linux']);
+  });
+
   it('F-2413 6.4 step 5: a connect that reuses the running server prunes too', async () => {
     const {recording, options} = setup();
     await connect(

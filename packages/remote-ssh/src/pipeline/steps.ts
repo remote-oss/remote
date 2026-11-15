@@ -280,6 +280,7 @@ export interface ConnectSteps {
     lease: ConnectionLease,
     action: 'kill' | 'uninstall' | 'cleanup',
     cancellation: AbortSignal,
+    host?: ProbedHost,
   ): Promise<MaintenanceOutcome>;
   /** Installs the default extensions on a server that was already running; a failure never fails the connect. */
   installExtensions(
