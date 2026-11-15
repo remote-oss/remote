@@ -41,7 +41,7 @@ export const MODES = [
 ] as const;
 
 /** The lines of the run's `Host harness` block, without its `Host` line. */
-function harnessLines(): string[] {
+export function harnessLines(): string[] {
   const lines = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8').split(
     '\n',
   );
