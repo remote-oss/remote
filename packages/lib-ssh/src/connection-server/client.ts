@@ -103,6 +103,8 @@ export type ConnectionNotice =
   | {type: 'transportLost'}
   /** Lines of ssh's error stream, in order, for the window's log. */
   | {type: 'sshLines'; lines: string[]}
+  /** Lines a `LocalCommand` wrote to ssh's standard output, for the window's log alone. */
+  | {type: 'localCommandLines'; lines: string[]}
   | {type: 'helperGone'};
 
 /** Why the connection is not there. */
@@ -585,6 +587,7 @@ export class SharedConnection {
       case 'waitingForOtherWindow':
       case 'transportLost':
       case 'sshLines':
+      case 'localCommandLines':
         this.notify(event);
         break;
       default:

@@ -23,6 +23,7 @@ import {
   ConnectWait,
   type ConnectWaitSettings,
 } from '../process/connect-wait.ts';
+import {LocalCommandLog} from './local-command-log.ts';
 import {LineSplitter} from '../process/line-splitter.ts';
 import type {ProcessSpawner} from '../process/ports.ts';
 import {spawnSession, type SshSession} from '../process/session.ts';
@@ -294,9 +295,18 @@ export class ConnectionHandler implements MessageHandler {
     this.runs = runs;
     let ready = false;
     let early: Exclude<BootstrapEvent, {kind: 'ready'}> | undefined;
+    const commandLog = new LocalCommandLog();
+    let bootstrapped = false;
     const output = new LineSplitter(line => {
       const event = ready ? undefined : bootstrapEventOf(line);
+      if (event !== undefined) {
+        bootstrapped = true;
+      }
       if (event === undefined) {
+        const logged = bootstrapped ? undefined : commandLog.hear(line);
+        if (logged !== undefined) {
+          this.tell({type: 'localCommandLines', lines: [logged]});
+        }
         runs.hear(line);
       } else if (event.kind === 'ready') {
         ready = true;

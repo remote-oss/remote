@@ -2939,7 +2939,7 @@ describe('the container connector: the declared ports (card containers-72)', () 
     };
   }
 
-  it('F-1101 BR-1: the connection holds the forwardPorts, portsAttributes and otherPortsAttributes of the merged configuration', async () => {
+  it('F-1101 BR-1, BR-10: the connection holds the forwardPorts, portsAttributes and otherPortsAttributes of the merged configuration, and the attribute settings it wrote', async () => {
     const scene = sceneOf();
     scene.configuration = configurationWith({
       forwardPorts: [3000, 'side:4000'],
@@ -2951,6 +2951,10 @@ describe('the container connector: the declared ports (card containers-72)', () 
       forwardPorts: [3000, 'side:4000'],
       portsAttributes: {'3000': {label: 'web'}},
       otherPortsAttributes: {onAutoForward: 'silent'},
+      attributeSettings: {
+        'remote.portsAttributes': {'3000': {label: 'web'}},
+        'remote.otherPortsAttributes': {onAutoForward: 'silent'},
+      },
     });
   });
 
@@ -2976,6 +2980,7 @@ describe('the container connector: the declared ports (card containers-72)', () 
           forwardPorts: undefined,
           portsAttributes: undefined,
           otherPortsAttributes: undefined,
+          attributeSettings: {},
         },
       ],
     );

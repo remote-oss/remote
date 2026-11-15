@@ -307,8 +307,8 @@ export async function activate(
     manifest,
     host,
     {
-      revealLog: () => {
-        result.revealLog();
+      revealLog: preserveFocus => {
+        result.revealLog(preserveFocus);
       },
       logMark: () => result.logMark(),
       logText: from => result.logText(from),
@@ -426,7 +426,7 @@ async function surfaceAdapters(): Promise<EditorAdapters> {
 
 /** What the connect takes from the activation that served. */
 interface ServedActivation {
-  revealLog(): void;
+  revealLog(preserveFocus?: boolean): void;
   /** How many lines the log holds now. */
   logMark(): number;
   /** The log's text from its `from`-th line on. */
@@ -488,6 +488,9 @@ async function registerConnectOf(
             .getConfiguration('remote.SSH')
             .get('experimental.enhancedSessionLogs', true),
         createTerminal: troubleshootingEditor.createTerminal,
+        revealLog: preserveFocus => {
+          served.revealLog(preserveFocus);
+        },
         texts: () => ({
           heading: ownText({id: 'S138', values: []}, translate),
           leadIn: ownText({id: 'S125', values: []}, translate),

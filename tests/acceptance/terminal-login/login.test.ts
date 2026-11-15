@@ -21,6 +21,7 @@ import {
   pressEscape,
   clickToastLink,
   connectSurface,
+  indicatorDisconnects,
   dialogOf,
   notifications,
   panelShown,
@@ -288,6 +289,7 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
     const dialog = await waitForDialog(name, 120_000);
+    await indicatorDisconnects(name);
     const failed = {
       dialog: [dialog.details, [...dialog.buttons].sort()],
       indicator: (await connectSurface(name)).indicator.startsWith(

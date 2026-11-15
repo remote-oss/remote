@@ -26,8 +26,8 @@ export interface LogEnvironment {
 /** The open log: its logger, the reveal of Show Log, and the end of the channel. */
 export interface LogChannel {
   readonly logger: Logger;
-  /** Shows the panel with the channel selected and the focus in it, as often as asked. */
-  reveal(): void;
+  /** Shows the panel with the channel selected and the focus in it, as often as asked; `preserveFocus` leaves the focus where it is. */
+  reveal(preserveFocus?: boolean): void;
   /** How many lines the channel has been given so far. */
   mark(): number;
   /** The lines the channel was given from the `from`-th on (from the first by default), one to a line. */
@@ -90,8 +90,8 @@ export function openLogChannel(
   logger.info(`Client: ${environment.platform} ${environment.architecture}`);
   return {
     logger,
-    reveal: () => {
-      channel.show(false);
+    reveal: (preserveFocus = false) => {
+      channel.show(preserveFocus);
     },
     mark: () => written.length,
     text: (from = 0) => written.slice(from).join('\n'),

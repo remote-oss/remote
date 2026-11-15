@@ -2798,6 +2798,19 @@ export async function activate(
         showError: text => vscode.window.showErrorMessage(text),
         logger,
         translate,
+        attributes: {
+          effective: key => vscode.workspace.getConfiguration().get(key),
+          onChanged: listener =>
+            vscode.workspace.onDidChangeConfiguration(event => {
+              if (
+                event.affectsConfiguration('remote.portsAttributes') ||
+                event.affectsConfiguration('remote.otherPortsAttributes')
+              ) {
+                listener();
+              }
+            }),
+        },
+        scheduler: {setTimer: nodeTimer},
       }),
     };
     const registrationServed = {

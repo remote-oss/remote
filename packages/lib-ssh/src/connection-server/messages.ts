@@ -98,6 +98,8 @@ export type ConnectionEvent =
   | {type: 'scriptLine'; runId: number; line: string}
   /** Lines of ssh's error stream, in order, since the last such event. */
   | {type: 'sshLines'; lines: string[]}
+  /** Lines a `LocalCommand` wrote to ssh's standard output, for the window's log alone. */
+  | {type: 'localCommandLines'; lines: string[]}
   | {type: 'transportLost'};
 
 type Fields = Record<string, unknown>;
@@ -338,9 +340,10 @@ export function readConnectionEvent(
         ? {type: 'scriptLine', runId: body.runId, line: body.line}
         : undefined;
     case 'sshLines':
+    case 'localCommandLines':
       return Array.isArray(body.lines) &&
         body.lines.every(line => typeof line === 'string')
-        ? {type: 'sshLines', lines: body.lines}
+        ? {type: body.type, lines: body.lines}
         : undefined;
     case 'waitingForOtherWindow':
     case 'transportLost':
