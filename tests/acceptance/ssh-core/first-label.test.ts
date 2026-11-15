@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {cachedLabelAuthorities} from './global-state.ts';
+import {cachedLabelAuthorities} from '../windows/global-state.ts';
 import {
   appendScript,
   closeWindow,
@@ -11,15 +11,15 @@ import {
   signal,
   startInWindow,
   waitFor,
-} from './harness.ts';
-import {dismissals} from './maintenance.ts';
+} from '../windows/harness.ts';
+import {dismissals} from '../windows/maintenance.ts';
 import {
   pressEscape,
   quickPickOf,
   statusItem,
   statusItemText,
   windowTitle,
-} from './renderer.ts';
+} from '../windows/renderer.ts';
 
 /**
  * The password-only account spelt with its user: an authority of its own (F-2502 BR-8) that no connect that works uses,

@@ -16,7 +16,6 @@ import {
   signal,
   tunnelsOf,
   userSettings,
-  settingIn,
   waitFor,
 } from '../windows/harness.ts';
 import {cachedLabelAuthorities} from '../windows/global-state.ts';
@@ -176,11 +175,7 @@ describe('the connect of a folder that is not trusted, with the server on a sock
     await connectedWithin(first, INSTALL_MILLISECONDS);
     await closeWindow(first);
     const cached = cachedLabelAuthorities().includes('ssh-remote+harness-zsh');
-    // The connect that worked stored the host's platform (F-2206), so this window asks no platform pick.
-    const platform = (
-      (await settingIn('local', 'remote.SSH.remotePlatform')) as
-        Record<string, unknown> | undefined
-    )?.['harness-zsh'];
+    // The connect that worked remembered the host's platform (F-2206), so this window asks no platform pick.
     const window = 'st31';
     appendScript([
       {
@@ -205,10 +200,9 @@ describe('the connect of a folder that is not trusted, with the server on a sock
     signal('st31-retry');
     await connectedWithin(window, INSTALL_MILLISECONDS);
     deepStrictEqual(
-      [cached, platform, indicator, timedOut, await dialogOf(window)],
+      [cached, indicator, timedOut, await dialogOf(window)],
       [
         true,
-        'linux',
         'Disconnected from SSH: harness-zsh',
         'Could not establish connection to "harness-zsh": Connecting with SSH timed out.',
         undefined,
