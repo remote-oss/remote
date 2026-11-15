@@ -9,7 +9,7 @@ import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {linesSince, runWith} from '../windows/maintenance.ts';
-import {notifications, statusItem} from '../windows/renderer.ts';
+import {answerDialog, statusItem, waitForDialog} from '../windows/renderer.ts';
 import {
   appendScript,
   closeWindow,
@@ -994,7 +994,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     });
   });
 
-  it('F-2310 AC-31 (c2601-jump-reconnect-cancel-part): cancelling the jump host input of a reconnection stops it, the indicator reads Disconnected from SSH and nothing more is asked', async () => {
+  it('F-2310 AC-31 (c2601-jump-reconnect-cancel): cancelling the jump host input of a reconnection stops it with core’s Cannot reconnect dialog, the indicator reads Disconnected from SSH and nothing more is asked', async () => {
     const alias = 'c2601-recancel';
     const file = passwordChain(alias, 1, NOTICES_LOSS);
     const result = await connectWith(
@@ -1018,11 +1018,12 @@ describe('jump hosts and proxy commands (card #2601)', function () {
         } finally {
           restoreHostNetwork();
         }
-        await indicatorAfter(alias, 'Disconnected from SSH', Date.now());
-        await new Promise(resolve => setTimeout(resolve, 20_000));
+        const dialog = await waitForDialog(alias, 90_000);
+        const indicator = await indicatorOf(alias);
+        await answerDialog(alias, 'Cancel');
         return {
-          indicator: await indicatorOf(alias),
-          toasts: await notifications(alias),
+          details: dialog.details,
+          indicator,
           asked: recordLines('maskedInput', alias).length - asked,
         };
       },
@@ -1032,11 +1033,12 @@ describe('jump hosts and proxy commands (card #2601)', function () {
           passwordAt(alias, '127.0.0.1', hostPassword()),
           passwordAt(alias, '127.0.0.2', hostPassword()),
         ],
+        settings: {'window.dialogStyle': 'custom'},
       },
     );
     deepStrictEqual(result, {
+      details: 'Cannot reconnect. Please reload the window.',
       indicator: `Disconnected from SSH: ${alias}`,
-      toasts: [],
       asked: 1,
     });
   });
