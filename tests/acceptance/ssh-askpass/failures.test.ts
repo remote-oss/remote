@@ -17,6 +17,7 @@ import {
   answerDialog,
   dialogOf,
   inputBoxOf,
+  notifications,
   quickPickOf,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -146,8 +147,14 @@ describe('the failures of a login through the user’s own askpass program (card
   it('F-2309 AC-14 (c2596-wrong-answer): a program that answers wrongly gives the failure dialog after ssh gives up, with no fallback input, and a Retry with a corrected program connects', async () => {
     knowHostKey('askpass-pw');
     await withSettings({[EXTERNAL]: true, ...useOwnConfig()});
-    answering([{match: 'password', answer: 'not-the-password'}]);
+    answering([
+      {match: 'password', answer: 'not-the-password', delayMilliseconds: 8000},
+    ]);
     await openWindow('askpass-pw', 'as1');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    process.stdout.write(
+      `AC14 ${JSON.stringify(await notifications('as1'))}\n`,
+    );
     const dialog = await waitForDialog('as1', 120_000);
     const inputs = await inputsShown('as1');
     answering([passwordRule()]);
