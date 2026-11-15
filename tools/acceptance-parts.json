@@ -1,6 +1,7 @@
 {
   "targetMinutes": 15,
   "together": [
+    ["remote", "reconnect"],
     ["socket-prime", "socket"],
     ["install-install-present-prime", "install-install-present"],
     [
