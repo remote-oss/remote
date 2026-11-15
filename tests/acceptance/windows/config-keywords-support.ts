@@ -20,11 +20,20 @@ import {
   userSettings,
   variable,
   waitFor,
-} from '../windows/harness.ts';
-import {dismissals} from '../windows/maintenance.ts';
-import {notifications, statusItem, windowTitle} from '../windows/renderer.ts';
+} from './harness.ts';
+import {dismissals} from './maintenance.ts';
+import {notifications, statusItem, windowTitle} from './renderer.ts';
 
 const execFileAsync = promisify(execFile);
+
+/** The modes of the extension: the local connection server, and one `ssh` of its own per window. */
+export const MODES = [
+  {mode: 'server', settings: {}},
+  {
+    mode: 'terminal',
+    settings: {'remote.SSH.useLocalServer': false},
+  },
+] as const;
 
 /** The lines of the run's `Host harness` block, without its `Host` line. */
 function harnessLines(): string[] {
@@ -60,13 +69,26 @@ function entryFile(
   return file;
 }
 
-/** What plain `ssh -F <file> <alias> true` did: its exit status and what it wrote to stderr. */
+/**
+ * The `ssh` the launch's Remote - SSH runs: the `remote.SSH.path` of the launch's user settings, or the `ssh` on the
+ * PATH when they name none, so that a row's plain `ssh` is the product's.
+ */
+export function launchSsh(): string {
+  const text = readUserSettings();
+  const named =
+    text === undefined
+      ? undefined
+      : (JSON.parse(text) as Record<string, unknown>)['remote.SSH.path'];
+  return typeof named === 'string' && named !== '' ? named : 'ssh';
+}
+
+/** What plain `ssh -F <file> <alias> true`, with the launch's `ssh`, did: its exit status and what it wrote to stderr. */
 export async function plainSsh(
   file: string,
   alias: string,
 ): Promise<{status: number; stderr: string}> {
   try {
-    await execFileAsync('ssh', ['-F', file, alias, 'true']);
+    await execFileAsync(launchSsh(), ['-F', file, alias, 'true']);
     return {status: 0, stderr: ''};
   } catch (caught) {
     const failure = caught as {code?: number; stderr?: string};
@@ -177,15 +199,4 @@ export async function connectWith<Result>(
 /** The failure dialogs window `name` showed from `mark` (milliseconds) on. */
 function shownFrom(name: string, mark: number) {
   return recordLines('failureDialog', name).filter(line => line.time >= mark);
-}
-
-/** Whether the client's `ssh` knows the keyword line `keyword`; a row for a newer keyword skips on a client that does not. */
-export async function clientKnows(keyword: string): Promise<boolean> {
-  const file = entryFile('c2593-probe', [keyword]);
-  try {
-    await execFileAsync('ssh', ['-G', '-F', file, 'c2593-probe']);
-    return true;
-  } catch {
-    return false;
-  }
 }

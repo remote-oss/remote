@@ -1137,6 +1137,18 @@ export function launchesOf(root: string): Launch[] {
     },
     // The core features of the editor in a window on the SSH host, read through the renderer.
     {...RENDERER_LAUNCH, label: 'ssh-core', suite: 'ssh-core'},
+    // The same with the pinned OpenSSH client as the user's `remote.SSH.path`, for the criteria about keywords newer than
+    // the runners' client; the rows run plain `ssh` through the same path.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-newclient',
+      suite: 'ssh-newclient',
+      sshClient: 'pinned',
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.SSH.path': '${HARNESS_SSH_CLIENT}',
+      },
+    },
     // Remote - SSH beside the core editor's own SSH agent hosts: AI features start off, and core's agent-host keys sit in the
     // settings at their defaults. The empty script makes Remote - SSH show its real pickers, in the run's own home.
     {

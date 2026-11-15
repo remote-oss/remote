@@ -152,6 +152,9 @@
       "path": "tests/acceptance/ssh-core"
     },
     {
+      "path": "tests/acceptance/ssh-newclient"
+    },
+    {
       "path": "tests/acceptance/ssh-agents"
     },
     {
