@@ -5,7 +5,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {connectWith} from './config-keywords-support.ts';
+import {connectWith} from '../windows/config-keywords-support.ts';
 
 describe('a LocalCommand’s output in the log (card #2598)', function () {
   this.timeout(300_000);
