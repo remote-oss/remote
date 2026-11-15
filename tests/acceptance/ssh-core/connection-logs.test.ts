@@ -622,10 +622,18 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
         await inWindow('c121-live', 'opensshremotes.cleanLocalServer');
         await waitFor(
           'the reconnection of c121-live',
-          () =>
-            connectionLog()
-              .slice(mark)
-              .some(each => each.includes('reconnection')),
+          () => {
+            const later = connectionLog().slice(mark);
+            const start = later.findIndex(each =>
+              each.includes('reconnection'),
+            );
+            return (
+              start >= 0 &&
+              later
+                .slice(start)
+                .some(each => each.startsWith('Resolved ssh-remote+harness'))
+            );
+          },
           120_000,
         );
         const record = connectionLog().slice(mark);
@@ -638,12 +646,23 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
               traceLines: record.some(each =>
                 each.startsWith('[ssh] debug1: '),
               ),
+              storedRecord: record.some(each =>
+                each.startsWith('the stored data has'),
+              ),
+              environments: record.some(each =>
+                each.startsWith('the terminal environments were updated'),
+              ),
             },
-            {reconnected: true, traceLines: true},
+            {
+              reconnected: true,
+              traceLines: true,
+              storedRecord: true,
+              environments: true,
+            },
           );
         } catch (caught) {
           throw new Error(
-            `${(caught as Error).message}: the reconnection record holds ${JSON.stringify(record.slice(0, 15))}`,
+            `${(caught as Error).message}: the reconnection record holds ${JSON.stringify(record.filter(each => !each.startsWith('Searched for ssh')).slice(0, 60))}`,
             {cause: caught},
           );
         }
