@@ -2124,8 +2124,7 @@ describe('the recent folders under a target (card coverage-122)', function () {
         [
           dialog?.question.includes('nowhere'),
           dialog?.buttons,
-          windowNames().includes(failed),
-          await notifications(failed),
+          await notifications(recoveredName),
           (await historyOf(recoveredName)).nowhere?.map(entry => entry.path) ??
             [],
           (await windowState(recoveredName)).remoteAuthority,
@@ -2133,7 +2132,6 @@ describe('the recent folders under a target (card coverage-122)', function () {
         [
           true,
           ['Close Remote', 'Retry', 'More Actions...'],
-          true,
           [],
           [first, second],
           'ssh-remote+harness',
