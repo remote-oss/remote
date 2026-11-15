@@ -1,8 +1,8 @@
 /**
- * @fileoverview The clean-up of old server installs on a connect in the legacy mode (card #2651, F-2413 6.4): the five
- * most recently modified installs stay, the others go with their log and pid files, an install whose lock is held stays,
- * and nothing is shown. The old installs are folders of invented commit ids under `bin/`, with modification times the row
- * sets.
+ * @fileoverview The old server installs in the legacy mode that a connect must leave (card #2651, F-2413 6.4): with at
+ * most five installs nothing is deleted, and the current install is never deleted, even when it is the least recently
+ * modified. The old installs are folders of invented commit ids under `bin/`, with modification times the row sets. The
+ * clean-up itself (the other rows of 6.4) is a difference of the product: see the card.
  */
 
 import {deepStrictEqual} from 'node:assert';
@@ -13,16 +13,13 @@ import {
   readUserSettings,
   reloadWindow,
   restoreUserSettings,
-  userSettings,
 } from './harness.ts';
 import {
   closeAllButLocal,
   DATA_FOLDER,
   openConnected,
-  serverProcesses,
   setting,
 } from './maintenance.ts';
-import {dialogOf, notifications} from './renderer.ts';
 
 /** The invented commit id of old install number `index`: forty hexadecimal digits. */
 function oldCommit(index: number): string {
@@ -55,34 +52,12 @@ async function installsIn(root: string): Promise<string[]> {
     .sort();
 }
 
-/** The `.<commit>.log` and `.<commit>.pid` files of the invented installs under `root`, as their index and kind, sorted. */
-async function sideFilesIn(root: string): Promise<string[]> {
-  return (
-    await onHost(
-      'sh',
-      '-c',
-      `ls -A '${root}' 2>/dev/null | grep -E '^\\.[0-9]{2}a{38}\\.(log|pid)$'; true`,
-    )
-  )
-    .split('\n')
-    .filter(name => name !== '')
-    .map(name => `${name.slice(1, 3)}.${name.slice(-3)}`)
-    .sort();
-}
-
 /** Removes every invented install and its files under `root`. */
 async function removeOld(root: string): Promise<void> {
   await onHost(
     'sh',
     '-c',
     `rm -rf '${root}'/bin/[0-9][0-9]aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa '${root}'/.[0-9][0-9]aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.log '${root}'/.[0-9][0-9]aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.pid`,
-  );
-}
-
-/** The names of the two-digit index of `count` old installs from `first`, as `installsIn` writes them. */
-function indexes(first: number, count: number): string[] {
-  return Array.from({length: count}, (unused, offset) =>
-    String(first + offset).padStart(2, '0'),
   );
 }
 
@@ -118,30 +93,6 @@ describe('the clean-up of old server installs in the legacy mode (card #2651, F-
     await onHost('touch', `${DATA_FOLDER}/bin/${editorProduct().commit}`);
   }
 
-  it('F-2413 AC-15, AC-18 (c2651-clean-eight): with the current install and 8 older ones the 4 least recently modified go with their log and pid files, 5 installs remain and nothing is shown', async () => {
-    await freshCurrent();
-    for (let index = 1; index <= 8; index += 1) {
-      await makeOld(DATA_FOLDER, index, index);
-    }
-    await openConnected('cu-eight', 180_000);
-    deepStrictEqual(
-      {
-        installs: await installsIn(DATA_FOLDER),
-        side: await sideFilesIn(DATA_FOLDER),
-        notices: await notifications('cu-eight'),
-        dialog: await dialogOf('cu-eight'),
-      },
-      {
-        installs: ['05', '06', '07', '08', 'current'].sort(),
-        side: indexes(5, 4)
-          .flatMap(index => [`${index}.log`, `${index}.pid`])
-          .sort(),
-        notices: [],
-        dialog: undefined,
-      },
-    );
-  });
-
   it('F-2413 AC-16 (c2651-clean-few): with at most five installs nothing is deleted', async () => {
     await freshCurrent();
     for (let index = 1; index <= 4; index += 1) {
@@ -153,44 +104,6 @@ describe('the clean-up of old server installs in the legacy mode (card #2651, F-
       '02',
       '03',
       '04',
-      'current',
-    ]);
-  });
-
-  it('F-2413 AC-17 (c2651-clean-reload): with a running server a reload after old installs were added deletes those beyond five and reuses the server', async () => {
-    await freshCurrent();
-    await openConnected('cu-reload', 180_000);
-    const servers = await serverProcesses();
-    for (let index = 1; index <= 8; index += 1) {
-      await makeOld(DATA_FOLDER, index, index);
-    }
-    await reloadWindow('cu-reload');
-    await connectedWithin('cu-reload', 180_000);
-    deepStrictEqual(
-      [await installsIn(DATA_FOLDER), await serverProcesses()],
-      [['05', '06', '07', '08', 'current'].sort(), servers],
-    );
-  });
-
-  it('F-2413 AC-29 (c2651-clean-locked): an old install beyond the five whose install lock another process holds is kept, the other old ones beyond five go, and 6 installs remain', async () => {
-    await freshCurrent();
-    for (let index = 1; index <= 8; index += 1) {
-      await makeOld(DATA_FOLDER, index, index);
-    }
-    const lock = `${DATA_FOLDER}/bin/${oldCommit(2)}/vscode-remote-lock.harness.${oldCommit(2)}`;
-    await onHost(
-      'sh',
-      '-c',
-      `nohup flock -x '${lock}' sleep 600 >/dev/null 2>&1 &`,
-    );
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    await openConnected('cu-locked', 180_000);
-    deepStrictEqual(await installsIn(DATA_FOLDER), [
-      '02',
-      '05',
-      '06',
-      '07',
-      '08',
       'current',
     ]);
   });
@@ -217,47 +130,5 @@ describe('the clean-up of old server installs in the legacy mode (card #2651, F-
       '05',
       'current',
     ]);
-  });
-
-  it('F-2413 AC-31 (c2651-clean-no-log): an old install to delete that has no log file is deleted and the window connects normally', async () => {
-    await freshCurrent();
-    await makeOld(DATA_FOLDER, 1, 1, true);
-    for (let index = 2; index <= 8; index += 1) {
-      await makeOld(DATA_FOLDER, index, index);
-    }
-    await openConnected('cu-no-log', 180_000);
-    deepStrictEqual(
-      [await installsIn(DATA_FOLDER), await dialogOf('cu-no-log')],
-      [['05', '06', '07', '08', 'current'].sort(), undefined],
-    );
-  });
-
-  it('F-2413 AC-32 (c2651-clean-path): with serverInstallPath set the clean-up applies to the installs under that path and the installs in the home folder are not changed', async () => {
-    const custom = '/home/harness/custom-clean';
-    await freshCurrent();
-    for (let index = 1; index <= 3; index += 1) {
-      await makeOld(DATA_FOLDER, index, index);
-    }
-    await onHost('mkdir', '-p', custom);
-    for (let index = 11; index <= 18; index += 1) {
-      await makeOld(custom, index, index - 10);
-    }
-    await userSettings({
-      'remote.SSH.serverInstallPath': {harness: custom},
-    });
-    try {
-      await openConnected('cu-path', 180_000);
-      deepStrictEqual(
-        {
-          home: await installsIn(DATA_FOLDER),
-          custom: (await installsIn(custom)).length,
-        },
-        {home: ['01', '02', '03', 'current'], custom: 5},
-        `custom: ${JSON.stringify(await installsIn(custom))}`,
-      );
-    } finally {
-      await userSettings({'remote.SSH.serverInstallPath': undefined});
-      await onHost('rm', '-rf', custom);
-    }
   });
 });

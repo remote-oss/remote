@@ -433,6 +433,8 @@
       "kill-unsaved.test.ts": 0.6,
       "pty.test.ts": 14.4,
       "remote-settings.test.ts": 0.7,
+      "server-lifetime-long.test.ts": 5.4,
+      "server-lifetime.test.ts": 11.2,
       "session-hints.test.ts": 1.3,
       "settings.test.ts": 0.1,
       "silent-flows.test.ts": 0.7,
