@@ -20,8 +20,8 @@ describe('a window opened 0.2 to 1.7 s after the last one closed, with the serve
 
   it('the sweep', async () => {
     const results: unknown[] = [];
-    for (const repeat of [0, 1, 2]) {
-      for (let wait = 0; wait <= 1500; wait += 100) {
+    for (const repeat of [0, 1, 2, 3]) {
+      for (let wait = 1200; wait <= 2400; wait += 100) {
         const first = `lg-a-${String(wait)}-${String(repeat)}`;
         const second = `lg-b-${String(wait)}-${String(repeat)}`;
         await openWindow('harness', first);
@@ -41,12 +41,15 @@ describe('a window opened 0.2 to 1.7 s after the last one closed, with the serve
         await openWindow('harness', second);
         let connected = false;
         try {
-          await connectedWithin(second, 90_000);
+          await connectedWithin(second, 40_000);
           connected = true;
         } catch {
           connected = false;
         }
         const lines = connectionLog().slice(mark);
+        const stamped = connected
+          ? []
+          : connectionLog({withTimes: true}).slice(-50);
         results.push({
           wait,
           repeat,
@@ -57,6 +60,7 @@ describe('a window opened 0.2 to 1.7 s after the last one closed, with the serve
           exits: lines.filter(line =>
             line.includes('the connection helper exits'),
           ).length,
+          tail: stamped,
           gone: lines.filter(line => line.includes('the helper is gone'))
             .length,
           failed: lines
