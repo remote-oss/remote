@@ -20,7 +20,11 @@ import {
   windowState,
 } from '../windows/harness.ts';
 import {closeAllButLocal, dismissals} from '../windows/maintenance.ts';
-import {outputPanelFocused, statusItem} from '../windows/renderer.ts';
+import {
+  indicatorDisconnects,
+  outputPanelFocused,
+  statusItem,
+} from '../windows/renderer.ts';
 import {hintRecords, type HintRecords} from '../windows/hint-store.ts';
 import {keepingSettings, PLATFORMS} from '../windows/tunnel-support.ts';
 
@@ -61,6 +65,7 @@ async function opened(alias: string, name: string): Promise<void> {
 
 /** What window `name` shows of its failure: the notice count, the dialog count and the indicator. */
 async function failureOf(name: string): Promise<[number, number, string]> {
+  await indicatorDisconnects(name);
   return [
     recordLines('notice', name).length,
     recordLines('failureDialog', name).length,
