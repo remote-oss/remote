@@ -28,6 +28,7 @@ import {
   restoreHostNetwork,
   restoreUserSettings,
   signal,
+  startInWindow,
   userSettings,
   variable,
   waitFor,
@@ -548,11 +549,18 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       const next = await nextEmptyWindow(() =>
         inWindow('local', 'workbench.action.newWindow'),
       );
-      await runWith(next, 'opensshremotes.openEmptyWindowInCurrentWindow', [
-        hostAnswer(next, {label: alias}),
-        {surface: 'pick', match: 'fingerprint', answer: 'yes'},
-        {surface: 'pick', match: 'fingerprint', answer: 'yes'},
-      ]);
+      // The command turns the window into a remote one, which ends the extension host before it can answer: it is started, not awaited.
+      appendScript(
+        [
+          hostAnswer(next, {label: alias}),
+          {surface: 'pick', match: 'fingerprint', answer: 'yes'},
+          {surface: 'pick', match: 'fingerprint', answer: 'yes'},
+        ].map(entry => ({...entry, window: next})),
+      );
+      await startInWindow(
+        next,
+        'opensshremotes.openEmptyWindowInCurrentWindow',
+      );
       await waitFor(
         `${next} to be on the host`,
         async () => (await windowState(next)).remoteName === 'ssh-remote',
