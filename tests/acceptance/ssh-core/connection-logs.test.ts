@@ -77,6 +77,9 @@ const S125_LINE = 'See verbose information in the Output Log...';
 /** The rule of 40 dashes that ends a resolve step. */
 const SEPARATOR_LINE = '-'.repeat(40);
 
+/** The margin after the failure dialog during which a session troubleshooting terminal, if it is to open at all, opens. */
+const TERMINAL_MILLISECONDS = 5_000;
+
 describe('the logs of a connected SSH window (card connect-125, #1600)', function () {
   this.timeout(300_000);
 
@@ -286,6 +289,40 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
       deepStrictEqual(await outputChannelOf('c121-refused'), 'Remote - SSH');
     } finally {
       await closeWindow('c121-refused').catch(() => undefined);
+    }
+  });
+
+  it('F-2003 AC-30 (c121-off-panel): with enhanced session logs off, a failure dialog with the panel hidden shows the panel on the Remote - SSH channel and no session troubleshooting terminal', async () => {
+    await userSettings({
+      'remote.SSH.experimental.enhancedSessionLogs': false,
+    });
+    await openWindow('blackhole', 'c121-off');
+    try {
+      await waitFor(
+        'the failure dialog of c121-off',
+        () => recordLines('failureDialog', 'c121-off').length > 0,
+        INSTALL_MILLISECONDS,
+      );
+      await waitFor(
+        'the panel of c121-off on the Remote - SSH channel',
+        async () => (await outputChannelOf('c121-off')) === 'Remote - SSH',
+        60_000,
+      );
+      await new Promise(resolve => setTimeout(resolve, TERMINAL_MILLISECONDS));
+      deepStrictEqual(
+        [
+          await outputChannelOf('c121-off'),
+          (await terminalTabsOf('c121-off')).filter(label =>
+            label.includes('Remote - SSH: Session Troubleshooting'),
+          ),
+        ],
+        ['Remote - SSH', []],
+      );
+    } finally {
+      await userSettings({
+        'remote.SSH.experimental.enhancedSessionLogs': undefined,
+      });
+      await closeWindow('c121-off').catch(() => undefined);
     }
   });
 
