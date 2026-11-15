@@ -5,7 +5,7 @@
  * it, and refuses the launch where there is no such server.
  */
 
-import net from 'node:net';
+import {connect} from 'node:net';
 import {sshConfigPath} from './acceptance-keys.ts';
 
 /** The alias the `windows-host` launch's windows open. */
@@ -24,11 +24,11 @@ export async function answersOn(
   milliseconds = 5000,
 ): Promise<boolean> {
   return new Promise(resolve => {
-    const socket = net.connect({host: '127.0.0.1', port});
-    const end = (answered: boolean): void => {
+    const socket = connect({host: '127.0.0.1', port});
+    function end(answered: boolean): void {
       socket.destroy();
       resolve(answered);
-    };
+    }
     socket.setTimeout(milliseconds, () => {
       end(false);
     });

@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import net from 'node:net';
+import {createServer} from 'node:net';
 import {
   answersOn,
   windowsHostBlock,
@@ -70,7 +70,9 @@ describe('the Windows SSH host of the windows-host launch (card #2652)', () => {
   });
 
   it('#2652: a client that is not Windows, a missing variable and a server that does not answer each refuse the launch', async () => {
-    const answers = (): Promise<boolean> => Promise.resolve(true);
+    function answers(): Promise<boolean> {
+      return Promise.resolve(true);
+    }
     deepStrictEqual(
       [
         await refusalOf(VARIABLES, 'linux', answers),
@@ -92,7 +94,7 @@ describe('the Windows SSH host of the windows-host launch (card #2652)', () => {
   });
 
   it('#2652: a port with a listener answers, and one with none does not', async () => {
-    const server = net.createServer();
+    const server = createServer();
     await new Promise<void>(resolve => {
       server.listen(0, '127.0.0.1', resolve);
     });
