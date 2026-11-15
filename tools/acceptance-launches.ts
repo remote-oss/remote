@@ -194,10 +194,8 @@ export const WINDOW_PORT_RANGE = '20000-20999';
 /** The setting that holds the window's port range. */
 export const WINDOW_PORT_RANGE_SETTING = 'remote.SSH.preferredLocalPortRange';
 
-/** The launches of the `ssh` group that keep the search's default window port, each with the rows that need it. */
+/** The launches of the `ssh` group that keep the search's default window port, each with what needs it; a launch gets the range and its rows that need the default opt out for themselves, as `ssh-core`'s session-hints rows do. */
 export const WINDOW_PORT_DEFAULT_LAUNCHES: Readonly<Record<string, string>> = {
-  'ssh-core':
-    'its session-hints rows read which settings are customised, and its tunnel-ranges rows set the range themselves',
   'ssh-agents':
     "its rows read the settings with core's agent-host keys at their defaults",
   'config-files':

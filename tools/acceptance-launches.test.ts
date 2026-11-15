@@ -2344,7 +2344,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('#2639: every launch of the ssh group gives the window the port range below the ephemeral ports but the three that keep the search’s default, each with its reason, and a launch that sets a range keeps its own', () => {
+  it('#2639: every launch of the ssh group gives the window the port range below the ephemeral ports but the two that keep the search’s default, each with its reason, and a launch that sets a range keeps its own', () => {
     const [first, last] = WINDOW_PORT_RANGE.split('-').map(Number);
     const all = launchesOf(REPOSITORY_ROOT);
     deepStrictEqual(
@@ -2373,13 +2373,7 @@ describe('the platform cases (card coverage-12)', () => {
           reason => reason.length > 20,
         ),
       ],
-      [
-        true,
-        ['config-files', 'ssh-core', 'ssh-agents'],
-        [],
-        '41060-41061',
-        true,
-      ],
+      [true, ['config-files', 'ssh-agents'], [], '41060-41061', true],
     );
   });
 
