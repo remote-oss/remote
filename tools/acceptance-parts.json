@@ -357,7 +357,6 @@
     },
     "no-proposals": {"commands.test.ts": 0.1},
     "passphrase-input": {
-      "host-key-pick.test.ts": 1.1,
       "passphrase.test.ts": 3.7
     },
     "passphrase-late": 0.1,
@@ -448,7 +447,7 @@
       "unparsable.test.ts": 0.1,
       "x11.test.ts": 10.2
     },
-    "ssh-newclient": 1.6,
+    "ssh-newclient": 2.7,
     "terminal": 0.3,
     "terminal-login": {"chat-absence.test.ts": 0.7, "login.test.ts": 3.4},
     "terminal-odd": {"ask.test.ts": 0.3},

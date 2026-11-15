@@ -100,10 +100,6 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     install terminal behind "details". Ours asks it the way terminal mode does with `remote.SSH.showLoginTerminal` off
     (F-2305 AC-43), one rule across the modes; with the setting on the question stays in the terminal (ruled 2026-10-20
     on remote-oss/remote-ssh#41; `ruling-1601-host-key-pick`, athena on #1601; spec question on remote-oss/remote-ssh#55).
-  - F-2412 AC-10 describes the question of the maintenance commands as a quick input with core's message "Press 'Enter'
-    to confirm your input or 'Escape' to cancel", answered "yes". That raw input is the reference's fallback for a
-    wording it does not recognize; a recognized host-key question is F-2305's pick in every flow. Continue goes on and
-    records the key; Escape ends the command with the error of F-2412 AC-12 and records nothing (athena on #1687).
     Rows: (ruling-1601-host-key-pick)
 - **A window that joins a running local connection server writes no setting line.**
   - F-2604 AC-1 and AC-15 put the line "ERROR: TCP port forwarding appears to be disabled…" (STR:S046) in the log of the
