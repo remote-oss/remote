@@ -1492,3 +1492,32 @@ describe('the setting of the external askpass (card #2596, F-2309 AC-1)', () => 
     );
   });
 });
+
+describe('the setting of the reconnection grace time (card #2651, F-2413 AC-1)', () => {
+  it('F-2413 AC-1 (c2651-setting): remote.SSH.reconnectionGraceTime is a number or null, null by default, of application scope with a minimum of 1, and its markdown description is the exact text of the specification', () => {
+    const property = manifest().contributes?.configuration?.properties?.[
+      'remote.SSH.reconnectionGraceTime'
+    ] as
+      (Record<string, unknown> & {markdownDescription?: unknown}) | undefined;
+    const key = nlsKey(property?.markdownDescription);
+    deepStrictEqual(
+      {
+        type: property?.type,
+        default: property?.default,
+        scope: property?.scope,
+        minimum: property?.minimum,
+        plainDescription: property?.description,
+        markdown: key === null ? undefined : englishTable()[key],
+      },
+      {
+        type: ['number', 'null'],
+        default: null,
+        scope: 'application',
+        minimum: 1,
+        plainDescription: undefined,
+        markdown:
+          'The grace time in **seconds** to wait before terminating the remote server when the client disconnects. Leave empty to use VS Code defaults. The remote VS Code server must be restarted for this setting to take effect.  _Currently supports only linux remotes._',
+      },
+    );
+  });
+});

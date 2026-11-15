@@ -221,13 +221,22 @@ export function engineCli(): string {
   return engine === undefined || engine === '' ? 'docker' : engine;
 }
 
-/** The lines of a JSON-lines file; a file not written yet is empty. */
+/**
+ * The lines of JSON-lines text that a newline has ended. A writer appends each line with its newline, and a read can
+ * meet a line it is still writing: that last part is left for the next read.
+ */
+export function completeLines<Line>(text: string): Line[] {
+  return text
+    .slice(0, text.lastIndexOf('\n') + 1)
+    .split('\n')
+    .filter(line => line !== '')
+    .map(line => JSON.parse(line) as Line);
+}
+
+/** The lines of a JSON-lines file that a newline has ended; a file not written yet is empty. */
 function linesOf<Line>(file: string): Line[] {
   return existsSync(file)
-    ? readFileSync(file, 'utf8')
-        .split('\n')
-        .filter(line => line !== '')
-        .map(line => JSON.parse(line) as Line)
+    ? completeLines<Line>(readFileSync(file, 'utf8'))
     : [];
 }
 

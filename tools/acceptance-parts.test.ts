@@ -273,6 +273,29 @@ describe('acceptance-parts (card tooling-159)', () => {
     );
   });
 
+  it("#2643: the repository's table keeps remote with reconnect, whose suite reads the server remote kept, and its parts hold the two in one part", () => {
+    const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
+    const pair = ['remote', 'reconnect'];
+    const holding = partsOfTable(
+      launchesOf(REPOSITORY_ROOT),
+      table,
+      suiteFilesIn(REPOSITORY_ROOT),
+    )
+      .map(part =>
+        part.launches.split(',').filter(label => pair.includes(label)),
+      )
+      .filter(labels => labels.length > 0);
+    deepStrictEqual(
+      [
+        (table.together ?? []).some(labels =>
+          pair.every(label => labels.includes(label)),
+        ),
+        holding,
+      ],
+      [true, [pair]],
+    );
+  });
+
   it("tooling-159, #2355: the repository's parts make every launch but the genuine ones, cli-path, wsl and windows-host, each test file of a split launch exactly once, the same parts each time", () => {
     const launches = launchesOf(REPOSITORY_ROOT);
     const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;

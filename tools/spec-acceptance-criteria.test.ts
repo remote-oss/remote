@@ -72,8 +72,32 @@ describe('acceptanceCriteriaOf, a removed criterion', () => {
     ]);
   });
 
+  it('#142: a Removed line whose Removed follows a parenthesised note is skipped', () => {
+    deepStrictEqual(
+      removed(
+        '- **F-2304.AC-2** (stub, revised by F-3907 rule 4) Removed: not known.',
+      ),
+      ['F-2304.AC-1', 'F-2304.AC-3'],
+    );
+  });
+
+  it('#142: a Merged-into line whose Merged into follows a parenthesised note is skipped', () => {
+    deepStrictEqual(
+      removed('- **F-2304.AC-2** (note) Merged into AC-3: see it.'),
+      ['F-2304.AC-1', 'F-2304.AC-3'],
+    );
+  });
+
   it('#142: a line that says removed later is kept', () => {
     deepStrictEqual(removed('- **F-2304.AC-2** Given a host, then removed.'), [
+      'F-2304.AC-1',
+      'F-2304.AC-2',
+      'F-2304.AC-3',
+    ]);
+  });
+
+  it('#142: a criterion that starts with a parenthesised note is kept', () => {
+    deepStrictEqual(removed('- **F-2304.AC-2** (revised) Given a host.'), [
       'F-2304.AC-1',
       'F-2304.AC-2',
       'F-2304.AC-3',
