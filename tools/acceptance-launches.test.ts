@@ -331,6 +331,7 @@ describe('the launches of the VSCodium run', () => {
         'agent-notmp',
         'default-ports',
         'ssh-core',
+        'ssh-newclient',
         'ssh-agents',
         'ssh-askpass',
         'ssh-askpass-env',
@@ -432,6 +433,7 @@ describe('the launches of the VSCodium run', () => {
         ['agent-notmp', undefined, true, undefined],
         ['default-ports', undefined, true, undefined],
         ['ssh-core', undefined, true, undefined],
+        ['ssh-newclient', undefined, true, undefined],
         ['ssh-agents', undefined, true, undefined],
         ['ssh-askpass', undefined, true, undefined],
         ['ssh-askpass-env', undefined, true, undefined],
@@ -1272,6 +1274,26 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
+  it('#2600: only ssh-newclient asks for the pinned OpenSSH client, its remote.SSH.path is the path the run passes, and ssh-core keeps the machine’s ssh', () => {
+    const client = '/cache/remote-oss/openssh-10.6p2-9ae44872090c/bin/ssh';
+    deepStrictEqual(
+      [
+        launches
+          .filter(launch => launch.sshClient === 'pinned')
+          .map(launch => launch.label),
+        withHarnessBases(launchLabelled(launches, 'ssh-newclient').settings, {
+          HARNESS_SSH_CLIENT: client,
+        }),
+        launchLabelled(launches, 'ssh-core').settings,
+      ],
+      [
+        ['ssh-newclient'],
+        {'window.title': '[${rootName}]', 'remote.SSH.path': client},
+        {'window.title': '[${rootName}]'},
+      ],
+    );
+  });
+
   it('tooling-168: of the forwarding launches only agent-off has a host setup: it ends the servers of the account, waits until none is left, and removes the agent links', () => {
     deepStrictEqual(
       ['agent', 'agent-off', 'x11', 'x11-noxauth'].map(label => {
@@ -1319,6 +1341,7 @@ describe('the launches of the VSCodium run', () => {
         'agent-notmp',
         'default-ports',
         'ssh-core',
+        'ssh-newclient',
         'ssh-agents',
         'ssh-askpass',
         'ssh-askpass-env',
