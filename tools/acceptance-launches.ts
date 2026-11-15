@@ -184,11 +184,44 @@ export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
 
 /** What a launch the renderer helpers read needs: the debugging port, and window titles they can find a window by. */
 /**
- * The window's local ports for the launches whose rows connect many windows in a row (#2585, #2586): below the client's
- * ephemeral port range, which on Linux starts at 32768, so no outgoing connection of the client holds a port the search
- * judges free by connecting. Without a range the search picks from 49152 up, inside it.
+ * The window's local ports for every launch of the `ssh` group but those of `WINDOW_PORT_DEFAULT_LAUNCHES` (#2585, #2586,
+ * #2616, #2639): below the client's ephemeral port range, which on Linux starts at 32768, so no outgoing connection of the
+ * client holds a port the search judges free by connecting. Without a range the search picks from 49152 up, inside it.
+ * The harness refuses a run on a machine whose ephemeral range overlaps it (`windowPortRangeProblem`).
  */
 export const WINDOW_PORT_RANGE = '20000-20999';
+
+/** The setting that holds the window's port range. */
+export const WINDOW_PORT_RANGE_SETTING = 'remote.SSH.preferredLocalPortRange';
+
+/** The launches of the `ssh` group that keep the search's default window port, each with what needs it; a launch gets the range and its rows that need the default opt out for themselves, as `ssh-core`'s session-hints rows do. */
+export const WINDOW_PORT_DEFAULT_LAUNCHES: Readonly<Record<string, string>> = {
+  'ssh-agents':
+    "its rows read the settings with core's agent-host keys at their defaults",
+  'config-files':
+    'its rows compare the settings file the editor read with the one the launch was given',
+};
+
+/** What is wrong with the window port range `range` on a machine whose kernel's ephemeral range reads `ephemeral`, if anything. */
+export function windowPortRangeProblem(
+  range: string,
+  ephemeral: string,
+): string | undefined {
+  const [first, last] = range.split('-').map(Number);
+  const [lowest, highest] = ephemeral.trim().split(/\s+/u).map(Number);
+  if (
+    first === undefined ||
+    last === undefined ||
+    lowest === undefined ||
+    highest === undefined ||
+    [first, last, lowest, highest].some(Number.isNaN)
+  ) {
+    return `the window port range ${range} or the ephemeral range "${ephemeral.trim()}" cannot be read`;
+  }
+  return first <= highest && last >= lowest
+    ? `the window port range ${range} overlaps this machine's ephemeral port range ${String(lowest)}-${String(highest)}: an outgoing connection of the client can hold a port the search finds free, so the launch's rows would fail at random; set the range outside ${String(lowest)}-${String(highest)}`
+    : undefined;
+}
 
 const RENDERER_LAUNCH = {
   kind: 'plain',
@@ -1002,7 +1035,6 @@ export function launchesOf(root: string): Launch[] {
       label: 'windows',
       kind: 'plain',
       suite: 'windows',
-      settings: {'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE},
       environment: {REMOTE_OSS_SENTINEL: 'sent1nel-<run>'},
     },
     // Terminal mode with the login terminal shown and the extension's own prompts (no script), read through the renderer.
@@ -1032,7 +1064,6 @@ export function launchesOf(root: string): Launch[] {
       label: 'passphrase-input',
       suite: 'passphrase',
       settings: {
-        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
         // The remote name after the folder, as core's own label gives it.
         'window.title': '[${rootName}]${remoteName}',
         'window.dialogStyle': 'custom',
@@ -1088,14 +1119,12 @@ export function launchesOf(root: string): Launch[] {
       suite: 'login-shells',
       settings: {
         ...RENDERER_LAUNCH.settings,
-        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
       },
     },
     {
       label: 'preconnect',
       kind: 'plain',
       suite: 'preconnect',
-      settings: {'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE},
       // A variable of the editor's environment, which the script of a row reports it received.
       environment: {REMOTE_OSS_F2108_VARIABLE: 'f2108-<run>'},
     },
@@ -1137,7 +1166,6 @@ export function launchesOf(root: string): Launch[] {
       suite: 'default-ports',
       settings: {
         ...RENDERER_LAUNCH.settings,
-        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
         'remote.SSH.defaultForwardedPorts': [
           {name: 'web', remotePort: 8632, localPort: 18632},
         ],
@@ -1384,7 +1412,6 @@ export function launchesOf(root: string): Launch[] {
         ...TRUST_LAUNCH.settings,
         // Core's default is never; the rows answer core's startup prompt, so this launch turns it on.
         'security.workspace.trust.startupPrompt': 'once',
-        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
       },
     },
     {
@@ -1394,7 +1421,6 @@ export function launchesOf(root: string): Launch[] {
       settings: {
         ...TRUST_LAUNCH.settings,
         'remote.SSH.useLocalServer': false,
-        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
         'remote.SSH.remotePlatform': {harness: 'linux', agentfwd: 'linux'},
       },
     },
@@ -1796,13 +1822,20 @@ export function launchGroupOf(launch: Launch): LaunchGroup {
     : 'ssh';
 }
 
-/** The user settings a launch gets: its own, and the engine's `dev.containers.dockerPath` when it names one. */
+/** The user settings a launch gets: its own, the window port range of a launch of the `ssh` group that is not an exception, and the engine's `dev.containers.dockerPath` when it names one. */
 export function settingsOfLaunch(
   launch: Launch,
 ): Readonly<Record<string, unknown>> | undefined {
+  const own = launch.settings;
+  const ranged =
+    launchGroupOf(launch) === 'ssh' &&
+    !(launch.label in WINDOW_PORT_DEFAULT_LAUNCHES) &&
+    own?.[WINDOW_PORT_RANGE_SETTING] === undefined
+      ? {...own, [WINDOW_PORT_RANGE_SETTING]: WINDOW_PORT_RANGE}
+      : own;
   return launch.engine === undefined
-    ? launch.settings
-    : {...launch.settings, 'dev.containers.dockerPath': launch.engine};
+    ? ranged
+    : {...ranged, 'dev.containers.dockerPath': launch.engine};
 }
 
 /** Whether a launch installs Dev Containers, whose rows need the run's dev container image; a launch that publishes its templates builds it too, because the run's `mini` template names it. */

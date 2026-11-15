@@ -84,8 +84,10 @@ import {
   launchesOf,
   launchGroupOf,
   launchLabelled,
+  settingsOfLaunch,
   type Launch,
   type RunnerLaunch,
+  WINDOW_PORT_RANGE,
 } from './acceptance-launches.ts';
 import {
   PARTS_TABLE,
@@ -1415,6 +1417,47 @@ describe('acceptance', () => {
     });
   }
 
+  it('#2639: the settings of a launch whose window port range overlaps the machine’s ephemeral range are refused, with the launch named', () => {
+    throws(() => {
+      writeUserSettings(
+        workspace.root,
+        '/run/ssh_config',
+        {'remote.SSH.preferredLocalPortRange': '20000-20999'},
+        launchLabelled(launchesOf(REPOSITORY_ROOT), 'windows'),
+        '15000 60999',
+      );
+    }, /^Error: windows: the window port range 20000-20999 overlaps this machine's ephemeral port range 15000-60999/u);
+  });
+
+  it('#2639: the settings of every launch are written on a machine whose ephemeral range is the Linux default, those that keep a range of their own included', () => {
+    const failures: string[] = [];
+    const launches = launchesOf(REPOSITORY_ROOT);
+    for (const launch of launches) {
+      try {
+        writeUserSettings(
+          workspace.root,
+          '/run/ssh_config',
+          settingsOfLaunch(launch) ?? {},
+          launch,
+          '32768\t60999',
+        );
+      } catch (caught) {
+        failures.push(String(caught));
+      }
+    }
+    deepStrictEqual(
+      [
+        failures,
+        launches.some(
+          launch =>
+            settingsOfLaunch(launch)?.['remote.SSH.preferredLocalPortRange'] ===
+            '41060-41061',
+        ),
+      ],
+      [[], true],
+    );
+  });
+
   it("gives the editor's user settings the harness ssh_config as remote.SSH.configFile", () => {
     writeUserSettings(workspace.root, '/run/ssh_config');
     deepStrictEqual(
@@ -2475,7 +2518,10 @@ describe('acceptance', () => {
   });
 
   describe('runLaunches', () => {
-    const BASE = {'remote.SSH.configFile': '/run/ssh_config'};
+    const BASE = {
+      'remote.SSH.configFile': '/run/ssh_config',
+      'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
+    };
     const TERMINAL: Launch = {
       label: 'terminal',
       runner: 'runner-remote',
@@ -2846,6 +2892,7 @@ describe('acceptance', () => {
         settings: {'remote.SSH.configFile': '/elsewhere'},
       });
       deepStrictEqual(seen.get('remote'), {
+        ...BASE,
         'remote.SSH.configFile': '/elsewhere',
       });
     });
