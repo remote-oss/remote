@@ -475,10 +475,15 @@ const CONTAINERS_B_FILES: readonly string[] = [
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
 
 /**
- * The launches that may set `remote.SSH.configFile` themselves, by label: `ssh-agents`, whose rows name their own files. Every other launch uses the run's
+ * The launches that may set `remote.SSH.configFile` themselves, by label: `ssh-agents` and the three `ssh-askpass` launches, whose rows name their own files. Every other launch uses the run's
  * ssh_config, which the harness hosts reach.
  */
-export const CONFIG_FILE_LAUNCHES: readonly string[] = ['ssh-agents'];
+export const CONFIG_FILE_LAUNCHES: readonly string[] = [
+  'ssh-agents',
+  'ssh-askpass',
+  'ssh-askpass-env',
+  'ssh-askpass-space',
+];
 
 /** The token for the run's folder, which a launch's settings and environment may name. */
 const RUN_FOLDER_TOKEN = '<run>';
@@ -987,6 +992,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'windows',
       kind: 'plain',
       suite: 'windows',
+      settings: {'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE},
       environment: {REMOTE_OSS_SENTINEL: 'sent1nel-<run>'},
     },
     // Terminal mode with the login terminal shown and the extension's own prompts (no script), read through the renderer.
@@ -1016,6 +1022,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'passphrase-input',
       suite: 'passphrase',
       settings: {
+        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
         // The remote name after the folder, as core's own label gives it.
         'window.title': '[${rootName}]${remoteName}',
         'window.dialogStyle': 'custom',
@@ -1078,6 +1085,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'preconnect',
       kind: 'plain',
       suite: 'preconnect',
+      settings: {'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE},
       // A variable of the editor's environment, which the script of a row reports it received.
       environment: {REMOTE_OSS_F2108_VARIABLE: 'f2108-<run>'},
     },
@@ -1145,6 +1153,55 @@ export function launchesOf(root: string): Launch[] {
       environment: {
         HOME: '<run>/home-agents',
         REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+      },
+    },
+    // The user's own SSH_ASKPASS program: the editor's environment names the run's stand-in askpass and puts the
+    // run's ssh recorder first on the PATH, and the extension's own inputs are real, so a row sees which of the two
+    // answered. The stand-ins are written into `<run>/askpass-bin` by the suite's `before` hook.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-askpass',
+      suite: 'ssh-askpass',
+      settings: {
+        'window.title': '[${rootName}]${remoteName}',
+        'window.dialogStyle': 'custom',
+      },
+      environment: {
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+        SSH_ASKPASS: '<run>/askpass-bin/answer',
+        PATH: '<run>/askpass-bin:<path>',
+      },
+    },
+    // The same stand-ins with the askpass variables the editor's own environment can hold otherwise: an empty
+    // `SSH_ASKPASS` and `SSH_ASKPASS_REQUIRE=never`, which the extension must not let reach a login of its own.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-askpass-env',
+      suite: 'ssh-askpass-env',
+      settings: {
+        'window.title': '[${rootName}]${remoteName}',
+        'window.dialogStyle': 'custom',
+      },
+      environment: {
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+        SSH_ASKPASS: '',
+        SSH_ASKPASS_REQUIRE: 'never',
+        PATH: '<run>/askpass-bin:<path>',
+      },
+    },
+    // The same again with an `SSH_ASKPASS` of a single space, which names no program.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-askpass-space',
+      suite: 'ssh-askpass-space',
+      settings: {
+        'window.title': '[${rootName}]${remoteName}',
+        'window.dialogStyle': 'custom',
+      },
+      environment: {
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+        SSH_ASKPASS: ' ',
+        PATH: '<run>/askpass-bin:<path>',
       },
     },
     // Dev Containers beside Remote - SSH, in a window on the SSH host: the commands that edit a configuration where it lives.
@@ -1305,6 +1362,7 @@ export function launchesOf(root: string): Launch[] {
         ...TRUST_LAUNCH.settings,
         // Core's default is never; the rows answer core's startup prompt, so this launch turns it on.
         'security.workspace.trust.startupPrompt': 'once',
+        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
       },
     },
     {
@@ -1314,6 +1372,7 @@ export function launchesOf(root: string): Launch[] {
       settings: {
         ...TRUST_LAUNCH.settings,
         'remote.SSH.useLocalServer': false,
+        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
         'remote.SSH.remotePlatform': {harness: 'linux', agentfwd: 'linux'},
       },
     },

@@ -20,6 +20,7 @@ type Editor = Pick<typeof vscode, 'window'>;
 /** An input box the test drives: what the adapter set on it, and what the test types. */
 class FakeInputBox extends FakeWidget {
   password: boolean | undefined;
+  prompt: string | undefined;
   value = '';
 
   accept(typed: string): void {
@@ -557,6 +558,26 @@ describe('promptEditorOf (the login questions, F-2305 and F-2306)', () => {
       controller.signal,
     );
     deepStrictEqual([await result, fake.boxes.length], [undefined, 0]);
+  });
+
+  it('F-2306 AC-7: a message is the prompt line of the input box', () => {
+    const fake = fakeEditor(() => undefined);
+    void promptEditorOf(fake.editor, same).maskedInput(
+      {
+        placeholder: 'Password: ',
+        message: 'Permission denied, please try again.',
+      },
+      NEVER,
+    );
+    deepStrictEqual(
+      fake.boxes[0]?.prompt,
+      'Permission denied, please try again.',
+    );
+  });
+
+  it('F-2306 AC-1: an input without a message leaves the prompt line unset, so the editor shows its own', () => {
+    const {inputBox} = typedInto(fakeEditor(() => undefined));
+    deepStrictEqual(inputBox.prompt, undefined);
   });
 
   it('contracts: the input is disposed after an answer', async () => {

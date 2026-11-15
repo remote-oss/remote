@@ -119,6 +119,8 @@ export interface RecordLine {
   active?: string | undefined;
   /** The detail text a modal was shown with; only the lines of a `licenceModal` or a `preconnectDialog` surface have it. */
   detail?: string;
+  /** The message a masked input was shown with, in the line the editor puts under its box; only the lines of a `maskedInput` surface that had one have it. */
+  message?: string;
 }
 
 /**
@@ -393,7 +395,10 @@ export function scriptedAdapters(
       entry: Extract<ScriptEntry, {surface: Kind}>,
     ) => Given<Value> | undefined,
     cancellation: AbortSignal | undefined,
-    shown: Pick<RecordLine, 'buttons' | 'items' | 'detail' | 'active'> = {},
+    shown: Pick<
+      RecordLine,
+      'buttons' | 'items' | 'detail' | 'active' | 'message'
+    > = {},
   ): Promise<Value | undefined> {
     const entries = entriesOf(scriptFile, files, windowName);
     const entry = entries[answeredOf(files, recordFile, windowName)];
@@ -507,6 +512,7 @@ export function scriptedAdapters(
             recorded: entry.answer === 'dismiss' ? 'dismiss' : '<supplied>',
           }),
           cancellation,
+          request.message === undefined ? {} : {message: request.message},
         ),
       translate: template => template,
     },
