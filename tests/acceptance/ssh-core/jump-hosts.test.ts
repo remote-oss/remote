@@ -12,6 +12,7 @@ import {linesSince, runWith} from '../windows/maintenance.ts';
 import {notifications, statusItem} from '../windows/renderer.ts';
 import {
   appendScript,
+  connectionLog,
   closeWindow,
   connectedWithin,
   cutHostNetwork,
@@ -994,7 +995,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     });
   });
 
-  it('F-2310 AC-31 (c2601-jump-reconnect-cancel-part): cancelling the jump host input of a reconnection stops it, the indicator reads Disconnected from SSH and nothing more is asked', async () => {
+  it.only('F-2310 AC-31 (c2601-jump-reconnect-cancel-part): cancelling the jump host input of a reconnection stops it, the indicator reads Disconnected from SSH and nothing more is asked', async () => {
     const alias = 'c2601-recancel';
     const file = passwordChain(alias, 1, NOTICES_LOSS);
     const result = await connectWith(
@@ -1003,6 +1004,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       'connects',
       async () => {
         const asked = recordLines('maskedInput', alias).length;
+        const logMark = connectionLog().length;
         appendScript([
           {
             surface: 'maskedInput',
@@ -1020,11 +1022,21 @@ describe('jump hosts and proxy commands (card #2601)', function () {
         }
         await indicatorAfter(alias, 'Disconnected from SSH', Date.now());
         await new Promise(resolve => setTimeout(resolve, 20_000));
-        return {
-          indicator: await indicatorOf(alias),
-          toasts: await notifications(alias),
-          asked: recordLines('maskedInput', alias).length - asked,
-        };
+        throw new Error(
+          `MEASURED ${JSON.stringify({
+            indicator: await indicatorOf(alias),
+            toasts: await notifications(alias),
+            asked: recordLines('maskedInput', alias).length - asked,
+            log: connectionLog()
+              .slice(logMark)
+              .filter(
+                line =>
+                  (!line.startsWith('Searched for ssh') &&
+                    !line.includes('debug1: ')) ||
+                  line.includes('Authenticated'),
+              ),
+          })}`,
+        );
       },
       {
         file,
