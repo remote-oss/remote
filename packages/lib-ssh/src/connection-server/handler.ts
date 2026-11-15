@@ -1,3 +1,6 @@
+import {writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
 /**
  * @fileoverview S9, the helper side: the one `ssh` connection of a host, shared by the windows that hold a lease.
  * The oldest live lease owns the login; the others wait. The connection counts as set up at the first setup report
@@ -293,6 +296,14 @@ export class ConnectionHandler implements MessageHandler {
         this.options.logLine(
           `DIAG write ${String(text.length)} head=${JSON.stringify(text.slice(0, 80))}`,
         );
+        try {
+          writeFileSync(
+            path.join(tmpdir(), `c2681-frame-${String(Date.now())}.txt`),
+            text,
+          );
+        } catch (caught) {
+          this.options.logLine(`DIAG frame not saved ${String(caught)}`);
+        }
         void session.write(text).then(
           written => {
             this.options.logLine(`DIAG written ${JSON.stringify(written)}`);

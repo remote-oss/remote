@@ -4,7 +4,8 @@
  */
 
 import {execFileSync, spawn} from 'node:child_process';
-import {existsSync, readFileSync} from 'node:fs';
+import {existsSync, readdirSync, readFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
   powershellCommandsFor,
@@ -100,35 +101,52 @@ async function measure(label: string, early: boolean, holdMilliseconds: number, 
   console.log(`c2681-measure ${label}: ${JSON.stringify({events, stderr: stderr.slice(0, 3000)})}`);
 }
 
+/** The loop with stdin open and `frame` written once the ready line is read, with the timeline printed. */
+async function measureFrame(label: string, frame: string): Promise<void> {
+  const {remoteProgram} = powershellSessionStart();
+  const started = Date.now();
+  const events: string[] = [];
+  const note = (what: string) => events.push(`${String(Date.now() - started)}ms ${what}`);
+  const child = spawn('ssh', ['-T', '-F', variable('HARNESS_SSH_CONFIG'), 'winhost', remoteProgram], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  let stdout = '';
+  let written = false;
+  child.stdout.on('data', (text: string) => {
+    stdout += text;
+    note(`stdout ${JSON.stringify(text.slice(0, 160))}`);
+    if (!written && stdout.includes('LAYER1-READY')) {
+      written = true;
+      child.stdin.write(frame);
+      note('frame written');
+    }
+  });
+  child.stderr.on('data', (text: string) => note(`stderr ${JSON.stringify(text.slice(0, 160))}`));
+  const killer = setTimeout(() => {
+    note('killed');
+    child.kill();
+  }, 20_000);
+  await new Promise(resolve => child.once('close', resolve));
+  clearTimeout(killer);
+  console.log(`c2681-measure ${label}: ${JSON.stringify(events)}`);
+}
+
 describe('the Windows session loop with its input kept open (card #2681, measurement)', function () {
   this.timeout(900_000);
 
-  for (const hide of ['hide', 'show']) {
-    it(`measure the loop from a detached relay with no console (${hide})`, async () => {
-      useShell(SHELLS.windowsPowershell);
-      const frame = powershellCommandsFor('c2681mark', {
-        script: 'Write-Output "platform: $([Environment]::OSVersion.Platform)"',
-        environment: {},
-        inputBase64: null,
-      });
-      const outFile = path.join(variable('HARNESS_RUN_FOLDER'), `relay-${hide}.json`);
-      const relay = spawn(
-        process.execPath,
-        [
-          path.join(import.meta.dirname, 'detached-relay.mjs'),
-          outFile,
-          variable('HARNESS_SSH_CONFIG'),
-          powershellSessionStart().remoteProgram,
-          frame,
-          hide,
-        ],
-        {detached: true, stdio: 'ignore', windowsHide: true},
-      );
-      relay.unref();
-      await new Promise(resolve => setTimeout(resolve, 25_000));
-      console.log(`c2681-measure relay-${hide}: ${existsSync(outFile) ? readFileSync(outFile, 'utf8') : 'no file'}`);
-    });
-  }
+  it('replay the frames the helper wrote, over plain ssh', async () => {
+    useShell(SHELLS.windowsPowershell);
+    const saved = readdirSync(tmpdir()).filter(name => name.startsWith('c2681-frame-')).sort();
+    console.log(`c2681-measure saved frames: ${JSON.stringify(saved)}`);
+    for (const name of saved.slice(0, 2)) {
+      const frame = readFileSync(path.join(tmpdir(), name), 'utf8');
+      const header = frame.slice(0, frame.indexOf('\n'));
+      console.log(`c2681-measure frame ${name}: ${JSON.stringify({length: frame.length, bytes: Buffer.byteLength(frame), header: header.replace(/^\S+/, 'MARKER'), crs: (frame.match(/\r/g) ?? []).length, nonAscii: (frame.match(/[^\x00-\x7f]/g) ?? []).length, tail: frame.slice(-120)})}`);
+      await measureFrame(`replay ${name}`, frame);
+    }
+  });
 
   after(() => {
     useShell(SHELLS.windowsPowershell);
