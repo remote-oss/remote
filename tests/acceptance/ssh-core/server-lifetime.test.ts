@@ -12,23 +12,33 @@ import {
   closeWindow,
   connectedWithin,
   connectionLog,
+  cutHostNetwork,
   editorLogsFolder,
-  hostAnswer,
-  inWindow,
   onHost,
   openWindow,
   readUserSettings,
   reloadWindow,
+  restoreHostNetwork,
   restoreUserSettings,
   userSettings,
   waitFor,
+  windowEvents,
 } from '../windows/harness.ts';
 import {
   closeAllButLocal,
   DATA_FOLDER,
   dismissals,
+  pickHost,
+  runWith,
+  serverProcesses,
+  serversGoneWithin,
 } from '../windows/maintenance.ts';
-import {dialogOf, notifications} from '../windows/renderer.ts';
+import {
+  answerDialog,
+  dialogOf,
+  notifications,
+  statusBarText,
+} from '../windows/renderer.ts';
 import {PLATFORMS} from '../windows/tunnel-support.ts';
 
 /** The setting of the feature. */
@@ -118,6 +128,73 @@ function clientGraceSince(since: number): string[] {
     })
     .map(line => line.slice(line.indexOf('Client received')));
 }
+
+/** One state of a window's reconnection, as core shows it: the remote indicator and the modal dialog, if any. */
+interface Seen {
+  /** Milliseconds from the cut of the network. */
+  after: number;
+  indicator: string;
+  dialog: string | undefined;
+  buttons: string[];
+}
+
+/**
+ * Samples window `name` once a second until `stop` says so or `limit` milliseconds passed, and gives each change of its
+ * indicator or dialog, the seconds of a countdown ("in 26 seconds") written as `N seconds`.
+ */
+async function observed(
+  name: string,
+  began: number,
+  stop: (seen: Seen) => boolean,
+  limit: number,
+): Promise<Seen[]> {
+  const states: Seen[] = [];
+  const deadline = Date.now() + limit;
+  while (Date.now() < deadline) {
+    const indicator = await statusBarText(name, 'status.host').catch(() => '');
+    const dialog = await dialogOf(name).catch(() => undefined);
+    const text =
+      dialog === undefined
+        ? undefined
+        : (dialog.message || dialog.details).replace(
+            /\d+ seconds?/,
+            'N seconds',
+          );
+    const current: Seen = {
+      after: Date.now() - began,
+      indicator,
+      dialog: text,
+      buttons: dialog?.buttons ?? [],
+    };
+    const last = states.at(-1);
+    if (last?.indicator !== indicator || last.dialog !== text) {
+      states.push(current);
+    }
+    if (stop(current)) {
+      break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  return states;
+}
+
+/** Cuts the host's network, samples the window until `stop` or `limit`, and brings the network back. */
+async function cutObserved(
+  name: string,
+  stop: (seen: Seen) => boolean,
+  limit: number,
+): Promise<Seen[]> {
+  const began = Date.now();
+  cutHostNetwork();
+  try {
+    return await observed(name, began, stop, limit);
+  } finally {
+    restoreHostNetwork();
+  }
+}
+
+/** The text of core's dialog that the reconnection gave up. */
+const GAVE_UP = 'Cannot reconnect. Please reload the window.';
 
 describe('the grace time of the server a connect starts (card #2651, F-2413)', function () {
   this.timeout(600_000);
@@ -251,19 +328,17 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
         .filter(line => /grace/i.test(line)),
       client: clientGraceSince(since),
     };
-    appendScript([hostAnswer(name, {label: 'harness'})]);
-    await inWindow(name, 'opensshremotes.cleanRemoteServer');
-    await waitFor(
-      'the server to be gone',
-      async () =>
-        onHost('pgrep', '-u', 'harness', '-f', `${DATA_FOLDER}/`).then(
-          () => false,
-          () => true,
-        ),
-      60_000,
-    );
+    const servers = await serverProcesses();
+    await runWith(name, 'opensshremotes.cleanRemoteServer', [
+      pickHost('harness'),
+    ]);
+    await serversGoneWithin(servers, 30_000);
     await closeWindow(name).catch(() => undefined);
-    const again = await connectFresh('c2651-running-2', {[GRACE]: 60});
+    const again = Date.now();
+    appendScript(dismissals('c2651-running-2'));
+    await openWindow('harness', 'c2651-running-2');
+    await connectedWithin('c2651-running-2', 180_000);
+    await new Promise(resolve => setTimeout(resolve, 3000));
     deepStrictEqual(
       [reloaded, (await serverGrace()).parsed, clientGraceSince(again)],
       [
@@ -329,5 +404,126 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
       ['text', true, dflt],
       ['object', true, dflt],
     ]);
+  });
+
+  it('F-2413 AC-8, AC-35, AC-36 (c2651-cut-sixty): with 60 s a lost network ends in core’s dialogs of the reconnection, then the dialog that it cannot reconnect with Cancel and Reload Window and the indicator Disconnected from SSH, and Cancel closes it and leaves the window disconnected', async () => {
+    const name = 'c2651-cut-sixty';
+    await connectFresh(name, {[GRACE]: 60});
+    const states = await cutObserved(
+      name,
+      seen => seen.dialog === GAVE_UP,
+      200_000,
+    );
+    const last = states.at(-1);
+    await answerDialog(name, 'Cancel').catch(() => undefined);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    const after = {
+      dialog: await dialogOf(name).catch(() => undefined),
+      indicator: await statusBarText(name, 'status.host'),
+    };
+    deepStrictEqual(
+      {
+        reconnecting: states.some(each =>
+          each.indicator.startsWith('Reconnecting to SSH: harness'),
+        ),
+        attempting: states.find(
+          each => each.dialog === 'Disconnected. Attempting to reconnect...',
+        )?.buttons,
+        countdown: states.find(each =>
+          each.dialog?.startsWith('Attempting to reconnect in N seconds'),
+        )?.buttons,
+        gaveUp: [last?.dialog, last?.buttons, last?.indicator],
+        withinBounds:
+          (last?.after ?? 0) > 60_000 && (last?.after ?? Infinity) < 150_000,
+        afterCancel: after,
+      },
+      {
+        reconnecting: true,
+        attempting: ['Dismiss', 'Reload Window'],
+        countdown: ['Reload Window', 'Dismiss', 'Reconnect Now'],
+        gaveUp: [
+          GAVE_UP,
+          ['Cancel', 'Reload Window'],
+          'Disconnected from SSH: harness',
+        ],
+        withinBounds: true,
+        afterCancel: {
+          dialog: undefined,
+          indicator: 'Disconnected from SSH: harness',
+        },
+      },
+      JSON.stringify(states),
+    );
+  });
+
+  it('F-2413 AC-10 (c2651-cut-reload): after the dialog that it cannot reconnect and with the host reachable, Reload Window connects to the server that still runs, which no new install follows', async () => {
+    const name = 'c2651-cut-reload';
+    await connectFresh(name, {[GRACE]: 60});
+    const servers = await serverProcesses();
+    await cutObserved(name, seen => seen.dialog === GAVE_UP, 200_000);
+    const mark = connectionLog().length;
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    await answerDialog(name, 'Reload Window');
+    await connectedWithin(name, 120_000);
+    deepStrictEqual(
+      [
+        await serverProcesses(),
+        connectionLog()
+          .slice(mark)
+          .filter(line => /install|download/i.test(line)),
+      ],
+      [servers, []],
+      JSON.stringify(connectionLog().slice(mark)),
+    );
+  });
+
+  it('F-2413 AC-9 (c2651-cut-default): with the default grace time a network lost for 90 s and back reconnects the window to the same server without a reload', async () => {
+    const name = 'c2651-cut-default';
+    await connectFresh(name, {});
+    const servers = await serverProcesses();
+    function activations(): number {
+      return windowEvents(name).filter(each => each.event === 'activated')
+        .length;
+    }
+    const before = activations();
+    cutHostNetwork();
+    try {
+      await new Promise(resolve => setTimeout(resolve, 90_000));
+    } finally {
+      restoreHostNetwork();
+    }
+    await waitFor(
+      'the window to be connected again',
+      async () =>
+        (await statusBarText(name, 'status.host').catch(() => '')) ===
+        'SSH: harness',
+      120_000,
+    );
+    deepStrictEqual(
+      [await serverProcesses(), activations() - before],
+      [servers, 0],
+    );
+  });
+
+  it('F-2413 AC-28 (c2651-cut-log): the server log of a window that lost its network for 110 s (what the log says and when; the row prints it)', async () => {
+    const name = 'c2651-cut-log';
+    await connectFresh(name, {[GRACE]: 60});
+    const cutAt = new Date();
+    cutHostNetwork();
+    try {
+      await new Promise(resolve => setTimeout(resolve, 110_000));
+    } finally {
+      restoreHostNetwork();
+    }
+    const restored = new Date();
+    await new Promise(resolve => setTimeout(resolve, 70_000));
+    const logs = await onHost(
+      'sh',
+      '-c',
+      `tail -n 40 ${DATA_FOLDER}/.*.log 2>/dev/null | cut -c1-260 ; true`,
+    );
+    process.stdout.write(
+      `CUTLOG ${JSON.stringify({cutAt: cutAt.toISOString(), restored: restored.toISOString(), servers: (await serverProcesses()).length, logs: logs.split('\n')})}\n`,
+    );
   });
 });
