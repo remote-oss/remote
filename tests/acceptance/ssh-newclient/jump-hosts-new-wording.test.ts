@@ -23,7 +23,7 @@ import {
 describe('F-2310 host-key questions in the wording of OpenSSH 10.2 (card #2610)', function () {
   this.timeout(300_000);
 
-  it('PROBE c2610-probe-client: the text of the host-key questions the pinned client asks through SSH_ASKPASS', async () => {
+  it('PROBE c2610-probe-client: the text of the host-key questions the pinned client asks through SSH_ASKPASS', () => {
     const alias = 'c2610-probe-client';
     const known = freshKnown(alias);
     const file = writeConfig(alias, [
