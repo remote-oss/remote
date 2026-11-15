@@ -46,6 +46,9 @@ import {PLATFORMS} from '../windows/tunnel-support.ts';
 /** The setting of the feature. */
 const GRACE = 'remote.SSH.reconnectionGraceTime';
 
+/** Core's dialogs in the page, where the row can read them: the dialog that it cannot reconnect is otherwise a native one. */
+const CUSTOM_DIALOGS = 'window.dialogStyle';
+
 /** What the server's log says of its grace time, with the line's own time and ids left out. */
 interface ServerGrace {
   parsed: string[];
@@ -440,7 +443,7 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
 
   it('F-2413 AC-8, AC-35, AC-36 (c2651-cut-sixty): with 60 s a lost network ends in core’s dialogs of the reconnection, then the dialog that it cannot reconnect with Cancel and Reload Window and the indicator Disconnected from SSH, and Cancel closes it and leaves the window disconnected', async () => {
     const name = 'c2651-cut-sixty';
-    await connectFresh(name, {[GRACE]: 60});
+    await connectFresh(name, {[GRACE]: 60, [CUSTOM_DIALOGS]: 'custom'});
     const states = await cutObserved(
       name,
       seen => seen.indicator.startsWith('Disconnected'),
@@ -502,7 +505,7 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
 
   it('F-2413 AC-10 (c2651-cut-reload): after the dialog that it cannot reconnect and with the host reachable, Reload Window connects to the server that still runs, which no new install follows', async () => {
     const name = 'c2651-cut-reload';
-    await connectFresh(name, {[GRACE]: 60});
+    await connectFresh(name, {[GRACE]: 60, [CUSTOM_DIALOGS]: 'custom'});
     const servers = await serverProcesses();
     await cutObserved(name, seen => seen.dialog === GAVE_UP, 200_000);
     const mark = connectionLog().length;
