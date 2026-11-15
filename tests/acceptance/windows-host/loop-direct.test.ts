@@ -39,7 +39,7 @@ function useShell(program: string): void {
  * Starts the loop with stdin open. With `early`, the frame goes at once; otherwise once `LAYER1-READY` is read. The
  * input closes `holdMilliseconds` after the frame. Prints the timeline of the markers and what stderr said.
  */
-async function measure(label: string, early: boolean, holdMilliseconds: number, script = 'Write-Output "platform: $([Environment]::OSVersion.Platform)"', inputBase64: string | null = null): Promise<void> {
+async function measure(label: string, early: boolean, holdMilliseconds: number, emptyFirst = false, script = 'Write-Output "platform: $([Environment]::OSVersion.Platform)"', inputBase64: string | null = null): Promise<void> {
   const {remoteProgram} = powershellSessionStart();
   const frame = powershellCommandsFor('c2681mark', {
     script,
@@ -60,6 +60,10 @@ async function measure(label: string, early: boolean, holdMilliseconds: number, 
       return;
     }
     written = true;
+    if (emptyFirst) {
+      child.stdin.write('');
+      note('empty write');
+    }
     child.stdin.write(frame);
     note('frame written');
     setTimeout(() => {
@@ -95,14 +99,10 @@ async function measure(label: string, early: boolean, holdMilliseconds: number, 
 describe('the Windows session loop with its input kept open (card #2681, measurement)', function () {
   this.timeout(900_000);
 
-  it('measure the scripts the connect runs, under Windows PowerShell', async () => {
+  it('measure an empty write before the frame, under Windows PowerShell', async () => {
     useShell(SHELLS.windowsPowershell);
-    const probe = readFileSync(path.join(import.meta.dirname, 'probe-golden.ps1'), 'utf8');
-    await measure('exit', false, 15_000, 'Write-Output before; exit 0');
-    await measure('get-command', false, 15_000, 'Get-Command -Name tar.exe -CommandType Application -ErrorAction SilentlyContinue | Out-Null; Write-Output found');
-    await measure('probe-empty-input', false, 15_000, probe, '');
-    await measure('probe-null-input', false, 15_000, probe, null);
-    await measure('big-script', false, 15_000, `${'# filler line for the size of the probe\n'.repeat(150)}Write-Output big`);
+    await measure('no-empty-write', false, 15_000, false);
+    await measure('empty-write', false, 15_000, true);
   });
 
   after(() => {

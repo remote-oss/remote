@@ -354,7 +354,9 @@ export class ConnectionHandler implements MessageHandler {
     const lines = new LineSplitter(line => {
       if (!preludeWritten && setupMarkerOf(line) === 'authenticated') {
         preludeWritten = true;
-        void session.write(this.options.sessionPrelude);
+        if (this.options.sessionPrelude !== '') {
+          void session.write(this.options.sessionPrelude);
+        }
       }
       feed.push(line);
       if (this.state === 'connecting') {

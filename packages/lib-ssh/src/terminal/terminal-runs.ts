@@ -51,7 +51,9 @@ export class TerminalSessionRunner implements SessionRunner {
         terminal.dispose();
       },
     });
-    terminal.send(options.prelude);
+    if (options.prelude !== '') {
+      terminal.send(options.prelude);
+    }
     let ready = false;
     const output = new LineSplitter(line => {
       const event = ready ? undefined : bootstrapEventOf(line);
