@@ -344,7 +344,7 @@
   "label": "spec:reviewed",
   "title": "Host requirements and GPU availability",
   "epic": "E02",
-  "acCount": 51,
+  "acCount": 52,
   "surfaces": {
    "commands": [],
    "settings": [
