@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {readFileSync, writeFileSync} from 'node:fs';
 import {
+  connectionLog,
   inWindow,
   readUserSettings,
   restoreUserSettings,
@@ -11,6 +12,8 @@ import {
 import {
   answerInputBox,
   chooseQuickPickItem,
+  dialogOf,
+  notifications,
   pageOf,
   pressEscape,
   quickPickOf,
@@ -46,14 +49,31 @@ async function startedOnStranger(): Promise<{ending: Promise<string>}> {
     'the host pick',
     async () => (await quickPickOf('local')) !== undefined,
     60_000,
-  );
+  ).catch(failedWithFacts);
   await answerInputBox('local', 'stranger');
   await waitFor(
     'the question about the host key',
     async () => (await quickPickOf('local'))?.placeholder === PLACEHOLDER,
     60_000,
-  );
+  ).catch(failedWithFacts);
   return {ending};
+}
+
+/** Throws `caught` with what the local window shows and the end of the connection log, so a wait that ran out says why. */
+async function failedWithFacts(caught: unknown): Promise<never> {
+  const shown = await quickPickOf('local').catch((failed: unknown) =>
+    String(failed),
+  );
+  const dialog = await dialogOf('local').catch((failed: unknown) =>
+    String(failed),
+  );
+  const toasts = await notifications('local').catch((failed: unknown) =>
+    String(failed),
+  );
+  throw new Error(
+    `${String(caught)}; the quick pick: ${JSON.stringify(shown)}; the dialog: ${JSON.stringify(dialog)}; the notifications: ${JSON.stringify(toasts)}; the end of the connection log:\n${connectionLog().slice(-20).join('\n')}`,
+    {cause: caught},
+  );
 }
 
 describe('the host-key question of a maintenance command, in the wording of OpenSSH 10.2 (cards coverage-100, #2653)', function () {
