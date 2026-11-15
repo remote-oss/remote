@@ -253,8 +253,9 @@ function fixture(
 async function loggedIn(
   storedRecord?: PlainData,
   terms?: ConnectionTerms,
+  level?: Level,
 ): Promise<Fixture & {outcome: Awaited<ReturnType<Fixture['connecting']>>}> {
-  const ready = fixture();
+  const ready = fixture('acquired', undefined, level);
   ready.lease.storedRecord = storedRecord;
   const pending = ready.connecting(undefined, undefined, terms);
   await settled();
@@ -492,6 +493,36 @@ describe('the connection step', () => {
       outcome.kind === 'done' ? outcome.value.storedRecord : outcome,
       record,
     );
+  });
+
+  describe('F-2003 BR-9 item 2 (#2538): the stored record of the host is a line at trace', () => {
+    const RECORD = {
+      remotePort: 4321,
+      operatingSystem: 'linux',
+      architecture: 'x64',
+      temporaryFolder: '/tmp',
+      connectionToken: 'secret-token',
+    };
+
+    it('says at trace that the stored data has a record of the host and its operating system, and never its token', async () => {
+      const {logged} = await loggedIn(RECORD, undefined, 'trace');
+      deepStrictEqual(logged(), [
+        'the stored data has a record of host harness: linux',
+      ]);
+    });
+
+    it('says at trace that the stored data has no record when the helper holds none', async () => {
+      const {logged} = await loggedIn(undefined, undefined, 'trace');
+      deepStrictEqual(logged(), [
+        'the stored data has no record of host harness',
+      ]);
+    });
+
+    it('writes nothing about it at debug, with or without a record', async () => {
+      const withRecord = await loggedIn(RECORD, undefined, 'debug');
+      const without = await loggedIn(undefined, undefined, 'debug');
+      deepStrictEqual([withRecord.logged(), without.logged()], [[], []]);
+    });
   });
 
   describe('F-2206 AC-29: a connection another window set up is reused before the platform of the settings counts', () => {
