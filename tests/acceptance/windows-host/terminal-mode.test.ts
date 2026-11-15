@@ -159,7 +159,16 @@ async function connectSeen(name: string): Promise<Seen> {
       state.opened = true;
       return waitFor(
         `${name} to be connected`,
-        () => connectedOnHost(name),
+        () => {
+          if (
+            connectionLog()
+              .slice(logStart)
+              .some(line => line.startsWith('connect failed:'))
+          ) {
+            throw new Error(`${name}'s connect failed`);
+          }
+          return connectedOnHost(name);
+        },
         CONNECT_MILLISECONDS,
       );
     })
@@ -197,6 +206,30 @@ async function connectSeen(name: string): Promise<Seen> {
       };
 }
 
+/**
+ * A copy of the run's ssh_config whose `winhost` block waits `seconds` for the connection: the extension takes a
+ * host's `ConnectTimeout` as its connect wait, and the run's block has 10.
+ */
+function configWaiting(seconds: number): string {
+  const text = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8');
+  const start = text.indexOf(`\nHost ${ALIAS}\n`);
+  const file = path.join(
+    variable('HARNESS_RUN_FOLDER'),
+    `ssh_config_${ALIAS}_${String(seconds)}`,
+  );
+  writeFileSync(
+    file,
+    text.slice(0, start) +
+      text
+        .slice(start)
+        .replace(
+          /^(\s+)ConnectTimeout \d+$/m,
+          `$1ConnectTimeout ${String(seconds)}`,
+        ),
+  );
+  return file;
+}
+
 /** The last lines of the connection log, for a failure to show. */
 function logTail(): string {
   return JSON.stringify(connectionLog().slice(-60));
@@ -224,9 +257,13 @@ describe('a Windows SSH host in terminal mode and local-server mode (card #2678,
   });
 
   it('F-2701 AC-6 (c2678-mapped): with the alias mapped to windows, by remotePlatform or by windowsRemotes, a connect in terminal mode under each shell, and one in local-server mode, shows no platform pick, reports a Windows host and connects', async () => {
+    const runConfig = (JSON.parse(saved ?? '{}') as Record<string, unknown>)[
+      'remote.SSH.configFile'
+    ];
     const mapped = {
       'remote.SSH.remotePlatform': {[ALIAS]: 'windows'},
       'remote.SSH.windowsRemotes': [],
+      'remote.SSH.configFile': runConfig,
     };
     const connects: Array<{
       label: string;
@@ -244,17 +281,13 @@ describe('a Windows SSH host in terminal mode and local-server mode (card #2678,
         settings: {
           ...mapped,
           'remote.SSH.useLocalServer': false,
-          'remote.SSH.connectTimeout': 120,
+          'remote.SSH.configFile': configWaiting(120),
         },
       },
       {
         label: 'c2678-term-ps',
         shell: 'windowsPowershell',
-        settings: {
-          ...mapped,
-          'remote.SSH.useLocalServer': false,
-          'remote.SSH.connectTimeout': 15,
-        },
+        settings: {...mapped, 'remote.SSH.useLocalServer': false},
       },
       {
         label: 'c2678-term-cmd',
@@ -270,6 +303,7 @@ describe('a Windows SSH host in terminal mode and local-server mode (card #2678,
         label: 'c2678-term-legacy-list',
         shell: 'windowsPowershell',
         settings: {
+          ...mapped,
           'remote.SSH.useLocalServer': false,
           'remote.SSH.remotePlatform': {},
           'remote.SSH.windowsRemotes': [ALIAS],
@@ -282,7 +316,9 @@ describe('a Windows SSH host in terminal mode and local-server mode (card #2678,
       await userSettings(each.settings);
       useShell(SHELLS[each.shell]);
       const shellRead = defaultShell();
-      seen.push({...(await connectSeen(each.label)), shellRead});
+      const measured = {...(await connectSeen(each.label)), shellRead};
+      console.log(`c2678-mapped connect: ${JSON.stringify(measured)}`);
+      seen.push(measured);
       await closeAllButLocal();
     }
     console.log(`c2678-mapped measured: ${JSON.stringify(seen)}`);
