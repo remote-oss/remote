@@ -157,6 +157,26 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
     );
   });
 
+  it("F-0417 BR-5, F-0701 AC-14: the clone counts for the shutdown helper before its container is looked up, so an earlier window's check cannot stop the container it reuses", async () => {
+    const scene = volumeScene();
+    const ready = scene.outcome;
+    let atPrepare: string[] = [];
+    scene.outcome = () => {
+      atPrepare = scene.shutdownSent.map(request => request.type);
+      return Promise.resolve(typeof ready === 'function' ? ready() : ready);
+    };
+    await scene.connector.connect(inputOf(VOLUME_PAYLOAD));
+    await new Promise(setImmediate);
+    deepStrictEqual(
+      [
+        atPrepare,
+        scene.shutdownSent.filter(request => request.type === 'register')
+          .length,
+      ],
+      [['register'], 1],
+    );
+  });
+
   it('F-0303 AC-14: a recovery window runs up on the host from the synthetic file, with no bootstrap and no clone, and follows core’s trust', async () => {
     const recovery = volumePayloadOf({
       kind: 'volume',

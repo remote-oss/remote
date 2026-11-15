@@ -2163,12 +2163,20 @@ export function containerConnectorOf(
         },
       };
     }
-    /** Prepares the dev container: `up` runs in the bootstrap container, or on the host when there is none. */
+    /**
+     * Prepares the dev container: `up` runs in the bootstrap container, or on the host when there is none. The
+     * connection counts for the shutdown helper from here, before the existing container is looked up, so an earlier
+     * window's check does not stop the container this connect is about to reuse.
+     */
     function prepareContainer(
       bootstrap: string | undefined,
       request: VolumeContainerRequest,
       configText: string,
     ): Promise<ContainerOutcome> {
+      registerConnection(
+        {volumeName: request.volumeName, folder: target.folder},
+        {dockerPath: dockerFile, environment},
+      );
       const pass = hostPassOf(request, configText);
       lifecycle = dependencies.lifecycleFor(
         engine,
