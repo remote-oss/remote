@@ -36,6 +36,22 @@ const CHANNEL_CLOSED = 'seconds of inactivity';
 /** A line the connection log gains once per connect of a window, the reconnection's included. */
 const CONNECTED_LINE = 'Remote server listening on port';
 
+/** The host's sshd processes of the harness account's connections, by process id, and how many connections they make. */
+async function harnessSessions(): Promise<{
+  processIds: string[];
+  connections: number;
+}> {
+  const lines = (await onHostAs('root', 'ps', '-o', 'pid,args'))
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => /^\d+\s+sshd(?:-session)?: harness[@ ]/.test(line));
+  return {
+    processIds: lines.map(line => line.split(/\s+/)[0] ?? ''),
+    // Each connection has one process for its session (`harness@notty`) beside its privileged monitor.
+    connections: lines.filter(line => line.includes('harness@')).length,
+  };
+}
+
 /** How many connects the connection log holds so far. */
 function connects(): number {
   return connectionLog().filter(line => line.includes(CONNECTED_LINE)).length;
@@ -174,15 +190,19 @@ describe('ssh_config keywords newer than the runners’ OpenSSH (card #2600)', f
           () => false,
         );
         const connectsBefore = connects();
-        const ended = await onHostAs(
-          'root',
-          'pkill',
-          '-TERM',
-          'sshd-session',
-        ).then(
-          () => 'ended',
-          (error: unknown) => String(error),
-        );
+        const sessions = await harnessSessions();
+        const ended =
+          sessions.connections === 1
+            ? await onHostAs(
+                'root',
+                'kill',
+                '-TERM',
+                ...sessions.processIds,
+              ).then(
+                () => 'ended',
+                (error: unknown) => String(error),
+              )
+            : `not ended: the host has ${String(sessions.connections)} connections of the harness account`;
         const endedAt = Date.now();
         const indicators = new Set<string>();
         await waitFor(
@@ -227,6 +247,8 @@ describe('ssh_config keywords newer than the runners’ OpenSSH (card #2600)', f
     );
     deepStrictEqual(
       [
+        result.channelClosed,
+        result.ended,
         result.reconnected,
         result.indicators,
         result.dialogs,
@@ -236,6 +258,8 @@ describe('ssh_config keywords newer than the runners’ OpenSSH (card #2600)', f
         result.sameShell,
       ],
       [
+        true,
+        'ended',
         true,
         [`Reconnecting to SSH: ${alias}...`, `SSH: ${alias}`],
         [],
