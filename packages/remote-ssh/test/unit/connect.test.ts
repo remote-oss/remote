@@ -61,6 +61,7 @@ describe('the connect pipeline, when it works', () => {
       'gate',
       'transfer',
       'start',
+      'cleanup',
       'openTunnel',
       'rememberPlatform',
       'applyDefaults',
@@ -1408,6 +1409,70 @@ describe('the connect pipeline, what it keeps and gives back', () => {
       options,
     );
     deepStrictEqual(recording.calls.includes('installExtensions'), true);
+  });
+
+  it('F-2413 6.4 step 1: the connect prunes the older installs once the server runs, before the tunnel opens', async () => {
+    const {recording, options} = setup();
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(
+      recording.calls.filter(call =>
+        ['start', 'cleanup', 'openTunnel'].includes(call),
+      ),
+      ['start', 'cleanup', 'openTunnel'],
+    );
+  });
+
+  it('F-2413 6.4 step 5: a connect that reuses the running server prunes too', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {start: () => Promise.resolve(REUSED)}),
+      options,
+    );
+    deepStrictEqual(recording.calls.includes('cleanup'), true);
+  });
+
+  it('F-2413 6.4 step 8: a clean-up that cannot run is logged and the connect goes on', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        maintain: () => Promise.reject(new Error('the channel broke')),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result,
+        logSink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('clean-up')),
+      ],
+      [
+        true,
+        ['the clean-up of old installs did not work: Error: the channel broke'],
+      ],
+    );
+  });
+
+  it('F-2413 6.4: a clean-up that ends in another status than done is logged and the connect goes on', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        maintain: () => Promise.resolve({kind: 'noResultBlock'}),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result,
+        logSink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('clean-up')),
+      ],
+      [true, ['the clean-up of old installs ended with noResultBlock']],
+    );
   });
 
   it('leaves the default extensions alone on a server it started', async () => {
