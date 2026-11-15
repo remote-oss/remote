@@ -16,6 +16,7 @@ import {
   readUserSettings,
   recordLines,
   restoreUserSettings,
+  terminalFacts,
   userSettings,
   variable,
   waitFor,
@@ -120,6 +121,9 @@ interface Seen {
   picks: number;
   platform: string[];
   posixErrors: string[];
+  /** For a connect that failed: the end of its window's active terminal and its last log lines with their times. */
+  terminal?: string;
+  timedLog?: string[];
 }
 
 /** Opens window `name` and gives what its connect showed; a connect that fails is a value, not a throw. */
@@ -139,12 +143,27 @@ async function connectSeen(name: string): Promise<Seen> {
       () => false,
     );
   const lines = connectionLog().slice(logStart);
-  return {
+  const seen: Seen = {
     name,
     connected,
     picks: recordLines('platformPick').length - picksBefore,
     platform: lines.filter(line => line.startsWith('Host platform:')),
     posixErrors: lines.filter(line => POSIX_ERROR.test(line)),
+  };
+  if (connected) {
+    return seen;
+  }
+  const facts = await terminalFacts(name).catch((failed: unknown) => ({
+    text: `unread: ${String(failed)}`,
+    terminals: [],
+  }));
+  return {
+    ...seen,
+    terminal: `${JSON.stringify(facts.terminals)} ${(facts.text ?? '').slice(-1500)}`,
+    timedLog: connectionLog({withTimes: true})
+      .slice(logStart)
+      .filter(line => !line.includes('Searched for ssh in'))
+      .slice(-20),
   };
 }
 
@@ -171,25 +190,34 @@ describe('a Windows SSH host in terminal mode and local-server mode (card #2678,
   });
 
   it('F-2701 AC-6 (c2678-mapped): with the alias mapped to windows, by remotePlatform or by windowsRemotes, a connect in terminal mode under each shell, and one in local-server mode, shows no platform pick, reports a Windows host and connects', async () => {
+    const mapped = {
+      'remote.SSH.remotePlatform': {[ALIAS]: 'windows'},
+      'remote.SSH.windowsRemotes': [],
+    };
     const connects: Array<{
       label: string;
       shell: Shell;
       settings: Record<string, unknown>;
     }> = [
       {
+        label: 'c2678-local-ps',
+        shell: 'windowsPowershell',
+        settings: {...mapped, 'remote.SSH.useLocalServer': true},
+      },
+      {
         label: 'c2678-term-ps',
         shell: 'windowsPowershell',
-        settings: {'remote.SSH.useLocalServer': false},
+        settings: {...mapped, 'remote.SSH.useLocalServer': false},
       },
       {
         label: 'c2678-term-cmd',
         shell: 'commandPrompt',
-        settings: {'remote.SSH.useLocalServer': false},
+        settings: {...mapped, 'remote.SSH.useLocalServer': false},
       },
       {
         label: 'c2678-term-pwsh',
         shell: 'powershellSeven',
-        settings: {'remote.SSH.useLocalServer': false},
+        settings: {...mapped, 'remote.SSH.useLocalServer': false},
       },
       {
         label: 'c2678-term-legacy-list',
@@ -200,11 +228,10 @@ describe('a Windows SSH host in terminal mode and local-server mode (card #2678,
           'remote.SSH.windowsRemotes': [ALIAS],
         },
       },
-      {label: 'c2678-local-ps', shell: 'windowsPowershell', settings: {}},
     ];
     const seen: Array<Seen & {shellRead: string}> = [];
+    // One write per connect, every setting it needs in it: a second write right after a first can go unseen by the window.
     for (const each of connects) {
-      restoreUserSettings(saved);
       await userSettings(each.settings);
       useShell(SHELLS[each.shell]);
       const shellRead = defaultShell();
@@ -233,6 +260,7 @@ describe('a Windows SSH host in terminal mode and local-server mode (card #2678,
     await userSettings({
       'remote.SSH.useLocalServer': false,
       'remote.SSH.remotePlatform': {},
+      'remote.SSH.windowsRemotes': [],
     });
     useShell(SHELLS.windowsPowershell);
     writeFileSync(
