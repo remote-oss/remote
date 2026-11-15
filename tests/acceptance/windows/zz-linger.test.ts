@@ -8,28 +8,55 @@ import {
 } from './harness.ts';
 import {closeAllButLocal} from './maintenance.ts';
 
-const OFFSETS = [
-  0, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 7000,
-];
+function pause(milliseconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
 
-describe('a window opened after the last one closed, at offsets around the local server’s exit (card #2466, throwaway)', function () {
-  this.timeout(1_800_000);
+async function helperGone(): Promise<number> {
+  const began = Date.now();
+  while (Date.now() - began < 15_000) {
+    if ((await connectionHelpers()).length === 0) {
+      return Date.now();
+    }
+    await pause(20);
+  }
+  return -1;
+}
+
+describe('the local server’s exit after the last window closed, and a window opened right at it (card #2466, throwaway)', function () {
+  this.timeout(2_400_000);
 
   beforeEach(closeAllButLocal);
 
-  it('each offset twice', async () => {
+  it('the exit delay, then a scan around it', async () => {
+    const delays: number[] = [];
+    for (let round = 0; round < 8; round += 1) {
+      const name = `lg-m-${String(round)}`;
+      await openWindow('harness', name);
+      await connectedWithin(name, 90_000);
+      await pause(2000);
+      const closedAt = Date.now();
+      await closeWindow(name);
+      const gone = await helperGone();
+      delays.push(gone < 0 ? -1 : gone - closedAt);
+    }
+    const sorted = delays.filter(each => each > 0).sort((a, b) => a - b);
+    const middle = sorted[Math.floor(sorted.length / 2)] ?? 1800;
     const results: unknown[] = [];
-    for (const repeat of [0, 1]) {
-      for (const offset of OFFSETS) {
-        const first = `lg-a-${String(offset)}-${String(repeat)}`;
-        const second = `lg-b-${String(offset)}-${String(repeat)}`;
+    for (const repeat of [0, 1, 2]) {
+      for (let step = -6; step <= 6; step += 1) {
+        const offset = Math.max(0, middle + step * 25 - 200);
+        const first = `lg-a-${String(step)}-${String(repeat)}`;
+        const second = `lg-b-${String(step)}-${String(repeat)}`;
         await openWindow('harness', first);
         await connectedWithin(first, 90_000);
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await pause(2000);
         const mark = connectionLog().length;
         const closedAt = Date.now();
         await closeWindow(first);
-        await new Promise(resolve => setTimeout(resolve, offset));
+        // closeWindow returns when the helper has ended too, so this offset counts from the return, not from the close.
+        const returnedAt = Date.now();
+        await pause(Math.max(0, offset - (returnedAt - closedAt)));
         const openedAt = Date.now();
         await openWindow('harness', second);
         let connected = false;
@@ -41,11 +68,12 @@ describe('a window opened after the last one closed, at offsets around the local
         }
         const lines = connectionLog().slice(mark);
         results.push({
-          offset,
+          step,
           repeat,
-          connected,
-          afterMs: Date.now() - openedAt,
+          offset,
+          closeTook: returnedAt - closedAt,
           sinceClose: openedAt - closedAt,
+          connected,
           exits: lines.filter(line =>
             line.includes('the connection helper exits'),
           ).length,
@@ -63,6 +91,8 @@ describe('a window opened after the last one closed, at offsets around the local
         ).catch(() => undefined);
       }
     }
-    process.stdout.write(`LINGER ${JSON.stringify(results)}\n`);
+    process.stdout.write(
+      `LINGER ${JSON.stringify({delays, middle, results})}\n`,
+    );
   });
 });
