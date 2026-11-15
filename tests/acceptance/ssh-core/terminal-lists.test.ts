@@ -308,7 +308,6 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
     } catch (error) {
       failures.push(error);
     }
-    await onHost('rm', '-f', file);
     try {
       // The server reads its machine settings as they change, not at once: the next terminal of the launch opens in the
       // default shell only when the window reads the setting without zsh (a terminal of zsh in c80-shell, batch 7).
