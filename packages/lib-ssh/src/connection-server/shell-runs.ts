@@ -7,11 +7,8 @@
 
 import type {Scheduler} from 'lib-helper';
 import {type Interpreter, posixQuote} from 'lib-host';
-import {environmentPrefix} from '../process/remote-program.ts';
+import {base64Lines, environmentPrefix} from '../process/remote-program.ts';
 import {powershellCommandsFor} from './powershell-session.ts';
-
-/** The characters of base64 text on one line of the input. */
-const BASE64_LINE_LENGTH = 76;
 
 const SESSION_ENDED: RunEnd = {
   kind: 'failed',
@@ -64,9 +61,7 @@ export function commandsFor(marker: string, request: ShellRun): string {
       ? `${script} </dev/null`
       : [
           `base64 -d <<'${marker}_input' | ${script}`,
-          ...(request.inputBase64.match(
-            new RegExp(`.{1,${String(BASE64_LINE_LENGTH)}}`, 'gu'),
-          ) ?? []),
+          ...base64Lines(request.inputBase64),
           `${marker}_input`,
         ].join('\n');
   const end = `printf '%s%s %s\\n' ${posixQuote(`${marker}:e`)} 'nd' "$?"`;

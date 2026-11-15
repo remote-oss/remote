@@ -56,6 +56,16 @@ function environmentLines(
   ]);
 }
 
+/** The characters of base64 text on one line of a session's input, well under a terminal's line limit. */
+const BASE64_LINE_LENGTH = 76;
+
+/** `text` cut into lines of at most `BASE64_LINE_LENGTH` characters; none for empty text. */
+export function base64Lines(text: string): string[] {
+  return (
+    text.match(new RegExp(`.{1,${String(BASE64_LINE_LENGTH)}}`, 'gu')) ?? []
+  );
+}
+
 /**
  * The environment as the words in front of a command (`A='x y' B='it'\''s' `), empty for none, so that the command
  * receives it without the values appearing in any process's command line.

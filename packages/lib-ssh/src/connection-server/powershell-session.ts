@@ -1,12 +1,14 @@
 /**
  * @fileoverview The session a Windows host runs for `ShellRuns`: a fixed PowerShell loop, the twin of the POSIX
- * bootstrap. It prints `LAYER1-READY`, then for each framed run on its standard input starts a child PowerShell that
- * reads the run's prelude with the direct channel's reader, feeds it the run's input, and copies its output between the
- * run's markers. The child's command line holds only the reader, never a value of the run.
+ * bootstrap. It prints `LAYER1-READY` on a line of its own, after a line end that ends any words in front of it. Then
+ * for each framed run on its standard input it starts a child PowerShell that reads the run's prelude with the direct
+ * channel's reader, feeds it the run's input, and copies its output between the run's markers. The child's command
+ * line holds only the reader, never a value of the run.
  */
 
 import type {Interpreter, PlatformHint} from 'lib-host';
 import {
+  base64Lines,
   powershellPrelude,
   powershellReader,
 } from '../process/remote-program.ts';
@@ -27,6 +29,7 @@ export const POWERSHELL_SESSION_LOOP = [
   "$ErrorActionPreference = 'Stop'",
   '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false',
   '$Stream = [Console]::OpenStandardInput()',
+  '$Out = [Console]::OpenStandardOutput()',
   `$ReaderText = '${powershellReader(PRELUDE_BYTES_TOKEN)}'`,
   'function Read-Exactly([int]$Count) {',
   '  $Buffer = New-Object byte[] $Count',
@@ -38,7 +41,7 @@ export const POWERSHELL_SESSION_LOOP = [
   '  }',
   '  return ,$Buffer',
   '}',
-  '[Console]::Out.Write("LAYER1-READY`n")',
+  '[Console]::Out.Write("`nLAYER1-READY`n")',
   '[Console]::Out.Flush()',
   'while ($true) {',
   '  $Header = New-Object System.Collections.Generic.List[byte]',
@@ -49,7 +52,7 @@ export const POWERSHELL_SESSION_LOOP = [
   '    $Header.Add([byte]$Byte)',
   '  }',
   "  $Fields = [System.Text.Encoding]::ASCII.GetString($Header.ToArray()).TrimEnd([char]13).Split(' ')",
-  "  if ($Fields.Count -ne 3 -or $Fields[1] -notmatch '^[0-9]+$' -or $Fields[2] -notmatch '^[0-9]+$') { exit 2 }",
+  "  if ($Fields.Count -ne 3 -or $Fields[1] -notmatch '^[0-9]{1,9}$' -or $Fields[2] -notmatch '^[0-9]{1,9}$') { exit 2 }",
   '  $Prelude = Read-Exactly ([int]$Fields[1])',
   '  $InputBytes = [Convert]::FromBase64String([System.Text.Encoding]::ASCII.GetString((Read-Exactly ([int]$Fields[2]))))',
   '  [Console]::Out.Write("$($Fields[0]):start`n")',
@@ -61,13 +64,16 @@ export const POWERSHELL_SESSION_LOOP = [
   '  $Info.UseShellExecute = $false',
   '  $Info.RedirectStandardInput = $true',
   '  $Info.RedirectStandardOutput = $true',
-  '  $Info.StandardOutputEncoding = New-Object System.Text.UTF8Encoding $false',
   '  $Child = [System.Diagnostics.Process]::Start($Info)',
+  '  $Copy = $Child.StandardOutput.BaseStream.CopyToAsync($Out)',
   '  $ChildInput = $Child.StandardInput.BaseStream',
-  '  $ChildInput.Write($Prelude, 0, $Prelude.Length)',
-  '  $ChildInput.Write($InputBytes, 0, $InputBytes.Length)',
-  '  $ChildInput.Close()',
-  '  while ($null -ne ($Line = $Child.StandardOutput.ReadLine())) { [Console]::Out.Write("$Line`n") }',
+  '  try {',
+  '    $ChildInput.Write($Prelude, 0, $Prelude.Length)',
+  '    $ChildInput.Write($InputBytes, 0, $InputBytes.Length)',
+  '    $ChildInput.Close()',
+  '  } catch {}',
+  '  $Copy.Wait()',
+  '  $Out.Flush()',
   '  $Child.WaitForExit()',
   '  [Console]::Out.Write("$($Fields[0]):end $($Child.ExitCode)`n")',
   '  [Console]::Out.Flush()',
@@ -95,7 +101,8 @@ export function powershellSessionStart(): {
 
 /**
  * The framed run the loop reads: the header `<marker> <prelude bytes> <input characters>`, the prelude (the run's
- * environment and script, as the direct channel's reader takes them), then the input as base64, empty for none.
+ * environment and script, as the direct channel's reader takes them), then the input as base64 in short lines, as the
+ * POSIX runs send it, so that a terminal's line limit never cuts it; empty for none.
  */
 export function powershellCommandsFor(
   marker: string,
@@ -106,7 +113,9 @@ export function powershellCommandsFor(
   },
 ): string {
   const prelude = powershellPrelude(request.environment, request.script);
-  const input = request.inputBase64 ?? '';
+  const input = base64Lines(request.inputBase64 ?? '')
+    .map(line => `${line}\n`)
+    .join('');
   return `${marker} ${String(Buffer.byteLength(prelude, 'utf8'))} ${String(input.length)}\n${prelude}${input}`;
 }
 

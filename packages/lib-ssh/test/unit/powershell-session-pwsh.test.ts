@@ -1,12 +1,20 @@
 import {createHash, randomBytes} from 'node:crypto';
-import {spawn} from 'node:child_process';
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {type ChildProcessByStdio, spawn, spawnSync} from 'node:child_process';
+import type {Readable, Writable} from 'node:stream';
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {deepStrictEqual} from 'node:assert';
 import {
   POWERSHELL_SESSION_LOOP,
   powershellCommandsFor,
+  powershellSessionStart,
 } from '../../src/connection-server/powershell-session.ts';
 
 /** What the loop printed and how it ended. */
@@ -33,22 +41,11 @@ function framed(
   });
 }
 
-/** Runs the loop under `pwsh`, its children `pwsh` too, with `input` on its standard input. */
-async function session(input: string): Promise<SessionEnd> {
-  const loop = path.join(loopFolder.path, 'loop.ps1');
-  const child = spawn(
-    'pwsh',
-    [
-      '-NoLogo',
-      '-NoProfile',
-      '-NonInteractive',
-      '-File',
-      loop,
-      '-ChildProgram',
-      'pwsh',
-    ],
-    {stdio: ['pipe', 'pipe', 'inherit']},
-  );
+/** What `child` printed and how it ended, once it has read all of `input`. */
+async function ended(
+  child: ChildProcessByStdio<Writable, Readable, null>,
+  input: string,
+): Promise<SessionEnd> {
   const chunks: Buffer[] = [];
   child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
   child.stdin.on('error', () => undefined);
@@ -64,6 +61,44 @@ async function session(input: string): Promise<SessionEnd> {
   };
 }
 
+/** Runs the loop's file under `pwsh`, its children `pwsh` too, with `input` on its standard input. */
+async function session(input: string): Promise<SessionEnd> {
+  const loop = path.join(loopFolder.path, 'loop.ps1');
+  return ended(
+    spawn(
+      'pwsh',
+      [
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-File',
+        loop,
+        '-ChildProgram',
+        'pwsh',
+      ],
+      {stdio: ['pipe', 'pipe', 'inherit']},
+    ),
+    input,
+  );
+}
+
+/**
+ * Runs the session's own remote program, the one encoded command a Windows host gets, with `powershell` and
+ * `powershell.exe` on the path standing for `pwsh`.
+ */
+async function hostSession(input: string): Promise<SessionEnd> {
+  return ended(
+    spawn('sh', ['-c', powershellSessionStart().remoteProgram], {
+      stdio: ['pipe', 'pipe', 'inherit'],
+      env: {
+        ...process.env,
+        PATH: `${path.join(loopFolder.path, 'bin')}:${process.env.PATH ?? ''}`,
+      },
+    }),
+    input,
+  );
+}
+
 describe('the PowerShell session loop, run under pwsh (card #1899)', function () {
   this.timeout(120_000);
 
@@ -73,6 +108,13 @@ describe('the PowerShell session loop, run under pwsh (card #1899)', function ()
       path.join(loopFolder.path, 'loop.ps1'),
       POWERSHELL_SESSION_LOOP,
     );
+    const pwsh = spawnSync('sh', ['-c', 'command -v pwsh'], {
+      encoding: 'utf8',
+    }).stdout.trim();
+    mkdirSync(path.join(loopFolder.path, 'bin'));
+    for (const name of ['powershell', 'powershell.exe']) {
+      symlinkSync(pwsh, path.join(loopFolder.path, 'bin', name));
+    }
   });
 
   after(() => {
@@ -124,8 +166,56 @@ describe('the PowerShell session loop, run under pwsh (card #1899)', function ()
     );
   });
 
+  it('F-2701 5.0 step 5: the ready line comes after a line end of its own, so that words a command in front of the session left without one stay on their line', async () => {
+    const ended = await session('');
+    deepStrictEqual(
+      [ended.output.toString('utf8'), ended.status],
+      ['\nLAYER1-READY\n', 0],
+    );
+  });
+
   it('F-2701 5.0 step 5: a header that does not parse ends the session with status 2', async () => {
     const ended = await session('not a header\n');
     deepStrictEqual([ended.lines, ended.status], [['LAYER1-READY'], 2]);
+  });
+
+  it('F-2701 5.0 step 5: a header whose length has more than nine digits ends the session with status 2', async () => {
+    const ended = await session('m1 999999999999 0\n');
+    deepStrictEqual([ended.lines, ended.status], [['LAYER1-READY'], 2]);
+  });
+
+  it('F-2701 5.0 step 5: a run that writes 128 KiB before it reads its 70 000-byte input ends with all its output and its status', async () => {
+    const binary = randomBytes(70_000);
+    const ended = await session(
+      framed(
+        'm1',
+        '1..2048 | ForEach-Object { "x" * 63 }; $Stream = [Console]::OpenStandardInput(); $Copy = New-Object System.IO.MemoryStream; $Stream.CopyTo($Copy); "read:$($Copy.Length)"; exit 4',
+        {},
+        binary,
+      ),
+    );
+    deepStrictEqual(
+      [
+        ended.lines.filter(line => line === 'x'.repeat(63)).length,
+        ended.lines.slice(-2),
+        ended.status,
+      ],
+      [2048, ['read:70000', 'm1:end 4'], 0],
+    );
+  });
+
+  it('F-2701 5.0 step 5: the last words of a run that writes no line end come in front of its end marker', async () => {
+    const ended = await session(framed('m1', '[Console]::Out.Write("tail")'));
+    deepStrictEqual(ended.lines, ['LAYER1-READY', 'm1:start', 'tailm1:end 0']);
+  });
+
+  it("F-2701 5.0 step 5: the session's own remote program, one encoded command, runs a framed run", async () => {
+    const ended = await hostSession(
+      framed('m1', 'Write-Output "a=$env:GREETING"', {GREETING: 'host'}),
+    );
+    deepStrictEqual(
+      [ended.lines, ended.status],
+      [['LAYER1-READY', 'm1:start', 'a=host', 'm1:end 0'], 0],
+    );
   });
 });

@@ -66,7 +66,24 @@ describe('the PowerShell session loop (card #1899)', () => {
     const prelude = `$env:GREETING = 'it''s é'\n${PLAIN_RUN.script}\n`;
     deepStrictEqual(
       commands,
-      `m2 ${String(Buffer.byteLength(prelude, 'utf8'))} 4\n${prelude}aGk=`,
+      `m2 ${String(Buffer.byteLength(prelude, 'utf8'))} 5\n${prelude}aGk=\n`,
+    );
+  });
+
+  it("F-2701 5.0 step 5: a run's input goes as base64 lines of 76 characters, each line end counted in its length", () => {
+    const base64 = Buffer.alloc(100).toString('base64');
+    const commands = powershellCommandsFor('m3', {
+      ...PLAIN_RUN,
+      inputBase64: base64,
+    });
+    const input = `${base64.slice(0, 76)}\n${base64.slice(76, 152)}\n`;
+    deepStrictEqual(
+      [base64.length, commands.split('\n')[0], commands.endsWith(input)],
+      [
+        136,
+        `m3 ${String(Buffer.byteLength(`${PLAIN_RUN.script}\n`, 'utf8'))} 138`,
+        true,
+      ],
     );
   });
 

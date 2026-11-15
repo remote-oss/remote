@@ -2,6 +2,7 @@ param([string]$ChildProgram = 'powershell.exe')
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 $Stream = [Console]::OpenStandardInput()
+$Out = [Console]::OpenStandardOutput()
 $ReaderText = '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 $Stream = [Console]::OpenStandardInput()
 $Bytes = New-Object byte[] PRELUDE_BYTES
@@ -18,7 +19,7 @@ function Read-Exactly([int]$Count) {
   }
   return ,$Buffer
 }
-[Console]::Out.Write("LAYER1-READY`n")
+[Console]::Out.Write("`nLAYER1-READY`n")
 [Console]::Out.Flush()
 while ($true) {
   $Header = New-Object System.Collections.Generic.List[byte]
@@ -29,7 +30,7 @@ while ($true) {
     $Header.Add([byte]$Byte)
   }
   $Fields = [System.Text.Encoding]::ASCII.GetString($Header.ToArray()).TrimEnd([char]13).Split(' ')
-  if ($Fields.Count -ne 3 -or $Fields[1] -notmatch '^[0-9]+$' -or $Fields[2] -notmatch '^[0-9]+$') { exit 2 }
+  if ($Fields.Count -ne 3 -or $Fields[1] -notmatch '^[0-9]{1,9}$' -or $Fields[2] -notmatch '^[0-9]{1,9}$') { exit 2 }
   $Prelude = Read-Exactly ([int]$Fields[1])
   $InputBytes = [Convert]::FromBase64String([System.Text.Encoding]::ASCII.GetString((Read-Exactly ([int]$Fields[2]))))
   [Console]::Out.Write("$($Fields[0]):start`n")
@@ -41,13 +42,16 @@ while ($true) {
   $Info.UseShellExecute = $false
   $Info.RedirectStandardInput = $true
   $Info.RedirectStandardOutput = $true
-  $Info.StandardOutputEncoding = New-Object System.Text.UTF8Encoding $false
   $Child = [System.Diagnostics.Process]::Start($Info)
+  $Copy = $Child.StandardOutput.BaseStream.CopyToAsync($Out)
   $ChildInput = $Child.StandardInput.BaseStream
-  $ChildInput.Write($Prelude, 0, $Prelude.Length)
-  $ChildInput.Write($InputBytes, 0, $InputBytes.Length)
-  $ChildInput.Close()
-  while ($null -ne ($Line = $Child.StandardOutput.ReadLine())) { [Console]::Out.Write("$Line`n") }
+  try {
+    $ChildInput.Write($Prelude, 0, $Prelude.Length)
+    $ChildInput.Write($InputBytes, 0, $InputBytes.Length)
+    $ChildInput.Close()
+  } catch {}
+  $Copy.Wait()
+  $Out.Flush()
   $Child.WaitForExit()
   [Console]::Out.Write("$($Fields[0]):end $($Child.ExitCode)`n")
   [Console]::Out.Flush()
