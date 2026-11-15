@@ -36,6 +36,25 @@ function connectorOptions(
   };
 }
 
+/** A connector whose steps throw, which tells `resolveEnded` how its resolve ended. */
+function throwingConnector(
+  resolveEnded: (
+    hints: readonly FailureHint[],
+    outcome: ResolveOutcome,
+  ) => void,
+): SshConnector {
+  return connectorOf({
+    stepsFor: () => {
+      throw new Error('broken');
+    },
+    terminalMode: () => false,
+    options: connectorOptions(setup().options),
+    revealLog: () => undefined,
+    applyTerminalEnvironment: () => undefined,
+    resolveEnded,
+  });
+}
+
 /** A connector over the fixture's steps, with the recording, and a log the details reveal counts in. */
 function connectorFor(
   changes: Partial<ConnectSteps> = {},
@@ -327,17 +346,9 @@ describe('the connector over the connect pipeline', () => {
     );
     await failing.connector.connect(HOST_INPUT);
     await connectorFor({}, () => false, record).connector.connect(HOST_INPUT);
-    const throwing = connectorOf({
-      stepsFor: () => {
-        throw new Error('broken');
-      },
-      terminalMode: () => false,
-      options: connectorOptions(setup().options),
-      revealLog: () => undefined,
-      applyTerminalEnvironment: () => undefined,
-      resolveEnded: record,
-    });
-    await throwing.connect(HOST_INPUT).catch(() => undefined);
+    await throwingConnector(record)
+      .connect(HOST_INPUT)
+      .catch(() => undefined);
     deepStrictEqual(told, [[hint], [], []]);
   });
 
@@ -358,16 +369,7 @@ describe('the connector over the connect pipeline', () => {
       () => false,
       record,
     ).connector.connect(HOST_INPUT);
-    await connectorOf({
-      stepsFor: () => {
-        throw new Error('broken');
-      },
-      terminalMode: () => false,
-      options: connectorOptions(setup().options),
-      revealLog: () => undefined,
-      applyTerminalEnvironment: () => undefined,
-      resolveEnded: record,
-    })
+    await throwingConnector(record)
       .connect(HOST_INPUT)
       .catch(() => undefined);
     const window: {connector?: SshConnector} = {};
