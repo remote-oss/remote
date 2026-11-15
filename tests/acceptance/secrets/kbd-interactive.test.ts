@@ -7,7 +7,7 @@
 
 import {deepStrictEqual} from 'node:assert';
 import {randomInt} from 'node:crypto';
-import {readdirSync, readFileSync} from 'node:fs';
+import {readdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {newPassword} from '../../../tools/acceptance-run.ts';
 import {
@@ -22,9 +22,11 @@ import {
   type SecretPlace,
   secretHits,
   totpCode,
+  userSettings,
   variable,
   waitFor,
 } from '../windows/harness.ts';
+import {keepingSettings, PLATFORMS} from '../windows/tunnel-support.ts';
 
 /** The length of one step of the host's codes; the host takes the step before and after the current one too. */
 const STEP_MILLISECONDS = 30_000;
@@ -296,5 +298,114 @@ describe('keyboard-interactive logins type nothing into a file (F-2306 AC-27, ca
       ],
       [[], [], ['totp-secret', '.google_authenticator']],
     );
+  });
+});
+
+/**
+ * The run's ssh_config with one alias more, `jump2fa`: the harness account at the host's own sshd, through the
+ * `twofactor` account as its jump host, so the jump asks for a password and a code and the target asks for nothing.
+ * Gives the file's path.
+ */
+function jumpConfigFile(): string {
+  const text = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8');
+  const jumped = /^Host jumped\n(?: {2}.*\n)+/m.exec(text)?.[0];
+  if (jumped === undefined) {
+    throw new Error('the run’s ssh_config has no alias jumped to copy');
+  }
+  const file = path.join(RUN_FOLDER, 'ssh_config_jump2fa');
+  writeFileSync(
+    file,
+    `${text}\n${jumped
+      .replace('Host jumped', 'Host jump2fa')
+      .replace('ProxyJump harness', 'ProxyJump twofactor')
+      .replace('known_hosts_jumped', 'known_hosts_jump2fa')}`,
+  );
+  return file;
+}
+
+/** Runs `rowBody` with the shared connection and the config of the `jump2fa` alias, and puts the settings back. */
+function throughJump(rowBody: () => Promise<void>): Promise<void> {
+  return keepingSettings(async () => {
+    await userSettings({
+      ...PLATFORMS,
+      'remote.SSH.useLocalServer': true,
+      'remote.SSH.configFile': jumpConfigFile(),
+    });
+    await rowBody();
+  });
+}
+
+describe('a jump host with a password and a code (F-2310 AC-6, AC-35, card #2613)', function () {
+  this.timeout(600_000);
+
+  it('F-2310 AC-6 (c2613-jump-inputs): the password and the code of the jump host are asked in that order, and the target asks for nothing after them', async () => {
+    await throughJump(async () => {
+      const code = totpCode();
+      appendScript([
+        {
+          surface: 'maskedInput',
+          match: 'password',
+          answer: {text: hostPassword()},
+          window: 'j1',
+        },
+        {
+          surface: 'maskedInput',
+          match: 'verification code',
+          answer: {text: code},
+          window: 'j1',
+        },
+      ]);
+      await openWindow('jump2fa', 'j1');
+      await connectedWithin('j1', LOGIN_MILLISECONDS);
+      deepStrictEqual(questionsOf('j1'), ['password', 'verification code']);
+      await closeWindow('j1');
+    });
+  });
+
+  it('F-2310 AC-35 (c2613-jump-round): a failed round of the jump host asks for the password again with no message of ours', async () => {
+    await throughJump(async () => {
+      const code = totpCode();
+      appendScript([
+        {
+          surface: 'maskedInput',
+          match: 'password',
+          answer: {text: 'not-the-password'},
+          window: 'j2',
+        },
+        {
+          surface: 'maskedInput',
+          match: 'verification code',
+          answer: {text: wrongCode()},
+          window: 'j2',
+        },
+        {
+          surface: 'maskedInput',
+          match: 'password',
+          answer: {text: hostPassword()},
+          window: 'j2',
+        },
+        {
+          surface: 'maskedInput',
+          match: 'verification code',
+          answer: {text: code},
+          window: 'j2',
+        },
+      ]);
+      await openWindow('jump2fa', 'j2');
+      await connectedWithin('j2', LOGIN_MILLISECONDS);
+      deepStrictEqual(
+        recordLines('maskedInput', 'j2').map(line => [
+          line.question.includes('verification code') ? 'code' : 'password',
+          line.message,
+        ]),
+        [
+          ['password', undefined],
+          ['code', undefined],
+          ['password', undefined],
+          ['code', undefined],
+        ],
+      );
+      await closeWindow('j2');
+    });
   });
 });
