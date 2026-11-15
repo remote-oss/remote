@@ -12,7 +12,6 @@ import {promisify} from 'node:util';
 import {deepStrictEqual} from 'node:assert';
 import {
   appendScript,
-  connectionLog,
   closeWindow,
   openWindow,
   readUserSettings,
@@ -107,7 +106,6 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
       ...settings,
     });
     const mark = Date.now();
-    const logMark = connectionLog().length;
     appendScript(dismissals(alias));
     await openWindow(alias, alias);
     try {
@@ -130,11 +128,6 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
           question: dialog?.question,
           left,
           limited: readdirSync(starts).length >= START_LIMIT,
-          diagnostic: `${String(readdirSync(starts).length)} starts; ${connectionLog()
-            .slice(logMark)
-            .filter(line => !line.includes('OpenSSH_'))
-            .slice(0, 30)
-            .join(' | ')}`,
         },
         {
           question: `Could not establish connection to "${alias}".`,
