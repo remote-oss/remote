@@ -31,17 +31,19 @@ function logFiles(folder: string): string[] {
 }
 
 async function noServers(): Promise<void> {
-  await onHost(
-    'sh',
-    '-c',
-    `pkill -u harness -f '${DATA}/' ; pkill -u harness -f 'code-insiders' ; true`,
+  await onHost('pkill', '-u', 'harness', '-f', `${DATA}/`).catch(
+    () => undefined,
+  );
+  await onHost('pkill', '-u', 'harness', '-f', 'code-insiders').catch(
+    () => undefined,
   );
   await waitFor(
     'no server processes',
     async () =>
-      (
-        await onHost('sh', '-c', `pgrep -u harness -f '${DATA}/' || true`)
-      ).trim() === '',
+      onHost('pgrep', '-u', 'harness', '-f', `${DATA}/`).then(
+        () => false,
+        () => true,
+      ),
     60_000,
   );
 }
