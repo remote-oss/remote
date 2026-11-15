@@ -75,12 +75,12 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
     writeFileSync(
       wrapper,
       [
-        '#!/bin/sh',
+        '#!/bin/bash',
         `PATH="${binFolder}:$PATH"; export PATH`,
         `started=$(ls "${starts}" | wc -l)`,
         `if [ "$started" -ge ${String(START_LIMIT)} ]; then echo "fork: Resource temporarily unavailable" >&2; exit 255; fi`,
         `: > "${starts}/$$"`,
-        `exec "${real}" "$@"`,
+        `exec -a ssh "${real}" "$@"`,
         '',
       ].join('\n'),
     );
@@ -128,7 +128,10 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
           question: dialog?.question,
           left,
           limited: readdirSync(starts).length >= START_LIMIT,
-          diagnostic: `${String(readdirSync(starts).length)} starts; ${connectionLog().slice(-40).join(' | ')}`,
+          diagnostic: `${String(readdirSync(starts).length)} starts; ${connectionLog()
+            .filter(line => !line.includes('OpenSSH_'))
+            .slice(-25)
+            .join(' | ')}`,
         },
         {
           question: `Could not establish connection to "${alias}".`,
