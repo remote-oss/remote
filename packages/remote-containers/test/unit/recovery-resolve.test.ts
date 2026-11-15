@@ -109,6 +109,7 @@ describe('the resolve of a recovery container (card containers-160, #2017)', () 
         calls: ['volume inspect', 'build --tag'],
         written: [file],
         request: {
+          volumeName: 'r-volume',
           folder: '/tmp/stand-in',
           configFile: file,
           idLabels: [

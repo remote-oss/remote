@@ -275,6 +275,41 @@ describe('Clone Repository in Container Volume (card containers-151)', function 
     await closeWindow(FOLDER);
   });
 
+  /**
+   * Opens the clone, closes its window, reopens the same URL `delay` milliseconds later, and gives the containers of its
+   * volume before, and all and running 12 s after the reopened window connected.
+   */
+  async function reopenedAfter(delay: number): Promise<string[][]> {
+    const volume = String((await clonedVolumes(REPOSITORY))[0]?.split(' ')[0]);
+    const label = `vsch.local.repository.volume=${volume}`;
+    await startClone(REPOSITORY);
+    await connectedToContainer(FOLDER, 600_000);
+    const containers = await containersWith(label);
+    await closeWindow(FOLDER);
+    await new Promise(resolve => setTimeout(resolve, delay));
+    await startClone(REPOSITORY);
+    await connectedToContainer(FOLDER, 600_000);
+    // Past the closed window's 10 s check, with this window connected.
+    await new Promise(resolve => setTimeout(resolve, 12_000));
+    const after = [
+      containers,
+      await containersWith(label),
+      await dockerLines('ps', '-q', '--filter', `label=${label}`),
+    ];
+    await closeWindow(FOLDER);
+    return after;
+  }
+
+  it("F-0701 AC-14 (c2645-reuse-in-delay): the same URL reopened inside the closed window's delay reuses the running container, which its check then leaves running", async () => {
+    const [containers, all, running] = await reopenedAfter(8000);
+    deepStrictEqual([all, running], [containers, containers]);
+  });
+
+  it("F-0701 AC-14 (c2645-reuse-at-check): the same URL reopened right at the closed window's check, while its stop may run, connects and leaves the container running", async () => {
+    const [containers, all, running] = await reopenedAfter(10_200);
+    deepStrictEqual([all, running], [containers, containers]);
+  });
+
   it('F-0701 AC-9 (c151-no-config-part): a clone with no configuration opens the template picker; Escape shows S414, and Cancel leaves an empty local window, the volume kept with no configuration', async () => {
     const known = openEmptyWindows();
     await startClone(BARE);

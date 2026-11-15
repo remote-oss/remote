@@ -431,6 +431,7 @@
       "exec-server.test.ts": 0.2,
       "forwarding-disabled.test.ts": 3.6,
       "kill-unsaved.test.ts": 0.6,
+      "open-entry-points.test.ts": 10.6,
       "pty.test.ts": 14.4,
       "remote-settings.test.ts": 0.7,
       "server-lifetime-long.test.ts": 5.4,

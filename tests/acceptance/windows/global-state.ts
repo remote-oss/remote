@@ -37,3 +37,19 @@ export function extensionState(): Promise<Record<string, unknown>> {
     stored === undefined ? {} : (JSON.parse(stored) as Record<string, unknown>),
   );
 }
+
+/**
+ * The authorities of the runtime label formatters core keeps in the profile's cache, newest first: the ones a window
+ * registered once its host reported, which core registers again at the start of every later window.
+ */
+export function cachedLabelAuthorities(): string[] {
+  const stored = globalState().get('memento/cachedResourceLabelFormatters2');
+  const formatters =
+    stored === undefined
+      ? undefined
+      : (JSON.parse(stored) as {formatters?: Array<{authority?: string}>})
+          .formatters;
+  return (formatters ?? []).flatMap(each =>
+    each.authority === undefined ? [] : [each.authority],
+  );
+}

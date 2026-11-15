@@ -65,6 +65,7 @@
         "explorer/*.test.ts",
         "explorer-alone/*.test.ts",
         "wsl/*.test.ts",
+        "windows-host/*.test.ts",
         "explorer-trust/*.test.ts",
         "explorer-trust-pickers/*.test.ts",
         "explorer-home/*.test.ts",

@@ -185,6 +185,9 @@
       "path": "tests/acceptance/wsl"
     },
     {
+      "path": "tests/acceptance/windows-host"
+    },
+    {
       "path": "tests/acceptance/explorer-alone"
     },
     {

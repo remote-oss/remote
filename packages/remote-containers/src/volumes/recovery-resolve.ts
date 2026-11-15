@@ -84,6 +84,7 @@ export async function resolveRecovery(
   );
   await ports.writeFile(configFile, configText);
   const request: VolumeContainerRequest = {
+    volumeName,
     folder: ports.standInFolder,
     configFile,
     idLabels: recoveryIdLabels(volumeName, configFile),

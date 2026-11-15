@@ -43,11 +43,14 @@ export interface RegistryPorts {
 
 /** The registry's decisions; each request method answers as the helper replies. */
 export interface ShutdownRegistry {
-  /** Records the connection `request` names, held by lease `leaseId`. */
+  /**
+   * Records the connection `request` names, held by lease `leaseId`, and answers at once, or once a stop already
+   * running for a container of its identity has ended: the connect then finds that container stopped, not stopping.
+   */
   register(
     leaseId: number,
     request: Extract<ShutdownRequest, {type: 'register'}>,
-  ): ShutdownReply;
+  ): ShutdownReply | Promise<ShutdownReply>;
   /** Records the Compose project the connection started, before its services are. */
   setCompose(
     request: Extract<ShutdownRequest, {type: 'compose'}>,
@@ -100,6 +103,11 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
   // The services that a close left running because a connection used them, by engine and project, for the helper's life.
   const skipped = new Map<string, Set<string>>();
   const pending = new Set<Promise<void>>();
+  // The stops running now, each with the identity of the connection whose check started it.
+  const stopping = new Set<{
+    identity: ContainerIdentity;
+    done: Promise<void>;
+  }>();
   const unknown: ShutdownReply = {
     accepted: false,
     problem: 'unknown connection',
@@ -147,14 +155,21 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
       ports.logLine(`container ${containerId} is in use and stays running`);
       return;
     }
-    const result = await ports.runDocker(connection.engine, [
-      'stop',
-      containerId,
-    ]);
-    if (result.status !== 0) {
-      ports.logLine(
-        `docker stop ${containerId} failed with status ${String(result.status)}`,
-      );
+    const done = ports
+      .runDocker(connection.engine, ['stop', containerId])
+      .then(result => {
+        if (result.status !== 0) {
+          ports.logLine(
+            `docker stop ${containerId} failed with status ${String(result.status)}`,
+          );
+        }
+      });
+    const stop = {identity: connection.identity, done};
+    stopping.add(stop);
+    try {
+      await done;
+    } finally {
+      stopping.delete(stop);
     }
   }
 
@@ -367,7 +382,18 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
         live: true,
         ending: false,
       });
-      return {accepted: true};
+      const running = [...stopping].filter(stop =>
+        sameIdentity(stop.identity, request.identity),
+      );
+      if (running.length === 0) {
+        return {accepted: true};
+      }
+      ports.logLine(
+        `connection ${request.connectionId} waits for the stop of its container to end`,
+      );
+      return Promise.all(running.map(stop => stop.done)).then(() => ({
+        accepted: true,
+      }));
     },
     setCompose: request => {
       const connection = connections.get(request.connectionId);
