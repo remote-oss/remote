@@ -137,6 +137,21 @@ async function measureFrame(label: string, frame: string, invocation?: {program:
 describe('the Windows session loop with its input kept open (card #2681, measurement)', function () {
   this.timeout(900_000);
 
+  it('print what the host ran during the connects', () => {
+    const watchFile = path.join(variable('HARNESS_RUN_FOLDER'), 'process-watch.txt');
+    const lines = existsSync(watchFile) ? readFileSync(watchFile, 'utf8').split('\n') : [];
+    const seen = new Map<string, string>();
+    for (const line of lines) {
+      const key = line.split(' ').slice(1).join(' ');
+      if (key !== '' && !seen.has(key)) {
+        seen.set(key, line.split(' ')[0] ?? '');
+      }
+    }
+    console.log(`c2681-measure processes: ${JSON.stringify([...seen].map(([key, first]) => `${first} ${key}`).slice(0, 200))}`);
+    const events = execFileSync('powershell', ['-NoProfile', '-Command', "Get-WinEvent -LogName 'OpenSSH/Operational' -MaxEvents 120 | Sort-Object TimeCreated | ForEach-Object { $_.TimeCreated.ToString('HH:mm:ss.fff') + ' ' + ($_.Message -replace '\\s+', ' ') }"], {encoding: 'utf8'});
+    console.log(`c2681-measure sshd events: ${JSON.stringify(events.split('\n').slice(-120))}`);
+  });
+
   it('replay the frames the helper wrote, over plain ssh', async () => {
     useShell(SHELLS.windowsPowershell);
     const saved = readdirSync(tmpdir()).filter(name => name.startsWith('c2681-frame-')).sort();
