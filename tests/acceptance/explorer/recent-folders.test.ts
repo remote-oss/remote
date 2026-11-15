@@ -41,6 +41,7 @@ import {
   pressSpace,
   quickPickFacts,
   quickPickRows,
+  rememberPage,
   rowAction,
   rowContextMenu,
   rowContextMenuByKey,
@@ -2042,6 +2043,9 @@ describe('the recent folders under a target (card coverage-122)', function () {
     this.timeout(600_000);
     const saved = readUserSettings();
     const window = await viewWindowIn('c122-un');
+    // The failed window comes back local, folder-less, titled '[]' like the base window's; with the base window's page
+    // remembered, the recovered one is the one left among the '[]' pages when its own page is asked for.
+    await rememberPage('local');
     const first = `${HOME}/c122-un-a`;
     const second = `${HOME}/c122-un-b`;
     const reachable = `${HOME}/c122-un-c`;
