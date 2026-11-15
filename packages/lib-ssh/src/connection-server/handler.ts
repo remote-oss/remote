@@ -251,6 +251,19 @@ export class ConnectionHandler implements MessageHandler {
     }
     this.state = 'connecting';
     const {invocation, askpassEnvironment, editorEnvironment} = this.options;
+    try {
+      writeFileSync(
+        path.join(tmpdir(), `c2681-invocation-${String(Date.now())}.json`),
+        JSON.stringify({
+          program: invocation.program,
+          arguments: invocation.arguments,
+          askpassEnvironment,
+          editorEnvironment,
+        }),
+      );
+    } catch (caught) {
+      this.options.logLine(`DIAG invocation not saved ${String(caught)}`);
+    }
     const outcome = await spawnSession(
       this.options.spawner,
       invocation,

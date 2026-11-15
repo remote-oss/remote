@@ -102,14 +102,15 @@ async function measure(label: string, early: boolean, holdMilliseconds: number, 
 }
 
 /** The loop with stdin open and `frame` written once the ready line is read, with the timeline printed. */
-async function measureFrame(label: string, frame: string): Promise<void> {
+async function measureFrame(label: string, frame: string, invocation?: {program: string; arguments: string[]; environment: Record<string, string>}): Promise<void> {
   const {remoteProgram} = powershellSessionStart();
   const started = Date.now();
   const events: string[] = [];
   const note = (what: string) => events.push(`${String(Date.now() - started)}ms ${what}`);
-  const child = spawn('ssh', ['-T', '-F', variable('HARNESS_SSH_CONFIG'), 'winhost', remoteProgram], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
+  const child =
+    invocation === undefined
+      ? spawn('ssh', ['-T', '-F', variable('HARNESS_SSH_CONFIG'), 'winhost', remoteProgram], {stdio: ['pipe', 'pipe', 'pipe']})
+      : spawn(invocation.program, invocation.arguments, {stdio: ['pipe', 'pipe', 'pipe'], env: invocation.environment, windowsHide: true});
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
   let stdout = '';
@@ -145,6 +146,14 @@ describe('the Windows session loop with its input kept open (card #2681, measure
       const header = frame.slice(0, frame.indexOf('\n'));
       console.log(`c2681-measure frame ${name}: ${JSON.stringify({length: frame.length, bytes: Buffer.byteLength(frame), header: header.replace(/^\S+/, 'MARKER'), crs: (frame.match(/\r/g) ?? []).length, nonAscii: (frame.match(/[^\x00-\x7f]/g) ?? []).length, tail: frame.slice(-120)})}`);
       await measureFrame(`replay ${name}`, frame);
+      const invocations = readdirSync(tmpdir()).filter(each => each.startsWith('c2681-invocation-')).sort();
+      for (const each of invocations.slice(0, 1)) {
+        const saved = JSON.parse(readFileSync(path.join(tmpdir(), each), 'utf8')) as {program: string; arguments: string[]; askpassEnvironment: Record<string, string>; editorEnvironment: Record<string, string>};
+        console.log(`c2681-measure invocation: ${JSON.stringify({program: saved.program, arguments: saved.arguments, askpass: Object.keys(saved.askpassEnvironment), editor: Object.keys(saved.editorEnvironment).length})}`);
+        const environment = {...saved.editorEnvironment, ...saved.askpassEnvironment};
+        await measureFrame('replay with the invocation', frame, {program: saved.program, arguments: saved.arguments, environment});
+        await measureFrame('replay with the invocation, no askpass', frame, {program: saved.program, arguments: saved.arguments, environment: {...saved.editorEnvironment}});
+      }
     }
   });
 
