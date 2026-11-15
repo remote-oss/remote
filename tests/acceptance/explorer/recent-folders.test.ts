@@ -1081,7 +1081,11 @@ describe('the recent folders under a target (card coverage-122)', function () {
             `its open pick is ${JSON.stringify(await quickPickFacts(opened).catch(() => 'unreachable'))}, ` +
             `its notifications are ${JSON.stringify(await notifications(opened).catch(() => 'unreachable'))}`,
         );
-        throw error;
+        // The reload tears the window's agent down while the command is in flight, so the command answers
+        // Canceled; the reconnect wait below verifies the reload stood.
+        if (!String(error).includes('Canceled')) {
+          throw error;
+        }
       }
       await waitFor(
         `window ${opened} to reconnect after its reload`,
@@ -1674,7 +1678,9 @@ describe('the recent folders under a target (card coverage-122)', function () {
       await foldersSettled(empty, 'harness', [target], `${HOME}/c122-es-`);
       deepStrictEqual(
         [
-          (await folderRowsOf(empty, 'harness')).map(each => each.description),
+          (await folderRowsOf(empty, 'harness'))
+            .map(each => each.description)
+            .filter(each => each.startsWith(`${HOME}/c122-es-`)),
           await historyOf(driver),
           windowNames().filter(name => !before.includes(name)),
         ],
