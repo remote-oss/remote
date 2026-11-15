@@ -132,6 +132,35 @@ function readerText(text: string): string {
   return lexed.parseError;
 }
 
+/**
+ * What the hook at the end of the file reports when its reconnect fails (card #2466, where the resolve met `channelClosed: the
+ * helper is gone` once, 25 ms after the connection helper's exit line, and a measurement of 110 rounds did not show a race): the
+ * rows that ran and the helpers each left, the helper list sampled from the reconnect's start, the connection log, and what the host holds now.
+ */
+async function hookFacts(
+  began: string,
+  changes: string[],
+  trail: string[],
+): Promise<string> {
+  const stamped = connectionLog({withTimes: true});
+  const exits = stamped.filter(line =>
+    /connection helper exits|the helper is gone/.test(line),
+  );
+  const onTheHost = await onHost(
+    'sh',
+    '-c',
+    `pgrep -u harness -fl 'server-mai[n].js' 2>&1; ls '${DATA_FOLDER}/bin' 2>&1; true`,
+  ).catch((failed: unknown) => `not read: ${String(failed)}`);
+  return [
+    `the hook's reconnect began at ${began}; helpers now ${JSON.stringify(await connectionHelpers())}`,
+    `the rows of the file, newest last:\n${trail.join('\n')}`,
+    `the helper's exit lines and every "helper is gone" (the helper's own lines have no time):\n${exits.join('\n')}`,
+    `the connection helpers as sampled every 25 ms from the reconnect's start, each change with its time:\n${changes.join('\n')}`,
+    `the log, last 60 lines:\n${stamped.slice(-60).join('\n')}`,
+    `the host: server processes and the server folder's bin:\n${onTheHost.trim()}`,
+  ].join('\n');
+}
+
 describe('Add New SSH Host and the server maintenance commands (card coverage-30)', function () {
   this.timeout(900_000);
 
@@ -144,11 +173,43 @@ describe('Add New SSH Host and the server maintenance commands (card coverage-30
     savedSettings = readUserSettings();
   });
 
+  /** When each row ended, how it ended and which connection helpers were running: the facts the hook below reports when it fails. */
+  const trail: string[] = [];
+
+  afterEach(async function () {
+    trail.push(
+      `${new Date().toISOString()} ${this.currentTest?.state ?? '?'} ${(this.currentTest?.title ?? '').slice(0, 70)}; helpers ${JSON.stringify(await connectionHelpers())}`,
+    );
+  });
+
   after(async () => {
     writeFileSync(configFile(), savedConfig);
     restoreUserSettings(savedSettings);
     // The Kill and Uninstall rows end the harness account's server; the files after this one need one on the host.
-    await openConnected('mt1');
+    const began = new Date().toISOString();
+    // The helper's own log lines carry no time, so the helper list is sampled while the reconnect runs.
+    const changes: string[] = [];
+    let last = JSON.stringify(await connectionHelpers());
+    changes.push(`${began} ${last}`);
+    const sampler = setInterval(() => {
+      void connectionHelpers().then(helpers => {
+        const text = JSON.stringify(helpers);
+        if (text !== last) {
+          last = text;
+          changes.push(`${new Date().toISOString()} ${text}`);
+        }
+      });
+    }, 25);
+    try {
+      await openConnected('mt1');
+    } catch (caught) {
+      throw new Error(
+        `${String(caught)}\n${await hookFacts(began, changes, trail)}`,
+        {cause: caught},
+      );
+    } finally {
+      clearInterval(sampler);
+    }
     await closeWindow('mt1');
   });
 
