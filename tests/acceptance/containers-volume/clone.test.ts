@@ -275,6 +275,29 @@ describe('Clone Repository in Container Volume (card containers-151)', function 
     await closeWindow(FOLDER);
   });
 
+  it("F-0417 BR-5, F-0701 AC-14 (c2645-reuse-in-delay): the same URL reopened inside the closed window's delay reuses the running container, which its check then leaves running", async () => {
+    const volume = String((await clonedVolumes(REPOSITORY))[0]?.split(' ')[0]);
+    const label = `vsch.local.repository.volume=${volume}`;
+    await startClone(REPOSITORY);
+    await connectedToContainer(FOLDER, 600_000);
+    const containers = await containersWith(label);
+    await closeWindow(FOLDER);
+    // Reopened 8 s after the close, the reuse is under way when the closed window's 10 s check runs.
+    await new Promise(resolve => setTimeout(resolve, 8000));
+    await startClone(REPOSITORY);
+    await connectedToContainer(FOLDER, 600_000);
+    // Past the closed window's check, with this window connected: the container is still running.
+    await new Promise(resolve => setTimeout(resolve, 12_000));
+    deepStrictEqual(
+      [
+        await containersWith(label),
+        await dockerLines('ps', '-q', '--filter', `label=${label}`),
+      ],
+      [containers, containers],
+    );
+    await closeWindow(FOLDER);
+  });
+
   it('F-0701 AC-9 (c151-no-config-part): a clone with no configuration opens the template picker; Escape shows S414, and Cancel leaves an empty local window, the volume kept with no configuration', async () => {
     const known = openEmptyWindows();
     await startClone(BARE);
