@@ -103,6 +103,7 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
     await userSettings({
       'remote.SSH.configFile': file,
       'remote.SSH.path': wrapper,
+      'remote.SSH.remotePlatform': {[alias]: 'linux'},
       ...settings,
     });
     const mark = Date.now();
