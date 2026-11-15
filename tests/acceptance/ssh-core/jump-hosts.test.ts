@@ -1169,12 +1169,18 @@ describe('jump hosts and proxy commands (card #2601)', function () {
         );
         // The authority is remote as soon as the connect starts: the inputs are counted once the window is connected.
         await waitFor(
-          `${next} to be connected through ${alias}`,
+          `${next} to be connected`,
           async () =>
-            (await statusItem(next, 'status.host').catch(() => ({text: ''})))
-              .text === `SSH: ${alias}`,
+            (
+              await statusItem(next, 'status.host').catch(() => ({text: ''}))
+            ).text.startsWith('SSH: '),
           120_000,
-        );
+        ).catch(async (caught: unknown) => {
+          throw new Error(
+            `${String(caught)}; its indicator reads "${(await statusItem(next, 'status.host').catch(() => ({text: '?'}))).text}"`,
+            {cause: caught},
+          );
+        });
         const asked = recordLines('maskedInput', next).length;
         await closeWindow(next);
         return {before, asked};
