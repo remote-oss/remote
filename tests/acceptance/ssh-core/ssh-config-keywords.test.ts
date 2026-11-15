@@ -18,7 +18,11 @@ import {
   recordLines,
   variable,
 } from '../windows/harness.ts';
-import {clientKnows, connectWith, plainSsh} from './config-keywords-support.ts';
+import {
+  connectWith,
+  MODES,
+  plainSsh,
+} from '../windows/config-keywords-support.ts';
 
 const CIPHER_LINES = [
   'Ciphers aes256-ctr',
@@ -63,15 +67,6 @@ async function hostsListed(): Promise<string[]> {
 function asBase(text: string, alias: string): string {
   return text.replaceAll(alias, 'c2593');
 }
-
-/** The modes of the extension: the local connection server, and one `ssh` of its own per window. */
-const MODES = [
-  {mode: 'server', settings: {}},
-  {
-    mode: 'terminal',
-    settings: {'remote.SSH.useLocalServer': false},
-  },
-] as const;
 
 describe('ssh_config keywords passed through to ssh (card #2593)', function () {
   this.timeout(300_000);
@@ -213,34 +208,6 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
         [],
         true,
       ],
-    );
-  });
-
-  it('F-2109 AC-7 (c2593-refuse): RefuseConnection shows the dialog without a reason, the text is not shown and the log holds ssh’s line', async function () {
-    if (!(await clientKnows('RefuseConnection "c2593-refused-text"'))) {
-      this.skip();
-    }
-    const result = await connectWith(
-      'c2593-refuse',
-      ['RefuseConnection "c2593-refused-text"'],
-      'fails',
-      async (outcome, file) => ({
-        outcome,
-        plain: await plainSsh(file, 'c2593-refuse'),
-        logged: outcome.connectLog.some(line =>
-          line.includes('c2593-refused-text'),
-        ),
-      }),
-    );
-    deepStrictEqual(
-      [
-        result.plain.status,
-        result.outcome.dialog,
-        result.outcome.toasts,
-        result.logged,
-      ],
-      [255, 'Could not establish connection to "c2593-refuse".', [], true],
-      result.plain.stderr,
     );
   });
 
@@ -424,42 +391,6 @@ describe('ssh_config keywords passed through to ssh (card #2593)', function () {
       async (outcome, file) => ({
         outcome,
         plain: await plainSsh(file, 'c2593-harmless'),
-      }),
-    );
-    deepStrictEqual(
-      [result.plain.status, result.outcome.toasts, result.outcome.dialog],
-      [0, [], undefined],
-      result.plain.stderr,
-    );
-  });
-
-  it('F-2109 AC-19 (c2593-weak-default): KexAlgorithms restricted to a non-post-quantum method the server offers, with WarnWeakCrypto at its default, connects with no notification and no dialog', async () => {
-    const result = await connectWith(
-      'c2593-weak-default',
-      ['KexAlgorithms curve25519-sha256'],
-      'connects',
-      async (outcome, file) => ({
-        outcome,
-        plain: (await plainSsh(file, 'c2593-weak-default')).status,
-      }),
-    );
-    deepStrictEqual(
-      [result.plain, result.outcome.toasts, result.outcome.dialog],
-      [0, [], undefined],
-    );
-  });
-
-  it('F-2109 AC-19 (c2593-weak-no-pq): the same with WarnWeakCrypto no-pq-kex', async function () {
-    if (!(await clientKnows('WarnWeakCrypto no-pq-kex'))) {
-      this.skip();
-    }
-    const result = await connectWith(
-      'c2593-weak-no-pq',
-      ['KexAlgorithms curve25519-sha256', 'WarnWeakCrypto no-pq-kex'],
-      'connects',
-      async (outcome, file) => ({
-        outcome,
-        plain: await plainSsh(file, 'c2593-weak-no-pq'),
       }),
     );
     deepStrictEqual(

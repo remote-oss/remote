@@ -273,6 +273,11 @@ class FakeHarness implements HarnessDependencies {
     });
   };
 
+  readonly pinnedSshClient = (): string => {
+    this.calls.push('pinned ssh client built');
+    return '/cache/remote-oss/openssh-10.6p2-9ae44872090c/bin/ssh';
+  };
+
   readonly prepareTemplates = (
     root: string,
     runFolder: string,
@@ -526,6 +531,7 @@ const LAUNCH_ORDER = [
   'agent-notmp',
   'default-ports',
   'ssh-core',
+  'ssh-newclient',
   'ssh-agents',
   'ssh-askpass',
   'ssh-askpass-env',
@@ -1834,6 +1840,36 @@ describe('acceptance', () => {
         'local',
       ]);
       deepStrictEqual(harness.launched, ['local', 'remote']);
+    });
+
+    it('#2600: a run whose chosen launches ask for no pinned OpenSSH client builds none and passes no HARNESS_SSH_CLIENT', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['ssh-core']);
+      deepStrictEqual(
+        [
+          harness.calls.filter(call => call === 'pinned ssh client built'),
+          harness.variables?.HARNESS_SSH_CLIENT,
+        ],
+        [[], undefined],
+      );
+    });
+
+    it('#2600: a run with ssh-newclient builds the pinned OpenSSH client once and passes its path as HARNESS_SSH_CLIENT', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', [
+        'ssh-core',
+        'ssh-newclient',
+      ]);
+      deepStrictEqual(
+        [
+          harness.calls.filter(call => call === 'pinned ssh client built'),
+          harness.variables?.HARNESS_SSH_CLIENT,
+          harness.launched,
+        ],
+        [
+          ['pinned ssh client built'],
+          '/cache/remote-oss/openssh-10.6p2-9ae44872090c/bin/ssh',
+          ['ssh-core', 'ssh-newclient'],
+        ],
+      );
     });
 
     it('containers-59: a run whose chosen launches ask for no registry starts none', async () => {

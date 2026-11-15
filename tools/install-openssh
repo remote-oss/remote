@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# install-openssh: the OpenSSH client pinned below, for the ssh-newclient launch, built as the job's own user.
+#
+#   tools/install-openssh    build the pinned client into its cache folder unless it is there already, and print the
+#                            path of its ssh on the last line; the build's own output goes to stderr
+#
+# The criteria of F-2109 AC-7, AC-15 and AC-19 are about a client that knows RefuseConnection, ChannelTimeout and
+# WarnWeakCrypto (OpenSSH 10.0 and later); the runners' Ubuntu 24.04 has 9.6. The portable release's tarball is checked
+# against its pinned sha256, the one openssh.com publishes for it, and only its client is built, without OpenSSL and
+# zlib: the harness host's keys are ed25519 and its key exchange curve25519 or mlkem768x25519, which the client has on
+# its own, so the build needs a C compiler and make and no other package. The cache folder is named by the version and
+# the digest, so a pin change builds afresh, and the workflow caches it under the same name.
+set -euo pipefail
+
+OPENSSH_VERSION=10.6p2
+OPENSSH_SHA256=9ae44872090cf2f06b3cf9ff147e7f16f309671340763ed2f99248398ae29d5b
+CACHE_FOLDER="${XDG_CACHE_HOME:-$HOME/.cache}/remote-oss/openssh-$OPENSSH_VERSION-${OPENSSH_SHA256:0:12}"
+CLIENT="$CACHE_FOLDER/bin/ssh"
+
+# whether the cached client is the pinned release
+pinned_client_built() {
+  [ -x "$CLIENT" ] && "$CLIENT" -V 2>&1 | grep -q "^OpenSSH_$OPENSSH_VERSION,"
+}
+
+if ! pinned_client_built; then
+  for tool in cc make curl; do
+    command -v "$tool" >/dev/null || {
+      echo "install-openssh: $tool is missing, and building OpenSSH $OPENSSH_VERSION needs it" >&2
+      exit 1
+    }
+  done
+  work=$(mktemp -d)
+  trap 'rm -rf "$work"' EXIT
+  archive="$work/openssh-$OPENSSH_VERSION.tar.gz"
+  curl -fsSL -o "$archive" "https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-$OPENSSH_VERSION.tar.gz"
+  echo "$OPENSSH_SHA256  $archive" | sha256sum -c - >/dev/null || {
+    echo "install-openssh: openssh-$OPENSSH_VERSION.tar.gz does not match its pinned sha256 $OPENSSH_SHA256" >&2
+    exit 1
+  }
+  tar -xzf "$archive" -C "$work"
+  (
+    cd "$work/openssh-$OPENSSH_VERSION"
+    ./configure --prefix="$CACHE_FOLDER" --without-openssl --without-zlib --without-pam --without-selinux \
+      --with-privsep-path="$work/empty" >&2
+    make -j"$(nproc)" ssh >&2
+  )
+  mkdir -p "$CACHE_FOLDER/bin"
+  install -m 0755 "$work/openssh-$OPENSSH_VERSION/ssh" "$CLIENT"
+  pinned_client_built || {
+    echo "install-openssh: the built client does not report OpenSSH $OPENSSH_VERSION: $("$CLIENT" -V 2>&1)" >&2
+    exit 1
+  }
+fi
+"$CLIENT" -V >&2
+echo "$CLIENT"
