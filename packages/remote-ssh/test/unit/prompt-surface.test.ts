@@ -286,6 +286,36 @@ describe('the prompt surface: a question asked again (F-2306 6.2 step 2, F-2310 
     );
   });
 
+  it('F-2306 AC-7: a $( in the line is escaped, so the input box draws no icon from text of the host', async () => {
+    deepStrictEqual(await askedAgain(['Denied $(key) by $(account)']), {
+      placeholder: '<Enter password for user@box>',
+      message: 'Denied \\$(key) by \\$(account)',
+    });
+  });
+
+  it('F-2306 AC-7: the control characters of the line are dropped, C0, DEL and C1 alike', async () => {
+    deepStrictEqual(
+      await askedAgain(['\u001b[31mDenied\u0007 \u009bnow\u007f\tagain\u0000']),
+      {
+        placeholder: '<Enter password for user@box>',
+        message: '[31mDenied nowagain',
+      },
+    );
+  });
+
+  it('F-2306 AC-7: a line of controls alone says nothing, and the line before it stays the message', async () => {
+    deepStrictEqual(
+      await askedAgain([
+        'Permission denied, please try again.',
+        '\u001b\u0007',
+      ]),
+      {
+        placeholder: '<Enter password for user@box>',
+        message: 'Permission denied, please try again.',
+      },
+    );
+  });
+
   it('F-2310 AC-35: with only debug lines since the answer the question has no message', async () => {
     deepStrictEqual(
       await askedAgain([

@@ -77,20 +77,38 @@ export interface AttachedPromptSurface {
 /** The lines of ssh's `-v` output, which are for the log and never a message to the user. */
 const DEBUG_LINE = /^debug[123]: /;
 
+/** Whether `code` is a C0 or C1 control character, or DEL. */
+function isControl(code: number): boolean {
+  return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
+}
+
+/**
+ * `line` as an input box may show it. The line is text of the host or of a module on it (a PAM or server message can be
+ * ssh's last line), and the box draws `$(name)` as an icon and acts on terminal escapes, so the controls are dropped
+ * and every `$(` is escaped.
+ */
+function shownLine(line: string): string {
+  return [...line]
+    .filter(character => !isControl(character.codePointAt(0) ?? 0))
+    .join('')
+    .replaceAll('$(', '\\$(');
+}
+
 /**
  * What ssh said since the last answer to a masked question. A masked question asked again with the placeholder of the
- * one answered last has ssh's last line that is not a debug line as its message; every other question has none. The
- * line is shown as ssh wrote it: ssh writes it before the connection token exists, so there is nothing in it to mask.
+ * one answered last has ssh's last line that is not a debug line as its message, made safe to show by {@link shownLine};
+ * every other question has none. ssh writes the line before the connection token exists, so there is nothing in it to
+ * mask.
  */
 class RetryMessage {
   private answered: string | undefined;
   private lastLine: string | undefined;
 
-  /** Takes in ssh's error-stream lines, in the order they came. */
+  /** Takes in ssh's error-stream lines, in the order they came; a line with nothing left to show says nothing. */
   hear(lines: readonly string[]): void {
     for (const written of lines) {
-      const line = written.endsWith('\r') ? written.slice(0, -1) : written;
-      if (line !== '' && !DEBUG_LINE.test(line)) {
+      const line = shownLine(written);
+      if (line !== '' && !DEBUG_LINE.test(written)) {
         this.lastLine = line;
       }
     }
