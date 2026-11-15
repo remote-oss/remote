@@ -447,7 +447,8 @@
       "unparsable.test.ts": 0.1,
       "x11.test.ts": 10.2
     },
-    "ssh-newclient": 2.7,
+    "ssh-newclient": 1.6,
+    "ssh-newclient-pickers": 1.1,
     "terminal": 0.3,
     "terminal-login": {"chat-absence.test.ts": 0.7, "login.test.ts": 3.4},
     "terminal-odd": {"ask.test.ts": 0.3},

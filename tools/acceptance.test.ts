@@ -534,6 +534,7 @@ const LAUNCH_ORDER = [
   'default-ports',
   'ssh-core',
   'ssh-newclient',
+  'ssh-newclient-pickers',
   'ssh-agents',
   'ssh-askpass',
   'ssh-askpass-env',
