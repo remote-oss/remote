@@ -8,6 +8,8 @@ import {
 import {
   closeWindow,
   connectedToContainer,
+  containersLog,
+  containersLogStamped,
   openEmptyWindows,
   readUserSettings,
   restoreUserSettings,
@@ -206,7 +208,7 @@ describe('The recovery container (card containers-160, part A)', function () {
     await closeWindow(left);
   });
 
-  it('F-0410 AC-16, AC-16a, AC-16b: the recovery button connects a container of the bootstrap image on the volume, with Git and a docker client but no daemon, and a second start restarts the same container', async () => {
+  it.only('MEASURE2685 F-0410 AC-16, AC-16a, AC-16b: the recovery button connects a container of the bootstrap image on the volume, with Git and a docker client but no daemon, and a second start restarts the same container', async () => {
     await reachRecovery(repository.url, FIRST);
     const volume = await volumeOf(repository.url);
     const [container] = await recoveryContainers(volume);
@@ -232,13 +234,56 @@ describe('The recovery container (card containers-160, part A)', function () {
       ),
     };
     await closeWindow(FIRST);
-    await execFileAsync('docker', ['stop', String(container)]);
-    await reachRecovery(repository.url, FIRST);
+    for (let round = 1; round <= 6; round += 1) {
+      const since = Math.floor(Date.now() / 1000);
+      const mark = containersLog().length;
+      await execFileAsync('docker', ['stop', String(container)]);
+      const stoppedAt = Date.now();
+      let outcome = 'connected';
+      try {
+        await reachRecovery(repository.url, FIRST);
+      } catch (caught) {
+        outcome = `FAILED ${String(caught).slice(0, 120)}`;
+      }
+      const events = await execFileAsync('docker', [
+        'events',
+        '--since',
+        String(since),
+        '--until',
+        String(Math.floor(Date.now() / 1000) + 1),
+        '--filter',
+        `container=${String(container)}`,
+        '--format',
+        '{{.TimeNano}} {{.Action}}',
+      ]).then(
+        result =>
+          result.stdout
+            .trim()
+            .split('\n')
+            .map(line => {
+              const [nano, action] = line.split(' ');
+              return `${String(Math.round(Number(nano) / 1e6 - stoppedAt))}ms ${String(action)}`;
+            }),
+        () => ['events unreadable'],
+      );
+      const lines = containersLogStamped()
+        .slice(mark)
+        .filter(line =>
+          /already running|Starting container|shutdown|stop|helper|recover|exited/i.test(
+            line,
+          ),
+        )
+        .map(line => line.slice(0, 160));
+      console.log(
+        `MEASURE2685 round=${String(round)} outcome=${outcome} events=${JSON.stringify(events)} log=${JSON.stringify(lines)}`,
+      );
+      await closeWindow(FIRST).catch(() => undefined);
+    }
     const restarted = {
       containers: await recoveryContainers(volume),
       running: await inspected(String(container), '{{.State.Running}}'),
     };
-    await closeWindow(FIRST);
+    await closeWindow(FIRST).catch(() => undefined);
     deepStrictEqual(
       {first, restarted},
       {
