@@ -630,6 +630,35 @@ describe('the scripted adapters answer from the script only', () => {
     );
   });
 
+  /** The record line of a masked input shown with `request`. */
+  async function lineOf(request: {placeholder: string; message?: string}) {
+    const {adapters, files} = scripted([
+      {surface: 'maskedInput', match: 'password', answer: {text: 's3cret'}},
+    ]);
+    await adapters.prompts.maskedInput(request, NEVER);
+    return files.lines()[0];
+  }
+
+  it('F-2306 AC-7: the message a masked input was shown with is in its record line', async () => {
+    deepStrictEqual(
+      (
+        await lineOf({
+          placeholder: "alex@dev's password:",
+          message: 'Permission denied, please try again.',
+        })
+      )?.message,
+      'Permission denied, please try again.',
+    );
+  });
+
+  it('F-2306 AC-1: a masked input shown without a message has no message in its record line', async () => {
+    deepStrictEqual(
+      'message' in
+        ((await lineOf({placeholder: "alex@dev's password:"})) ?? {}),
+      false,
+    );
+  });
+
   it('S7: no text of the record holds the masked input', async () => {
     strictEqual(
       (await filesAfterPassword()).appended.join('').includes('s3cret'),

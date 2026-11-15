@@ -413,6 +413,7 @@
     "secrets": {"kbd-interactive.test.ts": 0.9},
     "slow": 0.6,
     "socket": 0.3,
+    "ssh-askpass": {"failures.test.ts": 2.1, "login.test.ts": 9.4},
     "ssh-containers": {"configure-features.test.ts": 0.5},
     "ssh-core": {
       "activation.test.ts": 0.9,

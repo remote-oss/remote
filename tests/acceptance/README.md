@@ -125,6 +125,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 - `ssh-newclient`: the same as `ssh-core` with `remote.SSH.path` naming the pinned OpenSSH client, which `tools/install-openssh` builds once per runner (OpenSSH 10.6p2, checked against its sha256) and the run passes as HARNESS_SSH_CLIENT; `ssh-newclient/*.test.ts` holds F-2109's rows for keywords newer than the runners' own client, and each runs plain `ssh` through the same path. A run that cannot build the client refuses the launch.
 - `ssh-agents`: a plain launch with the renderer helpers, AI features off, core's four agent-host keys at their defaults and a home of the run's own (`<run>/home-agents`); `ssh-agents/*.test.ts` writes the SSH files of that home and shows Remote - SSH beside core's own SSH agent hosts from outside, F-2008's rows. It may set `remote.SSH.configFile` itself.
 
+- `ssh-askpass`: a plain launch with the renderer helpers, `SSH_ASKPASS` naming the run's own program (`<run>/askpass-bin/answer`, which answers from rules a row writes and records its calls) and the run's `ssh` stand-in first on `PATH`; `ssh-askpass/*.test.ts` opens windows on the password hosts and shows what the extension does with the user's askpass program, F-2309's rows. It may set `remote.SSH.configFile` itself.
+
 - `ssh-containers`: a plain launch with the renderer helpers, Dev Containers installed beside Remote - SSH, and the run's registry and templates; `ssh-containers/*.test.ts` opens windows on the SSH host and runs Dev Containers' commands in them, which edit a configuration where it lives (F-0807's rows). It is in the `containers` group.
 
 - `no-proposals`: the same without the proposed API.
