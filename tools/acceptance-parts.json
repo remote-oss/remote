@@ -1,6 +1,7 @@
 {
   "targetMinutes": 15,
   "together": [
+    ["remote", "reconnect"],
     ["socket-prime", "socket"],
     ["install-install-present-prime", "install-install-present"],
     [
@@ -433,6 +434,8 @@
       "kill-unsaved.test.ts": 0.6,
       "pty.test.ts": 14.4,
       "remote-settings.test.ts": 0.7,
+      "server-lifetime-long.test.ts": 5.4,
+      "server-lifetime.test.ts": 10.9,
       "session-hints.test.ts": 1.3,
       "settings.test.ts": 0.1,
       "silent-flows.test.ts": 0.7,
@@ -487,6 +490,7 @@
       "remote-log.test.ts": 0.4,
       "renderer.test.ts": 0,
       "resolve-log.test.ts": 0.8,
+      "server-cleanup.test.ts": 0.5,
       "socket-mode.test.ts": 0.8,
       "socket-more.test.ts": 5.8,
       "socket-platform.test.ts": 0.5,
