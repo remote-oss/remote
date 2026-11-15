@@ -4,26 +4,11 @@
  */
 
 import {spawn} from 'node:child_process';
-import {sep} from 'node:path';
+import {endProcessGroup, NODE_GROUP_SYSTEM} from './process-group.ts';
 import type {ProcessHandle, ProcessSpecification} from './ports.ts';
 
 /** How long a process's standard streams may stay open after its exit before another process is taken to hold them. */
 const STDIO_DRAIN_MILLISECONDS = 500;
-
-/** Whether a client can lead a process group of its own, which only a POSIX system has; the path separator tells it. */
-const OWNS_GROUP = sep === '/';
-
-/** Ends every process in the group that `leader` leads, which is what a client's own children (ProxyCommand, ProxyJump) are in. */
-export function endProcessGroup(leader: number | undefined): void {
-  if (!OWNS_GROUP || leader === undefined) {
-    return;
-  }
-  try {
-    process.kill(-leader, 'SIGKILL');
-  } catch {
-    // The group is already gone.
-  }
-}
 
 /** Starts a client process; rejects with the system's error, which carries a code, when it cannot start it. */
 export function nodeProcessSpawner(
@@ -38,7 +23,7 @@ export function nodeProcessSpawner(
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
         // On POSIX the client leads its own process group, so ending the group ends what it started.
-        detached: OWNS_GROUP,
+        detached: NODE_GROUP_SYSTEM.posix,
       },
     );
     child.stdout.setEncoding('utf8');

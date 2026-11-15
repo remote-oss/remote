@@ -79,7 +79,7 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
 
   /**
    * The attempt of `mode` over the recursing configuration. With `blocking`, the wrapper holds the ssh it is asked to
-   * start after `BLOCK_AFTER`, as a `sleep` with a marker in its arguments, so a chain of ssh processes is alive when
+   * start after `BLOCK_AFTER`, as a `sleep` with a marker in its arguments that ignores HUP and TERM, as a stuck ProxyCommand does, so a chain of ssh processes is alive when
    * the attempt ends with its dialog; otherwise it fails them after `START_LIMIT`. Either way, no ssh process of the
    * attempt is left, and the held ones are ended at the row's end whatever its outcome.
    */
@@ -105,7 +105,7 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
         `PATH="${binFolder}:$PATH"; export PATH`,
         `started=$(ls "${starts}" | wc -l)`,
         blocking
-          ? `if [ "$started" -ge ${String(BLOCK_AFTER)} ]; then exec -a "ssh-${marker}" sleep 600; fi`
+          ? `if [ "$started" -ge ${String(BLOCK_AFTER)} ]; then trap "" HUP TERM; exec -a "ssh-${marker}" sleep 600; fi`
           : `if [ "$started" -ge ${String(START_LIMIT)} ]; then echo "fork: Resource temporarily unavailable" >&2; exit 255; fi`,
         `: > "${starts}/$$"`,
         `exec -a ssh "${real}" "$@"`,
