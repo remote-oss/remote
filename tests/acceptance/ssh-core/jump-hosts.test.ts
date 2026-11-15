@@ -13,6 +13,7 @@ import {answerDialog, statusItem, waitForDialog} from '../windows/renderer.ts';
 import {
   appendScript,
   closeWindow,
+  connectionLog,
   connectedWithin,
   cutHostNetwork,
   hostAnswer,
@@ -34,10 +35,17 @@ import {
   windowEvents,
 } from '../windows/harness.ts';
 import {
+  ASK_WITHOUT,
+  askLines,
   connectWith,
+  freshKnown,
+  harnessHostFingerprint,
   hostBlock,
   plainSsh,
+  questionsOn,
   resolvedCount,
+  startHostSshd,
+  target,
   writeConfig,
 } from '../windows/config-keywords-support.ts';
 
@@ -46,30 +54,6 @@ const execFileAsync = promisify(execFile);
 /** The dialog without a reason that a failed connect of `alias` shows. */
 function reasonless(alias: string): string {
   return `Could not establish connection to "${alias}".`;
-}
-
-/** The target behind a jump host: the harness host's own sshd, at its port inside. */
-function target(alias: string, jump: string): string[] {
-  return hostBlock(alias, [`ProxyJump ${jump}`, 'Port 22'], ['Port']);
-}
-
-/** The `ssh` lines of a row whose host keys are unknown: it asks, and its known-hosts file is `known`. */
-function askLines(known: string): string[] {
-  return ['StrictHostKeyChecking ask', `UserKnownHostsFile ${known}`];
-}
-
-/** The keywords of the harness block that `ASK` replaces. */
-const ASK_WITHOUT = [
-  'BatchMode',
-  'StrictHostKeyChecking',
-  'UserKnownHostsFile',
-];
-
-/** An empty known-hosts file of the run for row `alias`. */
-function freshKnown(alias: string): string {
-  const file = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.known`);
-  writeFileSync(file, '');
-  return file;
 }
 
 /** What is wrong with the password hosts of a row: only passwords are tried, three times for a jump that is told so. */
@@ -134,11 +118,6 @@ function passwordAt(alias: string, address: string, text: string) {
     answer: {text},
     window: alias,
   } as const;
-}
-
-/** The questions window `alias` was asked on `surface`, in order. */
-function questionsOn(alias: string, surface: string): string[] {
-  return recordLines(surface, alias).map(line => line.question);
 }
 
 /** The names in `listing`, a line each, that have `server` in them. */
@@ -496,49 +475,118 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     });
   });
 
-  it('F-2310 AC-24 (c2601-hostkey-picks): unknown host keys behind a jump host ask the fingerprint pick for each hop, and Continue records both keys', async () => {
-    const alias = 'c2601-picks';
+  it('F-2310 AC-24 (c2614-hostkey-picks): unknown host keys behind a jump host with keys of their own ask the fingerprint pick for each hop, the jump host’s and then the target’s, and Continue records both keys', async () => {
+    const alias = 'c2614-picks';
+    const port = 22022;
     const known = freshKnown(alias);
     const file = writeConfig(alias, [
       hostBlock(
         alias,
         [
           `ProxyJump ${alias}-hop`,
-          'HostName 127.0.0.2',
-          'Port 22',
+          'HostName 127.0.0.1',
+          `Port ${String(port)}`,
           ...askLines(known),
         ],
         ['Port', 'HostName', ...ASK_WITHOUT],
       ),
       hostBlock(`${alias}-hop`, askLines(known), ASK_WITHOUT),
     ]);
+    const second = await startHostSshd(port);
+    const saved = readUserSettings();
+    try {
+      const jumpKey = await harnessHostFingerprint();
+      const targetKey = second.fingerprint;
+      await userSettings({'remote.SSH.configFile': file});
+      // The window the command opens is the one that asks the picks; the host pick is the local window's.
+      appendScript([
+        hostAnswer('local', {label: alias}),
+        {surface: 'pick', match: 'fingerprint', answer: 'yes'},
+        {surface: 'pick', match: 'fingerprint', answer: 'yes'},
+      ]);
+      const resolvedBefore = resolvedCount(alias);
+      const next = await nextEmptyWindow(() =>
+        inWindow('local', 'opensshremotes.openEmptyWindow'),
+      );
+      await waitFor(
+        `${next} to resolve ${alias}`,
+        () => resolvedCount(alias) > resolvedBefore,
+        120_000,
+      ).catch((caught: unknown) => {
+        throw new Error(
+          `${String(caught)}\nwhat the window asked:\n${recordLines(
+            undefined,
+            next,
+          )
+            .map(
+              line =>
+                `${line.surface}: ${line.question.slice(0, 100)} -> ${line.answer}`,
+            )
+            .join('\n')}\nthe log:\n${connectionLog().slice(-25).join('\n')}`,
+          {cause: caught},
+        );
+      });
+      const result = {
+        picks: recordLines('pick', next)
+          .filter(line => line.answer !== 'held')
+          .map(line => line.question),
+        recorded: linesOf(known).length,
+      };
+      await closeWindow(next);
+      deepStrictEqual(result, {
+        picks: [
+          `"${alias}" has fingerprint "${String(jumpKey)}".`,
+          `"${alias}" has fingerprint "${String(targetKey)}".`,
+        ],
+        recorded: 2,
+      });
+    } finally {
+      restoreUserSettings(saved);
+      await second.stop();
+    }
+  });
+
+  it('F-2310 AC-17 (c2614-fdpass): ProxyUseFdpass yes with a helper that passes a connected socket back connects', async () => {
+    const alias = 'c2614-fdpass';
+    const script = path.join(variable('HARNESS_RUN_FOLDER'), 'fdpass-proxy.py');
+    writeFileSync(
+      script,
+      'import socket\nimport sys\n\nconnection = socket.create_connection((sys.argv[1], int(sys.argv[2])))\nsocket.send_fds(socket.socket(fileno=1), [b"\\0"], [connection.fileno()])\n',
+    );
+    const file = writeConfig(alias, [
+      hostBlock(alias, [
+        `ProxyCommand python3 -I ${script} %h %p`,
+        'ProxyUseFdpass yes',
+      ]),
+    ]);
     const result = await connectWith(
       alias,
       [],
       'connects',
-      () => ({
-        picks: questionsOn(alias, 'pick').map(question =>
-          question.replace(/SHA256:\S+/, 'SHA256:x'),
-        ),
-        recorded: readFileSync(known, 'utf8')
-          .split('\n')
-          .filter(line => line !== '').length,
+      async (outcome, written) => ({
+        outcome: outcome.dialog,
+        plain: (await plainSsh(written, alias)).status,
       }),
+      {file},
+    );
+    deepStrictEqual(result, {outcome: undefined, plain: 0});
+  });
+
+  it('F-2310 AC-17 (c2614-fdpass-relay): ProxyUseFdpass yes with a relaying proxy fails with the dialog without a reason', async () => {
+    const alias = 'c2614-fdrelay';
+    const file = writeConfig(alias, [
+      hostBlock(alias, ['ProxyCommand nc %h %p', 'ProxyUseFdpass yes']),
+    ]);
+    const result = await connectWith(
+      alias,
+      [],
+      'fails',
+      outcome => outcome.dialog,
       {
         file,
-        script: [
-          {surface: 'pick', match: 'fingerprint', answer: 'yes', window: alias},
-          {surface: 'pick', match: 'fingerprint', answer: 'yes', window: alias},
-        ],
       },
     );
-    deepStrictEqual(result, {
-      picks: [
-        `"${alias}" has fingerprint "SHA256:x`,
-        `"${alias}" has fingerprint "SHA256:x`,
-      ],
-      recorded: 2,
-    });
+    deepStrictEqual(result, reasonless(alias));
   });
 
   it('F-2310 AC-19 (c2601-hostkey-changed): a known-hosts line for the jump host that does not match its key fails with the changed host key dialog', async () => {
