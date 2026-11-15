@@ -2120,6 +2120,13 @@ describe('the recent folders under a target (card coverage-122)', function () {
             'ssh-remote+harness',
         120_000,
       );
+      // The setup progress toast outlives the window's authority switch, and the final ask asks for the steady state:
+      // wait for it to clear, so a progress that sticks fails this wait with its own message, not the final ask.
+      await waitFor(
+        `window ${recoveredName} to show no notifications`,
+        async () => (await notifications(recoveredName)).length === 0,
+        120_000,
+      );
       deepStrictEqual(
         [
           dialog?.question.includes('nowhere'),
