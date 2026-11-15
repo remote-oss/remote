@@ -32,7 +32,6 @@ import {
   variable,
   waitFor,
   windowEvents,
-  windowState,
 } from '../windows/harness.ts';
 import {
   connectWith,
@@ -1168,9 +1167,12 @@ describe('jump hosts and proxy commands (card #2601)', function () {
         const next = await nextEmptyWindow(() =>
           inWindow(alias, 'opensshremotes.openEmptyWindowOnCurrentHost'),
         );
+        // The authority is remote as soon as the connect starts: the inputs are counted once the window is connected.
         await waitFor(
-          `${next} to be on the host`,
-          async () => (await windowState(next)).remoteName === 'ssh-remote',
+          `${next} to be connected through ${alias}`,
+          async () =>
+            (await statusItem(next, 'status.host').catch(() => ({text: ''})))
+              .text === `SSH: ${alias}`,
           120_000,
         );
         const asked = recordLines('maskedInput', next).length;
