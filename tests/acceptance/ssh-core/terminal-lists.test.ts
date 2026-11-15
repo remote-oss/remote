@@ -74,11 +74,11 @@ async function groupsOf(folder: string): Promise<Array<[string, string]>> {
 const DEFAULT_PROFILE = 'terminal.integrated.defaultProfile.linux';
 
 /**
- * What tells a window that missed the removal of the host's machine settings from one that never could read it: what the
+ * What tells a window that missed the emptying of the host's machine settings from one that never could read it: what the
  * window reads and every scope of the setting it knows, what the host holds at the file, and whether the window reads
- * the setting without zsh once the file is written again (empty) and then removed again, and after how long.
+ * the setting without zsh once the file is written with another content, and after how long.
  */
-async function removalFacts(window: string, file: string): Promise<string> {
+async function cleanupFacts(window: string, file: string): Promise<string> {
   const onFile = await onHost(
     'sh',
     '-c',
@@ -89,7 +89,7 @@ async function removalFacts(window: string, file: string): Promise<string> {
     inspected: await inspectedIn(window, DEFAULT_PROFILE),
     onHost: onFile,
   };
-  await onHost('sh', '-c', `printf '%s' '{}' > '${file}'`);
+  await onHost('sh', '-c', `printf '%s' '{"c2641.probe": true}' > '${file}'`);
   const began = Date.now();
   facts.readWithoutZshAfterRewriteMilliseconds = await waitFor(
     `window ${window} to read ${DEFAULT_PROFILE} without zsh after the file was written again`,
@@ -99,7 +99,7 @@ async function removalFacts(window: string, file: string): Promise<string> {
     () => Date.now() - began,
     () => 'not within 10 s',
   );
-  await onHost('rm', '-f', file);
+  await onHost('sh', '-c', `printf '%s' '{}' > '${file}'`);
   return JSON.stringify(facts);
 }
 
@@ -308,7 +308,9 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
     } catch (error) {
       failures.push(error);
     }
-    await onHost('rm', '-f', file);
+    // The file is emptied, not removed: the server missed a removal of it every second time in a measurement (card #2641;
+    // twelve rounds on a runner, the window kept reading zsh for 20 s), and read every write of it.
+    await onHost('sh', '-c', `printf '%s' '{}' > '${file}'`);
     try {
       // The server reads its machine settings as they change, not at once: the next terminal of the launch opens in the
       // default shell only when the window reads the setting without zsh (a terminal of zsh in c80-shell, batch 7).
@@ -320,7 +322,7 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
     } catch (error) {
       failures.push(
         new Error(
-          `${error instanceof Error ? error.message : String(error)}; facts: ${await removalFacts('c125-zsh', file).catch((failed: unknown) => `not gathered: ${String(failed)}`)}`,
+          `${error instanceof Error ? error.message : String(error)}; facts: ${await cleanupFacts('c125-zsh', file).catch((failed: unknown) => `not gathered: ${String(failed)}`)}`,
           {cause: error},
         ),
       );
