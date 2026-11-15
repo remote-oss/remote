@@ -1583,6 +1583,36 @@ export async function openLink(name: string, text: string): Promise<string> {
   );
 }
 
+/**
+ * Runs the editor's own executable with `words` and the launch's user-data folder, so that the arguments reach the
+ * running instance as the `code` of a user's shell would hand them over (`--remote`, `-r`, `-n`, `--goto`,
+ * `--folder-uri`). Gives the exit status and what the command printed.
+ */
+export async function editorCommandLine(
+  ...words: string[]
+): Promise<{status: number | null; output: string}> {
+  const environment = {...process.env};
+  delete environment.ELECTRON_RUN_AS_NODE;
+  try {
+    const {stdout, stderr} = await execFileAsync(
+      variable('HARNESS_EDITOR_EXECUTABLE'),
+      [`--user-data-dir=${variable('HARNESS_USER_DATA')}`, ...words],
+      {env: environment, timeout: 60_000},
+    );
+    return {status: 0, output: `${stdout}${stderr}`};
+  } catch (caught) {
+    const failed = caught as {
+      code?: number | string;
+      stdout?: string;
+      stderr?: string;
+    };
+    return {
+      status: typeof failed.code === 'number' ? failed.code : null,
+      output: `${failed.stdout ?? ''}${failed.stderr ?? ''}`,
+    };
+  }
+}
+
 /** What a process spawned through the exec server of window `name`'s authority printed, and its exit code. */
 export async function execSpawnedIn(
   name: string,

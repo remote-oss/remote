@@ -3527,6 +3527,21 @@ export async function pressEnter(name: string): Promise<void> {
   await pressKey(await pageOf(name), name, 'Enter');
 }
 
+/** The modifier bit of Control in the protocol's key events. */
+const CONTROL = 2;
+
+/** Presses Ctrl+Enter in window `name`, which accepts the active item of the quick pick that is open as the item to open in a new window. */
+export async function pressControlEnter(name: string): Promise<void> {
+  await pressStroke(await pageOf(name), name, {
+    key: 'Enter',
+    code: 'Enter',
+    windowsVirtualKeyCode: VIRTUAL_KEY_CODES.Enter,
+    nativeVirtualKeyCode: VIRTUAL_KEY_CODES.Enter,
+    text: '\r',
+    modifiers: CONTROL,
+  });
+}
+
 /** Presses Enter in window `name`, which accepts the active item of the quick pick that is open. */
 export function acceptQuickPick(name: string): Promise<void> {
   return pressEnter(name);
@@ -4505,6 +4520,31 @@ export async function pressQuickPickOk(name: string): Promise<void> {
       return null;
     })()`,
   );
+}
+
+/**
+ * Clicks the button of the quick input open in window `name` whose text is `label`: a button of the input's own, as
+ * the folder dialog's "Show Local". It fails naming the buttons it found.
+ */
+export async function pressQuickInputButton(
+  name: string,
+  label: string,
+): Promise<void> {
+  const missing = await evaluate<string | null>(
+    name,
+    `(() => {
+      const buttons = [...document.querySelectorAll('${QUICK_WIDGET} .monaco-button')];
+      const button = buttons.find(each => each.textContent?.trim() === ${JSON.stringify(label)});
+      if (button === undefined) {
+        return 'no button ' + ${JSON.stringify(JSON.stringify(label))} + ' among ' + JSON.stringify(buttons.map(each => each.textContent));
+      }
+      button.click();
+      return null;
+    })()`,
+  );
+  if (missing !== null) {
+    throw new Error(`window ${name}: ${missing}`);
+  }
 }
 
 /** What the Settings editor shows for one setting. */
