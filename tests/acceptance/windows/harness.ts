@@ -2041,11 +2041,82 @@ async function readBackOfSetting(
       30_000,
     );
   } catch (caught) {
+    const facts =
+      readBack === 'window'
+        ? `; facts: ${await readBackFacts(key, value).catch((failed: unknown) => `not gathered: ${String(failed)}`)}`
+        : '';
     throw new Error(
-      `${caught instanceof Error ? caught.message : 'the wait failed'}; the value written: ${canonicalJson(value)}${readBack === 'file' ? '' : `; the value read: ${canonicalJson(read)}`}`,
+      `${caught instanceof Error ? caught.message : 'the wait failed'}; the value written: ${canonicalJson(value)}${readBack === 'file' ? '' : `; the value read: ${canonicalJson(read)}`}${facts}`,
       {cause: caught},
     );
   }
+}
+
+/** What `read` gives within `milliseconds`, or a text saying it gave nothing: a window that does not answer must not hold up the facts of a failure. */
+async function answeredWithin(
+  read: Promise<unknown>,
+  milliseconds: number,
+): Promise<unknown> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<string>(resolve => {
+    timer = setTimeout(() => {
+      resolve(`no answer in ${String(milliseconds)} ms`);
+    }, milliseconds);
+  });
+  try {
+    return await Promise.race([
+      read.catch((failed: unknown) => `failed: ${String(failed)}`),
+      late,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * What tells the readings of a timed-out read-back apart: the window that answered, what each open window reads as the
+ * user's value of `key` (a window other than the answering one that reads `value` means the choice of window), the
+ * settings file's own text, and whether the answering window reads `value` once the file is rewritten with the same
+ * bytes, and when (a window that then reads it had missed the file's change). The facts are gathered after the 30 s,
+ * bounded, so the failure comes at most about 40 s later.
+ */
+async function readBackFacts(key: string, value: unknown): Promise<string> {
+  const file = userSettingsFile();
+  const text = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
+  const answering = settingsWindow();
+  const windows: Record<string, unknown> = {};
+  for (const name of windowNames().filter(isOpen)) {
+    const state = windowEvents(name)
+      .filter(each => each.event === 'state')
+      .at(-1);
+    windows[name] = {
+      remoteAuthority: state?.remoteAuthority ?? null,
+      userValue: await answeredWithin(userValueIn(name, key), 5000),
+    };
+  }
+  let rewriteReadAfterMilliseconds: number | string = 'not within 10 s';
+  if (text !== undefined) {
+    writeFileSync(file, text);
+    const began = Date.now();
+    try {
+      await waitFor(
+        `${answering} to read ${key} after the file was rewritten`,
+        async () =>
+          canonicalJson(await userValueIn(answering, key)) ===
+          canonicalJson(value),
+        10_000,
+      );
+      rewriteReadAfterMilliseconds = Date.now() - began;
+    } catch {
+      // The text above says it did not read it.
+    }
+  }
+  return JSON.stringify({
+    answering,
+    windows,
+    file: text,
+    rewriteReadAfterMilliseconds,
+  });
 }
 
 /**
