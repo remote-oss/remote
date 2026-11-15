@@ -273,6 +273,11 @@ class FakeHarness implements HarnessDependencies {
     });
   };
 
+  readonly windowsHostBlock = (runFolder: string): Promise<string> => {
+    this.calls.push(`windows host block ${path.basename(runFolder)}`);
+    return Promise.resolve('\nHost winhost\n  HostName 127.0.0.1\n');
+  };
+
   readonly pinnedSshClient = (): string => {
     this.calls.push('pinned ssh client built');
     return '/cache/remote-oss/openssh-10.6p2-9ae44872090c/bin/ssh';
@@ -1840,6 +1845,31 @@ describe('acceptance', () => {
         'local',
       ]);
       deepStrictEqual(harness.launched, ['local', 'remote']);
+    });
+
+    it("#2652: a run with windows-host adds the winhost block to the run's ssh_config once, and a run without asks for none", async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['local']);
+      const without = harness.calls.filter(call =>
+        call.startsWith('windows host block'),
+      );
+      await runAcceptance(workspace.root, harness, 'vscodium', [
+        'windows-host',
+      ]);
+      deepStrictEqual(
+        [
+          without,
+          harness.calls.filter(call => call.startsWith('windows host block')),
+          readFileSync(
+            path.join(harness.runFolder, 'ssh_config'),
+            'utf8',
+          ).includes('\nHost winhost\n  HostName 127.0.0.1\n'),
+        ],
+        [
+          [],
+          [`windows host block ${path.basename(harness.runFolder)}`],
+          true,
+        ],
+      );
     });
 
     it('#2600: a run whose chosen launches ask for no pinned OpenSSH client builds none and passes no HARNESS_SSH_CLIENT', async () => {

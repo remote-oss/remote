@@ -22,7 +22,7 @@ on:
       windows-launches:
         description: The launches of the Windows job, joined by commas; none skips the job
         type: string
-        default: containers-a,containers-b,containers-trust,local,remote,wsl
+        default: containers-a,containers-b,containers-trust,local,remote,wsl,windows-host
       macos-launches:
         description: The launches of the macOS job, joined by commas; none skips the job
         type: string
@@ -43,7 +43,7 @@ jobs:
       run:
         shell: pwsh
     env:
-      LAUNCHES: ${{ inputs.windows-launches || 'containers-a,containers-b,containers-trust,local,remote,wsl' }}
+      LAUNCHES: ${{ inputs.windows-launches || 'containers-a,containers-b,containers-trust,local,remote,wsl,windows-host' }}
       WSL_UTF8: '1'
     steps:
       # the host images and their scripts are built in the WSL engine from this checkout, so they keep the repository's
@@ -106,6 +106,34 @@ jobs:
           Set-Service ssh-agent -StartupType Manual
           Start-Service ssh-agent
           Get-Service ssh-agent | Format-Table -AutoSize Name, Status, StartType
+      # Windows' OpenSSH Server, for the windows-host launch: the image has it installed and running on its default
+      # configuration, so the step backs that up and serves 127.0.0.1 alone on a port of the run, with key authentication
+      # for the job's account (an administrator, whose key the server reads from administrators_authorized_keys) and
+      # Windows PowerShell as its shell. About 12 s on windows-2025 (card #2652). The step after the launches puts the
+      # image's configuration back.
+      - name: Windows' OpenSSH Server on 127.0.0.1, for the windows-host launch
+        if: contains(env.LAUNCHES, 'windows-host')
+        run: |
+          $ssh = 'C:\ProgramData\ssh'
+          $folder = Join-Path $env:RUNNER_TEMP 'winhost'
+          New-Item -ItemType Directory -Force $folder | Out-Null
+          if ((Get-WindowsCapability -Online -Name 'OpenSSH.Server*').State -ne 'Installed') { Add-WindowsCapability -Online -Name 'OpenSSH.Server~~~~0.0.1.0' | Out-Null }
+          # the first start makes the host keys and the default configuration, which the step keeps to put back
+          Start-Service sshd; Stop-Service sshd
+          Copy-Item (Join-Path $ssh 'sshd_config') (Join-Path $folder 'sshd_config.image')
+          $key = Join-Path $folder 'id_ed25519'
+          ssh-keygen -q -t ed25519 -N '' -f $key
+          $port = 2222
+          Set-Content -Path (Join-Path $ssh 'sshd_config') -Encoding ascii -Value @("Port $port", 'ListenAddress 127.0.0.1', 'PubkeyAuthentication yes', 'PasswordAuthentication no', 'AuthorizedKeysFile .ssh/authorized_keys', 'Subsystem sftp sftp-server.exe', 'Match Group administrators', '       AuthorizedKeysFile __PROGRAMDATA__/ssh/administrators_authorized_keys')
+          $authorized = Join-Path $ssh 'administrators_authorized_keys'
+          Get-Content "$key.pub" | Set-Content -Path $authorized -Encoding ascii
+          icacls $authorized /inheritance:r /grant 'Administrators:F' /grant 'SYSTEM:F' | Out-Null
+          New-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell -Value 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -PropertyType String -Force | Out-Null
+          Start-Service sshd
+          Get-NetTCPConnection -State Listen -LocalPort $port | Format-Table -AutoSize LocalAddress, LocalPort
+          "HARNESS_WINHOST_PORT=$port" >> $env:GITHUB_ENV
+          "HARNESS_WINHOST_USER=$env:USERNAME" >> $env:GITHUB_ENV
+          "HARNESS_WINHOST_IDENTITY=$key" >> $env:GITHUB_ENV
       # Docker Desktop's engine takes a Windows client's drive paths as bind sources, and the distro's engine does not,
       # so the launches reach it through a stand-in on 127.0.0.1 that rewrites them to the distro's /mnt paths and logs
       # each rewrite (reading-2511-desktop-stand-in). A process started in one step is gone by the next, so the stand-in
@@ -143,6 +171,16 @@ jobs:
         run: |
           $left = @(wsl -l -q | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ -like 'acceptance-*' })
           if ($left.Count -gt 0) { "the launches left WSL distros: $($left -join ', ')"; exit 1 }
+      # the image's own OpenSSH Server configuration back, after the windows-host launch
+      - name: Windows' OpenSSH Server is put back
+        if: always() && contains(env.LAUNCHES, 'windows-host')
+        run: |
+          $ssh = 'C:\ProgramData\ssh'
+          $kept = Join-Path $env:RUNNER_TEMP 'winhost\sshd_config.image'
+          Stop-Service sshd -ErrorAction SilentlyContinue
+          if (Test-Path $kept) { Copy-Item $kept (Join-Path $ssh 'sshd_config') -Force }
+          Remove-Item (Join-Path $ssh 'administrators_authorized_keys') -Force -ErrorAction SilentlyContinue
+          Remove-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell -ErrorAction SilentlyContinue
       - if: always()
         run: pnpm acceptance:clean
       - name: No acceptance distro is left after the clean-up
