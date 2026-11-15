@@ -40,15 +40,42 @@ export const MODES = [
   },
 ] as const;
 
-/** The lines of the run's `Host harness` block, without its `Host` line. */
-function harnessLines(): string[] {
+/** The lines of the run's block of host `base`, without its `Host` line. */
+function blockLines(base: string): string[] {
   const lines = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8').split(
     '\n',
   );
-  const start = lines.indexOf('Host harness');
+  const start = lines.indexOf(`Host ${base}`);
   const rest = lines.slice(start + 1);
   const end = rest.findIndex(line => !line.startsWith(' '));
   return rest.slice(0, end === -1 ? rest.length : end);
+}
+
+/** The block of host `alias`: the lines of the run's block `base` but those of `without`, then `extra`. */
+export function hostBlock(
+  alias: string,
+  extra: readonly string[],
+  without: readonly string[] = [],
+  base = 'harness',
+): string[] {
+  return [
+    `Host ${alias}`,
+    ...blockLines(base).filter(
+      line => !without.includes(line.trim().split(' ')[0] ?? ''),
+    ),
+    ...extra.map(line => `  ${line}`),
+    '',
+  ];
+}
+
+/** Writes the file `name` of the run from `blocks`, each the lines of a `Host` block, and gives its path. */
+export function writeConfig(
+  name: string,
+  blocks: ReadonlyArray<readonly string[]>,
+): string {
+  const file = path.join(variable('HARNESS_RUN_FOLDER'), `${name}.config`);
+  writeFileSync(file, blocks.flat().join('\n'));
+  return file;
 }
 
 /** Writes the file of the run for alias `alias` with its entry: the harness host's lines, then `extra`. */
@@ -58,20 +85,10 @@ function entryFile(
   without: readonly string[] = [],
   hosts: readonly string[] = [],
 ): string {
-  const file = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.config`);
-  writeFileSync(
-    file,
-    [
-      `Host ${alias}`,
-      ...harnessLines().filter(
-        line => !without.includes(line.trim().split(' ')[0] ?? ''),
-      ),
-      ...extra.map(line => `  ${line}`),
-      ...hosts.flatMap(host => ['', `Host ${host}`, '  HostName 127.0.0.1']),
-      '',
-    ].join('\n'),
-  );
-  return file;
+  return writeConfig(alias, [
+    hostBlock(alias, extra, without),
+    ...hosts.map(host => [`Host ${host}`, '  HostName 127.0.0.1', '']),
+  ]);
 }
 
 /**
@@ -111,6 +128,8 @@ export interface Outcome {
   progress: string[];
   /** The lines the connection log gained from the start of this connect, and no earlier ones. */
   connectLog: string[];
+  /** When the failure dialog was shown, in milliseconds since the epoch. */
+  dialogTime: number | undefined;
   /** The window's title. */
   title: string;
   /** Milliseconds from the first progress line to the failure dialog; undefined when there was no dialog. */
@@ -122,6 +141,8 @@ export interface Outcome {
 
 /** What a row may change of its connect: settings it sets, keywords of the harness entry it leaves out, answers it scripts. */
 export interface ConnectOptions {
+  /** A file the row wrote itself, in place of the entry written from `extra`. */
+  file?: string;
   settings?: Readonly<Record<string, unknown>>;
   without?: readonly string[];
   /** Aliases of further hosts the file holds after the entry. */
@@ -143,7 +164,8 @@ export async function connectWith<Result>(
   body: (outcome: Outcome, file: string) => Result | Promise<Result>,
   options: ConnectOptions = {},
 ): Promise<Result> {
-  const file = entryFile(name, extra, options.without, options.hosts);
+  const file =
+    options.file ?? entryFile(name, extra, options.without, options.hosts);
   const saved = readUserSettings();
   await userSettings({'remote.SSH.configFile': file, ...options.settings});
   const settingsBefore = readUserSettings();
@@ -176,6 +198,7 @@ export async function connectWith<Result>(
           .filter(line => line.time >= mark)
           .map(line => line.question),
         connectLog: connectionLog().slice(logMark),
+        dialogTime: dialog?.time,
         title: await windowTitle(name),
         failedAfter:
           dialog === undefined
