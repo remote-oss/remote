@@ -55,6 +55,9 @@ describe('the tunnel of a window under the default settings and their combinatio
 
   it('F-2104 AC-4, AC-5 (c79-password-reload): a password host is asked once and logs in once, and the reloaded window asks nothing, logs in no more, and reconnects through new editor ports and the same SOCKS port', async () => {
     await keepingSettings(async () => {
+      // The row's criterion is a new window port after the reload, which the search's default (random) pick gives and the
+      // launch's range below the ephemeral ports (first free port, ascending) does not: the setting is off for this row.
+      await userSettings({'remote.SSH.preferredLocalPortRange': undefined});
       const connected = await connectedWith('c79-reload', 'password', {});
       const editorBefore = portsOf(listeners(), 'editor');
       const socksBefore = portsOf(connected.added, 'ssh');

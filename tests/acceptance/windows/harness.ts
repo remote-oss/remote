@@ -181,6 +181,8 @@ export interface RecordLine {
   items?: string[];
   /** The label of the row that was focused when the pick opened; only the lines of a `platformPick` have it. */
   active?: string | undefined;
+  /** The message a masked input was shown with; only the lines of a `maskedInput` surface that had one have it. */
+  message?: string;
   time: number;
 }
 
