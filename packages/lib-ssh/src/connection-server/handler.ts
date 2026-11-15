@@ -257,6 +257,9 @@ export class ConnectionHandler implements MessageHandler {
         JSON.stringify({
           program: invocation.program,
           arguments: invocation.arguments,
+          execPath: process.execPath,
+          runAsNode: process.env.ELECTRON_RUN_AS_NODE,
+          versions: process.versions,
           askpassEnvironment,
           editorEnvironment,
         }),
