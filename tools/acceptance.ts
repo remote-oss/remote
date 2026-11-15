@@ -116,6 +116,9 @@ import {
   hostCases,
   runnerLaunches,
   suitesOf,
+  WINDOW_PORT_RANGE,
+  WINDOW_PORT_RANGE_SETTING,
+  windowPortRangeProblem,
   withHarnessBases,
   withRunTokens,
 } from './acceptance-launches.ts';
@@ -1075,6 +1078,22 @@ export function packagedExtensions(
     .map(entry => path.join(folder, entry.name));
 }
 
+/** The kernel's ephemeral port range as Linux prints it, read once per run; none where the machine has no such file. */
+let ephemeralRangeText: {value: string | undefined} | undefined = undefined;
+
+/** The text of `/proc/sys/net/ipv4/ip_local_port_range`, or undefined on a machine without it. */
+function kernelEphemeralRange(): string | undefined {
+  ephemeralRangeText ??= {
+    value: existsSync(EPHEMERAL_RANGE_FILE)
+      ? readFileSync(EPHEMERAL_RANGE_FILE, 'utf8')
+      : undefined,
+  };
+  return ephemeralRangeText.value;
+}
+
+/** The file where Linux keeps the range of the ports it gives to outgoing connections. */
+const EPHEMERAL_RANGE_FILE = '/proc/sys/net/ipv4/ip_local_port_range';
+
 /**
  * The editor's user settings of a launch, in its user-data folder: the extensions under test read the harness's
  * ssh_config, and `extra` is the launch's own settings. With a launch, the same bytes go to
@@ -1087,7 +1106,17 @@ export function writeUserSettings(
   configFile: string,
   extra: Readonly<Record<string, unknown>> = {},
   launch?: Launch,
+  ephemeral: string | undefined = kernelEphemeralRange(),
 ): void {
+  // Only the harness's own range is checked: a launch that sets a range of its own does it to test the setting.
+  const problem =
+    extra[WINDOW_PORT_RANGE_SETTING] === WINDOW_PORT_RANGE &&
+    ephemeral !== undefined
+      ? windowPortRangeProblem(WINDOW_PORT_RANGE, ephemeral)
+      : undefined;
+  if (problem !== undefined) {
+    throw new Error(`${launch?.label ?? 'the run'}: ${problem}`);
+  }
   const tail = launch?.settingsTail;
   const written = JSON.stringify(
     {'remote.SSH.configFile': configFile, ...extra},

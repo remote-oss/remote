@@ -161,6 +161,8 @@ describe('the session record of every resolve (card connect-135)', function () {
 
   before(async () => {
     saved = readUserSettings();
+    // The record lists which of the 22 settings the user customised, and the launch's window port range is one of them.
+    await userSettings({'remote.SSH.preferredLocalPortRange': undefined});
     await closeAllButLocal();
     await inWindow('local', CLEAR);
     await waitFor('an empty store', () => hintRecords().length === 0, 60_000);

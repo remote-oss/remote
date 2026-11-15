@@ -5,7 +5,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   pickShown,
@@ -137,7 +137,15 @@ describe('the configuration file opened from the SSH group (card coverage-102, p
       await openFromGear(window, file);
       const pushed = companionCalls(HOSTS_CHANGED).length;
       await typeAndSave(window, 'Host typed-one\n');
-      const saved = Date.now();
+      const issued = Date.now();
+      // The save runs in the editor after this row issued it: the push is timed from the file's write, when the save
+      // completed (as the contract measures it), not from the moment the command was issued.
+      await waitFor(
+        `${file} to hold the typed host`,
+        () => readFileSync(file, 'utf8').includes('Host typed-one'),
+        30_000,
+      );
+      const saved = statSync(file).mtimeMs;
       const shown = await listsWithin(
         window,
         ['typed-one', 'user-one', ...systemHosts()],
@@ -163,6 +171,7 @@ describe('the configuration file opened from the SSH group (card coverage-102, p
           ),
         ],
         [1, true, true, ['typed-one', 'user-one', ...systemHosts()], true],
+        `the save was issued at ${String(issued)} and the file was written ${String(saved - issued)} ms after; the pushes came ${JSON.stringify(pushes.map(push => push.time - saved))} ms after the write`,
       );
     } finally {
       await closeWindow(window);
