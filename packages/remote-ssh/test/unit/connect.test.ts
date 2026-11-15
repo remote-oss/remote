@@ -1367,14 +1367,24 @@ describe('the connect pipeline, what it keeps and gives back', () => {
     server: {...STARTED.server, reused: true},
   };
 
-  it('installs the default extensions on a server that was already running', async () => {
+  /** The recording of a connect whose start found the server already running. */
+  async function connectReusing(): Promise<
+    ReturnType<typeof setup>['recording']
+  > {
     const {recording, options} = setup();
     await connect(
       INPUT,
       steps(recording, {start: () => Promise.resolve(REUSED)}),
       options,
     );
-    deepStrictEqual(recording.calls.includes('installExtensions'), true);
+    return recording;
+  }
+
+  it('installs the default extensions on a server that was already running', async () => {
+    deepStrictEqual(
+      (await connectReusing()).calls.includes('installExtensions'),
+      true,
+    );
   });
 
   it('F-2413 6.4 step 1: the connect prunes the older installs once the server runs, before the tunnel opens', async () => {
@@ -1405,13 +1415,7 @@ describe('the connect pipeline, what it keeps and gives back', () => {
   });
 
   it('F-2413 6.4 step 5: a connect that reuses the running server prunes too', async () => {
-    const {recording, options} = setup();
-    await connect(
-      INPUT,
-      steps(recording, {start: () => Promise.resolve(REUSED)}),
-      options,
-    );
-    deepStrictEqual(recording.calls.includes('cleanup'), true);
+    deepStrictEqual((await connectReusing()).calls.includes('cleanup'), true);
   });
 
   it('F-2413 6.4 step 8: a clean-up that cannot run is logged and the connect goes on', async () => {

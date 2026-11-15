@@ -184,15 +184,21 @@ if (-not (Test-Path -LiteralPath $BinFolder -PathType Container)) {
 }
 $Index = 0
 foreach ($Folder in @(Get-ChildItem -LiteralPath $BinFolder -Force | Sort-Object -Property LastWriteTime -Descending)) {
-  $Index++
   $Name = $Folder.Name
+  $Kind = Get-FolderKind $Name
+  if (($CLEANUP_KIND -eq 'keepNewest') -and ($Kind -eq 'commit')) {
+    $Index++
+  }
   if ($Name -eq $COMMIT) {
     continue
   }
-  $Kind = Get-FolderKind $Name
   switch ($CLEANUP_KIND) {
     'keepNewest' {
-      if ($Index -gt [int]$KEEP_COUNT) {
+      if ($Kind -eq 'commit') {
+        if ($Index -gt [int]$KEEP_COUNT) {
+          Remove-Install $Name
+        }
+      } elseif ($Kind -eq 'leftover') {
         Remove-Install $Name
       }
     }

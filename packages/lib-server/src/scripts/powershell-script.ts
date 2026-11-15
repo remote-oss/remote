@@ -322,7 +322,8 @@ const UNINSTALL_BODY: readonly string[] = [
 
 /**
  * Cleanup: the installs under `bin/`, newest first, removed by the policy's kind; the current commit is always kept,
- * and an install whose lock another step holds is left.
+ * and an install whose lock another step holds is left. Of the policy that keeps the newest, only the commits are ranked
+ * and kept, a leftover is removed, and any other folder is left alone.
  */
 const CLEANUP_BODY: readonly string[] = [
   ...DATA_FOLDER_GUARD,
@@ -332,15 +333,21 @@ const CLEANUP_BODY: readonly string[] = [
   '}',
   '$Index = 0',
   'foreach ($Folder in @(Get-ChildItem -LiteralPath $BinFolder -Force | Sort-Object -Property LastWriteTime -Descending)) {',
-  '  $Index++',
   '  $Name = $Folder.Name',
+  '  $Kind = Get-FolderKind $Name',
+  "  if (($CLEANUP_KIND -eq 'keepNewest') -and ($Kind -eq 'commit')) {",
+  '    $Index++',
+  '  }',
   '  if ($Name -eq $COMMIT) {',
   '    continue',
   '  }',
-  '  $Kind = Get-FolderKind $Name',
   '  switch ($CLEANUP_KIND) {',
   "    'keepNewest' {",
-  '      if ($Index -gt [int]$KEEP_COUNT) {',
+  "      if ($Kind -eq 'commit') {",
+  '        if ($Index -gt [int]$KEEP_COUNT) {',
+  '          Remove-Install $Name',
+  '        }',
+  "      } elseif ($Kind -eq 'leftover') {",
   '        Remove-Install $Name',
   '      }',
   '    }',
