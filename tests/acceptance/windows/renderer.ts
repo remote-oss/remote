@@ -278,12 +278,15 @@ export async function pageCount(): Promise<number> {
   return (await pages()).length;
 }
 
-/** The titles among `titles` that window `name`'s folder name gives: `[<name>]` or `[<name> [...`, `[]` for `local`. */
+/**
+ * The titles among `titles` that window `name`'s folder name gives: `[<name>]`, `[<name> [...` once a remote window has
+ * its label, `[<name>]<authority>` while it has none yet, and `[]` for `local`.
+ */
 function titlesOfName(name: string, titles: readonly string[]): string[] {
   return titles.filter(title =>
     name === 'local'
       ? title === '[]'
-      : title === `[${name}]` ||
+      : title.startsWith(`[${name}]`) ||
         title.startsWith(`[${name} [`) ||
         // The window of the in-memory folder memfs:/ is titled by the folder's name, which is its root.
         (name === 'memfs' && title === '[/]'),
