@@ -42,7 +42,7 @@ interface LaunchCommon {
    */
   wslDistros?: true;
   /**
-   * Whether the launch's Remote - SSH runs the pinned OpenSSH client (`tools/install-openssh`, card #2600) through
+   * Whether the launch's Remote - SSH runs the pinned OpenSSH client (`tools/install-openssh`) through
    * `remote.SSH.path`, which its settings name as `${HARNESS_SSH_CLIENT}`: the run builds the client once and passes its
    * path as HARNESS_SSH_CLIENT, and a run that cannot build it refuses the launch.
    */

@@ -274,7 +274,7 @@ export interface HarnessVariables {
   HARNESS_REGISTRY?: string;
   /** The `wsl` launch's distros by role (installed, wsl2, wsl1) as JSON, when a chosen launch asks for them. */
   HARNESS_WSL_DISTROS?: string;
-  /** The path of the pinned OpenSSH client's `ssh`, for a run with a launch that asks for it (card #2600). */
+  /** The path of the pinned OpenSSH client's `ssh`, for a run with a launch that asks for it. */
   HARNESS_SSH_CLIENT?: string;
   /** The run's registry as its templates' ids name it (`localhost:<port>`), when a chosen launch asks for templates. */
   HARNESS_TEMPLATE_REGISTRY?: string;

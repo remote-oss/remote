@@ -1,17 +1,14 @@
 import {deepStrictEqual} from 'node:assert';
 import path from 'node:path';
 import {pinnedSshClient} from './acceptance-ssh-client.ts';
-import type {CommandResult} from './command-runner.ts';
+import type {CommandResult, CommandRunner} from './command-runner.ts';
 
 const CLIENT = '/cache/remote-oss/openssh-10.6p2-9ae44872090c/bin/ssh';
 
 /** A command runner that records each call and answers by the program it runs. */
 function recording(answers: Readonly<Record<string, CommandResult>>): {
   calls: string[][];
-  command: (
-    program: string,
-    programArguments: readonly string[],
-  ) => CommandResult;
+  command: CommandRunner;
 } {
   const calls: string[][] = [];
   return {
@@ -24,12 +21,7 @@ function recording(answers: Readonly<Record<string, CommandResult>>): {
 }
 
 /** The message a refused launch gives, or `not refused`. */
-function refusalOf(
-  command: (
-    program: string,
-    programArguments: readonly string[],
-  ) => CommandResult,
-): string {
+function refusalOf(command: CommandRunner): string {
   try {
     pinnedSshClient(command, '/repo', () => undefined);
     return 'not refused';

@@ -20,7 +20,7 @@ describe('ssh_config keywords newer than the runners’ OpenSSH (card #2600)', f
     const client = launchSsh();
     const version = spawnSync(client, ['-V'], {encoding: 'utf8'});
     deepStrictEqual(
-      [client, version.status, /^OpenSSH_10\.6p2,/.test(version.stderr)],
+      [client, version.status, version.stderr.startsWith('OpenSSH_10.6p2,')],
       [variable('HARNESS_SSH_CLIENT'), 0, true],
       version.stderr,
     );
