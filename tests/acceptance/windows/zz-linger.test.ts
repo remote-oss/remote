@@ -1,6 +1,7 @@
 import {
   closeWindow,
   connectedWithin,
+  onHost,
   connectionHelpers,
   connectionLog,
   openWindow,
@@ -28,7 +29,7 @@ describe('the local server’s exit after the last window closed, and a window o
 
   beforeEach(closeAllButLocal);
 
-  it('the exit delay, then a scan around it', async () => {
+  it('the exit delay, then a scan around it with the server killed after the close', async () => {
     const delays: number[] = [];
     for (let round = 0; round < 8; round += 1) {
       const name = `lg-m-${String(round)}`;
@@ -44,8 +45,10 @@ describe('the local server’s exit after the last window closed, and a window o
     const middle = sorted[Math.floor(sorted.length / 2)] ?? 1800;
     const results: unknown[] = [];
     for (const repeat of [0, 1, 2]) {
-      for (let step = -6; step <= 6; step += 1) {
-        const offset = Math.max(0, middle + step * 25 - 200);
+      for (const step of [
+        -120, -80, -40, -24, -12, -6, -3, 0, 3, 6, 12, 24, 40, 80, 120,
+      ]) {
+        const offset = Math.max(0, middle + step * 10 - 200);
         const first = `lg-a-${String(step)}-${String(repeat)}`;
         const second = `lg-b-${String(step)}-${String(repeat)}`;
         await openWindow('harness', first);
@@ -54,6 +57,14 @@ describe('the local server’s exit after the last window closed, and a window o
         const mark = connectionLog().length;
         const closedAt = Date.now();
         await closeWindow(first);
+        await onHost(
+          'pkill',
+          '-u',
+          'harness',
+          '-f',
+          '--',
+          'server-main.js',
+        ).catch(() => undefined);
         // closeWindow returns when the helper has ended too, so this offset counts from the return, not from the close.
         const returnedAt = Date.now();
         await pause(Math.max(0, offset - (returnedAt - closedAt)));
