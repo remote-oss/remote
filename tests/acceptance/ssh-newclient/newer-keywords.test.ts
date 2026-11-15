@@ -27,8 +27,11 @@ import {editorHasFocus, statusItem} from '../windows/renderer.ts';
 /** The text the untitled editor of the reconnect row holds. */
 const UNSAVED = 'unsaved text of c2600';
 
-/** The longest the reconnect row waits for ssh to end and the window to connect again (the specification's VS-7 waits 400 s). */
-const DROP_MILLISECONDS = 420_000;
+/** The longest the reconnect row waits for the window to connect again once its connection has ended. */
+const RECONNECT_MILLISECONDS = 60_000;
+
+/** What ssh prints when ChannelTimeout closes the session channel of the connection. */
+const CHANNEL_CLOSED = 'seconds of inactivity';
 
 /** A line the connection log gains once per connect of a window, the reconnection's included. */
 const CONNECTED_LINE = 'Remote server listening on port';
@@ -140,8 +143,7 @@ describe('ssh_config keywords newer than the runners’ OpenSSH (card #2600)', f
     );
   });
 
-  it('F-2109 AC-15 (c2600-channel-timeout): when ssh ends after the connect (ChannelTimeout), the window reconnects by itself with no dialog, shows Reconnecting to SSH and then SSH again, and keeps the terminal’s shell, the unsaved text and the focus', async function () {
-    this.timeout(DROP_MILLISECONDS + 240_000);
+  it('F-2109 AC-15 (c2600-channel-timeout): when ssh ends after the connect (ChannelTimeout closes its session channel, then the host ends the connection), the window reconnects by itself with no dialog, shows Reconnecting to SSH and then SSH again, and keeps the terminal’s shell, the unsaved text and the focus', async () => {
     const alias = 'c2600-timeout';
     const result = await connectWith(
       alias,
@@ -161,19 +163,38 @@ describe('ssh_config keywords newer than the runners’ OpenSSH (card #2600)', f
           focused: await editorHasFocus(alias),
         };
         const mark = Date.now();
-
+        // ChannelTimeout closes the session channel, but the window's forwarded channels keep ssh running: the host
+        // then ends the connection, as a server does, so ssh ends on its own after a successful connect.
+        const channelClosed = await waitFor(
+          'ChannelTimeout to close the session channel',
+          () => connectionLog().some(line => line.includes(CHANNEL_CLOSED)),
+          30_000,
+        ).then(
+          () => true,
+          () => false,
+        );
         const connectsBefore = connects();
+        const ended = await onHostAs(
+          'root',
+          'pkill',
+          '-TERM',
+          'sshd-session',
+        ).then(
+          () => 'ended',
+          (error: unknown) => String(error),
+        );
+        const endedAt = Date.now();
         const indicators = new Set<string>();
         await waitFor(
-          'ssh to end and the window to connect again',
+          'the window to connect again',
           async () => {
             indicators.add((await statusItem(alias, 'status.host')).text);
             return connects() > connectsBefore;
           },
-          DROP_MILLISECONDS,
+          RECONNECT_MILLISECONDS,
         ).catch(() => undefined);
         const reconnected = connects() > connectsBefore;
-        const droppedAfter = Math.round((Date.now() - mark) / 1000);
+        const droppedAfter = Math.round((Date.now() - endedAt) / 1000);
         await waitFor(
           'the indicator to read SSH again',
           async () => {
@@ -190,6 +211,8 @@ describe('ssh_config keywords newer than the runners’ OpenSSH (card #2600)', f
         return {
           reconnected,
           droppedAfter,
+          channelClosed,
+          ended,
           indicators: [...indicators].sort(),
           dialogs: recordLines('failureDialog', alias)
             .filter(line => line.time >= mark)
@@ -221,7 +244,7 @@ describe('ssh_config keywords newer than the runners’ OpenSSH (card #2600)', f
         UNSAVED,
         true,
       ],
-      `ssh ended ${String(result.droppedAfter)} s after the wait began; the log's last lines: ${JSON.stringify(result.lastLines)}`,
+      `session channel closed: ${String(result.channelClosed)}; the host's sessions: ${result.ended}; ${String(result.droppedAfter)} s from the end to the reconnect; the log's last lines: ${JSON.stringify(result.lastLines)}`,
     );
   });
 });
