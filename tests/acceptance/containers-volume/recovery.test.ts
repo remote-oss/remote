@@ -30,6 +30,7 @@ import {
 } from '../windows/renderer.ts';
 import {
   clonedVolumes,
+  containerFacts,
   containersWith,
   dockerLines,
   removeClone,
@@ -85,9 +86,31 @@ async function recover(folder: string): Promise<void> {
 
 /** Clones `source` until its build fails, then recovers its window `folder`. */
 async function reachRecovery(source: string, folder: string): Promise<void> {
+  const began = Math.floor(Date.now() / 1000);
   await startClone(source);
   await waitForDialog(folder, 900_000);
-  await recover(folder);
+  await recover(folder).catch(async (caught: unknown) => {
+    throw new Error(
+      `${String(caught)}; ${await recoveryFacts(source, began)}`,
+      {cause: caught},
+    );
+  });
+}
+
+/** What the engine says of the recovery containers of the clone of `source` since the epoch second `since`; never throws. */
+async function recoveryFacts(source: string, since: number): Promise<string> {
+  try {
+    const containers = await recoveryContainers(await volumeOf(source));
+    return containers.length === 0
+      ? 'no recovery container exists'
+      : (
+          await Promise.all(
+            containers.map(container => containerFacts(container, since)),
+          )
+        ).join('; ');
+  } catch (caught) {
+    return `the recovery containers could not be read: ${String(caught)}`;
+  }
 }
 
 /** The recovery containers of the volume, in any state, as ids. */

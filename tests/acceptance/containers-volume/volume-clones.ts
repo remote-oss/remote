@@ -27,6 +27,48 @@ export function clonedVolumes(repository: string): Promise<string[]> {
   );
 }
 
+/**
+ * What the engine says of `container` for a failure to carry: its state (status, exit code, start and finish times,
+ * the engine's error) and its events since the epoch second `since`, each with its time as ISO text. Never throws: what
+ * cannot be read is said.
+ */
+export async function containerFacts(
+  container: string,
+  since: number,
+): Promise<string> {
+  const state = await execFileAsync('docker', [
+    'inspect',
+    '--format',
+    '{{json .State}}',
+    container,
+  ]).then(
+    result => result.stdout.trim(),
+    (caught: unknown) => `unreadable: ${String(caught)}`,
+  );
+  const events = await execFileAsync('docker', [
+    'events',
+    '--since',
+    String(since),
+    '--until',
+    String(Math.floor(Date.now() / 1000) + 1),
+    '--filter',
+    `container=${container}`,
+    '--format',
+    '{{.TimeNano}} {{.Action}}',
+  ]).then(
+    result =>
+      result.stdout
+        .split('\n')
+        .filter(line => line !== '')
+        .map(line => {
+          const [nano = '0', action = ''] = line.split(' ');
+          return `${new Date(Number(nano) / 1e6).toISOString()} ${action}`;
+        }),
+    (caught: unknown) => [`unreadable: ${String(caught)}`],
+  );
+  return `${container}: state ${state}; events since the reach began ${JSON.stringify(events)}`;
+}
+
 /** The containers, in any state, that carry `label`, as their ids. */
 export function containersWith(label: string): Promise<string[]> {
   return dockerLines('ps', '-a', '-q', '--filter', `label=${label}`);
