@@ -491,7 +491,7 @@
       "remote-log.test.ts": 0.4,
       "renderer.test.ts": 0,
       "resolve-log.test.ts": 0.8,
-      "server-cleanup.test.ts": 0.5,
+      "server-cleanup.test.ts": 1.6,
       "socket-mode.test.ts": 0.8,
       "socket-more.test.ts": 5.8,
       "socket-platform.test.ts": 0.5,
