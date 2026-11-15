@@ -130,6 +130,7 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
           left,
           limited: readdirSync(starts).length >= START_LIMIT,
           diagnostic: `${String(readdirSync(starts).length)} starts; ${connectionLog()
+            .slice(logMark)
             .filter(line => !line.includes('OpenSSH_'))
             .slice(0, 30)
             .join(' | ')}`,
