@@ -51,7 +51,11 @@ export {parseAddHostCommand} from './config/add-host.ts';
 export {lexConfiguration} from './config/lexer.ts';
 export type {LexResult} from './config/lexer.ts';
 export {writeHostBlock} from './config/writer.ts';
-export type {DiagnosticStringId, FailureKind} from './diagnostics/rules.ts';
+export type {
+  ConnectionMode,
+  DiagnosticStringId,
+  FailureKind,
+} from './diagnostics/rules.ts';
 export {
   CONNECTION_CLOSED_TEXT,
   FAILING_CONNECTIONS_TOPIC,
@@ -59,7 +63,6 @@ export {
 export type {
   Classification,
   ClassifyPurpose,
-  ConnectionMode,
   FailureHint,
   FailureReason,
   FilledString,

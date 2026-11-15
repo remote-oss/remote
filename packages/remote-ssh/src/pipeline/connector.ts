@@ -353,8 +353,11 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
         stop,
         lost: false,
       };
-      dependencies.applyTerminalEnvironment(
-        forwardingEnvironment(result.forwarding),
+      const environment = forwardingEnvironment(result.forwarding);
+      dependencies.applyTerminalEnvironment(environment);
+      const names = Object.keys(environment);
+      dependencies.options.logger.trace(
+        `the terminal environments were updated: ${names.length === 0 ? 'no variables' : names.join(', ')}`,
       );
       return result.connected;
     },
