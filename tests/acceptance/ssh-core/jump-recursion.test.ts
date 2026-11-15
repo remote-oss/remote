@@ -12,6 +12,7 @@ import {promisify} from 'node:util';
 import {deepStrictEqual} from 'node:assert';
 import {
   appendScript,
+  connectionLog,
   closeWindow,
   openWindow,
   readUserSettings,
@@ -127,6 +128,7 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
           question: dialog?.question,
           left,
           limited: readdirSync(starts).length >= START_LIMIT,
+          diagnostic: `${String(readdirSync(starts).length)} starts; ${connectionLog().slice(-40).join(' | ')}`,
         },
         {
           question: `Could not establish connection to "${alias}".`,
