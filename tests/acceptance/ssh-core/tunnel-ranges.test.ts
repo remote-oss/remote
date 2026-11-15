@@ -14,7 +14,11 @@ import {
 } from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {runSshArguments} from '../windows/pty-support.ts';
-import {notifications, statusBarText, statusItem} from '../windows/renderer.ts';
+import {
+  indicatorDisconnects,
+  notifications,
+  statusItem,
+} from '../windows/renderer.ts';
 import {
   addedSince,
   connectedWith,
@@ -406,16 +410,7 @@ describe('the local port range of a window (card coverage-79)', function () {
       await openWindow('harness', name);
       await dialogsOf(name, 1);
       const phases = recordLines('progress', name).map(line => line.question);
-      // The spec has the dialog and the indicator at the same moment and orders neither (F-2601 5.0 step 3, F-2003 6.4
-      // step 2), and the log reveal of a failed connect (#2537) lets core's indicator follow the dialog by about a
-      // quarter of a second (measured: 5 of 12 windows read "Opening Remote..." 50 to 80 ms after it, all read
-      // "Disconnected" by 320 ms), so the row waits up to a second for it (athena's ruling on #2537).
-      await waitFor(
-        'the remote indicator to read Disconnected',
-        async () =>
-          (await statusBarText(name, 'status.host')).startsWith('Disconnected'),
-        1000,
-      ).catch(() => undefined);
+      await indicatorDisconnects(name);
       const indicator = (await statusItem(name, 'status.host')).text;
       await closeWindow(name);
       deepStrictEqual(
