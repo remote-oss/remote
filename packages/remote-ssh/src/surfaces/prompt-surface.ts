@@ -88,10 +88,13 @@ function isControl(code: number): boolean {
  * and every `$(` is escaped.
  */
 function shownLine(line: string): string {
-  return [...line]
-    .filter(character => !isControl(character.codePointAt(0) ?? 0))
-    .join('')
-    .replaceAll('$(', '\\$(');
+  let kept = '';
+  for (let index = 0; index < line.length; index += 1) {
+    if (!isControl(line.charCodeAt(index))) {
+      kept += line.charAt(index);
+    }
+  }
+  return kept.replaceAll('$(', '\\$(');
 }
 
 /**
