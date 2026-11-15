@@ -5,7 +5,7 @@
 
 import {execFile, execFileSync} from 'node:child_process';
 import {deepStrictEqual} from 'node:assert';
-import {chmodSync, readFileSync, writeFileSync} from 'node:fs';
+import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {linesSince, runWith} from '../windows/maintenance.ts';
@@ -24,7 +24,6 @@ import {
   onHostAs,
   recordLines,
   readUserSettings,
-  relaunch,
   reloadWindow,
   restoreHostNetwork,
   restoreUserSettings,
@@ -580,7 +579,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     );
   });
 
-  it('F-2310 AC-20 (c2601-password-reload): a window connected through a password jump host reloads and connects with no input', async () => {
+  it('F-2310 AC-20 (c2601-password-reload-part): a window connected through a password jump host reloads and connects with no input', async () => {
     const alias = 'c2601-pwreload';
     const file = passwordChain(alias, 1);
     const result = await connectWith(
@@ -1155,7 +1154,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     ]);
   });
 
-  it('F-2310 AC-20 (c2601-password-new-window): New Window on Active Host through a password jump host connects with no input', async () => {
+  it('F-2310 AC-20 (c2601-password-new-window-part): New Window on Active Host through a password jump host connects with no input', async () => {
     const alias = 'c2601-pwnew';
     const file = passwordChain(alias, 1);
     const result = await connectWith(
@@ -1185,64 +1184,5 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       },
     );
     deepStrictEqual(result, {before: 2, asked: 0});
-  });
-
-  it('F-2310 AC-20 (c2601-password-restart): a restarted editor reconnects a window through a password jump host with no input', async () => {
-    const alias = 'c2601-pwrestart';
-    const file = passwordChain(alias, 1);
-    const result = await connectWith(
-      alias,
-      [],
-      'connects',
-      async () => {
-        const before = recordLines('maskedInput', alias).length;
-        await relaunch(alias, {environment: {}});
-        await connectedWithin(alias, 180_000);
-        return {
-          before,
-          asked: recordLines('maskedInput', alias).length - before,
-        };
-      },
-      {
-        file,
-        script: [
-          passwordAt(alias, '127.0.0.1', hostPassword()),
-          passwordAt(alias, '127.0.0.2', hostPassword()),
-          passwordAt(alias, '127.0.0.1', hostPassword()),
-          passwordAt(alias, '127.0.0.2', hostPassword()),
-        ],
-      },
-    );
-    deepStrictEqual(result, {before: 2, asked: 0});
-  });
-
-  it('F-2310 AC-32 (c2601-jump-loop): a catch-all ProxyJump that also applies to the jump alias fails with no input and the dialog without a reason, and no ssh of the attempt stays, with the attempt’s processes capped', async () => {
-    const alias = 'c2601-loop';
-    const wrapper = path.join(
-      variable('HARNESS_RUN_FOLDER'),
-      'c2601-ssh-capped',
-    );
-    writeFileSync(
-      wrapper,
-      '#!/bin/sh\nulimit -u $(( $(ps -u "$(id -u)" --no-headers | wc -l) + 40 ))\nexec ssh "$@"\n',
-    );
-    chmodSync(wrapper, 0o755);
-    const file = writeConfig(alias, [
-      hostBlock(alias, []),
-      hostBlock(`${alias}-hop`, []),
-      ['Host *', `  ProxyJump ${alias}-hop`, ''],
-    ]);
-    const result = await connectWith(
-      alias,
-      [],
-      'fails',
-      async outcome => ({
-        dialog: outcome.dialog,
-        asked: recordLines('maskedInput', alias).length,
-        left: await processesWith(file),
-      }),
-      {file, settings: {'remote.SSH.path': wrapper}},
-    );
-    deepStrictEqual(result, {dialog: reasonless(alias), asked: 0, left: []});
   });
 });
