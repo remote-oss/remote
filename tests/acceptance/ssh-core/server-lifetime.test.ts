@@ -17,6 +17,7 @@ import {
   onHost,
   openWindow,
   readUserSettings,
+  recordLines,
   reloadWindow,
   restoreHostNetwork,
   restoreUserSettings,
@@ -129,6 +130,19 @@ function clientGraceSince(since: number): string[] {
     .map(line => line.slice(line.indexOf('Client received')));
 }
 
+/** The process id of the host's server itself (not its children), which a reconnection must not change. */
+async function serverMain(): Promise<string> {
+  return (
+    await onHost(
+      'pgrep',
+      '-u',
+      'harness',
+      '-f',
+      `${DATA_FOLDER}/bin/.*/out/server-main.js`,
+    ).catch(() => '')
+  ).trim();
+}
+
 /** One state of a window's reconnection, as core shows it: the remote indicator and the modal dialog, if any. */
 interface Seen {
   /** Milliseconds from the cut of the network. */
@@ -136,6 +150,7 @@ interface Seen {
   indicator: string;
   dialog: string | undefined;
   buttons: string[];
+  notices: string[];
 }
 
 /**
@@ -165,9 +180,14 @@ async function observed(
       indicator,
       dialog: text,
       buttons: dialog?.buttons ?? [],
+      notices: await notifications(name).catch(() => []),
     };
     const last = states.at(-1);
-    if (last?.indicator !== indicator || last.dialog !== text) {
+    if (
+      last?.indicator !== indicator ||
+      last.dialog !== text ||
+      last.notices.join('|') !== current.notices.join('|')
+    ) {
       states.push(current);
     }
     if (stop(current)) {
@@ -329,7 +349,7 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
       client: clientGraceSince(since),
     };
     const servers = await serverProcesses();
-    await runWith(name, 'opensshremotes.cleanRemoteServer', [
+    await runWith('local', 'opensshremotes.cleanRemoteServer', [
       pickHost('harness'),
     ]);
     await serversGoneWithin(servers, 30_000);
@@ -452,7 +472,11 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
           indicator: 'Disconnected from SSH: harness',
         },
       },
-      JSON.stringify(states),
+      `${JSON.stringify(states)} ${JSON.stringify(
+        recordLines(undefined, name)
+          .slice(-8)
+          .map(line => [line.surface, line.question, line.buttons]),
+      )}`,
     );
   });
 
@@ -480,7 +504,7 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
   it('F-2413 AC-9 (c2651-cut-default): with the default grace time a network lost for 90 s and back reconnects the window to the same server without a reload', async () => {
     const name = 'c2651-cut-default';
     await connectFresh(name, {});
-    const servers = await serverProcesses();
+    const server = await serverMain();
     function activations(): number {
       return windowEvents(name).filter(each => each.event === 'activated')
         .length;
@@ -499,10 +523,7 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
         'SSH: harness',
       120_000,
     );
-    deepStrictEqual(
-      [await serverProcesses(), activations() - before],
-      [servers, 0],
-    );
+    deepStrictEqual([await serverMain(), activations() - before], [server, 0]);
   });
 
   it('F-2413 AC-28 (c2651-cut-log): the server log of a window that lost its network for 110 s (what the log says and when; the row prints it)', async () => {
