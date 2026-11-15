@@ -97,6 +97,8 @@ export interface AgentEvent {
   inUserScope?: boolean;
   /** The value the user's settings hold for the setting, as `setting` reports it (not merged with the default, as `value` is for an object): null for none. */
   userValue?: unknown;
+  /** The whole `inspect` of the setting, as `setting` reports it: the value of every scope the window knows. */
+  inspected?: unknown;
   /** Where a forwarded port is reachable on this machine, as the editor gave it. */
   localAddress?: string | {host: string; port: number};
   remotePort?: number;
@@ -2159,6 +2161,17 @@ export async function settingIn(
   return (
     await reported(name, 'setting', 'acceptance.agent.setting', settingId)
   )?.value;
+}
+
+/** The whole `inspect` of the setting `settingId` in window `name`: the value of every scope the window knows, null when it reports none. */
+export async function inspectedIn(
+  name: string,
+  settingId: string,
+): Promise<unknown> {
+  return (
+    (await reported(name, 'setting', 'acceptance.agent.setting', settingId))
+      ?.inspected ?? null
+  );
 }
 
 /** Whether the user's settings, as window `name` reads them, hold a value for the setting `settingId`; a key holding `null` reads as none, so the settings file is what tells it from a removed key. */

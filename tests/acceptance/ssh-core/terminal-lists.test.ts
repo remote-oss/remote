@@ -3,6 +3,7 @@ import {
   closeWindow,
   connectedWithin,
   editorProduct,
+  inspectedIn,
   inWindow,
   onHost,
   openWindow,
@@ -71,6 +72,36 @@ async function groupsOf(folder: string): Promise<Array<[string, string]>> {
 
 /** The setting that names the profile a new terminal opens. */
 const DEFAULT_PROFILE = 'terminal.integrated.defaultProfile.linux';
+
+/**
+ * What tells a window that missed the removal of the host's machine settings from one that never could read it: what the
+ * window reads and every scope of the setting it knows, what the host holds at the file, and whether the window reads
+ * the setting without zsh once the file is written again (empty) and then removed again, and after how long.
+ */
+async function removalFacts(window: string, file: string): Promise<string> {
+  const onFile = await onHost(
+    'sh',
+    '-c',
+    `ls -l '${file}' 2>&1; cat '${file}' 2>&1`,
+  ).catch((failed: unknown) => String(failed));
+  const facts: Record<string, unknown> = {
+    value: await settingIn(window, DEFAULT_PROFILE),
+    inspected: await inspectedIn(window, DEFAULT_PROFILE),
+    onHost: onFile,
+  };
+  await onHost('sh', '-c', `printf '%s' '{}' > '${file}'`);
+  const began = Date.now();
+  facts.readWithoutZshAfterRewriteMilliseconds = await waitFor(
+    `window ${window} to read ${DEFAULT_PROFILE} without zsh after the file was written again`,
+    async () => (await settingIn(window, DEFAULT_PROFILE)) !== 'zsh',
+    10_000,
+  ).then(
+    () => Date.now() - began,
+    () => 'not within 10 s',
+  );
+  await onHost('rm', '-f', file);
+  return JSON.stringify(facts);
+}
 
 describe('the lists and the reload of an SSH window that uses its terminals (card connect-125)', function () {
   this.timeout(300_000);
@@ -287,7 +318,12 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
         30_000,
       );
     } catch (error) {
-      failures.push(error);
+      failures.push(
+        new Error(
+          `${error instanceof Error ? error.message : String(error)}; facts: ${await removalFacts('c125-zsh', file).catch((failed: unknown) => `not gathered: ${String(failed)}`)}`,
+          {cause: error},
+        ),
+      );
     }
     await closeWindow('c125-zsh').catch(() => undefined);
     // The row's own error comes first; a wait that timed out after a passing row fails the row by itself.
