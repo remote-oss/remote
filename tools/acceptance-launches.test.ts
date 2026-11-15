@@ -14,7 +14,10 @@ import {
   needsDevContainerImage,
   HOST_CASE_SUITES,
   type HostCase,
+  WINDOW_PORT_DEFAULT_LAUNCHES,
   WINDOW_PORT_RANGE,
+  WINDOW_PORT_RANGE_SETTING,
+  windowPortRangeProblem,
   hostCases,
   hostSetupOf,
   portFreeCommand,
@@ -926,7 +929,6 @@ describe('the launches of the VSCodium run', () => {
           {
             'window.title': '[${rootName}]',
             'security.workspace.trust.startupPrompt': 'once',
-            'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
           },
         ],
         [
@@ -935,7 +937,6 @@ describe('the launches of the VSCodium run', () => {
           {
             'window.title': '[${rootName}]',
             'remote.SSH.useLocalServer': false,
-            'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
             'remote.SSH.remotePlatform': {harness: 'linux', agentfwd: 'linux'},
           },
         ],
@@ -1047,7 +1048,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('containers-101: only the containers-podman launch names an engine, and its user settings gain dev.containers.dockerPath podman while every other launch’s stay as they are', () => {
+  it('containers-101: only the containers-podman launch names an engine, and its user settings gain dev.containers.dockerPath podman while no other launch gets it', () => {
     const podman = launches.find(
       launch => launch.label === 'containers-podman',
     );
@@ -1058,7 +1059,11 @@ describe('the launches of the VSCodium run', () => {
           .map(launch => [launch.label, launch.engine]),
         launches
           .filter(launch => launch.engine === undefined)
-          .every(launch => settingsOfLaunch(launch) === launch.settings),
+          .every(
+            launch =>
+              settingsOfLaunch(launch)?.['dev.containers.dockerPath'] ===
+              undefined,
+          ),
         podman === undefined
           ? undefined
           : settingsOfLaunch(podman)?.['dev.containers.dockerPath'],
@@ -1315,7 +1320,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, windows, login-shells, preconnect, agent-notmp, default-ports, the explorer, trust and containers launches and every ports case', () => {
+  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, login-shells, agent-notmp, default-ports, the explorer, trust and containers launches and every ports case', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
@@ -1331,13 +1336,11 @@ describe('the launches of the VSCodium run', () => {
         'socket',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
-        'windows',
         'terminal-login',
         'passphrase-input',
         'terminal-odd',
         'passphrase-late',
         'login-shells',
-        'preconnect',
         'agent-notmp',
         'default-ports',
         'ssh-core',
@@ -2008,7 +2011,6 @@ describe('the launch with no runner', () => {
           label: 'windows',
           kind: 'plain',
           suite: 'windows',
-          settings: {'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE},
           environment: {REMOTE_OSS_SENTINEL: 'sent1nel-<run>'},
         },
       ],
@@ -2026,7 +2028,6 @@ describe('the launch with no runner', () => {
           debuggingPort: true,
           settings: {
             'window.title': '[${rootName}]',
-            'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
           },
         },
       ],
@@ -2343,32 +2344,58 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('#2585, #2586, #2616: the launches that connect many windows through the local server (windows, passphrase-input, login-shells, preconnect, default-ports, trust and trust-terminal) give the window a port range below the 32768 where the client’s ephemeral range starts, and only the failing connect that tests a busy range sets one besides', () => {
+  it('#2639: every launch of the ssh group gives the window the port range below the ephemeral ports but the three that keep the search’s default, each with its reason, and a launch that sets a range keeps its own', () => {
     const [first, last] = WINDOW_PORT_RANGE.split('-').map(Number);
+    const all = launchesOf(REPOSITORY_ROOT);
     deepStrictEqual(
       [
         (first ?? 0) > 1023 && (last ?? 65535) < 32768,
-        launchesOf(REPOSITORY_ROOT)
+        all
           .filter(
             launch =>
-              settingsOfLaunch(launch)?.[
-                'remote.SSH.preferredLocalPortRange'
-              ] !== undefined,
+              launchGroupOf(launch) === 'ssh' &&
+              settingsOfLaunch(launch)?.[WINDOW_PORT_RANGE_SETTING] ===
+                undefined,
           )
           .map(launch => launch.label),
+        all
+          .filter(
+            launch =>
+              launchGroupOf(launch) !== 'ssh' &&
+              settingsOfLaunch(launch)?.[WINDOW_PORT_RANGE_SETTING] !==
+                undefined,
+          )
+          .map(launch => launch.label),
+        settingsOfLaunch(launchLabelled(all, 'failure-port-range-busy'))?.[
+          WINDOW_PORT_RANGE_SETTING
+        ],
+        Object.values(WINDOW_PORT_DEFAULT_LAUNCHES).every(
+          reason => reason.length > 20,
+        ),
       ],
       [
         true,
-        [
-          'failure-port-range-busy',
-          'windows',
-          'passphrase-input',
-          'login-shells',
-          'preconnect',
-          'default-ports',
-          'trust',
-          'trust-terminal',
-        ],
+        ['config-files', 'ssh-core', 'ssh-agents'],
+        [],
+        '41060-41061',
+        true,
+      ],
+    );
+  });
+
+  it('#2639: the window port range is refused against an ephemeral range it overlaps, accepted below it, and a range that cannot be read is refused', () => {
+    deepStrictEqual(
+      [
+        windowPortRangeProblem('20000-20999', '32768\t60999\n'),
+        windowPortRangeProblem('20000-20999', '15000 60999')?.startsWith(
+          "the window port range 20000-20999 overlaps this machine's ephemeral port range 15000-60999",
+        ),
+        windowPortRangeProblem('20000-20999', 'unreadable'),
+      ],
+      [
+        undefined,
+        true,
+        'the window port range 20000-20999 or the ephemeral range "unreadable" cannot be read',
       ],
     );
   });
