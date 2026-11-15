@@ -37,6 +37,7 @@ import {
   connectWith,
   hostBlock,
   plainSsh,
+  resolvedCount,
   writeConfig,
 } from '../windows/config-keywords-support.ts';
 
@@ -1164,23 +1165,16 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       'connects',
       async () => {
         const before = questionsOn(alias, 'maskedInput').length;
+        const resolvedBefore = resolvedCount(alias);
         const next = await nextEmptyWindow(() =>
           inWindow(alias, 'opensshremotes.openEmptyWindowOnCurrentHost'),
         );
-        // The authority is remote as soon as the connect starts: the inputs are counted once the window is connected.
+        // The authority is remote as soon as the connect starts: the inputs are counted once the window has resolved the host.
         await waitFor(
-          `${next} to be connected`,
-          async () =>
-            (
-              await statusItem(next, 'status.host').catch(() => ({text: ''}))
-            ).text.startsWith('SSH: '),
+          `${next} to resolve ${alias}`,
+          () => resolvedCount(alias) > resolvedBefore,
           120_000,
-        ).catch(async (caught: unknown) => {
-          throw new Error(
-            `${String(caught)}; its indicator reads "${(await statusItem(next, 'status.host').catch(() => ({text: '?'}))).text}"`,
-            {cause: caught},
-          );
-        });
+        );
         const asked = recordLines('maskedInput', next).length;
         await closeWindow(next);
         return {before, asked};

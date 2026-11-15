@@ -231,3 +231,10 @@ export async function connectWith<Result>(
 function shownFrom(name: string, mark: number) {
   return recordLines('failureDialog', name).filter(line => line.time >= mark);
 }
+
+/** How many times the connection log says a window resolved `alias` to a local port, which it does once it is connected. */
+export function resolvedCount(alias: string): number {
+  return connectionLog().filter(line =>
+    line.includes(`Resolved ssh-remote+${alias} to local port`),
+  ).length;
+}
