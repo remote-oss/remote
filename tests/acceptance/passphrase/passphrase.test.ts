@@ -357,7 +357,7 @@ describe('the passphrase input of a key (card coverage-96)', function () {
     }
   });
 
-  it('F-2307 AC-7 (ruling-1681-first-label): three wrong passphrases end in the Permission denied dialog, and the indicator of the authority that never connected names the host', async () => {
+  it('F-2307 AC-7 (c96-first-label): three wrong passphrases end in the Permission denied dialog, and the indicator of the authority that never connected reads Disconnected from SSH, without the host', async () => {
     const name = await openKeyWindow('passkey-12', 'c96-first-label');
     try {
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -372,7 +372,7 @@ describe('the passphrase input of a key (card coverage-96)', function () {
         },
         {
           dialog: refused('passkey-12'),
-          indicator: 'Disconnected from SSH: passkey-12',
+          indicator: 'Disconnected from SSH',
         },
       );
     } finally {

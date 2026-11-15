@@ -27,6 +27,16 @@ describe('pageTitleByName', () => {
     );
   });
 
+  it('card #2635: a remote window whose label is not registered yet finds its page by its name before the authority', () => {
+    deepStrictEqual(
+      [
+        pageTitleByName('as1', ['[as1]ssh-remote+password', '[]']),
+        pageTitleByName('as1', ['[as10]ssh-remote+password', '[]']),
+      ],
+      ['[as1]ssh-remote+password', undefined],
+    );
+  });
+
   it('containers-19: the local window is the empty brackets', () => {
     strictEqual(pageTitleByName('local', ['[]SSH: harness', '[]']), '[]');
   });

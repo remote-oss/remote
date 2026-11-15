@@ -216,6 +216,33 @@ describe('the connector over the connect pipeline', () => {
     return heard;
   }
 
+  it('F-2502 5.0 step 3: a connect whose host reported tells the host-report listeners its target, and a removed listener hears nothing', async () => {
+    const {connector} = connectorFor();
+    const heard: unknown[] = [];
+    const removed: unknown[] = [];
+    connector.onHostReported(target => {
+      heard.push(target);
+    });
+    const stop = connector.onHostReported(target => {
+      removed.push(target);
+    });
+    stop();
+    await connector.connect(HOST_INPUT);
+    deepStrictEqual(
+      [heard, removed],
+      [
+        [
+          {
+            family: 'ssh-remote',
+            target: INPUT.target,
+            rawHostString: INPUT.rawHostString,
+          },
+        ],
+        [],
+      ],
+    );
+  });
+
   it('F-2304: the stages of the connect reach the phase listeners', async () => {
     deepStrictEqual((await phasesHeard({kind: 'downloading'})).slice(0, 3), [
       {name: 'initializing', details: true, quiet: true},

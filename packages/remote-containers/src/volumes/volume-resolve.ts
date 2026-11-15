@@ -33,6 +33,8 @@ import {uniqueVolumeName} from './volume-name.ts';
 
 /** What `up` in the bootstrap is asked for. */
 export interface VolumeContainerRequest {
+  /** The volume the dev container mounts, which names the connection to the shutdown helper. */
+  volumeName: string;
   /** The folder in the volume, as the bootstrap and the dev container see it. */
   folder: string;
   configFile: string;
@@ -191,6 +193,7 @@ export async function resolveVolume(
   }
   const configFile = `${folder}/${configuration}`;
   const request: VolumeContainerRequest = {
+    volumeName,
     folder,
     configFile,
     idLabels: volumeIdLabels({

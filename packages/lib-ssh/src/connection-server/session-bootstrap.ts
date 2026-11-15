@@ -31,7 +31,8 @@ const TIMEOUT_EXIT = '    exit 124';
  * built to a file; a watchdog kills it after `LAYER1_SECONDS`. The session reaches `exec sh` unless the login shell
  * outlasts its bound or ends by itself without starting the command: it then prints one line, `LAYER1-TIMEOUT
  * <seconds>` or `LAYER1-EXITED <status>`, and ends, so the connect never goes on without the user's environment. Before
- * `exec sh` it prints `LAYER1-READY`: the connect is set up only when a reader has seen that line.
+ * `exec sh` it prints `LAYER1-READY`: the connect is set up only when a reader has seen that line. Each of the three is
+ * printed after a line end of its own, so that it is a line even when what came before wrote none.
  */
 const SESSION_BOOTSTRAP_LINES: readonly string[] = [
   'LAYER1_DIR=$(mktemp -d 2>/dev/null) || LAYER1_DIR=',
@@ -61,17 +62,17 @@ const SESSION_BOOTSTRAP_LINES: readonly string[] = [
   '    eval "$(cat "$LAYER1_DIR/env")"',
   '  elif [ -e "$LAYER1_DIR/timeout" ]; then',
   '    rm -rf "$LAYER1_DIR"',
-  '    printf \'LAYER1-TIMEOUT %s\\n\' "$LAYER1_SECONDS"',
+  '    printf \'\\nLAYER1-TIMEOUT %s\\n\' "$LAYER1_SECONDS"',
   TIMEOUT_EXIT,
   '  else',
   '    rm -rf "$LAYER1_DIR"',
-  '    printf \'LAYER1-EXITED %s\\n\' "$LAYER1_STATUS"',
+  '    printf \'\\nLAYER1-EXITED %s\\n\' "$LAYER1_STATUS"',
   '    exit 1',
   '  fi',
   'fi',
   '[ -n "$LAYER1_DIR" ] && rm -rf "$LAYER1_DIR"',
   'unset LAYER1_DIR LAYER1_PID LAYER1_WATCH LAYER1_STATUS LAYER1_SECONDS',
-  "printf 'LAYER1-READY\\n'",
+  "printf '\\nLAYER1-READY\\n'",
   'exec sh',
 ];
 
