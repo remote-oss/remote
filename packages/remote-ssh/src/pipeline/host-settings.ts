@@ -159,9 +159,16 @@ export function effectiveProxyText(setting: unknown, alias: string): string {
   return typeof chosen === 'string' ? chosen : String(chosen);
 }
 
-/** The seconds of reconnection grace: a number of 1 or more, else 0, which passes no option. */
+/**
+ * The seconds of reconnection grace: a number of 1 or more, a string of digits read as its number, else 0, which
+ * passes no option.
+ */
 export function graceSecondsOf(setting: unknown): number {
-  return typeof setting === 'number' && setting >= 1 ? setting : 0;
+  const value =
+    typeof setting === 'string' && /^\d+$/.test(setting)
+      ? Number(setting)
+      : setting;
+  return typeof value === 'number' && value >= 1 ? value : 0;
 }
 
 /** A setting that is a boolean as it is, else the default the manifest declares. */

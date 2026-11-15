@@ -221,10 +221,24 @@ describe('the reconnection grace time and the flags', () => {
         graceSecondsOf(0),
         graceSecondsOf(-5),
         graceSecondsOf(null),
-        graceSecondsOf('300'),
+        graceSecondsOf('3 0'),
         graceSecondsOf(undefined),
       ],
       [300, 1, 0, 0, 0, 0, 0],
+    );
+  });
+
+  it('F-2413 AC-23: a string of digits runs as its number, a leading zero among them, and every other string stays none', () => {
+    deepStrictEqual(
+      [
+        graceSecondsOf('30'),
+        graceSecondsOf('030'),
+        graceSecondsOf('300'),
+        graceSecondsOf('30s'),
+        graceSecondsOf('-5'),
+        graceSecondsOf(30),
+      ],
+      [30, 30, 300, 0, 0, 30],
     );
   });
 
