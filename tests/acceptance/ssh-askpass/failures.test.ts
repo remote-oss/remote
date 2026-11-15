@@ -8,6 +8,7 @@ import {renameSync} from 'node:fs';
 import path from 'node:path';
 import {
   openWindow,
+  waitFor,
   readUserSettings,
   restoreUserSettings,
   variable,
@@ -20,6 +21,7 @@ import {
   answerDialog,
   dialogOf,
   inputBoxOf,
+  notifications,
   quickPickOf,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -149,15 +151,29 @@ describe('the failures of a login through the user’s own askpass program (card
   it('F-2309 AC-14 (c2596-wrong-answer): a program that answers wrongly gives the failure dialog after ssh gives up, with no fallback input, and a Retry with a corrected program connects', async () => {
     knowHostKey('askpass-pw');
     await userSettings({[EXTERNAL]: true, ...useOwnConfig()});
-    answering([{match: 'password', answer: 'not-the-password'}]);
+    answering([
+      {match: 'password', answer: 'not-the-password', delayMilliseconds: 8000},
+    ]);
     await openWindow('askpass-pw', 'as1');
+    // While the program has not answered, ssh has not given up: the progress notification of the setup is shown.
+    const progress = await waitFor(
+      'the setup’s progress notification',
+      async () =>
+        (await notifications('as1')).some(text =>
+          text.startsWith('Setting up SSH Host askpass-pw:'),
+        ),
+      30_000,
+    ).then(
+      () => true,
+      () => false,
+    );
     const dialog = await waitForDialog('as1', 120_000);
     const inputs = await inputsShown('as1');
     answering([passwordRule()]);
     await answerDialog('as1', 'Retry');
     await connectedWithin('as1', 120_000);
     deepStrictEqual(
-      {dialog, inputs},
+      {dialog, inputs, progress},
       {
         dialog: {
           message: '',
@@ -165,6 +181,7 @@ describe('the failures of a login through the user’s own askpass program (card
           buttons: BUTTONS,
         },
         inputs: [],
+        progress: true,
       },
     );
   });
