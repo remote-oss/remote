@@ -193,6 +193,9 @@ export class ConnectionHandler implements MessageHandler {
         detail: 'the connection is not set up',
       };
     }
+    this.options.logLine(
+      `DIAG run ${String(request.runId)} script=${String(request.script.length)} head=${JSON.stringify(request.script.slice(0, 60))} env=${JSON.stringify(Object.keys(request.environment))} input=${String(request.inputBase64?.length)}`,
+    );
     const end = await runs.execute(request, line => {
       context.notify({type: 'scriptLine', runId: request.runId, line});
     });
@@ -287,7 +290,17 @@ export class ConnectionHandler implements MessageHandler {
     this.wait = wait;
     const runs = new ShellRuns({
       write: text => {
-        void session.write(text);
+        this.options.logLine(
+          `DIAG write ${String(text.length)} head=${JSON.stringify(text.slice(0, 80))}`,
+        );
+        void session.write(text).then(
+          written => {
+            this.options.logLine(`DIAG written ${JSON.stringify(written)}`);
+          },
+          (caught: unknown) => {
+            this.options.logLine(`DIAG write failed ${String(caught)}`);
+          },
+        );
       },
       scheduler: this.options.scheduler,
       newMarker: this.options.newMarker,
@@ -301,7 +314,12 @@ export class ConnectionHandler implements MessageHandler {
     let early: Exclude<BootstrapEvent, {kind: 'ready'}> | undefined;
     const commandLog = new LocalCommandLog();
     let bootstrapped = false;
+    let heard = 0;
     const output = new LineSplitter(line => {
+      heard += 1;
+      if (heard <= 60) {
+        this.options.logLine(`DIAG out ${JSON.stringify(line.slice(0, 160))}`);
+      }
       const event = ready ? undefined : bootstrapEventOf(line);
       if (event !== undefined) {
         bootstrapped = true;
@@ -344,6 +362,7 @@ export class ConnectionHandler implements MessageHandler {
       }
     });
     session.onError(piece => {
+      this.options.logLine(`DIAG err ${JSON.stringify(piece.slice(0, 400))}`);
       lines.push(piece);
     });
     wait.start();
