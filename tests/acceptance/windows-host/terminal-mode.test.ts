@@ -126,22 +126,57 @@ interface Seen {
   timedLog?: string[];
 }
 
-/** Opens window `name` and gives what its connect showed; a connect that fails is a value, not a throw. */
+/** The terminal names window `name` showed, and the last text of its active terminal, read every 3 s until `done`. */
+async function terminalsWhile(
+  name: string,
+  done: () => boolean,
+): Promise<{terminals: string[]; text: string}> {
+  const terminals = new Set<string>();
+  let text = '';
+  while (!done()) {
+    const facts = await terminalFacts(name).catch(() => undefined);
+    for (const terminal of facts?.terminals ?? []) {
+      terminals.add(terminal);
+    }
+    if ((facts?.text ?? '') !== '') {
+      text = facts?.text ?? '';
+    }
+    await new Promise(resolve => setTimeout(resolve, 3000));
+  }
+  return {terminals: [...terminals], text: text.slice(-2000)};
+}
+
+/**
+ * Opens window `name` and gives what its connect showed, its terminals read while it connected; a connect that fails
+ * is a value, not a throw.
+ */
 async function connectSeen(name: string): Promise<Seen> {
   const logStart = connectionLog().length;
   const picksBefore = recordLines('platformPick').length;
-  const connected = await openOnHost(name)
-    .then(() =>
-      waitFor(
+  const state = {ended: false, opened: false};
+  const connecting = openOnHost(name)
+    .then(() => {
+      state.opened = true;
+      return waitFor(
         `${name} to be connected`,
         () => connectedOnHost(name),
         CONNECT_MILLISECONDS,
-      ),
-    )
+      );
+    })
     .then(
       () => true,
       () => false,
-    );
+    )
+    .finally(() => {
+      state.ended = true;
+    });
+  while (!state.opened && !state.ended) {
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  const watched = state.ended
+    ? {terminals: [], text: ''}
+    : await terminalsWhile(name, () => state.ended);
+  const connected = await connecting;
   const lines = connectionLog().slice(logStart);
   const seen: Seen = {
     name,
@@ -150,21 +185,16 @@ async function connectSeen(name: string): Promise<Seen> {
     platform: lines.filter(line => line.startsWith('Host platform:')),
     posixErrors: lines.filter(line => POSIX_ERROR.test(line)),
   };
-  if (connected) {
-    return seen;
-  }
-  const facts = await terminalFacts(name).catch((failed: unknown) => ({
-    text: `unread: ${String(failed)}`,
-    terminals: [],
-  }));
-  return {
-    ...seen,
-    terminal: `${JSON.stringify(facts.terminals)} ${(facts.text ?? '').slice(-1500)}`,
-    timedLog: connectionLog({withTimes: true})
-      .slice(logStart)
-      .filter(line => !line.includes('Searched for ssh in'))
-      .slice(-20),
-  };
+  return connected
+    ? seen
+    : {
+        ...seen,
+        terminal: `${JSON.stringify(watched.terminals)} ${watched.text}`,
+        timedLog: connectionLog({withTimes: true})
+          .slice(logStart)
+          .filter(line => !line.includes('Searched for ssh in'))
+          .slice(-20),
+      };
 }
 
 /** The last lines of the connection log, for a failure to show. */
@@ -177,10 +207,14 @@ describe('a Windows SSH host in terminal mode and local-server mode (card #2678,
   let saved: string | undefined;
   let shellBefore = 'none';
 
-  before(() => {
+  before(async () => {
     variable('HARNESS_WINHOST_PORT');
     saved = readUserSettings();
     shellBefore = defaultShell();
+    // The launch's first change of the settings file can go unseen by the local window; its read-back rewrites the file,
+    // so a second write is seen.
+    const first = {'remote.SSH.windowsRemotes': []};
+    await userSettings(first).catch(() => userSettings(first));
   });
 
   afterEach(async () => {
@@ -205,9 +239,22 @@ describe('a Windows SSH host in terminal mode and local-server mode (card #2678,
         settings: {...mapped, 'remote.SSH.useLocalServer': true},
       },
       {
+        label: 'c2678-term-ps-long',
+        shell: 'windowsPowershell',
+        settings: {
+          ...mapped,
+          'remote.SSH.useLocalServer': false,
+          'remote.SSH.connectTimeout': 120,
+        },
+      },
+      {
         label: 'c2678-term-ps',
         shell: 'windowsPowershell',
-        settings: {...mapped, 'remote.SSH.useLocalServer': false},
+        settings: {
+          ...mapped,
+          'remote.SSH.useLocalServer': false,
+          'remote.SSH.connectTimeout': 15,
+        },
       },
       {
         label: 'c2678-term-cmd',
