@@ -181,6 +181,8 @@ export interface Scene {
   shutdownSent: ShutdownRequest[];
   /** When the helper answers a register: at once, unless a row holds it. */
   registerAnswer: () => Promise<void>;
+  /** What the connector's clock reads, in milliseconds. */
+  clockNow: number;
   readsAtShutdown: number[];
   /** What `docker inspect` prints of the container's metadata label; `fails` for an engine that does not answer. */
   metadata: string;
@@ -417,6 +419,7 @@ export function sceneOf(
     revealed: 0,
     shutdownSent: [],
     registerAnswer: () => Promise.resolve(),
+    clockNow: 0,
     readsAtShutdown: [],
     metadata: '',
     published: 'null',
@@ -758,7 +761,7 @@ export function sceneOf(
     preflight: {
       logger: createLogger(sink, {minimumLevel: () => 'debug'}),
       searchPath: () => '/usr/bin',
-      clock: () => 0,
+      clock: () => scene.clockNow,
       setTimer: (milliseconds, callback) => {
         scene.timerDelays.push(milliseconds);
         scene.timers.push(callback);
@@ -936,12 +939,13 @@ export async function leaveRebuildIntent(
 }
 
 /**
- * Connects `scene` to `payload` with the helper's answer to its register held, and gives how many containers were
- * prepared before the answer came and once the connect was over.
+ * Connects `scene` to `payload` with the helper's answer to its register held, runs `beforeAnswer`, gives the answer,
+ * and gives how many containers were prepared before the answer came and once the connect was over.
  */
 export async function preparedAroundRegister(
   scene: Scene,
   payload: string,
+  beforeAnswer: () => void = () => undefined,
 ): Promise<[number, number]> {
   const answer = {give: (): void => undefined};
   scene.registerAnswer = () =>
@@ -953,6 +957,7 @@ export async function preparedAroundRegister(
     await new Promise(setImmediate);
   }
   const before = scene.prepared.length;
+  beforeAnswer();
   answer.give();
   await connecting;
   return [before, scene.prepared.length];

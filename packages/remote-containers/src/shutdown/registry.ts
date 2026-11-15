@@ -166,8 +166,11 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
       });
     const stop = {identity: connection.identity, done};
     stopping.add(stop);
-    await done;
-    stopping.delete(stop);
+    try {
+      await done;
+    } finally {
+      stopping.delete(stop);
+    }
   }
 
   /** Whether another live connection of the project holds the service's container, by its id or by naming the service. */

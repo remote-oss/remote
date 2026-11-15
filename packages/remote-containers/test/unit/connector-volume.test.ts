@@ -185,6 +185,21 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
     );
   });
 
+  it('F-0417 BR-5: an answer to the register that came after a stop held it is logged with its wait', async () => {
+    const scene = volumeScene();
+    await preparedAroundRegister(scene, VOLUME_PAYLOAD, () => {
+      scene.clockNow += 9300;
+    });
+    deepStrictEqual(
+      scene.sink.lines.some(line =>
+        line.message.includes(
+          'the shutdown helper answered the register after 9.3 s',
+        ),
+      ),
+      true,
+    );
+  });
+
   it('F-0417 BR-5: a helper that never answers the register holds the clone for the bound only, and the log says so', async () => {
     const scene = volumeScene();
     scene.registerAnswer = () => new Promise<void>(() => undefined);

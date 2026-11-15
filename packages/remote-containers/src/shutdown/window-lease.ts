@@ -11,6 +11,12 @@ import type {ShutdownRequest} from './protocol.ts';
 /** How long a request to the helper may take, in milliseconds. */
 export const REQUEST_MILLISECONDS = 2000;
 
+/**
+ * How long the helper may take to answer a register: `docker stop`'s own timeout of 10 s, which a stop already running
+ * for the connection's container may take before the answer, and 2 s more. The connect waits for that answer no longer.
+ */
+export const REGISTER_ANSWER_MILLISECONDS = 12_000;
+
 /** What the window uses of a lease. */
 export interface LeaseOnHelper {
   request(body: PlainData, limitMilliseconds: number): Promise<RequestOutcome>;
@@ -85,7 +91,9 @@ export function createWindowLease(ports: WindowLeasePorts): ShutdownMessenger {
     }
     const outcome = await current.request(
       request as unknown as PlainData,
-      REQUEST_MILLISECONDS,
+      request.type === 'register'
+        ? REGISTER_ANSWER_MILLISECONDS
+        : REQUEST_MILLISECONDS,
     );
     if (outcome.kind === 'helperGone') {
       gone(current);

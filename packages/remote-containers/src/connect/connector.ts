@@ -87,7 +87,10 @@ import {
   metadataArguments,
   recordedMetadataOf,
 } from '../shutdown/recorded-metadata.ts';
-import type {ShutdownMessenger} from '../shutdown/window-lease.ts';
+import {
+  REGISTER_ANSWER_MILLISECONDS,
+  type ShutdownMessenger,
+} from '../shutdown/window-lease.ts';
 import {sourceTypesValid} from '../config/source-types.ts';
 import {type PreflightDependencies, secondCheck} from '../engine/preflight.ts';
 import {execChannelOf, execChannelOver} from '../exec/exec-channel.ts';
@@ -202,16 +205,13 @@ const CLI_INFO_LEVEL = 3;
 const CLI_WARNING_LEVEL = 4;
 const CLI_ERROR_LEVEL = 5;
 
+/** An answer to the register slower than this is logged: the helper held it for a stop of the container that was running. */
+const SLOW_REGISTER_MILLISECONDS = 1000;
+
 /** How many characters of a container's identifier the log shows. */
 const IDENTIFIER_LENGTH = 12;
 
 /** How long a canonical request waits for the configuration read, in milliseconds (windows contracts §3.2). */
-/**
- * How long a connect waits for the shutdown helper's answer to its register: `docker stop`'s own timeout of 10 s, which
- * a stop already running for its container may take, and 2 s more.
- */
-const REGISTER_WAIT_MILLISECONDS = 12_000;
-
 const CANONICAL_READ_MILLISECONDS = 30_000;
 
 /** How long the decline's modal waits for its OK before the folder reopens locally, in milliseconds. */
@@ -1123,17 +1123,24 @@ export function containerConnectorOf(
     const waiting = {stop: (): void => undefined};
     const bound = new Promise<'bound'>(resolve => {
       waiting.stop = dependencies.preflight.setTimer(
-        REGISTER_WAIT_MILLISECONDS,
+        REGISTER_ANSWER_MILLISECONDS,
         () => {
           resolve('bound');
         },
       );
     });
+    const askedAt = dependencies.preflight.clock();
     const ended = await Promise.race([
       shutdownRegistered.then(() => 'answered' as const),
       bound,
     ]);
     waiting.stop();
+    const waited = dependencies.preflight.clock() - askedAt;
+    if (ended === 'answered' && waited >= SLOW_REGISTER_MILLISECONDS) {
+      logger.info(
+        `the shutdown helper answered the register after ${(waited / 1000).toFixed(1)} s`,
+      );
+    }
     if (ended === 'bound') {
       logger.info(
         'the shutdown helper did not answer the register in time; the container is looked up without its answer',
