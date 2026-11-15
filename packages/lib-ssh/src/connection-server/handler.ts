@@ -269,7 +269,7 @@ export class ConnectionHandler implements MessageHandler {
     }
     const outcome = await spawnSession(
       this.options.spawner,
-      invocation,
+      {...invocation, arguments: ['-vvv', ...invocation.arguments]},
       askpassEnvironment,
       editorEnvironment,
     );
@@ -391,7 +391,11 @@ export class ConnectionHandler implements MessageHandler {
       }
     });
     session.onError(piece => {
-      this.options.logLine(`DIAG err ${JSON.stringify(piece.slice(0, 400))}`);
+      for (const each of piece.split('\n')) {
+        if (/channel 1|rfd|wfd|stdin|efd|read<=0|write|eof|EOF|chan_|client_loop|select/i.test(each)) {
+          this.options.logLine(`DIAG err ${JSON.stringify(each.slice(0, 200))}`);
+        }
+      }
       lines.push(piece);
     });
     wait.start();
