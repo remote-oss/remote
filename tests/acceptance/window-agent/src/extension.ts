@@ -352,6 +352,7 @@ export function activate(context: vscode.ExtensionContext): void {
           inUserScope:
             configuration.inspect(settingId)?.globalValue !== undefined,
           userValue: configuration.inspect(settingId)?.globalValue ?? null,
+          inspected: configuration.inspect(settingId) ?? null,
         });
       },
     ),
