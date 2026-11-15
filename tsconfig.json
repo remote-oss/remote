@@ -170,6 +170,9 @@
       "path": "tests/acceptance/ssh-askpass-space"
     },
     {
+      "path": "tests/acceptance/ssh-killed"
+    },
+    {
       "path": "tests/acceptance/ssh-containers"
     },
     {
