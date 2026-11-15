@@ -1,13 +1,29 @@
 /**
  * @fileoverview The process port on Node.js: a child process with piped standard streams, started with exactly the
- * environment it is given.
+ * environment it is given, and on POSIX as the leader of its own process group, which ends with it.
  */
 
 import {spawn} from 'node:child_process';
+import {sep} from 'node:path';
 import type {ProcessHandle, ProcessSpecification} from './ports.ts';
 
 /** How long a process's standard streams may stay open after its exit before another process is taken to hold them. */
 const STDIO_DRAIN_MILLISECONDS = 500;
+
+/** Whether a client can lead a process group of its own, which only a POSIX system has; the path separator tells it. */
+const OWNS_GROUP = sep === '/';
+
+/** Ends every process in the group that `leader` leads, which is what a client's own children (ProxyCommand, ProxyJump) are in. */
+export function endProcessGroup(leader: number | undefined): void {
+  if (!OWNS_GROUP || leader === undefined) {
+    return;
+  }
+  try {
+    process.kill(-leader, 'SIGKILL');
+  } catch {
+    // The group is already gone.
+  }
+}
 
 /** Starts a client process; rejects with the system's error, which carries a code, when it cannot start it. */
 export function nodeProcessSpawner(
@@ -21,6 +37,8 @@ export function nodeProcessSpawner(
         env: {...specification.environment},
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
+        // On POSIX the client leads its own process group, so ending the group ends what it started.
+        detached: OWNS_GROUP,
       },
     );
     child.stdout.setEncoding('utf8');
@@ -49,6 +67,7 @@ export function nodeProcessSpawner(
         }
       }
       child.once('exit', (status: number | null) => {
+        endProcessGroup(child.pid);
         drain = setTimeout(() => {
           settle(status);
           releaseStreams();
@@ -71,6 +90,7 @@ export function nodeProcessSpawner(
         endInput: () => child.stdin.end(),
         kill: () => {
           child.kill();
+          endProcessGroup(child.pid);
           releaseStreams();
         },
       });
