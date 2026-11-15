@@ -223,3 +223,32 @@ export async function connectWith<Result>(
 function shownFrom(name: string, mark: number) {
   return recordLines('failureDialog', name).filter(line => line.time >= mark);
 }
+
+/** The target behind a jump host: the harness host's own sshd, at its port inside. */
+export function target(alias: string, jump: string): string[] {
+  return hostBlock(alias, [`ProxyJump ${jump}`, 'Port 22'], ['Port']);
+}
+
+/** The `ssh` lines of a row whose host keys are unknown: it asks, and its known-hosts file is `known`. */
+export function askLines(known: string): string[] {
+  return ['StrictHostKeyChecking ask', `UserKnownHostsFile ${known}`];
+}
+
+/** The keywords of the harness block that `askLines` replaces. */
+export const ASK_WITHOUT = [
+  'BatchMode',
+  'StrictHostKeyChecking',
+  'UserKnownHostsFile',
+];
+
+/** An empty known-hosts file of the run for row `alias`. */
+export function freshKnown(alias: string): string {
+  const file = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.known`);
+  writeFileSync(file, '');
+  return file;
+}
+
+/** The questions window `alias` was asked on `surface`, in order. */
+export function questionsOn(alias: string, surface: string): string[] {
+  return recordLines(surface, alias).map(line => line.question);
+}
