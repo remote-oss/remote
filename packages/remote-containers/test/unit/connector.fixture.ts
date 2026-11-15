@@ -179,6 +179,10 @@ export interface Scene {
   revealed: number;
   /** What the shutdown helper was told, in order, and how many configuration reads had started at each message. */
   shutdownSent: ShutdownRequest[];
+  /** When the helper answers a register: at once, unless a row holds it. */
+  registerAnswer: () => Promise<void>;
+  /** What the connector's clock reads, in milliseconds. */
+  clockNow: number;
   readsAtShutdown: number[];
   /** What `docker inspect` prints of the container's metadata label; `fails` for an engine that does not answer. */
   metadata: string;
@@ -414,6 +418,8 @@ export function sceneOf(
     relayHostsEnded: 0,
     revealed: 0,
     shutdownSent: [],
+    registerAnswer: () => Promise.resolve(),
+    clockNow: 0,
     readsAtShutdown: [],
     metadata: '',
     published: 'null',
@@ -685,7 +691,9 @@ export function sceneOf(
       send: request => {
         scene.shutdownSent.push(request);
         scene.readsAtShutdown.push(scene.configurationReads.length);
-        return Promise.resolve();
+        return request.type === 'register'
+          ? scene.registerAnswer()
+          : Promise.resolve();
       },
     },
     newConnectionId: () => {
@@ -753,7 +761,7 @@ export function sceneOf(
     preflight: {
       logger: createLogger(sink, {minimumLevel: () => 'debug'}),
       searchPath: () => '/usr/bin',
-      clock: () => 0,
+      clock: () => scene.clockNow,
       setTimer: (milliseconds, callback) => {
         scene.timerDelays.push(milliseconds);
         scene.timers.push(callback);
@@ -928,4 +936,29 @@ export async function leaveRebuildIntent(
     {buildNoCache: true},
     0,
   );
+}
+
+/**
+ * Connects `scene` to `payload` with the helper's answer to its register held, runs `beforeAnswer`, gives the answer,
+ * and gives how many containers were prepared before the answer came and once the connect was over.
+ */
+export async function preparedAroundRegister(
+  scene: Scene,
+  payload: string,
+  beforeAnswer: () => void = () => undefined,
+): Promise<[number, number]> {
+  const answer = {give: (): void => undefined};
+  scene.registerAnswer = () =>
+    new Promise<void>(resolve => {
+      answer.give = resolve;
+    });
+  const connecting = scene.connector.connect(inputOf(payload));
+  for (let turn = 0; turn < 20; turn += 1) {
+    await new Promise(setImmediate);
+  }
+  const before = scene.prepared.length;
+  beforeAnswer();
+  answer.give();
+  await connecting;
+  return [before, scene.prepared.length];
 }

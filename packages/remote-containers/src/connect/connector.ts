@@ -87,7 +87,10 @@ import {
   metadataArguments,
   recordedMetadataOf,
 } from '../shutdown/recorded-metadata.ts';
-import type {ShutdownMessenger} from '../shutdown/window-lease.ts';
+import {
+  REGISTER_ANSWER_MILLISECONDS,
+  type ShutdownMessenger,
+} from '../shutdown/window-lease.ts';
 import {sourceTypesValid} from '../config/source-types.ts';
 import {type PreflightDependencies, secondCheck} from '../engine/preflight.ts';
 import {execChannelOf, execChannelOver} from '../exec/exec-channel.ts';
@@ -201,6 +204,9 @@ function relayVariablesOf(
 const CLI_INFO_LEVEL = 3;
 const CLI_WARNING_LEVEL = 4;
 const CLI_ERROR_LEVEL = 5;
+
+/** An answer to the register slower than this is logged: the helper held it for a stop of the container that was running. */
+const SLOW_REGISTER_MILLISECONDS = 1000;
 
 /** How many characters of a container's identifier the log shows. */
 const IDENTIFIER_LENGTH = 12;
@@ -771,6 +777,8 @@ export function containerConnectorOf(
   let attemptIdentity: WindowIdentity | undefined;
   /** The id the shutdown helper knows this window's connection by; nothing before the connect passed the trust gate. */
   let shutdownConnection: string | undefined;
+  /** The helper's answer to this window's register, which comes once any stop of its container already running ended. */
+  let shutdownRegistered: Promise<void> = Promise.resolve();
   let checking = false;
   /** The reconnection attempts of core that this connector, one per window session, has answered (S286). */
   let reconnectionAttempts = 0;
@@ -1096,7 +1104,7 @@ export function containerConnectorOf(
     }
     const connectionId = dependencies.newConnectionId();
     shutdownConnection = connectionId;
-    void dependencies.shutdown.send({
+    shutdownRegistered = dependencies.shutdown.send({
       type: 'register',
       connectionId,
       identity,
@@ -1104,6 +1112,40 @@ export function containerConnectorOf(
       ...(owning ? {} : {owning: false as const}),
     });
     return connectionId;
+  }
+
+  /**
+   * Waits for the helper's answer to this window's register before the container is looked up, so a container whose
+   * stop was already running is found stopped and started again, not reused while it goes down. A helper that does not
+   * answer within the stop's own time and a little more holds the connect no longer.
+   */
+  async function afterShutdownRegister(): Promise<void> {
+    const waiting = {stop: (): void => undefined};
+    const bound = new Promise<'bound'>(resolve => {
+      waiting.stop = dependencies.preflight.setTimer(
+        REGISTER_ANSWER_MILLISECONDS,
+        () => {
+          resolve('bound');
+        },
+      );
+    });
+    const askedAt = dependencies.preflight.clock();
+    const ended = await Promise.race([
+      shutdownRegistered.then(() => 'answered' as const),
+      bound,
+    ]);
+    waiting.stop();
+    const waited = dependencies.preflight.clock() - askedAt;
+    if (ended === 'answered' && waited >= SLOW_REGISTER_MILLISECONDS) {
+      logger.info(
+        `the shutdown helper answered the register after ${(waited / 1000).toFixed(1)} s`,
+      );
+    }
+    if (ended === 'bound') {
+      logger.info(
+        'the shutdown helper did not answer the register in time; the container is looked up without its answer',
+      );
+    }
   }
 
   /**
@@ -1386,6 +1428,7 @@ export function containerConnectorOf(
       return trustDeclined();
     }
     const connectionId = registerWithShutdown(folder, tools);
+    await afterShutdownRegister();
     const {rebuild, failure} = await takenBeforeCheck(
       input,
       engine,
@@ -2163,12 +2206,21 @@ export function containerConnectorOf(
         },
       };
     }
-    /** Prepares the dev container: `up` runs in the bootstrap container, or on the host when there is none. */
-    function prepareContainer(
+    /**
+     * Prepares the dev container: `up` runs in the bootstrap container, or on the host when there is none. The
+     * connection counts for the shutdown helper from here, before the existing container is looked up, so an earlier
+     * window's check does not stop the container this connect is about to reuse.
+     */
+    async function prepareContainer(
       bootstrap: string | undefined,
       request: VolumeContainerRequest,
       configText: string,
     ): Promise<ContainerOutcome> {
+      registerConnection(
+        {volumeName: request.volumeName, folder: target.folder},
+        {dockerPath: dockerFile, environment},
+      );
+      await afterShutdownRegister();
       const pass = hostPassOf(request, configText);
       lifecycle = dependencies.lifecycleFor(
         engine,

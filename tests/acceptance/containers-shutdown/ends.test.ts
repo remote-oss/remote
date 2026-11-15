@@ -4,7 +4,9 @@ import {mkdirSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
+  closeWindow,
   connectedToContainer,
+  containersLog,
   devContainerFolder,
   devContainersOf,
   reloadWindow,
@@ -47,6 +49,12 @@ function dockerfileFolder(
   return folder;
 }
 
+/** The status Docker gives `containerId`, or `gone`. */
+async function statusOf(containerId: string): Promise<string> {
+  const state = await stateOf(containerId);
+  return state === 'gone' ? state : state.status;
+}
+
 describe('what ends a window decides when its container stops (card containers-69)', function () {
   this.timeout(900_000);
 
@@ -85,6 +93,43 @@ describe('what ends a window decides when its container stops (card containers-6
       ],
       outcomes.join('; '),
     );
+  });
+
+  it("card #2645 (c2645-reopen-during-stop): a folder reopened while the closed window's stop of a container that ignores the signal still runs waits for that stop, then starts the container and connects", async () => {
+    const folder = dockerfileFolder(
+      'c2645-reopen-stop',
+      `CMD ["sh", "-c", "trap '' TERM; while :; do sleep 1; done"]\n`,
+      {overrideCommand: false},
+    );
+    const window = await openFolderWindow(folder);
+    await reopenInContainer(window, 300_000);
+    const [containerId = ''] = await devContainersOf(folder);
+    try {
+      const mark = containersLog().length;
+      await closeWindow(window);
+      // The check runs 10 s after the close, and docker stop then waits its full 10 s for a command that ignores the signal.
+      await new Promise(resolve => setTimeout(resolve, 12_000));
+      const stoppingAtReopen = await statusOf(containerId);
+      const again = await openFolderWindow(folder);
+      await reopenInContainer(again, 300_000);
+      const waited = containersLog()
+        .slice(mark)
+        .map(line => /answered the register after ([0-9.]+) s/.exec(line)?.[1])
+        .find(seconds => seconds !== undefined);
+      deepStrictEqual(
+        [
+          stoppingAtReopen,
+          Number(waited ?? 0) >= 3,
+          await devContainersOf(folder),
+          await statusOf(containerId),
+        ],
+        ['running', true, [containerId], 'running'],
+        `the register's wait: ${String(waited)} s`,
+      );
+      await closeWindow(again);
+    } finally {
+      await removeContainersOf(folder);
+    }
   });
 
   it('F-0417 AC-22 (e22): a process started in the container from the host with docker exec does not keep it running', async () => {

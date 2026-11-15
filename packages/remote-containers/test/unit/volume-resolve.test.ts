@@ -193,6 +193,7 @@ describe('the resolve of a clone in a volume (card containers-151)', () => {
           'prepare in boot1 with {"image": "alpine"}',
         ],
         request: {
+          volumeName,
           folder: '/workspaces/r',
           configFile: '/workspaces/r/.devcontainer/devcontainer.json',
           idLabels: [
