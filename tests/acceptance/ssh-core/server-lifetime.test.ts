@@ -147,6 +147,15 @@ async function serverMain(): Promise<string> {
   ).trim();
 }
 
+/** The host's clock as a second of the day, which its log lines' own time stamps are on. */
+async function hostSecond(): Promise<number> {
+  const [hours, minutes, seconds] = (await onHost('date', '+%H:%M:%S'))
+    .trim()
+    .split(':')
+    .map(Number);
+  return (hours ?? 0) * 3600 + (minutes ?? 0) * 60 + (seconds ?? 0);
+}
+
 /** One state of a window's reconnection, as core shows it: the remote indicator and the modal dialog, if any. */
 interface Seen {
   /** Milliseconds from the cut of the network. */
@@ -549,25 +558,85 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
     deepStrictEqual([await serverMain(), activations() - before], [server, 0]);
   });
 
-  it('F-2413 AC-28 (c2651-cut-log): the server log of a window that lost its network for 110 s (what the log says and when; the row prints it)', async () => {
+  it('F-2413 AC-28 (c2651-cut-log): with 60 s and a network lost for 110 s the server logs no disconnect while the network is down, logs it with a one-minute wait about 30 s after the network returned, and still runs once the client has given up', async () => {
     const name = 'c2651-cut-log';
     await connectFresh(name, {[GRACE]: 60});
-    const cutAt = new Date();
+    const server = await serverMain();
+    const cutAt = await hostSecond();
     cutHostNetwork();
+    let restoredAt: number;
     try {
       await new Promise(resolve => setTimeout(resolve, 110_000));
     } finally {
       restoreHostNetwork();
+      restoredAt = await hostSecond();
     }
-    const restored = new Date();
-    await new Promise(resolve => setTimeout(resolve, 70_000));
-    const logs = await onHost(
-      'sh',
-      '-c',
-      `tail -n 40 ${DATA_FOLDER}/.*.log 2>/dev/null | cut -c1-260 ; true`,
+    const gaveUp = (await statusBarText(name, 'status.host')).startsWith(
+      'Disconnected',
     );
-    process.stdout.write(
-      `CUTLOG ${JSON.stringify({cutAt: cutAt.toISOString(), restored: restored.toISOString(), servers: (await serverProcesses()).length, logs: logs.split('\n')})}\n`,
+    await new Promise(resolve => setTimeout(resolve, 60_000));
+    const disconnects = (
+      await onHost(
+        'sh',
+        '-c',
+        `cat ${DATA_FOLDER}/.*.log 2>/dev/null | grep -F 'The client has disconnected' ; true`,
+      )
+    )
+      .split('\n')
+      .filter(line => line !== '');
+    const seconds = disconnects.map(line => {
+      const found = /^\[(\d\d):(\d\d):(\d\d)\]/.exec(line);
+      return found === null
+        ? -1
+        : Number(found[1]) * 3600 + Number(found[2]) * 60 + Number(found[3]);
+    });
+    const lateBy = (seconds[0] ?? -1) - restoredAt;
+    deepStrictEqual(
+      {
+        disconnectsWhileDown: seconds.filter(
+          second => second >= cutAt && second < restoredAt,
+        ).length,
+        waits: disconnects.map(line =>
+          line.includes('will wait for reconnection 1m'),
+        ),
+        aboutThirtySecondsLater: lateBy >= 20 && lateBy <= 45,
+        gaveUp,
+        running: (await serverMain()) === server,
+      },
+      {
+        disconnectsWhileDown: 0,
+        waits: [true],
+        aboutThirtySecondsLater: true,
+        gaveUp: true,
+        running: true,
+      },
+      JSON.stringify({cutAt, restoredAt, lateBy, disconnects}),
     );
+  });
+
+  it('F-2413 AC-33 (c2651-restart-reads): in the legacy mode a value changed 10 s or more before the server dies is the one the new server runs with, started by the automatic reconnection', async () => {
+    const name = 'c2651-restart-reads';
+    await connectFresh(name, {'remote.SSH.useExecServer': false});
+    await userSettings({[GRACE]: 60});
+    await new Promise(resolve => setTimeout(resolve, 12_000));
+    const before = await serverMain();
+    await onHost(
+      'pkill',
+      '-u',
+      'harness',
+      '-f',
+      `${DATA_FOLDER}/bin/.*/out/server-main.js`,
+    );
+    await waitFor(
+      'a new server with 60 s',
+      async () =>
+        (await serverMain()) !== '' &&
+        (await serverMain()) !== before &&
+        (await serverGrace()).parsed.some(line => line.includes('60s')),
+      180_000,
+    );
+    deepStrictEqual((await serverGrace()).parsed, [
+      'Parsed CLI argument: 60s -> 60000ms',
+    ]);
   });
 });
