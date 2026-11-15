@@ -167,19 +167,7 @@ describe('the Windows session loop with its input kept open (card #2681, measure
         console.log(`c2681-measure invocation: ${JSON.stringify({program: saved.program, arguments: saved.arguments, askpass: Object.keys(saved.askpassEnvironment), editor: Object.keys(saved.editorEnvironment).length})}`);
         const environment = {...saved.editorEnvironment, ...saved.askpassEnvironment};
         await measureFrame('replay with the invocation', frame, {program: saved.program, arguments: saved.arguments.filter(each => each !== '-vvv'), environment});
-        const runtime = saved as unknown as {execPath: string; runAsNode?: string; versions: Record<string, string>};
-        console.log(`c2681-measure helper runtime: ${JSON.stringify({execPath: runtime.execPath, runAsNode: runtime.runAsNode, node: runtime.versions.node, electron: runtime.versions.electron})}`);
-        for (const hide of ['hide', 'show']) {
-          const outFile = path.join(variable('HARNESS_RUN_FOLDER'), `electron-relay-${hide}.json`);
-          const relay = spawn(
-            runtime.execPath,
-            [path.join(import.meta.dirname, 'detached-relay.mjs'), outFile, variable('HARNESS_SSH_CONFIG'), powershellSessionStart().remoteProgram, frame, hide],
-            {detached: true, stdio: 'ignore', windowsHide: true, env: {...process.env, ELECTRON_RUN_AS_NODE: '1'}},
-          );
-          relay.unref();
-          await new Promise(resolve => setTimeout(resolve, 25_000));
-          console.log(`c2681-measure electron-relay-${hide}: ${existsSync(outFile) ? readFileSync(outFile, 'utf8') : 'no file'}`);
-        }
+        await measureFrame('replay with the invocation at -vvv', frame, {program: saved.program, arguments: ['-vvv', ...saved.arguments], environment});
       }
     }
   });
