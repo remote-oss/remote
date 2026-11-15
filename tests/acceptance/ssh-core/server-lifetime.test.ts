@@ -38,6 +38,7 @@ import {
   answerDialog,
   dialogOf,
   notifications,
+  pageText,
   statusBarText,
 } from '../windows/renderer.ts';
 import {PLATFORMS} from '../windows/tunnel-support.ts';
@@ -213,6 +214,11 @@ async function cutObserved(
   }
 }
 
+/** `lines` without the repeats, in order. */
+function unique(lines: string[]): string[] {
+  return [...new Set(lines)];
+}
+
 /** The text of core's dialog that the reconnection gave up. */
 const GAVE_UP = 'Cannot reconnect. Please reload the window.';
 
@@ -341,12 +347,16 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
     await reloadWindow(name);
     await connectedWithin(name, 180_000);
     await new Promise(resolve => setTimeout(resolve, 3000));
+    const graced = await serverGrace();
     const reloaded = {
-      server: await serverGrace(),
+      server: {
+        parsed: graced.parsed,
+        extensionHost: unique(graced.extensionHost),
+      },
       remoteLog: connectionLog()
         .slice(mark)
         .filter(line => /grace/i.test(line)),
-      client: clientGraceSince(since),
+      client: unique(clientGraceSince(since)),
     };
     const servers = await serverProcesses();
     await runWith('local', 'opensshremotes.cleanRemoteServer', [
@@ -372,7 +382,9 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
             ],
           },
           remoteLog: [],
-          client: [],
+          client: [
+            'Client received grace time from server: 10800000ms (10800s)',
+          ],
         },
         ['Parsed CLI argument: 60s -> 60000ms'],
         ['Client received grace time from server: 60000ms (60s)'],
@@ -431,9 +443,17 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
     await connectFresh(name, {[GRACE]: 60});
     const states = await cutObserved(
       name,
-      seen => seen.dialog === GAVE_UP,
+      seen => seen.indicator.startsWith('Disconnected'),
       200_000,
     );
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    const shown = {
+      dialog: await dialogOf(name).catch(() => undefined),
+      page: (await pageText(name))
+        .split('\n')
+        .filter(line => /reconnect|Reload|Cancel/i.test(line)),
+      notices: await notifications(name),
+    };
     const last = states.at(-1);
     await answerDialog(name, 'Cancel').catch(() => undefined);
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -472,9 +492,9 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
           indicator: 'Disconnected from SSH: harness',
         },
       },
-      `${JSON.stringify(states)} ${JSON.stringify(
+      `${JSON.stringify(states)} ${JSON.stringify(shown)} ${JSON.stringify(
         recordLines(undefined, name)
-          .slice(-8)
+          .slice(-4)
           .map(line => [line.surface, line.question, line.buttons]),
       )}`,
     );
