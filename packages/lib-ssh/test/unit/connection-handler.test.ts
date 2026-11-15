@@ -8,6 +8,7 @@ import {
 } from '../../src/index.ts';
 import {ScriptedSpawner, startError} from './fake-client-process.ts';
 import {authenticate} from './connection-fixture.ts';
+import {LOCAL_COMMAND_DROPPED_LINE} from '../../src/connection-server/local-command-log.ts';
 
 const INVOCATION = {
   program: 'ssh',
@@ -208,6 +209,70 @@ describe('connection handler (contracts §4 S9)', () => {
           ],
           ['sshLines', 'connected'],
         ],
+      );
+    });
+
+    it('#2598 (F-2109 AC-12): the standard output lines before the first protocol line are a LocalCommand’s, sent for the log alone; later lines are not, and the protocol is read as before', async () => {
+      await send(1, {type: 'connect'});
+      const client = spawner.started[0];
+      client?.error(
+        'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".\n',
+      );
+      client?.output('out-marker\n');
+      client?.output('\n');
+      client?.output('second line\n');
+      client?.output('LAYER1-READY\n');
+      client?.output('after the protocol\n');
+      deepStrictEqual(
+        [
+          events.filter(
+            event => (event as {type?: string}).type === 'localCommandLines',
+          ),
+          eventTypes().includes('connected'),
+        ],
+        [
+          [
+            {type: 'localCommandLines', lines: ['out-marker']},
+            {type: 'localCommandLines', lines: ['second line']},
+          ],
+          true,
+        ],
+      );
+    });
+
+    it('#2598 (F-2109 AC-12): a command that writes no line end joins its text to the first protocol line, which is then logged and not read as the protocol', async () => {
+      await send(1, {type: 'connect'});
+      const client = spawner.started[0];
+      client?.output('out-marker');
+      client?.output('LAYER1-READY\n');
+      deepStrictEqual(
+        [
+          events.filter(
+            event => (event as {type?: string}).type === 'localCommandLines',
+          ),
+          eventTypes().includes('connected'),
+        ],
+        [
+          [{type: 'localCommandLines', lines: ['out-markerLAYER1-READY']}],
+          false,
+        ],
+      );
+    });
+
+    it('#2598 (F-2109 AC-12): the output of a LocalCommand is cut at 100 lines, with one line saying so', async () => {
+      await send(1, {type: 'connect'});
+      const client = spawner.started[0];
+      for (let line = 1; line <= 105; line += 1) {
+        client?.output(`line ${String(line)}\n`);
+      }
+      const sent = events
+        .filter(
+          event => (event as {type?: string}).type === 'localCommandLines',
+        )
+        .flatMap(event => (event as {lines: string[]}).lines);
+      deepStrictEqual(
+        [sent.length, sent[99], sent[100]],
+        [101, 'line 100', LOCAL_COMMAND_DROPPED_LINE],
       );
     });
 

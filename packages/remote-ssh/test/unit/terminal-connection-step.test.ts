@@ -250,6 +250,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     const made = fixture({level: 'trace'});
     const {result, terminal} = await started(made);
     terminal.write(AUTHENTICATED_ONLY);
+    terminal.write('debug1: Entering interactive session.\n');
     terminal.write(
       "printf 'LAYER1-READY\\n'\nexec sh\nls -l\ntotal 4\nchannel 3: open failed: administratively prohibited: open failed\nconnect_to localhost port 8080: failed.\nWarning: remote port forwarding failed for listen port 9000\nLAYER1-READY\n",
     );
@@ -264,6 +265,82 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
       '[ssh] Warning: remote port forwarding failed for listen port 9000',
       '[ssh] channel 4: open failed: connect failed: Connection refused',
     ]);
+  });
+
+  /** The lines of a fixture's log that a LocalCommand's output made. */
+  function commandLogged(made: Fixture): string[] {
+    return made.logged().filter(line => line.startsWith('[local command] '));
+  }
+
+  it('#2598 (F-2109 AC-12): the lines between ssh’s authentication and its entering the session are the LocalCommand’s, besides ssh’s own debug, channel and blank lines, and the echo of what the product typed; later lines are not', async () => {
+    const made = fixture({level: 'trace'});
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    const typed = made.terminals.opened[0]?.sent.join('') ?? '';
+    terminal.write(typed.replaceAll('\n', '\r\n'));
+    terminal.write(
+      'out-marker\r\n\r\ndebug1: client_input_global_request\nchannel 2: open failed: x\nerr-marker\n',
+    );
+    terminal.write('debug1: Entering interactive session.\n');
+    terminal.write('a line of the shell\nLAYER1-READY\n');
+    await result;
+    deepStrictEqual(commandLogged(made), [
+      '[local command] out-marker',
+      '[local command] err-marker',
+    ]);
+  });
+
+  it('#2598 (F-2109 AC-12): the last words of a command that wrote no line end share their line with ssh’s entering the session, and are logged without it', async () => {
+    const made = fixture({level: 'trace'});
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    terminal.write(
+      'first\r\nlast words debug1: Entering interactive session.\r\n',
+    );
+    terminal.write('a line of the shell\nLAYER1-READY\n');
+    await result;
+    deepStrictEqual(commandLogged(made), [
+      '[local command] first',
+      '[local command] last words',
+    ]);
+  });
+
+  it('#2598 (F-2109 AC-12): the protocol’s first line closes the time too, when the closing line never comes', async () => {
+    const made = fixture({level: 'trace'});
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    terminal.write('out-marker\nLAYER1-READY\nlate line\n');
+    await result;
+    deepStrictEqual(commandLogged(made), ['[local command] out-marker']);
+  });
+
+  it('#2598 (F-2109 AC-12): the output is cut at 100 lines, with one line saying so', async () => {
+    const made = fixture({level: 'trace'});
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    for (let line = 1; line <= 105; line += 1) {
+      terminal.write(`line ${String(line)}\n`);
+    }
+    terminal.write('LAYER1-READY\n');
+    await result;
+    const logged = commandLogged(made);
+    deepStrictEqual(
+      [logged.length, logged[99], logged[100]],
+      [
+        101,
+        '[local command] line 100',
+        "[local command] more than 100 lines or 8 KiB of the command's output were dropped",
+      ],
+    );
+  });
+
+  it('#2598 (F-2109 AC-12): before the authentication nothing is a LocalCommand’s', async () => {
+    const made = fixture({level: 'trace'});
+    const {result, terminal} = await started(made);
+    terminal.write('out-marker\n');
+    terminal.write(AUTHENTICATED);
+    await result;
+    deepStrictEqual(commandLogged(made), []);
   });
 
   it('F-2003 BR-8: at debug terminal mode keeps the lines without debug1, and the failing login’s refusal is among them', async () => {

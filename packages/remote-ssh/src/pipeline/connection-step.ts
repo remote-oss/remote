@@ -18,7 +18,7 @@ import type {PhaseEvent} from './connect.ts';
 import {ofAcquire, ofConnection} from './failure.ts';
 import {sshTargetOf} from './host-settings.ts';
 import {platformOfRecord} from './platform.ts';
-import {logSshLines} from './ssh-log.ts';
+import {logLocalCommandLines, logSshLines} from './ssh-log.ts';
 import type {
   ConnectInput,
   ConnectionTerms,
@@ -108,6 +108,8 @@ export function openConnectionStep(
     const stopSshLog = connection.onNotice(notice => {
       if (notice.type === 'sshLines') {
         logSshLines(dependencies.logger, notice.lines, token);
+      } else if (notice.type === 'localCommandLines') {
+        logLocalCommandLines(dependencies.logger, notice.lines, token);
       }
     });
     function end(): void {

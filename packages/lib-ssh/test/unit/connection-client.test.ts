@@ -21,7 +21,12 @@ import {
   type RunFacts,
   SharedConnection,
 } from '../../src/index.ts';
-import {authenticate, RUN_FACTS, SSH_REQUEST} from './connection-fixture.ts';
+import {
+  AUTHENTICATED,
+  authenticate,
+  RUN_FACTS,
+  SSH_REQUEST,
+} from './connection-fixture.ts';
 import {ScriptedSpawner, startError} from './fake-client-process.ts';
 
 const PARAMETERS = 'REMOTE_OSS_HELPER_PARAMETERS';
@@ -345,6 +350,19 @@ describe('the window side of the shared connection (S9)', () => {
     deepStrictEqual(
       heard.map(notice => notice.type),
       ['sshLines', 'transportLost', 'helperGone'],
+    );
+  });
+
+  it('#2598 (F-2109 AC-12): a LocalCommand’s lines the helper sends reach a window that holds the connection as a notice of their own', async () => {
+    const {connection, outcome} = await connectFirst();
+    const heard = notices(connection);
+    sshRuns.started[0]?.error(AUTHENTICATED);
+    sshRuns.started[0]?.output('out-marker\n');
+    sshRuns.started[0]?.output('LAYER1-READY\n');
+    await outcome;
+    deepStrictEqual(
+      heard.filter(notice => notice.type === 'localCommandLines'),
+      [{type: 'localCommandLines', lines: ['out-marker']}],
     );
   });
 
