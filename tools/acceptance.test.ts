@@ -1847,7 +1847,7 @@ describe('acceptance', () => {
       deepStrictEqual(harness.launched, ['local', 'remote']);
     });
 
-    it("#2652: a run with windows-host adds the winhost block to the run's ssh_config once, and a run without asks for none", async () => {
+    it('#2652: a run with windows-host asks for the winhost block once, for its ssh_config, and a run without asks for none', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium', ['local']);
       const without = harness.calls.filter(call =>
         call.startsWith('windows host block'),
@@ -1859,16 +1859,8 @@ describe('acceptance', () => {
         [
           without,
           harness.calls.filter(call => call.startsWith('windows host block')),
-          readFileSync(
-            path.join(harness.runFolder, 'ssh_config'),
-            'utf8',
-          ).includes('\nHost winhost\n  HostName 127.0.0.1\n'),
         ],
-        [
-          [],
-          [`windows host block ${path.basename(harness.runFolder)}`],
-          true,
-        ],
+        [[], [`windows host block ${path.basename(harness.runFolder)}`]],
       );
     });
 

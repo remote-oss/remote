@@ -109,7 +109,7 @@ jobs:
       # Windows' OpenSSH Server, for the windows-host launch: the image has it installed and running on its default
       # configuration, so the step backs that up and serves 127.0.0.1 alone on a port of the run, with key authentication
       # for the job's account (an administrator, whose key the server reads from administrators_authorized_keys) and
-      # Windows PowerShell as its shell. About 12 s on windows-2025 (card #2652). The step after the launches puts the
+      # Windows PowerShell as its shell. About 12 s on windows-2025. The step after the launches puts the
       # image's configuration back.
       - name: Windows' OpenSSH Server on 127.0.0.1, for the windows-host launch
         if: contains(env.LAUNCHES, 'windows-host')

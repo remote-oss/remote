@@ -9,7 +9,7 @@ import net from 'node:net';
 import {sshConfigPath} from './acceptance-keys.ts';
 
 /** The alias the `windows-host` launch's windows open. */
-export const WINDOWS_HOST_ALIAS = 'winhost';
+const WINDOWS_HOST_ALIAS = 'winhost';
 
 /** The variables the platform workflow's Windows job exports for the run's Windows SSH host. */
 export interface WindowsHostVariables {

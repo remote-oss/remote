@@ -12,6 +12,12 @@ const VARIABLES: WindowsHostVariables = {
   HARNESS_WINHOST_IDENTITY: 'C:\\a\\_temp\\winhost\\id_ed25519',
 };
 
+/** The variables without the user. */
+const NO_USER: WindowsHostVariables = {
+  HARNESS_WINHOST_PORT: '2222',
+  HARNESS_WINHOST_IDENTITY: 'C:\\a\\_temp\\winhost\\id_ed25519',
+};
+
 /** The message a refused launch gives, or `not refused`. */
 async function refusalOf(
   environment: WindowsHostVariables,
@@ -68,11 +74,7 @@ describe('the Windows SSH host of the windows-host launch (card #2652)', () => {
     deepStrictEqual(
       [
         await refusalOf(VARIABLES, 'linux', answers),
-        await refusalOf(
-          {...VARIABLES, HARNESS_WINHOST_USER: undefined},
-          'win32',
-          answers,
-        ),
+        await refusalOf(NO_USER, 'win32', answers),
         await refusalOf(
           {...VARIABLES, HARNESS_WINHOST_PORT: 'none'},
           'win32',
@@ -82,7 +84,7 @@ describe('the Windows SSH host of the windows-host launch (card #2652)', () => {
       ],
       [
         'the windows-host launch needs a Windows client, whose OpenSSH Server the platform workflow starts; this one is linux',
-        `the windows-host launch needs HARNESS_WINHOST_PORT, HARNESS_WINHOST_USER and HARNESS_WINHOST_IDENTITY, which the platform workflow's Windows job sets; this run has ${JSON.stringify({...VARIABLES, HARNESS_WINHOST_USER: undefined})}`,
+        `the windows-host launch needs HARNESS_WINHOST_PORT, HARNESS_WINHOST_USER and HARNESS_WINHOST_IDENTITY, which the platform workflow's Windows job sets; this run has ${JSON.stringify(NO_USER)}`,
         `the windows-host launch needs HARNESS_WINHOST_PORT, HARNESS_WINHOST_USER and HARNESS_WINHOST_IDENTITY, which the platform workflow's Windows job sets; this run has ${JSON.stringify({...VARIABLES, HARNESS_WINHOST_PORT: 'none'})}`,
         'the windows-host launch needs the Windows OpenSSH Server on 127.0.0.1:2222, and nothing answers there',
       ],
@@ -95,7 +97,8 @@ describe('the Windows SSH host of the windows-host launch (card #2652)', () => {
       server.listen(0, '127.0.0.1', resolve);
     });
     const address = server.address();
-    const port = typeof address === 'object' && address !== null ? address.port : 0;
+    const port =
+      typeof address === 'object' && address !== null ? address.port : 0;
     const open = await answersOn(port);
     await new Promise<void>(resolve => {
       server.close(() => {
