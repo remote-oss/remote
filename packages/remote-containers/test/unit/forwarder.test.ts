@@ -15,8 +15,11 @@ interface Scene {
   forwarder: ReturnType<typeof forwarderOf>;
 }
 
-/** The forwarder over fakes; the ports in `refused` reject. */
-function sceneOf(refused: readonly number[] = []): Scene {
+/** The forwarder over fakes; the ports in `refused` reject, and with `unreadable` the window's settings throw. */
+function sceneOf(
+  refused: readonly number[] = [],
+  {unreadable = false}: {unreadable?: boolean} = {},
+): Scene {
   const listeners = new Set<() => void>();
   const timers = new Map<() => void, number>();
   const scene: Scene = {
@@ -60,7 +63,12 @@ function sceneOf(refused: readonly number[] = []): Scene {
     },
     translate: template => template,
     attributes: {
-      effective: key => scene.effective[key],
+      effective: key => {
+        if (unreadable) {
+          throw new Error('no configuration');
+        }
+        return scene.effective[key];
+      },
       onChanged: listener => {
         listeners.add(listener);
         return {
@@ -256,6 +264,25 @@ describe('the forwarder (card containers-72)', () => {
         [
           'the declared forwards open before the port attributes are in effect in the window',
         ],
+      ],
+    );
+  });
+
+  it('F-1101 BR-10: settings that cannot be read are logged and the forwards still open, without a rejection', async () => {
+    const scene = sceneOf([], {unreadable: true});
+    await scene.forwarder.forward({
+      forwardPorts: [3000],
+      portsAttributes: undefined,
+      otherPortsAttributes: undefined,
+      attributeSettings: {'remote.portsAttributes': {'3000': {label: 'Web'}}},
+    });
+    deepStrictEqual(
+      [scene.warned, scene.opened.length],
+      [
+        [
+          'the declared forwards open without waiting: the port attributes could not be read: no configuration',
+        ],
+        1,
       ],
     );
   });

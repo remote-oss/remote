@@ -53,6 +53,37 @@ export interface Forwarder {
   forward(declared: DeclaredPorts | undefined): Promise<void>;
 }
 
+/** The text of a thrown value: an error's message, or the value as text. */
+function messageOf(caught: unknown): string {
+  return caught instanceof Error ? caught.message : String(caught);
+}
+
+/**
+ * Waits for the port attributes `declared` wrote to be in effect in the window. The bound and a failure to read the
+ * window's settings are logged, and neither keeps the forwards from opening.
+ */
+async function attributesSettled(
+  declared: DeclaredPorts,
+  ports: ForwarderPorts,
+): Promise<void> {
+  try {
+    const wait = await untilAttributesInEffect(
+      declared.attributeSettings ?? {},
+      ports.attributes,
+      ports.scheduler,
+    );
+    if (wait === 'bound') {
+      ports.logger.info(
+        'the declared forwards open before the port attributes are in effect in the window',
+      );
+    }
+  } catch (caught) {
+    ports.logger.warn(
+      `the declared forwards open without waiting: the port attributes could not be read: ${messageOf(caught)}`,
+    );
+  }
+}
+
 /** A forwarder over the editor's tunnels. */
 export function forwarderOf(ports: ForwarderPorts): Forwarder {
   return {
@@ -69,16 +100,7 @@ export function forwarderOf(ports: ForwarderPorts): Forwarder {
           filled(ports.translate, PORT_TEMPLATES.S278, [written]),
         );
       }
-      const wait = await untilAttributesInEffect(
-        declared.attributeSettings ?? {},
-        ports.attributes,
-        ports.scheduler,
-      );
-      if (wait === 'bound') {
-        ports.logger.info(
-          'the declared forwards open before the port attributes are in effect in the window',
-        );
-      }
+      await attributesSettled(declared, ports);
       for (const {host, port} of forwards) {
         const protocol = defaultProtocolOf(
           port,
@@ -92,7 +114,7 @@ export function forwarderOf(ports: ForwarderPorts): Forwarder {
           });
         } catch (caught) {
           ports.logger.warn(
-            `the forward of ${host}:${String(port)} was refused: ${caught instanceof Error ? caught.message : String(caught)}`,
+            `the forward of ${host}:${String(port)} was refused: ${messageOf(caught)}`,
           );
         }
       }
