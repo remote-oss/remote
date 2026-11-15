@@ -513,7 +513,9 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       );
       await waitFor(
         `${next} to be on the host`,
-        async () => (await windowState(next)).remoteName === 'ssh-remote',
+        async () =>
+          (await windowState(next).catch(() => undefined))?.remoteName ===
+          'ssh-remote',
         120_000,
       );
       const result = {
