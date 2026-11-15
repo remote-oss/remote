@@ -16,6 +16,7 @@ import {
   FOLDER,
   containerReadsFail,
   inputOf,
+  preparedAroundRegister,
   leaveRebuildIntent,
   PAYLOAD,
   READY,
@@ -2923,6 +2924,12 @@ describe('the container connector: the remote environment (card containers-45)',
       scene.probeScripts.map(script => script.includes(' -i -c ')),
       [true],
     );
+  });
+});
+
+describe('the container connector: the shutdown register before the lookup (card #2645)', () => {
+  it('F-0417 BR-5: a folder looks its container up only once the helper has answered its register', async () => {
+    deepStrictEqual(await preparedAroundRegister(sceneOf(), PAYLOAD), [0, 1]);
   });
 });
 

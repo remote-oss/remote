@@ -206,6 +206,12 @@ const CLI_ERROR_LEVEL = 5;
 const IDENTIFIER_LENGTH = 12;
 
 /** How long a canonical request waits for the configuration read, in milliseconds (windows contracts §3.2). */
+/**
+ * How long a connect waits for the shutdown helper's answer to its register: `docker stop`'s own timeout of 10 s, which
+ * a stop already running for its container may take, and 2 s more.
+ */
+const REGISTER_WAIT_MILLISECONDS = 12_000;
+
 const CANONICAL_READ_MILLISECONDS = 30_000;
 
 /** How long the decline's modal waits for its OK before the folder reopens locally, in milliseconds. */
@@ -771,6 +777,8 @@ export function containerConnectorOf(
   let attemptIdentity: WindowIdentity | undefined;
   /** The id the shutdown helper knows this window's connection by; nothing before the connect passed the trust gate. */
   let shutdownConnection: string | undefined;
+  /** The helper's answer to this window's register, which comes once any stop of its container already running ended. */
+  let shutdownRegistered: Promise<void> = Promise.resolve();
   let checking = false;
   /** The reconnection attempts of core that this connector, one per window session, has answered (S286). */
   let reconnectionAttempts = 0;
@@ -1096,7 +1104,7 @@ export function containerConnectorOf(
     }
     const connectionId = dependencies.newConnectionId();
     shutdownConnection = connectionId;
-    void dependencies.shutdown.send({
+    shutdownRegistered = dependencies.shutdown.send({
       type: 'register',
       connectionId,
       identity,
@@ -1104,6 +1112,33 @@ export function containerConnectorOf(
       ...(owning ? {} : {owning: false as const}),
     });
     return connectionId;
+  }
+
+  /**
+   * Waits for the helper's answer to this window's register before the container is looked up, so a container whose
+   * stop was already running is found stopped and started again, not reused while it goes down. A helper that does not
+   * answer within the stop's own time and a little more holds the connect no longer.
+   */
+  async function afterShutdownRegister(): Promise<void> {
+    const waiting = {stop: (): void => undefined};
+    const bound = new Promise<'bound'>(resolve => {
+      waiting.stop = dependencies.preflight.setTimer(
+        REGISTER_WAIT_MILLISECONDS,
+        () => {
+          resolve('bound');
+        },
+      );
+    });
+    const ended = await Promise.race([
+      shutdownRegistered.then(() => 'answered' as const),
+      bound,
+    ]);
+    waiting.stop();
+    if (ended === 'bound') {
+      logger.info(
+        'the shutdown helper did not answer the register in time; the container is looked up without its answer',
+      );
+    }
   }
 
   /**
@@ -1386,6 +1421,7 @@ export function containerConnectorOf(
       return trustDeclined();
     }
     const connectionId = registerWithShutdown(folder, tools);
+    await afterShutdownRegister();
     const {rebuild, failure} = await takenBeforeCheck(
       input,
       engine,
@@ -2168,7 +2204,7 @@ export function containerConnectorOf(
      * connection counts for the shutdown helper from here, before the existing container is looked up, so an earlier
      * window's check does not stop the container this connect is about to reuse.
      */
-    function prepareContainer(
+    async function prepareContainer(
       bootstrap: string | undefined,
       request: VolumeContainerRequest,
       configText: string,
@@ -2177,6 +2213,7 @@ export function containerConnectorOf(
         {volumeName: request.volumeName, folder: target.folder},
         {dockerPath: dockerFile, environment},
       );
+      await afterShutdownRegister();
       const pass = hostPassOf(request, configText);
       lifecycle = dependencies.lifecycleFor(
         engine,

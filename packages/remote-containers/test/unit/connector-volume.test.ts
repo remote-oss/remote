@@ -4,6 +4,7 @@ import type {EngineRunOutcome} from '../../src/engine/engine-host.ts';
 import {volumePayloadOf} from '../../src/volumes/volume-payload.ts';
 import {
   inputOf,
+  preparedAroundRegister,
   leaveRebuildIntent,
   type Scene,
   sceneOf,
@@ -174,6 +175,37 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
           .length,
       ],
       [['register'], 1],
+    );
+  });
+
+  it('F-0417 BR-5: the clone looks its container up only once the helper has answered its register, which comes after a stop already running', async () => {
+    deepStrictEqual(
+      await preparedAroundRegister(volumeScene(), VOLUME_PAYLOAD),
+      [0, 1],
+    );
+  });
+
+  it('F-0417 BR-5: a helper that never answers the register holds the clone for the bound only, and the log says so', async () => {
+    const scene = volumeScene();
+    scene.registerAnswer = () => new Promise<void>(() => undefined);
+    const connecting = scene.connector.connect(inputOf(VOLUME_PAYLOAD));
+    for (let turn = 0; turn < 20; turn += 1) {
+      await new Promise(setImmediate);
+    }
+    const waited = scene.timerDelays.includes(12_000);
+    for (const timer of scene.timers.splice(0)) {
+      timer();
+    }
+    await connecting;
+    deepStrictEqual(
+      [
+        waited,
+        scene.prepared.length,
+        scene.sink.lines.some(line =>
+          line.message.includes('did not answer the register in time'),
+        ),
+      ],
+      [true, 1, true],
     );
   });
 

@@ -75,7 +75,7 @@ function connect(
   identity: ContainerIdentity = IDENTITY,
   container?: {containerId: string; action: 'stop' | 'none'},
 ): void {
-  registry.register(leaseId, {
+  void registry.register(leaseId, {
     type: 'register',
     connectionId,
     identity,
@@ -414,7 +414,7 @@ describe('the shutdown registry (card containers-68)', () => {
   it('F-0417 BR-11: a request about a connection nobody registered is answered and changes nothing, and so is a second register', () => {
     const {registry} = scene();
     connect(registry, 1, 'a');
-    const replies: ShutdownReply[] = [
+    const replies: Array<ShutdownReply | Promise<ShutdownReply>> = [
       registry.setContainer({
         type: 'container',
         connectionId: 'nobody',
@@ -489,7 +489,7 @@ function composeConnect(
     containerId?: string;
   } = {},
 ): void {
-  registry.register(leaseId, {
+  void registry.register(leaseId, {
     type: 'register',
     connectionId,
     identity: {
@@ -711,7 +711,7 @@ describe('the shutdown registry, the Compose stop (card containers-144)', () => 
     const world = project(APP_AND_DB);
     const {registry, advance} = scene(world.answer);
     composeConnect(registry, 1, 'a', ['app', 'db']);
-    registry.register(2, {
+    void registry.register(2, {
       type: 'register',
       connectionId: 'reloaded',
       identity: {
@@ -831,7 +831,7 @@ describe('the shutdown registry, the Compose stop (card containers-144)', () => 
 
   it('F-0417 AC-14, AC-44 (c163-non-owning): a connection that does not own stops nothing when it ends, and while it lives another connection to the same container stops nothing either', async () => {
     const alone = scene();
-    alone.registry.register(1, {
+    void alone.registry.register(1, {
       type: 'register',
       connectionId: 'attached',
       identity: {containerName: 'web'},
@@ -848,7 +848,7 @@ describe('the shutdown registry, the Compose stop (card containers-144)', () => 
     await alone.advance(10 * CHECK_MILLISECONDS);
     const shared = scene();
     connect(shared.registry, 1, 'owner', IDENTITY, STOP);
-    shared.registry.register(2, {
+    void shared.registry.register(2, {
       type: 'register',
       connectionId: 'attached',
       identity: {containerName: 'web'},
@@ -869,7 +869,7 @@ describe('the shutdown registry, the Compose stop (card containers-144)', () => 
   it('F-0417 AC-14 (c163-non-owning-end): the owner stops the container when the non-owning connection has gone too', async () => {
     const {registry, advance, runs} = scene();
     connect(registry, 1, 'owner', IDENTITY, STOP);
-    registry.register(2, {
+    void registry.register(2, {
       type: 'register',
       connectionId: 'attached',
       identity: {containerName: 'web'},
@@ -885,5 +885,85 @@ describe('the shutdown registry, the Compose stop (card containers-144)', () => 
     registry.leasesChanged([]);
     await advance(CHECK_MILLISECONDS);
     deepStrictEqual(runs, ['10s stop c0ffee']);
+  });
+});
+
+describe('the shutdown registry, a register while a stop runs (card #2645)', () => {
+  /** A registry whose `docker stop` ends only when the test says, with its timers fired by hand. */
+  function heldStop() {
+    const timers: Array<() => void> = [];
+    const stop = {end: (): void => undefined};
+    const runs: string[] = [];
+    const registry = createShutdownRegistry({
+      runDocker: (engine, argv) => {
+        runs.push(argv.join(' '));
+        return argv[0] === 'stop'
+          ? new Promise<DockerResult>(resolve => {
+              stop.end = () => {
+                resolve({status: 0, stdout: ''});
+              };
+            })
+          : Promise.resolve({status: 0, stdout: ''});
+      },
+      setTimer: (milliseconds, callback) => {
+        timers.push(callback);
+        return () => undefined;
+      },
+      logLine: () => undefined,
+    });
+    /** Ends connection `a` and fires its check, which starts the stop of c0ffee and holds it. */
+    async function stopStarted(): Promise<void> {
+      connect(registry, 1, 'a', IDENTITY, STOP);
+      registry.leave({type: 'leave', connectionId: 'a'});
+      for (const timer of timers.splice(0)) {
+        timer();
+      }
+      await new Promise(resolve => setImmediate(resolve));
+    }
+    return {
+      registry,
+      runs,
+      stopStarted,
+      endStop: () => {
+        stop.end();
+      },
+    };
+  }
+
+  it('F-0417 BR-5, F-0701 AC-14: a register for the identity whose container is being stopped is answered once the stop has ended', async () => {
+    const {registry, runs, stopStarted, endStop} = heldStop();
+    await stopStarted();
+    let answered = false;
+    const reply = Promise.resolve(
+      registry.register(2, {
+        type: 'register',
+        connectionId: 'b',
+        identity: IDENTITY,
+        engine: ENGINE,
+      }),
+    ).then(given => {
+      answered = true;
+      return given;
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    const beforeEnd = answered;
+    endStop();
+    deepStrictEqual(
+      [runs, beforeEnd, await reply],
+      [['stop c0ffee'], false, {accepted: true}],
+    );
+  });
+
+  it('F-0417 BR-5: a register for another identity while a stop runs is answered at once', async () => {
+    const {registry, stopStarted, endStop} = heldStop();
+    await stopStarted();
+    const reply = registry.register(2, {
+      type: 'register',
+      connectionId: 'b',
+      identity: OTHER_IDENTITY,
+      engine: ENGINE,
+    });
+    endStop();
+    deepStrictEqual(reply, {accepted: true});
   });
 });
