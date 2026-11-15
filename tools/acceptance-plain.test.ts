@@ -20,6 +20,7 @@ import {
   languagePackVsixOf,
   packageLanguagePack,
   packageWindowAgent,
+  preSeedArgv,
   type RelaunchRequest,
   registerLanguagePack,
   type PlainSteps,
@@ -461,11 +462,27 @@ describe('the Node tests of a plain launch', () => {
 });
 
 describe('runPlainLaunch', () => {
-  const PLAIN_RUN = {
-    runFolder: '/run',
-    executable: '/editor',
-    environment: {HARNESS_RUN_FOLDER: '/run'},
+  let workspace: TemporaryWorkspace;
+  let runFolder: string;
+  let plainRun: {
+    runFolder: string;
+    executable: string;
+    environment: {HARNESS_RUN_FOLDER: string};
   };
+
+  beforeEach(() => {
+    workspace = new TemporaryWorkspace('plain-run');
+    runFolder = workspace.root;
+    plainRun = {
+      runFolder,
+      executable: '/editor',
+      environment: {HARNESS_RUN_FOLDER: runFolder},
+    };
+  });
+
+  afterEach(() => {
+    workspace.remove();
+  });
 
   /** Steps that record what happened, with tests that end as `outcome` says. */
   function recordingSteps(outcome: 'pass' | 'fail' | 'throw') {
@@ -499,25 +516,25 @@ describe('runPlainLaunch', () => {
 
   it('D-85: it starts the editor, runs the tests, and stops the editor', async () => {
     const {steps, happened} = recordingSteps('pass');
-    await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps);
+    await runPlainLaunch('/repo', plainRun, LAUNCH, steps);
     deepStrictEqual(happened, ['start', 'tests', 'stop']);
   });
 
   it("tooling-66: the launch's editor and tests are given its own user-data folder", async () => {
     const {steps, programs} = recordingSteps('pass');
-    await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps);
+    await runPlainLaunch('/repo', plainRun, LAUNCH, steps);
     deepStrictEqual(
       programs.map(program => program.environment.HARNESS_USER_DATA),
-      ['/run/user-data-windows', '/run/user-data-windows'],
+      [`${runFolder}/user-data-windows`, `${runFolder}/user-data-windows`],
     );
   });
 
   it("tooling-96: the launch's editor and tests are told its extensions folder, its own when it has one and the run's otherwise", async () => {
     const {steps, programs} = recordingSteps('pass');
-    await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps);
+    await runPlainLaunch('/repo', plainRun, LAUNCH, steps);
     await runPlainLaunch(
       '/repo',
-      PLAIN_RUN,
+      plainRun,
       {
         ...LAUNCH,
         label: 'containers-a',
@@ -528,25 +545,25 @@ describe('runPlainLaunch', () => {
     deepStrictEqual(
       programs.map(program => program.environment.HARNESS_EXTENSIONS_FOLDER),
       [
-        '/run/extensions',
-        '/run/extensions',
-        '/run/extensions-containers-a',
-        '/run/extensions-containers-a',
+        `${runFolder}/extensions`,
+        `${runFolder}/extensions`,
+        `${runFolder}/extensions-containers-a`,
+        `${runFolder}/extensions-containers-a`,
       ],
     );
   });
 
   it("tooling-79: each launch's editor and tests get a state folder of their own in the run's, and HARNESS_EDITOR_LOGS names it", async () => {
     const {steps, programs} = recordingSteps('pass');
-    await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps);
+    await runPlainLaunch('/repo', plainRun, LAUNCH, steps);
     deepStrictEqual(
       programs.map(program => [
         program.environment.XDG_STATE_HOME,
         program.environment.HARNESS_EDITOR_LOGS,
       ]),
       [
-        ['/run/windows/state', '/run/windows/state'],
-        ['/run/windows/state', '/run/windows/state'],
+        [`${runFolder}/windows/state`, `${runFolder}/windows/state`],
+        [`${runFolder}/windows/state`, `${runFolder}/windows/state`],
       ],
     );
   });
@@ -555,7 +572,7 @@ describe('runPlainLaunch', () => {
     const {steps, programs} = recordingSteps('pass');
     await runPlainLaunch(
       '/repo',
-      PLAIN_RUN,
+      plainRun,
       {...LAUNCH, environment: {XDG_STATE_HOME: '<run>/xdg/state'}},
       steps,
     );
@@ -565,8 +582,8 @@ describe('runPlainLaunch', () => {
         program.environment.HARNESS_EDITOR_LOGS,
       ]),
       [
-        ['/run/xdg/state', '/run/xdg/state'],
-        ['/run/xdg/state', '/run/xdg/state'],
+        [`${runFolder}/xdg/state`, `${runFolder}/xdg/state`],
+        [`${runFolder}/xdg/state`, `${runFolder}/xdg/state`],
       ],
     );
   });
@@ -582,7 +599,7 @@ describe('runPlainLaunch', () => {
       const seen: boolean[] = [];
       await runPlainLaunch(
         '/repo',
-        {...PLAIN_RUN, runFolder: workspace.root},
+        {...plainRun, runFolder: workspace.root},
         LAUNCH,
         {
           ...steps,
@@ -601,7 +618,7 @@ describe('runPlainLaunch', () => {
   it('tooling-51: the launch ends only once the editor has stopped, so the next launch never meets it', async () => {
     const {steps, happened} = recordingSteps('pass');
     let release: (() => void) | undefined;
-    const launching = runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, {
+    const launching = runPlainLaunch('/repo', plainRun, LAUNCH, {
       ...steps,
       start: program => {
         steps.start(program);
@@ -635,13 +652,13 @@ describe('runPlainLaunch', () => {
 
   it('D-85: it stops the editor when the tests fail', async () => {
     const {steps, happened} = recordingSteps('fail');
-    await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps);
+    await runPlainLaunch('/repo', plainRun, LAUNCH, steps);
     deepStrictEqual(happened, ['start', 'tests', 'stop']);
   });
 
   it('D-85: it stops the editor when the tests cannot start', async () => {
     const {steps, happened} = recordingSteps('throw');
-    await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps).catch(
+    await runPlainLaunch('/repo', plainRun, LAUNCH, steps).catch(
       () => undefined,
     );
     deepStrictEqual(happened, ['start', 'tests', 'stop']);
@@ -650,28 +667,31 @@ describe('runPlainLaunch', () => {
   it('D-85: it returns the exit code of the tests', async () => {
     const {steps} = recordingSteps('fail');
     deepStrictEqual(
-      (await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps)).exitCode,
+      (await runPlainLaunch('/repo', plainRun, LAUNCH, steps)).exitCode,
       1,
     );
   });
 
   it('D-85: the editor and the tests share the launch’s record', async () => {
     const {steps, programs} = recordingSteps('pass');
-    await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps);
+    await runPlainLaunch('/repo', plainRun, LAUNCH, steps);
     deepStrictEqual(
       programs.map(program => program.environment.REMOTE_OSS_ACCEPTANCE_RECORD),
-      ['/run/windows-record.jsonl', '/run/windows-record.jsonl'],
+      [
+        `${runFolder}/windows-record.jsonl`,
+        `${runFolder}/windows-record.jsonl`,
+      ],
     );
   });
 
   it('D-85: the editor and the tests point their windows at the launch’s agent folder', async () => {
     const {steps, programs} = recordingSteps('pass');
-    await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps);
+    await runPlainLaunch('/repo', plainRun, LAUNCH, steps);
     deepStrictEqual(
       programs.map(
         program => program.environment.REMOTE_OSS_ACCEPTANCE_WINDOWS,
       ),
-      ['/run/windows/agent/pids', '/run/windows/agent/pids'],
+      [`${runFolder}/windows/agent/pids`, `${runFolder}/windows/agent/pids`],
     );
   });
 
@@ -680,14 +700,14 @@ describe('runPlainLaunch', () => {
       each.label.startsWith('explorer'),
     )) {
       const {steps, programs} = recordingSteps('pass');
-      await runPlainLaunch('/repo', PLAIN_RUN, launch, steps);
+      await runPlainLaunch('/repo', plainRun, launch, steps);
       deepStrictEqual(
         programs.map(
           program => program.environment.REMOTE_OSS_ACCEPTANCE_WINDOWS,
         ),
         [
-          path.join('/run', launch.label, 'agent', 'pids'),
-          path.join('/run', launch.label, 'agent', 'pids'),
+          path.join(runFolder, launch.label, 'agent', 'pids'),
+          path.join(runFolder, launch.label, 'agent', 'pids'),
         ],
       );
     }
@@ -697,7 +717,7 @@ describe('runPlainLaunch', () => {
     const {steps, programs} = recordingSteps('pass');
     await runPlainLaunch(
       '/repo',
-      PLAIN_RUN,
+      plainRun,
       {...LAUNCH, withExtensions: ['remote-oss.remote-containers']},
       steps,
     );
@@ -705,7 +725,10 @@ describe('runPlainLaunch', () => {
       programs.map(
         program => program.environment.REMOTE_OSS_ACCEPTANCE_CONTAINERS_LOG,
       ),
-      ['/run/windows-containers-log.txt', '/run/windows-containers-log.txt'],
+      [
+        `${runFolder}/windows-containers-log.txt`,
+        `${runFolder}/windows-containers-log.txt`,
+      ],
     );
   });
 
@@ -713,7 +736,7 @@ describe('runPlainLaunch', () => {
     const {steps, programs} = recordingSteps('pass');
     await runPlainLaunch(
       '/repo',
-      PLAIN_RUN,
+      plainRun,
       {...LAUNCH, withExtensions: ['remote-oss.remote-explorer']},
       steps,
     );
@@ -731,11 +754,11 @@ describe('runPlainLaunch', () => {
       each => each.kind === 'plain',
     )) {
       const {steps, programs} = recordingSteps('pass');
-      await runPlainLaunch('/repo', PLAIN_RUN, launch, steps);
+      await runPlainLaunch('/repo', plainRun, launch, steps);
       seen.push([
         launch.label,
         programs[0]?.environment.REMOTE_OSS_ACCEPTANCE_CONTAINERS_LOG ===
-          path.join('/run', `${launch.label}-containers-log.txt`),
+          path.join(runFolder, `${launch.label}-containers-log.txt`),
       ]);
     }
     deepStrictEqual(
@@ -756,7 +779,7 @@ describe('runPlainLaunch', () => {
     const {steps, programs} = recordingSteps('pass');
     await runPlainLaunch(
       '/repo',
-      PLAIN_RUN,
+      plainRun,
       {...LAUNCH, environment: {HARNESS_RUN_FOLDER: '/other'}},
       steps,
     );
@@ -767,13 +790,13 @@ describe('runPlainLaunch', () => {
     const {steps, programs} = recordingSteps('pass');
     await runPlainLaunch(
       '/repo',
-      PLAIN_RUN,
+      plainRun,
       {...LAUNCH, environment: {HOME: '<run>/home'}},
       steps,
     );
     deepStrictEqual(
       programs.map(program => program.environment.HOME),
-      ['/run/home', '/run/home'],
+      [`${runFolder}/home`, `${runFolder}/home`],
     );
   });
 
@@ -782,9 +805,9 @@ describe('runPlainLaunch', () => {
     await runPlainLaunch(
       '/repo',
       {
-        ...PLAIN_RUN,
+        ...plainRun,
         environment: {
-          HARNESS_RUN_FOLDER: '/run',
+          HARNESS_RUN_FOLDER: runFolder,
           HARNESS_DOWNLOADS_LOCAL: 'http://localhost:9',
         },
       },
@@ -816,9 +839,9 @@ describe('runPlainLaunch', () => {
       await runPlainLaunch(
         '/repo',
         {
-          ...PLAIN_RUN,
+          ...plainRun,
           environment: {
-            ...PLAIN_RUN.environment,
+            ...plainRun.environment,
             HARNESS_EDITOR_VERSION: '1.139.1',
             HARNESS_GENUINE_VERSION: '1.125.0',
           },
@@ -853,9 +876,9 @@ describe('runPlainLaunch', () => {
     await runPlainLaunch(
       '/repo',
       {
-        runFolder: '/run',
+        runFolder,
         executable: '/vscode/code',
-        environment: {HARNESS_RUN_FOLDER: '/run'},
+        environment: {HARNESS_RUN_FOLDER: runFolder},
       },
       GENUINE,
       steps,
@@ -1134,6 +1157,33 @@ describe('the fixture language packs (card coverage-76)', () => {
           label: 'hu',
         },
       },
+    );
+  });
+});
+
+describe('the launch argv.json the harness stands before its editor starts (card coverage-38)', () => {
+  let workspace: TemporaryWorkspace;
+
+  beforeEach(() => {
+    workspace = new TemporaryWorkspace('argv-seed');
+  });
+
+  afterEach(() => {
+    workspace.remove();
+  });
+
+  it('coverage-38: it stands a parsing argv.json with the crash-reporter keys in the launch user-data folder, and leaves no temp file behind', () => {
+    preSeedArgv(workspace.root, LAUNCH);
+    const folder = userDataFolderOf(workspace.root, LAUNCH);
+    deepStrictEqual(
+      [
+        readdirSync(folder).sort(),
+        JSON.parse(readFileSync(path.join(folder, 'argv.json'), 'utf8')),
+      ],
+      [
+        ['argv.json'],
+        {'enable-crash-reporter': false, 'crash-reporter-id': ''},
+      ],
     );
   });
 });
@@ -1511,11 +1561,18 @@ describe('runPlainLaunch relaunch (card tooling-88)', () => {
       };
       const programs: Program[] = [];
       const stopped: number[] = [];
+      const argvs: string[] = [];
       let activations = 0;
       let answer = '';
       const steps: PlainSteps = {
         start: program => {
           programs.push(program);
+          argvs.push(
+            readFileSync(
+              path.join(userDataFolderOf(workspace.root, launch), 'argv.json'),
+              'utf8',
+            ),
+          );
           const index = programs.length;
           // The restarted editor's window activates as soon as it starts.
           activations += index > 1 ? 1 : 0;
@@ -1554,6 +1611,7 @@ describe('runPlainLaunch relaunch (card tooling-88)', () => {
       );
       return {
         answer,
+        argvs,
         stopped,
         folders: programs.map(program =>
           program.programArguments.filter(each => each.startsWith('file:')),
@@ -1569,8 +1627,11 @@ describe('runPlainLaunch relaunch (card tooling-88)', () => {
   }
 
   it('tooling-88: the editor is restarted with the launch’s own windows and the merged environment, and the answer names the launch’s own window', async () => {
+    const seed =
+      '{\n\t"enable-crash-reporter": false,\n\t"crash-reporter-id": ""\n}\n';
     deepStrictEqual(await relaunched('file:///work/proj'), {
       answer: JSON.stringify({id: 'r', succeeded: true, own: 'proj'}),
+      argvs: [seed, seed],
       stopped: [1, 2],
       folders: [['file:///work/proj'], ['file:///work/proj']],
       changed: [undefined, 'yes'],
@@ -1590,6 +1651,23 @@ describe('runPlainLaunch relaunch (card tooling-88)', () => {
     deepStrictEqual(
       [JSON.parse(outcome.answer), outcome.folders],
       [{id: 'r', succeeded: true, own: 'local'}, [[], []]],
+    );
+  });
+
+  it('coverage-38: the launch’s editor, first and restarted, starts on the launch’s own argv.json with the crash-reporter keys', async () => {
+    const outcome = await relaunched(undefined);
+    deepStrictEqual(
+      outcome.argvs.map(
+        content =>
+          JSON.parse(content) as {
+            'enable-crash-reporter': boolean;
+            'crash-reporter-id': string;
+          },
+      ),
+      [
+        {'enable-crash-reporter': false, 'crash-reporter-id': ''},
+        {'enable-crash-reporter': false, 'crash-reporter-id': ''},
+      ],
     );
   });
 

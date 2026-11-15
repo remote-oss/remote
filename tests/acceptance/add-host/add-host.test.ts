@@ -13,6 +13,7 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -145,6 +146,24 @@ async function shown(name: string) {
   return withoutActivity(await windowState(name));
 }
 
+/** The launch's own argv.json as it stands: its age in whole seconds and its content; 'absent' when the file does not exist, no age when it vanished between the read and the stat. */
+function argvStanding(): string {
+  const file = path.join(RUN_FOLDER, 'user-data-add-host', 'argv.json');
+  let content: string;
+  try {
+    content = readFileSync(file, 'utf8');
+  } catch {
+    return 'absent';
+  }
+  let seconds: number;
+  try {
+    seconds = Math.round((Date.now() - statSync(file).mtimeMs) / 1000);
+  } catch {
+    return `content ${JSON.stringify(content)}`;
+  }
+  return `mtime ${String(seconds)} s ago: ${JSON.stringify(content)}`;
+}
+
 describe('Add New SSH Host... in a window of the editor with its own home (card coverage-38)', function () {
   this.timeout(600_000);
   let savedSettings: string | undefined;
@@ -198,16 +217,33 @@ describe('Add New SSH Host... in a window of the editor with its own home (card 
       async () => (await windowState('local')).activeTab?.uri === href,
       15_000,
     );
-    deepStrictEqual(
-      [
-        (await windowState('local')).activeTab,
-        (await activeEditorTextOf('local'))?.startsWith(
-          'Host alpha\n  HostName alpha\n  Port 2222\n  User bob\n',
-        ),
-        await notifications('local'),
-      ],
-      [{uri: href, preview: true}, true, []],
-    );
+    try {
+      deepStrictEqual(
+        [
+          (await windowState('local')).activeTab,
+          (await activeEditorTextOf('local'))?.startsWith(
+            'Host alpha\n  HostName alpha\n  Port 2222\n  User bob\n',
+          ),
+          await notifications('local'),
+        ],
+        [{uri: href, preview: true}, true, []],
+      );
+    } catch (error) {
+      const first = argvStanding();
+      const noticesFirst = await notifications('local').catch(
+        () => 'unreadable',
+      );
+      await new Promise(resolve => setTimeout(resolve, 5_000));
+      const later = argvStanding();
+      const noticesLater = await notifications('local').catch(
+        () => 'unreadable',
+      );
+      console.log(
+        `AC-8: the launch's argv.json stood at ${first} and 5 s later at ${later}; ` +
+          `the notifications stood at ${JSON.stringify(noticesFirst)} then at ${JSON.stringify(noticesLater)}`,
+      );
+      throw error;
+    }
     await inWindow('local', 'workbench.action.closeAllEditors');
   });
 
