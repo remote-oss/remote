@@ -150,7 +150,7 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
     await recursionOf('server', {});
   });
 
-  it.only('F-2310 AC-32 (c2664-recursion-terminal): in the terminal mode, with a catch-all ProxyJump that applies to the jump alias, the dialog has no reason and no ssh process of the attempt stays', async () => {
+  it('F-2310 AC-32 (c2664-recursion-terminal): in the terminal mode, with a catch-all ProxyJump that applies to the jump alias, the dialog has no reason and no ssh process of the attempt stays', async () => {
     await recursionOf('terminal', {'remote.SSH.useLocalServer': false});
   });
 });
