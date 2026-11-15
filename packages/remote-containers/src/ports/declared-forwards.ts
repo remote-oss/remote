@@ -3,6 +3,8 @@
  * forwards, in order and once each, which start with a dash and are reported, and the protocol a port opens with.
  */
 
+import type {MachineSettings} from '../settings/machine-settings.ts';
+
 /** Where a forward goes in the container: a host name the container resolves and a port. */
 interface ForwardTarget {
   host: string;
@@ -22,6 +24,8 @@ export interface DeclaredPorts {
   forwardPorts: unknown;
   portsAttributes: unknown;
   otherPortsAttributes: unknown;
+  /** The port attribute settings the connection wrote to the machine settings, which the forwards wait for. */
+  attributeSettings?: MachineSettings;
 }
 
 const HOST_AND_PORT = /^([a-z0-9-]+):(\d{1,5})$/;
