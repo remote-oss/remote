@@ -45,9 +45,11 @@ function pushesSince(count: number): ReturnType<typeof companionCalls> {
   return companionCalls(PUSH).slice(count);
 }
 
-/** The folders the local window's Remotes view lists under the host `host`, by their paths; none when it has no row. */
+/**
+ * The folders the local window's Remotes view lists under the host `host`, by their paths; none when it has no row. The
+ * view stands shown by the caller: showing it in here would put a command wait behind every read the row makes.
+ */
 async function historyOf(host: string): Promise<string[]> {
-  await inWindow('local', SHOW_REMOTE_EXPLORER);
   let rows = (await viewRows('local', VIEW)) ?? [];
   const hostRow = rows.find(each => each.level === 2 && each.label === host);
   if (hostRow?.expanded === false) {
@@ -72,9 +74,12 @@ describe('the push of the active folders (card coverage-100, F-2501 AC-36)', fun
 
   before(() => rememberPage('local'));
 
-  it('F-2501 AC-36 (c100-connected): a window with a folder on a reachable alias makes one push when its first resolve ends, and a window on the same alias with no folder makes none within 30 s', async () => {
+  // The two halves of the criterion run as two rows: the waits of one half alone (the connect, a window's open and
+  // the closes) add past the row's own timeout on a slow machine, and the part's own limit cannot stand two such rows.
+  it('F-2501 AC-36 (c100-connected): a window with a folder on a reachable alias makes one push when its first resolve ends, and the history of the connected host shows the folder', async () => {
     await onHost('mkdir', '-p', '/home/harness/af36a');
     const before = companionCalls(PUSH).length;
+    await inWindow('local', SHOW_REMOTE_EXPLORER);
     await openWindow('harness', 'af36a');
     try {
       await connectedWithin('af36a', INSTALL_MILLISECONDS);
@@ -88,36 +93,38 @@ describe('the push of the active folders (card coverage-100, F-2501 AC-36)', fun
           (await historyOf('harness')).includes('/home/harness/af36a'),
         30_000,
       );
-      const afterFolder = companionCalls(PUSH).length;
-      const empty = await nextEmptyWindow(() =>
-        inWindow(
-          'local',
-          'acceptance.agent.openWindow',
-          'vscode-remote://ssh-remote+harness',
-        ),
+      deepStrictEqual(
+        pushes.map(push => push.envelope),
+        [
+          {
+            interfaceVersion: {major: 1, minor: 0},
+            outcome: 'connected',
+            hostKey: 'harness',
+          },
+        ],
       );
-      try {
-        await new Promise(resolve =>
-          setTimeout(resolve, EMPTY_WINDOW_MILLISECONDS),
-        );
-        deepStrictEqual(
-          [pushes.map(push => push.envelope), pushesSince(afterFolder).length],
-          [
-            [
-              {
-                interfaceVersion: {major: 1, minor: 0},
-                outcome: 'connected',
-                hostKey: 'harness',
-              },
-            ],
-            0,
-          ],
-        );
-      } finally {
-        await closeWindow(empty).catch(() => undefined);
-      }
     } finally {
       await closeWindow('af36a').catch(() => undefined);
+    }
+  });
+
+  it('F-2501 AC-36 (c100-empty): a window on the same alias with no folder makes no push within 30 s', async () => {
+    await inWindow('local', SHOW_REMOTE_EXPLORER);
+    const before = companionCalls(PUSH).length;
+    const empty = await nextEmptyWindow(() =>
+      inWindow(
+        'local',
+        'acceptance.agent.openWindow',
+        'vscode-remote://ssh-remote+harness',
+      ),
+    );
+    try {
+      await new Promise(resolve =>
+        setTimeout(resolve, EMPTY_WINDOW_MILLISECONDS),
+      );
+      deepStrictEqual(pushesSince(before).length, 0);
+    } finally {
+      await closeWindow(empty).catch(() => undefined);
     }
   });
 
@@ -137,6 +144,7 @@ describe('the push of the active folders (card coverage-100, F-2501 AC-36)', fun
       },
     ]);
     const before = companionCalls(PUSH).length;
+    await inWindow('local', SHOW_REMOTE_EXPLORER);
     await openWindow('refused', 'af36b');
     try {
       await waitFor(
