@@ -186,7 +186,10 @@ ls -t "$DATA_DIR/bin" 2>/dev/null | while IFS= read -r NAME; do
     keepNewest)
       case $KIND in
         commit) [ "$INDEX" -le "$KEEP_COUNT" ] || remove_install "$NAME" ;;
-        leftover) remove_install "$NAME" ;;
+        leftover)
+          # A leftover is also a stepwise install in progress, which holds no lock: only an old one goes.
+          [ -z "$(find "$DATA_DIR/bin" -maxdepth 1 -name "$NAME" -mmin +60 2>/dev/null)" ] || remove_install "$NAME"
+          ;;
       esac
       ;;
     onlyCurrentRemoveLeftovers)

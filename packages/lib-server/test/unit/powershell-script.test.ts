@@ -1493,6 +1493,25 @@ describe('the PowerShell cleanup, run under pwsh', function () {
     );
   });
 
+  it('F-2413: keepNewest removes a leftover that was modified two hours ago, and one modified a minute ago stays, as does another folder', () => {
+    const host = powershellHost();
+    const parameters = {
+      ...parametersFor(),
+      cleanup: {kind: 'keepNewest' as const, count: 5},
+    };
+    const installs = installsAged(host, parameters, {
+      [parameters.commit]: 10,
+      [`${COMMIT_A}-1700000000000`]: 7200,
+      [`${COMMIT_B}-1700000000000`]: 60,
+      notes: 40,
+    });
+    runOn(host, single('cleanup'), parameters);
+    deepStrictEqual(
+      readdirSync(installs).sort(),
+      [`${COMMIT_B}-1700000000000`, 'notes', parameters.commit].sort(),
+    );
+  });
+
   it('F-2413: onlyCurrentRemoveLeftovers removes other commits and leftovers, and keeps the rest', () => {
     const host = powershellHost();
     const parameters = {

@@ -218,6 +218,7 @@ describe('the POSIX bootstrap script', () => {
       names: readonly string[],
       parameters: ScriptParameters,
       heldLock?: string,
+      freshNames: readonly string[] = [],
     ): string[] {
       const binFolder = path.join(host.home, '.server-data', 'bin');
       mkdirSync(binFolder, {recursive: true});
@@ -236,7 +237,10 @@ describe('the POSIX bootstrap script', () => {
       }
       names.forEach((name, index) => {
         const seconds = 1_700_000_000 - index * 100;
-        utimesSync(path.join(binFolder, name), seconds, seconds);
+        // A fresh folder keeps the time it was made: now.
+        if (!freshNames.includes(name)) {
+          utimesSync(path.join(binFolder, name), seconds, seconds);
+        }
       });
       runScript(host, single('cleanup'), parameters);
       return readdirSync(binFolder).sort();
@@ -341,6 +345,41 @@ describe('the POSIX bootstrap script', () => {
           commit('3'),
           'abc1230000000000000000000000000000000000',
           'notes',
+        ].sort(),
+      );
+    });
+
+    it('F-2413 6.4: cleanup removes a leftover that has not been modified for two hours', () => {
+      const parameters = parametersFor();
+      parameters.cleanup = {kind: 'keepNewest', count: 5};
+      const leftover = `${'9'.repeat(40)}-1700000000`;
+      const binFolder = path.join(host.home, '.server-data', 'bin');
+      mkdirSync(path.join(binFolder, leftover), {recursive: true});
+      const twoHoursAgo = (Date.now() - 2 * 3_600_000) / 1000;
+      utimesSync(path.join(binFolder, leftover), twoHoursAgo, twoHoursAgo);
+      runScript(host, single('cleanup'), parameters);
+      deepStrictEqual(existsSync(path.join(binFolder, leftover)), false);
+    });
+
+    it('F-2413 6.4: cleanup leaves a leftover that was modified just now, which may be an install in progress, and does not count it', () => {
+      const parameters = parametersFor();
+      parameters.cleanup = {kind: 'keepNewest', count: 1};
+      const leftover = `${'9'.repeat(40)}-1700000000`;
+      deepStrictEqual(
+        binAfter(
+          [
+            leftover,
+            '1'.repeat(40),
+            'abc1230000000000000000000000000000000000',
+          ],
+          parameters,
+          undefined,
+          [leftover],
+        ),
+        [
+          leftover,
+          '1'.repeat(40),
+          'abc1230000000000000000000000000000000000',
         ].sort(),
       );
     });

@@ -199,7 +199,10 @@ foreach ($Folder in @(Get-ChildItem -LiteralPath $BinFolder -Force | Sort-Object
           Remove-Install $Name
         }
       } elseif ($Kind -eq 'leftover') {
-        Remove-Install $Name
+        # A leftover is also a stepwise install in progress, which holds no lock: only an old one goes.
+        if ($Folder.LastWriteTime -lt [DateTime]::Now.AddMinutes(-60)) {
+          Remove-Install $Name
+        }
       }
     }
     'onlyCurrentRemoveLeftovers' {
