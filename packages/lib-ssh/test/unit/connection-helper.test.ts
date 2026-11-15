@@ -10,6 +10,7 @@ import {
   type SshRequest,
 } from '../../src/index.ts';
 import {ScriptedSpawner} from './fake-client-process.ts';
+import {powershellSessionStart} from '../../src/connection-server/powershell-session.ts';
 import {authenticate} from './connection-fixture.ts';
 
 const ENDPOINT = '/run/rh-0123456789abcdef.sock';
@@ -87,6 +88,7 @@ describe('connection helper', () => {
       displayHost: 'h.invalid',
       externalAskpass: false,
       askpassFirstMessageMilliseconds: 5000,
+      hostPlatform: 'unknown',
       ...changes,
     };
     return runConnectionHelper({
@@ -237,6 +239,13 @@ describe('connection helper', () => {
         input?.startsWith('exec sh -c '),
       ],
       ['h.invalid', false, true],
+    );
+  });
+
+  it('F-2701 5.0 step 5: a host decided as Windows gets the PowerShell loop as its remote command', async () => {
+    deepStrictEqual(
+      await lastArgumentFor(REQUEST, {hostPlatform: 'windows'}),
+      powershellSessionStart().remoteProgram,
     );
   });
 
@@ -479,6 +488,7 @@ describe('connection helper', () => {
             displayHost: 'h.invalid',
             externalAskpass: false,
             askpassFirstMessageMilliseconds: 5000,
+            hostPlatform: 'unknown',
           },
         },
         port,

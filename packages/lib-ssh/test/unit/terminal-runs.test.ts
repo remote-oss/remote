@@ -43,6 +43,7 @@ function fixture() {
     terminal: session,
     scheduler: clock.scheduler(),
     prelude: PRELUDE,
+    interpreter: 'posixShell',
     newMarker: () => {
       markers += 1;
       return `m${String(markers)}`;

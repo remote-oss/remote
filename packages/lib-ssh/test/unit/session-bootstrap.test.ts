@@ -21,7 +21,39 @@ import {
   sessionStartFor,
 } from '../../src/index.ts';
 import {TUNNEL_COMMAND} from '../../src/arguments/invocation.ts';
+import {powershellSessionStart} from '../../src/connection-server/powershell-session.ts';
 import {planScript} from '../../src/process/remote-program.ts';
+
+describe('the session start by platform (card #1899)', () => {
+  const settings = {
+    connectTimeoutSeconds: 15,
+    fromHost: false,
+    unboundedWaitSeconds: 60,
+  };
+
+  it('F-2701 5.0 step 5: a Windows host starts the PowerShell loop with no prelude, and every other platform the POSIX bootstrap, byte for byte', () => {
+    deepStrictEqual(
+      [
+        sessionStartFor(settings, false, 'windows'),
+        sessionStartFor(settings, false, 'linux'),
+        sessionStartFor(settings, true, 'unknown'),
+      ],
+      [
+        powershellSessionStart(),
+        sessionStartFor(settings),
+        sessionStartFor(settings, true),
+      ],
+    );
+  });
+
+  it("F-2701 5.0 step 5: with the RemoteCommand in effect a Windows session's prelude is the loop's line alone, with no exec", () => {
+    const start = powershellSessionStart();
+    deepStrictEqual(connectionStart(start, true, 'windows'), {
+      remoteProgram: undefined,
+      prelude: `${start.remoteProgram}\n`,
+    });
+  });
+});
 
 describe('the connection start (card connect-92, #1407)', () => {
   it('F-2704 AC-30: with no RemoteCommand in effect the start is returned as it is', () => {

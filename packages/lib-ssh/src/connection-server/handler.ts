@@ -14,6 +14,7 @@ import type {
   Scheduler,
 } from 'lib-helper';
 import {AskpassEndpoint} from 'lib-helper';
+import type {Interpreter} from 'lib-host';
 import {classifyPrompt} from '../prompts/classify.ts';
 import type {PromptSurface} from './messages.ts';
 import type {Invocation} from '../arguments/invocation.ts';
@@ -65,6 +66,8 @@ export interface ConnectionHandlerOptions {
   };
   /** A marker for the commands of one script run on the session; unguessable and new on every call. */
   newMarker: () => string;
+  /** What the session runs its scripts with, from the host's platform. */
+  interpreter: Interpreter;
   logLine: (line: string) => void;
 }
 
@@ -288,6 +291,7 @@ export class ConnectionHandler implements MessageHandler {
       },
       scheduler: this.options.scheduler,
       newMarker: this.options.newMarker,
+      interpreter: this.options.interpreter,
       onWedged: () => {
         session.kill();
       },

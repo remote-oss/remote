@@ -95,11 +95,23 @@ function powershellEnvironmentLines(
 }
 
 /**
+ * What a PowerShell run reads first on its standard input: the environment as assignments, then the script, then a
+ * line end. The environment's names must already be checked.
+ */
+export function powershellPrelude(
+  environment: Readonly<Record<string, string>>,
+  script: string,
+): string {
+  return `${[...powershellEnvironmentLines(environment), script].join('\n')}\n`;
+}
+
+/**
  * The fixed text PowerShell runs: it reads exactly `byteCount` bytes of the raw standard input, which hold the
- * prelude and the script, and runs them as a script block. It never reads through the console's buffered reader, so
+ * prelude and the script, and runs them as a script block. `byteCount` may instead be a token that the session loop
+ * replaces with each run's count. It never reads through the console's buffered reader, so
  * what follows those bytes is left for the script.
  */
-export function powershellReader(byteCount: number): string {
+export function powershellReader(byteCount: number | string): string {
   const count = String(byteCount);
   return [
     '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false',
@@ -124,7 +136,7 @@ export function powershellPlan(
   if (script.kind === 'refused') {
     return script;
   }
-  const prelude = `${[...powershellEnvironmentLines(request.environment), script.text].join('\n')}\n`;
+  const prelude = powershellPrelude(request.environment, script.text);
   const reader = powershellReader(Buffer.byteLength(prelude, 'utf8'));
   const remoteProgram = `powershell -NoLogo -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(reader, 'utf16le').toString('base64')}`;
   if (remoteProgram.length > limit) {
