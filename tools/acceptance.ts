@@ -116,6 +116,7 @@ import {
   hostCases,
   runnerLaunches,
   suitesOf,
+  WINDOW_PORT_RANGE,
   WINDOW_PORT_RANGE_SETTING,
   windowPortRangeProblem,
   withHarnessBases,
@@ -1104,10 +1105,11 @@ export function writeUserSettings(
   launch?: Launch,
   ephemeral: string | undefined = kernelEphemeralRange(),
 ): void {
-  const range = extra[WINDOW_PORT_RANGE_SETTING];
+  // Only the harness's own range is checked: a launch that sets a range of its own does it to test the setting.
   const problem =
-    typeof range === 'string' && ephemeral !== undefined
-      ? windowPortRangeProblem(range, ephemeral)
+    extra[WINDOW_PORT_RANGE_SETTING] === WINDOW_PORT_RANGE &&
+    ephemeral !== undefined
+      ? windowPortRangeProblem(WINDOW_PORT_RANGE, ephemeral)
       : undefined;
   if (problem !== undefined) {
     throw new Error(`${launch?.label ?? 'the run'}: ${problem}`);

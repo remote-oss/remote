@@ -84,6 +84,7 @@ import {
   launchesOf,
   launchGroupOf,
   launchLabelled,
+  settingsOfLaunch,
   type Launch,
   type RunnerLaunch,
   WINDOW_PORT_RANGE,
@@ -1426,6 +1427,35 @@ describe('acceptance', () => {
         '15000 60999',
       );
     }, /^Error: windows: the window port range 20000-20999 overlaps this machine's ephemeral port range 15000-60999/u);
+  });
+
+  it('#2639: the settings of every launch are written on a machine whose ephemeral range is the Linux default, those that keep a range of their own included', () => {
+    const failures: string[] = [];
+    const launches = launchesOf(REPOSITORY_ROOT);
+    for (const launch of launches) {
+      try {
+        writeUserSettings(
+          workspace.root,
+          '/run/ssh_config',
+          settingsOfLaunch(launch) ?? {},
+          launch,
+          '32768\t60999',
+        );
+      } catch (caught) {
+        failures.push(String(caught));
+      }
+    }
+    deepStrictEqual(
+      [
+        failures,
+        launches.some(
+          launch =>
+            settingsOfLaunch(launch)?.['remote.SSH.preferredLocalPortRange'] ===
+            '41060-41061',
+        ),
+      ],
+      [[], true],
+    );
   });
 
   it("gives the editor's user settings the harness ssh_config as remote.SSH.configFile", () => {
