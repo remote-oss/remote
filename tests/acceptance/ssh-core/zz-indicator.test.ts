@@ -7,7 +7,7 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
-import {statusItem} from '../windows/renderer.ts';
+import {statusBarText} from '../windows/renderer.ts';
 import {keepingSettings} from '../windows/tunnel-support.ts';
 
 const FAILURE = 'Could not establish connection';
@@ -17,14 +17,14 @@ describe('the remote indicator after the failure dialog (card #2537, throwaway m
 
   beforeEach(closeAllButLocal);
 
-  it('the time from the failure dialog to Disconnected, ten windows', async () => {
+  it('the time from the failure dialog to Disconnected, twelve windows', async () => {
     await keepingSettings(async () => {
       await userSettings({
         'remote.SSH.preferredLocalPortRange': '80-80',
         'remote.SSH.remotePlatform': {harness: 'linux'},
       });
       const results: unknown[] = [];
-      for (let round = 0; round < 10; round += 1) {
+      for (let round = 0; round < 12; round += 1) {
         const name = `ind-${String(round)}`;
         appendScript([
           {
@@ -47,23 +47,24 @@ describe('the remote indicator after the failure dialog (card #2537, throwaway m
           120_000,
         );
         const shown = recordLines('failureDialog', name)[0]?.time ?? 0;
-        const first = (await statusItem(name, 'status.host')).text;
-        const readAt = Date.now();
-        let disconnectedAt = -1;
-        for (let poll = 0; poll < 400 && disconnectedAt < 0; poll += 1) {
-          const text = (await statusItem(name, 'status.host')).text;
+        const samples: Array<[number, string]> = [];
+        let disconnectedAfterMs = -1;
+        for (let poll = 0; poll < 600 && disconnectedAfterMs < 0; poll += 1) {
+          const text = await statusBarText(name, 'status.host');
+          const offset = Date.now() - shown;
+          samples.push([offset, text.slice(0, 1)]);
           if (text.startsWith('Disconnected')) {
-            disconnectedAt = Date.now();
+            disconnectedAfterMs = offset;
           } else {
-            await new Promise(resolve => setTimeout(resolve, 50));
+            await new Promise(resolve => setTimeout(resolve, 20));
           }
         }
         results.push({
           round,
-          firstRead: first,
-          firstReadAfterDialogMs: readAt - shown,
-          disconnectedAfterDialogMs:
-            disconnectedAt < 0 ? 'never in 20 s' : disconnectedAt - shown,
+          firstSampleAfterDialogMs: samples[0]?.[0],
+          firstSampleText: samples[0]?.[1],
+          disconnectedSampledAfterDialogMs: disconnectedAfterMs,
+          samples: samples.length,
         });
         await closeWindow(name);
       }
