@@ -1,16 +1,20 @@
 import {deepStrictEqual} from 'node:assert';
+import {mkdirSync} from 'node:fs';
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {cachedLabelAuthorities} from '../windows/global-state.ts';
 import {
   appendScript,
   closeWindow,
   heldLines,
   inWindow,
-  nextEmptyWindow,
   openWindow,
   recordLines,
   signal,
   startInWindow,
+  variable,
   waitFor,
+  windowNames,
 } from '../windows/harness.ts';
 import {dismissals} from '../windows/maintenance.ts';
 import {
@@ -84,8 +88,19 @@ describe('the window label of an authority whose first resolve fails (card #2635
   });
 
   it('F-2502 AC-34 (c2635-recent): a local window opened after the refusal lists the authority’s folder in Open Recent as <folder> [SSH]', async () => {
-    const later = await nextEmptyWindow(() =>
-      inWindow('local', 'workbench.action.newWindow'),
+    // A local folder of its own names the later window and its title apart from every empty window of the run.
+    const later = 'c2635-later';
+    const folder = path.join(variable('HARNESS_RUN_FOLDER'), later);
+    mkdirSync(folder, {recursive: true});
+    await inWindow(
+      'local',
+      'acceptance.agent.openWindow',
+      pathToFileURL(folder).href,
+    );
+    await waitFor(
+      `window ${later} to open`,
+      () => windowNames().includes(later),
+      60_000,
     );
     try {
       await startInWindow(later, 'workbench.action.openRecent');
