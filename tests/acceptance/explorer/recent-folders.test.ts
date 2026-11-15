@@ -9,6 +9,7 @@ import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {
+  appendScript,
   closeWindow,
   inWindow,
   isOpen,
@@ -2062,14 +2063,26 @@ describe('the recent folders under a target (card coverage-122)', function () {
       await titleAction(window, VIEW, REFRESH);
       await foldersSettled(window, 'nowhere', [first, second], `${HOME}/c122-`);
       await foldersSettled(window, 'harness', [reachable], `${HOME}/c122-`);
+      appendScript([
+        {
+          surface: 'failureDialog',
+          match: 'Could not establish connection',
+          answer: {button: 'Close Remote'},
+          window: failed,
+        },
+      ]);
       await rowAction(window, VIEW, 'c122-un-b', CURRENT);
       await waitFor(
         `window ${failed} to stand`,
         () => windowNames().includes(failed),
         120_000,
       );
-      await waitForDialog(failed, 120_000);
-      await clickDialogButton(failed, 'Close Remote');
+      await waitFor(
+        `the failure dialog of window ${failed}`,
+        () => recordLines('failureDialog', failed).length > 0,
+        120_000,
+      );
+      const dialog = recordLines('failureDialog', failed).at(-1);
       async function comesLocal(): Promise<string> {
         for (const name of windowNames()) {
           if (name === 'local' || !isOpen(name)) {
@@ -2102,13 +2115,22 @@ describe('the recent folders under a target (card coverage-122)', function () {
       );
       deepStrictEqual(
         [
+          dialog?.question.includes('nowhere'),
+          dialog?.buttons,
           windowNames().includes(failed),
           await notifications(failed),
           (await historyOf(recoveredName)).nowhere?.map(entry => entry.path) ??
             [],
           (await windowState(recoveredName)).remoteAuthority,
         ],
-        [true, [], [first, second], 'ssh-remote+harness'],
+        [
+          true,
+          ['Close Remote', 'Retry', 'More Actions...'],
+          true,
+          [],
+          [first, second],
+          'ssh-remote+harness',
+        ],
       );
     } finally {
       restoreUserSettings(saved);
