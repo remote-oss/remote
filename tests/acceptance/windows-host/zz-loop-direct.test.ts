@@ -166,7 +166,7 @@ describe('the Windows session loop with its input kept open (card #2681, measure
         const saved = JSON.parse(readFileSync(path.join(tmpdir(), each), 'utf8')) as {program: string; arguments: string[]; askpassEnvironment: Record<string, string>; editorEnvironment: Record<string, string>};
         console.log(`c2681-measure invocation: ${JSON.stringify({program: saved.program, arguments: saved.arguments, askpass: Object.keys(saved.askpassEnvironment), editor: Object.keys(saved.editorEnvironment).length})}`);
         const environment = {...saved.editorEnvironment, ...saved.askpassEnvironment};
-        await measureFrame('replay with the invocation', frame, {program: saved.program, arguments: saved.arguments, environment});
+        await measureFrame('replay with the invocation', frame, {program: saved.program, arguments: saved.arguments.filter(each => each !== '-vvv'), environment});
         const runtime = saved as unknown as {execPath: string; runAsNode?: string; versions: Record<string, string>};
         console.log(`c2681-measure helper runtime: ${JSON.stringify({execPath: runtime.execPath, runAsNode: runtime.runAsNode, node: runtime.versions.node, electron: runtime.versions.electron})}`);
         for (const hide of ['hide', 'show']) {

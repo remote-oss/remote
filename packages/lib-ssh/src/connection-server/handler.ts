@@ -391,8 +391,8 @@ export class ConnectionHandler implements MessageHandler {
       }
     });
     session.onError(piece => {
-      for (const each of piece.split('\n')) {
-        if (/channel 1|rfd|wfd|stdin|efd|read<=0|write|eof|EOF|chan_|client_loop|select/i.test(each)) {
+      if (ready) {
+        for (const each of piece.split('\n')) {
           this.options.logLine(`DIAG err ${JSON.stringify(each.slice(0, 200))}`);
         }
       }
