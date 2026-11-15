@@ -1,4 +1,5 @@
 import {writeFileSync} from 'node:fs';
+import {powershellCommandsFor} from './powershell-session.ts';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 /**
@@ -359,6 +360,17 @@ export class ConnectionHandler implements MessageHandler {
         runs.hear(line);
       } else if (event.kind === 'ready') {
         ready = true;
+        if (this.options.interpreter === 'powershell') {
+          const probe = powershellCommandsFor('diag2681', {
+            script: 'Write-Output "diag says hi"',
+            environment: {},
+            inputBase64: null,
+          });
+          this.options.logLine(`DIAG own frame ${String(probe.length)}`);
+          void session.write(probe).then(() => {
+            this.options.logLine('DIAG own frame flushed');
+          });
+        }
         if (this.state === 'connecting') {
           wait.stop();
           this.askpass.closeAll();
