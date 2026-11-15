@@ -22,7 +22,12 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {dismissals} from '../windows/maintenance.ts';
-import {notifications, statusItem, windowTitle} from '../windows/renderer.ts';
+import {
+  indicatorDisconnects,
+  notifications,
+  statusItem,
+  windowTitle,
+} from '../windows/renderer.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -135,6 +140,9 @@ export async function connectWith<Result>(
       );
     }
     const dialog = shownFrom(name, mark)[0];
+    if (expectation === 'fails') {
+      await indicatorDisconnects(name);
+    }
     return await body(
       {
         connected: expectation === 'connects',

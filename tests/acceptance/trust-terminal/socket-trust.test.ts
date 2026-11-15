@@ -24,6 +24,7 @@ import {
   dialogOf,
   portsRows,
   primaryButtonOf,
+  indicatorDisconnects,
   statusItem,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -175,6 +176,7 @@ describe('the connect of a folder that is not trusted, with the server on a sock
       () => recordLines('failureDialog', window).length > 0,
       120_000,
     );
+    await indicatorDisconnects(window);
     const indicator = (await statusItem(window, 'status.host')).text;
     const timedOut = recordLines('failureDialog', window)[0]?.question;
     await answerDialog(window, 'Trust Folder & Continue');
@@ -215,6 +217,7 @@ describe('the connect of a folder that is not trusted, with the server on a sock
       () => recordLines('failureDialog', window).length > 0,
       120_000,
     );
+    await indicatorDisconnects(window);
     deepStrictEqual(
       [
         recordLines('failureDialog', window).map(line => line.question),
