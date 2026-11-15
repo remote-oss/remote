@@ -383,7 +383,11 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
           'echo start >> /tmp/c58-runs; echo "start $(date +%s%3N)" >> /tmp/c58-times',
       });
       try {
-        const stopped = await inspectOf(await containerLeftBy(folder));
+        const created = containersLog().length;
+        const first = await reopened(folder);
+        const stopped = await inspectOf(await containerOf(folder));
+        await lifecycleFinishedSince(created);
+        await closeWindow(first);
         await execFileAsync('docker', ['stop', stopped.id]);
         const mark = containersLog().length;
         const name = await reopened(folder);
