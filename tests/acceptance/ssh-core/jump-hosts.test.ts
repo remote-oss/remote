@@ -146,6 +146,13 @@ function serverNamesOf(listing: string): string[] {
   return listing.split('\n').filter(name => name.includes('server'));
 }
 
+/** The fingerprint (SHA256:...) of the public key file `publicKey` on the host. */
+async function fingerprintOf(publicKey: string): Promise<string | undefined> {
+  return (await onHostAs('harness', 'ssh-keygen', '-lf', publicKey)).split(
+    ' ',
+  )[1];
+}
+
 /** The non-empty lines of `file`. */
 function linesOf(file: string): string[] {
   return readFileSync(file, 'utf8')
@@ -496,49 +503,127 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     });
   });
 
-  it('F-2310 AC-24 (c2601-hostkey-picks): unknown host keys behind a jump host ask the fingerprint pick for each hop, and Continue records both keys', async () => {
-    const alias = 'c2601-picks';
+  it('F-2310 AC-24 (c2614-hostkey-picks): unknown host keys behind a jump host ask the fingerprint pick for each hop, and Continue records both keys', async () => {
+    const alias = 'c2614-picks';
+    const port = 22022;
+    const folder = '/tmp/c2614-sshd';
     const known = freshKnown(alias);
     const file = writeConfig(alias, [
       hostBlock(
         alias,
         [
           `ProxyJump ${alias}-hop`,
-          'HostName 127.0.0.2',
-          'Port 22',
+          'HostName 127.0.0.1',
+          `Port ${String(port)}`,
           ...askLines(known),
         ],
         ['Port', 'HostName', ...ASK_WITHOUT],
       ),
       hostBlock(`${alias}-hop`, askLines(known), ASK_WITHOUT),
     ]);
+    await onHostAs(
+      'harness',
+      'sh',
+      '-c',
+      `rm -rf ${folder}; mkdir -p ${folder} && ssh-keygen -q -t ed25519 -N '' -f ${folder}/hostkey && printf '%s\\n' 'HostKey ${folder}/hostkey' 'PidFile ${folder}/sshd.pid' 'UsePAM no' 'StrictModes no' 'AuthorizedKeysFile /home/harness/.ssh/authorized_keys' 'ListenAddress 127.0.0.1' > ${folder}/sshd_config && (setsid /usr/sbin/sshd -D -e -f ${folder}/sshd_config -p ${String(port)} > ${folder}/sshd.log 2>&1 < /dev/null &)`,
+    );
+    const saved = readUserSettings();
+    try {
+      await waitFor(
+        'the second sshd to listen',
+        async () =>
+          onHostAs(
+            'harness',
+            'sh',
+            '-c',
+            `nc -z 127.0.0.1 ${String(port)} && echo up`,
+          )
+            .then(text => text.includes('up'))
+            .catch(() => false),
+        30_000,
+      );
+      const jumpKey = await fingerprintOf('/etc/ssh/ssh_host_ed25519_key.pub');
+      const targetKey = await fingerprintOf(`${folder}/hostkey.pub`);
+      await userSettings({'remote.SSH.configFile': file});
+      const next = await nextEmptyWindow(() =>
+        inWindow('local', 'workbench.action.newWindow'),
+      );
+      await runWith(next, 'opensshremotes.openEmptyWindowInCurrentWindow', [
+        hostAnswer(next, {label: alias}),
+        {surface: 'pick', match: 'fingerprint', answer: 'yes'},
+        {surface: 'pick', match: 'fingerprint', answer: 'yes'},
+      ]);
+      await waitFor(
+        `${next} to be on the host`,
+        async () => (await windowState(next)).remoteName === 'ssh-remote',
+        120_000,
+      );
+      const result = {
+        picks: recordLines('pick', next)
+          .filter(line => line.answer !== 'held')
+          .map(line => line.question),
+        recorded: linesOf(known).length,
+      };
+      await closeWindow(next);
+      deepStrictEqual(result, {
+        picks: [
+          `"${alias}" has fingerprint "${String(jumpKey)}".`,
+          `"${alias}" has fingerprint "${String(targetKey)}".`,
+        ],
+        recorded: 2,
+      });
+    } finally {
+      restoreUserSettings(saved);
+      await onHostAs(
+        'harness',
+        'sh',
+        '-c',
+        `kill $(cat ${folder}/sshd.pid) 2>/dev/null; rm -rf ${folder}; true`,
+      );
+    }
+  });
+
+  it('F-2310 AC-17 (c2614-fdpass): ProxyUseFdpass yes with a helper that passes a connected socket back connects', async () => {
+    const alias = 'c2614-fdpass';
+    const script = path.join(variable('HARNESS_RUN_FOLDER'), 'fdpass-proxy.py');
+    writeFileSync(
+      script,
+      'import socket\nimport sys\n\nconnection = socket.create_connection((sys.argv[1], int(sys.argv[2])))\nsocket.send_fds(socket.socket(fileno=1), [b"\\0"], [connection.fileno()])\n',
+    );
+    const file = writeConfig(alias, [
+      hostBlock(alias, [
+        `ProxyCommand python3 -I ${script} %h %p`,
+        'ProxyUseFdpass yes',
+      ]),
+    ]);
     const result = await connectWith(
       alias,
       [],
       'connects',
-      () => ({
-        picks: questionsOn(alias, 'pick').map(question =>
-          question.replace(/SHA256:\S+/, 'SHA256:x'),
-        ),
-        recorded: readFileSync(known, 'utf8')
-          .split('\n')
-          .filter(line => line !== '').length,
+      async (outcome, written) => ({
+        outcome: outcome.dialog,
+        plain: (await plainSsh(written, alias)).status,
       }),
+      {file},
+    );
+    deepStrictEqual(result, {outcome: undefined, plain: 0});
+  });
+
+  it('F-2310 AC-17 (c2614-fdpass-relay): ProxyUseFdpass yes with a relaying proxy fails with the dialog without a reason', async () => {
+    const alias = 'c2614-fdrelay';
+    const file = writeConfig(alias, [
+      hostBlock(alias, ['ProxyCommand nc %h %p', 'ProxyUseFdpass yes']),
+    ]);
+    const result = await connectWith(
+      alias,
+      [],
+      'fails',
+      outcome => outcome.dialog,
       {
         file,
-        script: [
-          {surface: 'pick', match: 'fingerprint', answer: 'yes', window: alias},
-          {surface: 'pick', match: 'fingerprint', answer: 'yes', window: alias},
-        ],
       },
     );
-    deepStrictEqual(result, {
-      picks: [
-        `"${alias}" has fingerprint "SHA256:x`,
-        `"${alias}" has fingerprint "SHA256:x`,
-      ],
-      recorded: 2,
-    });
+    deepStrictEqual(result, reasonless(alias));
   });
 
   it('F-2310 AC-19 (c2601-hostkey-changed): a known-hosts line for the jump host that does not match its key fails with the changed host key dialog', async () => {
