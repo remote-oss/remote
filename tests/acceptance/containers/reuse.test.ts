@@ -8,6 +8,7 @@ import {
   closeWindow,
   containersLog,
   containersLogSince,
+  containersLogStamped,
   devContainerFolder,
   devContainersOf,
   inWindow,
@@ -374,54 +375,79 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it('F-0408 AC-13, F-0409 AC-2 (gate-row-4): a stopped container is started again with the same id, with no image build and a Starting container step in the log, its postCreateCommand not run again and its postStartCommand run, and no dialog shows', async () => {
-    const folder = devContainerFolder('reuse-stopped', {
-      postCreateCommand: 'echo create >> /tmp/c58-runs',
-      postStartCommand: 'echo start >> /tmp/c58-runs',
+  for (let round = 1; round <= 12; round += 1) {
+    it.only(`MEASURE2626 ${String(round)}: F-0408 AC-13, F-0409 AC-2 (gate-row-4): a stopped container is started again with the same id, with no image build and a Starting container step in the log, its postCreateCommand not run again and its postStartCommand run, and no dialog shows`, async () => {
+      const folder = devContainerFolder('reuse-stopped', {
+        postCreateCommand: 'echo create >> /tmp/c58-runs',
+        postStartCommand:
+          'echo start >> /tmp/c58-runs; echo "start $(date +%s%3N)" >> /tmp/c58-times',
+      });
+      try {
+        const stopped = await inspectOf(await containerLeftBy(folder));
+        await execFileAsync('docker', ['stop', stopped.id]);
+        const mark = containersLog().length;
+        const name = await reopened(folder);
+        const dialog = await dialogOf(name);
+        await lifecycleFinishedSince(mark);
+        const finishedAt = Date.now();
+        const lines = containersLogSince(mark);
+        const containerIds = await devContainersOf(folder);
+        const started = await inspectOf(containerIds[0] ?? '');
+        const {stdout: runs} = await execFileAsync('docker', [
+          'exec',
+          started.id,
+          'cat',
+          '/tmp/c58-runs',
+        ]);
+        await new Promise(resolve => setTimeout(resolve, 8000));
+        const later = await execFileAsync('docker', [
+          'exec',
+          started.id,
+          'sh',
+          '-c',
+          'cat /tmp/c58-runs; echo ---; cat /tmp/c58-times',
+        ]).then(
+          result => result.stdout,
+          () => 'unreadable',
+        );
+        const stamped = containersLogStamped()
+          .slice(mark)
+          .filter(line =>
+            /lifecycle|Starting container|background|personal|attach/i.test(
+              line,
+            ),
+          );
+        console.log(
+          `MEASURE2626 round=${String(round)} runsAtRead=${JSON.stringify(runs.trim().split('\n'))} finishedAt=${String(finishedAt)} eightSecondsLater=${JSON.stringify(later)} log=${JSON.stringify(stamped)}`,
+        );
+        await closeWindow(name);
+        deepStrictEqual(
+          {
+            containers: containerIds.length,
+            sameId: started.id === stopped.id,
+            status: started.status,
+            later: started.startedAt > stopped.startedAt,
+            dialog,
+            builds: lines.filter(line => /^#\d+ /.test(line)),
+            startingStep: lines.includes('Starting container'),
+            runs: runs.trim().split('\n'),
+          },
+          {
+            containers: 1,
+            sameId: true,
+            status: 'running',
+            later: true,
+            dialog: undefined,
+            builds: [],
+            startingStep: true,
+            runs: ['create', 'start', 'start'],
+          },
+        );
+      } finally {
+        await removeContainers(folder);
+      }
     });
-    try {
-      const stopped = await inspectOf(await containerLeftBy(folder));
-      await execFileAsync('docker', ['stop', stopped.id]);
-      const mark = containersLog().length;
-      const name = await reopened(folder);
-      const dialog = await dialogOf(name);
-      await lifecycleFinishedSince(mark);
-      const lines = containersLogSince(mark);
-      const containerIds = await devContainersOf(folder);
-      const started = await inspectOf(containerIds[0] ?? '');
-      const {stdout: runs} = await execFileAsync('docker', [
-        'exec',
-        started.id,
-        'cat',
-        '/tmp/c58-runs',
-      ]);
-      await closeWindow(name);
-      deepStrictEqual(
-        {
-          containers: containerIds.length,
-          sameId: started.id === stopped.id,
-          status: started.status,
-          later: started.startedAt > stopped.startedAt,
-          dialog,
-          builds: lines.filter(line => /^#\d+ /.test(line)),
-          startingStep: lines.includes('Starting container'),
-          runs: runs.trim().split('\n'),
-        },
-        {
-          containers: 1,
-          sameId: true,
-          status: 'running',
-          later: true,
-          dialog: undefined,
-          builds: [],
-          startingStep: true,
-          runs: ['create', 'start', 'start'],
-        },
-      );
-    } finally {
-      await removeContainers(folder);
-    }
-  });
+  }
 
   it('F-0409 AC-6 (r4b): a container removed outside the editor is made again silently, with a new id', async () => {
     const folder = devContainerFolder('reuse-removed');

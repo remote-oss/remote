@@ -350,6 +350,11 @@ export function containersLog(): string[] {
   return logLinesOf('REMOTE_OSS_ACCEPTANCE_CONTAINERS_LOG');
 }
 
+/** MEASURE2626 (throwaway). */
+export function containersLogStamped(): string[] {
+  return stampedLogLinesOf('REMOTE_OSS_ACCEPTANCE_CONTAINERS_LOG');
+}
+
 /** The lines of the Dev Containers log after the first `mark` of them, `mark` being a count taken earlier. */
 export function containersLogSince(mark: number): string[] {
   return containersLog().slice(mark);
