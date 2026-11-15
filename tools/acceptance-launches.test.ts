@@ -1301,6 +1301,32 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
+  it('#2653: the install step of the pinned OpenSSH client matches every launch that asks for it, in both workflows, since a name such as ssh-newclient-pickers matches only as a substring', () => {
+    const condition =
+      "contains(matrix.part.launches, 'ssh-newclient') || contains(matrix.part.launches, '@ssh')";
+    const steps = ['ci.yml', 'acceptance-launches.yml'].map(
+      file =>
+        readFileSync(
+          path.join(REPOSITORY_ROOT, '.github', 'workflows', file),
+          'utf8',
+        )
+          .split('\n')
+          .filter(line => line.includes(condition)).length,
+    );
+    deepStrictEqual(
+      [
+        steps,
+        launchesOf(REPOSITORY_ROOT)
+          .filter(launch => launch.sshClient === 'pinned')
+          .map(launch => launch.label.includes('ssh-newclient')),
+      ],
+      [
+        [2, 2],
+        [true, true],
+      ],
+    );
+  });
+
   it('tooling-168: of the forwarding launches only agent-off has a host setup: it ends the servers of the account, waits until none is left, and removes the agent links', () => {
     deepStrictEqual(
       ['agent', 'agent-off', 'x11', 'x11-noxauth'].map(label => {
