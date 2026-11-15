@@ -2291,6 +2291,27 @@ export async function statusBarText(
   );
 }
 
+/**
+ * Gives core's remote indicator of window `name` up to `milliseconds` (a second) to read "Disconnected", for a row that
+ * reads it at the moment a failure dialog is recorded. The spec has the dialog and the indicator at the same moment and
+ * orders neither (F-2601 5.0 step 3, F-2003 6.4 step 2), and the log reveal of a failed connect lets the indicator follow
+ * the dialog by about a quarter of a second (measured on #2537: "Disconnected" by 317 ms in 12 windows); athena's
+ * ruling on #2537 is that such a row waits at most a second. It never fails: the row's own read says what it found.
+ */
+export async function indicatorDisconnects(
+  name: string,
+  milliseconds = 1000,
+): Promise<void> {
+  const deadline = Date.now() + milliseconds;
+  while (Date.now() < deadline) {
+    const text = await statusBarText(name, 'status.host').catch(() => '');
+    if (text.startsWith('Disconnected')) {
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+}
+
 /** The DOM ids of every status bar item window `name` shows, in the order of the bar. */
 export async function statusBarItemIds(name: string): Promise<string[]> {
   return evaluate<string[]>(
@@ -4523,6 +4544,33 @@ export async function settingRow(
         };
       })()`,
     )) ?? undefined
+  );
+}
+
+/** The value the control of the first setting of the Settings editor of window `name` shows; empty when it shows none. */
+export async function settingControlOf(name: string): Promise<string> {
+  return (
+    (await evaluate<string | null>(
+      name,
+      `(() => {
+        const select = document.querySelector('.settings-editor .setting-item-control select');
+        return select === null ? null : (select.selectedOptions[0]?.textContent ?? '');
+      })()`,
+    )) ?? ''
+  );
+}
+
+/** The option values of the dropdown of the first setting of the Settings editor of window `name`; empty when its control is no dropdown. */
+export async function settingControlOptions(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `(() => {
+      const select = document.querySelector('.settings-editor .setting-item-control select');
+      if (select === null) {
+        return [];
+      }
+      return [...select.options].map(option => option.value);
+    })()`,
   );
 }
 

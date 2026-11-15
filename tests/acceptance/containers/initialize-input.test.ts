@@ -22,6 +22,14 @@ import {
   typeInTerminal,
 } from '../windows/renderer.ts';
 
+/**
+ * Whether the command has written its whole answer line to `file`. The shell creates the file when it opens the
+ * redirection, before its `printf` writes, so a file that exists can still be empty.
+ */
+function answerWritten(file: string): boolean {
+  return existsSync(file) && readFileSync(file, 'utf8').endsWith('\n');
+}
+
 /** Resolves once `check` gives, every 500 ms, for up to `milliseconds`; a refusal at the end is thrown. */
 async function until(
   description: string,
@@ -213,7 +221,17 @@ async function typedHidden(
 ): Promise<{answer: string; theTypedTextShows: boolean}> {
   await untilText(window, 'code > ');
   await typeInTerminal(window, 'SECRET7\n');
-  await until('the command to write its answer', () => existsSync(answer));
+  await until('the command to write its answer', () =>
+    answerWritten(answer),
+  ).catch(async (caught: unknown) => {
+    const held = existsSync(answer)
+      ? `holds ${JSON.stringify(readFileSync(answer, 'utf8'))}`
+      : 'does not exist';
+    throw new Error(
+      `${String(caught)}; the answer file ${held}; the terminal shows ${JSON.stringify((await terminalText(window)).slice(-300))}`,
+      {cause: caught},
+    );
+  });
   return {
     answer: readFileSync(answer, 'utf8'),
     theTypedTextShows: (await terminalText(window)).includes('SECRET7'),
@@ -227,7 +245,7 @@ describe('the input of the "Configuring..." terminal', function () {
     const {window, answer} = await prompted('initcmd', 'initcmd-answer.txt');
     const echoedOnce = await theTypedKeyStandsAlone(window);
     await until('the initializeCommand to write its answer', () =>
-      existsSync(answer),
+      answerWritten(answer),
     );
     deepStrictEqual(
       {
@@ -247,7 +265,7 @@ describe('the input of the "Configuring..." terminal', function () {
     const {window, answer} = await prompted('lineedit', 'lineedit-answer.txt');
     await typeInTerminal(window, 'ab\x7f\n');
     await until('the initializeCommand to write its answer', () =>
-      existsSync(answer),
+      answerWritten(answer),
     );
     deepStrictEqual(readFileSync(answer, 'utf8'), 'answered: a\n');
     await connectedToContainer('lineedit');
@@ -275,7 +293,7 @@ describe('the input of the "Configuring..." terminal', function () {
     await untilText(window, 'PROMPTSHOWN? [Y/n] > ', 60_000);
     await typeInTerminal(window, 'Y\n');
     await until('the initializeCommand to write its answer', () =>
-      existsSync(answer),
+      answerWritten(answer),
     );
     deepStrictEqual(readFileSync(answer, 'utf8'), 'answered: Y\n');
     await connectedToContainer('promptshown');
@@ -304,7 +322,7 @@ describe('the input of the "Configuring..." terminal', function () {
     await focusTerminal(window);
     const echoedOnce = await theTypedKeyStandsAlone(window);
     await until('the postCreateCommand to write its answer', () =>
-      existsSync(answer),
+      answerWritten(answer),
     );
     deepStrictEqual(
       {
@@ -357,7 +375,7 @@ describe('the input of the "Configuring..." terminal', function () {
     await focusTerminal(window);
     await typeInTerminal(window, 'Y\n');
     await until('the postCreateCommand to write its answer', () =>
-      existsSync(host),
+      answerWritten(host),
     );
     deepStrictEqual(readFileSync(host, 'utf8'), 'answered: Y\n');
     await connectedToContainer('readp');
@@ -370,7 +388,7 @@ describe('the input of the "Configuring..." terminal', function () {
       initializeCommand: `if [ -t 0 ]; then printf 'tty: yes\\n' > ${host}; else printf 'tty: no\\n' > ${host}; fi`,
     });
     await until('the initializeCommand to write its answer', () =>
-      existsSync(host),
+      answerWritten(host),
     );
     deepStrictEqual(readFileSync(host, 'utf8'), 'tty: yes\n');
     await connectedToContainer('ptyused');

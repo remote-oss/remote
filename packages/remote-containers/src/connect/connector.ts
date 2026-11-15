@@ -1876,6 +1876,7 @@ export function containerConnectorOf(
         forwardPorts: merged?.forwardPorts,
         portsAttributes: merged?.portsAttributes,
         otherPortsAttributes: merged?.otherPortsAttributes,
+        attributeSettings: portAttributeSettings(merged),
       },
     };
     const connection = held;

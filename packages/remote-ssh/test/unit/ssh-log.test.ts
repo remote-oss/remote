@@ -3,6 +3,10 @@ import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import {
   isForwardingLine,
+  beforeInteractiveSession,
+  isSshDebugLine,
+  localCommandEntry,
+  logLocalCommandLines,
   logSshLines,
   sshLogEntries,
   withoutAnswer,
@@ -154,6 +158,65 @@ describe('ssh’s lines in the log (card connect-66)', () => {
         `${padding}${prompt} 123456`,
         ':'.repeat(5000),
       ],
+    );
+  });
+});
+
+describe('a LocalCommand’s lines in the log (card #2598, F-2109 AC-12)', () => {
+  it('#2598: an entry is marked [local command], the carriage return of the terminal is dropped and the token is masked', () => {
+    deepStrictEqual(
+      [
+        localCommandEntry('out-marker\r', undefined),
+        localCommandEntry('the token is secret-token here', 'secret-token'),
+      ],
+      [
+        '[local command] out-marker',
+        '[local command] the token is aaaaaa-aaaaa here',
+      ],
+    );
+  });
+
+  it('#2598: the lines are logged at info, in order, and nothing else is told', () => {
+    const sink = new MemorySink();
+    logLocalCommandLines(
+      createLogger(sink, {minimumLevel: (): Level => 'info'}),
+      ['one', 'two'],
+      undefined,
+    );
+    deepStrictEqual(
+      sink.lines.map(line => [line.level, line.message]),
+      [
+        ['info', '[local command] one'],
+        ['info', '[local command] two'],
+      ],
+    );
+  });
+
+  it('#2598: ssh’s entering the session closes the time at the end of a line, with the words in front of it given, and no other line does', () => {
+    deepStrictEqual(
+      [
+        'debug1: Entering interactive session.',
+        'debug1: Entering interactive session.\r',
+        'last words debug1: Entering interactive session.\r',
+        'debug1: Entering interactive session',
+        'Entering interactive session.',
+        'debug1: Entering interactive session. and more',
+      ].map(beforeInteractiveSession),
+      ['', '', 'last words ', undefined, undefined, undefined],
+    );
+  });
+
+  it('#2598: ssh’s debug1, debug2 and debug3 lines are its own, and a line that only holds the word is not', () => {
+    deepStrictEqual(
+      [
+        'debug1: x',
+        'debug2: x',
+        'debug3: x',
+        'debug4: x',
+        'a debug1: x',
+        'debug1:x',
+      ].map(isSshDebugLine),
+      [true, true, true, false, false, false],
     );
   });
 });

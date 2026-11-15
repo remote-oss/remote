@@ -380,7 +380,13 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       postStartCommand: 'echo start >> /tmp/c58-runs',
     });
     try {
-      const stopped = await inspectOf(await containerLeftBy(folder));
+      // The window is closed only after the first container's lifecycle commands have run: a window closed sooner ends
+      // them, and its postStartCommand then runs once, at the restart, which leaves one `start` short of the three.
+      const created = containersLog().length;
+      const first = await reopened(folder);
+      const stopped = await inspectOf(await containerOf(folder));
+      await lifecycleFinishedSince(created);
+      await closeWindow(first);
       await execFileAsync('docker', ['stop', stopped.id]);
       const mark = containersLog().length;
       const name = await reopened(folder);
