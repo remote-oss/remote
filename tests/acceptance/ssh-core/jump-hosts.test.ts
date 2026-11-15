@@ -9,7 +9,12 @@ import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {linesSince, runWith} from '../windows/maintenance.ts';
-import {answerDialog, statusItem, waitForDialog} from '../windows/renderer.ts';
+import {
+  answerDialog,
+  notifications,
+  statusItem,
+  waitForDialog,
+} from '../windows/renderer.ts';
 import {
   appendScript,
   connectedWithin,
@@ -938,6 +943,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
         inputs: 0,
         asked: 0,
       },
+      `reconnecting after ${String(result.reconnectingAfter)} s`,
     );
   });
 
@@ -1016,10 +1022,18 @@ describe('jump hosts and proxy commands (card #2601)', function () {
         } finally {
           restoreHostNetwork();
         }
-        const dialog = await waitForDialog(alias, 180_000);
+        const dialog = await waitForDialog(alias, 90_000).catch(
+          () => undefined,
+        );
         const indicator = await indicatorOf(alias);
-        await answerDialog(alias, 'Cancel');
-        return {details: dialog.details, indicator};
+        if (dialog !== undefined) {
+          await answerDialog(alias, 'Cancel');
+        }
+        return {
+          details: dialog?.details,
+          indicator,
+          toasts: await notifications(alias),
+        };
       },
       {
         file,
@@ -1032,6 +1046,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     deepStrictEqual(result, {
       details: 'Cannot reconnect. Please reload the window.',
       indicator: `Disconnected from SSH: ${alias}`,
+      toasts: [],
     });
   });
 
