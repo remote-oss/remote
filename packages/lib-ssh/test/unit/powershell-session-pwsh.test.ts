@@ -41,15 +41,34 @@ function framed(
   });
 }
 
-/** What `child` printed and how it ended, once it has read all of `input`. */
+/**
+ * What `child` printed and how it ended, once it has read all of `input`: written at once, or `delay` ms after the
+ * ready line when a delay is given.
+ */
 async function ended(
   child: ChildProcessByStdio<Writable, Readable, null>,
   input: string,
+  delay?: number,
 ): Promise<SessionEnd> {
   const chunks: Buffer[] = [];
-  child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
+  let written = false;
+  child.stdout.on('data', (chunk: Buffer) => {
+    chunks.push(chunk);
+    if (
+      delay !== undefined &&
+      !written &&
+      Buffer.concat(chunks).includes('LAYER1-READY')
+    ) {
+      written = true;
+      setTimeout(() => {
+        child.stdin.end(input);
+      }, delay);
+    }
+  });
   child.stdin.on('error', () => undefined);
-  child.stdin.end(input);
+  if (delay === undefined) {
+    child.stdin.end(input);
+  }
   const status = await new Promise<number | null>(resolve => {
     child.once('close', resolve);
   });
@@ -61,8 +80,11 @@ async function ended(
   };
 }
 
-/** Runs the loop's file under `pwsh`, its children `pwsh` too, with `input` on its standard input. */
-async function session(input: string): Promise<SessionEnd> {
+/**
+ * Runs the loop's file under `pwsh`, its children `pwsh` too, with `input` on its standard input, written `delay` ms
+ * after the ready line when a delay is given.
+ */
+async function session(input: string, delay?: number): Promise<SessionEnd> {
   const loop = path.join(loopFolder.path, 'loop.ps1');
   return ended(
     spawn(
@@ -79,6 +101,7 @@ async function session(input: string): Promise<SessionEnd> {
       {stdio: ['pipe', 'pipe', 'inherit']},
     ),
     input,
+    delay,
   );
 }
 
@@ -207,6 +230,14 @@ describe('the PowerShell session loop, run under pwsh (card #1899)', function ()
   it('F-2701 5.0 step 5: the last words of a run that writes no line end come in front of its end marker', async () => {
     const ended = await session(framed('m1', '[Console]::Out.Write("tail")'));
     deepStrictEqual(ended.lines, ['LAYER1-READY', 'm1:start', 'tailm1:end 0']);
+  });
+
+  it('F-2701 5.0 step 5: under PowerShell 7 a run written 200 ms after the ready line is read through the console stream and answered', async () => {
+    const ended = await session(framed('m1', 'Write-Output late'), 200);
+    deepStrictEqual(
+      [ended.lines, ended.status],
+      [['LAYER1-READY', 'm1:start', 'late', 'm1:end 0'], 0],
+    );
   });
 
   it("F-2701 5.0 step 5: the session's own remote program, one encoded command, runs a framed run", async () => {
