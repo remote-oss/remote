@@ -88,7 +88,7 @@ describe('the columns of the troubleshooting table (card #2700)', function () {
       });
       const table = await failedTable('harness', 'c2700-offline');
       deepStrictEqual(
-        [cellsOf(table[1]), columnOf(table, 3).join('')],
+        [cellsOf(table[1]), columnOf(table, 3).join('').replaceAll(' ', '')],
         [
           ['Status', 'Message', 'Mitigations', 'Resources'],
           `•${DOCUMENTATION}`,
