@@ -152,6 +152,12 @@ describe('the Windows session loop with its input kept open (card #2681, measure
     console.log(`c2681-measure sshd events: ${JSON.stringify(events.split('\n').slice(-120))}`);
   });
 
+  it('print the helper summaries', () => {
+    for (const name of readdirSync(tmpdir()).filter(each => each.startsWith('c2681-summary-')).sort()) {
+      console.log(`c2681-measure summary ${name}: ${JSON.stringify(readFileSync(path.join(tmpdir(), name), 'utf8').split('\n').slice(0, 80))}`);
+    }
+  });
+
   it('replay the frames the helper wrote, over plain ssh', async () => {
     useShell(SHELLS.windowsPowershell);
     const saved = readdirSync(tmpdir()).filter(name => name.startsWith('c2681-frame-')).sort();

@@ -1,4 +1,4 @@
-import {writeFileSync} from 'node:fs';
+import {appendFileSync, writeFileSync} from 'node:fs';
 import {powershellCommandsFor} from './powershell-session.ts';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -88,6 +88,7 @@ export class ConnectionHandler implements MessageHandler {
   private leaseCount = 0;
   private state: ConnectionState = 'idle';
   private session: SshSession | undefined;
+  private note: ((text: string) => void) | undefined;
   private feed: SshLineFeed | undefined;
   private sharedRecord: SharedRecord | null = null;
   private killed = false;
@@ -313,6 +314,7 @@ export class ConnectionHandler implements MessageHandler {
         this.options.logLine(
           `DIAG write ${String(text.length)} head=${JSON.stringify(text.slice(0, 80))}`,
         );
+        this.note?.(`write ${String(text.length)} ${JSON.stringify(text.slice(0, 50))}`);
         try {
           writeFileSync(
             path.join(tmpdir(), `c2681-frame-${String(Date.now())}.txt`),
@@ -343,10 +345,19 @@ export class ConnectionHandler implements MessageHandler {
     const commandLog = new LocalCommandLog();
     let bootstrapped = false;
     let heard = 0;
+    const summary = path.join(tmpdir(), `c2681-summary-${String(Date.now())}.txt`);
+    const note = (text: string): void => {
+      try {
+        appendFileSync(summary, `${new Date().toISOString()} ${text}\n`);
+      } catch {
+        // measure only
+      }
+    };
+    this.note = note;
     const output = new LineSplitter(line => {
       heard += 1;
-      if (heard <= 60) {
-        this.options.logLine(`DIAG out ${JSON.stringify(line.slice(0, 160))}`);
+      if (heard <= 200) {
+        note(`out ${JSON.stringify(line.slice(0, 100))}`);
       }
       const event = ready ? undefined : bootstrapEventOf(line);
       if (event !== undefined) {
@@ -367,6 +378,7 @@ export class ConnectionHandler implements MessageHandler {
             inputBase64: null,
           });
           this.options.logLine(`DIAG own frame ${String(probe.length)}`);
+          note(`own frame ${String(probe.length)}`);
           void session.write(probe).then(() => {
             this.options.logLine('DIAG own frame flushed');
           });
