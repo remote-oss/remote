@@ -1,9 +1,10 @@
 /**
  * @fileoverview The process port on Node.js: a child process with piped standard streams, started with exactly the
- * environment it is given.
+ * environment it is given, and on POSIX as the leader of its own process group, which ends with it.
  */
 
 import {spawn} from 'node:child_process';
+import {endProcessGroup, NODE_GROUP_SYSTEM} from './process-group.ts';
 import type {ProcessHandle, ProcessSpecification} from './ports.ts';
 
 /** How long a process's standard streams may stay open after its exit before another process is taken to hold them. */
@@ -21,6 +22,8 @@ export function nodeProcessSpawner(
         env: {...specification.environment},
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
+        // On POSIX the client leads its own process group, so ending the group ends what it started.
+        detached: NODE_GROUP_SYSTEM.posix,
       },
     );
     child.stdout.setEncoding('utf8');
@@ -49,6 +52,7 @@ export function nodeProcessSpawner(
         }
       }
       child.once('exit', (status: number | null) => {
+        endProcessGroup(child.pid);
         drain = setTimeout(() => {
           settle(status);
           releaseStreams();
@@ -71,6 +75,7 @@ export function nodeProcessSpawner(
         endInput: () => child.stdin.end(),
         kill: () => {
           child.kill();
+          endProcessGroup(child.pid);
           releaseStreams();
         },
       });

@@ -51,6 +51,26 @@ async function sshOf(alias: string): Promise<string[]> {
     );
 }
 
+/** How many ssh processes the wrapper lets an attempt start before it holds the next ones. */
+const BLOCK_AFTER = 2;
+
+/** The ssh processes of `alias` that are left once they had `seconds` to end: none, when the attempt ended them. */
+async function waitUntilNone(
+  alias: string,
+  seconds: number,
+): Promise<string[]> {
+  let left = await sshOf(alias);
+  for (
+    let attempt = 0;
+    attempt < seconds * 2 && left.length > 0;
+    attempt += 1
+  ) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    left = await sshOf(alias);
+  }
+  return left;
+}
+
 describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
   this.timeout(600_000);
   let saved: string | undefined;
@@ -63,16 +83,23 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
     restoreUserSettings(saved);
   });
 
-  /** The attempt of `mode`: the dialog has no reason and no ssh process of it is left. */
+  /**
+   * The attempt of `mode` over the recursing configuration. With `blocking`, the wrapper holds the ssh it is asked to
+   * start after `BLOCK_AFTER`, as a `sleep` with a marker in its arguments that ignores HUP and TERM, as a stuck ProxyCommand does, so a chain of ssh processes is alive when
+   * the attempt ends with its dialog; otherwise it fails them after `START_LIMIT`. Either way, no ssh process of the
+   * attempt is left, and the held ones are ended at the row's end whatever its outcome.
+   */
   async function recursionOf(
     mode: 'server' | 'terminal',
     settings: Record<string, unknown>,
+    blocking: boolean,
   ): Promise<void> {
-    const alias = `c2664-${mode}`;
-    const jump = `jump2664-${mode}`;
+    const alias = `c2664-${mode}${blocking ? '-held' : ''}`;
+    const jump = `jump-${alias}`;
+    const marker = `held-${alias}`;
     const runFolder = variable('HARNESS_RUN_FOLDER');
-    const binFolder = path.join(runFolder, `ssh-path-${mode}`);
-    const starts = path.join(runFolder, `ssh-starts-${mode}`);
+    const binFolder = path.join(runFolder, `ssh-path-${alias}`);
+    const starts = path.join(runFolder, `ssh-starts-${alias}`);
     // A rerun in the same run folder starts its count at none, or the cap would be reached before the attempt.
     rmSync(starts, {recursive: true, force: true});
     mkdirSync(binFolder, {recursive: true});
@@ -85,7 +112,9 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
         '#!/bin/bash',
         `PATH="${binFolder}:$PATH"; export PATH`,
         `started=$(ls "${starts}" | wc -l)`,
-        `if [ "$started" -ge ${String(START_LIMIT)} ]; then echo "fork: Resource temporarily unavailable" >&2; exit 255; fi`,
+        blocking
+          ? `if [ "$started" -ge ${String(BLOCK_AFTER)} ]; then trap "" HUP TERM; exec -a "ssh-${marker}" sleep 600; fi`
+          : `if [ "$started" -ge ${String(START_LIMIT)} ]; then echo "fork: Resource temporarily unavailable" >&2; exit 255; fi`,
         `: > "${starts}/$$"`,
         `exec -a ssh "${real}" "$@"`,
         '',
@@ -126,11 +155,11 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
       const dialog = recordLines('failureDialog', alias).find(
         line => line.time >= mark,
       );
-      let left = await sshOf(alias);
-      for (let attempt = 0; attempt < 20 && left.length > 0; attempt += 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        left = await sshOf(alias);
+      if (blocking) {
+        deepStrictEqual(await waitUntilNone(alias, 5), []);
+        return;
       }
+      const left = await waitUntilNone(alias, 10);
       deepStrictEqual(
         {
           question: dialog?.question,
@@ -162,10 +191,18 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
   }
 
   it('F-2310 AC-32 (c2664-recursion-server): in the local-server mode, with a catch-all ProxyJump that applies to the jump alias, no input is asked, the dialog has no reason and no ssh process of the attempt stays', async () => {
-    await recursionOf('server', {});
+    await recursionOf('server', {}, false);
   });
 
   it('F-2310 AC-32 (c2664-recursion-terminal): in the terminal mode, with a catch-all ProxyJump that applies to the jump alias, no input is asked, the dialog has no reason and no ssh process of the attempt stays', async () => {
-    await recursionOf('terminal', {'remote.SSH.useLocalServer': false});
+    await recursionOf('terminal', {'remote.SSH.useLocalServer': false}, false);
+  });
+
+  it('card #2664 (c2664-held-chain-server): in the local-server mode, when the attempt ends with its chain of ssh processes alive, none of them is left within 5 s of the dialog', async () => {
+    await recursionOf('server', {}, true);
+  });
+
+  it('card #2664 (c2664-held-chain-terminal): in the terminal mode, when the attempt ends with its chain of ssh processes alive, none of them is left within 5 s of the dialog', async () => {
+    await recursionOf('terminal', {'remote.SSH.useLocalServer': false}, true);
   });
 });
