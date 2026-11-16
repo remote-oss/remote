@@ -87,10 +87,8 @@ import {
   metadataArguments,
   recordedMetadataOf,
 } from '../shutdown/recorded-metadata.ts';
-import {
-  REGISTER_ANSWER_MILLISECONDS,
-  type ShutdownMessenger,
-} from '../shutdown/window-lease.ts';
+import {REGISTER_WAIT_MILLISECONDS} from '../shutdown/helper-request.ts';
+import type {ShutdownMessenger} from '../shutdown/window-lease.ts';
 import {sourceTypesValid} from '../config/source-types.ts';
 import {type PreflightDependencies, secondCheck} from '../engine/preflight.ts';
 import {execChannelOf, execChannelOver} from '../exec/exec-channel.ts';
@@ -1117,13 +1115,14 @@ export function containerConnectorOf(
   /**
    * Waits for the helper's answer to this window's register before the container is looked up, so a container whose
    * stop was already running is found stopped and started again, not reused while it goes down. A helper that does not
-   * answer within the stop's own time and a little more holds the connect no longer.
+   * answer within the time the acquire may take (a draining helper's close, a fresh start) and the stop's own time and a
+   * little more holds the connect no longer.
    */
   async function afterShutdownRegister(): Promise<void> {
     const waiting = {stop: (): void => undefined};
     const bound = new Promise<'bound'>(resolve => {
       waiting.stop = dependencies.preflight.setTimer(
-        REGISTER_ANSWER_MILLISECONDS,
+        REGISTER_WAIT_MILLISECONDS,
         () => {
           resolve('bound');
         },

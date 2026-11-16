@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {REGISTER_WAIT_MILLISECONDS} from '../../src/shutdown/helper-request.ts';
 import type {CliTarget} from '../../src/cli/cli-arguments.ts';
 import type {EngineRunOutcome} from '../../src/engine/engine-host.ts';
 import {volumePayloadOf} from '../../src/volumes/volume-payload.ts';
@@ -207,7 +208,7 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
     for (let turn = 0; turn < 20; turn += 1) {
       await new Promise(setImmediate);
     }
-    const waited = scene.timerDelays.includes(12_000);
+    const waited = scene.timerDelays.includes(REGISTER_WAIT_MILLISECONDS);
     for (const timer of scene.timers.splice(0)) {
       timer();
     }
