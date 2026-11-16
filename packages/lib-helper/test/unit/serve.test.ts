@@ -360,11 +360,8 @@ describe('serve', () => {
   });
 
   it('contracts X2: a hello during the end action of a delayed check is answered ending, and the endpoint stays until the action is done', async () => {
-    let finishAction: () => void = () => undefined;
-    handler.runAction = () =>
-      new Promise<void>(resolve => {
-        finishAction = resolve;
-      });
+    const action = Promise.withResolvers<void>();
+    handler.runAction = () => action.promise;
     start({
       kind: 'delayedCheckAfterLastLease',
       milliseconds: 10_000,
@@ -378,7 +375,7 @@ describe('serve', () => {
     await settled();
     const during = await connect();
     const listeningDuring = port.isListening(ENDPOINT);
-    finishAction();
+    action.resolve();
     deepStrictEqual(
       [during.received, listeningDuring, await ending, during.closed],
       [[{type: 'ending'}], true, 'policy', true],
