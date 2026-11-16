@@ -139,6 +139,48 @@ describe('the hint recorder (card connect-119)', () => {
     ]);
   });
 
+  it('F-2602 AC-14: a hint whose templates name a setting key as a link stores where those keys sit, in the message and in the mitigations, and the text stays plain', async () => {
+    const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    attempt(recorder, [
+      {
+        status: 'CreateInstallDirFailed',
+        message: {id: 'S139', values: ['$HOME', 'remote.SSH.key']},
+        mitigations: [
+          {id: 'S112', values: ['remote.SSH.key']},
+          {id: 'S053', values: []},
+        ],
+        resources: [],
+      },
+    ]);
+    await settled();
+    const [entry] = errorsOf(stored.value?.records[0]);
+    deepStrictEqual(
+      [
+        entry?.kind === 'error' && entry.mitigations?.[0],
+        entry?.kind === 'error' && entry.links,
+      ],
+      [
+        'Remove or edit setting remote.SSH.key',
+        {
+          message: [{start: 143, length: 14}],
+          mitigations: [[{start: 23, length: 14}], []],
+        },
+      ],
+    );
+  });
+
+  it('F-2602 AC-14: a hint with no link slot stores no links, as a record written before them has none', async () => {
+    const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    attempt(recorder, [HINT]);
+    await settled();
+    deepStrictEqual(
+      errorsOf(stored.value?.records[0]).map(
+        entry => entry.kind === 'error' && 'links' in entry,
+      ),
+      [false],
+    );
+  });
+
   it('F-2604 AC-22: the hints are written under the key the clear command deletes', async () => {
     const {recorder, keys} = recording(['2026-11-02T00:00:00Z']);
     attempt(recorder, [HINT]);

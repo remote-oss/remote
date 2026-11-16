@@ -2,7 +2,12 @@ import {deepStrictEqual, throws} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {FAILURE_TEMPLATES} from '../../src/surfaces/failure-strings.ts';
-import {OWN_TEMPLATES, ownText} from '../../src/surfaces/own-strings.ts';
+import {
+  LINK_SLOTS,
+  OWN_TEMPLATES,
+  ownText,
+  ownTextWithLinks,
+} from '../../src/surfaces/own-strings.ts';
 
 const BUNDLES = path.join(import.meta.dirname, '..', '..', 'l10n');
 
@@ -59,6 +64,56 @@ describe('the strings that are ours alone', () => {
         Object.hasOwn(bundle, template),
       ),
       true,
+    );
+  });
+});
+
+describe('the setting keys drawn as links (F-2602 3.4)', () => {
+  it('names the link slots once per string id: S016, S048 and S112 their key, S139 its second place, and no other string a slot', () => {
+    deepStrictEqual(LINK_SLOTS, {
+      S016: [0],
+      S048: [0],
+      S112: [0],
+      S139: [1],
+    });
+  });
+
+  it('F-2602 AC-14: the key of S112 is a range of its text, and S049’s key, which is plain, has none', () => {
+    deepStrictEqual(
+      [
+        ownTextWithLinks(
+          {id: 'S112', values: ['remote.SSH.serverInstallPath']},
+          template => template,
+        ),
+        ownTextWithLinks(
+          {id: 'S049', values: ['remote.SSH.serverInstallPath']},
+          template => template,
+        ).ranges,
+      ],
+      [
+        {
+          text: 'Remove or edit setting remote.SSH.serverInstallPath',
+          ranges: [{start: 23, length: 28}],
+        },
+        [],
+      ],
+    );
+  });
+
+  it('F-2602 AC-14: the second value of S139 is a range, and its first, the folder, is not', () => {
+    deepStrictEqual(
+      ownTextWithLinks(
+        {id: 'S139', values: ['$HOME', 'remote.SSH.serverInstallPath']},
+        template => template,
+      ).ranges,
+      [{start: 143, length: 28}],
+    );
+  });
+
+  it('an id this table lacks throws naming it', () => {
+    throws(
+      () => ownTextWithLinks({id: 'nothing', values: []}, template => template),
+      /no template for the string id nothing/,
     );
   });
 });

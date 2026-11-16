@@ -9,8 +9,8 @@
 import type {FailureHint, FailureReason, FilledString} from 'lib-authority';
 import {type EnvironmentHint, statusNumberOf} from 'lib-ssh';
 import {isFailureStringId, textOfId} from '../surfaces/failure-strings.ts';
-import {ownText} from '../surfaces/own-strings.ts';
-import type {Translate} from '../surfaces/strings.ts';
+import {ownTextWithLinks} from '../surfaces/own-strings.ts';
+import type {TextRange, Translate} from '../surfaces/strings.ts';
 import type {ConfirmedUpdateEnvironment} from '../state/confirmed-update.ts';
 import {hintStoreKeyOf} from './hint-store-key.ts';
 import {
@@ -61,22 +61,41 @@ export interface HintRecorder {
  * so that no hint ever stops the connect that records it.
  */
 function idText(reference: FilledString, translate: Translate): string {
+  return idParts(reference, translate).text;
+}
+
+/** A text, and where the setting keys that are links sit in it. */
+interface LinkedText {
+  text: string;
+  ranges: TextRange[];
+}
+
+/** `idText` of `reference`, with the ranges of the setting keys its template draws as links. */
+function idParts(reference: FilledString, translate: Translate): LinkedText {
   if (isFailureStringId(reference.id)) {
-    return textOfId(reference.id, translate, [...reference.values]);
+    return {
+      text: textOfId(reference.id, translate, [...reference.values]),
+      ranges: [],
+    };
   }
   try {
-    return ownText(
+    return ownTextWithLinks(
       {id: reference.id, values: [...reference.values]},
       translate,
     );
   } catch {
-    return reference.id;
+    return {text: reference.id, ranges: []};
   }
 }
 
-/** The text of a hint's message or mitigation. */
-function textOf(part: string | FilledString, translate: Translate): string {
-  return typeof part === 'string' ? part : idText(part, translate);
+/** The text of a hint's message or mitigation, with the ranges of its links. */
+function linkedTextOf(
+  part: string | FilledString,
+  translate: Translate,
+): LinkedText {
+  return typeof part === 'string'
+    ? {text: part, ranges: []}
+    : idParts(part, translate);
 }
 
 /** The text of a hint's details: a reason's own text, or a string of either table. */
@@ -166,18 +185,31 @@ export function hintRecorderOf(
     },
     record: hint => {
       const statusNumber = statusNumberOf(hint.status);
+      const message = linkedTextOf(hint.message, environment.translate);
+      const mitigations = hint.mitigations.map(each =>
+        linkedTextOf(each, environment.translate),
+      );
+      const linked =
+        message.ranges.length > 0 ||
+        mitigations.some(each => each.ranges.length > 0);
       const entry: SessionHint = {
         kind: 'error',
         status: hint.status,
         ...(statusNumber === undefined ? {} : {statusNumber}),
-        message: textOf(hint.message, environment.translate),
+        message: message.text,
         ...(hint.details === undefined
           ? {}
           : {details: reasonText(hint.details, environment.translate)}),
-        mitigations: hint.mitigations.map(each =>
-          textOf(each, environment.translate),
-        ),
+        mitigations: mitigations.map(each => each.text),
         resources: hint.resources.map(() => environment.documentation()),
+        ...(linked
+          ? {
+              links: {
+                message: message.ranges,
+                mitigations: mitigations.map(each => each.ranges),
+              },
+            }
+          : {}),
       };
       if (!attemptErrors.some(each => sameError(each, entry))) {
         attemptErrors.push(entry);
