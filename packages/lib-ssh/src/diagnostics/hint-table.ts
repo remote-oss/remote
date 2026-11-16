@@ -172,20 +172,25 @@ function rowLines(cells: readonly Cell[], header: boolean): string[] {
 
 /**
  * The table of `rows` for a terminal `width` cells wide: a Status column as wide as its longest cell and a Message
- * column that takes the rest, with Mitigations and Resources beside them when a row has either, the three sharing the
- * rest equally. One data row for each hint, with a single rule between rows.
+ * column that takes the rest, with a Mitigations column when a row has a mitigation and a Resources column when a row
+ * has a resource, each of them and the Message column sharing the rest equally. One data row for each hint, with a
+ * single rule between rows.
  */
 export function hintTable(
   rows: readonly HintTableRow[],
   width: number,
   headers: HintTableHeaders = HEADERS,
 ): string[] {
-  const withLists = rows.some(
-    entry => entry.mitigations.length > 0 || entry.resources.length > 0,
-  );
-  const names = withLists
-    ? (['status', 'message', 'mitigations', 'resources'] as const)
-    : (['status', 'message'] as const);
+  const names = [
+    'status' as const,
+    'message' as const,
+    ...(rows.some(entry => entry.mitigations.length > 0)
+      ? ['mitigations' as const]
+      : []),
+    ...(rows.some(entry => entry.resources.length > 0)
+      ? ['resources' as const]
+      : []),
+  ];
   const statusWidth = Math.max(
     headers.status.length,
     ...rows.map(entry => entry.status.length),
@@ -198,7 +203,7 @@ export function hintTable(
     width - borders - padding - statusWidth,
   );
   const each = Math.floor(rest / flexible);
-  type Name = (typeof names)[number];
+  type Name = 'status' | 'message' | 'mitigations' | 'resources';
   const spec: Record<Name, Column> = {
     status: {header: headers.status, centre: true, width: statusWidth},
     message: {header: headers.message, centre: false, width: each},
