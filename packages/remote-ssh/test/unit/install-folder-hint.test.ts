@@ -3,11 +3,17 @@ import {installFolderHint} from '../../src/diagnostics/install-folder-hint.ts';
 import {ownText} from '../../src/surfaces/own-strings.ts';
 
 describe('the hint of an install folder the host cannot create (card #2708)', () => {
-  const hint = installFolderHint(template => template);
+  const hint = installFolderHint();
 
   it('F-2407 AC-13: the status, the message with the folder and the setting filled, and the failure as its details', () => {
     deepStrictEqual(
-      [hint.status, hint.message, hint.details],
+      [
+        hint.status,
+        typeof hint.message === 'string'
+          ? hint.message
+          : ownText(hint.message, template => template),
+        hint.details,
+      ],
       [
         'CreateInstallDirFailed',
         "The install directory on the remote host could not be created. By default this is the '$HOME' directory and can be overridden with the setting remote.SSH.serverInstallPath",

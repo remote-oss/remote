@@ -18,6 +18,7 @@ import {
   dismissals,
   freshHost,
 } from '../windows/maintenance.ts';
+import {terminalRows} from '../windows/renderer.ts';
 import {keepingSettings, PLATFORMS} from '../windows/tunnel-support.ts';
 import {
   cellsOf,
@@ -52,7 +53,7 @@ async function failedTable(name: string) {
   appendScript(dismissals(name));
   await failedOn('harness', name);
   try {
-    return {table: await wholeTableOf(name)};
+    return {table: await wholeTableOf(name), rows: await terminalRows(name)};
   } finally {
     await closeWindow(name).catch(() => undefined);
   }
@@ -76,22 +77,28 @@ describe('the hints of an install folder and a download that fail (card #2708)',
     await closeAllButLocal();
   });
 
-  it('F-2602 AC-14, AC-18 (c2708-install-path): an install folder the remote user cannot create gives a Mitigations column that starts with removing or editing the setting and no Resources column, and the setting keeps its value', async () => {
+  it('F-2602 AC-14, AC-18 (c2708-install-path): an install folder the remote user cannot create gives a Mitigations column that starts with removing or editing the setting, its key drawn as a link, and no Resources column, and the setting keeps its value', async () => {
     await keepingSettings(async () => {
       await freshHost();
       const value = {harness: '/proc/nope/dir'};
       await userSettings({...PLATFORMS, [SETTING]: value});
       const before = readUserSettings();
-      const {table} = await failedTable('c2708-install-path');
+      const {table, rows} = await failedTable('c2708-install-path');
       deepStrictEqual(
         {
           header: cellsOf(table[1]),
-          first: columnOf(table, 2)[0],
+          first: squeezed(columnOf(table, 2).join('')).startsWith(
+            squeezed(`•Remove or edit setting ${SETTING}`),
+          ),
+          linked: squeezed(rows.flatMap(entry => entry.underlined).join(''))
+            .length,
           unchanged: readUserSettings() === before,
         },
         {
           header: ['Status', 'Message', 'Mitigations'],
-          first: `• Remove or edit setting ${SETTING}`,
+          first: true,
+          // The key of the explanation and the key of the first mitigation.
+          linked: 2 * SETTING.length,
           unchanged: true,
         },
       );

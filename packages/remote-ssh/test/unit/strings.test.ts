@@ -1,7 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
-import {filled} from '../../src/surfaces/strings.ts';
+import {filled, filledWithRanges} from '../../src/surfaces/strings.ts';
 
 const BUNDLES = path.join(import.meta.dirname, '..', '..', 'l10n');
 
@@ -80,5 +80,44 @@ describe('filling a template', () => {
 
   it('F-3902 rule 8: a template without places is returned as translated', () => {
     deepStrictEqual(filled(same, 'no places'), 'no places');
+  });
+});
+
+describe('a template filled with the places of its values (F-2602 3.4)', () => {
+  it('gives the range of each value of a named slot in the filled text, counted in its characters', () => {
+    deepStrictEqual(
+      filledWithRanges(
+        template => template,
+        'on {1}, set {0} and {1}',
+        ['a', 'bc'],
+        [1],
+      ),
+      {
+        text: 'on bc, set a and bc',
+        ranges: [
+          {start: 3, length: 2},
+          {start: 17, length: 2},
+        ],
+      },
+    );
+  });
+
+  it('gives no range for a slot that is not named, an empty value, or a place with no value', () => {
+    deepStrictEqual(
+      filledWithRanges(template => template, '{0}{1}{2}', ['a', ''], [0, 1, 2]),
+      {text: 'a{2}', ranges: [{start: 0, length: 1}]},
+    );
+  });
+
+  it('puts the ranges after the translation, which may move the places', () => {
+    deepStrictEqual(
+      filledWithRanges(
+        template => (template === 'T {0}' ? 'Ein langer Text {0}' : template),
+        'T {0}',
+        ['key'],
+        [0],
+      ).ranges,
+      [{start: 16, length: 3}],
+    );
   });
 });

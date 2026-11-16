@@ -5,21 +5,16 @@
 
 import type {FailureHint} from 'lib-ssh';
 import {settings} from '../identifiers.generated.ts';
-import {ownText} from '../surfaces/own-strings.ts';
-import type {Translate} from '../surfaces/strings.ts';
 
 /** The text the explanation shows for the default folder, which the host's shell expands and the client does not. */
 const DEFAULT_FOLDER = '$HOME';
 
-/** The hint for a host that could not create its install folder, its texts in the display language. */
-export function installFolderHint(translate: Translate): FailureHint {
+/** The hint for a host that could not create its install folder, its texts left to the recorder, which writes them in the display language. */
+export function installFolderHint(): FailureHint {
   const setting = settings.serverInstallPath.id;
   return {
     status: 'CreateInstallDirFailed',
-    message: ownText(
-      {id: 'S139', values: [DEFAULT_FOLDER, setting]},
-      translate,
-    ),
+    message: {id: 'S139', values: [DEFAULT_FOLDER, setting]},
     details: {id: 'S070'},
     mitigations: [
       {id: 'S112', values: [setting]},

@@ -5,7 +5,12 @@
 
 import {SSH_LABEL_PREFIX_ID} from '../window/label-suffix.ts';
 import type {StringRef} from '../connect/picker-model.ts';
-import {type Translate, filled} from './strings.ts';
+import {
+  type Translate,
+  filled,
+  filledWithRanges,
+  type TextRange,
+} from './strings.ts';
 
 /** The ids of the strings that are ours alone, and their English templates. */
 export const OWN_TEMPLATES = {
@@ -79,5 +84,32 @@ export function ownText(reference: StringRef, translate: Translate): string {
     translate,
     OWN_TEMPLATES[reference.id as keyof typeof OWN_TEMPLATES],
     reference.values,
+  );
+}
+
+/**
+ * The places of the strings whose value is a setting key drawn as a link, by string id; the key of every other string
+ * is shown plain.
+ */
+export const LINK_SLOTS: Readonly<Record<string, readonly number[]>> = {
+  S016: [0],
+  S048: [0],
+  S112: [0],
+  S139: [1],
+};
+
+/** The text of a string of our own, and where the setting keys that are links sit in it. */
+export function ownTextWithLinks(
+  reference: StringRef,
+  translate: Translate,
+): {text: string; ranges: TextRange[]} {
+  if (!Object.hasOwn(OWN_TEMPLATES, reference.id)) {
+    throw new Error(`no template for the string id ${reference.id}`);
+  }
+  return filledWithRanges(
+    translate,
+    OWN_TEMPLATES[reference.id as keyof typeof OWN_TEMPLATES],
+    reference.values,
+    LINK_SLOTS[reference.id] ?? [],
   );
 }
