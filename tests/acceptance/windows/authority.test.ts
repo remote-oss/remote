@@ -158,6 +158,45 @@ describe('the ssh-remote authorities of F-2501 (card coverage-19)', function () 
     );
   });
 
+  it('F-2501 AC-8, AC-25 (ruling-2731-listen-retry): four windows opened at once on four spellings of one host all connect, in each of four rounds, though they search the window ports at the same moment', async () => {
+    const port = hostPort();
+    const spellings = [
+      hexOf({hostName: '127.0.0.1', user: 'harness', port}),
+      `harness@127.0.0.1:${String(port)}`,
+      hexOf({hostName: '127.0.0.1', user: 'harness'}),
+      'harness@127.0.0.1',
+    ];
+    const names = ['a1', 'a2', 'a3', 'a4'];
+    const rounds: boolean[][] = [];
+    for (let round = 0; round < 4; round++) {
+      await Promise.all(
+        spellings.map((spelling, index) =>
+          openWindow(spelling, names[index] ?? 'a1'),
+        ),
+      );
+      const connected: boolean[] = [];
+      for (const name of names) {
+        connected.push(
+          await connectedWithin(name, 90_000).then(
+            () => true,
+            () => false,
+          ),
+        );
+      }
+      rounds.push(connected);
+      for (const name of names) {
+        if (isOpen(name)) {
+          await closeWindow(name);
+        }
+      }
+      await noHelperWithin(60_000);
+    }
+    deepStrictEqual(
+      rounds,
+      Array.from({length: 4}, () => [true, true, true, true]),
+    );
+  });
+
   it('F-2501 AC-9: a host typed with a port connects as the configured user, and a name with no configured user is refused', async () => {
     const port = String(hostPort());
     const since = now();
