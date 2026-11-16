@@ -295,25 +295,6 @@
       "installedIn": "/home/harness/.vscodium-server-insiders"
     },
     {
-      "label": "local-copy-fails",
-      "cite": "F-2405 AC-16 (local-copy-fails)",
-      "settings": {
-        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}",
-        "remote.SSH.localServerDownload": "always"
-      },
-      "setup": [
-        "mkdir -p /home/harness/.vscodium-server-insiders && chown root:root /home/harness/.vscodium-server-insiders && chmod 555 /home/harness/.vscodium-server-insiders"
-      ],
-      "outcome": "dialog",
-      "dialogIncludes": ["Could not establish connection to \"harness\""],
-      "stages": [
-        "Downloading VS Code Server locally",
-        "Copying VS Code Server to host with scp"
-      ],
-      "noStages": ["Installing VS Code Server"],
-      "hostLacks": ["/home/harness/.vscodium-server-insiders/bin"]
-    },
-    {
       "label": "local-no-marker",
       "cite": "F-2405 AC-8 (ruling-1607-no-marker)",
       "settings": {
@@ -554,6 +535,28 @@
         "hostThenClient": true
       },
       "installedIn": "/home/harness/.vscodium-server-insiders"
+    },
+    {
+      "label": "local-copy-fails",
+      "cite": "F-2405 AC-16 (local-copy-fails)",
+      "authority": "agentfwd-tmpdir",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "always"
+      },
+      "setup": [
+        "pkill -u harness-tmpdir -f '[v]scodium-server-insiders'; rm -rf /home/harness-tmpdir/.vscodium-server-insiders; chmod 500 /home/harness-tmpdir/tmp; true"
+      ],
+      "outcome": "dialog",
+      "dialogIncludes": [
+        "Could not establish connection to \"agentfwd-tmpdir\""
+      ],
+      "stages": [
+        "Downloading VS Code Server locally",
+        "Copying VS Code Server to host with scp"
+      ],
+      "noStages": ["Installing VS Code Server"],
+      "hostLacks": ["/home/harness-tmpdir/.vscodium-server-insiders/bin"]
     }
   ]
 }
