@@ -148,6 +148,19 @@ function mitmResult(): Classification {
   };
 }
 
+/** The reasons of the two runs with the two lines in either order, the shared server's stream. */
+function bothOrders(
+  first: string,
+  second: string,
+): Array<Classification['reason']> {
+  return [
+    classifyRun([lineOf(first), lineOf(second)], 255, 'connection', 'shared')
+      .reason,
+    classifyRun([lineOf(second), lineOf(first)], 255, 'connection', 'shared')
+      .reason,
+  ];
+}
+
 /** The full line `ssh` prints for one of the seven network texts, as measured against the real client. */
 function lineOf(text: string): string {
   if (text === 'Could not resolve hostname') {
@@ -196,7 +209,7 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
     );
   });
 
-  it('F-2603.BR-3: a nonexistent pipe names its reason', () => {
+  it('F-2603 AC-5: BR-3, a nonexistent pipe names its reason', () => {
     deepStrictEqual(
       classifyRun(
         [
@@ -207,6 +220,13 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
         'shared',
       ),
       offline('unreachable', 'S142'),
+    );
+  });
+
+  it('F-2603 AC-5: the dialog text of the pipe reason ends in exactly one full stop', () => {
+    strictEqual(
+      endWithFullStop('The process tried to write to a nonexistent pipe'),
+      'The process tried to write to a nonexistent pipe.',
     );
   });
 
@@ -340,7 +360,7 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
     );
   });
 
-  it('F-2603.BR-3: an unassignable address names its reason', () => {
+  it('F-2603 AC-4: BR-3, an unassignable address names its reason', () => {
     deepStrictEqual(
       classifyRun(
         ["ssh: connect to host h port 22: Can't assign requested address"],
@@ -352,7 +372,7 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
     );
   });
 
-  it("ADR-0010: a rule's text in the middle of a line is not ssh's message (it was recognised at any position before the forms were anchored)", () => {
+  it("ADR-0010: in a terminal's stream a rule's text in the middle of a line is not ssh's message (in the shared stream the offline texts count contained, ruling-2706-offline-texts)", () => {
     deepStrictEqual(
       classifyRun(
         [
@@ -362,7 +382,7 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
         ],
         255,
         'connection',
-        'shared',
+        'terminal',
       ),
       {kind: 'unknown', hints: [], logLines: []},
     );
@@ -440,14 +460,31 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
     });
   }
 
-  it('F-2603.7.E2: all seven texts in table order give the first reason', () => {
+  it('F-2603 AC-15: 7.E2, an unresolvable hostname and a missing route, in either line order', () => {
+    deepStrictEqual(
+      bothOrders('Could not resolve hostname', 'No route to host'),
+      [{id: 'S032'}, {id: 'S032'}],
+    );
+  });
+
+  it('F-2603 AC-16: 7.E2, an unreachable network and the pipe text, in either line order', () => {
+    deepStrictEqual(
+      bothOrders(
+        'Network is unreachable',
+        'The process tried to write to a nonexistent pipe',
+      ),
+      [{id: 'S094'}, {id: 'S094'}],
+    );
+  });
+
+  it('F-2603 AC-25: 7.E2, all seven texts in table order give the first reason', () => {
     deepStrictEqual(
       classifyRun(SEVEN_TEXTS.map(lineOf), 255, 'connection', 'shared').reason,
       {id: 'S094'},
     );
   });
 
-  it('F-2603.7.E2: all seven texts in reverse order give the first reason', () => {
+  it('F-2603 AC-25: 7.E2, all seven texts in reverse order give the first reason', () => {
     deepStrictEqual(
       classifyRun(
         SEVEN_TEXTS.map(lineOf).reverse(),
@@ -467,7 +504,7 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
     'Host is down',
   ] as const;
   for (const variant of CASE_VARIANTS) {
-    it(`F-2603.7.E1: the text ${variant} matches nothing`, () => {
+    it(`F-2603 AC-14: 7.E1, the text ${variant} matches nothing`, () => {
       deepStrictEqual(classifyRun([variant], 255, 'connection', 'shared'), {
         kind: 'unknown',
         hints: [],
@@ -975,6 +1012,100 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
     );
   });
 
+  const OFFLINE_TEXTS: Array<
+    [string, Classification['kind'], DiagnosticStringId]
+  > = [
+    ['Network is unreachable', 'unreachable', 'S094'],
+    ['Could not resolve hostname', 'unreachable', 'S032'],
+    ['The process tried to write to a nonexistent pipe', 'unreachable', 'S142'],
+    ['No route to host', 'unreachable', 'S097'],
+    ["Can't assign requested address", 'unreachable', 'S014'],
+  ];
+  for (const [text, kind, reason] of OFFLINE_TEXTS) {
+    it(`F-2603 AC-6 (ruling-2706-offline-texts): ${text} surrounded by other text on a line is recognised in shared mode, its lower case and the same line in a terminal are not`, () => {
+      deepStrictEqual(
+        [
+          classifyRun([`motd: ${text} motd`], 255, 'connection', 'shared'),
+          classifyRun(
+            [`motd: ${text.toLowerCase()} motd`],
+            255,
+            'connection',
+            'shared',
+          ),
+          classifyRun([`motd: ${text} motd`], 255, 'connection', 'terminal'),
+        ],
+        [
+          offline(kind, reason),
+          {kind: 'unknown', hints: [], logLines: []},
+          {kind: 'unknown', hints: [], logLines: []},
+        ],
+      );
+    });
+  }
+
+  it('F-2603 AC-6 (ruling-2706-offline-texts): in a terminal, the anchored forms still give their reasons', () => {
+    deepStrictEqual(
+      [
+        classifyRun(
+          ['ssh: connect to host h port 22: Network is unreachable'],
+          255,
+          'connection',
+          'terminal',
+        ),
+        classifyRun(
+          [
+            'ssh: Could not resolve hostname h.invalid: Name or service not known',
+          ],
+          255,
+          'connection',
+          'terminal',
+        ),
+        classifyRun(
+          [
+            'ssh: connect to host h port 22: The process tried to write to a nonexistent pipe',
+          ],
+          255,
+          'connection',
+          'terminal',
+        ),
+        classifyRun(
+          ['ssh: connect to host h port 22: No route to host'],
+          255,
+          'connection',
+          'terminal',
+        ),
+        classifyRun(
+          ["ssh: connect to host h port 22: Can't assign requested address"],
+          255,
+          'connection',
+          'terminal',
+        ),
+      ],
+      [
+        offline('unreachable', 'S094'),
+        offline('unreachable', 'S032'),
+        offline('unreachable', 'S142'),
+        offline('unreachable', 'S097'),
+        offline('unreachable', 'S014'),
+      ],
+    );
+  });
+
+  it('F-2603 AC-6 (ruling-2706-offline-texts): a denied line beside a surrounded offline text still gives the permission-denied result', () => {
+    deepStrictEqual(
+      classifyRun(
+        [
+          'x@h.invalid: Permission denied (publickey).',
+          'motd: Network is unreachable motd',
+        ],
+        255,
+        'connection',
+        'shared',
+      ),
+      denied('Permission denied (publickey).'),
+    );
+  });
+
   it('F-2604.AC-3 (provisional): the forwarding hint names its documentation topic', () => {
     const result = classifyRun([PROHIBITED_LINE], 255, 'connection', 'shared');
     deepStrictEqual(result.hints[0]?.resources, [
@@ -1058,6 +1189,22 @@ describe('endWithFullStop (the closing full stop of a reason text)', () => {
     strictEqual(
       endWithFullStop('Permission denied (password)'),
       'Permission denied (password).',
+    );
+  });
+
+  it('F-2603 AC-27: the recognised reasons end without a full stop in the hint entry and the troubleshooting row, and their dialog text ends in exactly one', () => {
+    const reasons = [
+      "Can't assign requested address",
+      'Could not resolve hostname',
+      'Network is unreachable',
+      'No route to host',
+      'The connection timed out',
+      'The operation timed out',
+      'The process tried to write to a nonexistent pipe',
+    ];
+    deepStrictEqual(
+      reasons.map(text => [text.endsWith('.'), endWithFullStop(text)]),
+      reasons.map(text => [false, `${text}.`]),
     );
   });
 

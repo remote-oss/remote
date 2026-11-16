@@ -1,9 +1,10 @@
 /**
  * @fileoverview The forms `ssh` writes on its error output that the classifier recognises, and what each one means.
  * A form is a regular expression anchored at the start of a line: a text in the middle of a line, such as remote text a
- * startup file prints, is not ssh's message. The two timeout forms are the exception in the shared server's stream,
- * where the exact, case-sensitive timeout text counts wherever it stands in a line; in a terminal's stream only the
- * anchored forms count, because that stream also carries what a question or a proxy command wrote.
+ * startup file prints, is not ssh's message. The OfflineError family is the exception in the shared server's stream,
+ * where its exact, case-sensitive texts count wherever they stand in a line (ADR-0010, ruling-2706-offline-texts); in a
+ * terminal's stream only the anchored forms count, because that stream also carries what a question or a proxy command
+ * wrote.
  */
 
 /** A failure kind, closed: every failure maps to exactly one. */
@@ -71,26 +72,34 @@ function connectError(text: string): RegExp {
 }
 
 /**
- * The network forms, highest priority first, whatever the order of the lines. The two timeout forms match the
- * contained text only in the shared server's stream, where ssh appends them to more than one diagnostic; in a
- * terminal's stream a question or a proxy command can write the same text in its own line, so only the anchored
- * `connect to host` form gives the reason there.
+ * The network forms, highest priority first, whatever the order of the lines. The five offline texts and the two
+ * timeout forms match the contained text only in the shared server's stream, where ssh writes them inside more than
+ * one diagnostic (ruling-2706-offline-texts); in a terminal's stream a question or a proxy command can write the same
+ * text in its own line, so only their anchored forms give the reason there.
  */
 export function networkRules(mode: ConnectionMode): readonly NetworkRule[] {
   return [
     {
-      pattern: connectError('Network is unreachable'),
+      pattern:
+        mode === 'terminal'
+          ? connectError('Network is unreachable')
+          : /Network is unreachable/,
       kind: 'unreachable',
       reason: 'S094',
     },
     {
-      pattern: new RegExp(`^${OWN_PREFIX}Could not resolve hostname \\S+: `),
+      pattern:
+        mode === 'terminal'
+          ? new RegExp(`^${OWN_PREFIX}Could not resolve hostname \\S+: `)
+          : /Could not resolve hostname/,
       kind: 'unreachable',
       reason: 'S032',
     },
     {
       pattern:
-        /^(?:scp: )?(?:ssh: connect to host \S+ port \d+: )?The process tried to write to a nonexistent pipe/,
+        mode === 'terminal'
+          ? /^(?:scp: )?(?:ssh: connect to host \S+ port \d+: )?The process tried to write to a nonexistent pipe/
+          : /The process tried to write to a nonexistent pipe/,
       kind: 'unreachable',
       reason: 'S142',
     },
@@ -111,12 +120,18 @@ export function networkRules(mode: ConnectionMode): readonly NetworkRule[] {
       reason: 'S140',
     },
     {
-      pattern: connectError('No route to host'),
+      pattern:
+        mode === 'terminal'
+          ? connectError('No route to host')
+          : /No route to host/,
       kind: 'unreachable',
       reason: 'S097',
     },
     {
-      pattern: connectError("Can't assign requested address"),
+      pattern:
+        mode === 'terminal'
+          ? connectError("Can't assign requested address")
+          : /Can't assign requested address/,
       kind: 'unreachable',
       reason: 'S014',
     },

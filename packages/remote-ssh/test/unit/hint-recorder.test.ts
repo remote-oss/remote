@@ -1,10 +1,11 @@
-import type {DiagnosticStringId} from 'lib-ssh';
+import type {DiagnosticStringId, FailureHint, FailureReason} from 'lib-ssh';
 import {deepStrictEqual} from 'node:assert';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import type {FailureHint} from 'lib-ssh';
 import {hintRecorderOf} from '../../src/diagnostics/hint-recorder.ts';
 import type {HintStore} from '../../src/diagnostics/hint-store.ts';
+import {rowsOf} from '../../src/diagnostics/troubleshooting.ts';
+import {failurePresenterOf} from '../../src/surfaces/failure-presenter.ts';
 
 const ENVIRONMENT = [
   {kind: 'environment' as const, message: 'one', details: 'first'},
@@ -291,6 +292,93 @@ describe('the hint recorder (card connect-119)', () => {
         return error?.kind === 'error' ? error.details : undefined;
       }),
       ['Port forwarding is disabled'],
+    );
+  });
+
+  const OFFLINE_IDS: DiagnosticStringId[] = [
+    'S014',
+    'S032',
+    'S094',
+    'S097',
+    'S137',
+    'S140',
+    'S142',
+  ];
+
+  /** The English text of each id of OFFLINE_IDS, in order. */
+  const OFFLINE_TEXTS = [
+    "Can't assign requested address",
+    'Could not resolve hostname',
+    'Network is unreachable',
+    'No route to host',
+    'The connection timed out',
+    'The operation timed out',
+    'The process tried to write to a nonexistent pipe',
+  ];
+
+  /** The dialog text of a failure with `reason`, as the presenter shows it. */
+  function dialogTextOf(reason: FailureReason): string | undefined {
+    const shown: string[] = [];
+    const presenter = failurePresenterOf(
+      {
+        showError: text => {
+          shown.push(text);
+          return Promise.resolve(undefined);
+        },
+      },
+      {
+        reload: () => Promise.resolve(undefined),
+        closeRemote: () => Promise.resolve(undefined),
+        moreActions: () => Promise.resolve(undefined),
+        openSetting: () => Promise.resolve(undefined),
+      },
+      template => template,
+      {
+        alias: () => 'box',
+        applicationName: 'VSCodium',
+        displayName: 'Remote - SSH',
+      },
+    );
+    void presenter.present({
+      kind: 'unreachable',
+      retryable: false,
+      silent: false,
+      userAlreadyNotified: false,
+      hints: [],
+      diagnostics: [],
+      reason,
+    });
+    return shown[0];
+  }
+
+  it('F-2603 AC-27: the hint entry and the troubleshooting row keep every recognised offline reason without a full stop, and the dialog text ends in exactly one', () => {
+    const {recorder} = recording(['2026-11-02T00:00:00Z']);
+    recorder.begin();
+    for (const reasonId of OFFLINE_IDS) {
+      recorder.record({
+        status: 'OfflineError',
+        message: 'Error: OfflineError',
+        details: {id: reasonId},
+        mitigations: [],
+        resources: [],
+      });
+    }
+    recorder.end();
+    const entries = recorder.errors();
+    deepStrictEqual(
+      OFFLINE_IDS.map((reasonId, index) => {
+        const entry = entries[index];
+        return [
+          entry?.kind === 'error' ? entry.details : undefined,
+          entry?.kind === 'error' ? rowsOf([entry])[0]?.message : undefined,
+          dialogTextOf({id: reasonId}),
+        ];
+      }),
+      OFFLINE_TEXTS.map(text => [
+        text,
+        `Error: OfflineError (${text})`,
+        `Could not establish connection to "box": ${text}.`,
+      ]),
     );
   });
 
