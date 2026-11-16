@@ -487,7 +487,7 @@ describe('the reading of each library failure (no library text is shown)', () =>
     });
   }
 
-  it('F-2403 7.E3: a script status of CreateInstallDirFailed gives the install reason S075', () => {
+  it('F-2403 7.E3: a script status of CreateInstallDirFailed gives the reason S070 of the install folder (F-2407 AC-11)', () => {
     deepStrictEqual(
       ofStart(
         {kind: 'scriptFailed', status: 'CreateInstallDirFailed'},
@@ -495,7 +495,7 @@ describe('the reading of each library failure (no library text is shown)', () =>
       ),
       {
         kind: 'serverInstall',
-        reason: {id: 'S075'},
+        reason: {id: 'S070'},
       },
     );
   });
@@ -735,7 +735,7 @@ describe('the reading of each library failure (no library text is shown)', () =>
       [ofTransfer(failure), ofStart(failure, EXEC_SERVER)],
       Array.from({length: 2}, () => ({
         kind: 'serverInstall',
-        reason: {id: 'S075'},
+        reason: {id: 'S070'},
         logDetail: 'cannot write /p: Permission denied',
       })),
     );
@@ -762,7 +762,7 @@ describe('the reading of each library failure (no library text is shown)', () =>
       deepStrictEqual(
         [detail.reason, detail.logDetail?.split('\n')],
         [
-          {id: 'S075'},
+          {id: 'S070'},
           hinted
             ? [
                 'cannot write /h/lock: Is a directory',
@@ -780,7 +780,7 @@ describe('the reading of each library failure (no library text is shown)', () =>
         {kind: 'scriptFailed', status: 'CreateInstallDirFailed'},
         EXEC_SERVER,
       ),
-      {kind: 'serverInstall', reason: {id: 'S075'}},
+      {kind: 'serverInstall', reason: {id: 'S070'}},
     );
   });
 

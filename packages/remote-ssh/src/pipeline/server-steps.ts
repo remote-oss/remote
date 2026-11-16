@@ -98,6 +98,8 @@ export interface ServerStepDependencies {
   files: ClientFilePort;
   /** Tells that the host could not download the archive while the client may not: `downloadFailed`, or `noDownloader`. */
   onHostDownloadRefused: (cause: 'downloadFailed' | 'noDownloader') => void;
+  /** Keeps the hint of an install folder setting the check rejected, `value` being the setting as written. */
+  onInstallFolderInvalid: (value: string) => void;
   /** Keeps the hint of an install folder the host could not create, for the troubleshooting view. */
   onInstallFolderRefused: () => void;
   /** Keeps the hint of a download the client could not make, `value` being the reason the dialog gives. */
@@ -311,19 +313,22 @@ export function createServerSteps(
       }
       return {kind: 'done', value: undefined};
     },
-    checkInstallFolder: () =>
-      settings.installFolder.kind === 'invalid'
-        ? {
-            kind: 'failed',
-            failure: {
-              kind: 'invalidSetting',
-              reason: {
-                id: 'installPathProvided',
-                values: [settings.installFolder.value],
-              },
-            },
-          }
-        : {kind: 'done', value: undefined},
+    checkInstallFolder: () => {
+      if (settings.installFolder.kind !== 'invalid') {
+        return {kind: 'done', value: undefined};
+      }
+      dependencies.onInstallFolderInvalid(settings.installFolder.value);
+      return {
+        kind: 'failed',
+        failure: {
+          kind: 'invalidSetting',
+          reason: {
+            id: 'installPathProvided',
+            values: [settings.installFolder.value],
+          },
+        },
+      };
+    },
     checkProxy: () => {
       const problem = proxyProblem(settings, dependencies.parseUri);
       if (problem === undefined) {

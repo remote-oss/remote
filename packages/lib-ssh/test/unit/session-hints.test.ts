@@ -100,6 +100,7 @@ describe('the numbers of the error statuses (card connect-135)', () => {
       InvalidProxyUrl: 9,
       CreateInstallDirFailed: 10,
       LocalDownloadFailed: 11,
+      InvalidCustomServerPath: 12,
     });
   });
 
