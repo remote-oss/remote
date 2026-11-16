@@ -84,8 +84,10 @@ import {
   launchesOf,
   launchGroupOf,
   launchLabelled,
+  settingsOfLaunch,
   type Launch,
   type RunnerLaunch,
+  WINDOW_PORT_RANGE,
 } from './acceptance-launches.ts';
 import {
   PARTS_TABLE,
@@ -214,10 +216,17 @@ class FakeHarness implements HarnessDependencies {
         ? `${CONTAINER}\n`
         : programArguments[0] === 'port'
           ? '127.0.0.1:49153\n'
-          : programArguments[0] === 'inspect' &&
-              programArguments.some(argument => argument.includes('IPAddress'))
-            ? `${ROUTED_ADDRESS}\n`
-            : '';
+          : programArguments[0] === 'exec' &&
+              programArguments.includes(
+                '/proc/sys/net/ipv4/ip_local_port_range',
+              )
+            ? '47000\t60999\n'
+            : programArguments[0] === 'inspect' &&
+                programArguments.some(argument =>
+                  argument.includes('IPAddress'),
+                )
+              ? `${ROUTED_ADDRESS}\n`
+              : '';
     return {status: 0, stdout, stderr: ''};
   };
 
@@ -271,6 +280,11 @@ class FakeHarness implements HarnessDependencies {
         return Promise.resolve();
       },
     });
+  };
+
+  readonly windowsHostBlock = (runFolder: string): Promise<string> => {
+    this.calls.push(`windows host block ${path.basename(runFolder)}`);
+    return Promise.resolve('\nHost winhost\n  HostName 127.0.0.1\n');
   };
 
   readonly pinnedSshClient = (): string => {
@@ -532,6 +546,7 @@ const LAUNCH_ORDER = [
   'default-ports',
   'ssh-core',
   'ssh-newclient',
+  'ssh-newclient-pickers',
   'ssh-agents',
   'ssh-askpass',
   'ssh-askpass-env',
@@ -1415,6 +1430,47 @@ describe('acceptance', () => {
     });
   }
 
+  it('#2639: the settings of a launch whose window port range overlaps the machine’s ephemeral range are refused, with the launch named', () => {
+    throws(() => {
+      writeUserSettings(
+        workspace.root,
+        '/run/ssh_config',
+        {'remote.SSH.preferredLocalPortRange': '20000-20999'},
+        launchLabelled(launchesOf(REPOSITORY_ROOT), 'windows'),
+        '15000 60999',
+      );
+    }, /^Error: windows: the window port range 20000-20999 overlaps this machine's ephemeral port range 15000-60999/u);
+  });
+
+  it('#2639: the settings of every launch are written on a machine whose ephemeral range is the Linux default, those that keep a range of their own included', () => {
+    const failures: string[] = [];
+    const launches = launchesOf(REPOSITORY_ROOT);
+    for (const launch of launches) {
+      try {
+        writeUserSettings(
+          workspace.root,
+          '/run/ssh_config',
+          settingsOfLaunch(launch) ?? {},
+          launch,
+          '32768\t60999',
+        );
+      } catch (caught) {
+        failures.push(String(caught));
+      }
+    }
+    deepStrictEqual(
+      [
+        failures,
+        launches.some(
+          launch =>
+            settingsOfLaunch(launch)?.['remote.SSH.preferredLocalPortRange'] ===
+            '41060-41061',
+        ),
+      ],
+      [[], true],
+    );
+  });
+
   it("gives the editor's user settings the harness ssh_config as remote.SSH.configFile", () => {
     writeUserSettings(workspace.root, '/run/ssh_config');
     deepStrictEqual(
@@ -1842,6 +1898,23 @@ describe('acceptance', () => {
       deepStrictEqual(harness.launched, ['local', 'remote']);
     });
 
+    it('#2652: a run with windows-host asks for the winhost block once, for its ssh_config, and a run without asks for none', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['local']);
+      const without = harness.calls.filter(call =>
+        call.startsWith('windows host block'),
+      );
+      await runAcceptance(workspace.root, harness, 'vscodium', [
+        'windows-host',
+      ]);
+      deepStrictEqual(
+        [
+          without,
+          harness.calls.filter(call => call.startsWith('windows host block')),
+        ],
+        [[], [`windows host block ${path.basename(harness.runFolder)}`]],
+      );
+    });
+
     it('#2600: a run whose chosen launches ask for no pinned OpenSSH client builds none and passes no HARNESS_SSH_CLIENT', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium', ['ssh-core']);
       deepStrictEqual(
@@ -2112,6 +2185,7 @@ describe('acceptance', () => {
           'docker build',
           'ssh-keygen -q',
           'docker run',
+          'docker exec',
           'docker port',
           'docker network',
           'docker network',
@@ -2475,7 +2549,10 @@ describe('acceptance', () => {
   });
 
   describe('runLaunches', () => {
-    const BASE = {'remote.SSH.configFile': '/run/ssh_config'};
+    const BASE = {
+      'remote.SSH.configFile': '/run/ssh_config',
+      'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
+    };
     const TERMINAL: Launch = {
       label: 'terminal',
       runner: 'runner-remote',
@@ -2846,6 +2923,7 @@ describe('acceptance', () => {
         settings: {'remote.SSH.configFile': '/elsewhere'},
       });
       deepStrictEqual(seen.get('remote'), {
+        ...BASE,
         'remote.SSH.configFile': '/elsewhere',
       });
     });
@@ -3192,24 +3270,44 @@ describe('acceptance', () => {
       deepStrictEqual(waits, [FRESH_RESOLVE_WAIT_MILLISECONDS]);
     });
 
-    it('coverage-13: a failing host setup fails the attempt with its command and its output', async () => {
+    /** Runs the ports launch on a host whose docker commands fail with `failure`, and gives the error of its setup. */
+    async function setupFailing(
+      failure: Pick<CommandResult, 'stdout' | 'stderr'>,
+    ): Promise<unknown> {
       function command(program: string): CommandResult {
         return program === 'docker'
-          ? {status: 1, stdout: '', stderr: 'setup broke'}
+          ? {status: 1, ...failure}
           : {status: 0, stdout: '', stderr: ''};
       }
       const {sleep} = recordingSleeper();
-      await rejects(
-        runLaunches(
-          workspace.root,
-          '/run/ssh_config',
-          [PORTS],
-          command,
-          'c0ffee',
-          sleep,
-          () => Promise.resolve({exitCode: 0, output: ''}),
-        ),
-        /host setup failed: pkill -f 'n\[c\] -lk -p'; true\nsetup broke/,
+      return runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [PORTS],
+        command,
+        'c0ffee',
+        sleep,
+        () => Promise.resolve({exitCode: 0, output: ''}),
+      ).then(
+        () => undefined,
+        (caught: unknown) => (caught as Error).message,
+      );
+    }
+
+    it('coverage-13: a failing host setup fails the attempt with its command and its output', async () => {
+      deepStrictEqual(
+        await setupFailing({stdout: '', stderr: 'setup broke'}),
+        "host setup failed: pkill -f 'n[c] -lk -p'; true\nsetup broke",
+      );
+    });
+
+    it('#2683: a host setup that fails names what it printed on its standard output too, before its standard error', async () => {
+      deepStrictEqual(
+        await setupFailing({
+          stdout: 'port 45002 is still in use',
+          stderr: 'netstat broke',
+        }),
+        "host setup failed: pkill -f 'n[c] -lk -p'; true\nport 45002 is still in use\nnetstat broke",
       );
     });
 

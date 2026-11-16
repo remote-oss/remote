@@ -85,6 +85,22 @@ function noticesSince(mark: number, window: string): Array<[string, string[]]> {
     .map(line => [line.question, line.buttons ?? []]);
 }
 
+/** What ssh recorded in the known-hosts file of `password-ask`, or nothing when there is no such file. */
+function recordedHosts(): string {
+  try {
+    return readFileSync(passwordAskHosts(), 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+/** The titles of the host-key picks window `local` showed since `mark`. */
+function pickTitles(mark: number): string[] {
+  return linesSince(mark, 'local')
+    .filter(line => line.surface === 'pick')
+    .map(line => line.question);
+}
+
 /** Runs a kill on host in window `window` with `answers` scripted for it, and gives the mark it started from. */
 function killWith(
   window: string,
@@ -329,30 +345,50 @@ describe('Kill VS Code Server (card coverage-39)', function () {
     );
   });
 
-  it('F-2411 AC-17: an unknown host key dismissed fails and records nothing; accepted, it kills', async () => {
+  it('F-2411 AC-17: an unknown host key is asked as the pick with the fingerprint in its title; dismissed or cancelled it fails and records nothing; accepted, it kills', async () => {
     rmSync(passwordAskHosts(), {force: true});
     const dismissed = await killWith('local', [
       pickHost('password-ask'),
       {surface: 'pick', match: 'has fingerprint', answer: 'dismiss'},
     ]);
-    const firstNotices = noticesSince(dismissed, 'local');
-    const recorded = (() => {
-      try {
-        return readFileSync(passwordAskHosts(), 'utf8');
-      } catch {
-        return '';
-      }
-    })();
+    const escapedAttempt = {
+      notices: noticesSince(dismissed, 'local'),
+      titles: pickTitles(dismissed),
+      recorded: recordedHosts(),
+    };
+    const cancelled = await killWith('local', [
+      pickHost('password-ask'),
+      {surface: 'pick', match: 'has fingerprint', answer: 'no'},
+    ]);
+    const cancelledAttempt = {
+      notices: noticesSince(cancelled, 'local'),
+      titles: pickTitles(cancelled),
+      recorded: recordedHosts(),
+    };
     const accepted = await killWith('local', [
       pickHost('password-ask'),
       {surface: 'pick', match: 'has fingerprint', answer: 'yes'},
       password(),
     ]);
+    const acceptedNotices = noticesSince(accepted, 'local');
     rmSync(passwordAskHosts(), {force: true});
+    const title = /^"password-ask" has fingerprint "SHA256:[^"]+"\.$/;
     deepStrictEqual(
-      [firstNotices, recorded, noticesSince(accepted, 'local')],
+      [
+        escapedAttempt.notices,
+        escapedAttempt.titles.map(each => title.test(each)),
+        escapedAttempt.recorded,
+        cancelledAttempt.notices,
+        cancelledAttempt.titles.map(each => title.test(each)),
+        cancelledAttempt.recorded,
+        acceptedNotices,
+      ],
       [
         [[killFailed('password-ask'), ['Open Logs']]],
+        [true],
+        '',
+        [[killFailed('password-ask'), ['Open Logs']]],
+        [true],
         '',
         [[killed('password-ask'), ['Open Logs']]],
       ],

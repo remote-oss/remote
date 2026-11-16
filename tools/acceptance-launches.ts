@@ -42,6 +42,12 @@ interface LaunchCommon {
    */
   wslDistros?: true;
   /**
+   * Whether the launch's windows open the run's Windows SSH host, the alias `winhost`: Windows' OpenSSH Server on
+   * 127.0.0.1, which the platform workflow's Windows job starts and passes as HARNESS_WINHOST_*. Only a Windows client
+   * has it, and another refuses the launch.
+   */
+  windowsHost?: true;
+  /**
    * Whether the launch's Remote - SSH runs the pinned OpenSSH client (`tools/install-openssh`) through
    * `remote.SSH.path`, which its settings name as `${HARNESS_SSH_CLIENT}`: the run builds the client once and passes its
    * path as HARNESS_SSH_CLIENT, and a run that cannot build it refuses the launch.
@@ -184,11 +190,44 @@ export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
 
 /** What a launch the renderer helpers read needs: the debugging port, and window titles they can find a window by. */
 /**
- * The window's local ports for the launches whose rows connect many windows in a row (#2585, #2586): below the client's
- * ephemeral port range, which on Linux starts at 32768, so no outgoing connection of the client holds a port the search
- * judges free by connecting. Without a range the search picks from 49152 up, inside it.
+ * The window's local ports for every launch of the `ssh` group but those of `WINDOW_PORT_DEFAULT_LAUNCHES` (#2585, #2586,
+ * #2616, #2639): below the client's ephemeral port range, which on Linux starts at 32768, so no outgoing connection of the
+ * client holds a port the search judges free by connecting. Without a range the search picks from 49152 up, inside it.
+ * The harness refuses a run on a machine whose ephemeral range overlaps it (`windowPortRangeProblem`).
  */
 export const WINDOW_PORT_RANGE = '20000-20999';
+
+/** The setting that holds the window's port range. */
+export const WINDOW_PORT_RANGE_SETTING = 'remote.SSH.preferredLocalPortRange';
+
+/** The launches of the `ssh` group that keep the search's default window port, each with what needs it; a launch gets the range and its rows that need the default opt out for themselves, as `ssh-core`'s session-hints rows do. */
+export const WINDOW_PORT_DEFAULT_LAUNCHES: Readonly<Record<string, string>> = {
+  'ssh-agents':
+    "its rows read the settings with core's agent-host keys at their defaults",
+  'config-files':
+    'its rows compare the settings file the editor read with the one the launch was given',
+};
+
+/** What is wrong with the window port range `range` on a machine whose kernel's ephemeral range reads `ephemeral`, if anything. */
+export function windowPortRangeProblem(
+  range: string,
+  ephemeral: string,
+): string | undefined {
+  const [first, last] = range.split('-').map(Number);
+  const [lowest, highest] = ephemeral.trim().split(/\s+/u).map(Number);
+  if (
+    first === undefined ||
+    last === undefined ||
+    lowest === undefined ||
+    highest === undefined ||
+    [first, last, lowest, highest].some(Number.isNaN)
+  ) {
+    return `the window port range ${range} or the ephemeral range "${ephemeral.trim()}" cannot be read`;
+  }
+  return first <= highest && last >= lowest
+    ? `the window port range ${range} overlaps this machine's ephemeral port range ${String(lowest)}-${String(highest)}: an outgoing connection of the client can hold a port the search finds free, so the launch's rows would fail at random; set the range outside ${String(lowest)}-${String(highest)}`
+    : undefined;
+}
 
 const RENDERER_LAUNCH = {
   kind: 'plain',
@@ -790,10 +829,28 @@ export function portFreeCommand(port: number): string {
 }
 
 /**
+ * The command that waits, up to five seconds, until a listener of the host has `port` on 127.0.0.1, and, when none has,
+ * prints the sockets that have `port` as their local port and the holders that run, and fails: a holder that could not
+ * bind its port leaves nothing else to read.
+ */
+export function holderListeningCommand(port: number): string {
+  return (
+    'for i in $(seq 1 20); do ' +
+    `netstat -ltn | grep -q ' 127.0.0.1:${String(port)} ' && exit 0; ` +
+    'sleep 0.25; done; ' +
+    `echo "nothing listens on 127.0.0.1:${String(port)} after 5 s; the sockets with that local port:"; ` +
+    `netstat -tanp | awk '$4 ~ /:${String(port)}$/'; ` +
+    'echo "the holders that run:"; ' +
+    "ps | grep '[n]c -lk'; exit 1"
+  );
+}
+
+/**
  * The host setup of a host case, in the order the run runs it: free the held ports; stop the server unless the case
  * keeps it; remove the suite's folders unless the case keeps the server or its files; hold the case's ports, each
- * waited on as it starts; then the case's own commands. The brackets keep `pkill` from matching the `sh -c` that runs
- * it.
+ * waited on to be free of other sockets as it starts (a client socket of the host that holds the port as its local port
+ * keeps the holder from binding it); then wait for each holder to listen; then the case's own commands. The brackets
+ * keep `pkill` from matching the `sh -c` that runs it.
  */
 export function hostSetupOf(
   hostCase: HostCase,
@@ -819,18 +876,14 @@ export function hostSetupOf(
     entries.push({command: portFreeCommand(hostCase.port)});
   }
   for (const holder of holders) {
+    entries.push({command: portFreeCommand(holder)});
     entries.push({
       command: `nc -lk -p ${String(holder)} -s 127.0.0.1 -e /bin/true`,
       detach: true,
     });
   }
   for (const holder of holders) {
-    entries.push({
-      command:
-        'for i in $(seq 1 20); do ' +
-        `netstat -ltn | grep -q ' 127.0.0.1:${String(holder)} ' && exit 0; ` +
-        'sleep 0.25; done; exit 1',
-    });
+    entries.push({command: holderListeningCommand(holder)});
   }
   for (const command of hostCase.setup ?? []) {
     entries.push({command});
@@ -1002,7 +1055,6 @@ export function launchesOf(root: string): Launch[] {
       label: 'windows',
       kind: 'plain',
       suite: 'windows',
-      settings: {'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE},
       environment: {REMOTE_OSS_SENTINEL: 'sent1nel-<run>'},
     },
     // Terminal mode with the login terminal shown and the extension's own prompts (no script), read through the renderer.
@@ -1032,7 +1084,6 @@ export function launchesOf(root: string): Launch[] {
       label: 'passphrase-input',
       suite: 'passphrase',
       settings: {
-        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
         // The remote name after the folder, as core's own label gives it.
         'window.title': '[${rootName}]${remoteName}',
         'window.dialogStyle': 'custom',
@@ -1088,14 +1139,12 @@ export function launchesOf(root: string): Launch[] {
       suite: 'login-shells',
       settings: {
         ...RENDERER_LAUNCH.settings,
-        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
       },
     },
     {
       label: 'preconnect',
       kind: 'plain',
       suite: 'preconnect',
-      settings: {'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE},
       // A variable of the editor's environment, which the script of a row reports it received.
       environment: {REMOTE_OSS_F2108_VARIABLE: 'f2108-<run>'},
     },
@@ -1137,7 +1186,6 @@ export function launchesOf(root: string): Launch[] {
       suite: 'default-ports',
       settings: {
         ...RENDERER_LAUNCH.settings,
-        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
         'remote.SSH.defaultForwardedPorts': [
           {name: 'web', remotePort: 8632, localPort: 18632},
         ],
@@ -1152,6 +1200,19 @@ export function launchesOf(root: string): Launch[] {
       label: 'ssh-newclient',
       suite: 'ssh-newclient',
       sshClient: 'pinned',
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.SSH.path': '${HARNESS_SSH_CLIENT}',
+      },
+    },
+    // The same client with the extension's own pickers: the empty script makes Remote - SSH show its real quick picks, which
+    // the host-key row reads (its items and the focused one), and the rows of ssh-newclient need the script.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-newclient-pickers',
+      suite: 'ssh-newclient-pickers',
+      sshClient: 'pinned',
+      environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
       settings: {
         ...RENDERER_LAUNCH.settings,
         'remote.SSH.path': '${HARNESS_SSH_CLIENT}',
@@ -1280,6 +1341,19 @@ export function launchesOf(root: string): Launch[] {
       namedOnly: true,
       wslDistros: true,
     },
+    // A Windows SSH host: the platform workflow's Windows job runs Windows' OpenSSH Server on 127.0.0.1, and the
+    // launch's windows open it as `winhost`, its platform known so no pick is asked.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'windows-host',
+      suite: 'windows-host',
+      namedOnly: true,
+      windowsHost: true,
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.SSH.remotePlatform': {winhost: 'windows'},
+      },
+    },
     {
       ...RENDERER_LAUNCH,
       label: 'wsl-linux-standdown',
@@ -1384,7 +1458,6 @@ export function launchesOf(root: string): Launch[] {
         ...TRUST_LAUNCH.settings,
         // Core's default is never; the rows answer core's startup prompt, so this launch turns it on.
         'security.workspace.trust.startupPrompt': 'once',
-        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
       },
     },
     {
@@ -1394,7 +1467,6 @@ export function launchesOf(root: string): Launch[] {
       settings: {
         ...TRUST_LAUNCH.settings,
         'remote.SSH.useLocalServer': false,
-        'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
         'remote.SSH.remotePlatform': {harness: 'linux', agentfwd: 'linux'},
       },
     },
@@ -1796,13 +1868,20 @@ export function launchGroupOf(launch: Launch): LaunchGroup {
     : 'ssh';
 }
 
-/** The user settings a launch gets: its own, and the engine's `dev.containers.dockerPath` when it names one. */
+/** The user settings a launch gets: its own, the window port range of a launch of the `ssh` group that is not an exception, and the engine's `dev.containers.dockerPath` when it names one. */
 export function settingsOfLaunch(
   launch: Launch,
 ): Readonly<Record<string, unknown>> | undefined {
+  const own = launch.settings;
+  const ranged =
+    launchGroupOf(launch) === 'ssh' &&
+    !(launch.label in WINDOW_PORT_DEFAULT_LAUNCHES) &&
+    own?.[WINDOW_PORT_RANGE_SETTING] === undefined
+      ? {...own, [WINDOW_PORT_RANGE_SETTING]: WINDOW_PORT_RANGE}
+      : own;
   return launch.engine === undefined
-    ? launch.settings
-    : {...launch.settings, 'dev.containers.dockerPath': launch.engine};
+    ? ranged
+    : {...ranged, 'dev.containers.dockerPath': launch.engine};
 }
 
 /** Whether a launch installs Dev Containers, whose rows need the run's dev container image; a launch that publishes its templates builds it too, because the run's `mini` template names it. */

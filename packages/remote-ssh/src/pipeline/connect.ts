@@ -68,6 +68,11 @@ export type PhaseEvent =
 export interface ConnectOptions {
   cancellation: AbortSignal;
   onPhase: (event: PhaseEvent) => void;
+  /**
+   * Called each time the connection step opens: the host reported its platform, or the window joined a connection
+   * whose record holds it. Nothing before it means the host was reached.
+   */
+  onHostReported?: () => void;
   /** The value of `remote.SSH.maxReconnectionAttempts`, as the user wrote it. */
   maximumReconnectionAttempts: unknown;
   /** How long the pre-connection script may take, with its question to the user. */
@@ -417,6 +422,7 @@ async function runSteps(
     }
     const opened = connection.value;
     held.lease = opened;
+    options.onHostReported?.();
     if (opened.storedRecord === undefined) {
       // Nothing stored and live to reuse (a first connect, a retry after a failure): the progress shows from here with
       // the title alone. A reuse stays quiet, so that a reload of a connected window shows no progress.

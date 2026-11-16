@@ -116,6 +116,9 @@ import {
   hostCases,
   runnerLaunches,
   suitesOf,
+  WINDOW_PORT_RANGE,
+  WINDOW_PORT_RANGE_SETTING,
+  windowPortRangeProblem,
   withHarnessBases,
   withRunTokens,
 } from './acceptance-launches.ts';
@@ -136,6 +139,7 @@ import {
   writeStandIns,
 } from './acceptance-plain.ts';
 import {knownRedsJudge} from './known-reds.ts';
+import {windowsHostBlock} from './acceptance-windows-host.ts';
 import {
   isMainModule,
   REPOSITORY_ROOT,
@@ -394,6 +398,8 @@ export interface HarnessDependencies {
   ) => Promise<RunWslDistros>;
   /** The pinned OpenSSH client's path, built once (tools/install-openssh), for a launch with `sshClient: 'pinned'`. */
   pinnedSshClient: () => string;
+  /** The `winhost` block of the run's ssh_config for the Windows SSH host of the platform workflow, on a Windows client only. */
+  windowsHostBlock: (runFolder: string) => Promise<string>;
   /** Publishes the run's templates into the registry at `address` and writes the run's index; the run's dev container image names its `mini` template; gives the templates' registry. */
   prepareTemplates: (
     root: string,
@@ -1072,6 +1078,22 @@ export function packagedExtensions(
     .map(entry => path.join(folder, entry.name));
 }
 
+/** The kernel's ephemeral port range as Linux prints it, read once per run; none where the machine has no such file. */
+let ephemeralRangeText: {value: string | undefined} | undefined = undefined;
+
+/** The text of `/proc/sys/net/ipv4/ip_local_port_range`, or undefined on a machine without it. */
+function kernelEphemeralRange(): string | undefined {
+  ephemeralRangeText ??= {
+    value: existsSync(EPHEMERAL_RANGE_FILE)
+      ? readFileSync(EPHEMERAL_RANGE_FILE, 'utf8')
+      : undefined,
+  };
+  return ephemeralRangeText.value;
+}
+
+/** The file where Linux keeps the range of the ports it gives to outgoing connections. */
+const EPHEMERAL_RANGE_FILE = '/proc/sys/net/ipv4/ip_local_port_range';
+
 /**
  * The editor's user settings of a launch, in its user-data folder: the extensions under test read the harness's
  * ssh_config, and `extra` is the launch's own settings. With a launch, the same bytes go to
@@ -1084,7 +1106,17 @@ export function writeUserSettings(
   configFile: string,
   extra: Readonly<Record<string, unknown>> = {},
   launch?: Launch,
+  ephemeral: string | undefined = kernelEphemeralRange(),
 ): void {
+  // Only the harness's own range is checked: a launch that sets a range of its own does it to test the setting.
+  const problem =
+    extra[WINDOW_PORT_RANGE_SETTING] === WINDOW_PORT_RANGE &&
+    ephemeral !== undefined
+      ? windowPortRangeProblem(WINDOW_PORT_RANGE, ephemeral)
+      : undefined;
+  if (problem !== undefined) {
+    throw new Error(`${launch?.label ?? 'the run'}: ${problem}`);
+  }
   const tail = launch?.settingsTail;
   const written = JSON.stringify(
     {'remote.SSH.configFile': configFile, ...extra},
@@ -1236,6 +1268,9 @@ async function prepare(
       controlFolderOf(runFolder),
     ),
   );
+  if (chosen.some(launch => launch.windowsHost === true)) {
+    appendFileSync(configFile, await dependencies.windowsHostBlock(runFolder));
+  }
   writeUserSettings(runFolder, configFile);
   await waitForHost(dependencies, configFile);
   // A launch whose window connects to a host of another base gets that host beside the run's, one per base, with the
@@ -1526,9 +1561,12 @@ function runHostSetup(
       entry.command,
     ]);
     if (result.status !== 0) {
-      throw new Error(
-        `host setup failed: ${entry.command}\n${result.stderr.trim()}`,
-      );
+      // What the command printed on either stream: its own account of what it found, as portFreeCommand's is.
+      const output = [result.stdout, result.stderr]
+        .map(text => text.trim())
+        .filter(text => text !== '')
+        .join('\n');
+      throw new Error(`host setup failed: ${entry.command}\n${output}`);
     }
   }
 }
@@ -2904,6 +2942,12 @@ if (isMainModule(import.meta.url)) {
             MINIROOTFS,
             url => downloadWithRetry(url),
             console.error.bind(console),
+          ),
+        windowsHostBlock: runFolder =>
+          windowsHostBlock(
+            process.env,
+            process.platform,
+            path.join(runFolder, 'known_hosts'),
           ),
         pinnedSshClient: () =>
           pinnedSshClient(

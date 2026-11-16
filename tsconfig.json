@@ -155,6 +155,9 @@
       "path": "tests/acceptance/ssh-newclient"
     },
     {
+      "path": "tests/acceptance/ssh-newclient-pickers"
+    },
+    {
       "path": "tests/acceptance/ssh-agents"
     },
     {
@@ -180,6 +183,9 @@
     },
     {
       "path": "tests/acceptance/wsl"
+    },
+    {
+      "path": "tests/acceptance/windows-host"
     },
     {
       "path": "tests/acceptance/explorer-alone"

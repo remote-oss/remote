@@ -197,6 +197,7 @@ describe('host channel over the shared ssh session: the lib-host contract', func
               displayHost: 'harness',
               externalAskpass: false,
               askpassFirstMessageMilliseconds: 5000,
+              hostPlatform: 'unknown',
             },
           }),
         policy: {kind: 'graceAfterLastLease', milliseconds: 50},

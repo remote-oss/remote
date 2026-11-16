@@ -6,11 +6,9 @@
  */
 
 import type {Scheduler} from 'lib-helper';
-import {posixQuote} from 'lib-host';
-import {environmentPrefix} from '../process/remote-program.ts';
-
-/** The characters of base64 text on one line of the input. */
-const BASE64_LINE_LENGTH = 76;
+import {type Interpreter, posixQuote} from 'lib-host';
+import {base64Lines, environmentPrefix} from '../process/remote-program.ts';
+import {powershellCommandsFor} from './powershell-session.ts';
 
 const SESSION_ENDED: RunEnd = {
   kind: 'failed',
@@ -43,6 +41,8 @@ export interface ShellRunsOptions {
   newMarker(): string;
   /** A run went past its deadline: the session cannot be trusted with another and has to end. */
   onWedged(): void;
+  /** What the session runs its scripts with: a POSIX `sh`, or the PowerShell loop of a Windows host. */
+  interpreter: Interpreter;
 }
 
 /** A run that waits, or that is on the session. */
@@ -61,9 +61,7 @@ export function commandsFor(marker: string, request: ShellRun): string {
       ? `${script} </dev/null`
       : [
           `base64 -d <<'${marker}_input' | ${script}`,
-          ...(request.inputBase64.match(
-            new RegExp(`.{1,${String(BASE64_LINE_LENGTH)}}`, 'gu'),
-          ) ?? []),
+          ...base64Lines(request.inputBase64),
           `${marker}_input`,
         ].join('\n');
   const end = `printf '%s%s %s\\n' ${posixQuote(`${marker}:e`)} 'nd' "$?"`;
@@ -161,7 +159,11 @@ export class ShellRuns {
       },
     );
     this.active = {queued, marker, started: false, cancel};
-    this.options.write(commandsFor(marker, queued.request));
+    this.options.write(
+      this.options.interpreter === 'powershell'
+        ? powershellCommandsFor(marker, queued.request)
+        : commandsFor(marker, queued.request),
+    );
   }
 
   private finish(end: RunEnd): void {

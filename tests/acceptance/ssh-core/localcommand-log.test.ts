@@ -55,4 +55,15 @@ describe('a LocalCommand’s output in the log (card #2598)', function () {
       ['[local command] out-marker-tail'],
     );
   });
+
+  it('F-2109 AC-12 (c2603-localcommand-printf-server): in the local-server mode the last words of a LocalCommand that writes no line end are a [local command] line in the log, and the connection works', async () => {
+    deepStrictEqual(
+      await markersIn(
+        'server',
+        'printf out-marker-tail',
+        'c2603-printf-server',
+      ),
+      ['[local command] out-marker-tail'],
+    );
+  });
 });

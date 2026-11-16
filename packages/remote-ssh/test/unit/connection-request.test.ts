@@ -164,8 +164,17 @@ describe("the shared connection's acquire request", () => {
           displayHost: 'dev',
           externalAskpass: false,
           askpassFirstMessageMilliseconds: 5000,
+          hostPlatform: TERMS.platform,
         },
       },
+    );
+  });
+
+  it("F-2701 5.0 step 5: the helper's start values carry the platform the window decided", async () => {
+    deepStrictEqual(
+      (await requestWith({terms: {...TERMS, platform: 'windows'}})).options
+        .hostPlatform,
+      'windows',
     );
   });
 
@@ -285,6 +294,22 @@ describe("the install connection's request in terminal mode (card connect-17)", 
     deepStrictEqual(
       request.remoteProgram,
       sessionStartFor(WAIT, true).remoteProgram,
+    );
+  });
+
+  it('F-2701 5.0 step 5: a host decided as Windows is reached with the PowerShell loop as its remote program', () => {
+    const request = installRequestOf(
+      {...INPUT, target: {kind: 'plain', text: 'alex@dev:2222'}},
+      {...TERMS, platform: 'windows', remoteCommandInEffect: false},
+      STATE,
+      SETTINGS,
+      ENVIRONMENT,
+      undefined,
+      WAIT,
+    );
+    deepStrictEqual(
+      request.remoteProgram,
+      sessionStartFor(WAIT, true, 'windows').remoteProgram,
     );
   });
 

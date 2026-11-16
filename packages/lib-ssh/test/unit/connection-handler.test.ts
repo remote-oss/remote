@@ -70,6 +70,7 @@ describe('connection handler (contracts §4 S9)', () => {
         displayHost: 'h.invalid',
         firstMessageMilliseconds: 5000,
       },
+      interpreter: 'posixShell',
       newMarker: () => {
         markers += 1;
         return `m${String(markers)}`;
@@ -240,23 +241,35 @@ describe('connection handler (contracts §4 S9)', () => {
       );
     });
 
-    it('#2598 (F-2109 AC-12): a command that writes no line end joins its text to the first protocol line, which is then logged and not read as the protocol', async () => {
+    /** The lines logged as a LocalCommand's and whether the connection was read as made, after `pieces` of output. */
+    async function afterOutput(
+      pieces: string[],
+    ): Promise<[unknown[], boolean]> {
       await send(1, {type: 'connect'});
       const client = spawner.started[0];
-      client?.output('out-marker');
-      client?.output('LAYER1-READY\n');
-      deepStrictEqual(
-        [
-          events.filter(
-            event => (event as {type?: string}).type === 'localCommandLines',
-          ),
-          eventTypes().includes('connected'),
-        ],
-        [
-          [{type: 'localCommandLines', lines: ['out-markerLAYER1-READY']}],
-          false,
-        ],
-      );
+      for (const piece of pieces) {
+        client?.output(piece);
+      }
+      return [
+        events.filter(
+          event => (event as {type?: string}).type === 'localCommandLines',
+        ),
+        eventTypes().includes('connected'),
+      ];
+    }
+
+    it('#2603 (F-2109 AC-12): the bootstrap prints a line end before its marker, so the last words of a command that wrote none are a line of their own, logged, and the marker is read', async () => {
+      deepStrictEqual(await afterOutput(['out-marker', '\nLAYER1-READY\n']), [
+        [{type: 'localCommandLines', lines: ['out-marker']}],
+        true,
+      ]);
+    });
+
+    it('#2598 (F-2109 AC-12): a marker that shares its line with text, as a host whose bootstrap printed no line end in front of it would write it, is logged and not read as the protocol', async () => {
+      deepStrictEqual(await afterOutput(['out-marker', 'LAYER1-READY\n']), [
+        [{type: 'localCommandLines', lines: ['out-markerLAYER1-READY']}],
+        false,
+      ]);
     });
 
     it('#2598 (F-2109 AC-12): the output of a LocalCommand is cut at 100 lines, with one line saying so', async () => {

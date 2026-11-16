@@ -84,6 +84,25 @@ function stepFailed(cause: string): MaintenanceRun {
   return {result: 'stepFailed', cause};
 }
 
+/** The status a POSIX shell ends with when it finds no program of the name it was given. */
+const COMMAND_NOT_FOUND = 127;
+
+/**
+ * Whether a login that ended before its session started is a Windows answer on a host with no PowerShell: the login
+ * shell found no `powershell` to run. The uninstall then ends as a step that did nothing, with no message, as it would
+ * on such a host after the Windows step ran.
+ */
+function windowsSessionMissing(
+  platform: string,
+  failure: {kind: string; sshExitStatus?: number | null},
+): boolean {
+  return (
+    platform === 'windows' &&
+    failure.kind === 'unknown' &&
+    failure.sshExitStatus === COMMAND_NOT_FOUND
+  );
+}
+
 /**
  * Runs `action` on the host of `input`. The lease is given back whatever the outcome, so the login the run took is
  * ended right after.
@@ -121,6 +140,12 @@ export async function runMaintenance(
   }
   const opened = await steps.openConnection(input, terms.value, cancellation);
   if (opened.kind === 'failed') {
+    if (
+      action === 'uninstall' &&
+      windowsSessionMissing(terms.value.platform, opened.failure)
+    ) {
+      return stepFailed('the host has no PowerShell for the Windows step');
+    }
     return failed(`the connection failed: ${opened.failure.kind}`);
   }
   const lease = opened.value;

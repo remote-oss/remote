@@ -9,6 +9,7 @@ import type {
   ConnectPhase,
   Connected,
   Connector,
+  DecodedTarget,
   Failed,
   FailureHint,
 } from 'lib-authority';
@@ -48,7 +49,7 @@ export interface ConnectorDependencies {
   /** Whether a connect runs in terminal mode (each window its own `ssh`); read once when the connect starts. */
   terminalMode: () => boolean;
   /** The options of one connect, except its cancellation and its phase listener, which the connector supplies. */
-  options: Omit<ConnectOptions, 'cancellation' | 'onPhase'>;
+  options: Omit<ConnectOptions, 'cancellation' | 'onPhase' | 'onHostReported'>;
   /** Reveals the connection's log: what the progress's details link shows. */
   revealLog(): void;
   /** Makes these the only variables the window's terminals get from the extension, for the connect that worked. */
@@ -167,6 +168,11 @@ export interface SshConnector extends Connector {
    * holds none or its transport was lost.
    */
   heldHost(): {target: SshTarget; terminalMode: boolean} | undefined;
+  /**
+   * Calls `listener` with the connect's target each time a connect's host reported its platform; gives back what
+   * removes it.
+   */
+  onHostReported(listener: (target: DecodedTarget) => void): () => void;
 }
 
 function isConnection(result: Connection | Failed): result is Connection {
@@ -191,6 +197,7 @@ const CANCEL_SOURCES: Readonly<Record<CancelSource, string>> = {
 /** The connector of Remote - SSH over its pipeline. */
 export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
   const phases = new Listeners<ConnectPhase>();
+  const hostReported = new Listeners<DecodedTarget>();
   const lost = new Listeners<undefined>();
   const closed = new Listeners<undefined>();
   let running: AbortController | undefined;
@@ -310,6 +317,13 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
           ...dependencies.options,
           cancellation: controller.signal,
           onPhase,
+          onHostReported: () => {
+            hostReported.tell({
+              family: 'ssh-remote',
+              target: input.target,
+              rawHostString: input.rawHostString,
+            });
+          },
         });
       } catch (caught) {
         dependencies.resolveEnded?.(
@@ -437,6 +451,7 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
         : {target: held.target, terminalMode: held.terminalMode};
     },
     onPhase: listener => phases.subscribe(listener),
+    onHostReported: listener => hostReported.subscribe(listener),
     onTransportLost: listener =>
       lost.subscribe(() => {
         listener();

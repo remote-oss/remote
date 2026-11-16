@@ -43,7 +43,7 @@ describe('a configuration file that cannot be parsed (card coverage-98)', functi
           toasts: [
             `Failed to connect to the remote extension host server (Error: ${broken}: unterminated quote after HostName)`,
           ],
-          indicator: 'Disconnected from SSH: cfghost',
+          indicator: 'Disconnected from SSH',
           dialogs: 0,
           sshChecked: false,
         },

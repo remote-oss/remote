@@ -42,7 +42,7 @@ export const MODES = [
 ] as const;
 
 /** The lines of the run's block of host `base`, without its `Host` line. */
-function blockLines(base: string): string[] {
+export function blockLines(base: string): string[] {
   const lines = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8').split(
     '\n',
   );

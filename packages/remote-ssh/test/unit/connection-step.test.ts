@@ -195,6 +195,7 @@ function fixture(
               displayHost: 'harness',
               externalAskpass: false,
               askpassFirstMessageMilliseconds: 5000,
+              hostPlatform: 'unknown',
             },
           }),
         policy: {kind: 'graceAfterLastLease', milliseconds: 3000},

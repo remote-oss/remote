@@ -14,9 +14,13 @@ import {
   needsDevContainerImage,
   HOST_CASE_SUITES,
   type HostCase,
+  WINDOW_PORT_DEFAULT_LAUNCHES,
   WINDOW_PORT_RANGE,
+  WINDOW_PORT_RANGE_SETTING,
+  windowPortRangeProblem,
   hostCases,
   hostSetupOf,
+  holderListeningCommand,
   portFreeCommand,
   type Launch,
   launchLabelled,
@@ -27,6 +31,7 @@ import {
   withRunTokens,
 } from './acceptance-launches.ts';
 import {chosenLaunches} from './acceptance.ts';
+import {HOST_EPHEMERAL_RANGE} from './acceptance-run.ts';
 import {UPDATE_SERVICE_NAME} from './acceptance-downloads.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
@@ -144,6 +149,7 @@ function labelsFromExplorer(): string[] {
     'wsl-linux',
     'wsl-linux-web',
     'wsl',
+    'windows-host',
     'wsl-linux-standdown',
     'explorer',
     'explorer-alone',
@@ -332,6 +338,7 @@ describe('the launches of the VSCodium run', () => {
         'default-ports',
         'ssh-core',
         'ssh-newclient',
+        'ssh-newclient-pickers',
         'ssh-agents',
         'ssh-askpass',
         'ssh-askpass-env',
@@ -434,6 +441,7 @@ describe('the launches of the VSCodium run', () => {
         ['default-ports', undefined, true, undefined],
         ['ssh-core', undefined, true, undefined],
         ['ssh-newclient', undefined, true, undefined],
+        ['ssh-newclient-pickers', undefined, true, undefined],
         ['ssh-agents', undefined, true, undefined],
         ['ssh-askpass', undefined, true, undefined],
         ['ssh-askpass-env', undefined, true, undefined],
@@ -442,6 +450,7 @@ describe('the launches of the VSCodium run', () => {
         ['wsl-linux', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl-linux-web', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl', ['remote-oss.remote-wsl'], true, undefined],
+        ['windows-host', undefined, true, undefined],
         ['wsl-linux-standdown', ['remote-oss.remote-wsl'], true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
         [
@@ -926,7 +935,6 @@ describe('the launches of the VSCodium run', () => {
           {
             'window.title': '[${rootName}]',
             'security.workspace.trust.startupPrompt': 'once',
-            'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
           },
         ],
         [
@@ -935,7 +943,6 @@ describe('the launches of the VSCodium run', () => {
           {
             'window.title': '[${rootName}]',
             'remote.SSH.useLocalServer': false,
-            'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
             'remote.SSH.remotePlatform': {harness: 'linux', agentfwd: 'linux'},
           },
         ],
@@ -1047,7 +1054,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('containers-101: only the containers-podman launch names an engine, and its user settings gain dev.containers.dockerPath podman while every other launch’s stay as they are', () => {
+  it('containers-101: only the containers-podman launch names an engine, and its user settings gain dev.containers.dockerPath podman while no other launch gets it', () => {
     const podman = launches.find(
       launch => launch.label === 'containers-podman',
     );
@@ -1058,7 +1065,11 @@ describe('the launches of the VSCodium run', () => {
           .map(launch => [launch.label, launch.engine]),
         launches
           .filter(launch => launch.engine === undefined)
-          .every(launch => settingsOfLaunch(launch) === launch.settings),
+          .every(
+            launch =>
+              settingsOfLaunch(launch)?.['dev.containers.dockerPath'] ===
+              undefined,
+          ),
         podman === undefined
           ? undefined
           : settingsOfLaunch(podman)?.['dev.containers.dockerPath'],
@@ -1083,6 +1094,7 @@ describe('the launches of the VSCodium run', () => {
         'socket-prime',
         'cli-path',
         'wsl',
+        'windows-host',
         'containers-podman',
         'ports-reuse-prime',
         'install-install-present-prime',
@@ -1287,9 +1299,35 @@ describe('the launches of the VSCodium run', () => {
         launchLabelled(launches, 'ssh-core').settings,
       ],
       [
-        ['ssh-newclient'],
+        ['ssh-newclient', 'ssh-newclient-pickers'],
         {'window.title': '[${rootName}]', 'remote.SSH.path': client},
         {'window.title': '[${rootName}]'},
+      ],
+    );
+  });
+
+  it('#2653: the install step of the pinned OpenSSH client matches every launch that asks for it, in both workflows, since a name such as ssh-newclient-pickers matches only as a substring', () => {
+    const condition =
+      "contains(matrix.part.launches, 'ssh-newclient') || contains(matrix.part.launches, '@ssh')";
+    const steps = ['ci.yml', 'acceptance-launches.yml'].map(
+      file =>
+        readFileSync(
+          path.join(REPOSITORY_ROOT, '.github', 'workflows', file),
+          'utf8',
+        )
+          .split('\n')
+          .filter(line => line.includes(condition)).length,
+    );
+    deepStrictEqual(
+      [
+        steps,
+        launchesOf(REPOSITORY_ROOT)
+          .filter(launch => launch.sshClient === 'pinned')
+          .map(launch => launch.label.includes('ssh-newclient')),
+      ],
+      [
+        [2, 2],
+        [true, true],
       ],
     );
   });
@@ -1315,7 +1353,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, windows, login-shells, preconnect, agent-notmp, default-ports, the explorer, trust and containers launches and every ports case', () => {
+  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, login-shells, agent-notmp, default-ports, the explorer, trust and containers launches and every ports case', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
@@ -1331,17 +1369,16 @@ describe('the launches of the VSCodium run', () => {
         'socket',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
-        'windows',
         'terminal-login',
         'passphrase-input',
         'terminal-odd',
         'passphrase-late',
         'login-shells',
-        'preconnect',
         'agent-notmp',
         'default-ports',
         'ssh-core',
         'ssh-newclient',
+        'ssh-newclient-pickers',
         'ssh-agents',
         'ssh-askpass',
         'ssh-askpass-env',
@@ -1533,7 +1570,7 @@ describe('the ports cases', () => {
     );
   });
 
-  it('coverage-13: the setup frees the held ports and the server, then holds each port and waits for it', () => {
+  it('coverage-13, #2683: the setup frees the held ports and the server, then holds each port once the host has no other socket on it, and waits for each holder to listen', () => {
     const current = caseOf('range-gaps');
     deepStrictEqual(hostSetupOf(current, PORTS_SUITE), [
       {command: "pkill -f 'n[c] -lk -p'; true"},
@@ -1545,21 +1582,28 @@ describe('the ports cases', () => {
           'sleep 0.5; done; exit 1',
       },
       {command: portFreeCommand(45001)},
+      {command: portFreeCommand(45000)},
       {command: 'nc -lk -p 45000 -s 127.0.0.1 -e /bin/true', detach: true},
+      {command: portFreeCommand(45002)},
       {command: 'nc -lk -p 45002 -s 127.0.0.1 -e /bin/true', detach: true},
-      {
-        command:
-          'for i in $(seq 1 20); do ' +
-          "netstat -ltn | grep -q ' 127.0.0.1:45000 ' && exit 0; " +
-          'sleep 0.25; done; exit 1',
-      },
-      {
-        command:
-          'for i in $(seq 1 20); do ' +
-          "netstat -ltn | grep -q ' 127.0.0.1:45002 ' && exit 0; " +
-          'sleep 0.25; done; exit 1',
-      },
+      {command: holderListeningCommand(45000)},
+      {command: holderListeningCommand(45002)},
     ]);
+  });
+
+  it('#2683: a holder that does not listen within five seconds fails the setup with the sockets that have its port and the holders that run', () => {
+    deepStrictEqual(
+      holderListeningCommand(45002),
+      [
+        'for i in $(seq 1 20); do ',
+        "netstat -ltn | grep -q ' 127.0.0.1:45002 ' && exit 0; ",
+        'sleep 0.25; done; ',
+        'echo "nothing listens on 127.0.0.1:45002 after 5 s; the sockets with that local port:"; ',
+        "netstat -tanp | awk '$4 ~ /:45002$/'; ",
+        'echo "the holders that run:"; ',
+        "ps | grep '[n]c -lk'; exit 1",
+      ].join(''),
+    );
   });
 
   it('coverage-13: a case that keeps the server gets no kill of it', () => {
@@ -1582,15 +1626,29 @@ describe('the ports cases', () => {
     );
   });
 
-  it('#2563: a case that keeps its server, or holds the port it expects, does not wait for the port', () => {
+  it("#2683: every port a ports case names on the host is below the host's own ephemeral range, so that no client socket of the host can hold it", () => {
+    const [lowest = 0] = HOST_EPHEMERAL_RANGE.split(' ').map(Number);
+    const named = cases
+      .flatMap(
+        current => JSON.stringify(current).match(/\b[1-5]\d{4}\b/gu) ?? [],
+      )
+      .map(Number)
+      .filter(port => port >= 40000);
+    deepStrictEqual(
+      [named.length > 0, named.filter(port => port >= lowest)],
+      [true, []],
+    );
+  });
+
+  it('#2563: a case that keeps its server, or holds the port it expects, does not wait for the port, and a holder waits for its own port once', () => {
     deepStrictEqual(
       [
         hostSetupOf(caseOf('reuse'), PORTS_SUITE).length,
         hostSetupOf({...caseOf('range-held'), port: 45000}, PORTS_SUITE).filter(
-          entry => entry.command.startsWith('for i in $(seq 1 120)'),
+          entry => entry.command === portFreeCommand(45000),
         ).length,
       ],
-      [1, 0],
+      [1, 1],
     );
   });
 
@@ -2008,7 +2066,6 @@ describe('the launch with no runner', () => {
           label: 'windows',
           kind: 'plain',
           suite: 'windows',
-          settings: {'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE},
           environment: {REMOTE_OSS_SENTINEL: 'sent1nel-<run>'},
         },
       ],
@@ -2026,7 +2083,6 @@ describe('the launch with no runner', () => {
           debuggingPort: true,
           settings: {
             'window.title': '[${rootName}]',
-            'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
           },
         },
       ],
@@ -2343,32 +2399,52 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('#2585, #2586, #2616: the launches that connect many windows through the local server (windows, passphrase-input, login-shells, preconnect, default-ports, trust and trust-terminal) give the window a port range below the 32768 where the client’s ephemeral range starts, and only the failing connect that tests a busy range sets one besides', () => {
+  it('#2639: every launch of the ssh group gives the window the port range below the ephemeral ports but the two that keep the search’s default, each with its reason, and a launch that sets a range keeps its own', () => {
     const [first, last] = WINDOW_PORT_RANGE.split('-').map(Number);
+    const all = launchesOf(REPOSITORY_ROOT);
     deepStrictEqual(
       [
         (first ?? 0) > 1023 && (last ?? 65535) < 32768,
-        launchesOf(REPOSITORY_ROOT)
+        all
           .filter(
             launch =>
-              settingsOfLaunch(launch)?.[
-                'remote.SSH.preferredLocalPortRange'
-              ] !== undefined,
+              launchGroupOf(launch) === 'ssh' &&
+              settingsOfLaunch(launch)?.[WINDOW_PORT_RANGE_SETTING] ===
+                undefined,
           )
           .map(launch => launch.label),
+        all
+          .filter(
+            launch =>
+              launchGroupOf(launch) !== 'ssh' &&
+              settingsOfLaunch(launch)?.[WINDOW_PORT_RANGE_SETTING] !==
+                undefined,
+          )
+          .map(launch => launch.label),
+        settingsOfLaunch(launchLabelled(all, 'failure-port-range-busy'))?.[
+          WINDOW_PORT_RANGE_SETTING
+        ],
+        Object.values(WINDOW_PORT_DEFAULT_LAUNCHES).every(
+          reason => reason.length > 20,
+        ),
+      ],
+      [true, ['config-files', 'ssh-agents'], [], '41060-41061', true],
+    );
+  });
+
+  it('#2639: the window port range is refused against an ephemeral range it overlaps, accepted below it, and a range that cannot be read is refused', () => {
+    deepStrictEqual(
+      [
+        windowPortRangeProblem('20000-20999', '32768\t60999\n'),
+        windowPortRangeProblem('20000-20999', '15000 60999')?.startsWith(
+          "the window port range 20000-20999 overlaps this machine's ephemeral port range 15000-60999",
+        ),
+        windowPortRangeProblem('20000-20999', 'unreadable'),
       ],
       [
+        undefined,
         true,
-        [
-          'failure-port-range-busy',
-          'windows',
-          'passphrase-input',
-          'login-shells',
-          'preconnect',
-          'default-ports',
-          'trust',
-          'trust-terminal',
-        ],
+        'the window port range 20000-20999 or the ephemeral range "unreadable" cannot be read',
       ],
     );
   });
