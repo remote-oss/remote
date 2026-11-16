@@ -6,7 +6,13 @@
  */
 
 import {execFile} from 'node:child_process';
-import {chmodSync, mkdirSync, readdirSync, writeFileSync} from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {deepStrictEqual} from 'node:assert';
@@ -67,6 +73,8 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
     const runFolder = variable('HARNESS_RUN_FOLDER');
     const binFolder = path.join(runFolder, `ssh-path-${mode}`);
     const starts = path.join(runFolder, `ssh-starts-${mode}`);
+    // A rerun in the same run folder starts its count at none, or the cap would be reached before the attempt.
+    rmSync(starts, {recursive: true, force: true});
     mkdirSync(binFolder, {recursive: true});
     mkdirSync(starts, {recursive: true});
     const real = (await execFileAsync('which', ['ssh'])).stdout.trim();
@@ -143,6 +151,13 @@ describe('a ProxyJump that recurses (card #2664, F-2310 AC-32)', function () {
       );
     } finally {
       await closeWindow(alias).catch(() => undefined);
+      for (const line of await sshOf(alias)) {
+        try {
+          process.kill(Number(line.trim().split(' ')[0]), 'SIGKILL');
+        } catch {
+          // The process ended on its own.
+        }
+      }
     }
   }
 
