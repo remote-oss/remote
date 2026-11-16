@@ -30,6 +30,11 @@ const CLEAR = 'opensshremotes.clearAllSessionHints';
 /** The setting that names the install folder. */
 const SETTING = 'remote.SSH.serverInstallPath';
 
+/** `text` without its spaces: the width of the table decides where a cell wraps, so the rows compare what is written. */
+function squeezed(text: string): string {
+  return text.replaceAll(' ', '');
+}
+
 /** The cells of column `column` of the data rows of `table`, one per line. */
 function columnOf(table: readonly string[], column: number): string[] {
   const end = table.findIndex(
@@ -88,6 +93,38 @@ describe('the hints of an install folder and a download that fail (card #2708)',
           header: ['Status', 'Message', 'Mitigations'],
           first: `• Remove or edit setting ${SETTING}`,
           unchanged: true,
+        },
+      );
+    });
+  });
+
+  it('F-2407 AC-9 (c2712-invalid-path): an install folder that is not a plain absolute path gives the row InvalidCustomServerPath, its message with the value as written, and the four mitigations in order', async () => {
+    await keepingSettings(async () => {
+      await userSettings({...PLATFORMS, [SETTING]: {harness: '~x'}});
+      const {table} = await failedTable('c2712-invalid-path');
+      deepStrictEqual(
+        {
+          header: cellsOf(table[1]),
+          status: columnOf(table, 0).join(''),
+          message: squeezed(columnOf(table, 1).join('')),
+          mitigations: columnOf(table, 2)
+            .join(' ')
+            .split('•')
+            .map(squeezed)
+            .filter(text => text !== ''),
+        },
+        {
+          header: ['Status', 'Message', 'Mitigations'],
+          status: 'InvalidCustomServerPath',
+          message: squeezed(
+            'The provided custom server path is invalid (Provided: "~x")',
+          ),
+          mitigations: [
+            'Ensure the provide path is an absolute path',
+            `Edit setting ${SETTING} to an absolute path on the remote server`,
+            `Do not use variables, double quotes, or other non-path characters when setting ${SETTING}`,
+            'Delete the setting for this host to use the default path in the user home directory',
+          ].map(squeezed),
         },
       );
     });
