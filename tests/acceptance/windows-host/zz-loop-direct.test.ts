@@ -180,15 +180,22 @@ describe('the Windows session loop with its input kept open (card #2681, measure
     console.log(`c2681-measure sshd events: ${JSON.stringify(events.split('\n').slice(-120))}`);
   });
 
-  it('measure delayed frames under each DefaultShell, and through cmd', async () => {
-    const frame = powershellCommandsFor('c2681mark', {script: 'Write-Output "platform: $([Environment]::OSVersion.Platform)"', environment: {}, inputBase64: null});
-    const loop = powershellSessionStart().remoteProgram;
-    for (const [name, program] of Object.entries(SHELLS)) {
-      useShell(program);
-      await measureDelayed(`${name} delay 200`, frame, 200, loop);
-      await measureDelayed(`${name} cmd-wrapped delay 200`, frame, 200, `cmd /c ${loop}`);
-    }
+  it('measure a non-PowerShell reader and the loop with -InputFormat None, with late input', async () => {
     useShell(SHELLS.windowsPowershell);
+    const frame = powershellCommandsFor('c2681mark', {script: 'Write-Output "platform: $([Environment]::OSVersion.Platform)"', environment: {}, inputBase64: null});
+    const encoded = powershellSessionStart().remoteProgram.split(' ').pop() ?? '';
+    await measureDelayed('findstr late', 'late line one\nlate line two\n', 1000, 'cmd /c "echo ready & findstr ."');
+    await measureDelayed('loop InputFormat None delay 200', frame, 200, `powershell -NoLogo -NoProfile -NonInteractive -InputFormat None -EncodedCommand ${encoded}`);
+    await measureDelayed('loop InputFormat None delay 2000', frame, 2000, `powershell -NoLogo -NoProfile -NonInteractive -InputFormat None -EncodedCommand ${encoded}`);
+    const reads = [
+      '[Console]::Out.Write("ready`n"); [Console]::Out.Flush()',
+      '$Stream = [Console]::OpenStandardInput()',
+      '$Clock = [Diagnostics.Stopwatch]::StartNew()',
+      'for ($Index = 0; $Index -lt 3; $Index++) { $Byte = $Stream.ReadByte(); [Console]::Out.Write("read $Byte after $($Clock.ElapsedMilliseconds) ms`n"); [Console]::Out.Flush() }',
+    ].join('\n');
+    const readsEncoded = Buffer.from(reads, 'utf16le').toString('base64');
+    await measureDelayed('reads InputFormat None', 'abc', 1000, `powershell -NoLogo -NoProfile -NonInteractive -InputFormat None -EncodedCommand ${readsEncoded}`);
+    await measureDelayed('reads pwsh', 'abc', 1000, `pwsh -NoLogo -NoProfile -NonInteractive -EncodedCommand ${readsEncoded}`);
   });
 
   it('print the helper summaries', () => {
