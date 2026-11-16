@@ -477,3 +477,49 @@ export async function focusAfter(
   await new Promise(resolve => setTimeout(resolve, 500));
   return focusedLabel(await detailedQuickPickRows(window));
 }
+
+/** A folder of the run named `label` with the files `contents` by relative path. */
+export function folderWith(
+  label: string,
+  contents: Readonly<Record<string, string>> = {},
+): string {
+  const folder = path.join(variable('HARNESS_RUN_FOLDER'), label);
+  mkdirSync(folder, {recursive: true});
+  for (const [relative, text] of Object.entries(contents)) {
+    const file = path.join(folder, relative);
+    mkdirSync(path.dirname(file), {recursive: true});
+    writeFileSync(file, text);
+  }
+  return folder;
+}
+
+/** The files below `folder` by relative path with their text, for comparing a folder before and after. */
+export function treeOf(folder: string): Record<string, string> {
+  const tree: Record<string, string> = {};
+  function walk(current: string): void {
+    for (const entry of readdirSync(current, {withFileTypes: true})) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        tree[`${path.relative(folder, full)}/`] = '';
+        walk(full);
+      } else {
+        tree[path.relative(folder, full)] = readFileSync(full, 'utf8');
+      }
+    }
+  }
+  walk(folder);
+  return tree;
+}
+
+/** A `.code-workspace` file of the run named `label` listing `folders`. */
+export function workspaceFile(
+  label: string,
+  folders: readonly object[],
+): string {
+  const file = path.join(
+    variable('HARNESS_RUN_FOLDER'),
+    `${label}.code-workspace`,
+  );
+  writeFileSync(file, JSON.stringify({folders}));
+  return file;
+}

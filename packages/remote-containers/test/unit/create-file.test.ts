@@ -31,6 +31,8 @@ function sceneOf(
   ],
   remoteName?: string,
   workspaceFile?: {scheme: string; fsPath: string},
+  workspaceText = '{"folders": [{"path": "one"}, {"path": "two"}]}',
+  confirmed = true,
 ): Scene {
   const calls: string[] = [];
   const sink = new MemorySink();
@@ -66,6 +68,12 @@ function sceneOf(
       },
       offerReopen: variant => {
         calls.push(`offerReopen ${variant}`);
+      },
+      readWorkspaceFile: () =>
+        Promise.resolve({kind: 'text' as const, text: workspaceText}),
+      confirmModal: text => {
+        calls.push(`confirm ${text}`);
+        return Promise.resolve(confirmed);
       },
       translate: template => template,
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
@@ -167,6 +175,42 @@ describe('the Add Dev Container Configuration Files command (card containers-80)
     );
     await createDevContainerFile(scene.ports)();
     deepStrictEqual(scene.calls[0], 'wizard /w roots /w/one,/w/two');
+  });
+
+  const VIRTUAL_FIRST = '{"folders": [{"uri": "memfs:/"}, {"path": "two"}]}';
+
+  const VIRTUAL_PROBLEM =
+    "confirm The workspace could fail to open in a container: Workspace contains folder 'memfs:/' not on the local file system.";
+
+  /** The command over a saved workspace whose first folder is virtual, the dialog about it answered with `confirmed`. */
+  function virtualFirstScene(confirmed: boolean): Scene {
+    return sceneOf(
+      WRITTEN,
+      null,
+      [
+        {scheme: 'memfs', fsPath: '/'},
+        {scheme: 'file', fsPath: '/w/two'},
+      ],
+      undefined,
+      {scheme: 'file', fsPath: '/w/team.code-workspace'},
+      VIRTUAL_FIRST,
+      confirmed,
+    );
+  }
+
+  it('F-0801 AC-31: a saved workspace whose first folder is virtual asks first with S363 filled with S408, and Cancel ends the command with nothing run', async () => {
+    const scene = virtualFirstScene(false);
+    await createDevContainerFile(scene.ports)();
+    deepStrictEqual(scene.calls, [VIRTUAL_PROBLEM]);
+  });
+
+  it('F-0801 AC-31: Continue on that dialog goes on to the wizard for the file’s folder', async () => {
+    const scene = virtualFirstScene(true);
+    await createDevContainerFile(scene.ports)();
+    deepStrictEqual(scene.calls.slice(0, 2), [
+      VIRTUAL_PROBLEM,
+      'wizard /w roots /w/two',
+    ]);
   });
 
   it('F-0801 AC-1: an untitled window of several folders, or a window of one that is not a file, does nothing and says so', async () => {

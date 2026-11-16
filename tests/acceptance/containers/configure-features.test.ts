@@ -9,7 +9,6 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  readdirSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -44,60 +43,24 @@ import {
 } from '../windows/renderer.ts';
 import {
   FEATURES_PLACEHOLDER,
+  folderWith,
   screenWith,
   storeRoot,
+  treeOf,
+  workspaceFile,
 } from '../windows/authoring-support.ts';
 
 const COMMAND = 'remote-containers.configureContainerFeatures';
 const TITLE = 'Dev Containers: Configure Container Features...';
 const NO_FILE = 'No container configuration file found.';
 
-/** A folder of the run named `label` with the files `contents` by relative path. */
-function folderWith(
-  label: string,
-  contents: Readonly<Record<string, string>> = {},
-): string {
-  const folder = path.join(variable('HARNESS_RUN_FOLDER'), label);
-  mkdirSync(folder, {recursive: true});
-  for (const [relative, text] of Object.entries(contents)) {
-    const file = path.join(folder, relative);
-    mkdirSync(path.dirname(file), {recursive: true});
-    writeFileSync(file, text);
-  }
-  return folder;
-}
-
-/** The files below `folder` by relative path with their text, for comparing a folder before and after. */
-function treeOf(folder: string): Record<string, string> {
-  const tree: Record<string, string> = {};
-  function walk(current: string): void {
-    for (const entry of readdirSync(current, {withFileTypes: true})) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        tree[`${path.relative(folder, full)}/`] = '';
-        walk(full);
-      } else {
-        tree[path.relative(folder, full)] = readFileSync(full, 'utf8');
-      }
-    }
-  }
-  walk(folder);
-  return tree;
-}
+/** The detail of the dialog that names the virtual folder of a saved workspace: S363 filled with S408. */
+const VIRTUAL_PROBLEM =
+  "The workspace could fail to open in a container: Workspace contains folder 'memfs:/' not on the local file system.";
 
 /** Runs the command in window `name` without waiting: its dialogs and picks answer it. */
 function startCommand(name: string): void {
   inWindow(name, COMMAND).catch(() => undefined);
-}
-
-/** A `.code-workspace` file of the run named `label` listing `folders`. */
-function workspaceFile(label: string, folders: readonly object[]): string {
-  const file = path.join(
-    variable('HARNESS_RUN_FOLDER'),
-    `${label}.code-workspace`,
-  );
-  writeFileSync(file, JSON.stringify({folders}));
-  return file;
 }
 
 describe('Configure Container Features: its file (card containers-150, part B)', function () {
@@ -318,13 +281,28 @@ describe('Configure Container Features: its file (card containers-150, part B)',
     }
   });
 
-  it('F-0807 AC-61, AC-62 (ruling-1971-workspace-check): in a saved workspace with a virtual root and no configuration, Add Files... asks whether to go on with the problem of the workspace file, Cancel creates nothing and Continue goes to the where-to step', async () => {
-    const folder = folderWith('c150-mixed-add', {'README.md': 'x\n'});
+  /**
+   * Add Files... in a saved workspace of the folder `label` and a virtual root, the virtual root first when `virtualFirst`:
+   * what the first modal, the problem modal and the where-to step show, and the folder's tree after Cancel.
+   */
+  async function addFilesInMixed(
+    label: string,
+    virtualFirst: boolean,
+  ): Promise<{
+    modal: string;
+    problem: string;
+    buttons: string[];
+    afterCancel: Record<string, string>;
+    where: string | undefined;
+    before: Record<string, string>;
+  }> {
+    const folder = folderWith(label, {'README.md': 'x\n'});
     const before = treeOf(folder);
-    const file = workspaceFile('c150-mixed-add', [
-      {path: path.basename(folder)},
-      {uri: 'memfs:/'},
-    ]);
+    const entries = [{path: path.basename(folder)}, {uri: 'memfs:/'}];
+    const file = workspaceFile(
+      label,
+      virtualFirst ? entries.toReversed() : entries,
+    );
     const window = await openWorkspaceWindow(file);
     await rememberPage(window);
     try {
@@ -346,26 +324,52 @@ describe('Configure Container Features: its file (card containers-150, part B)',
       );
       const facts = await quickPickFacts(window);
       await pressEscape(window);
-      deepStrictEqual(
-        {
-          modal: modal.details,
-          problem: problem.details,
-          buttons: problem.buttons,
-          afterCancel,
-          where: facts?.placeholder,
-        },
-        {
-          modal: NO_FILE,
-          problem:
-            "The workspace could fail to open in a container: Workspace contains folder 'memfs:/' not on the local file system.",
-          buttons: ['Cancel', 'Continue'],
-          afterCancel: before,
-          where: 'Where would you like to create your container configuration?',
-        },
-      );
+      return {
+        modal: modal.details,
+        problem: problem.details,
+        buttons: problem.buttons,
+        afterCancel,
+        where: facts?.placeholder,
+        before,
+      };
     } finally {
       await closeWindow(window).catch(() => undefined);
     }
+  }
+
+  /** What a saved workspace with a virtual root and no configuration shows of Add Files..., as the criteria say. */
+  function expectedProblem(
+    found: Awaited<ReturnType<typeof addFilesInMixed>>,
+  ): Record<string, unknown> {
+    return {
+      modal: found.modal,
+      problem: found.problem,
+      buttons: found.buttons,
+      afterCancel: found.afterCancel,
+      where: found.where,
+    };
+  }
+
+  it('F-0807 AC-61 (ruling-1971-workspace-check): in a saved workspace with a disk root first and a virtual root and no configuration, Add Files... asks whether to go on with the problem of the workspace file, Cancel creates nothing and Continue goes to the where-to step', async () => {
+    const found = await addFilesInMixed('c150-mixed-add', false);
+    deepStrictEqual(expectedProblem(found), {
+      modal: NO_FILE,
+      problem: VIRTUAL_PROBLEM,
+      buttons: ['Cancel', 'Continue'],
+      afterCancel: found.before,
+      where: 'Where would you like to create your container configuration?',
+    });
+  });
+
+  it('F-0807 AC-62 (c2724-virtual-first): in a saved workspace whose first folder is virtual, Add Files... asks with S363 filled with S408 for the first virtual folder, Cancel creates nothing and Continue opens the where-to step', async () => {
+    const found = await addFilesInMixed('c2724-virtual-first', true);
+    deepStrictEqual(expectedProblem(found), {
+      modal: NO_FILE,
+      problem: VIRTUAL_PROBLEM,
+      buttons: ['Cancel', 'Continue'],
+      afterCancel: found.before,
+      where: 'Where would you like to create your container configuration?',
+    });
   });
 
   it('F-0807 AC-59 (c150-mixed-disk): in a workspace of a disk root that has a configuration and a virtual root that has none, the pick opens on the disk root’s file', async () => {

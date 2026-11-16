@@ -225,7 +225,7 @@ describe('Configure Container Features: the pick and the write (card containers-
       const shown = await detailedQuickPickRows(window);
       const labels = shown.map(each => each.label.toLowerCase());
       const secondLineWord = shown
-        .flatMap(each => (each.detail ?? '').toLowerCase().split(/[^a-z]+/))
+        .flatMap(each => each.detail.toLowerCase().split(/[^a-z]+/))
         .find(
           word =>
             word.length > 6 && !labels.some(label => label.includes(word)),

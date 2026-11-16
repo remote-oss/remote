@@ -8,6 +8,10 @@ import path from 'node:path';
 import type {Logger} from 'lib-log';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import type {NotificationVariant} from '../open/reopen-notification.ts';
+import {
+  type WorkspaceFolderPorts,
+  workspaceFoldersAccepted,
+} from '../open/workspace-folders.ts';
 import type {WizardOutcome} from './wizard-stages.ts';
 
 /** The English templates of the command's texts, by their string ids. */
@@ -66,7 +70,8 @@ export function savedWorkspaceOf(
 }
 
 /** What the command needs of its surroundings. */
-export interface CreateFilePorts extends ContinuationPorts {
+export interface CreateFilePorts
+  extends ContinuationPorts, WorkspaceFolderPorts {
   window: {
     folders(): readonly WindowFolder[];
     /** The kind of remote the window is connected to; none for a local window. */
@@ -139,7 +144,10 @@ export function createDevContainerFile(
     // A saved multi-root workspace gets its configuration beside the workspace file; an untitled one gets none.
     const saved = savedWorkspaceOf(folders, ports.window.workspaceFile());
     if (saved !== undefined) {
-      await addConfiguration(ports, saved.folder, saved.roots);
+      // A workspace file with a folder the container cannot have asks first: Cancel ends the command with nothing written.
+      if (await workspaceFoldersAccepted(ports, saved.file)) {
+        await addConfiguration(ports, saved.folder, saved.roots);
+      }
       return;
     }
     if (folders.length !== 1 || folder === undefined) {

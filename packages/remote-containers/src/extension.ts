@@ -2126,6 +2126,8 @@ export async function activate(
               vscode.commands.executeCommand(
                 'workbench.action.files.openFolder',
               ),
+            readWorkspaceFile: file => reopenPorts.readWorkspaceFile(file),
+            confirmModal: text => reopenPorts.confirmModal(text),
             translate,
           }),
         },

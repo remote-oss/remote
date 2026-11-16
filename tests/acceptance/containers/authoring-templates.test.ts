@@ -187,15 +187,24 @@ describe('the template screen of the wizard (card coverage-72)', function () {
     );
   });
 
-  it('F-0802 AC-35 (c72-curated-python): a lone app.py gives the core set and the seven Python and Anaconda templates, Python 3 & PostgreSQL included', async () => {
+  it('F-0802 AC-35 (c72-curated-python): a lone app.py gives Show All Templates... first, Learn More second, then the core set and the Python and Anaconda templates of the own table, all alphabetical', async () => {
     await withWindow('c72-app-py', {'app.py': ''}, async window => {
       const labels = (await screenOf(window)).map(each => each.label);
       await closeScreen(window);
+      const templates = labels.slice(2);
       deepStrictEqual(
-        curatedOf([...CORE_SET, 'Python 3 & PostgreSQL']).filter(
-          label => !labels.includes(label),
-        ),
-        [],
+        {
+          head: labels.slice(0, 2),
+          alphabetical: templates.join('|'),
+          missing: curatedOf([...CORE_SET, 'Python 3 & PostgreSQL']).filter(
+            label => !labels.includes(label),
+          ),
+        },
+        {
+          head: ['Show All Templates...', 'Learn More'],
+          alphabetical: templates.toSorted(collator.compare).join('|'),
+          missing: [],
+        },
       );
     });
   });
@@ -344,9 +353,7 @@ describe('the template screen of the wizard (card coverage-72)', function () {
       deepStrictEqual(
         {
           haveHoverWord: hoverWord !== undefined,
-          secondLines: rows.some(
-            each => each.detail !== undefined && each.detail !== '',
-          ),
+          secondLines: rows.some(each => each.detail !== ''),
           owner,
           hover,
           byLabel: byLabel.every(

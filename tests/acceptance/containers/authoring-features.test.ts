@@ -138,18 +138,20 @@ describe('Select Features in the wizard (card containers-88)', function () {
       await startedWith(window, 'bare-lab');
       await screenWith(window, FEATURES);
       const rows = await detailedQuickPickRows(window);
-      const git = rows.find(each => each.label === GIT_FEATURE);
-      deepStrictEqual(git?.detail !== undefined && git.detail !== '', true);
       deepStrictEqual(
-        [GIT_FEATURE, 'Add Community Tool', LAB_OPTIONS].map(label =>
-          rows
-            .filter(each => each.label === label)
-            .map(each => [
-              each.description,
-              each.icons.includes('codicon-verified'),
-            ]),
-        ),
         [
+          rows.some(each => each.label === GIT_FEATURE && each.detail !== ''),
+          ...[GIT_FEATURE, 'Add Community Tool', LAB_OPTIONS].map(label =>
+            rows
+              .filter(each => each.label === label)
+              .map(each => [
+                each.description,
+                each.icons.includes('codicon-verified'),
+              ]),
+          ),
+        ],
+        [
+          true,
           [['devcontainers', true]],
           [['remote-oss-community', false]],
           [['remote-oss-run', false]],
