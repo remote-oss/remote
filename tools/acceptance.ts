@@ -1561,9 +1561,12 @@ function runHostSetup(
       entry.command,
     ]);
     if (result.status !== 0) {
-      throw new Error(
-        `host setup failed: ${entry.command}\n${result.stderr.trim()}`,
-      );
+      // What the command printed on either stream: its own account of what it found, as portFreeCommand's is.
+      const output = [result.stdout, result.stderr]
+        .map(text => text.trim())
+        .filter(text => text !== '')
+        .join('\n');
+      throw new Error(`host setup failed: ${entry.command}\n${output}`);
     }
   }
 }

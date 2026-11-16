@@ -23,6 +23,7 @@ import {
   PromptReader,
   type SessionRunner,
   connectionStart,
+  interpreterOfPlatform,
   sessionStartFor,
   setupMarkerOf,
   type SshRequest,
@@ -208,8 +209,9 @@ export function openTerminalConnectionStep(
         // the bound waits for the script's start as well.
         wait.start(goesOn ? 2 : 1);
         const {prelude} = connectionStart(
-          sessionStartFor(waitSettings, goesOn),
+          sessionStartFor(waitSettings, goesOn, terms.platform),
           terms.remoteCommandInEffect,
+          terms.platform,
         );
         for (const typed of prelude.split('\n')) {
           typedLines.add(typed.trim());
@@ -219,6 +221,7 @@ export function openTerminalConnectionStep(
           scheduler: dependencies.scheduler,
           prelude,
           newMarker: () => dependencies.newMarker(),
+          interpreter: interpreterOfPlatform(terms.platform),
           onBootstrap: event => {
             hearBootstrap(event, runner);
           },
