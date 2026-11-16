@@ -2,8 +2,15 @@
  * @fileoverview The table of the session troubleshooting terminal: the error hints of an attempt drawn with
  * box-drawing characters for a terminal of a given width, as pure text. The outer border is double and the inner rules
  * are single; "Status" is centred, the other headers are left-aligned; text wraps at spaces, and a word that is longer
- * than its column breaks after `/`, `.`, `_` or `-`; a list item starts with a bullet and wraps under itself.
+ * than its column breaks after `/`, `.`, `_` or `-`; a list item starts with a bullet and wraps under itself. A stretch
+ * of a cell that a row marks as a link is drawn bold and underlined, whatever lines it wraps over.
  */
+
+/** A stretch of a text: where it starts and how many characters it has. */
+export interface LinkRange {
+  start: number;
+  length: number;
+}
 
 /** One row of the table: an error hint as the table shows it. */
 export interface HintTableRow {
@@ -11,6 +18,70 @@ export interface HintTableRow {
   message: string;
   mitigations: readonly string[];
   resources: readonly string[];
+  /** The stretches of the message and of each mitigation drawn as links; a row without them draws all plain. */
+  links?: {
+    message?: readonly LinkRange[];
+    mitigations?: readonly (readonly LinkRange[])[];
+  };
+}
+
+/** The marks that start and end a link in a text on its way to the lines; they take no width and are replaced when a line is drawn. */
+const LINK_START = '\uE000';
+const LINK_END = '\uE001';
+
+/** What starts and ends bold, underlined text in the terminal. */
+const LINK_ON = '\u001b[1;4m';
+const LINK_OFF = '\u001b[0m';
+
+/** Whether `character` is one of the two link marks. */
+function isMark(character: string | undefined): boolean {
+  return character === LINK_START || character === LINK_END;
+}
+
+/** The characters of `text` that take room: the link marks do not. */
+function widthOf(text: string): number {
+  return text.replaceAll(LINK_START, '').replaceAll(LINK_END, '').length;
+}
+
+/** `text` split after its first `count` characters that take room, the marks that follow them going with the first part. */
+function splitAfter(text: string, count: number): [string, string] {
+  let seen = 0;
+  let index = 0;
+  while (index < text.length && (seen < count || isMark(text[index]))) {
+    seen += isMark(text[index]) ? 0 : 1;
+    index += 1;
+  }
+  return [text.slice(0, index), text.slice(index)];
+}
+
+/** `text` with a link mark at each start and end of `ranges`, which do not overlap. */
+function withLinkMarks(
+  text: string,
+  ranges: readonly LinkRange[] | undefined,
+): string {
+  let marked = text;
+  for (const range of [...(ranges ?? [])].sort(
+    (left, right) => right.start - left.start,
+  )) {
+    marked = `${marked.slice(0, range.start)}${LINK_START}${marked.slice(range.start, range.start + range.length)}${LINK_END}${marked.slice(range.start + range.length)}`;
+  }
+  return marked;
+}
+
+/** `lines` with every link closed at the end of its line and opened again on the next, so that each line stands alone. */
+function balanced(lines: readonly string[]): string[] {
+  let open = false;
+  return lines.map(line => {
+    const start = open ? LINK_START : '';
+    for (const character of line) {
+      if (character === LINK_START) {
+        open = true;
+      } else if (character === LINK_END) {
+        open = false;
+      }
+    }
+    return `${start}${line}${open ? LINK_END : ''}`;
+  });
 }
 
 /** The text of the column headers. */
@@ -62,10 +133,11 @@ function brokenWord(word: string, width: number): string[] {
   let line = '';
   for (const piece of piecesOf(word)) {
     let rest = piece;
-    while (line.length + rest.length > width) {
+    while (widthOf(line) + widthOf(rest) > width) {
       if (line === '') {
-        lines.push(rest.slice(0, width));
-        rest = rest.slice(width);
+        const [head, tail] = splitAfter(rest, width);
+        lines.push(head);
+        rest = tail;
       } else {
         lines.push(line);
         line = '';
@@ -81,9 +153,9 @@ export function wrappedText(text: string, width: number): string[] {
   const lines: string[] = [];
   let line = '';
   for (const word of text.split(' ').filter(each => each !== '')) {
-    if (line !== '' && line.length + 1 + word.length <= width) {
+    if (line !== '' && widthOf(line) + 1 + widthOf(word) <= width) {
       line = `${line} ${word}`;
-    } else if (word.length <= width) {
+    } else if (widthOf(word) <= width) {
       if (line !== '') {
         lines.push(line);
       }
@@ -108,7 +180,7 @@ export function wrappedText(text: string, width: number): string[] {
  */
 function itemLines(item: string, width: number): string[] {
   const inner = width - BULLET.length;
-  if (item.split(' ').some(word => word.length > inner)) {
+  if (item.split(' ').some(word => widthOf(word) > inner)) {
     return ['•', ...wrappedText(item, width)];
   }
   const [first = '', ...rest] = wrappedText(item, inner);
@@ -125,12 +197,12 @@ function listLines(items: readonly string[], width: number): string[] {
 
 /** `text` padded on the right to `width`. */
 function padded(text: string, width: number): string {
-  return text + ' '.repeat(Math.max(0, width - text.length));
+  return text + ' '.repeat(Math.max(0, width - widthOf(text)));
 }
 
 /** `text` centred in `width`, the extra cell going to the right. */
 function centred(text: string, width: number): string {
-  const left = Math.floor(Math.max(0, width - text.length) / 2);
+  const left = Math.floor(Math.max(0, width - widthOf(text)) / 2);
   return padded(' '.repeat(left) + text, width);
 }
 
@@ -166,7 +238,9 @@ function rowLines(cells: readonly Cell[], header: boolean): string[] {
       const text = lines[index] ?? '';
       return ` ${header && column.centre ? centred(text, column.width) : padded(text, column.width)} `;
     });
-    return `║${parts.join('│')}║`;
+    return `║${parts.join('│')}║`
+      .replaceAll(LINK_START, LINK_ON)
+      .replaceAll(LINK_END, LINK_OFF);
   });
 }
 
@@ -214,8 +288,17 @@ export function hintTable(
   const dataRows = rows.map(entry => {
     const lines: Record<Name, string[]> = {
       status: [entry.status],
-      message: wrappedText(entry.message, each),
-      mitigations: listLines(entry.mitigations, each),
+      message: balanced(
+        wrappedText(withLinkMarks(entry.message, entry.links?.message), each),
+      ),
+      mitigations: balanced(
+        listLines(
+          entry.mitigations.map((item, index) =>
+            withLinkMarks(item, entry.links?.mitigations?.[index]),
+          ),
+          each,
+        ),
+      ),
       resources: listLines(entry.resources, each),
     };
     return names.map(name => ({column: spec[name], lines: lines[name]}));

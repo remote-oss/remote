@@ -259,6 +259,51 @@ describe('the rows of the table (card connect-136)', () => {
   });
 });
 
+describe('the links of the table (F-2602 3.4)', () => {
+  it('the ranges of a stored hint go into its row, the mitigations’ parallel to the mitigations, and a hint without them has none', () => {
+    deepStrictEqual(
+      rowsOf([
+        {
+          kind: 'error',
+          status: 'S',
+          message: 'a key',
+          mitigations: ['x', 'Edit key'],
+          links: {
+            message: [{start: 2, length: 3}],
+            mitigations: [[], [{start: 5, length: 3}]],
+          },
+        },
+        {kind: 'error', status: 'Plain', message: 'prose', mitigations: ['y']},
+      ]).map(row => row.links),
+      [
+        {
+          message: [{start: 2, length: 3}],
+          mitigations: [[], [{start: 5, length: 3}]],
+        },
+        undefined,
+      ],
+    );
+  });
+
+  it('a range that a control character’s writing out would move is dropped, and the others stay', () => {
+    deepStrictEqual(
+      rowsOf([
+        {
+          kind: 'error',
+          status: 'S',
+          message: 'a\u0007 key',
+          mitigations: ['Edit key'],
+          links: {
+            message: [{start: 3, length: 3}],
+            mitigations: [[{start: 5, length: 3}]],
+          },
+        },
+      ]).map(row => row.links),
+      [{message: [], mitigations: [[{start: 5, length: 3}]]}],
+    );
+  });
+});
+
 describe('the pseudoterminal of the table (card connect-136)', () => {
   function makePty(rows = rowsOf([OFFLINE])): {
     made: TablePty;

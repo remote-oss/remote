@@ -443,7 +443,7 @@ export function wiringPortsOf(
         surfaces.hints.record(installPathHint(value, surfaces.translate));
       },
       onInstallFolderRefused: () => {
-        surfaces.hints.record(installFolderHint(surfaces.translate));
+        surfaces.hints.record(installFolderHint());
       },
       onLocalDownloadFailed: value => {
         surfaces.hints.record(localDownloadHint(value, surfaces.translate));
