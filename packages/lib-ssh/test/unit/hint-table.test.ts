@@ -6,6 +6,9 @@ import {
   wrappedText,
 } from '../../src/diagnostics/hint-table.ts';
 
+/** The sequences that start and end bold, underlined text. */
+const STYLE = new RegExp(`${String.fromCharCode(27)}\\[(?:1;4|0)m`, 'gu');
+
 const OFFLINE: HintTableRow = {
   status: 'OfflineError',
   message: 'Error: OfflineError (The connection timed out)',
@@ -115,21 +118,21 @@ describe('the table of the session troubleshooting terminal (card connect-136, F
   });
 
   it('F-2602 3.4: a range of a mitigation is drawn bold and underlined, the width of the line unchanged, and a table without ranges has no style', () => {
-    const row: HintTableRow = {
+    const plain: HintTableRow = {
       status: 'S',
       message: 'm',
       mitigations: ['Remove or edit setting remote.SSH.serverInstallPath'],
       resources: [],
     };
     const linked = hintTable(
-      [{...row, links: {mitigations: [[{start: 23, length: 28}]]}}],
+      [{...plain, links: {mitigations: [[{start: 23, length: 28}]]}}],
       100,
     );
     deepStrictEqual(
       [
         linked.slice(3, 5),
-        hintTable([row], 100).some(line => line.includes('\u001b')),
-        linked.map(line => line.replaceAll(/\u001b\[[0-9;]*m/gu, '').length),
+        hintTable([plain], 100).some(line => line.includes('\u001b')),
+        linked.map(line => line.replaceAll(STYLE, '').length),
       ],
       [
         [
