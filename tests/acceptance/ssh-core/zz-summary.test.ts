@@ -22,8 +22,8 @@ describe('where the summary line of a failure without issues falls against the r
   it('the rounds', async () => {
     const rounds: unknown[] = [];
     for (const [host, count] of [
-      ['refused', 40],
-      ['nowhere', 10],
+      ['refused', 60],
+      ['nowhere', 0],
     ] as const) {
       for (let round = 0; round < count; round += 1) {
         const folder = `zz-sum-${host}-${String(round)}`;
@@ -57,6 +57,9 @@ describe('where the summary line of a failure without issues falls against the r
           noHintsAt: found,
           noHintsBeforeMark: found >= 0 && found < mark,
           noHintsMissing: found < 0,
+          inSliceFromBefore: lines.slice(before).includes(NO_HINTS),
+          inSliceFromMark: lines.slice(mark).includes(NO_HINTS),
+          ruleBeforeIt: found > 0 && lines[found - 1] === '-'.repeat(40),
           stampLine,
           dayStart,
           openReturnedAt,
