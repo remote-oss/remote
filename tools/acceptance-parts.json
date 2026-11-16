@@ -460,6 +460,7 @@
     "trust": {
       "agent-link.test.ts": 1.9,
       "new-window.test.ts": 0.2,
+      "preconnect-restricted.test.ts": 0.3,
       "restricted-activation.test.ts": 0.3,
       "restricted.test.ts": 0.2,
       "trust.test.ts": 0.4
