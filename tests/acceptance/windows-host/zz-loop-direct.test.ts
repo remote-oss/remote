@@ -180,22 +180,26 @@ describe('the Windows session loop with its input kept open (card #2681, measure
     console.log(`c2681-measure sshd events: ${JSON.stringify(events.split('\n').slice(-120))}`);
   });
 
-  it('measure a non-PowerShell reader and the loop with -InputFormat None, with late input', async () => {
+  it('measure an overlapped FileStream on the standard input handle, with late input', async () => {
     useShell(SHELLS.windowsPowershell);
-    const frame = powershellCommandsFor('c2681mark', {script: 'Write-Output "platform: $([Environment]::OSVersion.Platform)"', environment: {}, inputBase64: null});
-    const encoded = powershellSessionStart().remoteProgram.split(' ').pop() ?? '';
-    await measureDelayed('findstr late', 'late line one\nlate line two\n', 1000, 'cmd /c "echo ready & findstr ."');
-    await measureDelayed('loop InputFormat None delay 200', frame, 200, `powershell -NoLogo -NoProfile -NonInteractive -InputFormat None -EncodedCommand ${encoded}`);
-    await measureDelayed('loop InputFormat None delay 2000', frame, 2000, `powershell -NoLogo -NoProfile -NonInteractive -InputFormat None -EncodedCommand ${encoded}`);
     const reads = [
       '[Console]::Out.Write("ready`n"); [Console]::Out.Flush()',
-      '$Stream = [Console]::OpenStandardInput()',
+      '$Console = [Console]::OpenStandardInput()',
+      "$Field = $Console.GetType().GetField('_handle', [Reflection.BindingFlags]'NonPublic,Instance')",
+      '[Console]::Out.Write("field $($null -ne $Field)`n")',
+      'try { $Stream = New-Object System.IO.FileStream($Field.GetValue($Console), [IO.FileAccess]::Read, 1, $true); [Console]::Out.Write("async stream`n") } catch { [Console]::Out.Write("no async stream: $($_.Exception.Message)`n"); $Stream = $Console }',
+      '[Console]::Out.Flush()',
       '$Clock = [Diagnostics.Stopwatch]::StartNew()',
-      'for ($Index = 0; $Index -lt 3; $Index++) { $Byte = $Stream.ReadByte(); [Console]::Out.Write("read $Byte after $($Clock.ElapsedMilliseconds) ms`n"); [Console]::Out.Flush() }',
+      '$Buffer = New-Object byte[] 8',
+      'for ($Index = 0; $Index -lt 2; $Index++) { $Got = $Stream.Read($Buffer, 0, 8); [Console]::Out.Write("read $Got after $($Clock.ElapsedMilliseconds) ms`n"); [Console]::Out.Flush() }',
     ].join('\n');
-    const readsEncoded = Buffer.from(reads, 'utf16le').toString('base64');
-    await measureDelayed('reads InputFormat None', 'abc', 1000, `powershell -NoLogo -NoProfile -NonInteractive -InputFormat None -EncodedCommand ${readsEncoded}`);
-    await measureDelayed('reads pwsh', 'abc', 1000, `pwsh -NoLogo -NoProfile -NonInteractive -EncodedCommand ${readsEncoded}`);
+    const encoded = Buffer.from(reads, 'utf16le').toString('base64');
+    const program = `powershell -NoLogo -NoProfile -NonInteractive -EncodedCommand ${encoded}`;
+    await measureDelayed('async stream late', 'abc', 1000, program);
+    await measureDelayed('async stream early', 'abc', 0, program);
+    useShell(SHELLS.commandPrompt);
+    await measureDelayed('async stream late under cmd', 'abc', 1000, program);
+    useShell(SHELLS.windowsPowershell);
   });
 
   it('print the helper summaries', () => {
