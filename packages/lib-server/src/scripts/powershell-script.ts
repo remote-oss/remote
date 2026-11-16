@@ -140,15 +140,21 @@ const INSTALL_TREE_BODY: readonly string[] = [
   "Complete-Step 'ServerFailedToStart'",
 ];
 
+/** A word the C runtime and cmd both read as it is, with no quotes. */
+const BARE_WORD = /^[A-Za-z0-9_.,:/=+-]+$/;
+
 /**
- * The server's start words as one Windows command line, each word quoted as the C runtime splits it: Start-Process
- * joins its arguments with spaces and quotes nothing. A Windows host has no socket mode, so the server always listens
- * on a port.
+ * The server's start words as one Windows command line, each word as the C runtime splits it: Start-Process joins its
+ * arguments with spaces and quotes nothing. A word that needs no quotes goes bare, since the server's batch launcher
+ * reads its first word inside a quoted comparison that a quoted word breaks. A Windows host has no socket mode, so the
+ * server always listens on a port.
  */
 function argumentLine(start: StartParameters): string {
   const words = startWordsOf({...start, socketMode: false}).map(word =>
     'text' in word
-      ? powershellQuote(windowsArgument(word.text))
+      ? powershellQuote(
+          BARE_WORD.test(word.text) ? word.text : windowsArgument(word.text),
+        )
       : `(ConvertTo-WindowsArgument $${word.variable})`,
   );
   return `$SERVER_ARGUMENTS = @(${words.join(', ')}) -join ' '`;
