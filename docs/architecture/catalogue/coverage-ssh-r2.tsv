@@ -369,7 +369,7 @@ F-2309.AC-26	acceptance
 F-2309.AC-27	core	the window title and the remote indicator text are VS Code core's from the authority; measured "Disconnected from SSH: <alias>" (c2596-program-cancels)
 F-2309.AC-28	acceptance	
 F-2309.AC-29	acceptance	
-F-2310.AC-1	todo	
+F-2310.AC-1	acceptance	
 F-2310.AC-2	todo	
 F-2310.AC-3	todo	
 F-2310.AC-4	todo	
@@ -402,9 +402,10 @@ F-2310.AC-30	acceptance
 F-2310.AC-31	acceptance	
 F-2310.AC-32	acceptance	
 F-2310.AC-33	acceptance	
-F-2310.AC-34	todo	
+F-2310.AC-34	acceptance	
 F-2310.AC-35	acceptance	
 F-2310.AC-36	acceptance	
+F-2310.AC-37	todo	
 F-2402.AC-1	todo	
 F-2402.AC-2	todo	
 F-2402.AC-3	todo	
