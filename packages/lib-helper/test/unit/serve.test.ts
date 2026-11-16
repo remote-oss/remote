@@ -38,6 +38,20 @@ interface TestClient {
   closed: boolean;
 }
 
+/** A promise and the call that resolves it. */
+function pending(): {promise: Promise<void>; resolve: () => void} {
+  const held: {resolve: () => void} = {resolve: () => undefined};
+  const promise = new Promise<void>(resolve => {
+    held.resolve = resolve;
+  });
+  return {
+    promise,
+    resolve: () => {
+      held.resolve();
+    },
+  };
+}
+
 async function settled(): Promise<void> {
   for (let round = 0; round < 5; round++) {
     await Promise.resolve();
@@ -360,7 +374,7 @@ describe('serve', () => {
   });
 
   it('contracts X2: a hello during the end action of a delayed check is answered ending, and the endpoint stays until the action is done', async () => {
-    const action = Promise.withResolvers<void>();
+    const action = pending();
     handler.runAction = () => action.promise;
     start({
       kind: 'delayedCheckAfterLastLease',
