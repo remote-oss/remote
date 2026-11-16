@@ -134,6 +134,34 @@ async function measureFrame(label: string, frame: string, invocation?: {program:
   console.log(`c2681-measure ${label}: ${JSON.stringify(events)}`);
 }
 
+/** Runs `remoteProgram`, writes `frame` `delay` ms after its first output line, and prints the timeline. */
+async function measureDelayed(label: string, frame: string, delay: number, remoteProgram: string): Promise<void> {
+  const started = Date.now();
+  const events: string[] = [];
+  const note = (what: string) => events.push(`${String(Date.now() - started)}ms ${what}`);
+  const child = spawn('ssh', ['-T', '-F', variable('HARNESS_SSH_CONFIG'), 'winhost', remoteProgram], {stdio: ['pipe', 'pipe', 'pipe']});
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  let armed = false;
+  child.stdout.on('data', (text: string) => {
+    note(`stdout ${JSON.stringify(text.slice(0, 160))}`);
+    if (!armed) {
+      armed = true;
+      setTimeout(() => {
+        child.stdin.write(frame);
+        note('frame written');
+      }, delay);
+    }
+  });
+  const killer = setTimeout(() => {
+    note('killed');
+    child.kill();
+  }, delay + 12_000);
+  await new Promise(resolve => child.once('close', resolve));
+  clearTimeout(killer);
+  console.log(`c2681-measure ${label}: ${JSON.stringify(events)}`);
+}
+
 describe('the Windows session loop with its input kept open (card #2681, measurement)', function () {
   this.timeout(900_000);
 
@@ -150,6 +178,22 @@ describe('the Windows session loop with its input kept open (card #2681, measure
     console.log(`c2681-measure processes: ${JSON.stringify([...seen].map(([key, first]) => `${first} ${key}`).slice(0, 200))}`);
     const events = execFileSync('powershell', ['-NoProfile', '-Command', "Get-WinEvent -LogName 'OpenSSH/Operational' -MaxEvents 120 | Sort-Object TimeCreated | ForEach-Object { $_.TimeCreated.ToString('HH:mm:ss.fff') + ' ' + ($_.Message -replace '\\s+', ' ') }"], {encoding: 'utf8'});
     console.log(`c2681-measure sshd events: ${JSON.stringify(events.split('\n').slice(-120))}`);
+  });
+
+  it('measure frames written after a delay, and what an empty read returns', async () => {
+    useShell(SHELLS.windowsPowershell);
+    const frame = powershellCommandsFor('c2681mark', {script: 'Write-Output "platform: $([Environment]::OSVersion.Platform)"', environment: {}, inputBase64: null});
+    for (const delay of [0, 20, 200, 2000]) {
+      await measureDelayed(`delay ${String(delay)}`, frame, delay, powershellSessionStart().remoteProgram);
+    }
+    const reads = [
+      '[Console]::Out.Write("ready`n"); [Console]::Out.Flush()',
+      '$Stream = [Console]::OpenStandardInput()',
+      '$Clock = [Diagnostics.Stopwatch]::StartNew()',
+      'for ($Index = 0; $Index -lt 6; $Index++) { $Byte = $Stream.ReadByte(); [Console]::Out.Write("read $Byte after $($Clock.ElapsedMilliseconds) ms`n"); [Console]::Out.Flush(); if ($Byte -lt 0) { Start-Sleep -Milliseconds 300 } }',
+    ].join('\n');
+    const program = `powershell -NoLogo -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(reads, 'utf16le').toString('base64')}`;
+    await measureDelayed('reads', 'abc', 1000, program);
   });
 
   it('print the helper summaries', () => {
