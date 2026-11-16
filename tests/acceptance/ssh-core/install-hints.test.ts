@@ -28,6 +28,9 @@ import {
 
 const CLEAR = 'opensshremotes.clearAllSessionHints';
 
+/** The link at the end of the terminal. */
+const OUTPUT_LOG_LINK = 'Output Log...';
+
 /** The setting that names the install folder. */
 const SETTING = 'remote.SSH.serverInstallPath';
 
@@ -97,8 +100,8 @@ describe('the hints of an install folder and a download that fail (card #2708)',
         {
           header: ['Status', 'Message', 'Mitigations'],
           first: true,
-          // The key of the explanation and the key of the first mitigation.
-          linked: 2 * SETTING.length,
+          // The key of the explanation, the key of the first mitigation and the link at the end of the terminal.
+          linked: 2 * SETTING.length + OUTPUT_LOG_LINK.length,
           unchanged: true,
         },
       );
