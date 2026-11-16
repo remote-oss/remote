@@ -52,7 +52,10 @@ while ($true) {
     $ChildInput.Close()
   } catch {}
   $Child.WaitForExit()
-  [void]$Copy.Wait(2000)
+  if (-not $Copy.Wait(2000)) {
+    try { $Child.StandardOutput.Close() } catch {}
+    try { [void]$Copy.Wait(1000) } catch {}
+  }
   $Out.Flush()
   [Console]::Out.Write("$($Fields[0]):end $($Child.ExitCode)`n")
   [Console]::Out.Flush()

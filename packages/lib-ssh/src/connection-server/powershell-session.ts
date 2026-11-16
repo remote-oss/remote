@@ -25,7 +25,8 @@ const POWERSHELL_WORDS = '-NoLogo -NoProfile -NonInteractive -EncodedCommand';
  * pass another. A header that doesn't parse, or input that ends inside a run, ends the session with status 2; the end
  * of the input between runs ends it with 0. A run ends when its child exits: a process the child started, such as the
  * server, can hold the child's output open for its own life, so the copy of that output gets a short drain, not the
- * output's end.
+ * output's end; a copy still open after it has the child's output closed under it, so that nothing such a process
+ * writes later reaches the session.
  */
 export const POWERSHELL_SESSION_LOOP = [
   "param([string]$ChildProgram = 'powershell.exe')",
@@ -76,7 +77,10 @@ export const POWERSHELL_SESSION_LOOP = [
   '    $ChildInput.Close()',
   '  } catch {}',
   '  $Child.WaitForExit()',
-  '  [void]$Copy.Wait(2000)',
+  '  if (-not $Copy.Wait(2000)) {',
+  '    try { $Child.StandardOutput.Close() } catch {}',
+  '    try { [void]$Copy.Wait(1000) } catch {}',
+  '  }',
   '  $Out.Flush()',
   '  [Console]::Out.Write("$($Fields[0]):end $($Child.ExitCode)`n")',
   '  [Console]::Out.Flush()',

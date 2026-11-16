@@ -258,6 +258,30 @@ describe('the PowerShell session loop, run under pwsh (card #1899)', function ()
     );
   });
 
+  it('F-2701 AC-18: what a process the child started writes after the child exited never reaches the session, not even inside the next run', async () => {
+    const ended = await session(
+      framed(
+        'm1',
+        "Start-Process -FilePath pwsh -ArgumentList '-NoProfile', '-Command', 'Start-Sleep -Seconds 3; Write-Output ghost' | Out-Null; Write-Output launched",
+      ) + framed('m2', 'Start-Sleep -Seconds 5; Write-Output next'),
+    );
+    deepStrictEqual(
+      [ended.lines, ended.status],
+      [
+        [
+          'LAYER1-READY',
+          'm1:start',
+          'launched',
+          'm1:end 0',
+          'm2:start',
+          'next',
+          'm2:end 0',
+        ],
+        0,
+      ],
+    );
+  });
+
   it('F-2701 5.0 step 5: under PowerShell 7 a run written 200 ms after the ready line is read through the console stream and answered', async () => {
     const ended = await session(framed('m1', 'Write-Output late'), 200);
     deepStrictEqual(
