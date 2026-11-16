@@ -1644,6 +1644,25 @@ describe('the manifest', () => {
     );
   });
 
+  // The qps-ploc tables as the generator makes them: the English tables letter for letter.
+  function qpsPlocTables(): [Record<string, unknown>, Record<string, unknown>] {
+    const nlsTable = readJson('package.nls.json');
+    return [
+      Object.fromEntries(
+        Object.entries(nlsTable).map(([key, text]) => [
+          key,
+          pseudoLocalize(String(text)),
+        ]),
+      ),
+      Object.fromEntries(
+        Object.keys(readJson('l10n/bundle.l10n.json')).map(text => [
+          text,
+          pseudoLocalize(text),
+        ]),
+      ),
+    ];
+  }
+
   it('F-1406.5: every locale of identifiers.json has a table and a runtime bundle with the English values, qps-ploc pseudo-localized when the package declares it', () => {
     const identifiers = readJson('identifiers.json');
     const locales = (identifiers.locales ?? []) as string[];
@@ -1655,15 +1674,7 @@ describe('the manifest', () => {
       if (locale !== 'qps-ploc' || identifiers.pseudoLocalized !== true) {
         return [nlsTable, Object.fromEntries(bundle.map(text => [text, text]))];
       }
-      return [
-        Object.fromEntries(
-          Object.entries(nlsTable).map(([key, text]) => [
-            key,
-            pseudoLocalize(String(text)),
-          ]),
-        ),
-        Object.fromEntries(bundle.map(text => [text, pseudoLocalize(text)])),
-      ];
+      return qpsPlocTables();
     }
     deepStrictEqual(
       [
@@ -1678,22 +1689,12 @@ describe('the manifest', () => {
   });
 
   it('F-0103 AC-3 (c2503-qps-letters): the qps-ploc tables are the English ones letter for letter, so a {0} placeholder and a command: link come through substituted', () => {
-    const nlsTable = readJson('package.nls.json');
-    const bundle = Object.keys(readJson('l10n/bundle.l10n.json'));
     deepStrictEqual(
       [
         readJson('package.nls.qps-ploc.json'),
         readJson('l10n/bundle.l10n.qps-ploc.json'),
       ],
-      [
-        Object.fromEntries(
-          Object.entries(nlsTable).map(([key, text]) => [
-            key,
-            pseudoLocalize(String(text)),
-          ]),
-        ),
-        Object.fromEntries(bundle.map(text => [text, pseudoLocalize(text)])),
-      ],
+      qpsPlocTables(),
     );
   });
 
