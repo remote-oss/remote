@@ -513,6 +513,7 @@ const CONTAINERS_B_FILES: readonly string[] = [
   'user-env.test.ts',
   'users.test.ts',
   'workspace-mount.test.ts',
+  'workspace-virtual-first.test.ts',
   'workspace-window.test.ts',
 ];
 
