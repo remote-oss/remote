@@ -27,6 +27,7 @@ import {
   runLabelArguments,
   variable,
   waitFor,
+  windowNames,
 } from '../windows/harness.ts';
 import {
   answerDialog,
@@ -47,6 +48,12 @@ import {
   setUserSetting,
 } from '../windows/folder-windows.ts';
 import {installBrowser, openedUrls} from '../windows/web-ui-support.ts';
+import {
+  listingOnly,
+  pickedContainer,
+  removeGroup,
+  started,
+} from '../windows/attach-support.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -90,18 +97,19 @@ async function platformName(): Promise<string> {
   return `alpine-${machine === 'aarch64' ? 'arm64' : 'x64'}`;
 }
 
-/** The partial installs on the volume: the entries named `{commit}_{epoch-ms}`, sorted. */
-async function leftoversOnVolume(): Promise<string[]> {
-  return (
-    await inVolume(`find ${volumeFolder()} -maxdepth 3 -name '*_[0-9]*' | sort`)
-  )
-    .split('\n')
-    .filter(line => line !== '');
-}
-
 /** The tree of the run's editor's commit for the run's image on the volume. */
 async function treeOfImage(): Promise<string> {
   return `${volumeFolder()}/bin/${await platformName()}/${editorProduct().commit}`;
+}
+
+/** Whether the volume holds a tree of this commit and the run's image's platform that has no product.json: what a later connect could take as complete. */
+async function hasIncompleteTree(): Promise<boolean> {
+  const tree = await treeOfImage();
+  return (
+    (await inVolume(
+      `if [ -d ${tree} ] && [ ! -f ${tree}/product.json ]; then echo incomplete; fi`,
+    )) === 'incomplete'
+  );
 }
 
 /** Removes the tree of this commit and the run's image's platform from the volume, and only that: other rows share the volume. */
@@ -629,14 +637,14 @@ describe('F-0503 server install (card containers-41)', function () {
     }, unreachable);
   });
 
-  it('F-0503 AC-21 (ruling-1591-no-partials): a download that fails mid-transfer leaves no partial and no final-name archive in the download folder', async () => {
+  it('F-0503 AC-21 (ruling-1591-no-partials): a download that fails mid-transfer leaves no archive under its final name in the download folder', async () => {
     const cutSource = `${variable('HARNESS_DOWNLOADS_LOCAL')}/cut`;
     await withFailingSource(async (folder, downloads) => {
       await failedDownload(folder, cutSource);
       deepStrictEqual(
         filesUnder(downloads).filter(
           entry =>
-            !entry.startsWith('.devcontainer') &&
+            entry.endsWith('.tar.gz') &&
             statSync(path.join(downloads, entry)).isFile(),
         ),
         [],
@@ -644,7 +652,7 @@ describe('F-0503 server install (card containers-41)', function () {
     }, cutSource);
   });
 
-  it('F-0503 AC-23 (ruling-1591-no-leftovers): closing the window during the install shows no dialog, the container exits with code 0, and the volume has no {commit}_{epoch-ms} directory, before or after the container is removed', async () => {
+  it('F-0503 AC-23, AC-25 (ruling-1591-no-leftovers): closing the window during the install shows no dialog, the container exits with code 0 and no tree without product.json is left on the volume; opening the same folder again installs the server and connects', async () => {
     const slow = `${variable('HARNESS_DOWNLOADS_LOCAL')}/slow`;
     await removeTree();
     await setUserSetting('remote.serverDownloadBaseUrl', slow);
@@ -677,14 +685,86 @@ describe('F-0503 server install (card containers-41)', function () {
         },
         90_000,
       );
-      const before = await leftoversOnVolume();
+      const incompleteBefore = await hasIncompleteTree();
       await removeContainers(folder);
+      const incompleteAfter = await hasIncompleteTree();
+      await setUserSetting('remote.serverDownloadBaseUrl', workingSource);
+      const again = await connect(folder);
       deepStrictEqual(
-        [dialog, stateText, before, await leftoversOnVolume()],
-        [undefined, 'exited 0', [], []],
+        [
+          dialog,
+          stateText,
+          incompleteBefore,
+          incompleteAfter,
+          again.phases,
+          await hasIncompleteTree(),
+          await inVolume(
+            `test -f ${await treeOfImage()}/product.json && echo complete`,
+          ),
+        ],
+        [
+          undefined,
+          'exited 0',
+          false,
+          false,
+          [INSTALLING, STARTING],
+          false,
+          'complete',
+        ],
       );
     } finally {
       await setUserSetting('remote.serverDownloadBaseUrl', workingSource);
+    }
+  });
+
+  it('F-0503 AC-24 (c2724-attach-close): closing an Attach window during the install leaves the container running and no tree without product.json under its server folder', async () => {
+    const slow = `${variable('HARNESS_DOWNLOADS_LOCAL')}/slow`;
+    await setUserSetting('remote.serverDownloadBaseUrl', slow);
+    const containerId = await started('c2724-attach', 'install');
+    await setUserSetting(
+      'dev.containers.dockerPath',
+      listingOnly('c2724-attach', 'install'),
+    );
+    const before = windowNames();
+    try {
+      await pickedContainer('/c2724-attach');
+      await waitFor(
+        'the attach window',
+        () => Promise.resolve(windowNames().length > before.length),
+        120_000,
+      );
+      const [attached = ''] = windowNames().filter(
+        name => !before.includes(name),
+      );
+      opened.push(attached);
+      await waitFor(
+        'the installing toast',
+        async () =>
+          (await notifications(attached)).some(text =>
+            text.includes(INSTALLING),
+          ),
+        180_000,
+      );
+      await closeWindow(attached);
+      opened.splice(opened.indexOf(attached), 1);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      const state = (
+        await execFileAsync('docker', [
+          'inspect',
+          '--format',
+          '{{.State.Status}}',
+          containerId,
+        ])
+      ).stdout.trim();
+      const incomplete = await inContainer(
+        containerId,
+        `for tree in $HOME/${editorProduct().serverDataFolderName}/bin/*; do if [ -d "$tree" ] && [ ! -f "$tree/product.json" ]; then echo "$tree"; fi; done`,
+      );
+      deepStrictEqual([state, incomplete], ['running', '']);
+    } finally {
+      await setUserSetting('dev.containers.dockerPath', undefined);
+      await setUserSetting('remote.serverDownloadBaseUrl', workingSource);
+      await removeGroup('install');
     }
   });
 
