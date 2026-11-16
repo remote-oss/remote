@@ -112,7 +112,7 @@
     },
     {
       "alias": "readonly",
-      "cite": "#668, F-2407 AC-11, AC-12",
+      "cite": "F-2407 AC-11, AC-12",
       "script": [
         {
           "surface": "failureDialog",
