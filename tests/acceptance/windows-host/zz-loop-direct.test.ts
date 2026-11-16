@@ -210,6 +210,8 @@ describe('the Windows session loop with its input kept open (card #2681, measure
         break;
       }
     }
+    const logs = execFileSync('powershell', ['-NoProfile', '-Command', "Get-ChildItem -LiteralPath (Join-Path $HOME '.vscodium-server-insiders') -Filter '*.log' -Force -ErrorAction SilentlyContinue | ForEach-Object { '== ' + $_.Name; Get-Content -LiteralPath $_.FullName -TotalCount 60 }"], {encoding: 'utf8'});
+    console.log(`c2681-measure server logs: ${JSON.stringify(logs.split('\n').map(line => line.trimEnd()).filter(Boolean).slice(0, 150))}`);
     const listing = execFileSync('powershell', ['-NoProfile', '-Command', "Get-ChildItem -LiteralPath (Join-Path $HOME '.vscodium-server-insiders') -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 80 | ForEach-Object { $_.FullName }"], {encoding: 'utf8'});
     console.log(`c2681-measure install folder: ${JSON.stringify(listing.split('\n').map(line => line.trim()).filter(Boolean))}`);
   });
