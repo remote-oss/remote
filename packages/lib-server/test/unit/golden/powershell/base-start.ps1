@@ -300,10 +300,16 @@ if ($null -eq $ServerProcess) {
     Exit-Lock
     Write-Failed $TOKEN_FILE $Message
   }
-  $SERVER_ARGUMENTS = @('"--start-server"', '"--host"', '"127.0.0.1"', '"--port"', '"0"', '"--connection-token-file"', (ConvertTo-WindowsArgument $TOKEN_FILE), '"--telemetry-level"', '"off"', '"--enable-remote-auto-shutdown"') -join ' '
+  $SERVER_ARGUMENTS = @('--start-server', '--host', '127.0.0.1', '--port', '0', '--connection-token-file', (ConvertTo-WindowsArgument $TOKEN_FILE), '--telemetry-level', 'off', '--enable-remote-auto-shutdown') -join ' '
   Write-Line 'server.launching=yes'
   Add-Fact 'server.launching' 'yes'
-  $Launch = @{FilePath = ([System.IO.Path]::Combine($INSTALL_DIR, $LAUNCHER)); ArgumentList = $SERVER_ARGUMENTS; PassThru = $true; RedirectStandardOutput = $LOG_FILE; RedirectStandardError = $ERROR_LOG_FILE}
+  $LaunchProgram = [System.IO.Path]::Combine($INSTALL_DIR, $LAUNCHER)
+  $LaunchArguments = $SERVER_ARGUMENTS
+  if ($LaunchProgram.EndsWith('.cmd')) {
+    $LaunchArguments = '/d /s /c "' + (ConvertTo-WindowsArgument $LaunchProgram) + ' ' + $SERVER_ARGUMENTS + '"'
+    $LaunchProgram = $env:ComSpec
+  }
+  $Launch = @{FilePath = $LaunchProgram; ArgumentList = $LaunchArguments; PassThru = $true; RedirectStandardOutput = $LOG_FILE; RedirectStandardError = $ERROR_LOG_FILE}
   try {
     $ServerProcess = Start-Program $Launch
     [System.IO.File]::WriteAllText($PID_FILE, [string]$ServerProcess.Id + ' ' + [string]$ServerProcess.StartTime.Ticks)

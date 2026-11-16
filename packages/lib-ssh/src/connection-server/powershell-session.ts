@@ -9,6 +9,7 @@
 import type {Interpreter, PlatformHint} from 'lib-host';
 import {
   base64Lines,
+  POWERSHELL_SESSION_INPUT,
   powershellPrelude,
   powershellReader,
 } from '../process/remote-program.ts';
@@ -22,15 +23,18 @@ const POWERSHELL_WORDS = '-NoLogo -NoProfile -NonInteractive -EncodedCommand';
 /**
  * The loop. `$ChildProgram` is `powershell.exe` on a Windows host; only the rows that run it under `pwsh` on Linux
  * pass another. A header that doesn't parse, or input that ends inside a run, ends the session with status 2; the end
- * of the input between runs ends it with 0.
+ * of the input between runs ends it with 0. A run ends when its child exits: a process the child started, such as the
+ * server, can hold the child's output open for its own life, so the copy of that output gets a short drain, not the
+ * output's end; a copy still open after it has the child's output closed under it, so that nothing such a process
+ * writes later reaches the session.
  */
 export const POWERSHELL_SESSION_LOOP = [
   "param([string]$ChildProgram = 'powershell.exe')",
   "$ErrorActionPreference = 'Stop'",
   '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false',
-  '$Stream = [Console]::OpenStandardInput()',
+  ...POWERSHELL_SESSION_INPUT,
   '$Out = [Console]::OpenStandardOutput()',
-  `$ReaderText = '${powershellReader(PRELUDE_BYTES_TOKEN)}'`,
+  `$ReaderText = '${powershellReader(PRELUDE_BYTES_TOKEN, 'pipe')}'`,
   'function Read-Exactly([int]$Count) {',
   '  $Buffer = New-Object byte[] $Count',
   '  $Read = 0',
@@ -72,9 +76,12 @@ export const POWERSHELL_SESSION_LOOP = [
   '    $ChildInput.Write($InputBytes, 0, $InputBytes.Length)',
   '    $ChildInput.Close()',
   '  } catch {}',
-  '  $Copy.Wait()',
-  '  $Out.Flush()',
   '  $Child.WaitForExit()',
+  '  if (-not $Copy.Wait(2000)) {',
+  '    try { $Child.StandardOutput.Close() } catch {}',
+  '    try { [void]$Copy.Wait(1000) } catch {}',
+  '  }',
+  '  $Out.Flush()',
   '  [Console]::Out.Write("$($Fields[0]):end $($Child.ExitCode)`n")',
   '  [Console]::Out.Flush()',
   '}',

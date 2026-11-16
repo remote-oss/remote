@@ -2,6 +2,7 @@ param([string]$ChildProgram = 'powershell.exe')
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 $Stream = [Console]::OpenStandardInput()
+if ($PSVersionTable.PSVersion.Major -lt 6) { try { $Stream = New-Object System.IO.FileStream($Stream.GetType().GetField('_handle', [Reflection.BindingFlags]'NonPublic,Instance').GetValue($Stream), [IO.FileAccess]::Read, 1, $true) } catch {} }
 $Out = [Console]::OpenStandardOutput()
 $ReaderText = '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 $Stream = [Console]::OpenStandardInput()
@@ -50,9 +51,12 @@ while ($true) {
     $ChildInput.Write($InputBytes, 0, $InputBytes.Length)
     $ChildInput.Close()
   } catch {}
-  $Copy.Wait()
-  $Out.Flush()
   $Child.WaitForExit()
+  if (-not $Copy.Wait(2000)) {
+    try { $Child.StandardOutput.Close() } catch {}
+    try { [void]$Copy.Wait(1000) } catch {}
+  }
+  $Out.Flush()
   [Console]::Out.Write("$($Fields[0]):end $($Child.ExitCode)`n")
   [Console]::Out.Flush()
 }

@@ -754,10 +754,12 @@ async function viaClient(
     await removeQuietly(dependencies.files, cache.archivePath);
   }
   dependencies.onPhase({kind: 'downloadingLocally'});
+  // The download's name differs from the host copy's: on a host that is the client itself, the two folders can be the
+  // same one, and a copy onto its own source would destroy it.
   const temporary =
     cache.kind === 'kept'
       ? `${cache.archivePath}_${uniqueSuffix(input)}`
-      : path.join(input.clientFolder, archiveName(input));
+      : path.join(input.clientFolder, `download-${archiveName(input)}`);
   try {
     const failure = await fetchVerified(input, dependencies, temporary);
     if (failure !== undefined) {
