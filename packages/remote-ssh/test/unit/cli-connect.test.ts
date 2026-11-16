@@ -471,6 +471,11 @@ describe("the connect's CLI path: the fallback before the window resolves", () =
     deepStrictEqual(kindOf(result), 'noServerSource');
   });
 
+  it('F-2413 6.5 step 3: a connect over the CLI never prunes the installs', async () => {
+    const {recording} = await connectOverCli(undefined);
+    deepStrictEqual(recording.calls.includes('cleanup'), false);
+  });
+
   it('§6: the CLI path is tried once per connect', async () => {
     const {recording} = await installFails();
     deepStrictEqual(

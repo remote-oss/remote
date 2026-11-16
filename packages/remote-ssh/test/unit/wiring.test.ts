@@ -776,6 +776,30 @@ describe("the composition's forwarding of the later server steps", () => {
     );
   });
 
+  it('F-2413.BR-9: the clean-up takes its locks by the probed host’s system, as the install does, and a kill with no host does not', async () => {
+    const {ports} = portsOf();
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    const methods: string[] = [];
+    for (const host of [HOST, undefined]) {
+      const channel = channelAnswering(lines('Ok'));
+      await steps.maintain(
+        inputFor('dev'),
+        leaseOn(channel),
+        'cleanup',
+        new AbortController().signal,
+        host,
+      );
+      const [call] = channel.calls;
+      methods.push(
+        call?.operation === 'runScript'
+          ? (/LOCK_METHOD='(\w+)'/.exec(call.request.script)?.[1] ?? '')
+          : '',
+      );
+    }
+    deepStrictEqual(methods, ['flock', 'link']);
+  });
+
   it("connect-14: the extensions install is this connect's server steps' install", async () => {
     const {ports} = portsOf({server: {defaultExtensions: ['pub.ext']}});
     const steps = stepsOf(ports);
