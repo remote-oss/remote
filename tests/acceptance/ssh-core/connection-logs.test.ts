@@ -910,8 +910,10 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
   it('F-2003 AC-23 (c121-summary): after a failure with issues the channel holds the rule and the session summary; after one without issues, that no hints were found', async () => {
     async function captured(host: string, folder: string): Promise<string[]> {
       appendScript(dismissals(folder));
-      await openWindow(host, folder);
+      // The mark comes before the window opens: a host that refuses at once fails, and writes its summary, while the open
+      // is still waiting for the window's agent, so a mark taken after it can lie behind the lines the row reads (#2710).
       const mark = connectionLog().length;
+      await openWindow(host, folder);
       try {
         await waitFor(
           `the failure dialog of ${folder}`,
