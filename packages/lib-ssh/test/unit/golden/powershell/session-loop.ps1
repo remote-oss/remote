@@ -2,6 +2,7 @@ param([string]$ChildProgram = 'powershell.exe')
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 $Stream = [Console]::OpenStandardInput()
+if ($PSVersionTable.PSVersion.Major -lt 6) { try { $Stream = New-Object System.IO.FileStream($Stream.GetType().GetField('_handle', [Reflection.BindingFlags]'NonPublic,Instance').GetValue($Stream), [IO.FileAccess]::Read, 1, $true) } catch {} }
 $Out = [Console]::OpenStandardOutput()
 $ReaderText = '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 $Stream = [Console]::OpenStandardInput()
