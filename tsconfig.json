@@ -155,6 +155,9 @@
       "path": "tests/acceptance/ssh-newclient"
     },
     {
+      "path": "tests/acceptance/ssh-newclient-pickers"
+    },
+    {
       "path": "tests/acceptance/ssh-agents"
     },
     {

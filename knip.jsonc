@@ -54,6 +54,7 @@
         "default-ports/*.test.ts",
         "ssh-core/*.test.ts",
         "ssh-newclient/*.test.ts",
+        "ssh-newclient-pickers/*.test.ts",
         "ssh-agents/*.test.ts",
         "ssh-askpass/*.test.ts",
         "ssh-askpass-env/*.test.ts",
