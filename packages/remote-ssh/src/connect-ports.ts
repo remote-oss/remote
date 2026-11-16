@@ -74,6 +74,8 @@ import type {NoticePort} from './surfaces/notice.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import type {HintRecorder} from './diagnostics/hint-recorder.ts';
 import {downloadRefusalHint} from './diagnostics/download-refusal.ts';
+import {installFolderHint} from './diagnostics/install-folder-hint.ts';
+import {localDownloadHint} from './diagnostics/local-download-hint.ts';
 import {invalidProxyHint} from './diagnostics/invalid-proxy.ts';
 import {
   openingAttached,
@@ -435,6 +437,12 @@ export function wiringPortsOf(
       files: machine.clientFiles,
       onHostDownloadRefused: cause => {
         surfaces.hints.record(downloadRefusalHint(cause, surfaces.translate));
+      },
+      onInstallFolderRefused: () => {
+        surfaces.hints.record(installFolderHint());
+      },
+      onLocalDownloadFailed: value => {
+        surfaces.hints.record(localDownloadHint(value, surfaces.translate));
       },
       lockLoop: hostLockLoopOf(
         machine.clock,

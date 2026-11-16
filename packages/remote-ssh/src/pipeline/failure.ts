@@ -109,7 +109,7 @@ const DOWNLOAD_FAILED: FailureReason = {id: 'S043'};
  * What a failed client download's reason names: `Failed to fetch` for the network, `Server returned <status>` for an
  * HTTP error status, the port's own text for a source that asks for credentials, and the file system's own text for the client's file.
  */
-function localDownloadValue(
+export function localDownloadValue(
   failure: Extract<TransferFailure, {kind: 'localDownload'}>,
 ): string {
   if (failure.cause === 'httpStatus') {

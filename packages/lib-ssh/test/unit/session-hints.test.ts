@@ -98,6 +98,8 @@ describe('the numbers of the error statuses (card connect-135)', () => {
       ServerDownloadFailed: 7,
       NoDownloaderAvailable: 8,
       InvalidProxyUrl: 9,
+      CreateInstallDirFailed: 10,
+      LocalDownloadFailed: 11,
     });
   });
 

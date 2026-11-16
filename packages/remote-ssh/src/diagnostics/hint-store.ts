@@ -9,6 +9,8 @@
  */
 export const HINT_STORE_KEY = 'remote.ssh.hints';
 
+import type {TextRange} from '../surfaces/strings.ts';
+
 /** One hint of a record: an environment fact, a recognised error, or the log text. */
 export type SessionHint =
   | {kind: 'environment'; message: string; details?: string}
@@ -21,6 +23,8 @@ export type SessionHint =
       details?: string;
       mitigations?: string[];
       resources?: string[];
+      /** Where the setting keys that are links sit in the message and in each mitigation; a record without it draws them plain. */
+      links?: {message?: TextRange[]; mitigations?: TextRange[][]};
     }
   | {kind: 'log'; text: string};
 
