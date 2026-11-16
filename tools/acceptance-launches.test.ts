@@ -1336,6 +1336,8 @@ describe('the launches of the VSCodium run', () => {
         'failure-platform-escape',
         'failure-port-range-busy',
         'failure-i686',
+        'failure-refused-nologs',
+        'failure-refused-chat',
         'terminal',
         'socket-prime',
         'socket',
@@ -1384,6 +1386,8 @@ describe('the launches of the VSCodium run', () => {
         'failure-platform-escape',
         'failure-port-range-busy',
         'failure-i686',
+        'failure-refused-nologs',
+        'failure-refused-chat',
       ],
     );
   });
@@ -1406,6 +1410,8 @@ describe('the launches of the VSCodium run', () => {
         ['failure-platform-escape', 'platform-escape'],
         ['failure-port-range-busy', 'port-range-busy'],
         ['failure-i686', 'i686'],
+        ['failure-refused-nologs', 'refused-nologs'],
+        ['failure-refused-chat', 'refused-chat'],
       ],
     );
   });
@@ -1425,6 +1431,8 @@ describe('the launches of the VSCodium run', () => {
         ['failure-platform-escape', undefined],
         ['failure-port-range-busy', [41060, 41061]],
         ['failure-i686', undefined],
+        ['failure-refused-nologs', undefined],
+        ['failure-refused-chat', undefined],
       ],
     );
   });

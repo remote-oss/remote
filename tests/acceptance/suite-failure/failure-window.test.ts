@@ -82,6 +82,31 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
     );
   });
 
+  it('F-2602 AC-1, AC-2, AC-3, AC-4 (c2602-items): Escape on the failure dialog opens the pick of actions with its placeholder and exactly its five items, in order, whatever the failure', () => {
+    const pick = record.findIndex(line => line.surface === 'mitigationPick');
+    const dialog = pick > 0 ? record[pick - 1] : undefined;
+    deepStrictEqual(
+      [
+        pick === -1 ? undefined : record[pick]?.question,
+        pick === -1 ? undefined : record[pick]?.items,
+        dialog?.surface,
+        dialog?.answer,
+      ],
+      [
+        'Pick an action to help resolve the problem.',
+        [
+          'Reload Window',
+          'Open Recent...',
+          'Open Documentation',
+          'Open SSH Configuration File',
+          'Open Settings',
+        ],
+        'failureDialog',
+        'dismiss',
+      ],
+    );
+  });
+
   if (failure?.bound !== undefined) {
     const bound = failure.bound;
     it(`${bound.cite}: the dialog came within ${String(bound.milliseconds)} ms of the ${bound.from}`, () => {
@@ -145,4 +170,15 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
     await new Promise(resolve => setTimeout(resolve, 5000));
     deepStrictEqual(launchScript().record().at(-1), lines.at(-1));
   });
+
+  if (failure !== undefined && nameOf(failure) === 'refused') {
+    it('F-2602 AC-24 (c2602-no-terminal): no troubleshooting terminal is open after the failure', () => {
+      strictEqual(
+        vscode.window.terminals.some(
+          terminal => terminal.name === 'Remote - SSH: Session Troubleshooting',
+        ),
+        false,
+      );
+    });
+  }
 });

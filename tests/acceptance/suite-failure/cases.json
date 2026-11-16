@@ -208,6 +208,48 @@
         "cite": "#670"
       },
       "noDownloadRequests": true
+    },
+    {
+      "label": "refused-nologs",
+      "alias": "refused",
+      "cite": "F-2602 AC-5",
+      "settings": {
+        "remote.SSH.experimental.enhancedSessionLogs": false
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"refused\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"refused\"."
+    },
+    {
+      "label": "refused-chat",
+      "alias": "refused",
+      "cite": "F-2602 AC-5",
+      "settings": {
+        "remote.SSH.experimental.chat": true
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"refused\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"refused\"."
     }
   ]
 }

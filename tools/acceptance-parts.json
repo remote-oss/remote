@@ -300,6 +300,8 @@
     "failure-port-range-busy": 0.2,
     "failure-readonly": 0.2,
     "failure-refused": 0.2,
+    "failure-refused-chat": 0.2,
+    "failure-refused-nologs": 0.2,
     "failure-refused-shown": 0.2,
     "failure-stranger": 0.2,
     "failure-stranger-cancel": 0.2,
