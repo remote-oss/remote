@@ -116,16 +116,32 @@ export function powershellPrelude(
 }
 
 /**
+ * The PowerShell lines that open the raw standard input of a process sshd started as `$Stream`. On Windows sshd gives
+ * that process an overlapped pipe, and Windows PowerShell's console stream never completes a read that has to wait on
+ * one; there the same handle is read through an overlapped FileStream. PowerShell 7 reads it as it is.
+ */
+export const POWERSHELL_SESSION_INPUT = [
+  '$Stream = [Console]::OpenStandardInput()',
+  "if ($PSVersionTable.PSVersion.Major -lt 6) { try { $Stream = New-Object System.IO.FileStream($Stream.GetType().GetField('_handle', [Reflection.BindingFlags]'NonPublic,Instance').GetValue($Stream), [IO.FileAccess]::Read, 1, $true) } catch {} }",
+];
+
+/**
  * The fixed text PowerShell runs: it reads exactly `byteCount` bytes of the raw standard input, which hold the
  * prelude and the script, and runs them as a script block. `byteCount` may instead be a token that the session loop
- * replaces with each run's count. It never reads through the console's buffered reader, so
- * what follows those bytes is left for the script.
+ * replaces with each run's count. It never reads through the console's buffered reader, so what follows those bytes
+ * is left for the script. `input` is `session` for a process sshd started, and `pipe` for the loop's child, whose
+ * input is the loop's own ordinary pipe.
  */
-export function powershellReader(byteCount: number | string): string {
+export function powershellReader(
+  byteCount: number | string,
+  input: 'session' | 'pipe' = 'session',
+): string {
   const count = String(byteCount);
   return [
     '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false',
-    '$Stream = [Console]::OpenStandardInput()',
+    ...(input === 'session'
+      ? POWERSHELL_SESSION_INPUT
+      : ['$Stream = [Console]::OpenStandardInput()']),
     `$Bytes = New-Object byte[] ${count}`,
     '$Read = 0',
     `while ($Read -lt ${count}) { $Count = $Stream.Read($Bytes, $Read, ${count} - $Read); if ($Count -le 0) { break }; $Read += $Count }`,
