@@ -698,9 +698,11 @@ describe('F-0503 server install (card containers-41)', function () {
           incompleteAfter,
           again.phases,
           await hasIncompleteTree(),
-          await inVolume(
-            `test -f ${await treeOfImage()}/product.json && echo complete`,
-          ),
+          (
+            await inVolume(
+              `test -f ${await treeOfImage()}/product.json && echo complete`,
+            )
+          ).trim(),
         ],
         [
           undefined,
@@ -720,6 +722,7 @@ describe('F-0503 server install (card containers-41)', function () {
   it('F-0503 AC-24 (c2724-attach-close): closing an Attach window during the install leaves the container running and no tree without product.json under its server folder', async () => {
     const slow = `${variable('HARNESS_DOWNLOADS_LOCAL')}/slow`;
     await setUserSetting('remote.serverDownloadBaseUrl', slow);
+    emptyCache();
     const containerId = await started('c2724-attach', 'install');
     await setUserSetting(
       'dev.containers.dockerPath',
@@ -737,14 +740,20 @@ describe('F-0503 server install (card containers-41)', function () {
         name => !before.includes(name),
       );
       opened.push(attached);
+      let shown: string[] = [];
       await waitFor(
-        'the installing toast',
-        async () =>
-          (await notifications(attached)).some(text =>
-            text.includes(INSTALLING),
-          ),
+        `the installing toast of ${attached}`,
+        async () => {
+          shown = await notifications(attached).catch(() => []);
+          return shown.some(text => text.includes(INSTALLING));
+        },
         180_000,
-      );
+      ).catch((caught: unknown) => {
+        throw new Error(
+          `${String(caught)}; the window showed ${JSON.stringify(shown)}; the windows are ${JSON.stringify(windowNames())}`,
+          {cause: caught},
+        );
+      });
       await closeWindow(attached);
       opened.splice(opened.indexOf(attached), 1);
       await new Promise(resolve => setTimeout(resolve, 5000));
