@@ -4,6 +4,7 @@ import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {FailureHint} from 'lib-ssh';
 import {hintRecorderOf} from '../../src/diagnostics/hint-recorder.ts';
+import {installPathHint} from '../../src/diagnostics/install-path-hint.ts';
 import type {HintStore} from '../../src/diagnostics/hint-store.ts';
 
 const ENVIRONMENT = [
@@ -179,6 +180,17 @@ describe('the hint recorder (card connect-119)', () => {
       ),
       [false],
     );
+  });
+
+  it('F-2407 AC-9: of the four mitigations of an invalid install folder only the key of the second, S048, is a link; the third, S038, shows its key plain', async () => {
+    const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    attempt(recorder, [installPathHint('~x', template => template)]);
+    await settled();
+    const [entry] = errorsOf(stored.value?.records[0]);
+    deepStrictEqual(entry?.kind === 'error' && entry.links, {
+      message: [],
+      mitigations: [[], [{start: 13, length: 28}], [], []],
+    });
   });
 
   it('F-2604 AC-22: the hints are written under the key the clear command deletes', async () => {
