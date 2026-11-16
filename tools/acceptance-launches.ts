@@ -42,6 +42,12 @@ interface LaunchCommon {
    */
   wslDistros?: true;
   /**
+   * Whether the launch's windows open the run's Windows SSH host, the alias `winhost`: Windows' OpenSSH Server on
+   * 127.0.0.1, which the platform workflow's Windows job starts and passes as HARNESS_WINHOST_*. Only a Windows client
+   * has it, and another refuses the launch.
+   */
+  windowsHost?: true;
+  /**
    * Whether the launch's Remote - SSH runs the pinned OpenSSH client (`tools/install-openssh`) through
    * `remote.SSH.path`, which its settings name as `${HARNESS_SSH_CLIENT}`: the run builds the client once and passes its
    * path as HARNESS_SSH_CLIENT, and a run that cannot build it refuses the launch.
@@ -823,10 +829,28 @@ export function portFreeCommand(port: number): string {
 }
 
 /**
+ * The command that waits, up to five seconds, until a listener of the host has `port` on 127.0.0.1, and, when none has,
+ * prints the sockets that have `port` as their local port and the holders that run, and fails: a holder that could not
+ * bind its port leaves nothing else to read.
+ */
+export function holderListeningCommand(port: number): string {
+  return (
+    'for i in $(seq 1 20); do ' +
+    `netstat -ltn | grep -q ' 127.0.0.1:${String(port)} ' && exit 0; ` +
+    'sleep 0.25; done; ' +
+    `echo "nothing listens on 127.0.0.1:${String(port)} after 5 s; the sockets with that local port:"; ` +
+    `netstat -tanp | awk '$4 ~ /:${String(port)}$/'; ` +
+    'echo "the holders that run:"; ' +
+    "ps | grep '[n]c -lk'; exit 1"
+  );
+}
+
+/**
  * The host setup of a host case, in the order the run runs it: free the held ports; stop the server unless the case
  * keeps it; remove the suite's folders unless the case keeps the server or its files; hold the case's ports, each
- * waited on as it starts; then the case's own commands. The brackets keep `pkill` from matching the `sh -c` that runs
- * it.
+ * waited on to be free of other sockets as it starts (a client socket of the host that holds the port as its local port
+ * keeps the holder from binding it); then wait for each holder to listen; then the case's own commands. The brackets
+ * keep `pkill` from matching the `sh -c` that runs it.
  */
 export function hostSetupOf(
   hostCase: HostCase,
@@ -852,18 +876,14 @@ export function hostSetupOf(
     entries.push({command: portFreeCommand(hostCase.port)});
   }
   for (const holder of holders) {
+    entries.push({command: portFreeCommand(holder)});
     entries.push({
       command: `nc -lk -p ${String(holder)} -s 127.0.0.1 -e /bin/true`,
       detach: true,
     });
   }
   for (const holder of holders) {
-    entries.push({
-      command:
-        'for i in $(seq 1 20); do ' +
-        `netstat -ltn | grep -q ' 127.0.0.1:${String(holder)} ' && exit 0; ` +
-        'sleep 0.25; done; exit 1',
-    });
+    entries.push({command: holderListeningCommand(holder)});
   }
   for (const command of hostCase.setup ?? []) {
     entries.push({command});
@@ -1307,6 +1327,19 @@ export function launchesOf(root: string): Launch[] {
       withExtensions: ['remote-oss.remote-wsl'],
       namedOnly: true,
       wslDistros: true,
+    },
+    // A Windows SSH host: the platform workflow's Windows job runs Windows' OpenSSH Server on 127.0.0.1, and the
+    // launch's windows open it as `winhost`, its platform known so no pick is asked.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'windows-host',
+      suite: 'windows-host',
+      namedOnly: true,
+      windowsHost: true,
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.SSH.remotePlatform': {winhost: 'windows'},
+      },
     },
     {
       ...RENDERER_LAUNCH,

@@ -955,7 +955,7 @@ F-2502.AC-13	unit
 F-2502.AC-14	unit	
 F-2502.AC-15	unit	
 F-2502.AC-16	core	core: one cache entry per authority string
-F-2502.AC-17	core	core: the title, the indicator and the label cache after a failed first resolve
+F-2502.AC-17	acceptance	
 F-2502.AC-18	core	core: the indicator's reconnecting text and the window title
 F-2502.AC-19	core	core: the indicator's truncated text and the window title
 F-2502.AC-20	core	core: the Extensions view section name
@@ -972,7 +972,7 @@ F-2502.AC-30	core	core: the Open Recent files list
 F-2502.AC-31	core	core: the Open Recent descriptions
 F-2502.AC-32	core	core: the Open Recent entries of two spellings
 F-2502.AC-33	core	core: the Welcome page's Recent list
-F-2502.AC-34	core	core: the Open Recent entry after a failed resolve
+F-2502.AC-34	acceptance	
 F-2502.AC-35	unit	
 F-2502.AC-36	todo	
 F-2507.AC-1	unit	

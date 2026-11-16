@@ -67,6 +67,40 @@ describe('the connect pipeline, when it works', () => {
     ]);
   });
 
+  it('F-2502 5.0 step 3: the host is reported once, when the connection step opens and before the probe', async () => {
+    const {recording, options} = setup();
+    await connect(INPUT, steps(recording), {
+      ...options,
+      onHostReported: () => {
+        recording.calls.push('hostReported');
+      },
+    });
+    deepStrictEqual(
+      recording.calls.filter(call =>
+        ['openConnection', 'hostReported', 'probe'].includes(call),
+      ),
+      ['openConnection', 'hostReported', 'probe'],
+    );
+  });
+
+  it('F-2502 7.E1: a connection step that fails reports no host', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        openConnection: () =>
+          Promise.resolve({kind: 'failed', failure: {kind: 'cancelled'}}),
+      }),
+      {
+        ...options,
+        onHostReported: () => {
+          recording.calls.push('hostReported');
+        },
+      },
+    );
+    deepStrictEqual(recording.calls.includes('hostReported'), false);
+  });
+
   it('F-2206 §9: the probed platform is logged after the probe', async () => {
     const {recording, options, logSink} = setup();
     await connect(INPUT, steps(recording), options);

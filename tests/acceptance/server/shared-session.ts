@@ -150,6 +150,7 @@ export async function attemptSharedSession(
             displayHost: 'harness',
             externalAskpass: false,
             askpassFirstMessageMilliseconds: 5000,
+            hostPlatform: 'unknown',
           },
         }),
       policy: {kind: 'graceAfterLastLease', milliseconds: GRACE_MILLISECONDS},

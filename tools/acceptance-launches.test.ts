@@ -20,6 +20,7 @@ import {
   windowPortRangeProblem,
   hostCases,
   hostSetupOf,
+  holderListeningCommand,
   portFreeCommand,
   type Launch,
   launchLabelled,
@@ -30,6 +31,7 @@ import {
   withRunTokens,
 } from './acceptance-launches.ts';
 import {chosenLaunches} from './acceptance.ts';
+import {HOST_EPHEMERAL_RANGE} from './acceptance-run.ts';
 import {UPDATE_SERVICE_NAME} from './acceptance-downloads.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
@@ -147,6 +149,7 @@ function labelsFromExplorer(): string[] {
     'wsl-linux',
     'wsl-linux-web',
     'wsl',
+    'windows-host',
     'wsl-linux-standdown',
     'explorer',
     'explorer-alone',
@@ -445,6 +448,7 @@ describe('the launches of the VSCodium run', () => {
         ['wsl-linux', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl-linux-web', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl', ['remote-oss.remote-wsl'], true, undefined],
+        ['windows-host', undefined, true, undefined],
         ['wsl-linux-standdown', ['remote-oss.remote-wsl'], true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
         [
@@ -1088,6 +1092,7 @@ describe('the launches of the VSCodium run', () => {
         'socket-prime',
         'cli-path',
         'wsl',
+        'windows-host',
         'containers-podman',
         'ports-reuse-prime',
         'install-install-present-prime',
@@ -1536,7 +1541,7 @@ describe('the ports cases', () => {
     );
   });
 
-  it('coverage-13: the setup frees the held ports and the server, then holds each port and waits for it', () => {
+  it('coverage-13, #2683: the setup frees the held ports and the server, then holds each port once the host has no other socket on it, and waits for each holder to listen', () => {
     const current = caseOf('range-gaps');
     deepStrictEqual(hostSetupOf(current, PORTS_SUITE), [
       {command: "pkill -f 'n[c] -lk -p'; true"},
@@ -1548,21 +1553,28 @@ describe('the ports cases', () => {
           'sleep 0.5; done; exit 1',
       },
       {command: portFreeCommand(45001)},
+      {command: portFreeCommand(45000)},
       {command: 'nc -lk -p 45000 -s 127.0.0.1 -e /bin/true', detach: true},
+      {command: portFreeCommand(45002)},
       {command: 'nc -lk -p 45002 -s 127.0.0.1 -e /bin/true', detach: true},
-      {
-        command:
-          'for i in $(seq 1 20); do ' +
-          "netstat -ltn | grep -q ' 127.0.0.1:45000 ' && exit 0; " +
-          'sleep 0.25; done; exit 1',
-      },
-      {
-        command:
-          'for i in $(seq 1 20); do ' +
-          "netstat -ltn | grep -q ' 127.0.0.1:45002 ' && exit 0; " +
-          'sleep 0.25; done; exit 1',
-      },
+      {command: holderListeningCommand(45000)},
+      {command: holderListeningCommand(45002)},
     ]);
+  });
+
+  it('#2683: a holder that does not listen within five seconds fails the setup with the sockets that have its port and the holders that run', () => {
+    deepStrictEqual(
+      holderListeningCommand(45002),
+      [
+        'for i in $(seq 1 20); do ',
+        "netstat -ltn | grep -q ' 127.0.0.1:45002 ' && exit 0; ",
+        'sleep 0.25; done; ',
+        'echo "nothing listens on 127.0.0.1:45002 after 5 s; the sockets with that local port:"; ',
+        "netstat -tanp | awk '$4 ~ /:45002$/'; ",
+        'echo "the holders that run:"; ',
+        "ps | grep '[n]c -lk'; exit 1",
+      ].join(''),
+    );
   });
 
   it('coverage-13: a case that keeps the server gets no kill of it', () => {
@@ -1585,15 +1597,29 @@ describe('the ports cases', () => {
     );
   });
 
-  it('#2563: a case that keeps its server, or holds the port it expects, does not wait for the port', () => {
+  it("#2683: every port a ports case names on the host is below the host's own ephemeral range, so that no client socket of the host can hold it", () => {
+    const [lowest = 0] = HOST_EPHEMERAL_RANGE.split(' ').map(Number);
+    const named = cases
+      .flatMap(
+        current => JSON.stringify(current).match(/\b[1-5]\d{4}\b/gu) ?? [],
+      )
+      .map(Number)
+      .filter(port => port >= 40000);
+    deepStrictEqual(
+      [named.length > 0, named.filter(port => port >= lowest)],
+      [true, []],
+    );
+  });
+
+  it('#2563: a case that keeps its server, or holds the port it expects, does not wait for the port, and a holder waits for its own port once', () => {
     deepStrictEqual(
       [
         hostSetupOf(caseOf('reuse'), PORTS_SUITE).length,
         hostSetupOf({...caseOf('range-held'), port: 45000}, PORTS_SUITE).filter(
-          entry => entry.command.startsWith('for i in $(seq 1 120)'),
+          entry => entry.command === portFreeCommand(45000),
         ).length,
       ],
-      [1, 0],
+      [1, 1],
     );
   });
 

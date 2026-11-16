@@ -128,6 +128,7 @@ export class WindowSide {
             displayHost: base.target.host,
             externalAskpass: false,
             askpassFirstMessageMilliseconds: 5000,
+            hostPlatform: 'unknown',
           },
         }),
       policy: {kind: 'graceAfterLastLease', milliseconds: GRACE_MILLISECONDS},

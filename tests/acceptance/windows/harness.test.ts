@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {withLogTail} from './harness.ts';
+import {completeLines, withLogTail} from './harness.ts';
 
 describe('withLogTail', () => {
   it('tooling-90: a message with no log lines is the message', () => {
@@ -78,5 +78,19 @@ describe('withLogTail', () => {
         `timed out\nbefore\n${failure}\nafter`,
       );
     });
+  });
+});
+
+describe('completeLines (card #2650)', () => {
+  it('#2650: the lines a newline has ended are read, and a last line still being written is left out', () => {
+    deepStrictEqual(
+      [
+        completeLines('{"event":"state"}\n{"event":"rep'),
+        completeLines('{"event":"state"}\n{"event":"report"}\n'),
+        completeLines('{"event":"sta'),
+        completeLines(''),
+      ],
+      [[{event: 'state'}], [{event: 'state'}, {event: 'report'}], [], []],
+    );
   });
 });

@@ -131,7 +131,7 @@ export async function registerConnect(
   const label =
     resolver === undefined
       ? undefined
-      : registerWindowLabel(resolver, host.labels, host.translate);
+      : registerWindowLabel(assembly.connector, host.labels, host.translate);
   if (resolver !== undefined) {
     enablePortsViewWhenConnected(resolver, host.portsView, host.logger);
   }

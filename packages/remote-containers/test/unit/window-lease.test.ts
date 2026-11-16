@@ -8,6 +8,7 @@ import {
   createWindowLease,
   type LeaseAcquired,
   type LeaseOnHelper,
+  REGISTER_ANSWER_MILLISECONDS,
   REQUEST_MILLISECONDS,
 } from '../../src/shutdown/window-lease.ts';
 
@@ -86,7 +87,39 @@ function linesOf(sink: MemorySink): string[] {
 }
 
 describe('the window’s lease on the shutdown helper (card containers-69)', () => {
-  it('F-0417 BR-9: the first message acquires the lease once, and the three messages reach the helper in order with a limit of two seconds', async () => {
+  it('F-0417 BR-5: a register whose answer comes after more than two seconds is waited for, up to the answer limit, before send resolves', async () => {
+    const answer = {give: (): void => undefined};
+    const helper = fakeLease(
+      () =>
+        new Promise<RequestOutcome>(resolve => {
+          answer.give = () => {
+            resolve(ACCEPTED);
+          };
+        }),
+    );
+    const {messenger, sink} = sceneOf({kind: 'acquired', lease: helper.lease});
+    let resolved = false;
+    const sending = messenger.send(REGISTER).then(() => {
+      resolved = true;
+    });
+    for (let turn = 0; turn < 10; turn += 1) {
+      await new Promise(setImmediate);
+    }
+    const beforeAnswer = resolved;
+    answer.give();
+    await sending;
+    deepStrictEqual(
+      [beforeAnswer, resolved, helper.asked, linesOf(sink)],
+      [
+        false,
+        true,
+        [{type: 'register', limit: REGISTER_ANSWER_MILLISECONDS}],
+        [],
+      ],
+    );
+  });
+
+  it('F-0417 BR-9: the first message acquires the lease once, and the three messages reach the helper in order, the register with the answer limit and the others with two seconds', async () => {
     const helper = fakeLease(() => ACCEPTED);
     const {messenger, acquires, sink} = sceneOf({
       kind: 'acquired',
@@ -102,7 +135,7 @@ describe('the window’s lease on the shutdown helper (card containers-69)', () 
       [
         1,
         [
-          {type: 'register', limit: REQUEST_MILLISECONDS},
+          {type: 'register', limit: REGISTER_ANSWER_MILLISECONDS},
           {type: 'container', limit: REQUEST_MILLISECONDS},
           {type: 'leave', limit: REQUEST_MILLISECONDS},
         ],

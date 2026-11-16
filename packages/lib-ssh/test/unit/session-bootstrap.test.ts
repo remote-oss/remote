@@ -21,7 +21,39 @@ import {
   sessionStartFor,
 } from '../../src/index.ts';
 import {TUNNEL_COMMAND} from '../../src/arguments/invocation.ts';
+import {powershellSessionStart} from '../../src/connection-server/powershell-session.ts';
 import {planScript} from '../../src/process/remote-program.ts';
+
+describe('the session start by platform (card #1899)', () => {
+  const settings = {
+    connectTimeoutSeconds: 15,
+    fromHost: false,
+    unboundedWaitSeconds: 60,
+  };
+
+  it('F-2701 5.0 step 5: a Windows host starts the PowerShell loop with no prelude, and every other platform the POSIX bootstrap, byte for byte', () => {
+    deepStrictEqual(
+      [
+        sessionStartFor(settings, false, 'windows'),
+        sessionStartFor(settings, false, 'linux'),
+        sessionStartFor(settings, true, 'unknown'),
+      ],
+      [
+        powershellSessionStart(),
+        sessionStartFor(settings),
+        sessionStartFor(settings, true),
+      ],
+    );
+  });
+
+  it("F-2701 5.0 step 5: with the RemoteCommand in effect a Windows session's prelude is the loop's line alone, with no exec", () => {
+    const start = powershellSessionStart();
+    deepStrictEqual(connectionStart(start, true, 'windows'), {
+      remoteProgram: undefined,
+      prelude: `${start.remoteProgram}\n`,
+    });
+  });
+});
 
 describe('the connection start (card connect-92, #1407)', () => {
   it('F-2704 AC-30: with no RemoteCommand in effect the start is returned as it is', () => {
@@ -292,21 +324,21 @@ function bootstrapWith(
 describe('the session bootstrap run by sh (card ssh-38, #443)', () => {
   it('F-2704 AC-11: a login shell that outlasts the bound ends the session with one line and the status 124', () => {
     const {output, status} = bootstrapWith('sleep 30', 1);
-    deepStrictEqual([output, status], ['LAYER1-TIMEOUT 1\n', 124]);
+    deepStrictEqual([output, status], ['\nLAYER1-TIMEOUT 1\n', 124]);
   });
 
   it('F-2704 AC-13: a login shell that ends at once without the start line ends the session with one line and the status 1', () => {
     const {output, status} = bootstrapWith('exit 1', 5);
-    deepStrictEqual([output, status], ['LAYER1-EXITED 1\n', 1]);
+    deepStrictEqual([output, status], ['\nLAYER1-EXITED 1\n', 1]);
   });
 
   it("F-2704 AC-13: the line names the login shell's own status", () => {
-    deepStrictEqual(bootstrapWith('exit 7', 5).output, 'LAYER1-EXITED 7\n');
+    deepStrictEqual(bootstrapWith('exit 7', 5).output, '\nLAYER1-EXITED 7\n');
   });
 
   it('#443: a login shell that prints the start line goes on to the commands, with no marker', () => {
     const {output, status} = bootstrapWith('exec sh', 5, 'echo ok\n');
-    deepStrictEqual([output, status], ['LAYER1-READY\nok\n', 0]);
+    deepStrictEqual([output, status], ['\nLAYER1-READY\nok\n', 0]);
   });
 
   it('ADR-0010: a startup file that prints LAYER1-START is not evaluated', () => {
@@ -315,7 +347,7 @@ describe('the session bootstrap run by sh (card ssh-38, #443)', () => {
       5,
       'echo ok\n',
     );
-    deepStrictEqual([output, status], ['LAYER1-READY\nok\n', 0]);
+    deepStrictEqual([output, status], ['\nLAYER1-READY\nok\n', 0]);
   });
 
   it('ADR-0010: startup output around the environment changes nothing, and the environment arrives', () => {
@@ -331,12 +363,12 @@ describe('the session bootstrap run by sh (card ssh-38, #443)', () => {
       5,
       'echo "$FOO"\n',
     );
-    deepStrictEqual([output, status], ['LAYER1-READY\nbar\n', 0]);
+    deepStrictEqual([output, status], ['\nLAYER1-READY\nbar\n', 0]);
   });
 
   it('F-2704 AC-11: a startup that reads its input takes the command line, so the shell ends without writing the environment', () => {
     const {output, status} = bootstrapWith('read LINE', 5);
-    deepStrictEqual([output, status], ['LAYER1-EXITED 0\n', 1]);
+    deepStrictEqual([output, status], ['\nLAYER1-EXITED 0\n', 1]);
   });
 
   it('#443: with no usable login shell the session still reaches the commands, after the ready line', () => {
@@ -350,7 +382,7 @@ describe('the session bootstrap run by sh (card ssh-38, #443)', () => {
       });
       deepStrictEqual(
         [result.stdout, result.status],
-        ['LAYER1-READY\nok\n', 0],
+        ['\nLAYER1-READY\nok\n', 0],
       );
     } finally {
       fake.remove();
@@ -374,7 +406,7 @@ describe('the session bootstrap run by sh (card ssh-38, #443)', () => {
       });
       deepStrictEqual(
         [result.stdout, result.status],
-        ['LAYER1-READY\nok\n', 0],
+        ['\nLAYER1-READY\nok\n', 0],
       );
     } finally {
       fake.remove();
