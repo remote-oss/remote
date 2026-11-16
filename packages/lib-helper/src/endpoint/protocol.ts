@@ -13,7 +13,10 @@ export type ClientMessage =
   | {type: 'request'; requestId: number; body: PlainData}
   | {type: 'stop'};
 
-/** What a helper sends: the lease it granted, a reply, the live leases after a change, or its own message. */
+/**
+ * What a helper sends: the lease it granted, or `ending` when it has committed to ending and grants none; a reply, the
+ * live leases after a change, or its own message.
+ */
 export type HelperMessage =
   | {
       type: 'welcome';
@@ -21,6 +24,7 @@ export type HelperMessage =
       leases: number[];
       payload: Record<string, string | number | boolean>;
     }
+  | {type: 'ending'}
   | {type: 'reply'; requestId: number; body: PlainData}
   | {type: 'failed'; requestId: number; reason: string}
   | {type: 'leaseListChanged'; leases: number[]}

@@ -409,6 +409,51 @@ describe('helper client', () => {
       deepStrictEqual([spawned.length, lease.startedByMe], [1, true]);
     });
 
+    /** An endpoint of a helper that answers every hello with `ending`, and closes when `closeAfter` milliseconds passed, if it is a number. */
+    async function endingAt(
+      endpoint: string,
+      closeAfter: number | undefined,
+    ): Promise<void> {
+      await endpoints.listen(endpoint, connection => {
+        connection.onMessage(() => {
+          connection.send({type: 'ending'});
+          if (closeAfter !== undefined) {
+            clock.scheduler().setTimer(closeAfter, () => {
+              files.files.delete(RECORD_PATH);
+              connection.close();
+            });
+          }
+        });
+      });
+    }
+
+    it('contracts X1: an ending reply is no failure: acquire waits for the endpoint to close, then starts a fresh helper once', async () => {
+      await endingAt('/run/ending.sock', 100);
+      files.files.set(RECORD_PATH, recordAt('/run/ending.sock'));
+      const lease = leaseOf(await drive(acquire(environment, request())));
+      deepStrictEqual(
+        [spawned.length, lease.startedByMe, prepares],
+        [1, true, 1],
+      );
+    });
+
+    it('contracts X1: a helper that answers ending and does not close is waited for no longer than the hello limit', async () => {
+      await endingAt('/run/ending.sock', undefined);
+      files.files.set(RECORD_PATH, recordAt('/run/ending.sock'));
+      const lease = leaseOf(await drive(acquire(environment, request())));
+      deepStrictEqual([spawned.length, lease.startedByMe], [1, true]);
+    });
+
+    it('contracts X1: a second ending reply, from the helper a rival wrote during the replacement, is endpointUnreachable', async () => {
+      await endingAt('/run/ending.sock', undefined);
+      files.files.set(RECORD_PATH, recordAt('/run/gone.sock'));
+      rivalWritesOnRemove(recordAt('/run/ending.sock'));
+      deepStrictEqual(await drive(acquire(environment, request())), {
+        kind: 'failed',
+        failure: 'endpointUnreachable',
+      });
+    });
+
     it('replaces a corrupt record and starts a new helper', async () => {
       files.files.set(RECORD_PATH, '{broken');
       const lease = leaseOf(await drive(acquire(environment, request())));
