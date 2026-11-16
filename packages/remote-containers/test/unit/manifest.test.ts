@@ -7,6 +7,7 @@ import {deepStrictEqual, partialDeepStrictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {views} from '../../src/identifiers.generated.ts';
+import {pseudoLocalize} from '../../../../tools/pseudo-locale.ts';
 
 const PACKAGE = path.join(import.meta.dirname, '..', '..');
 
@@ -1643,9 +1644,27 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-1406.5: every locale of identifiers.json has a table and a runtime bundle with the English values', () => {
-    const locales = (readJson('identifiers.json').locales ?? []) as string[];
+  it('F-1406.5: every locale of identifiers.json has a table and a runtime bundle with the English values, qps-ploc pseudo-localized when the package declares it', () => {
+    const identifiers = readJson('identifiers.json');
+    const locales = (identifiers.locales ?? []) as string[];
+    const nlsTable = readJson('package.nls.json');
     const bundle = Object.keys(readJson('l10n/bundle.l10n.json'));
+    function expected(
+      locale: string,
+    ): [Record<string, unknown>, Record<string, unknown>] {
+      if (locale !== 'qps-ploc' || identifiers.pseudoLocalized !== true) {
+        return [nlsTable, Object.fromEntries(bundle.map(text => [text, text]))];
+      }
+      return [
+        Object.fromEntries(
+          Object.entries(nlsTable).map(([key, text]) => [
+            key,
+            pseudoLocalize(String(text)),
+          ]),
+        ),
+        Object.fromEntries(bundle.map(text => [text, pseudoLocalize(text)])),
+      ];
+    }
     deepStrictEqual(
       [
         locales.length > 0,
@@ -1654,14 +1673,55 @@ describe('the manifest', () => {
           readJson(`l10n/bundle.l10n.${locale}.json`),
         ]),
       ],
+      [true, locales.map(expected)],
+    );
+  });
+
+  it('F-0103 AC-3 (c2503-qps-letters): the qps-ploc tables are the English ones letter for letter, so a {0} placeholder and a command: link come through substituted', () => {
+    const nlsTable = readJson('package.nls.json');
+    const bundle = Object.keys(readJson('l10n/bundle.l10n.json'));
+    deepStrictEqual(
       [
-        true,
-        locales.map(() => [
-          readJson('package.nls.json'),
-          Object.fromEntries(bundle.map(text => [text, text])),
-        ]),
+        readJson('package.nls.qps-ploc.json'),
+        readJson('l10n/bundle.l10n.qps-ploc.json'),
+      ],
+      [
+        Object.fromEntries(
+          Object.entries(nlsTable).map(([key, text]) => [
+            key,
+            pseudoLocalize(String(text)),
+          ]),
+        ),
+        Object.fromEntries(bundle.map(text => [text, pseudoLocalize(text)])),
       ],
     );
+  });
+
+  it('F-0103 AC-9 (c2503-qps-locked): a manifest value whose base entry locks a string keeps that string byte for byte in qps-ploc', () => {
+    const nlsTable = readJson('package.nls.json');
+    const ploc = readJson('package.nls.qps-ploc.json');
+    const locked: Array<[string, string]> = Object.entries(nlsTable).flatMap(
+      ([key, entry]) => {
+        if (
+          typeof entry !== 'object' ||
+          entry === null ||
+          Array.isArray(entry)
+        ) {
+          return [];
+        }
+        const comment = (entry as Record<string, unknown>).comment;
+        if (!Array.isArray(comment)) {
+          return [];
+        }
+        return comment.flatMap(comment => {
+          const kept = /^\{Locked='(.*)'\}$/.exec(String(comment));
+          return kept === null ? [] : [[key, kept[1]] as [string, string]];
+        });
+      },
+    );
+    for (const [key, kept] of locked) {
+      deepStrictEqual((ploc[key] as string).includes(kept), true);
+    }
   });
 
   it('F-1406.5: identifiers.json names the identity of the family and the identifiers the card lists', () => {
