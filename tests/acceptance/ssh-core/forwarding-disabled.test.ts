@@ -112,7 +112,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     );
   });
 
-  it('F-2604 AC-4, AC-6 (ruling-1985-forwarding-fails): the refusal shows the notice, and the connect then fails with F-2601’s dialog that names the refused forward, with no wait', async () => {
+  it('F-2604 AC-24 (ruling-1985-forwarding-fails): the refusal shows the notice, and the connect then fails with F-2601’s dialog that names the refused forward, with no wait', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS});
       const name = 'c85-wait';
@@ -235,7 +235,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     });
   });
 
-  it("F-2604 AC-17 (c85-disturbed): a cut and restored network, or the end of the window's ssh, after the failure adds no notice or dialog", async () => {
+  it("F-2604 AC-24 (c85-disturbed): a cut and restored network, or the end of the window's ssh, after the failure adds no notice or dialog", async () => {
     const seen: Array<Awaited<ReturnType<typeof failureOf>>> = [];
     const ended: string[] = [];
     for (const disturbance of ['network', 'ssh']) {
@@ -288,7 +288,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     ],
   };
 
-  it('F-2604 AC-1, AC-2, AC-3, AC-5, AC-22 (c85-line): the log holds the setting line once, directly after the first refused-channel line; the hint is stored when the dialog shows; Show log puts the Remote - SSH channel in front', async () => {
+  it('F-2604 AC-1, AC-2, AC-3, AC-22 (c85-line): the log holds the setting line once, directly after the first refused-channel line; the hint is stored when the dialog shows; Show log puts the Remote - SSH channel in front', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS});
       const name = 'c85-line';
@@ -368,7 +368,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     });
   });
 
-  it('F-2604 AC-9, AC-18 (ruling-1985-forwarding-fails): with the second ssh the window shows the failure dialog with the refused-forward reason, and the log holds the setting line', async () => {
+  it('F-2604 AC-24 (ruling-1985-forwarding-fails): with the second ssh the window shows the failure dialog with the refused-forward reason, and the log holds the setting line', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS, 'remote.SSH.useExecServer': false});
       const name = 'c85-second';
