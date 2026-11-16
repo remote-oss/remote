@@ -440,7 +440,7 @@
     },
     {
       "label": "local-404-nocors",
-      "cite": "F-2405 AC-29 (ruling-253-cors)",
+      "cite": "F-2405 AC-12 (ruling-253-cors)",
       "settings": {
         "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/missing/${os}-${arch}/${commit}",
         "remote.SSH.localServerDownload": "auto"
@@ -450,7 +450,7 @@
     },
     {
       "label": "local-nocache-ok",
-      "cite": "F-2405 AC-17 (ruling-253-nocache, an adaptation: the republished first half conflicts with F-3902 rule 6, remote-ssh#50)",
+      "cite": "F-2405 AC-17 (ruling-253-nocache)",
       "settings": {
         "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}"
       },
@@ -460,7 +460,7 @@
     },
     {
       "label": "local-nocache-fail",
-      "cite": "F-2405 AC-17 (ruling-253-nocache, an adaptation: the republished first half conflicts with F-3902 rule 6, remote-ssh#50)",
+      "cite": "F-2405 AC-17 (ruling-253-nocache)",
       "settings": {
         "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/junk/${os}-${arch}/${commit}"
       },
