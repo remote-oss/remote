@@ -82,7 +82,7 @@ describe('serve', () => {
       client.closed = true;
     });
     if (nonce !== null) {
-      client.connection.send({type: 'hello', nonce});
+      client.connection.send({type: 'hello', nonce, understands: ['ending']});
     }
     await settled();
     return client;
@@ -336,11 +336,52 @@ describe('serve', () => {
   it('contracts X2: a hello after the end policy fired is answered ending, with no lease, and its connection closes with the helper', async () => {
     start();
     const waiting = await waitingAtTheFire();
-    waiting.connection.send({type: 'hello', nonce: NONCE});
+    waiting.connection.send({
+      type: 'hello',
+      nonce: NONCE,
+      understands: ['ending'],
+    });
     await settled();
     deepStrictEqual(
       [waiting.received, await ending, waiting.closed],
       [[{type: 'ending'}], 'policy', true],
+    );
+  });
+
+  it('contracts X2: a hello that does not name ending, after the end policy fired, is closed with no message', async () => {
+    start();
+    const waiting = await waitingAtTheFire();
+    waiting.connection.send({type: 'hello', nonce: NONCE});
+    await settled();
+    deepStrictEqual(
+      [waiting.received, waiting.closed, await ending],
+      [[], true, 'policy'],
+    );
+  });
+
+  it('contracts X2: a hello during the end action of a delayed check is answered ending, and the endpoint stays until the action is done', async () => {
+    let finishAction: () => void = () => undefined;
+    handler.runAction = () =>
+      new Promise<void>(resolve => {
+        finishAction = resolve;
+      });
+    start({
+      kind: 'delayedCheckAfterLastLease',
+      milliseconds: 10_000,
+      action: 'stopContainers',
+      actionBound: 12_000,
+    });
+    const first = await connect();
+    first.connection.close();
+    await settled();
+    clock.advance(10_000);
+    await settled();
+    const during = await connect();
+    const listeningDuring = port.isListening(ENDPOINT);
+    finishAction();
+    deepStrictEqual(
+      [during.received, listeningDuring, await ending, during.closed],
+      [[{type: 'ending'}], true, 'policy', true],
     );
   });
 
@@ -366,7 +407,11 @@ describe('serve', () => {
     const first = await connect();
     const waiting = await connect(null);
     first.connection.send({type: 'stop'});
-    waiting.connection.send({type: 'hello', nonce: NONCE});
+    waiting.connection.send({
+      type: 'hello',
+      nonce: NONCE,
+      understands: ['ending'],
+    });
     await settled();
     deepStrictEqual(
       [waiting.received, await ending],
@@ -379,7 +424,11 @@ describe('serve', () => {
     handler.onLeasesChanged = leaseIds => heard.push(leaseIds);
     start();
     const waiting = await waitingAtTheFire();
-    waiting.connection.send({type: 'hello', nonce: NONCE});
+    waiting.connection.send({
+      type: 'hello',
+      nonce: NONCE,
+      understands: ['ending'],
+    });
     await settled();
     await ending;
     // Only the lease of the first window, granted and then closed: the refused hello adds nothing.
@@ -524,6 +573,7 @@ describe('serve', () => {
       kind: 'delayedCheckAfterLastLease',
       milliseconds: 10000,
       action: 'stopContainers',
+      actionBound: 12_000,
     });
     const client = await connect();
     client.connection.close();

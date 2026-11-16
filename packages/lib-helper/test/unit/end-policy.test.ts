@@ -12,6 +12,7 @@ const delayed: EndPolicy = {
   kind: 'delayedCheckAfterLastLease',
   milliseconds: 10000,
   action: 'stopContainers',
+  actionBound: 12_000,
 };
 
 // A fresh table, a fake clock, and a runner for the policy: the outcomes it reports, in order.
