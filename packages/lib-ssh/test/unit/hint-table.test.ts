@@ -50,6 +50,70 @@ describe('the table of the session troubleshooting terminal (card connect-136, F
     ]);
   });
 
+  it('F-2602 BR-9: an error with mitigations and no resources has no Resources column, and the two flexible columns share the rest equally', () => {
+    deepStrictEqual(
+      hintTable(
+        [
+          {
+            status: 'CreateInstallDirFailed',
+            message: 'The install directory could not be created',
+            mitigations: [
+              'Remove or edit setting remote.SSH.serverInstallPath',
+              'Ensure that the parent directory exists',
+            ],
+            resources: [],
+          },
+        ],
+        100,
+      ),
+      [
+        '╔════════════════════════╤════════════════════════════════════╤════════════════════════════════════╗',
+        '║         Status         │ Message                            │ Mitigations                        ║',
+        '╟────────────────────────┼────────────────────────────────────┼────────────────────────────────────╢',
+        '║ CreateInstallDirFailed │ The install directory could not be │ • Remove or edit setting           ║',
+        '║                        │ created                            │   remote.SSH.serverInstallPath     ║',
+        '║                        │                                    │ • Ensure that the parent directory ║',
+        '║                        │                                    │   exists                           ║',
+        '╚════════════════════════╧════════════════════════════════════╧════════════════════════════════════╝',
+      ],
+    );
+  });
+
+  it('F-2602 BR-9: an error with resources and no mitigations has no Mitigations column', () => {
+    deepStrictEqual(
+      hintTable(
+        [
+          {
+            status: 'CreateInstallDirFailed',
+            message: 'The install directory could not be created',
+            mitigations: [],
+            resources: ['https://docs.example/remote'],
+          },
+        ],
+        100,
+      ),
+      [
+        '╔════════════════════════╤════════════════════════════════════╤════════════════════════════════════╗',
+        '║         Status         │ Message                            │ Resources                          ║',
+        '╟────────────────────────┼────────────────────────────────────┼────────────────────────────────────╢',
+        '║ CreateInstallDirFailed │ The install directory could not be │ • https://docs.example/remote      ║',
+        '║                        │ created                            │                                    ║',
+        '╚════════════════════════╧════════════════════════════════════╧════════════════════════════════════╝',
+      ],
+    );
+  });
+
+  it('F-2602 BR-9: a column appears when any row has content for it, though the row that has it is not the first', () => {
+    const header = hintTable(
+      [OFFLINE, {...OFFLINE, mitigations: ['Try again later']}],
+      100,
+    )[1];
+    deepStrictEqual(
+      header?.includes('Mitigations') === true && !header.includes('Resources'),
+      true,
+    );
+  });
+
   it('F-2605.AC-5: the three flexible columns are equally wide', () => {
     const header = hintTable([FORWARDING], 132)[1] ?? '';
     deepStrictEqual(
