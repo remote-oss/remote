@@ -274,7 +274,7 @@ describe('the links of the table (F-2602 3.4)', () => {
           },
         },
         {kind: 'error', status: 'Plain', message: 'prose', mitigations: ['y']},
-      ]).map(row => row.links),
+      ]).map(entry => entry.links),
       [
         {
           message: [{start: 2, length: 3}],
@@ -298,7 +298,7 @@ describe('the links of the table (F-2602 3.4)', () => {
             mitigations: [[{start: 5, length: 3}]],
           },
         },
-      ]).map(row => row.links),
+      ]).map(entry => entry.links),
       [{message: [], mitigations: [[{start: 5, length: 3}]]}],
     );
   });

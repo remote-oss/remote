@@ -174,9 +174,7 @@ describe('the hint recorder (card connect-119)', () => {
     attempt(recorder, [HINT]);
     await settled();
     deepStrictEqual(
-      errorsOf(stored.value?.records[0]).map(
-        entry => entry.kind === 'error' && 'links' in entry,
-      ),
+      errorsOf(stored.value?.records[0]).map(entry => 'links' in entry),
       [false],
     );
   });
