@@ -9,7 +9,7 @@ export type PlainData =
 
 /** What a client sends: the hello that opens its lease, a request, or the order to end the helper. */
 export type ClientMessage =
-  | {type: 'hello'; nonce: string}
+  | {type: 'hello'; nonce: string; understands: string[]}
   | {type: 'request'; requestId: number; body: PlainData}
   | {type: 'stop'};
 
@@ -40,7 +40,12 @@ export function readClientMessage(value: unknown): ClientMessage | undefined {
     return undefined;
   }
   if (value.type === 'hello' && typeof value.nonce === 'string') {
-    return {type: 'hello', nonce: value.nonce};
+    const understands = Array.isArray(value.understands)
+      ? value.understands.filter(
+          (reply): reply is string => typeof reply === 'string',
+        )
+      : [];
+    return {type: 'hello', nonce: value.nonce, understands};
   }
   if (
     value.type === 'request' &&

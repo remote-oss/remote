@@ -160,7 +160,12 @@ export async function serve(options: ServeOptions): Promise<ServeEnd> {
         cancelHello();
         if (committed) {
           refused.add(connection);
-          connection.send({type: 'ending'} satisfies HelperMessage);
+          // A client that does not name `ending` cannot read it: it gets a close and no message, as for no welcome.
+          if (message.understands.includes('ending')) {
+            connection.send({type: 'ending'} satisfies HelperMessage);
+          } else {
+            connection.close();
+          }
           return;
         }
         const granted = table.open().leaseId;

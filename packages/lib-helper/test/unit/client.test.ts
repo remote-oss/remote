@@ -454,6 +454,46 @@ describe('helper client', () => {
       });
     });
 
+    it('contracts X1: the hello names the replies the client understands', async () => {
+      const heard: unknown[] = [];
+      await endpoints.listen('/run/hello.sock', connection => {
+        connection.onMessage(message => {
+          heard.push(message);
+        });
+      });
+      files.files.set(RECORD_PATH, recordAt('/run/hello.sock'));
+      await drive(acquire(environment, request()));
+      deepStrictEqual(heard[0], {
+        type: 'hello',
+        nonce: 'old',
+        understands: ['ending'],
+      });
+    });
+
+    it("contracts X1: a refused hello waits for the close up to the hello limit plus the policy's action bound, then starts a fresh helper", async () => {
+      await endingAt('/run/ending.sock', 5000);
+      files.files.set(RECORD_PATH, recordAt('/run/ending.sock'));
+      const lease = leaseOf(
+        await drive(
+          acquire(
+            environment,
+            request({
+              policy: {
+                kind: 'delayedCheckAfterLastLease',
+                milliseconds: 10_000,
+                action: 'drain',
+                actionBound: 12_000,
+              },
+            }),
+          ),
+        ),
+      );
+      deepStrictEqual(
+        [spawned.length, lease.startedByMe, clock.now() >= 5000],
+        [1, true, true],
+      );
+    });
+
     it('replaces a corrupt record and starts a new helper', async () => {
       files.files.set(RECORD_PATH, '{broken');
       const lease = leaseOf(await drive(acquire(environment, request())));

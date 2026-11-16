@@ -1215,11 +1215,13 @@ The WSL listener rendezvous (area D, D5) is a candidate if D chooses it.
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `acquire` | registry folder (per profile from global storage, per user, or per instance as `{instanceOf: <the caller's globalStorageUri.fsPath>}`; the caller chooses), namespace (extension and kind), recordKey, start specification (the bundled helper script and its parameters, and optionally `leaveStarterTree` with the bundled launcher script, see **The start**), end policy, cancellation | a lease: the helper's endpoint, its record payload, `startedByMe`, and the lease's position in the oldest-first list | `spawnFailed` (a launcher that exits other than 0 included), `endpointUnreachable` (after replacing a stale record once), `cancelled`, `registryUnresolved` (an instance folder that X3 can't find, returned before any record is read or claimed); an `ending` reply is not a failure: `acquire` waits for that helper's endpoint to close (bounded by the hello limit, as `stop` does), then claims and starts a fresh helper once, as for a stale record |
+| `acquire` | registry folder (per profile from global storage, per user, or per instance as `{instanceOf: <the caller's globalStorageUri.fsPath>}`; the caller chooses), namespace (extension and kind), recordKey, start specification (the bundled helper script and its parameters, and optionally `leaveStarterTree` with the bundled launcher script, see **The start**), end policy, cancellation | a lease: the helper's endpoint, its record payload, `startedByMe`, and the lease's position in the oldest-first list | `spawnFailed` (a launcher that exits other than 0 included), `endpointUnreachable` (after replacing a stale record once), `cancelled`, `registryUnresolved` (an instance folder that X3 can't find, returned before any record is read or claimed); an `ending` reply is not a failure: `acquire` waits for that helper's endpoint to close (bounded by the hello limit plus the end policy's `actionBound`), then claims and starts a fresh helper once, as for a stale record |
 | `release` | lease | none; closing the lease's connection has the same effect, so a crashed extension host releases by itself | none |
 | `request` | lease, message (plain data) | reply (plain data) | `helperGone`, `timeout` (the caller's limit) |
 | `events` | lease | helper messages, `leaseListChanged`, `helperGone` | none |
 | `stop` | registry folder (the same three forms), namespace, recordKey | done, also when nothing runs, and at once for an instance folder that can't be found. When it returns, the stopped helper's record is gone, so nothing it stored for the key outlives the call (ruled 2026-10-13, #532 and #597: F-2412 BR-7 and POST-3, F-2411 6.1 step 2). A helper that answers removes its own record before it closes its endpoint (X2), and `stop` waits for that close, bounded by the hello limit. `stop` removes the record itself only when the helper doesn't answer or doesn't end in time, and only while the file holds the stopped helper's nonce: a record a new helper wrote (another nonce) stays | none |
+
+- A hello names the replies its client understands (`understands: ['ending']`). A helper sends `ending` only to a hello that names it and closes any other hello unanswered, which an older client reads as no welcome.
 
 ### X2 helper-runtime (bundled into each helper script)
 
@@ -1232,8 +1234,11 @@ helper that never receives a lease ends by the same rule (ruled 2026-10-08); a j
 helper's record (the claim is atomic and the starter's hello window counts as alive):
 - `graceAfterLastLease(ms)`: end this long after the last lease closes. A new lease within the grace cancels it. SSH
   uses 2 to 4 s (F-2102 BR-3), and the value must also carry a reload.
-- `delayedCheckAfterLastLease(ms, action)`: after the last lease closes, wait, check again, then run the consumer's
-  action (for example "stop these containers") and end. Area C uses about 10 s (F-0417 AC-43).
+- `delayedCheckAfterLastLease(ms, action, actionBound)`: after the last lease closes, wait, check again, then run the
+  consumer's action (for example "stop these containers") and end. The helper commits to ending when the check decides to
+  run the action, before the action, so a hello during it is answered `ending`. `actionBound` is the longest the action
+  may take. Area C uses about 10 s and an `actionBound` of 12 s, the register answer's bound (F-0417 AC-43,
+  ruling-2645-register-reply). `graceAfterLastLease` and `idleAfterLastLease` have no action: their bound is 0.
 - `idleAfterLastLease(ms)`: as the grace, for the relay's 30 to 60 s (F-8103 BR-6).
 
 ### X3 registry (pure decisions, file access through a port)

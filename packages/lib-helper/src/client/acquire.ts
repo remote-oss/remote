@@ -117,14 +117,21 @@ function waitFor(timer: Timer, milliseconds: number): Promise<void> {
   });
 }
 
+/** The longest the end action of `policy` may take, which is 0 for a policy with none. */
+function actionBoundOf(policy: EndPolicy): number {
+  return policy.kind === 'delayedCheckAfterLastLease' ? policy.actionBound : 0;
+}
+
 /**
  * Connects and says hello with the nonce; undefined when the helper does not welcome within the limit, and 'ending' when
- * it answers that it has committed to ending, after its endpoint has closed, which the hello limit bounds.
+ * it answers that it has committed to ending, after its endpoint has closed, which the hello limit plus the policy's
+ * action bound bounds.
  */
 async function hello(
   environment: ClientEnvironment,
   record: HelperRecord,
   startedByMe: boolean,
+  policy: EndPolicy,
 ): Promise<HelperLease | 'ending' | undefined> {
   const started = environment.clock();
   const connection = await environment.endpoints
@@ -137,23 +144,34 @@ async function hello(
     Extract<HelperMessage, {type: 'welcome'}> | 'ending' | undefined
   >(resolve => {
     let refused = false;
-    const cancel = environment.timer(environment.helloLimitMilliseconds, () => {
-      resolve(refused ? 'ending' : undefined);
+    let cancel = environment.timer(environment.helloLimitMilliseconds, () => {
+      resolve(undefined);
     });
     connection.onMessage(message => {
       // The first message of a helper of this library is its welcome, or its refusal.
+      cancel();
       if ((message as HelperMessage).type === 'ending') {
         refused = true;
+        // The helper is running its end action: its endpoint closes when that is done.
+        cancel = environment.timer(
+          environment.helloLimitMilliseconds + actionBoundOf(policy),
+          () => {
+            resolve('ending');
+          },
+        );
         return;
       }
-      cancel();
       resolve(message as Extract<HelperMessage, {type: 'welcome'}>);
     });
     connection.onClose(() => {
       cancel();
       resolve(refused ? 'ending' : undefined);
     });
-    connection.send({type: 'hello', nonce: record.nonce});
+    connection.send({
+      type: 'hello',
+      nonce: record.nonce,
+      understands: ['ending'],
+    });
   });
   if (welcome === 'ending') {
     connection.close();
@@ -185,7 +203,7 @@ async function hello(
  */
 async function join(
   environment: ClientEnvironment,
-  request: {cancellation: AbortSignal},
+  request: {cancellation: AbortSignal; policy: EndPolicy},
   record: HelperRecord,
 ): Promise<HelperLease | 'cancelled' | 'ending' | undefined> {
   const deadline = record.startedAt + environment.startLimitMilliseconds;
@@ -193,7 +211,7 @@ async function join(
     if (request.cancellation.aborted) {
       return 'cancelled';
     }
-    const lease = await hello(environment, record, false);
+    const lease = await hello(environment, record, false, request.policy);
     if (lease === 'ending') {
       return lease;
     }
@@ -242,7 +260,7 @@ async function start<Refusal>(
   }
   const deadline = environment.clock() + environment.startLimitMilliseconds;
   while (!isAborted(request.cancellation)) {
-    const lease = await hello(environment, record, true);
+    const lease = await hello(environment, record, true, request.policy);
     if (lease instanceof HelperLease) {
       return {kind: 'acquired', lease};
     }
