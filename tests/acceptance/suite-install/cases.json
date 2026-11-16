@@ -425,7 +425,7 @@
     },
     {
       "label": "local-legacy",
-      "cite": "F-2405 AC-26 (local-legacy)",
+      "cite": "F-2405 AC-8, AC-26 (local-legacy)",
       "settings": {
         "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}",
         "remote.SSH.useExecServer": false
