@@ -23,6 +23,84 @@ describe('withLogTail', () => {
       [41, 'line 5', 'line 44'],
     );
   });
+  describe('a Feature that failed to install (card #2675)', () => {
+    const failure =
+      '#14 64.95 ERROR: Feature "Java (via SDKMAN!)" (ghcr.io/devcontainers/features/java) failed to install!';
+    const later = [...Array(45).keys()].map(
+      position => `later ${String(position)}`,
+    );
+
+    it('#2675: a failure older than the last forty lines goes before them with the three lines that said why', () => {
+      const lines = [
+        'earlier',
+        '#14 64.76 Downloading: maven 3.10.0',
+        '#14 64.95 Stop! The archive was corrupt and has been removed!',
+        '#14 64.95 (!) Installing maven  via SDKMAN failed after 5 attempts.',
+        failure,
+        ...later,
+      ];
+      const carried = withLogTail('timed out', lines).split('\n');
+      deepStrictEqual(
+        [carried.slice(0, 6), carried.length, carried.at(-1)],
+        [
+          [
+            'timed out',
+            'the Feature that failed to install:',
+            '#14 64.76 Downloading: maven 3.10.0',
+            '#14 64.95 Stop! The archive was corrupt and has been removed!',
+            '#14 64.95 (!) Installing maven  via SDKMAN failed after 5 attempts.',
+            failure,
+          ],
+          // the message, the heading and four lines, the heading of the tail and its forty lines
+          1 + 1 + 4 + 1 + 40,
+          'later 44',
+        ],
+      );
+    });
+
+    it('#2675: a failure near the start carries the lines there are before it', () => {
+      const carried = withLogTail('timed out', [
+        'first',
+        failure,
+        ...later,
+      ]).split('\n');
+      deepStrictEqual(carried.slice(1, 4), [
+        'the Feature that failed to install:',
+        'first',
+        failure,
+      ]);
+    });
+
+    it('#2675: a failure within the first lines of the last forty carries the lines before it that the tail lacks', () => {
+      const lines = [
+        'before 0',
+        'before 1',
+        'why one',
+        'why two',
+        'why three',
+        failure,
+        ...[...Array(38).keys()].map(position => `after ${String(position)}`),
+      ];
+      const carried = withLogTail('timed out', lines).split('\n');
+      deepStrictEqual(carried.slice(0, 7), [
+        'timed out',
+        'the Feature that failed to install:',
+        'why one',
+        'why two',
+        'why three',
+        failure,
+        'the last 40 lines:',
+      ]);
+    });
+
+    it('#2675: a failure inside the last forty lines is not carried twice', () => {
+      const lines = ['before', failure, 'after'];
+      deepStrictEqual(
+        withLogTail('timed out', lines),
+        `timed out\nbefore\n${failure}\nafter`,
+      );
+    });
+  });
 });
 
 describe('completeLines (card #2650)', () => {

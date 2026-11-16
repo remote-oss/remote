@@ -1063,10 +1063,33 @@ export async function reopenInContainer(
 /** How many lines of the Dev Containers log a connect that times out carries. */
 const CONNECT_LOG_LINES = 40;
 
-/** `message`, then a line break and the last {@link CONNECT_LOG_LINES} of `lines`; the message alone when there are none. */
+/** The line a Feature's install script ends with when it fails, as the build's output carries it. */
+const FEATURE_FAILED = /ERROR: Feature ".*" \(.*\) failed to install!/;
+
+/** How many lines before a Feature's failure line are kept with it. */
+const FEATURE_FAILURE_CONTEXT = 3;
+
+/**
+ * `message`, then a line break and the last {@link CONNECT_LOG_LINES} of `lines`; the message alone when there are none.
+ * A failed Feature install goes before that tail, with the lines that said why, when the tail does not hold all of
+ * them: the failure is older than the tail, or within its first lines so that the lines before it are not in it. The
+ * build's output is followed by more lines than the tail holds, and the failure is what a red needs.
+ */
 export function withLogTail(message: string, lines: readonly string[]): string {
   const tail = lines.slice(-CONNECT_LOG_LINES);
-  return tail.length === 0 ? message : `${message}\n${tail.join('\n')}`;
+  const tailStart = Math.max(lines.length - CONNECT_LOG_LINES, 0);
+  const failed = lines.findLastIndex(line => FEATURE_FAILED.test(line));
+  const contextStart = Math.max(failed - FEATURE_FAILURE_CONTEXT, 0);
+  const feature =
+    failed < 0 || contextStart >= tailStart
+      ? []
+      : lines.slice(contextStart, failed + 1);
+  if (tail.length === 0) {
+    return message;
+  }
+  return feature.length === 0
+    ? `${message}\n${tail.join('\n')}`
+    : `${message}\nthe Feature that failed to install:\n${feature.join('\n')}\nthe last ${String(CONNECT_LOG_LINES)} lines:\n${tail.join('\n')}`;
 }
 
 /** What the remote indicator reads while a window resolves its remote: core's text for the state before the connection is made. */
