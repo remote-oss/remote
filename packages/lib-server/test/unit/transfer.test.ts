@@ -44,7 +44,7 @@ const TOKEN = 'token1';
 
 const ARCHIVE_NAME = `server-abc1230000000000000000000000000000000000-1700000000000-${TOKEN}.tar.gz`;
 
-const LOCAL_FILE = path.join(CLIENT_FOLDER, ARCHIVE_NAME);
+const LOCAL_FILE = path.join(CLIENT_FOLDER, `download-${ARCHIVE_NAME}`);
 
 const REMOTE_COPY = `${HOST_FOLDER}/${ARCHIVE_NAME}`;
 
@@ -1754,9 +1754,23 @@ describe("the names of the transfer's files (F-6301.BR-14)", () => {
       [
         path.join(
           CLIENT_FOLDER,
-          'server-abc1230000000000000000000000000000000000-1700000000000-b.tar.gz',
+          'download-server-abc1230000000000000000000000000000000000-1700000000000-b.tar.gz',
         ),
       ],
+    );
+  });
+});
+
+describe('a host that is the client itself (card #2681)', () => {
+  it('F-2701 AC-18: the download and the copy on the host have different names, so a copy into the same folder never writes onto its source', async () => {
+    const {channel} = await runTransfer({plan: {where: 'client'}});
+    deepStrictEqual(
+      copiesOf(channel).map(copy =>
+        copy
+          .split(' -> ')
+          .map(file => path.posix.basename(file.replaceAll('\\', '/'))),
+      ),
+      [[`download-${ARCHIVE_NAME}`, ARCHIVE_NAME]],
     );
   });
 });
