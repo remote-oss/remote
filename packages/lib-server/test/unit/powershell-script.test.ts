@@ -1910,6 +1910,23 @@ describe('the PowerShell bootstrap script, as text', () => {
     );
   });
 
+  it('F-2701 AC-18: the start words go bare, so the batch launcher reads its first word, and a word that needs quotes is quoted', () => {
+    const parameters = parametersFor();
+    const line = scriptFor(single('start'), 'powershell', {
+      ...parameters,
+      start: {...parameters.start, extensions: ['pub.name@1.0.0']},
+    })
+      .split('\n')
+      .find(each => each.includes('$SERVER_ARGUMENTS = '));
+    deepStrictEqual(
+      [
+        line?.includes("@('--start-server', "),
+        line?.includes(`'--install-extension', '"pub.name@1.0.0"'`),
+      ],
+      [true, true],
+    );
+  });
+
   it('F-2701: the probe stays below the Windows command-line limit', () => {
     deepStrictEqual(
       scriptFor(single('probe'), 'powershell', parametersFor()).length < 8192,
