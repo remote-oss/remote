@@ -319,6 +319,73 @@ describe('serve', () => {
     );
   });
 
+  /**
+   * A connection that has not said hello, at the turn the end policy fires: the last lease closed 3000 ms ago, and the
+   * connection came 300 ms before, within the limit for its hello.
+   */
+  async function waitingAtTheFire(): Promise<TestClient> {
+    const first = await connect();
+    first.connection.close();
+    await settled();
+    clock.advance(2700);
+    const waiting = await connect(null);
+    clock.advance(300);
+    return waiting;
+  }
+
+  it('contracts X2: a hello after the end policy fired is answered ending, with no lease, and its connection closes with the helper', async () => {
+    start();
+    const waiting = await waitingAtTheFire();
+    waiting.connection.send({type: 'hello', nonce: NONCE});
+    await settled();
+    deepStrictEqual(
+      [waiting.received, await ending, waiting.closed],
+      [[{type: 'ending'}], 'policy', true],
+    );
+  });
+
+  it('contracts X2: a hello a turn before the end policy would fire is a lease, and the policy does not end the helper', async () => {
+    start();
+    await settled();
+    clock.advance(2999);
+    const client = await connect();
+    clock.advance(10_000);
+    await settled();
+    deepStrictEqual(
+      [
+        client.received.map(message => (message as {type: string}).type),
+        client.closed,
+        port.isListening(ENDPOINT),
+      ],
+      [['welcome'], false, true],
+    );
+  });
+
+  it('contracts X2: a hello after a stop arrived is answered ending', async () => {
+    start();
+    const first = await connect();
+    const waiting = await connect(null);
+    first.connection.send({type: 'stop'});
+    waiting.connection.send({type: 'hello', nonce: NONCE});
+    await settled();
+    deepStrictEqual(
+      [waiting.received, await ending],
+      [[{type: 'ending'}], 'stopped'],
+    );
+  });
+
+  it('contracts X2: a refused hello does not tell the handler of a lease', async () => {
+    const heard: Array<readonly number[]> = [];
+    handler.onLeasesChanged = leaseIds => heard.push(leaseIds);
+    start();
+    const waiting = await waitingAtTheFire();
+    waiting.connection.send({type: 'hello', nonce: NONCE});
+    await settled();
+    await ending;
+    // Only the lease of the first window, granted and then closed: the refused hello adds nothing.
+    deepStrictEqual(heard, [[1], []]);
+  });
+
   it('ends by its policy when no lease ever opens', async () => {
     start();
     await settled();

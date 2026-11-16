@@ -1,6 +1,6 @@
 /**
  * @fileoverview The helper side: listens on the endpoint, grants a lease to each client that says hello with the
- * record's nonce, answers requests through the consumer's handler, and ends by its policy or on a stop.
+ * record's nonce, until it has committed to ending, when it answers `ending`, answers requests through the consumer's handler, and ends by its policy or on a stop.
  */
 
 import {EventEmitter, once} from 'node:events';
@@ -89,7 +89,12 @@ export async function serve(options: ServeOptions): Promise<ServeEnd> {
   const ending = new EventEmitter();
   // The one 'end' event carries the outcome as its only argument.
   const ended = once(ending, 'end') as Promise<[PolicyOutcome | 'stopped']>;
+  // Set in the turn the policy fires or a stop arrives, with no await between: a hello is answered before it, with a lease
+  // that the policy would have seen, or after it, with `ending`.
+  let committed = false;
+  const refused = new Set<EndpointConnection>();
   function finish(outcome: PolicyOutcome | 'stopped'): void {
+    committed = true;
     ending.emit('end', outcome);
   }
   const runner = new EndPolicyRunner(
@@ -137,6 +142,7 @@ export async function serve(options: ServeOptions): Promise<ServeEnd> {
     );
     connection.onClose(() => {
       cancelHello();
+      refused.delete(connection);
       if (lease !== undefined) {
         connections.delete(lease);
         table.close(lease);
@@ -152,6 +158,11 @@ export async function serve(options: ServeOptions): Promise<ServeEnd> {
           return;
         }
         cancelHello();
+        if (committed) {
+          refused.add(connection);
+          connection.send({type: 'ending'} satisfies HelperMessage);
+          return;
+        }
         const granted = table.open().leaseId;
         lease = granted;
         connections.set(granted, connection);
@@ -214,7 +225,7 @@ export async function serve(options: ServeOptions): Promise<ServeEnd> {
       logLine(`the helper's record was not removed: ${failureText(caught)}`);
     },
   );
-  for (const connection of [...connections.values()]) {
+  for (const connection of [...connections.values(), ...refused]) {
     connection.close();
   }
   await server.close();
