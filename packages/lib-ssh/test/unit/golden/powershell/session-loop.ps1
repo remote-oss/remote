@@ -51,9 +51,9 @@ while ($true) {
     $ChildInput.Write($InputBytes, 0, $InputBytes.Length)
     $ChildInput.Close()
   } catch {}
-  $Copy.Wait()
-  $Out.Flush()
   $Child.WaitForExit()
+  [void]$Copy.Wait(2000)
+  $Out.Flush()
   [Console]::Out.Write("$($Fields[0]):end $($Child.ExitCode)`n")
   [Console]::Out.Flush()
 }

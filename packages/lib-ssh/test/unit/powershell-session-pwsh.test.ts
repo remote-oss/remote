@@ -232,6 +232,32 @@ describe('the PowerShell session loop, run under pwsh (card #1899)', function ()
     deepStrictEqual(ended.lines, ['LAYER1-READY', 'm1:start', 'tailm1:end 0']);
   });
 
+  it('F-2701 AC-18: a run whose child leaves a process holding its output open ends when the child exits, not when that process does', async () => {
+    const started = Date.now();
+    const ended = await session(
+      framed(
+        'm1',
+        "Start-Process -FilePath pwsh -ArgumentList '-NoProfile', '-Command', 'Start-Sleep -Seconds 30' | Out-Null; Write-Output launched",
+      ) + framed('m2', 'Write-Output next'),
+    );
+    deepStrictEqual(
+      [ended.lines, ended.status, Date.now() - started < 20_000],
+      [
+        [
+          'LAYER1-READY',
+          'm1:start',
+          'launched',
+          'm1:end 0',
+          'm2:start',
+          'next',
+          'm2:end 0',
+        ],
+        0,
+        true,
+      ],
+    );
+  });
+
   it('F-2701 5.0 step 5: under PowerShell 7 a run written 200 ms after the ready line is read through the console stream and answered', async () => {
     const ended = await session(framed('m1', 'Write-Output late'), 200);
     deepStrictEqual(
