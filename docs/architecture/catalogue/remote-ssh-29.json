@@ -526,7 +526,7 @@
   "label": "spec:draft",
   "title": "VS Code core features in an SSH window",
   "epic": "E25",
-  "acCount": 37,
+  "acCount": 35,
   "surfaces": {
    "commands": [
     "workbench.action.terminal.new",

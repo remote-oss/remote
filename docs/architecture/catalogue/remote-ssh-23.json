@@ -269,7 +269,7 @@
   "label": "spec:draft",
   "title": "SSH tunnel to the server, dynamic forwarding and local port range",
   "epic": "E21",
-  "acCount": 48,
+  "acCount": 46,
   "surfaces": {
    "commands": [],
    "settings": [
@@ -436,7 +436,7 @@
   "label": "spec:draft",
   "title": "PTY allocation",
   "epic": "E21",
-  "acCount": 17,
+  "acCount": 15,
   "surfaces": {
    "commands": [],
    "settings": [

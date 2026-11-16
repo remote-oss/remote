@@ -15,7 +15,7 @@ function german(template: string): string {
 }
 
 describe('the strings that are ours alone', () => {
-  it('F-2604 AC-6 (ruling-1985-forwarding-fails): the log line of a refused forward is the dialog reason with the ERROR lead, so the two have one text', () => {
+  it('F-2604 AC-24 (ruling-1985-forwarding-fails): the log line of a refused forward is the dialog reason with the ERROR lead, so the two have one text', () => {
     deepStrictEqual(
       OWN_TEMPLATES.S046,
       `ERROR: ${FAILURE_TEMPLATES.forwardingRefused}`,

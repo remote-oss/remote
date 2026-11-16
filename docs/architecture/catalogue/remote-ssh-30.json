@@ -89,7 +89,7 @@
   "label": "spec:reviewed",
   "title": "Mitigation picker: More Actions..., settings fixes and resources",
   "epic": "E26",
-  "acCount": 24,
+  "acCount": 23,
   "surfaces": {
    "commands": [
     "opensshremotes.openConfigFile",
@@ -258,7 +258,7 @@
   "label": "spec:draft",
   "title": "TCP forwarding disabled on the server",
   "epic": "E26",
-  "acCount": 22,
+  "acCount": 16,
   "surfaces": {
    "commands": [
     "opensshremotes.showLog"
