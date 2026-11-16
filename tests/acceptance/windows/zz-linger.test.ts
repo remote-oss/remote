@@ -20,13 +20,14 @@ describe('a window opened 0.2 to 1.7 s after the last one closed, with the serve
 
   it('the sweep', async () => {
     const results: unknown[] = [];
-    for (const repeat of [0, 1, 2, 3]) {
-      for (let wait = 1200; wait <= 2400; wait += 100) {
+    const batch = 0;
+    for (let repeat = batch * 20; repeat < batch * 20 + 20; repeat += 1) {
+      for (let wait = 1400; wait <= 1800; wait += 100) {
         const first = `lg-a-${String(wait)}-${String(repeat)}`;
         const second = `lg-b-${String(wait)}-${String(repeat)}`;
         await openWindow('harness', first);
         await connectedWithin(first, 120_000);
-        await pause(2000);
+        await pause(1000);
         const closedAt = Date.now();
         await closeWindow(first);
         const returnedAt = Date.now();
@@ -38,6 +39,21 @@ describe('a window opened 0.2 to 1.7 s after the last one closed, with the serve
           `pkill -u harness -f 'server-mai[n].js'; rm -rf '${DATA_FOLDER}/bin'; true`,
         ).catch(() => undefined);
         const openedAt = Date.now();
+        const changes: string[] = [
+          `${new Date().toISOString()} ${JSON.stringify(await connectionHelpers())}`,
+        ];
+        let last = changes[0]?.slice(25) ?? '';
+        const sampling = {on: true};
+        const sampler = (async () => {
+          while (sampling.on) {
+            await pause(25);
+            const text = JSON.stringify(await connectionHelpers());
+            if (text !== last) {
+              last = text;
+              changes.push(`${new Date().toISOString()} ${text}`);
+            }
+          }
+        })();
         await openWindow('harness', second);
         let connected = false;
         try {
@@ -46,6 +62,8 @@ describe('a window opened 0.2 to 1.7 s after the last one closed, with the serve
         } catch {
           connected = false;
         }
+        sampling.on = false;
+        await sampler;
         const lines = connectionLog().slice(mark);
         const stamped = connected
           ? []
@@ -61,6 +79,7 @@ describe('a window opened 0.2 to 1.7 s after the last one closed, with the serve
             line.includes('the connection helper exits'),
           ).length,
           tail: stamped,
+          changes: connected ? [] : changes,
           gone: lines.filter(line => line.includes('the helper is gone'))
             .length,
           failed: lines
