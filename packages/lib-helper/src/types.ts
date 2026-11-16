@@ -16,7 +16,13 @@ export interface HelperRecord {
 /** How a helper ends once its last lease is gone, as data rather than a per-consumer branch. */
 export type EndPolicy =
   | {kind: 'graceAfterLastLease'; milliseconds: number}
-  | {kind: 'delayedCheckAfterLastLease'; milliseconds: number; action: string}
+  | {
+      kind: 'delayedCheckAfterLastLease';
+      milliseconds: number;
+      action: string;
+      /** The longest the action may take: a client that is refused while it runs waits that long for the helper to close. */
+      actionBound: number;
+    }
   | {kind: 'idleAfterLastLease'; milliseconds: number};
 
 /** The record's fields in the order they are written to the file. */
