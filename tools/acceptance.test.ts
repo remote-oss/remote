@@ -216,10 +216,17 @@ class FakeHarness implements HarnessDependencies {
         ? `${CONTAINER}\n`
         : programArguments[0] === 'port'
           ? '127.0.0.1:49153\n'
-          : programArguments[0] === 'inspect' &&
-              programArguments.some(argument => argument.includes('IPAddress'))
-            ? `${ROUTED_ADDRESS}\n`
-            : '';
+          : programArguments[0] === 'exec' &&
+              programArguments.includes(
+                '/proc/sys/net/ipv4/ip_local_port_range',
+              )
+            ? '47000\t60999\n'
+            : programArguments[0] === 'inspect' &&
+                programArguments.some(argument =>
+                  argument.includes('IPAddress'),
+                )
+              ? `${ROUTED_ADDRESS}\n`
+              : '';
     return {status: 0, stdout, stderr: ''};
   };
 
@@ -2177,6 +2184,7 @@ describe('acceptance', () => {
           'docker build',
           'ssh-keygen -q',
           'docker run',
+          'docker exec',
           'docker port',
           'docker network',
           'docker network',
@@ -3261,24 +3269,44 @@ describe('acceptance', () => {
       deepStrictEqual(waits, [FRESH_RESOLVE_WAIT_MILLISECONDS]);
     });
 
-    it('coverage-13: a failing host setup fails the attempt with its command and its output', async () => {
+    /** Runs the ports launch on a host whose docker commands fail with `failure`, and gives the error of its setup. */
+    async function setupFailing(
+      failure: Pick<CommandResult, 'stdout' | 'stderr'>,
+    ): Promise<unknown> {
       function command(program: string): CommandResult {
         return program === 'docker'
-          ? {status: 1, stdout: '', stderr: 'setup broke'}
+          ? {status: 1, ...failure}
           : {status: 0, stdout: '', stderr: ''};
       }
       const {sleep} = recordingSleeper();
-      await rejects(
-        runLaunches(
-          workspace.root,
-          '/run/ssh_config',
-          [PORTS],
-          command,
-          'c0ffee',
-          sleep,
-          () => Promise.resolve({exitCode: 0, output: ''}),
-        ),
-        /host setup failed: pkill -f 'n\[c\] -lk -p'; true\nsetup broke/,
+      return runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [PORTS],
+        command,
+        'c0ffee',
+        sleep,
+        () => Promise.resolve({exitCode: 0, output: ''}),
+      ).then(
+        () => undefined,
+        (caught: unknown) => (caught as Error).message,
+      );
+    }
+
+    it('coverage-13: a failing host setup fails the attempt with its command and its output', async () => {
+      deepStrictEqual(
+        await setupFailing({stdout: '', stderr: 'setup broke'}),
+        "host setup failed: pkill -f 'n[c] -lk -p'; true\nsetup broke",
+      );
+    });
+
+    it('#2683: a host setup that fails names what it printed on its standard output too, before its standard error', async () => {
+      deepStrictEqual(
+        await setupFailing({
+          stdout: 'port 45002 is still in use',
+          stderr: 'netstat broke',
+        }),
+        "host setup failed: pkill -f 'n[c] -lk -p'; true\nport 45002 is still in use\nnetstat broke",
       );
     });
 
