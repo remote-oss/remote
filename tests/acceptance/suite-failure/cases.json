@@ -112,7 +112,7 @@
     },
     {
       "alias": "readonly",
-      "cite": "#668",
+      "cite": "#668, F-2407 AC-11, AC-12",
       "script": [
         {
           "surface": "failureDialog",
@@ -125,7 +125,7 @@
           "answer": "dismiss"
         }
       ],
-      "dialog": "Could not establish connection to \"readonly\": Failed to install the VS Code Server.",
+      "dialog": "Could not establish connection to \"readonly\": Failed to create the remote server's install directory.",
       "bound": {
         "from": "progress",
         "milliseconds": 15000,
