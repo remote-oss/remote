@@ -20,7 +20,7 @@ describe('a window opened 0.2 to 1.7 s after the last one closed, with the serve
 
   it('the sweep', async () => {
     const results: unknown[] = [];
-    const batch = 0;
+    const batch = 1;
     for (let repeat = batch * 20; repeat < batch * 20 + 20; repeat += 1) {
       for (let wait = 1400; wait <= 1800; wait += 100) {
         const first = `lg-a-${String(wait)}-${String(repeat)}`;
