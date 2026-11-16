@@ -68,13 +68,29 @@ export function hostBlock(
   ];
 }
 
-/** Writes the file `name` of the run from `blocks`, each the lines of a `Host` block, and gives its path. */
+/**
+ * Writes the file `name` of the run from `blocks`, each the lines of a `Host` block, and gives its path. The run's
+ * shared known-hosts file is replaced by one of the row's own: other rows of the launch write host keys to the shared
+ * one, and a key they left for an address of this row's hops would fail the row for a reason that is not its own.
+ */
 export function writeConfig(
   name: string,
   blocks: ReadonlyArray<readonly string[]>,
 ): string {
-  const file = path.join(variable('HARNESS_RUN_FOLDER'), `${name}.config`);
-  writeFileSync(file, blocks.flat().join('\n'));
+  const folder = variable('HARNESS_RUN_FOLDER');
+  const file = path.join(folder, `${name}.config`);
+  const own = path.posix.join(folder, `${name}.hosts`);
+  writeFileSync(
+    file,
+    blocks
+      .flat()
+      .map(line =>
+        /^\s+UserKnownHostsFile\s+\S+\/known_hosts$/u.test(line)
+          ? line.replace(/\S+$/u, own)
+          : line,
+      )
+      .join('\n'),
+  );
   return file;
 }
 
