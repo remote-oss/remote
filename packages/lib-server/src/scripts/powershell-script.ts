@@ -233,7 +233,15 @@ function startBody(start: StartParameters): string[] {
     `  ${argumentLine(start)}`,
     `  Write-Line ${powershellQuote(LAUNCHING_LINE)}`,
     "  Add-Fact 'server.launching' 'yes'",
-    `  $Launch = @{FilePath = (${LAUNCHER_PATH}); ArgumentList = $SERVER_ARGUMENTS; PassThru = $true; RedirectStandardOutput = $LOG_FILE; RedirectStandardError = $ERROR_LOG_FILE}`,
+    `  $LaunchProgram = ${LAUNCHER_PATH}`,
+    '  $LaunchArguments = $SERVER_ARGUMENTS',
+    // A batch file is run by cmd, which strips the first and last quote of a line that starts with one; /s keeps every
+    // inner quote, so the launcher's path and each start word reach the batch file whole.
+    "  if ($LaunchProgram.EndsWith('.cmd')) {",
+    `    $LaunchArguments = '/d /s /c "' + (ConvertTo-WindowsArgument $LaunchProgram) + ' ' + $SERVER_ARGUMENTS + '"'`,
+    '    $LaunchProgram = $env:ComSpec',
+    '  }',
+    '  $Launch = @{FilePath = $LaunchProgram; ArgumentList = $LaunchArguments; PassThru = $true; RedirectStandardOutput = $LOG_FILE; RedirectStandardError = $ERROR_LOG_FILE}',
     '  try {',
     '    $ServerProcess = Start-Program $Launch',
     "    [System.IO.File]::WriteAllText($PID_FILE, [string]$ServerProcess.Id + ' ' + [string]$ServerProcess.StartTime.Ticks)",
