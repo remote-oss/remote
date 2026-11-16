@@ -16,7 +16,12 @@ import {
   waitFor,
   windowState,
 } from '../windows/harness.ts';
-import {answerDialog, waitForDialog, windowTitle} from '../windows/renderer.ts';
+import {
+  answerDialog,
+  primaryButtonOf,
+  waitForDialog,
+  windowTitle,
+} from '../windows/renderer.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 
 const execFileAsync = promisify(execFile);
@@ -194,7 +199,7 @@ describe('Dev Containers: the Dockerfile path and the lifecycle (card containers
     }
   });
 
-  it('F-0412 AC-18, AC-32 (gate-row-2c): a Dockerfile that does not exist is refused before the reload, with S004 and its two buttons, and nothing is made', async () => {
+  it('F-0412 AC-18, AC-32 (gate-row-2c): a Dockerfile that does not exist is refused before any build, with S004 and Cancel | Open devcontainer.json, Open devcontainer.json primary, opens the file with the window local, and no container or image is made', async () => {
     const folder = devContainerFolder('gate-nodf', {
       name: 'x',
       image: undefined,
@@ -203,20 +208,36 @@ describe('Dev Containers: the Dockerfile path and the lifecycle (card containers
     const name = await openFolderWindow(folder);
     const running = inWindow(name, 'remote-containers.reopenInContainer');
     const shown = await waitForDialog(name);
-    await answerDialog(name, 'Cancel');
+    const primary = await primaryButtonOf(name);
+    await answerDialog(name, 'Open devcontainer.json');
     await running;
+    let imageMade = true;
+    try {
+      await docker('image', 'inspect', builtTag(folder));
+    } catch {
+      imageMade = false;
+    }
+    const state = await windowState(name);
     deepStrictEqual(
       {
         detail: shown.details,
-        buttons: [...shown.buttons].sort(),
-        remoteName: (await windowState(name)).remoteName,
+        buttons: shown.buttons,
+        primary,
+        remoteName: state.remoteName,
+        opened: state.activeTab?.uri.endsWith(
+          '.devcontainer/devcontainer.json',
+        ),
         containers: await devContainersOf(folder),
+        imageMade,
       },
       {
         detail: `"${path.join(folder, '.devcontainer', 'Missing')}" does not exist.`,
         buttons: ['Cancel', 'Open devcontainer.json'],
+        primary: 'Open devcontainer.json',
         remoteName: null,
+        opened: true,
         containers: [],
+        imageMade: false,
       },
     );
     await closeWindow(name);

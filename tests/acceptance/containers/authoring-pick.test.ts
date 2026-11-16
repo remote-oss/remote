@@ -99,7 +99,34 @@ function templateFile(folder: string, file: string): string {
 describe('the template pick and what follows it, against the run’s pinned template index (card coverage-101)', function () {
   this.timeout(900_000);
 
-  it('F-0403 AC-6 (reading-1808-pinned-index): a folder with a marker of no curated set shows the whole catalogue, a curated list keeps Show All Templates... without a description, with its hover text, and Learn More with its description only, and choosing Show All swaps in the whole catalogue with no Back button', async () => {
+  /** The labels of window `name`'s pick once it shows the curated list and focuses its first template. */
+  async function curatedPick(
+    window: string,
+  ): Promise<{head: string[]; first: string | undefined; rows: string[]}> {
+    await waitFor(
+      'the pick to show the curated list',
+      async () => {
+        const rows = await detailedQuickPickRows(window);
+        const labels = rows.map(each => each.label);
+        return (
+          labels.length > 2 &&
+          labels[0] === 'Show All Templates...' &&
+          labels[1] === 'Learn More' &&
+          (rows.find(each => each.focused)?.label ?? '') === labels[2]
+        );
+      },
+      30_000,
+    );
+    const rows = await detailedQuickPickRows(window);
+    const labels = rows.map(each => each.label);
+    return {
+      head: [labels[0] ?? '', labels[1] ?? ''],
+      first: rows.find(each => each.focused)?.label,
+      rows: labels.slice(2),
+    };
+  }
+
+  it('F-0403 AC-6 (reading-1808-pinned-index): a folder with a marker of no curated set shows the whole catalogue, the curated list shows Show All Templates... then Learn More at the top with their texts, its first item focused, an alphabetical base set of eight or nine items and the marker extra templates, and choosing Show All swaps in the whole catalogue with no Back button', async () => {
     const whole: string[][] = [];
     for (const [name, contents] of [
       ['c101-pick-none', {}],
@@ -113,12 +140,30 @@ describe('the template pick and what follows it, against the run’s pinned temp
         await closeScreen(window);
       });
     }
+    const catalog = whole[0] ?? [];
+    const base: string[] = [];
+    const results: unknown[] = [];
+    await withWindow('c101-pick-base', {'main.c': ''}, async window => {
+      const seen = await curatedPick(window);
+      base.push(...seen.rows);
+      results.push({
+        head: seen.head,
+        first: seen.first === seen.rows[0],
+        size: base.length >= 8 && base.length <= 9,
+        ordered: seen.rows.every(
+          (label, index) =>
+            index === 0 || (base[index - 1] ?? '').localeCompare(label) <= 0,
+        ),
+      });
+      await closeScreen(window);
+    });
     await withWindow('c101-pick-curated', {'go.mod': ''}, async window => {
-      const rows = await screenOf(window);
-      const learn = rows.find(each => each.label === 'Learn More');
-      const showAll = rows.find(each => each.label === 'Show All Templates...');
+      const seen = await curatedPick(window);
+      const learn = (await detailedQuickPickRows(window)).find(
+        each => each.label === 'Learn More',
+      );
       let hover = '';
-      for (let step = 0; step < rows.length && hover === ''; step += 1) {
+      for (let step = 0; step < seen.rows.length && hover === ''; step += 1) {
         if ((await focusAfter(window, 'ArrowUp')) === 'Show All Templates...') {
           hover =
             (await detailedQuickPickRows(window)).find(
@@ -126,6 +171,9 @@ describe('the template pick and what follows it, against the run’s pinned temp
             )?.detail ?? '';
         }
       }
+      const showAll = (await detailedQuickPickRows(window)).find(
+        each => each.label === 'Show All Templates...',
+      );
       await chooseQuickPickRow(window, 'Show All Templates...');
       await waitFor(
         'the whole catalogue',
@@ -137,26 +185,48 @@ describe('the template pick and what follows it, against the run’s pinned temp
       );
       const swapped = (await allQuickPickRows(window)).map(each => each.label);
       const facts = await quickPickFacts(window);
+      results.push({
+        whole: whole.every(labels => labels.join('|') === catalog.join('|')),
+        head: seen.head,
+        first: seen.first === seen.rows[0],
+        extras: seen.rows.length > base.length,
+        ordered: seen.rows.every(
+          (label, index) =>
+            index === 0 ||
+            (seen.rows[index - 1] ?? '').localeCompare(label) <= 0,
+        ),
+        baseKept: base.every(label => seen.rows.includes(label)),
+        inCatalog: seen.rows.every(label => catalog.includes(label)),
+        showAll: showAll?.description,
+        hover,
+        learn: [learn?.description, learn?.detail],
+        swapped: swapped.join('|') === catalog.join('|'),
+        buttons: facts?.titleButtons,
+      });
       await closeScreen(window);
-      deepStrictEqual(
-        [
-          whole.every(labels => labels.join('|') === whole[0]?.join('|')),
-          showAll?.description,
-          hover,
-          [learn?.description, learn?.detail],
-          swapped.join('|') === whole[0]?.join('|'),
-          facts?.titleButtons,
-        ],
-        [
-          true,
-          '',
-          'Show all available predefined container templates.',
-          ['Documentation on predefined container templates', ''],
-          true,
-          [],
-        ],
-      );
     });
+    deepStrictEqual(results, [
+      {
+        head: ['Show All Templates...', 'Learn More'],
+        first: true,
+        size: true,
+        ordered: true,
+      },
+      {
+        whole: true,
+        head: ['Show All Templates...', 'Learn More'],
+        first: true,
+        extras: true,
+        ordered: true,
+        baseKept: true,
+        inCatalog: true,
+        showAll: '',
+        hover: 'Show all available predefined container templates.',
+        learn: ['Documentation on predefined container templates', ''],
+        swapped: true,
+        buttons: [],
+      },
+    ]);
   });
 
   it('F-0403 AC-7 (reading-1808-pinned-index): a template with options asks one pick per list-valued option, the default focused and tagged, with Back, then one multi-select pick for its yes/no options, counted as the index defaults them', async () => {

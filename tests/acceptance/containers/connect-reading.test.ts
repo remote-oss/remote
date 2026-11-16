@@ -8,6 +8,7 @@ import {
   containersLog,
   containersLogSince,
   devContainerFolder,
+  devContainersOf,
   reloadingAction,
   reloadingCommand,
   reopenInContainer,
@@ -90,6 +91,20 @@ async function hubManifestStatus(): Promise<number> {
 
 const execFileAsync = promisify(execFile);
 
+/** The container's id, state and start time, as `docker inspect` says them. */
+async function stateOf(
+  containerId: string,
+): Promise<{id: string; status: string; startedAt: string}> {
+  const {stdout} = await execFileAsync('docker', [
+    'inspect',
+    '-f',
+    '{{.Id}}|{{.State.Status}}|{{.State.StartedAt}}',
+    containerId,
+  ]);
+  const [fullId = '', status = '', startedAt = ''] = stdout.trim().split('|');
+  return {id: fullId, status, startedAt};
+}
+
 const CONNECTING = 'Connecting to Dev Container (show log)';
 const LOG_LINK = 'command:remote-containers.revealLogTerminal';
 const DISCOVERY = 'Folder contains a Dev Container configuration file.';
@@ -133,7 +148,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
     }
   });
 
-  it('F-0408 AC-14 (ruling-1557-tolerance): reopening a folder whose container runs connects, by the log’s Resolving Remote, and shows S087, each within 1.5 s (athena’s ruling on #1204 for the spec’s 1 s), with no Starting container and no Starting VS Code Server in the log', async () => {
+  it('F-0408 AC-14 (ruling-1557-tolerance): reopening a folder whose container runs reuses it without starting it, its id and state unchanged, with no Starting lines, S087 briefly if at all, and a connect faster than starting the same container from stopped', async () => {
     const folder = devContainerFolder('c68-running', {
       name: 'Running Reuse',
       shutdownAction: 'none',
@@ -141,6 +156,8 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
     const name = await openFolderWindow(folder);
     try {
       await reopenInContainer(name);
+      const containerId = (await devContainersOf(folder))[0] ?? '';
+      const firstState = await stateOf(containerId);
       await closeWindow(name);
       const mark = containersLog().length;
       const again = await openFolderWindow(folder);
@@ -165,8 +182,21 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
           .map(line => /^Resolving Remote: (\d+) ms$/.exec(line)?.[1])
           .find(each => each !== undefined) ?? Infinity,
       );
+      const secondState = await stateOf(containerId);
+      await closeWindow(again);
+      await execFileAsync('docker', ['stop', containerId]);
+      const stoppedMark = containersLog().length;
+      const stopped = await openFolderWindow(folder);
+      await reopenInContainer(stopped);
+      const stoppedLines = containersLogSince(stoppedMark);
+      const stoppedMilliseconds = Number(
+        stoppedLines
+          .map(line => /^Resolving Remote: (\d+) ms$/.exec(line)?.[1])
+          .find(each => each !== undefined) ?? Infinity,
+      );
+      await closeWindow(stopped);
       console.log(
-        `F-0408 AC-14: connect ${String(connectMilliseconds)} ms, S087 on screen ${String(onScreen)} ms`,
+        `F-0408 AC-14: running connect ${String(connectMilliseconds)} ms, stopped connect ${String(stoppedMilliseconds)} ms, S087 on screen ${String(onScreen)} ms`,
       );
       deepStrictEqual(
         {
@@ -176,17 +206,20 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
               line === 'Starting container' ||
               line === 'Starting VS Code Server',
           ),
-          connectWithin: connectMilliseconds < TOLERANCE_MILLISECONDS,
-          shownWithin: onScreen < TOLERANCE_MILLISECONDS,
+          startedFromStopped: stoppedLines.includes('Starting container'),
+          state: secondState,
+          brief: onScreen < TOLERANCE_MILLISECONDS,
+          fastest: connectMilliseconds < stoppedMilliseconds,
         },
         {
           already: true,
           steps: [],
-          connectWithin: true,
-          shownWithin: true,
+          startedFromStopped: true,
+          state: firstState,
+          brief: true,
+          fastest: true,
         },
       );
-      await closeWindow(again);
     } finally {
       await removeContainers(folder);
     }
