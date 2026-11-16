@@ -4,6 +4,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
+import {forbiddenAmong} from '../../../tools/forbidden-texts.ts';
 import {
   appendScript,
   closeWindow,
@@ -30,9 +31,6 @@ const CLEAR = 'opensshremotes.clearAllSessionHints';
 /** The one address the Resources column of a download failure holds, the reimplementation's own documentation. */
 const DOCUMENTATION =
   'https://github.com/remote-oss/remote/tree/main/docs/remote-ssh';
-
-/** The texts a flow of this feature never shows. */
-const NEVER_SHOWN = ['More Info', 'in settings'];
 
 /** The cells of column `column` of the data rows of `table`, one per line. */
 function columnOf(table: readonly string[], column: number): string[] {
@@ -114,9 +112,6 @@ describe('the columns of the troubleshooting table (card #2700)', function () {
       ...(line.buttons ?? []),
       ...(line.items ?? []),
     ]);
-    deepStrictEqual(
-      shown.filter(text => NEVER_SHOWN.some(never => text.includes(never))),
-      [],
-    );
+    deepStrictEqual(forbiddenAmong(shown), []);
   });
 });

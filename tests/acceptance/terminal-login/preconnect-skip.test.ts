@@ -15,11 +15,9 @@ import {
   userSettings,
   variable,
 } from '../windows/harness.ts';
+import {forbiddenAmong} from '../../../tools/forbidden-texts.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {answerDialog, waitForDialog} from '../windows/renderer.ts';
-
-/** The texts a flow of the troubleshooting feature never shows: no setting is searched, no further information is offered. */
-const NEVER_SHOWN = ['More Info', 'in settings'];
 
 describe('Skip in the pre-connection dialog (card #2700)', function () {
   this.timeout(600_000);
@@ -63,13 +61,13 @@ describe('Skip in the pre-connection dialog (card #2700)', function () {
         again: second.buttons,
         marker: afterFirst || existsSync(marker),
         settingsUnchanged: readUserSettings() === settings,
-        offered: [first, second]
-          .flatMap(dialog => [
+        offered: forbiddenAmong(
+          [first, second].flatMap(dialog => [
             dialog.message,
             dialog.details,
             ...dialog.buttons,
-          ])
-          .filter(text => NEVER_SHOWN.some(never => text.includes(never))),
+          ]),
+        ),
       },
       {
         buttons: ['Skip', "Allow and Don't Ask Again", 'Cancel', 'Allow'],
