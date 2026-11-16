@@ -478,6 +478,7 @@
       "forward-port.test.ts": 0.1,
       "fresh-window.test.ts": 0.1,
       "harness.test.ts": 0,
+      "helper-linger.test.ts": 4.3,
       "kill-current.test.ts": 1,
       "kill.test.ts": 3.7,
       "local-server-share.test.ts": 0.3,
