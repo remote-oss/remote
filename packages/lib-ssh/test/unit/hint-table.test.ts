@@ -114,6 +114,57 @@ describe('the table of the session troubleshooting terminal (card connect-136, F
     );
   });
 
+  it('F-2602 3.4: a range of a mitigation is drawn bold and underlined, the width of the line unchanged, and a table without ranges has no style', () => {
+    const row: HintTableRow = {
+      status: 'S',
+      message: 'm',
+      mitigations: ['Remove or edit setting remote.SSH.serverInstallPath'],
+      resources: [],
+    };
+    const linked = hintTable(
+      [{...row, links: {mitigations: [[{start: 23, length: 28}]]}}],
+      100,
+    );
+    deepStrictEqual(
+      [
+        linked.slice(3, 5),
+        hintTable([row], 100).some(line => line.includes('\u001b')),
+        linked.map(line => line.replaceAll(/\u001b\[[0-9;]*m/gu, '').length),
+      ],
+      [
+        [
+          '║ S      │ m                                          │ • Remove or edit setting                   ║',
+          '║        │                                            │   \u001b[1;4mremote.SSH.serverInstallPath\u001b[0m             ║',
+        ],
+        false,
+        Array.from({length: 6}, () => 100),
+      ],
+    );
+  });
+
+  it('F-2602 3.4: a link in the message that wraps over lines is closed at the end of each line and opened again on the next', () => {
+    deepStrictEqual(
+      hintTable(
+        [
+          {
+            status: 'S',
+            message: 'See key remote.SSH.serverInstallPath here',
+            mitigations: [],
+            resources: [],
+            links: {message: [{start: 8, length: 28}]},
+          },
+        ],
+        40,
+      ).slice(3, 7),
+      [
+        '║ S      │ See key                     ║',
+        '║        │ \u001b[1;4mremote.SSH.\u001b[0m                 ║',
+        '║        │ \u001b[1;4mserverInstallPath\u001b[0m           ║',
+        '║        │ here                        ║',
+      ],
+    );
+  });
+
   it('F-2605.AC-5: the three flexible columns are equally wide', () => {
     const header = hintTable([FORWARDING], 132)[1] ?? '';
     deepStrictEqual(
