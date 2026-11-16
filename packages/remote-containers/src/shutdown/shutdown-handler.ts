@@ -15,12 +15,12 @@ export const DRAIN_ACTION = 'drain';
  * How the helper ends: ten seconds after its last lease, once every pending check and lookup is done. A window that is
  * refused while it drains waits for the helper to close as long as a register may take to be answered.
  */
-export const SHUTDOWN_END_POLICY: EndPolicy = {
+export const SHUTDOWN_END_POLICY = {
   kind: 'delayedCheckAfterLastLease',
   milliseconds: CHECK_MILLISECONDS,
   action: DRAIN_ACTION,
   actionBound: REGISTER_ANSWER_MILLISECONDS,
-};
+} as const satisfies EndPolicy;
 
 /** The handler over `registry`. */
 export function createShutdownHandler(

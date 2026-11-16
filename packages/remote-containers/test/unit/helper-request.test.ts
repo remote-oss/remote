@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  REGISTER_WAIT_MILLISECONDS,
   SHUTDOWN_CLIENT_WAITS,
   shutdownHelperRequest,
 } from '../../src/shutdown/helper-request.ts';
@@ -47,5 +48,19 @@ describe('the window’s request for the shutdown helper (card containers-69)', 
       startLimitMilliseconds: 10_000,
       retryMilliseconds: 100,
     });
+  });
+
+  it('card #2734: the connect waits for its register to be answered as long as the acquire may take after a refused hello and the answer may take after that', () => {
+    deepStrictEqual(
+      [
+        REGISTER_WAIT_MILLISECONDS,
+        REGISTER_WAIT_MILLISECONDS >
+          SHUTDOWN_CLIENT_WAITS.helloLimitMilliseconds +
+            SHUTDOWN_END_POLICY.actionBound +
+            SHUTDOWN_CLIENT_WAITS.startLimitMilliseconds +
+            12_000,
+      ],
+      [38_000, true],
+    );
   });
 });
