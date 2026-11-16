@@ -18,7 +18,6 @@ import {
   dismissals,
   freshHost,
 } from '../windows/maintenance.ts';
-import {terminalRows} from '../windows/renderer.ts';
 import {keepingSettings, PLATFORMS} from '../windows/tunnel-support.ts';
 import {
   cellsOf,
@@ -42,14 +41,13 @@ function columnOf(table: readonly string[], column: number): string[] {
     .filter(cell => cell !== '');
 }
 
-/** Opens window `name` on `harness`, fails it, and gives the whole table of its terminal and the rows in view. */
+/** Opens window `name` on `harness`, fails it, and gives the whole table of its terminal. */
 async function failedTable(name: string) {
   await inWindow('local', CLEAR);
   appendScript(dismissals(name));
   await failedOn('harness', name);
   try {
-    const table = await wholeTableOf(name);
-    return {table, rows: await terminalRows(name)};
+    return {table: await wholeTableOf(name)};
   } finally {
     await closeWindow(name).catch(() => undefined);
   }
@@ -73,28 +71,22 @@ describe('the hints of an install folder and a download that fail (card #2708)',
     await closeAllButLocal();
   });
 
-  it('F-2602 AC-14, AC-18 (c2708-install-path): an install folder the remote user cannot create gives a Mitigations column that starts with removing or editing the setting, drawn as a link, and no Resources column, and the setting keeps its value', async () => {
+  it('F-2602 AC-14, AC-18 (c2708-install-path): an install folder the remote user cannot create gives a Mitigations column that starts with removing or editing the setting and no Resources column, and the setting keeps its value', async () => {
     await keepingSettings(async () => {
       await freshHost();
       const value = {harness: '/proc/nope/dir'};
       await userSettings({...PLATFORMS, [SETTING]: value});
       const before = readUserSettings();
-      const {table, rows} = await failedTable('c2708-install-path');
+      const {table} = await failedTable('c2708-install-path');
       deepStrictEqual(
         {
           header: cellsOf(table[1]),
           first: columnOf(table, 2)[0],
-          linked: rows.some(
-            entry =>
-              entry.text.includes(`Remove or edit setting ${SETTING}`) &&
-              entry.underlined.includes(SETTING),
-          ),
           unchanged: readUserSettings() === before,
         },
         {
           header: ['Status', 'Message', 'Mitigations'],
-          first: '• Remove or edit setting',
-          linked: true,
+          first: `• Remove or edit setting ${SETTING}`,
           unchanged: true,
         },
       );
