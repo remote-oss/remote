@@ -9,6 +9,7 @@
 import type {Interpreter, PlatformHint} from 'lib-host';
 import {
   base64Lines,
+  POWERSHELL_SESSION_INPUT,
   powershellPrelude,
   powershellReader,
 } from '../process/remote-program.ts';
@@ -28,9 +29,9 @@ export const POWERSHELL_SESSION_LOOP = [
   "param([string]$ChildProgram = 'powershell.exe')",
   "$ErrorActionPreference = 'Stop'",
   '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false',
-  '$Stream = [Console]::OpenStandardInput()',
+  ...POWERSHELL_SESSION_INPUT,
   '$Out = [Console]::OpenStandardOutput()',
-  `$ReaderText = '${powershellReader(PRELUDE_BYTES_TOKEN)}'`,
+  `$ReaderText = '${powershellReader(PRELUDE_BYTES_TOKEN, 'pipe')}'`,
   'function Read-Exactly([int]$Count) {',
   '  $Buffer = New-Object byte[] $Count',
   '  $Read = 0',
