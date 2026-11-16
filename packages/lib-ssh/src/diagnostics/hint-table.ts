@@ -7,7 +7,7 @@
  */
 
 /** A stretch of a text: where it starts and how many characters it has. */
-export interface LinkRange {
+interface LinkRange {
   start: number;
   length: number;
 }
@@ -21,11 +21,11 @@ export interface HintTableRow {
   /** The stretches of the message and of each mitigation drawn as links; a row without them draws all plain. */
   links?: {
     message?: readonly LinkRange[];
-    mitigations?: readonly (readonly LinkRange[])[];
+    mitigations?: ReadonlyArray<readonly LinkRange[]>;
   };
 }
 
-/** The marks that start and end a link in a text on its way to the lines; they take no width and are replaced when a line is drawn. */
+/** The marks that start and end a link in a text on its way to the lines; they have no width and are replaced when a line is drawn. */
 const LINK_START = '\uE000';
 const LINK_END = '\uE001';
 
@@ -38,12 +38,12 @@ function isMark(character: string | undefined): boolean {
   return character === LINK_START || character === LINK_END;
 }
 
-/** The characters of `text` that take room: the link marks do not. */
+/** The number of characters of `text` that have a width: the link marks have none. */
 function widthOf(text: string): number {
   return text.replaceAll(LINK_START, '').replaceAll(LINK_END, '').length;
 }
 
-/** `text` split after its first `count` characters that take room, the marks that follow them going with the first part. */
+/** `text` split after its first `count` characters that have a width, the marks that follow them going with the first part. */
 function splitAfter(text: string, count: number): [string, string] {
   let seen = 0;
   let index = 0;
