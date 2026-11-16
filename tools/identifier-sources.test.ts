@@ -424,6 +424,36 @@ describe('identifier-sources', () => {
       );
     });
 
+    it('reads a pseudoLocalized flag of true and false back', () => {
+      deepStrictEqual(
+        [
+          declaredOf({
+            source: 'x#1',
+            standsDownFor: 'r',
+            pseudoLocalized: true,
+          }).pseudoLocalized,
+          declaredOf({
+            source: 'x#1',
+            standsDownFor: 'r',
+            pseudoLocalized: false,
+          }).pseudoLocalized,
+        ],
+        [true, false],
+      );
+    });
+
+    it('fails on a pseudoLocalized that is not a boolean', () => {
+      throws(
+        () =>
+          declaredOf({
+            source: 'x#1',
+            standsDownFor: 'r',
+            pseudoLocalized: 'yes',
+          }),
+        {message: 'declared.pseudoLocalized must be a boolean'},
+      );
+    });
+
     it('fails on an unknown field of an entry', () => {
       throws(
         () =>
