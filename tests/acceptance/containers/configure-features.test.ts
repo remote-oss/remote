@@ -303,7 +303,10 @@ describe('Configure Container Features: its file (card containers-150, part B)',
       label,
       virtualFirst ? entries.toReversed() : entries,
     );
-    const window = await openWorkspaceWindow(file);
+    // A workspace whose first folder is virtual is named as the in-memory window is.
+    const window = virtualFirst
+      ? await openMemoryWindow(file)
+      : await openWorkspaceWindow(file);
     await rememberPage(window);
     try {
       startCommand(window);

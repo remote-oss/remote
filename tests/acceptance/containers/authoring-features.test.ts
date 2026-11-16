@@ -17,7 +17,7 @@ import {
   chooseQuickPickRow,
   clickQuickPickRow,
   clearQuickPickInput,
-  detailedQuickPickRows,
+  allQuickPickRows,
   dialogOf,
   pressEscape,
   pressQuickPickOk,
@@ -61,7 +61,7 @@ const FEATURES_SCREEN = {
 
 /** The labels of the rows the Select Features screen of `window` lists now. */
 async function listedLabels(window: string): Promise<string[]> {
-  return (await detailedQuickPickRows(window)).map(each => each.label);
+  return (await allQuickPickRows(window)).map(each => each.label);
 }
 
 /** Takes the focused row of each screen the wizard shows until the screen whose placeholder is `placeholder` comes. */
@@ -137,7 +137,7 @@ describe('Select Features in the wizard (card containers-88)', function () {
     await withWindow('f88-owners', {}, async window => {
       await startedWith(window, 'bare-lab');
       await screenWith(window, FEATURES);
-      const rows = await detailedQuickPickRows(window);
+      const rows = await allQuickPickRows(window);
       deepStrictEqual(
         [
           rows.some(each => each.label === GIT_FEATURE && each.detail !== ''),

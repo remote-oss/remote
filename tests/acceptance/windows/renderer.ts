@@ -3429,6 +3429,11 @@ export async function chooseQuickPickRow(
     const rows = await quickPickRows(name);
     const target = rows.findIndex(entry => entry.label === label);
     if (target === -1) {
+      // The list renders the rows in view only: its next rows come to the arrow key.
+      if (presses < 60 && rows.length > 0) {
+        await pressKey(address, name, 'ArrowDown');
+        continue;
+      }
       throw new Error(
         `window ${name}: no row ${JSON.stringify(label)} among ${JSON.stringify(rows.map(entry => entry.label))}`,
       );
@@ -4467,14 +4472,26 @@ export async function toggleQuickPickRow(
   name: string,
   label: string,
 ): Promise<void> {
-  await evaluate<null>(
-    name,
-    `(() => {
-      const row = [...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row[role=checkbox]')].find(each => each.querySelector('.label-name')?.textContent === ${JSON.stringify(label)});
-      row.querySelector('.monaco-custom-toggle').click();
-      return null;
-    })()`,
-  );
+  const address = await pageOf(name);
+  for (let presses = 0; presses < 100; presses += 1) {
+    const clicked = await evaluate<boolean>(
+      name,
+      `(() => {
+        const row = [...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row[role=checkbox]')].find(each => each.querySelector('.label-name')?.textContent === ${JSON.stringify(label)});
+        if (row === undefined) {
+          return false;
+        }
+        row.querySelector('.monaco-custom-toggle').click();
+        return true;
+      })()`,
+    );
+    if (clicked) {
+      return;
+    }
+    // The list renders the rows in view only: its next rows come to the arrow key.
+    await pressKey(address, name, 'ArrowDown');
+  }
+  throw new Error(`window ${name}: no row ${JSON.stringify(label)} to toggle`);
 }
 
 /** What the chrome of the multi-select quick pick open in window `name` shows besides its rows: the counter and whether it has an OK button. */

@@ -8,7 +8,10 @@ import {deepStrictEqual} from 'node:assert';
 import {existsSync} from 'node:fs';
 import path from 'node:path';
 import {closeWindow} from '../windows/harness.ts';
-import {openWorkspaceWindow} from '../windows/folder-windows.ts';
+import {
+  openMemoryWindow,
+  openWorkspaceWindow,
+} from '../windows/folder-windows.ts';
 import {
   answerDialog,
   pressEscape,
@@ -52,7 +55,10 @@ describe('a saved workspace with a virtual folder and no configuration (card #27
       label,
       virtualFirst ? entries.toReversed() : entries,
     );
-    const window = await openWorkspaceWindow(file);
+    // A workspace whose first folder is virtual is named as the in-memory window is.
+    const window = virtualFirst
+      ? await openMemoryWindow(file)
+      : await openWorkspaceWindow(file);
     await rememberPage(window);
     try {
       await body(window, folder, file);

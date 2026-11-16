@@ -735,7 +735,12 @@ describe('F-0503 server install (card containers-41)', function () {
         'the attach window',
         () => Promise.resolve(windowNames().length > before.length),
         120_000,
-      );
+      ).catch(async (caught: unknown) => {
+        throw new Error(
+          `${String(caught)}; the windows were ${JSON.stringify(before)} and are ${JSON.stringify(windowNames())}; the local window shows ${JSON.stringify(await dialogOf('local'))}`,
+          {cause: caught},
+        );
+      });
       const [attached = ''] = windowNames().filter(
         name => !before.includes(name),
       );
