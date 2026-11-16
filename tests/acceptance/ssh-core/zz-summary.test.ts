@@ -40,7 +40,13 @@ describe('where the summary line of a failure without issues falls against the r
         );
         const dialogAfter = Date.now() - beganAt;
         const lines = connectionLog();
-        const found = lines.indexOf(NO_HINTS);
+        const found = lines.findIndex(
+          (line, index) => index >= before && line === NO_HINTS,
+        );
+        const stamped = connectionLog({withTimes: true});
+        const stampLine = found < 0 ? '' : (stamped[found] ?? '');
+        const openReturnedAt = beganAt + openTook;
+        const dayStart = new Date(openReturnedAt).setUTCHours(0, 0, 0, 0);
         rounds.push({
           host,
           round,
@@ -51,6 +57,9 @@ describe('where the summary line of a failure without issues falls against the r
           noHintsAt: found,
           noHintsBeforeMark: found >= 0 && found < mark,
           noHintsMissing: found < 0,
+          stampLine,
+          dayStart,
+          openReturnedAt,
         });
         process.stdout.write(`ROUND ${JSON.stringify(rounds.at(-1))}\n`);
         await closeWindow(folder).catch(() => undefined);
