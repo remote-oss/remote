@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {readFileSync, writeFileSync} from 'node:fs';
 import {
+  connectionLog,
   inWindow,
   readUserSettings,
   restoreUserSettings,
@@ -11,9 +12,12 @@ import {
 import {
   answerInputBox,
   chooseQuickPickItem,
+  dialogOf,
+  notifications,
   pageOf,
   pressEscape,
   quickPickOf,
+  quickPickRows,
   quickPickTitle,
 } from '../windows/renderer.ts';
 
@@ -45,17 +49,34 @@ async function startedOnStranger(): Promise<{ending: Promise<string>}> {
     'the host pick',
     async () => (await quickPickOf('local')) !== undefined,
     60_000,
-  );
+  ).catch(failedWithFacts);
   await answerInputBox('local', 'stranger');
   await waitFor(
     'the question about the host key',
     async () => (await quickPickOf('local'))?.placeholder === PLACEHOLDER,
     60_000,
-  );
+  ).catch(failedWithFacts);
   return {ending};
 }
 
-describe('the host-key question of a maintenance command (card coverage-100)', function () {
+/** Throws `caught` with what the local window shows and the end of the connection log, so a wait that ran out says why. */
+async function failedWithFacts(caught: unknown): Promise<never> {
+  const shown = await quickPickOf('local').catch((failed: unknown) =>
+    String(failed),
+  );
+  const dialog = await dialogOf('local').catch((failed: unknown) =>
+    String(failed),
+  );
+  const toasts = await notifications('local').catch((failed: unknown) =>
+    String(failed),
+  );
+  throw new Error(
+    `${String(caught)}; the quick pick: ${JSON.stringify(shown)}; the dialog: ${JSON.stringify(dialog)}; the notifications: ${JSON.stringify(toasts)}; the end of the connection log:\n${connectionLog().slice(-20).join('\n')}`,
+    {cause: caught},
+  );
+}
+
+describe('the host-key question of a maintenance command, in the wording of OpenSSH 10.2 (cards coverage-100, #2653)', function () {
   this.timeout(300_000);
 
   let settingsBefore: string | undefined;
@@ -69,13 +90,21 @@ describe('the host-key question of a maintenance command (card coverage-100)', f
     restoreUserSettings(settingsBefore);
   });
 
-  it('F-2412 AC-10 (ruling-1601-host-key-pick): the host key of an unknown host is asked as the pick with the fingerprint in its title and Continue and Cancel; Continue goes on and records the key, and Escape ends the command with the error of AC-12 and records nothing', async () => {
+  it('F-2412 AC-10 (c2653-host-key-pick): with ssh asking in the wording of OpenSSH 10.2, the host key of an unknown host is asked as the pick with the fingerprint in its title, Continue focused and Cancel; Continue goes on and records the key, and Cancel and Escape, each in an attempt of its own, end the command with the error of AC-12 and record nothing', async () => {
     const {ending: proceeding} = await startedOnStranger();
     const asked = await quickPickOf('local');
     const title = await quickPickTitle('local');
+    const focused = (await quickPickRows('local'))
+      .filter(entry => entry.focused)
+      .map(entry => entry.label);
     await chooseQuickPickItem('local', 'Continue');
     const continued = await proceeding;
     const recorded = readFileSync(knownHosts(), 'utf8').trim() !== '';
+
+    const {ending: cancelling} = await startedOnStranger();
+    await chooseQuickPickItem('local', 'Cancel');
+    const cancelled = await cancelling;
+    const keptAfterCancel = readFileSync(knownHosts(), 'utf8').trim() === '';
 
     const {ending: refusing} = await startedOnStranger();
     await pressEscape('local');
@@ -84,20 +113,26 @@ describe('the host-key question of a maintenance command (card coverage-100)', f
       {
         placeholder: asked?.placeholder,
         items: asked?.items,
+        focused,
         title: /^"stranger" has fingerprint "SHA256:[^"]+"\.$/.test(title),
         continued,
         recorded,
+        cancelled: cancelled.includes(UNINSTALL_FAILED),
+        keptAfterCancel,
         escaped: escaped.includes(UNINSTALL_FAILED),
-        keptEmpty: readFileSync(knownHosts(), 'utf8').trim() === '',
+        keptAfterEscape: readFileSync(knownHosts(), 'utf8').trim() === '',
       },
       {
         placeholder: PLACEHOLDER,
         items: ['Continue', 'Cancel'],
+        focused: ['Continue'],
         title: true,
         continued: 'done',
         recorded: true,
+        cancelled: true,
+        keptAfterCancel: true,
         escaped: true,
-        keptEmpty: true,
+        keptAfterEscape: true,
       },
     );
   });

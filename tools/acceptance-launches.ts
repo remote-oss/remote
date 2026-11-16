@@ -1205,6 +1205,19 @@ export function launchesOf(root: string): Launch[] {
         'remote.SSH.path': '${HARNESS_SSH_CLIENT}',
       },
     },
+    // The same client with the extension's own pickers: the empty script makes Remote - SSH show its real quick picks, which
+    // the host-key row reads (its items and the focused one), and the rows of ssh-newclient need the script.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-newclient-pickers',
+      suite: 'ssh-newclient-pickers',
+      sshClient: 'pinned',
+      environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.SSH.path': '${HARNESS_SSH_CLIENT}',
+      },
+    },
     // Remote - SSH beside the core editor's own SSH agent hosts: AI features start off, and core's agent-host keys sit in the
     // settings at their defaults. The empty script makes Remote - SSH show its real pickers, in the run's own home.
     {
