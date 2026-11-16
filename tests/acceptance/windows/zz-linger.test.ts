@@ -68,7 +68,7 @@ describe('a window opened 0.2 to 1.7 s after the last one closed, with the serve
         const stamped = connected
           ? []
           : connectionLog({withTimes: true}).slice(-50);
-        results.push({
+        const round = {
           wait,
           repeat,
           closeTook: returnedAt - closedAt,
@@ -89,7 +89,11 @@ describe('a window opened 0.2 to 1.7 s after the last one closed, with the serve
                 line.includes('channelClosed'),
             )
             .map(line => line.slice(0, 120)),
-        });
+        };
+        results.push(round);
+        process.stdout.write(
+          `ROUND ${JSON.stringify(connected && round.failed.length === 0 && round.gone === 0 ? {...round, tail: undefined, changes: undefined} : round)}\n`,
+        );
         await closeWindow(second).catch(() => undefined);
         await waitFor(
           'the helper to be gone',
