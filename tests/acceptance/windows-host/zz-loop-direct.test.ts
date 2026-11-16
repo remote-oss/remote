@@ -202,6 +202,18 @@ describe('the Windows session loop with its input kept open (card #2681, measure
     useShell(SHELLS.windowsPowershell);
   });
 
+  it('print the install frame and the install folder', () => {
+    for (const name of readdirSync(tmpdir()).filter(each => each.startsWith('c2681-frame-')).sort()) {
+      const frame = readFileSync(path.join(tmpdir(), name), 'utf8');
+      if (frame.includes('Expand-ServerArchive')) {
+        console.log(`c2681-measure install params ${name}: ${JSON.stringify(frame.split('\n').filter(line => /^\$(LAUNCHER|ARCHIVE_FORMAT|DATA_FOLDER|INSTALL_ROOT|COMMIT|ARCHIVE_PATH|INSTALL_TREE) /.test(line)))}`);
+        break;
+      }
+    }
+    const listing = execFileSync('powershell', ['-NoProfile', '-Command', "Get-ChildItem -LiteralPath (Join-Path $HOME '.vscodium-server-insiders') -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 80 | ForEach-Object { $_.FullName }"], {encoding: 'utf8'});
+    console.log(`c2681-measure install folder: ${JSON.stringify(listing.split('\n').map(line => line.trim()).filter(Boolean))}`);
+  });
+
   it('print the helper summaries', () => {
     for (const name of readdirSync(tmpdir()).filter(each => each.startsWith('c2681-summary-')).sort()) {
       console.log(`c2681-measure summary ${name}: ${JSON.stringify(readFileSync(path.join(tmpdir(), name), 'utf8').split('\n').slice(0, 80))}`);
