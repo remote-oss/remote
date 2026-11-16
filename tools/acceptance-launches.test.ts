@@ -1336,6 +1336,12 @@ describe('the launches of the VSCodium run', () => {
         'failure-platform-escape',
         'failure-port-range-busy',
         'failure-i686',
+        'failure-install-path-invalid',
+        'failure-install-path-nocreate',
+        'failure-manual-bootstrap',
+        'failure-download-offline',
+        'failure-proxy-invalid',
+        'failure-proxy-refused',
         'terminal',
         'socket-prime',
         'socket',
@@ -1384,6 +1390,12 @@ describe('the launches of the VSCodium run', () => {
         'failure-platform-escape',
         'failure-port-range-busy',
         'failure-i686',
+        'failure-install-path-invalid',
+        'failure-install-path-nocreate',
+        'failure-manual-bootstrap',
+        'failure-download-offline',
+        'failure-proxy-invalid',
+        'failure-proxy-refused',
       ],
     );
   });
@@ -1406,6 +1418,12 @@ describe('the launches of the VSCodium run', () => {
         ['failure-platform-escape', 'platform-escape'],
         ['failure-port-range-busy', 'port-range-busy'],
         ['failure-i686', 'i686'],
+        ['failure-install-path-invalid', 'install-path-invalid'],
+        ['failure-install-path-nocreate', 'install-path-nocreate'],
+        ['failure-manual-bootstrap', 'manual-bootstrap'],
+        ['failure-download-offline', 'download-offline'],
+        ['failure-proxy-invalid', 'proxy-invalid'],
+        ['failure-proxy-refused', 'proxy-refused'],
       ],
     );
   });
@@ -1425,6 +1443,12 @@ describe('the launches of the VSCodium run', () => {
         ['failure-platform-escape', undefined],
         ['failure-port-range-busy', [41060, 41061]],
         ['failure-i686', undefined],
+        ['failure-install-path-invalid', undefined],
+        ['failure-install-path-nocreate', undefined],
+        ['failure-manual-bootstrap', undefined],
+        ['failure-download-offline', undefined],
+        ['failure-proxy-invalid', undefined],
+        ['failure-proxy-refused', undefined],
       ],
     );
   });
