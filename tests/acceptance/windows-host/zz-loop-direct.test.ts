@@ -180,20 +180,15 @@ describe('the Windows session loop with its input kept open (card #2681, measure
     console.log(`c2681-measure sshd events: ${JSON.stringify(events.split('\n').slice(-120))}`);
   });
 
-  it('measure frames written after a delay, and what an empty read returns', async () => {
-    useShell(SHELLS.windowsPowershell);
+  it('measure delayed frames under each DefaultShell, and through cmd', async () => {
     const frame = powershellCommandsFor('c2681mark', {script: 'Write-Output "platform: $([Environment]::OSVersion.Platform)"', environment: {}, inputBase64: null});
-    for (const delay of [0, 20, 200, 2000]) {
-      await measureDelayed(`delay ${String(delay)}`, frame, delay, powershellSessionStart().remoteProgram);
+    const loop = powershellSessionStart().remoteProgram;
+    for (const [name, program] of Object.entries(SHELLS)) {
+      useShell(program);
+      await measureDelayed(`${name} delay 200`, frame, 200, loop);
+      await measureDelayed(`${name} cmd-wrapped delay 200`, frame, 200, `cmd /c ${loop}`);
     }
-    const reads = [
-      '[Console]::Out.Write("ready`n"); [Console]::Out.Flush()',
-      '$Stream = [Console]::OpenStandardInput()',
-      '$Clock = [Diagnostics.Stopwatch]::StartNew()',
-      'for ($Index = 0; $Index -lt 6; $Index++) { $Byte = $Stream.ReadByte(); [Console]::Out.Write("read $Byte after $($Clock.ElapsedMilliseconds) ms`n"); [Console]::Out.Flush(); if ($Byte -lt 0) { Start-Sleep -Milliseconds 300 } }',
-    ].join('\n');
-    const program = `powershell -NoLogo -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(reads, 'utf16le').toString('base64')}`;
-    await measureDelayed('reads', 'abc', 1000, program);
+    useShell(SHELLS.windowsPowershell);
   });
 
   it('print the helper summaries', () => {
