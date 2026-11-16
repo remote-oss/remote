@@ -212,25 +212,6 @@ describe('the Windows session loop with its input kept open (card #2681, measure
     }
     const logs = execFileSync('powershell', ['-NoProfile', '-Command', "Get-ChildItem -LiteralPath (Join-Path $HOME '.vscodium-server-insiders') -Filter '*.log' -Force -ErrorAction SilentlyContinue | ForEach-Object { '== ' + $_.Name; Get-Content -LiteralPath $_.FullName -TotalCount 60 }"], {encoding: 'utf8'});
     console.log(`c2681-measure server logs: ${JSON.stringify(logs.split('\n').map(line => line.trimEnd()).filter(Boolean).slice(0, 150))}`);
-    const launcherProbe = [
-      "$Bin = Join-Path $HOME '.vscodium-server-insiders\\bin'",
-      '$Commit = (Get-ChildItem -LiteralPath $Bin -Directory | Where-Object { $_.Name -notlike "*.stage.*" } | Select-Object -First 1).FullName',
-      "$Launcher = Join-Path $Commit 'bin\\codium-server-insiders.cmd'",
-      "'== launcher ' + $Launcher",
-      'Get-Content -LiteralPath $Launcher',
-      "'== help'",
-      '& cmd.exe /d /s /c (\'"\' + \'"\' + $Launcher + \'" --help"\') 2>&1 | Select-Object -First 8',
-      "'== exit ' + $LASTEXITCODE",
-      "'== start words via Start-Process'",
-      "$Out = Join-Path $env:TEMP 'c2681-start.log'; $Err = Join-Path $env:TEMP 'c2681-start.err'",
-      "$P = Start-Process -FilePath $env:ComSpec -ArgumentList ('/d /s /c \"\"' + $Launcher + '\" \"--start-server\" \"--host\" \"127.0.0.1\" \"--port\" \"0\" \"--without-connection-token\"\"') -PassThru -RedirectStandardOutput $Out -RedirectStandardError $Err -WindowStyle Hidden",
-      'Start-Sleep -Seconds 8',
-      "'out:'; Get-Content -LiteralPath $Out -ErrorAction SilentlyContinue | Select-Object -First 10",
-      "'err:'; Get-Content -LiteralPath $Err -ErrorAction SilentlyContinue | Select-Object -First 10",
-      'Stop-Process -Id $P.Id -Force -ErrorAction SilentlyContinue',
-    ].join('\n');
-    const probed = execFileSync('powershell', ['-NoProfile', '-Command', launcherProbe], {encoding: 'utf8'});
-    console.log(`c2681-measure launcher: ${JSON.stringify(probed.split('\n').map(line => line.trimEnd()).filter(Boolean).slice(0, 80))}`);
     const listing = execFileSync('powershell', ['-NoProfile', '-Command', "Get-ChildItem -LiteralPath (Join-Path $HOME '.vscodium-server-insiders') -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 80 | ForEach-Object { $_.FullName }"], {encoding: 'utf8'});
     console.log(`c2681-measure install folder: ${JSON.stringify(listing.split('\n').map(line => line.trim()).filter(Boolean))}`);
   });
