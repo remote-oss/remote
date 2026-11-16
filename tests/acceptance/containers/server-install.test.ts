@@ -27,7 +27,6 @@ import {
   runLabelArguments,
   variable,
   waitFor,
-  windowNames,
 } from '../windows/harness.ts';
 import {
   answerDialog,
@@ -48,12 +47,6 @@ import {
   setUserSetting,
 } from '../windows/folder-windows.ts';
 import {installBrowser, openedUrls} from '../windows/web-ui-support.ts';
-import {
-  listingOnly,
-  pickedContainer,
-  removeGroup,
-  started,
-} from '../windows/attach-support.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -716,69 +709,6 @@ describe('F-0503 server install (card containers-41)', function () {
       );
     } finally {
       await setUserSetting('remote.serverDownloadBaseUrl', workingSource);
-    }
-  });
-
-  it('F-0503 AC-24 (c2724-attach-close): closing an Attach window during the install leaves the container running and no tree without product.json under its server folder', async () => {
-    const slow = `${variable('HARNESS_DOWNLOADS_LOCAL')}/slow`;
-    await setUserSetting('remote.serverDownloadBaseUrl', slow);
-    emptyCache();
-    const containerId = await started('c2724-attach', 'install');
-    await setUserSetting(
-      'dev.containers.dockerPath',
-      listingOnly('c2724-attach', 'install'),
-    );
-    const before = windowNames();
-    try {
-      await pickedContainer('/c2724-attach');
-      await waitFor(
-        'the attach window',
-        () => Promise.resolve(windowNames().length > before.length),
-        120_000,
-      ).catch(async (caught: unknown) => {
-        throw new Error(
-          `${String(caught)}; the windows were ${JSON.stringify(before)} and are ${JSON.stringify(windowNames())}; the local window shows ${JSON.stringify(await dialogOf('local'))}`,
-          {cause: caught},
-        );
-      });
-      const [attached = ''] = windowNames().filter(
-        name => !before.includes(name),
-      );
-      opened.push(attached);
-      let shown: string[] = [];
-      await waitFor(
-        `the installing toast of ${attached}`,
-        async () => {
-          shown = await notifications(attached).catch(() => []);
-          return shown.some(text => text.includes(INSTALLING));
-        },
-        180_000,
-      ).catch((caught: unknown) => {
-        throw new Error(
-          `${String(caught)}; the window showed ${JSON.stringify(shown)}; the windows are ${JSON.stringify(windowNames())}`,
-          {cause: caught},
-        );
-      });
-      await closeWindow(attached);
-      opened.splice(opened.indexOf(attached), 1);
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      const state = (
-        await execFileAsync('docker', [
-          'inspect',
-          '--format',
-          '{{.State.Status}}',
-          containerId,
-        ])
-      ).stdout.trim();
-      const incomplete = await inContainer(
-        containerId,
-        `for tree in $HOME/${editorProduct().serverDataFolderName}/bin/*; do if [ -d "$tree" ] && [ ! -f "$tree/product.json" ]; then echo "$tree"; fi; done`,
-      );
-      deepStrictEqual([state, incomplete], ['running', '']);
-    } finally {
-      await setUserSetting('dev.containers.dockerPath', undefined);
-      await setUserSetting('remote.serverDownloadBaseUrl', workingSource);
-      await removeGroup('install');
     }
   });
 

@@ -74,13 +74,21 @@ describe('a saved workspace with a virtual folder and no configuration (card #27
     firstButton?: string,
   ): Promise<{detail: string; buttons: string[]}> {
     await startCommand(window, command);
-    if (firstButton !== undefined) {
-      await waitForDialog(window, 60_000);
-      await answerDialog(window, firstButton);
+    try {
+      if (firstButton !== undefined) {
+        await waitForDialog(window, 60_000);
+        await answerDialog(window, firstButton);
+      }
+      const problem = await waitForDialog(window, 60_000);
+      await answerDialog(window, 'Cancel');
+      return {detail: problem.details, buttons: problem.buttons};
+    } catch (caught) {
+      // The row compares what each command showed, so the one that showed no dialog is named in its result.
+      return {
+        detail: `${command}: ${String(caught).slice(0, 200)}`,
+        buttons: [],
+      };
     }
-    const problem = await waitForDialog(window, 60_000);
-    await answerDialog(window, 'Cancel');
-    return {detail: problem.details, buttons: problem.buttons};
   }
 
   it('F-0801 AC-31 (c2724-add-virtual-first-part): Add Dev Container Configuration Files... in a workspace whose first folder is virtual asks with S363 filled with S408, Cancel writes nothing, and Continue goes on to the location pick and the template pick for the workspace file’s folder', async () => {

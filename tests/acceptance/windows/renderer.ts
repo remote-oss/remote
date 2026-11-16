@@ -4454,16 +4454,33 @@ export async function pressQuickPickBack(name: string): Promise<void> {
   );
 }
 
-/** The rows of the multi-select quick pick open in window `name` with the state of each one's checkbox. */
+/** The rows of the multi-select quick pick open in window `name` with the state of each one's checkbox, those the list has not rendered included. */
 export async function quickPickChecks(
   name: string,
 ): Promise<Array<{label: string; checked: boolean}>> {
   return evaluate<Array<{label: string; checked: boolean}>>(
     name,
-    `[...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row[role=checkbox]')].map(row => ({
-      label: row.getAttribute('aria-label') ?? '',
-      checked: row.getAttribute('aria-checked') === 'true',
-    }))`,
+    `{(async () => {
+      const list = document.querySelector('${QUICK_WIDGET} .quick-input-list .monaco-list');
+      const seen = new Map();
+      const read = () => {
+        for (const row of list.querySelectorAll('.monaco-list-row[role=checkbox]')) {
+          seen.set(Number(row.getAttribute('aria-posinset')), {
+            label: row.getAttribute('aria-label') ?? '',
+            checked: row.getAttribute('aria-checked') === 'true',
+          });
+        }
+        return Number(list.querySelector('.monaco-list-row')?.getAttribute('aria-setsize') ?? 0);
+      };
+      const setSize = read();
+      // The list renders the rows in view only: its next rows come to the arrow key.
+      for (let step = 0; seen.size < setSize && step < setSize + 20; step += 1) {
+        list.dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40, bubbles: true, cancelable: true}));
+        await new Promise(resolve => setTimeout(resolve, 48));
+        read();
+      }
+      return [...seen.entries()].sort((first, second) => first[0] - second[0]).map(entry => entry[1]);
+    })()}`,
   );
 }
 
