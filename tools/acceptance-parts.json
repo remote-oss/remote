@@ -448,6 +448,7 @@
       "silent-flows.test.ts": 0.7,
       "terminal-lists.test.ts": 0.9,
       "terminal.test.ts": 0.3,
+      "install-hints.test.ts": 1,
       "troubleshooting-mitigations.test.ts": 1,
       "troubleshooting.test.ts": 0.9,
       "tunnel-ranges.test.ts": 2.4,
