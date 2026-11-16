@@ -4362,7 +4362,7 @@ export async function terminalRows(name: string): Promise<TerminalRow[]> {
       const rows = [...(containers[containers.length - 1]?.children ?? [])];
       return rows.map(entry => ({
         text: entry.innerText,
-        underlined: [...entry.querySelectorAll('span.xterm-underline')].map(
+        underlined: [...entry.querySelectorAll('span[class*="xterm-underline"]')].map(
           span => span.textContent ?? '',
         ),
       }));
