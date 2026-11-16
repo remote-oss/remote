@@ -71,6 +71,28 @@ describe('withLogTail', () => {
       ]);
     });
 
+    it('#2675: a failure within the first lines of the last forty carries the lines before it that the tail lacks', () => {
+      const lines = [
+        'before 0',
+        'before 1',
+        'why one',
+        'why two',
+        'why three',
+        failure,
+        ...[...Array(38).keys()].map(position => `after ${String(position)}`),
+      ];
+      const carried = withLogTail('timed out', lines).split('\n');
+      deepStrictEqual(carried.slice(0, 7), [
+        'timed out',
+        'the Feature that failed to install:',
+        'why one',
+        'why two',
+        'why three',
+        failure,
+        'the last 40 lines:',
+      ]);
+    });
+
     it('#2675: a failure inside the last forty lines is not carried twice', () => {
       const lines = ['before', failure, 'after'];
       deepStrictEqual(

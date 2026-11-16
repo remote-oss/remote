@@ -1071,16 +1071,19 @@ const FEATURE_FAILURE_CONTEXT = 3;
 
 /**
  * `message`, then a line break and the last {@link CONNECT_LOG_LINES} of `lines`; the message alone when there are none.
- * A failed Feature install that is older than that tail goes before it, with the lines that said why, because the
- * build's output is followed by more lines than the tail holds and the failure is what a red needs.
+ * A failed Feature install goes before that tail, with the lines that said why, when the tail does not hold all of
+ * them: the failure is older than the tail, or within its first lines so that the lines before it are not in it. The
+ * build's output is followed by more lines than the tail holds, and the failure is what a red needs.
  */
 export function withLogTail(message: string, lines: readonly string[]): string {
   const tail = lines.slice(-CONNECT_LOG_LINES);
+  const tailStart = Math.max(lines.length - CONNECT_LOG_LINES, 0);
   const failed = lines.findLastIndex(line => FEATURE_FAILED.test(line));
+  const contextStart = Math.max(failed - FEATURE_FAILURE_CONTEXT, 0);
   const feature =
-    failed < 0 || failed >= lines.length - CONNECT_LOG_LINES
+    failed < 0 || contextStart >= tailStart
       ? []
-      : lines.slice(Math.max(failed - FEATURE_FAILURE_CONTEXT, 0), failed + 1);
+      : lines.slice(contextStart, failed + 1);
   if (tail.length === 0) {
     return message;
   }
