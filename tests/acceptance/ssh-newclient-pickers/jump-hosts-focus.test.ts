@@ -133,7 +133,7 @@ describe('F-2310 host-key questions of the jump hosts through real quick picks (
         }),
         {
           file: oneJump(alias, known),
-          script: [],
+          script: null,
           settings: {'remote.SSH.remotePlatform': {[alias]: 'linux'}},
           during: async name => {
             picks = await answeredByEnter(name, 2);
@@ -186,7 +186,7 @@ describe('F-2310 host-key questions of the jump hosts through real quick picks (
         }),
         {
           file: twoJumps(alias, known),
-          script: [],
+          script: null,
           settings: {'remote.SSH.remotePlatform': {[alias]: 'linux'}},
           during: async name => {
             picks = await answeredByEnter(name, 3);
@@ -235,7 +235,7 @@ describe('F-2310 host-key questions of the jump hosts through real quick picks (
         }),
         {
           file: oneJump(alias, known),
-          script: [],
+          script: null,
           settings: terminalSettings(alias, true),
           during: async name => {
             typed = await typedYes(name, 2);
