@@ -1,7 +1,7 @@
 /**
  * @fileoverview F-2310's host-key questions of the jump hosts through real quick picks (card #2686): each fingerprint
- * pick is answered by Enter while it holds the keyboard focus,.
- * The pickers of `ssh-newclient` are scripted and answered at once, so only this launch can show either.
+ * pick is answered by Enter while it holds the keyboard focus. The pickers of `ssh-newclient` are scripted and answered
+ * as soon as they are shown, so only this launch can show the focus.
  */
 
 import {deepStrictEqual} from 'node:assert';
