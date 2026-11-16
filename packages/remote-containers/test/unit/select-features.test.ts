@@ -144,6 +144,24 @@ describe('Select Features (card containers-88)', () => {
     );
   });
 
+  it('F-0804 AC-2: a Feature that has a description shows it as the second line of its row, and one that has none shows no second line', async () => {
+    const described = [
+      {
+        ...featureOf('Described', 'devcontainers'),
+        description: 'Installs a tool.',
+      },
+      featureOf('Plain', 'someone'),
+    ];
+    const {screen} = await asked(pressEscape, [], described);
+    deepStrictEqual(
+      screen?.items.map(each => [each.label, each.detail]),
+      [
+        ['Described', 'Installs a tool.'],
+        ['Plain', undefined],
+      ],
+    );
+  });
+
   it('F-0804 BR-5, AC-3: filtering matches the label only, so neither the description nor the detail is searched', async () => {
     const {screen} = await asked(pressEscape);
     deepStrictEqual(

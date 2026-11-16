@@ -50,6 +50,8 @@ export interface CatalogueFeature {
   name: string;
   /** The GitHub owner its collection's repository names; none when the repository is not on `github.com`. */
   owner?: string;
+  /** The description the index gives it, shown as a second line under its label. */
+  description?: string;
   options: Readonly<Record<string, unknown>>;
 }
 
@@ -176,11 +178,13 @@ function featureOf(
   }
   const {fields, reference, name, version} = identity;
   const owner = repositoryOwnerOf(repository);
+  const description = textOf(fields.description);
   return {
     id: reference,
     version,
     name,
     ...(owner === undefined ? {} : {owner}),
+    ...(description === undefined ? {} : {description}),
     options: isRecord(fields.options) ? fields.options : {},
   };
 }

@@ -19,6 +19,8 @@ const SCREEN_TEMPLATES = {
 export interface OptionRow {
   label: string;
   description?: string;
+  /** The second line of the row. */
+  detail?: string;
   /** Shown whatever the user typed, as the row for typed text is. */
   alwaysShow?: boolean;
   /** The value the row stands for: a listed value, the typed text of the custom row, or a boolean's key. */
@@ -94,6 +96,7 @@ interface BooleanItem {
   key: string;
   label: string;
   description?: string;
+  detail?: string;
   checked: boolean;
   /** Carries the verified icon. */
   verified?: boolean;
@@ -303,6 +306,7 @@ export function pickBooleans(
         ...(item.description === undefined
           ? {}
           : {description: item.description}),
+        ...(item.detail === undefined ? {} : {detail: item.detail}),
         ...(item.verified === true ? {iconPath: ports.verifiedIcon} : {}),
         value: item.key,
       }));

@@ -321,7 +321,7 @@ describe('the template screen of the wizard (card coverage-72)', function () {
     });
   });
 
-  it('F-0802 AC-5 (c72-filter): typing a description shared by templates or words of a template’s hover text matches nothing beyond Learn More, while a label word matches its template', async () => {
+  it('F-0802 AC-5 (c72-filter): a template row shows its description as a second line, typing a description shared by templates or words of it matches nothing beyond Learn More, while a label word matches its template', async () => {
     await withWindow('c72-filter', {}, async window => {
       const rows = await screenOf(window);
       const labels = rows.map(each => each.label.toLowerCase());
@@ -344,6 +344,9 @@ describe('the template screen of the wizard (card coverage-72)', function () {
       deepStrictEqual(
         {
           haveHoverWord: hoverWord !== undefined,
+          secondLines: rows.some(
+            each => each.detail !== undefined && each.detail !== '',
+          ),
           owner,
           hover,
           byLabel: byLabel.every(
@@ -354,6 +357,7 @@ describe('the template screen of the wizard (card coverage-72)', function () {
         },
         {
           haveHoverWord: true,
+          secondLines: true,
           owner: ['Learn More'],
           hover: ['Learn More'],
           byLabel: true,

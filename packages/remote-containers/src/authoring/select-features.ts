@@ -90,6 +90,9 @@ export async function askFeatures(
         key: featureKeyOf(feature),
         label: feature.name,
         ...(feature.owner === undefined ? {} : {description: feature.owner}),
+        ...(feature.description === undefined
+          ? {}
+          : {detail: feature.description}),
         checked: kept.has(featureKeyOf(feature)),
         verified: feature.owner === VERIFIED_OWNER,
       })),

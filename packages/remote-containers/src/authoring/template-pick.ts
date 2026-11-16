@@ -229,6 +229,9 @@ function templateRow(
   return {
     label: template.name,
     description: template.owner,
+    ...(template.description === undefined
+      ? {}
+      : {detail: template.description}),
     ...(ports.isVerified(template) ? {iconPath: ports.verifiedIcon} : {}),
     action: {kind: 'template', template},
   };

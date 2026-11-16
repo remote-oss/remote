@@ -273,6 +273,32 @@ describe('the template catalogue (card containers-77)', () => {
     );
   });
 
+  it('F-0804 AC-2: a Feature carries the description of the index, and one with none has none', () => {
+    const result = parseCatalogue(
+      JSON.stringify({
+        collections: [
+          {
+            features: [
+              {
+                id: 'ghcr.io/x/features/a',
+                version: '1.0.0',
+                name: 'A',
+                description: 'Does a.',
+              },
+              {id: 'ghcr.io/x/features/b', version: '1.0.0', name: 'B'},
+            ],
+          },
+        ],
+      }),
+    );
+    deepStrictEqual(
+      result.kind === 'catalogue'
+        ? result.features.map(each => each.description)
+        : [],
+      ['Does a.', undefined],
+    );
+  });
+
   it('F-0804 BR-1: one index gives the templates and the Features, in the index’s order, and an entry without a text id, name and version is skipped', () => {
     const result = parseCatalogue(
       JSON.stringify({

@@ -215,13 +215,21 @@ describe('Configure Container Features: the pick and the write (card containers-
     );
   });
 
-  it('F-0807 AC-10, AC-12 (reading-1971-picker-is-f0804s): the pre-checked item is checked and counted, typing narrows the list to the items whose label matches, and a text that only the raw reference holds matches no item', async () => {
+  it('F-0807 AC-10, AC-12 (reading-1971-picker-is-f0804s): the pre-checked item is checked and counted, typing narrows the list to the items whose label matches, and a text that only the raw reference, the owner or a Feature’s second line holds matches no item', async () => {
     const listed = JSON.stringify({
       features: {[`${idOf(GIT_LABEL)}:1.2`]: {}},
     });
     await withPick('c150-filter', listed, async window => {
       const checks = await quickPickChecks(window);
       const counter = (await quickPickChrome(window)).counter;
+      const shown = await detailedQuickPickRows(window);
+      const labels = shown.map(each => each.label.toLowerCase());
+      const secondLineWord = shown
+        .flatMap(each => (each.detail ?? '').toLowerCase().split(/[^a-z]+/))
+        .find(
+          word =>
+            word.length > 6 && !labels.some(label => label.includes(word)),
+        );
       await typeInQuickPick(window, 'common');
       await new Promise(resolve => setTimeout(resolve, 700));
       const narrowed = (await quickPickRows(window)).map(each => each.label);
@@ -229,6 +237,16 @@ describe('Configure Container Features: the pick and the write (card containers-
       await typeInQuickPick(window, 'ghcr.io/devcontainers');
       await new Promise(resolve => setTimeout(resolve, 700));
       const byReference = (await quickPickRows(window)).map(each => each.label);
+      await clearQuickPickInput(window);
+      await typeInQuickPick(window, 'devcontainers');
+      await new Promise(resolve => setTimeout(resolve, 700));
+      const byOwner = (await quickPickRows(window)).map(each => each.label);
+      await clearQuickPickInput(window);
+      await typeInQuickPick(window, secondLineWord ?? 'no-second-line-word');
+      await new Promise(resolve => setTimeout(resolve, 700));
+      const bySecondLine = (await quickPickRows(window)).map(
+        each => each.label,
+      );
       await pressEscape(window);
       deepStrictEqual(
         [
@@ -236,8 +254,11 @@ describe('Configure Container Features: the pick and the write (card containers-
           counter,
           narrowed,
           byReference,
+          byOwner,
+          secondLineWord !== undefined,
+          bySecondLine,
         ],
-        [[GIT_LABEL], '1 Selected', [COMMON], []],
+        [[GIT_LABEL], '1 Selected', [COMMON], [], [], true, []],
       );
     });
   });

@@ -155,6 +155,25 @@ describe('the flat template pick (card containers-79)', () => {
     );
   });
 
+  it('F-0802 AC-5: a template shows its description as the second line of its row, and one with none shows no second line', () => {
+    const {picker} = started(sceneOf(), NO_FILES, [
+      {
+        ...templateOf('alpine', 'Alpine'),
+        description: 'Simple Alpine container.',
+      },
+      templateOf('other', 'Other', 'someone'),
+    ]);
+    deepStrictEqual(
+      picker.items
+        .filter(each => each.action.kind === 'template')
+        .map(each => [each.label, each.detail]),
+      [
+        ['Alpine', 'Simple Alpine container.'],
+        ['Other', undefined],
+      ],
+    );
+  });
+
   it('F-0802 AC-3: the verified icon follows the caller’s test, not the owner', () => {
     const scene = sceneOf();
     scene.ports.isVerified = template => template.name === 'Other';

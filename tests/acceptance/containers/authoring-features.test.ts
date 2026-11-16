@@ -133,11 +133,13 @@ describe('Select Features in the wizard (card containers-88)', function () {
     });
   });
 
-  it('F-0804 AC-2 (owners): a reference Feature shows devcontainers with the badge, a community Feature its owner with none, and the run’s own Feature remote-oss-run with none', async () => {
+  it('F-0804 AC-2 (owners): a reference Feature shows devcontainers with the badge and its description as a second line, a community Feature its owner with none, and the run’s own Feature remote-oss-run with none', async () => {
     await withWindow('f88-owners', {}, async window => {
       await startedWith(window, 'bare-lab');
       await screenWith(window, FEATURES);
       const rows = await detailedQuickPickRows(window);
+      const git = rows.find(each => each.label === GIT_FEATURE);
+      deepStrictEqual(git?.detail !== undefined && git.detail !== '', true);
       deepStrictEqual(
         [GIT_FEATURE, 'Add Community Tool', LAB_OPTIONS].map(label =>
           rows
