@@ -43,18 +43,22 @@ export async function tableOf(name: string): Promise<string[]> {
  */
 export async function wholeTableOf(name: string): Promise<string[]> {
   await inWindow(name, 'workbench.action.toggleMaximizedPanel');
-  await waitFor(
-    'the whole table in view',
-    async () => {
-      const lines = await tableOf(name).catch(() => []);
-      return (
-        lines[0]?.startsWith('╔') === true &&
-        lines.at(-1)?.startsWith('╚') === true
-      );
-    },
-    30_000,
-  );
-  return tableOf(name);
+  try {
+    await waitFor(
+      'the whole table in view',
+      async () => {
+        const lines = await tableOf(name).catch(() => []);
+        return (
+          lines[0]?.startsWith('╔') === true &&
+          lines.at(-1)?.startsWith('╚') === true
+        );
+      },
+      30_000,
+    );
+    return await tableOf(name);
+  } finally {
+    await inWindow(name, 'workbench.action.toggleMaximizedPanel');
+  }
 }
 
 /** The cells of a table row, trimmed. */

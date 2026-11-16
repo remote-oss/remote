@@ -32,6 +32,9 @@ interface FailureCase {
   settingUnchanged?: string;
 }
 
+/** The texts a flow of the troubleshooting feature never shows: no setting is searched, no further information is offered. */
+const NEVER_SHOWN = ['More Info', 'in settings'];
+
 /** The failing connects, bundled from the file the harness reads to launch them. */
 const cases = (casesFile as {cases: FailureCase[]}).cases;
 
@@ -140,6 +143,19 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
       );
     });
   }
+
+  it('F-2602 AC-21: no dialog, pick or notice of the failure offers More Info or a search in settings', () => {
+    deepStrictEqual(
+      lines
+        .flatMap(line => [
+          line.question,
+          ...(line.buttons ?? []),
+          ...(line.items ?? []),
+        ])
+        .filter(text => NEVER_SHOWN.some(never => text.includes(never))),
+      [],
+    );
+  });
 
   it('F-2601 AC-14: once the pick of actions is dismissed, nothing more is asked', async () => {
     await new Promise(resolve => setTimeout(resolve, 5000));
