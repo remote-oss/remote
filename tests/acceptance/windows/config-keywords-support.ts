@@ -165,6 +165,8 @@ export interface ConnectOptions {
   /** Aliases of further hosts the file holds after the entry. */
   hosts?: readonly string[];
   script?: Parameters<typeof appendScript>[0];
+  /** What the row does with window `name` once it is opening, before the wait for its connect or its dialog. */
+  during?: (name: string) => Promise<void>;
 }
 
 /** The time a failing connect has to show its dialog. */
@@ -191,6 +193,7 @@ export async function connectWith<Result>(
   try {
     appendScript(options.script ?? dismissals(name));
     await openWindow(name, name);
+    await options.during?.(name);
     if (expectation === 'connects') {
       await connectedWithin(name, 120_000);
     } else {
