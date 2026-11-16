@@ -149,6 +149,7 @@ export {
   sessionStart,
   sessionStartFor,
 } from './connection-server/session-bootstrap.ts';
+export {interpreterOfPlatform} from './connection-server/powershell-session.ts';
 export {
   firstSetupMarker,
   type SetupMarker,

@@ -9,9 +9,10 @@ import {
   type ConnectWaitSettings,
   connectWaitMilliseconds,
 } from '../process/connect-wait.ts';
-import {posixQuote} from 'lib-host';
+import {type PlatformHint, posixQuote} from 'lib-host';
 import {TUNNEL_COMMAND} from '../arguments/invocation.ts';
 import {preludeProgram} from '../process/remote-program.ts';
+import {powershellSessionStart} from './powershell-session.ts';
 
 /** The fewest and the most seconds the login shell's startup may take. */
 const LAYER_ONE_SECONDS = {minimum: 1, maximum: 600} as const;
@@ -109,15 +110,20 @@ export function sessionStart(
 
 /**
  * The session start for a connect wait: the login shell may take as long as the connect wait itself, in whole seconds,
- * rounded up, at least 1 and at most the ceiling; a host's own 0 takes the ceiling the wait names.
+ * rounded up, at least 1 and at most the ceiling; a host's own 0 takes the ceiling the wait names. A host decided as
+ * Windows gets the PowerShell loop instead; every other platform gets the POSIX bootstrap.
  */
 export function sessionStartFor(
   settings: ConnectWaitSettings,
   goesOnAfterTimeout = false,
+  platform: PlatformHint = 'unknown',
 ): {
   remoteProgram: string;
   prelude: string;
 } {
+  if (platform === 'windows') {
+    return powershellSessionStart();
+  }
   const seconds = connectWaitMilliseconds(settings) / 1000;
   return sessionStart(
     Math.min(
@@ -130,19 +136,23 @@ export function sessionStartFor(
 
 /**
  * The start of the connection's session: `start` as it is, or, with the host's RemoteCommand in effect, no remote
- * program (ssh refuses one beside it) and the program as the first line of the prelude, `exec <program>`, which the
- * shell the RemoteCommand starts reads from standard input.
+ * program (ssh refuses one beside it) and the program as the first line of the prelude, which the shell the
+ * RemoteCommand starts reads from standard input: `exec <program>` on POSIX, the program's line alone on Windows,
+ * whose shells have no `exec`.
  */
 export function connectionStart(
   start: {remoteProgram: string; prelude: string},
   remoteCommandInEffect: boolean,
+  platform: PlatformHint = 'unknown',
 ): {remoteProgram: string | undefined; prelude: string} {
-  return remoteCommandInEffect
-    ? {
-        remoteProgram: undefined,
-        prelude: `exec ${start.remoteProgram}\n${start.prelude}`,
-      }
-    : start;
+  if (!remoteCommandInEffect) {
+    return start;
+  }
+  const line =
+    platform === 'windows'
+      ? start.remoteProgram
+      : `exec ${start.remoteProgram}`;
+  return {remoteProgram: undefined, prelude: `${line}\n${start.prelude}`};
 }
 
 /**

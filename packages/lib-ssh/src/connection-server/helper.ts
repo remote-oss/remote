@@ -20,6 +20,8 @@ import {buildInvocation, type SshRequest} from '../arguments/invocation.ts';
 import type {ProcessSpawner} from '../process/ports.ts';
 import {ConnectionHandler} from './handler.ts';
 import {connectionStart, sessionStartFor} from './session-bootstrap.ts';
+import {interpreterOfPlatform} from './powershell-session.ts';
+import type {PlatformHint} from 'lib-host';
 
 /** The start values a client gives the helper in `HelperParameters.options`. */
 export interface ConnectionHelperOptions {
@@ -43,6 +45,8 @@ export interface ConnectionHelperOptions {
   externalAskpass: boolean;
   /** How long an askpass connection may take to send its question, in milliseconds. */
   askpassFirstMessageMilliseconds: number;
+  /** The host's platform as the window decided it: `windows` starts the PowerShell loop, anything else the POSIX bootstrap. */
+  hostPlatform: PlatformHint;
 }
 
 /** The ports a helper runs on: the real ones in the helper process, fakes in tests. */
@@ -93,8 +97,9 @@ export async function runConnectionHelper(
       unboundedWaitSeconds: options.unboundedWaitSeconds,
     };
     const start = connectionStart(
-      sessionStartFor(waitSettings),
+      sessionStartFor(waitSettings, false, options.hostPlatform),
       request.settings.remoteCommandInEffect,
+      options.hostPlatform,
     );
     const handler = new ConnectionHandler({
       invocation: buildInvocation({
@@ -122,6 +127,7 @@ export async function runConnectionHelper(
         firstMessageMilliseconds: options.askpassFirstMessageMilliseconds,
       },
       newMarker: environment.newNonce,
+      interpreter: interpreterOfPlatform(options.hostPlatform),
       logLine: environment.logLine,
     });
     const askpassServer = await environment.port.listen(
