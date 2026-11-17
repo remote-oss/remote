@@ -414,6 +414,15 @@ describe('connection handler (contracts §4 S9)', () => {
       await settled();
     }
 
+    /** The owner's connect, alone, up to ssh's report that the login is done and before it enters the session. */
+    async function loggedIn(): Promise<void> {
+      create({opening: OPENING});
+      handler.onLeasesChanged([1]);
+      events.length = 0;
+      await send(1, {type: 'connect'});
+      spawner.started[0]?.error(AUTHENTICATED);
+    }
+
     function written(): string | undefined {
       return spawner.started[0]?.inputText();
     }
@@ -499,11 +508,7 @@ describe('connection handler (contracts §4 S9)', () => {
     });
 
     it("#2598 (F-2109 AC-12), #1835: what comes before ssh enters the session is a LocalCommand's output, and the host shell's lines after it are not", async () => {
-      create({opening: OPENING});
-      handler.onLeasesChanged([1]);
-      events.length = 0;
-      await send(1, {type: 'connect'});
-      spawner.started[0]?.error(AUTHENTICATED);
+      await loggedIn();
       spawner.started[0]?.output('out-marker\n');
       spawner.started[0]?.error(SESSION_ENTERED);
       spawner.started[0]?.output(
@@ -515,6 +520,28 @@ describe('connection handler (contracts §4 S9)', () => {
           event => (event as {type: string}).type === 'localCommandLines',
         ),
         [{type: 'localCommandLines', lines: ['out-marker']}],
+      );
+    });
+
+    it("#2598 (F-2109 AC-12), #1835: a LocalCommand's last words with no line end are its own line once ssh enters the session, not part of the host's first line", async () => {
+      await loggedIn();
+      spawner.started[0]?.output('out-marker-tail');
+      spawner.started[0]?.error(SESSION_ENTERED);
+      spawner.started[0]?.output(
+        'REMOTE-OSS-PROBE-%OS%\nREMOTE-OSS-PROBE-DONE\n',
+      );
+      await settled();
+      deepStrictEqual(
+        [
+          events.filter(
+            event => (event as {type: string}).type === 'localCommandLines',
+          ),
+          written(),
+        ],
+        [
+          [{type: 'localCommandLines', lines: ['out-marker-tail']}],
+          `${PLATFORM_PROBE_INPUT}POSIX-LINE\n`,
+        ],
       );
     });
 
