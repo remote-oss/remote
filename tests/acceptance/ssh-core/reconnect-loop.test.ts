@@ -513,7 +513,7 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     );
   });
 
-  it('F-2505 AC-25 (c2703-old-ssh): when packets stop and core starts reconnecting, the previous connection’s local ssh ends within about 5 s of the first reconnection attempt, without waiting for an ssh timeout', async () => {
+  it('F-2505 AC-25 (c2703-old-ssh): when packets stop and core starts reconnecting, the previous connection’s local ssh ends within about 5 s of the first reconnection attempt, without waiting for an ssh timeout (7 s allowed, the criterion’s 2 s tolerance on the probe’s 3 s bound; the row prints the measured time in every run)', async () => {
     const name = 'c2703-old-ssh';
     const mark = await connectedWindow(name);
     const earlier = localSshOfHarness().map(each => each.processId);
