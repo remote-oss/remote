@@ -434,6 +434,9 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
     await settle(10_000);
     const afterPlain = otherNames();
     const rows = await recentRows(window);
+    console.log(
+      `MEASURE c2623-dot-folder rows=${String(rows.length)} labels=${JSON.stringify(rows.map(row => row.label))}`,
+    );
     await pressEscape(window);
     const files = described(rows, ['c2623.dot-a']);
     await commandLine('--remote', 'ssh-remote+harness', `${HOME}/c2623.dot-b/`);
