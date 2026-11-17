@@ -56,6 +56,19 @@ function replyingWith(code: number) {
   };
 }
 
+/** The probe of the forward at `port` for the host's `targetPort`, with a deadline of three seconds. */
+function probedAt(
+  clock: FakeClock,
+  port: number,
+  targetPort = 22,
+): Promise<boolean> {
+  return socksProbeOver(clock.scheduler())({
+    socksPort: port,
+    targetPort,
+    deadlineMilliseconds: 3000,
+  });
+}
+
 describe('the probe of the shared session over its SOCKS forward (card #2751)', () => {
   let clock: FakeClock;
 
@@ -65,11 +78,7 @@ describe('the probe of the shared session over its SOCKS forward (card #2751)', 
 
   it('F-2505 AC-25: a connect that the host answers counts as alive, and the request names the server’s port on the loopback', async () => {
     const {server, port, sent} = await serving(replyingWith(0));
-    const alive = await socksProbeOver(clock.scheduler())({
-      socksPort: port,
-      targetPort: 41001,
-      deadlineMilliseconds: 3000,
-    });
+    const alive = await probedAt(clock, port, 41001);
     await closed(server);
     deepStrictEqual(
       [alive, [...(sent[0] ?? [])], [...(sent[1] ?? [])]],
@@ -79,11 +88,7 @@ describe('the probe of the shared session over its SOCKS forward (card #2751)', 
 
   it('F-2505 AC-25: a connect that the host refuses counts as alive too: the session carried the answer', async () => {
     const {server, port} = await serving(replyingWith(2));
-    const alive = await socksProbeOver(clock.scheduler())({
-      socksPort: port,
-      targetPort: 41001,
-      deadlineMilliseconds: 3000,
-    });
+    const alive = await probedAt(clock, port, 41001);
     await closed(server);
     deepStrictEqual(alive, true);
   });
@@ -103,11 +108,7 @@ describe('the probe of the shared session over its SOCKS forward (card #2751)', 
       });
       socket.on('error', () => undefined);
     });
-    const probing = socksProbeOver(clock.scheduler())({
-      socksPort: port,
-      targetPort: 41001,
-      deadlineMilliseconds: 3000,
-    });
+    const probing = probedAt(clock, port, 41001);
     await new Promise<void>(resolve => {
       const poll = setInterval(() => {
         if (seen.length === 2) {
@@ -123,28 +124,61 @@ describe('the probe of the shared session over its SOCKS forward (card #2751)', 
     deepStrictEqual([alive, closedByProbe], [false, true]);
   });
 
+  it('F-2505 AC-25: a reply to the connect with no banner behind it counts as alive: ssh gives it only once the host answered', async () => {
+    const {server, port} = await serving(replyingWith(0));
+    const alive = await probedAt(clock, port);
+    await closed(server);
+    deepStrictEqual(alive, true);
+  });
+
+  it('F-2505 AC-25: the banner of the host’s sshd behind the reply counts as alive', async () => {
+    const {server, port} = await serving((socket, sent) => {
+      socket.on('data', chunk => {
+        sent.push(chunk);
+        socket.write(
+          sent.length === 1
+            ? Buffer.from([5, 0])
+            : Buffer.concat([
+                Buffer.from([5, 0, 0, 1, 0, 0, 0, 0, 0, 0]),
+                Buffer.from('SSH-2.0-OpenSSH_9.6\r\n'),
+              ]),
+        );
+      });
+      socket.on('error', () => undefined);
+    });
+    const alive = await probedAt(clock, port);
+    await closed(server);
+    deepStrictEqual(alive, true);
+  });
+
+  it('F-2505 AC-25: a socket that ssh closes after the connect request, as it does when the host refuses the port, counts as alive', async () => {
+    const {server, port} = await serving((socket, sent) => {
+      socket.on('data', chunk => {
+        sent.push(chunk);
+        if (sent.length === 1) {
+          socket.write(Buffer.from([5, 0]));
+        } else {
+          socket.destroy();
+        }
+      });
+      socket.on('error', () => undefined);
+    });
+    const alive = await probedAt(clock, port);
+    await closed(server);
+    deepStrictEqual(alive, true);
+  });
+
   it('F-2505 AC-25: a SOCKS port that refuses the connection is not alive', async () => {
     const {server, port} = await serving(() => undefined);
     await closed(server);
-    deepStrictEqual(
-      await socksProbeOver(clock.scheduler())({
-        socksPort: port,
-        targetPort: 41001,
-        deadlineMilliseconds: 3000,
-      }),
-      false,
-    );
+    deepStrictEqual(await probedAt(clock, port, 41001), false);
   });
 
-  it('F-2505 AC-25: a SOCKS port that closes before the reply is not alive', async () => {
+  it('F-2505 AC-25: a forward that closes before it answers the greeting is not alive', async () => {
     const {server, port} = await serving(socket => {
       socket.destroy();
     });
-    const alive = await socksProbeOver(clock.scheduler())({
-      socksPort: port,
-      targetPort: 41001,
-      deadlineMilliseconds: 3000,
-    });
+    const alive = await probedAt(clock, port, 41001);
     await closed(server);
     deepStrictEqual(alive, false);
   });

@@ -1,4 +1,6 @@
 import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
+import {scriptedProbe, type ProbeScript} from './scripted-probe.ts';
+import type {SocksProbe} from '../../src/index.ts';
 import type {EndpointConnection, HelperControl, PlainData} from 'lib-helper';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeEndpointPort} from 'lib-helper/testing/fake-endpoint';
@@ -50,10 +52,13 @@ describe('connection handler (contracts §4 S9)', () => {
   let logged: string[];
   let markers: number;
   let notices: PlainData[];
+  let probeScript: ProbeScript;
+  let probes: Array<Parameters<SocksProbe>[0]>;
 
   function create(changes: Partial<ConnectionHandlerOptions> = {}): void {
     handler = new ConnectionHandler({
       invocation: INVOCATION,
+      socksProbe: scriptedProbe(clock.scheduler(), probeScript, probes),
       socksPort: 41000,
       spawner: spawner.spawn,
       askpassEnvironment: {},
@@ -128,6 +133,8 @@ describe('connection handler (contracts §4 S9)', () => {
     logged = [];
     markers = 0;
     notices = [];
+    probeScript = {answers: true};
+    probes = [];
     create();
   });
 
@@ -1038,27 +1045,37 @@ describe('connection handler (contracts §4 S9)', () => {
   describe('checkSession (card #2751)', () => {
     const CHECK = {type: 'checkSession'} as const;
 
-    it('F-2505 AC-25: finds no session to answer before the connection is set up, and ends nothing', async () => {
+    it('F-2505 AC-25: finds no session to answer before the connection is set up, asks no probe and ends nothing', async () => {
       handler.onLeasesChanged([1]);
       deepStrictEqual(
-        [await send(1, CHECK), wasKilled(), stops],
-        [{type: 'sessionChecked', alive: false}, false, 0],
+        [await send(1, CHECK), probes, wasKilled(), stops],
+        [{type: 'sessionChecked', alive: false}, [], false, 0],
       );
     });
 
-    it('F-2505 AC-25: answers alive when the session answers a trivial run, and ends nothing', async () => {
+    it('F-2505 AC-25: asks the forward for a connect to the host’s own sshd within three seconds and writes nothing to the session', async () => {
       await connected();
-      const reply = send(1, CHECK);
-      await settled();
-      spawner.started[0]?.output('m1:start\nm1:end 0\n');
       deepStrictEqual(
-        [await reply, wasKilled(), events, stops],
-        [{type: 'sessionChecked', alive: true}, false, [], 0],
+        [
+          await send(1, CHECK),
+          probes,
+          (spawner.started[0]?.inputText() ?? '').includes('m1:st'),
+          wasKilled(),
+          events,
+        ],
+        [
+          {type: 'sessionChecked', alive: true},
+          [{socksPort: 41000, targetPort: 22, deadlineMilliseconds: 3000}],
+          false,
+          false,
+          [],
+        ],
       );
     });
 
-    it('F-2505 AC-25: ends a session that does not answer within three seconds, tells every lease its transport is lost and keeps the helper', async () => {
+    it('F-2505 AC-25: a session that stays silent is ended after three seconds, every lease is told its transport is lost and the helper stays', async () => {
       await connected();
+      probeScript.answers = false;
       const reply = send(2, CHECK);
       await settled();
       clock.advance(3000);
@@ -1075,6 +1092,7 @@ describe('connection handler (contracts §4 S9)', () => {
 
     it('F-2505 AC-25: lets the next connect start a fresh session on the same helper after the session ended', async () => {
       await connected();
+      probeScript.answers = false;
       const reply = send(1, CHECK);
       await settled();
       clock.advance(3000);
@@ -1087,127 +1105,43 @@ describe('connection handler (contracts §4 S9)', () => {
 
     it('F-2505 AC-25: shares one probe among checks that come while it runs', async () => {
       await connected();
+      probeScript.answers = false;
       const first = send(1, CHECK);
       const second = send(2, CHECK);
       await settled();
-      const text = spawner.started[0]?.inputText() ?? '';
-      spawner.started[0]?.output('m1:start\nm1:end 0\n');
+      clock.advance(3000);
       deepStrictEqual(
-        [
-          [await first, await second],
-          text.includes('m1:st'),
-          text.includes('m2:st'),
-        ],
+        [[await first, await second], probes.length],
         [
           [
-            {type: 'sessionChecked', alive: true},
-            {type: 'sessionChecked', alive: true},
+            {type: 'sessionChecked', alive: false},
+            {type: 'sessionChecked', alive: false},
           ],
-          true,
-          false,
+          1,
         ],
       );
     });
-    describe('with the server’s port known, the probe is a SOCKS connect', () => {
-      let probes: Array<{
-        socksPort: number;
-        targetPort: number;
-        deadlineMilliseconds: number;
-      }>;
-      let answer: boolean;
 
-      beforeEach(async () => {
-        probes = [];
-        answer = true;
-        create({
-          socksProbe: request => {
-            probes.push(request);
-            return Promise.resolve(answer);
-          },
-        });
-        await connected();
-        await send(1, {type: 'setSharedRecord', record: RECORD});
-      });
-
-      it('F-2505 AC-25: asks the forward for the server’s port within three seconds and writes nothing to the session', async () => {
-        const reply = await send(1, CHECK);
-        deepStrictEqual(
-          [
-            reply,
-            probes,
-            (spawner.started[0]?.inputText() ?? '').includes('m1:st'),
-            wasKilled(),
-          ],
-          [
-            {type: 'sessionChecked', alive: true},
-            [
-              {
-                socksPort: 41000,
-                targetPort: RECORD.remotePort,
-                deadlineMilliseconds: 3000,
-              },
-            ],
-            false,
-            false,
-          ],
-        );
-      });
-
-      it('F-2505 AC-25: a session that does not answer the connect is ended, its leases are told and the helper stays', async () => {
-        answer = false;
-        deepStrictEqual(
-          [await send(2, CHECK), wasKilled(), eventTypes(), stops],
-          [
-            {type: 'sessionChecked', alive: false},
-            true,
-            ['transportLost', 'ownerChanged'],
-            0,
-          ],
-        );
-      });
-
-      it('F-2505 AC-25: answers while another window’s run is on the session, since it does not wait for the run', async () => {
-        const running = send(1, {
-          type: 'runScript',
-          runId: 7,
-          script: 'tar x',
-          environment: {},
-          inputBase64: null,
-          deadlineMilliseconds: 600000,
-        });
-        await settled();
-        const reply = await send(2, CHECK);
-        let ended = false;
-        void running.then(() => {
-          ended = true;
-        });
-        await settled();
-        deepStrictEqual(
-          [reply, ended],
-          [{type: 'sessionChecked', alive: true}, false],
-        );
-      });
-    });
-
-    it('F-2505 AC-25: runs the S10 probe when no server port is known, though the handler has a SOCKS probe', async () => {
-      const asked: unknown[] = [];
-      create({
-        socksProbe: request => {
-          asked.push(request);
-          return Promise.resolve(true);
-        },
-      });
+    it('F-2505 AC-25: answers while another window’s run is on the session, since it does not wait for the run', async () => {
       await connected();
-      const reply = send(1, CHECK);
+      const running = send(1, {
+        type: 'runScript',
+        runId: 7,
+        script: 'tar x',
+        environment: {},
+        inputBase64: null,
+        deadlineMilliseconds: 600000,
+      });
       await settled();
-      spawner.started[0]?.output('m1:start\nm1:end 0\n');
+      const reply = await send(2, CHECK);
+      let ended = false;
+      void running.then(() => {
+        ended = true;
+      });
+      await settled();
       deepStrictEqual(
-        [
-          await reply,
-          asked,
-          (spawner.started[0]?.inputText() ?? '').includes('m1:st'),
-        ],
-        [{type: 'sessionChecked', alive: true}, [], true],
+        [reply, ended],
+        [{type: 'sessionChecked', alive: true}, false],
       );
     });
   });

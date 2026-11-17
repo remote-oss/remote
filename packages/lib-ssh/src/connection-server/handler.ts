@@ -71,11 +71,14 @@ export interface ConnectionHandlerOptions {
   /** What the session runs its scripts with, from the host's platform. */
   interpreter: Interpreter;
   logLine: (line: string) => void;
-  /** The probe over the SOCKS forward; none when the helper has no way to open one, and the session check then runs S10. */
-  socksProbe?: SocksProbe;
+  /** The probe of the shared session over its SOCKS forward. */
+  socksProbe: SocksProbe;
 }
 
 type ConnectionState = 'idle' | 'connecting' | 'connected';
+
+/** The port on the host's loopback the session check connects to: the host's own sshd. */
+const PROBE_TARGET_PORT = 22;
 
 /** The events and requests of one shared connection. */
 export class ConnectionHandler implements MessageHandler {
@@ -197,58 +200,35 @@ export class ConnectionHandler implements MessageHandler {
    * is running share it.
    */
   private sessionAnswers(): Promise<boolean> {
-    if (this.state !== 'connected' || this.runs === undefined) {
+    if (this.state !== 'connected') {
       return Promise.resolve(false);
     }
-    this.probe ??= this.probeSession(this.runs, this.session).finally(() => {
+    this.probe ??= this.probeSession(this.session).finally(() => {
       this.probe = undefined;
     });
     return this.probe;
   }
 
   private async probeSession(
-    runs: ShellRuns,
     session: SshSession | undefined,
   ): Promise<boolean> {
     this.probing = session;
-    const alive = await this.sessionCarriesTraffic(runs);
+    // A connect through the forward to the host's own sshd, which never waits for a run on the session: a run of S10
+    // would queue behind the one that is active, and a healthy session busy with another window's long run would
+    // answer late.
+    const alive = await this.options.socksProbe({
+      socksPort: this.options.socksPort,
+      targetPort: PROBE_TARGET_PORT,
+      deadlineMilliseconds: SESSION_PROBE_MILLISECONDS,
+    });
     if (alive) {
       this.probing = undefined;
       return true;
     }
-    // A probe over a SOCKS connect ends nothing by itself, and one over a run has already wedged the session.
     session?.kill();
     await session?.exit();
     this.probing = undefined;
     return false;
-  }
-
-  /**
-   * Whether the session answers within the probe's bound. With the server's port known the probe is a SOCKS connect to
-   * it through the forward, which never waits for a run on the session. Without one the probe is a run of S10, which
-   * waits behind the run that is active, so a frozen session with a long run is found only when that run's own
-   * deadline ends it.
-   */
-  private async sessionCarriesTraffic(runs: ShellRuns): Promise<boolean> {
-    const {socksProbe} = this.options;
-    const targetPort = this.sharedRecord?.remotePort;
-    if (socksProbe !== undefined && targetPort !== undefined) {
-      return socksProbe({
-        socksPort: this.options.socksPort,
-        targetPort,
-        deadlineMilliseconds: SESSION_PROBE_MILLISECONDS,
-      });
-    }
-    const end = await runs.execute(
-      {
-        script: ':',
-        environment: {},
-        inputBase64: null,
-        deadlineMilliseconds: SESSION_PROBE_MILLISECONDS,
-      },
-      () => undefined,
-    );
-    return end.kind === 'ended';
   }
 
   /** The session of a check ended: its windows are told, and the login is to be made again by the oldest lease. */

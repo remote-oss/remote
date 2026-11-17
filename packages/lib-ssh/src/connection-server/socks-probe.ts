@@ -1,7 +1,9 @@
 /**
  * @fileoverview The probe of a shared session that never queues behind a run on it: a SOCKS connect through the
- * helper's dynamic forward to the host's loopback. `ssh` answers a SOCKS client's connect only once the host's sshd has
- * answered the channel it opened for it, so any reply, a refusal included, shows the session carries traffic.
+ * helper's dynamic forward to the host's own loopback. `ssh` answers the connect only once the host's sshd has answered
+ * the channel it opened for it (a success reply, with whatever the target says behind it), and closes the client's socket
+ * when the host refuses the channel; a frozen session gives neither, which a runner showed for OpenSSH 9.6 with the
+ * host paused. So a reply or a close after the request shows the session carries traffic, and silence shows it does not.
  */
 
 import {connect} from 'node:net';
@@ -16,7 +18,7 @@ export interface SocksProbeRequest {
   deadlineMilliseconds: number;
 }
 
-/** Whether the session answered: true for any reply to the connect, false for none in time or a SOCKS port that refuses. */
+/** Whether the session answered: true for data after the connect request or a close after it, false for neither in time or a SOCKS port that refuses. */
 export type SocksProbe = (request: SocksProbeRequest) => Promise<boolean>;
 
 /** The greeting of a SOCKS5 client that offers no authentication. */
@@ -45,7 +47,7 @@ export function socksProbeOver(scheduler: Scheduler): SocksProbe {
         socket.write(GREETING);
       });
       socket.on('data', () => {
-        // The first answer is to the greeting, which ssh gives at once; the reply to the connect is the second.
+        // The first data is the answer to the greeting, which ssh gives at once; anything after the request is the host's.
         if (requested) {
           finish(true);
           return;
@@ -57,7 +59,8 @@ export function socksProbeOver(scheduler: Scheduler): SocksProbe {
         finish(false);
       });
       socket.on('close', () => {
-        finish(false);
+        // A close before the connect request is a forward that went away; one after it is the host's refusal.
+        finish(requested);
       });
     });
 }

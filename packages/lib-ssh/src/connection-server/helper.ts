@@ -66,8 +66,8 @@ export interface ConnectionHelperEnvironment {
   editorEnvironment: Readonly<Record<string, string | undefined>>;
   helloLimitMilliseconds: number;
   logLine: (line: string) => void;
-  /** The probe of the session over its SOCKS forward; none in a helper that cannot open sockets, whose check runs S10. */
-  socksProbe?: SocksProbe;
+  /** The probe of the session over its SOCKS forward. */
+  socksProbe: SocksProbe;
 }
 
 /** Serves until the policy or a stop ends the helper; its own record is removed whichever way it ends. */
@@ -132,9 +132,7 @@ export async function runConnectionHelper(
       newMarker: environment.newNonce,
       interpreter: interpreterOfPlatform(options.hostPlatform),
       logLine: environment.logLine,
-      ...(environment.socksProbe === undefined
-        ? {}
-        : {socksProbe: environment.socksProbe}),
+      socksProbe: environment.socksProbe,
     });
     const askpassServer = await environment.port.listen(
       askpassSocket,
