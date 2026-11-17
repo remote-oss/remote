@@ -9,6 +9,7 @@ import {
   appendScript,
   connectedWithin,
   connectionLog,
+  onHost,
   openWindow,
   readUserSettings,
   recordLines,
@@ -17,7 +18,11 @@ import {
   userSettings,
   waitFor,
 } from '../windows/harness.ts';
-import {closeAllButLocal, dismissals} from '../windows/maintenance.ts';
+import {
+  closeAllButLocal,
+  dismissals,
+  freshHost,
+} from '../windows/maintenance.ts';
 import {
   attemptsSince,
   between,
@@ -181,33 +186,15 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     await answerDialog(name, 'Cancel');
   });
 
-  it('F-2505 AC-20 (c2703-grace): with the grace time 30 core ends the reconnection about 30 to 40 s into the attempts, and Reload Window reconnects once the host answers', async () => {
-    const name = 'c2703-grace';
-    await userSettings({'remote.SSH.reconnectionGraceTime': 30});
-    const mark = await connectedWindow(name);
-    outageBegins();
-    const shown = await givenUp(name);
-    const dialogAt = clockNow();
-    const [first] = attemptsSince(mark, 'harness');
-    const into = seconds(between(first?.startedAt ?? 0, dialogAt));
-    unpauseHost();
-    await answerDialog(name, 'Reload Window');
-    await connectedWithin(name, 180_000);
-    deepStrictEqual(
-      [shown.details, into >= 28 && into <= 42, into],
-      [GIVEN_UP, true, into],
-    );
-  });
-
-  it('F-2505 AC-17 (c2703-setting): a limit changed in the user settings applies at the next failed attempt without a reload', async () => {
+  it('F-2505 AC-17 (c2703-setting): a limit changed in the user settings between two attempts applies at the next failed attempt without a reload', async () => {
     const name = 'c2703-setting';
-    await userSettings({'remote.SSH.maxReconnectionAttempts': 6});
+    await userSettings({'remote.SSH.maxReconnectionAttempts': 8});
     const mark = await connectedWindow(name);
     outageBegins();
     await waitFor(
-      'attempt 3',
-      () => attemptsSince(mark, 'harness').length >= 2,
-      120_000,
+      'attempt 4 to fail',
+      () => attemptsSince(mark, 'harness')[2]?.failedAt !== undefined,
+      180_000,
     );
     await userSettings({'remote.SSH.maxReconnectionAttempts': 2});
     const changedAt = clockNow();
@@ -217,8 +204,64 @@ describe('the reconnection loop of a window whose host stops answering (card #27
         attemptsSince(mark, 'harness').map(attempt => attempt.number),
         shown.details,
       ],
-      [[2, 3], GIVEN_UP],
-      `the setting was read back ${String(seconds(between(changedAt, clockNow())))} s before the dialog; the attempts were ${JSON.stringify(attemptsSince(mark, 'harness').map(attempt => [attempt.number, seconds(between(changedAt, attempt.startedAt)), attempt.failedAt === undefined ? undefined : seconds(between(changedAt, attempt.failedAt))]))} s from the change`,
+      [[2, 3, 4, 5], GIVEN_UP],
+      `the attempts were ${JSON.stringify(attemptsSince(mark, 'harness').map(attempt => [attempt.number, seconds(between(changedAt, attempt.startedAt)), attempt.failedAt === undefined ? undefined : seconds(between(changedAt, attempt.failedAt))]))} s from the change, which was read back before the dialog`,
+    );
+    await answerDialog(name, 'Cancel');
+  });
+
+  it('F-2505 AC-17 (c2703-folder-setting): a limit in the remote folder’s settings has no effect', async () => {
+    const name = 'c2703-folder-setting';
+    const folder = `/home/harness/${name}`;
+    await onHost('mkdir', '-p', `${folder}/.vscode`);
+    await onHost(
+      'sh',
+      '-c',
+      `printf '%s' '{"remote.SSH.maxReconnectionAttempts": 0}' > ${folder}/.vscode/settings.json`,
+    );
+    const mark = await connectedWindow(name);
+    outageBegins();
+    await waitFor(
+      'attempt 4',
+      () => attemptsSince(mark, 'harness').length >= 3,
+      180_000,
+    );
+    deepStrictEqual(
+      [
+        attemptsSince(mark, 'harness').map(attempt => attempt.number),
+        (await dialogOf(name))?.details === GIVEN_UP,
+      ],
+      [[2, 3, 4], false],
+    );
+  });
+
+  it('F-2505 AC-16 (c2703-earlier): a window that made more attempts in an earlier outage than the limit now allows stops reconnecting when the next attempt fails', async () => {
+    const name = 'c2703-earlier';
+    const mark = await connectedWindow(name);
+    outageBegins();
+    await waitFor(
+      'attempt 4 to fail',
+      () => attemptsSince(mark, 'harness')[2]?.failedAt !== undefined,
+      180_000,
+    );
+    unpauseHost();
+    await waitFor(
+      'the window to reconnect',
+      async () => (await statusBarText(name, 'status.host')) === 'SSH: harness',
+      180_000,
+    );
+    await userSettings({'remote.SSH.maxReconnectionAttempts': 1});
+    const second = connectionLog().length;
+    outageBegins();
+    const shown = await givenUp(name);
+    deepStrictEqual(
+      [
+        attemptsSince(mark, 'harness').length,
+        attemptsSince(second, 'harness').length,
+        shown.details,
+      ],
+      [3 + 1, 1, GIVEN_UP],
+      `the attempts of the second outage were ${JSON.stringify(attemptsSince(second, 'harness').map(attempt => attempt.number))}`,
     );
     await answerDialog(name, 'Cancel');
   });
@@ -302,5 +345,29 @@ describe('the reconnection loop of a window whose host stops answering (card #27
       ],
       `the resolves were ${JSON.stringify(resolves)}`,
     );
+  });
+
+  it('F-2505 AC-20 (c2703-grace): with the grace time 30 core ends the reconnection about 30 to 40 s into the attempts, and Reload Window reconnects once the host answers', async () => {
+    const name = 'c2703-grace';
+    // The grace time reaches core when the server starts, so the server that earlier rows left is replaced.
+    await freshHost();
+    await userSettings({
+      'remote.SSH.reconnectionGraceTime': 30,
+      'window.dialogStyle': 'custom',
+    });
+    const mark = await connectedWindow(name);
+    outageBegins();
+    const shown = await givenUp(name);
+    const dialogAt = clockNow();
+    const [first] = attemptsSince(mark, 'harness');
+    const into = seconds(between(first?.startedAt ?? 0, dialogAt));
+    unpauseHost();
+    await answerDialog(name, 'Reload Window');
+    await connectedWithin(name, 180_000);
+    deepStrictEqual(
+      [shown.details, into >= 28 && into <= 42, into],
+      [GIVEN_UP, true, into],
+    );
+    await freshHost();
   });
 });
