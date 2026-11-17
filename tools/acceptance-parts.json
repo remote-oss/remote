@@ -416,6 +416,7 @@
     "ssh-askpass": {"failures.test.ts": 2.1, "login.test.ts": 9.4},
     "ssh-containers": {"configure-features.test.ts": 0.5},
     "ssh-core": {
+      "reconnect-measure.test.ts": 6,
       "activation.test.ts": 0.9,
       "agent-forwarding-live.test.ts": 1.4,
       "agent-forwarding.test.ts": 5.6,
