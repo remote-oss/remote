@@ -215,6 +215,32 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     await answerDialog(name, 'Cancel');
   });
 
+  it('F-2505 AC-17 (c2703-setting-running): a limit changed while an attempt is running applies at that attempt’s failure or from the attempt that starts after the change, and both pass', async () => {
+    const name = 'c2703-setting-running';
+    await userSettings({'remote.SSH.maxReconnectionAttempts': 6});
+    const mark = await connectedWindow(name);
+    outageBegins();
+    await waitFor(
+      'attempt 3 to run',
+      () => {
+        const attempts = attemptsSince(mark, 'harness');
+        return attempts.length >= 2 && attempts[1]?.failedAt === undefined;
+      },
+      180_000,
+    );
+    await userSettings({'remote.SSH.maxReconnectionAttempts': 2});
+    const shown = await givenUp(name);
+    const numbers = attemptsSince(mark, 'harness')
+      .map(attempt => attempt.number)
+      .join();
+    deepStrictEqual(
+      [['2,3', '2,3,4'].includes(numbers), shown.details],
+      [true, GIVEN_UP],
+      `the attempts were ${numbers}`,
+    );
+    await answerDialog(name, 'Cancel');
+  });
+
   it('F-2505 AC-17 (c2703-folder-setting): a limit in the remote folder’s settings has no effect', async () => {
     const name = 'c2703-folder-setting';
     const folder = `/home/harness/${name}`;
