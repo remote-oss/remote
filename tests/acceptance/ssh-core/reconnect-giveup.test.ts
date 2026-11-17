@@ -115,17 +115,37 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     const mark = connectionLog().length;
     const asked = recordLines('maskedInput', name).length;
     const endedAt = Date.now();
+    const timeline: string[] = [];
+    let polling = true;
+    const poller = (async () => {
+      let last = '';
+      while (polling) {
+        const shown = await dialogOf(name).catch(() => undefined);
+        const text = shown === undefined ? 'none' : shown.details;
+        if (text !== last) {
+          timeline.push(
+            `[+${((Date.now() - endedAt) / 1000).toFixed(2)} s] ${text}`,
+          );
+          last = text;
+        }
+        await new Promise(resolve => setTimeout(resolve, 40));
+      }
+    })();
     await inWindow(name, 'opensshremotes.cleanLocalServer');
-    const dialog = await waitForDialog(name, 180_000).catch(
+    const dialog = await waitForDialog(name, 60_000).catch(
       async (caught: unknown) => {
+        polling = false;
+        await poller;
         throw new Error(
-          `${String(caught)}\n${await reconnectionState(name, mark, endedAt)}`,
+          `${String(caught)}\nTIMELINE of the dialog every 40 ms:\n${timeline.join('\n')}\n${await reconnectionState(name, mark, endedAt)}`,
           {cause: caught},
         );
       },
     );
+    polling = false;
+    await poller;
     console.log(
-      `PROBE ${name} dialog after ${String(Date.now() - endedAt)} ms\n${await reconnectionState(name, mark, endedAt)}`,
+      `PROBE ${name} TIMELINE:\n${timeline.join('\n')}\nPROBE ${name} dialog after ${String(Date.now() - endedAt)} ms\n${await reconnectionState(name, mark, endedAt)}`,
     );
     // Time for an attempt the extension should not make.
     await new Promise(resolve => setTimeout(resolve, 20_000));
