@@ -89,7 +89,7 @@ describe('connection helper', () => {
       displayHost: 'h.invalid',
       externalAskpass: false,
       askpassFirstMessageMilliseconds: 5000,
-      hostPlatform: 'unknown',
+      hostPlatform: 'linux',
       ...changes,
     };
     return runConnectionHelper({
@@ -248,6 +248,13 @@ describe('connection helper', () => {
     deepStrictEqual(
       await lastArgumentFor(REQUEST, {hostPlatform: 'windows'}),
       powershellSessionStart().remoteProgram,
+    );
+  });
+
+  it('#1835: a host whose platform is unknown gets no remote command: its own shell reads the probe first', async () => {
+    deepStrictEqual(
+      await lastArgumentFor(REQUEST, {hostPlatform: 'unknown'}),
+      'h.invalid',
     );
   });
 
@@ -490,7 +497,7 @@ describe('connection helper', () => {
             displayHost: 'h.invalid',
             externalAskpass: false,
             askpassFirstMessageMilliseconds: 5000,
-            hostPlatform: 'unknown',
+            hostPlatform: 'linux',
           },
         },
         port,

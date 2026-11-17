@@ -81,7 +81,7 @@ describe('the window side of the shared connection (S9)', () => {
             displayHost: 'harness',
             externalAskpass: false,
             askpassFirstMessageMilliseconds: 5000,
-            hostPlatform: 'unknown',
+            hostPlatform: 'linux',
           },
         }),
       policy: {kind: 'graceAfterLastLease', milliseconds: 3000},
@@ -197,6 +197,7 @@ describe('the window side of the shared connection (S9)', () => {
       runFacts: RUN_FACTS,
       socksPort: SOCKS_PORT,
       sharedRecord: null,
+      detectedPlatform: null,
     });
   });
 
@@ -220,6 +221,7 @@ describe('the window side of the shared connection (S9)', () => {
       runFacts: RUN_FACTS,
       socksPort: SOCKS_PORT,
       sharedRecord: RECORD,
+      detectedPlatform: null,
     });
   });
 
@@ -249,6 +251,7 @@ describe('the window side of the shared connection (S9)', () => {
       runFacts: RUN_FACTS,
       socksPort: SOCKS_PORT,
       sharedRecord: null,
+      detectedPlatform: null,
     });
   });
 

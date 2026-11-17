@@ -238,7 +238,7 @@ describe('F-2106: pseudo-terminal allocation', function () {
     });
   });
 
-  it('F-2106 AC-14 (ruling-1606-no-tty-warning): with the setting on and no RequestTTY in the shared mode there is no -T, no warning, no terminal, and the window connects', async () => {
+  it('F-2106 AC-14 (ruling-1606-no-tty-warning): with the setting on, no RequestTTY and the platform known in the shared mode there is no -T, no warning, no terminal, and the window connects', async () => {
     await keepingSettings(async () => {
       const found = await ptyConnect('c86-no-warning', 'harness', {
         [PERMIT]: true,
@@ -251,6 +251,33 @@ describe('F-2106: pseudo-terminal allocation', function () {
           found.logged.filter(line => line.includes('Pseudo-terminal')),
         ],
         [true, [false], ['notty'], []],
+      );
+    });
+  });
+
+  it("F-2106 AC-14 (c1835-unknown-warning): with the setting on, no RequestTTY and the platform unknown in the shared mode there is no -T, ssh's warning is an [ssh] line of the log as ssh wrote it, there is no terminal, and the window connects as a Linux host", async () => {
+    await keepingSettings(async () => {
+      const found = await ptyConnect('c1835-unknown-warning', 'harness', {
+        [PERMIT]: true,
+        'remote.SSH.remotePlatform': {},
+      });
+      deepStrictEqual(
+        [
+          found.connected,
+          found.commands.map(hasNoTty),
+          found.sessions,
+          found.logged.filter(line => line.includes('Pseudo-terminal')),
+          found.logged.filter(line => line.startsWith('Platform: ')),
+        ],
+        [
+          true,
+          [false],
+          ['notty'],
+          [
+            '[ssh] Pseudo-terminal will not be allocated because stdin is not a terminal.',
+          ],
+          ['Platform: linux'],
+        ],
       );
     });
   });

@@ -21,6 +21,7 @@ import type {FailureHint, FailureReason} from '../diagnostics/classify.ts';
 import type {FailureKind} from '../diagnostics/rules.ts';
 import type {SpawnFailure} from '../process/session.ts';
 import type {ConnectionHelperOptions} from './helper.ts';
+import type {DetectedPlatform} from './platform-probe.ts';
 import {
   type ConnectionEvent,
   type ConnectionReply,
@@ -140,6 +141,8 @@ export interface ConnectedState {
   runFacts: RunFacts;
   /** What an earlier window left for reuse, or null when nothing was stored yet. */
   sharedRecord: SharedRecord | null;
+  /** What the session's opening found when the host's platform was unknown; null when it was known. */
+  detectedPlatform: DetectedPlatform | null;
 }
 
 /** How the wait for the login ended. */
@@ -544,6 +547,10 @@ export class SharedConnection {
       runFacts,
       sharedRecord:
         asked.reply.type === 'sharedRecord' ? asked.reply.record : null,
+      detectedPlatform:
+        asked.reply.type === 'sharedRecord'
+          ? asked.reply.detectedPlatform
+          : null,
     };
   }
 
