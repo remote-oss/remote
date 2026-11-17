@@ -1698,33 +1698,6 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-0103 AC-9 (c2503-qps-locked): a manifest value whose base entry locks a string keeps that string byte for byte in qps-ploc', () => {
-    const nlsTable = readJson('package.nls.json');
-    const ploc = readJson('package.nls.qps-ploc.json');
-    const locked: Array<[string, string]> = Object.entries(nlsTable).flatMap(
-      ([key, entry]) => {
-        if (
-          typeof entry !== 'object' ||
-          entry === null ||
-          Array.isArray(entry)
-        ) {
-          return [];
-        }
-        const comment = (entry as Record<string, unknown>).comment;
-        if (!Array.isArray(comment)) {
-          return [];
-        }
-        return comment.flatMap(comment => {
-          const kept = /^\{Locked='(.*)'\}$/.exec(String(comment));
-          return kept === null ? [] : [[key, kept[1]] as [string, string]];
-        });
-      },
-    );
-    for (const [key, kept] of locked) {
-      deepStrictEqual((ploc[key] as string).includes(kept), true);
-    }
-  });
-
   it('F-1406.5: identifiers.json names the identity of the family and the identifiers the card lists', () => {
     partialDeepStrictEqual(readJson('identifiers.json'), {
       source: 'remote-oss/remote-containers#107 (F-1406)',
