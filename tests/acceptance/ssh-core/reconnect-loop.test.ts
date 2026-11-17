@@ -75,7 +75,12 @@ describe('the reconnection loop of a window whose host stops answering (card #27
 
   /** What a window shows once core ended its reconnection: the dialog and the indicator. */
   async function givenUp(name: string) {
-    const dialog = await waitForDialog(name, 240_000);
+    await waitFor(
+      'the dialog that ends the reconnection',
+      async () => (await dialogOf(name))?.details === GIVEN_UP,
+      240_000,
+    );
+    const dialog = await waitForDialog(name, 10_000);
     await indicatorDisconnects(name);
     return {
       details: dialog.details,
@@ -133,9 +138,9 @@ describe('the reconnection loop of a window whose host stops answering (card #27
             ? 'ok'
             : wait,
         ),
-        await dialogOf(name),
+        (await dialogOf(name))?.details === GIVEN_UP,
       ],
-      [[2, 3, 4, 5, 6, 7, 8, 9, 10, 11], expected.map(() => 'ok'), undefined],
+      [[2, 3, 4, 5, 6, 7, 8, 9, 10, 11], expected.map(() => 'ok'), false],
       `the waits were ${JSON.stringify(waits)}`,
     );
   });
@@ -205,6 +210,7 @@ describe('the reconnection loop of a window whose host stops answering (card #27
       120_000,
     );
     await userSettings({'remote.SSH.maxReconnectionAttempts': 2});
+    const changedAt = clockNow();
     const shown = await givenUp(name);
     deepStrictEqual(
       [
@@ -212,6 +218,7 @@ describe('the reconnection loop of a window whose host stops answering (card #27
         shown.details,
       ],
       [[2, 3], GIVEN_UP],
+      `the setting was read back ${String(seconds(between(changedAt, clockNow())))} s before the dialog; the attempts were ${JSON.stringify(attemptsSince(mark, 'harness').map(attempt => [attempt.number, seconds(between(changedAt, attempt.startedAt)), attempt.failedAt === undefined ? undefined : seconds(between(changedAt, attempt.failedAt))]))} s from the change`,
     );
     await answerDialog(name, 'Cancel');
   });
@@ -237,11 +244,11 @@ describe('the reconnection loop of a window whose host stops answering (card #27
         [
           attemptsSince(mark, 'harness').map(attempt => attempt.number),
           shown?.details,
-          await dialogOf(name).then(dialog => dialog?.details),
+          (await dialogOf(name))?.details === GIVEN_UP,
         ],
         value === -1
-          ? [[2], GIVEN_UP, GIVEN_UP]
-          : [[2, 3, 4, 5, 6], undefined, undefined],
+          ? [[2], GIVEN_UP, true]
+          : [[2, 3, 4, 5, 6], undefined, false],
       );
     });
   }
