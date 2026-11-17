@@ -410,7 +410,9 @@ export class ConnectionHandler implements MessageHandler {
         preludeWritten = true;
         opened.authenticated();
       }
-      opened.sshLine(line);
+      opened.sshLine(line, () => {
+        output.flush();
+      });
       feed.push(line);
       if (this.state === 'connecting') {
         errorLines.push(line);
@@ -448,7 +450,7 @@ export class ConnectionHandler implements MessageHandler {
    * to the opening rather than to the bootstrap. A known platform writes its prelude and starts the runs at once; an
    * unknown one writes the probe, takes the output lines until the answers end, then writes the platform's line, and on
    * POSIX the prelude once the shell has handed over. Until ssh says it entered the session, the output is a
-   * LocalCommand's, which ssh runs to its end first; after that the lines it takes are the host shell's banner,
+   * LocalCommand's, which ssh runs to its end first, its last words with no line end included; after that the lines it takes are the host shell's banner,
    * prompts, echoes and answers, so none of them is a LocalCommand's output or a run's.
    */
   private opened(
@@ -457,7 +459,7 @@ export class ConnectionHandler implements MessageHandler {
     startRuns: (interpreter: Interpreter) => void,
   ): {
     authenticated(): void;
-    sshLine(line: string): void;
+    sshLine(line: string, endLocal: () => void): void;
     hear(line: string): boolean;
   } {
     if (opening.kind === 'known') {
@@ -476,8 +478,9 @@ export class ConnectionHandler implements MessageHandler {
       authenticated: () => {
         void session.write(PLATFORM_PROBE_INPUT);
       },
-      sshLine: line => {
+      sshLine: (line, endLocal) => {
         if (phase === 'local' && isSessionEntered(line)) {
+          endLocal();
           phase = 'probing';
         }
       },
