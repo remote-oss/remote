@@ -42,6 +42,7 @@ import {
   signalFile,
   type AppendedEntry,
 } from '../../../tools/script-file.ts';
+import {explainedFailure, section} from './connect-failure.ts';
 import {editorFolderOf} from './editor-folder.ts';
 
 const execFileAsync = promisify(execFile);
@@ -2451,9 +2452,9 @@ export async function connectedWithin(
       milliseconds,
     );
   } catch (caught) {
-    throw new Error(
-      `${String(caught)}\n${await connectState()}\n${ownConnectOf(name)}`,
-      {cause: caught},
+    throw await explainedFailure(
+      caught,
+      async () => `${await connectState()}\n${ownConnectOf(name)}`,
     );
   }
 }
@@ -2477,25 +2478,24 @@ function newestSshLog(folder: string): string[] {
  * the questions and the progress it recorded, with their times, and the last lines of its own Remote - SSH log.
  */
 function ownConnectOf(name: string): string {
-  const recorded = recordLines(undefined, name)
-    .slice(-20)
-    .map(
-      line =>
-        `[${new Date(line.time).toISOString().slice(11, 23)}] ${line.surface}: ${line.question} (${line.answer})`,
-    );
-  const logFolder = windowEvents(name)
-    .filter(each => each.event === 'activated')
-    .at(-1)?.logFolder;
-  let sshLog: string;
-  try {
-    sshLog =
-      logFolder === undefined
-        ? '(no log folder: the window did not activate its agent)'
-        : newestSshLog(path.dirname(logFolder)).slice(-40).join('\n');
-  } catch (caught) {
-    sshLog = `(unreadable: ${String(caught)})`;
-  }
-  return `what ${name} recorded:\n${recorded.join('\n')}\nthe last lines of ${name}'s Remote - SSH log:\n${sshLog}`;
+  const recorded = section(`what ${name} recorded`, () =>
+    recordLines(undefined, name)
+      .slice(-20)
+      .map(
+        line =>
+          `[${new Date(line.time).toISOString().slice(11, 23)}] ${line.surface}: ${line.question} (${line.answer})`,
+      )
+      .join('\n'),
+  );
+  const sshLog = section(`the last lines of ${name}'s Remote - SSH log`, () => {
+    const logFolder = windowEvents(name)
+      .filter(each => each.event === 'activated')
+      .at(-1)?.logFolder;
+    return logFolder === undefined
+      ? '(no log folder: the window did not activate its agent)'
+      : newestSshLog(path.dirname(logFolder)).slice(-40).join('\n');
+  });
+  return `${recorded}\n${sshLog}`;
 }
 
 /** What the host and this machine hold when a window did not connect: the host's listeners and server processes, the last lines of its sshd's log, this machine's listeners, and the last lines of the launch's connection log with the time of each. */
