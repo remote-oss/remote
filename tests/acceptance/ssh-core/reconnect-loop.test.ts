@@ -614,6 +614,10 @@ describe('the reconnection loop of a window whose host stops answering (card #27
       }
       await new Promise(resolve => setTimeout(resolve, 200));
     }
+    // Printed in green runs too, so a drift toward the bound shows before it fails.
+    console.log(
+      `F-2505 AC-25: the old ssh ended ${String(endedAfter)} s after attempt 2 started`,
+    );
     deepStrictEqual(
       [earlier.length > 0, endedAfter !== undefined && endedAfter <= 7],
       [true, true],
