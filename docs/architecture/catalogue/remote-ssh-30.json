@@ -258,7 +258,7 @@
   "label": "spec:draft",
   "title": "TCP forwarding disabled on the server",
   "epic": "E26",
-  "acCount": 16,
+  "acCount": 17,
   "surfaces": {
    "commands": [
     "opensshremotes.showLog"

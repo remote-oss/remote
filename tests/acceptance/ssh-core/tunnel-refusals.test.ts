@@ -236,7 +236,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
     ]);
   });
 
-  it('F-2104 AC-22, AC-47, F-2604 AC-24 (ruling-1985-forwarding-fails): when the host refuses forwarding on the SOCKS path, whether by sshd or by ClearAllForwardings, the window shows the error notification once, with a Show log link and no button, whose command opens the Remote - SSH channel holding the refusal, and the connect then fails with F-2601’s dialog that names the refused forward', async () => {
+  it('F-2104 AC-22, AC-47, F-2604 AC-24 (ruling-1985-forwarding-fails): the refusal recognised during the resolve, F-2604 AC-24’s case: when the host refuses forwarding on the SOCKS path, whether by sshd or by ClearAllForwardings, the window shows the error notification once, with a Show log link and no button, whose command opens the Remote - SSH channel holding the refusal, and the connect then fails with F-2601’s dialog that names the refused forward', async () => {
     const seen: Array<{
       notices: Array<[string, string[] | undefined]>;
       dialogs: Array<string | undefined>;

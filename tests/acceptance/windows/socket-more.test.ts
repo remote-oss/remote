@@ -161,7 +161,7 @@ describe('more of the server on a socket (card coverage-81)', function () {
     }
   });
 
-  it('F-2410 AC-34 (ruling-1601-host-key-pick): with a stored platform and a host key not yet known, the progress notification shows and then the question about the key’s fingerprint is shown by the extension, with nothing else before it', async () => {
+  it('F-2410 AC-34 (ruling-1601-host-key-pick-half): with a stored platform and a host key not yet known, the progress notification shows and then the question about the key’s fingerprint is shown by the extension, with nothing else before it', async () => {
     await userSettings({
       'remote.SSH.remoteServerListenOnSocket': true,
       'remote.SSH.remotePlatform': {
