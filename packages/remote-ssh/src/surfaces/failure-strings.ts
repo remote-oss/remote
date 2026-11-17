@@ -26,6 +26,7 @@ export type FailureStringId =
   | 'S045'
   | 'S047'
   | 'S067'
+  | 'S070'
   | 'S071'
   | 'S073'
   | 'S075'
@@ -100,6 +101,7 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S067: 'Error establishing tunnel ({0}).',
   S071: 'Failed to download VS Code Server ({0})',
   S073: 'Failed to find a free local port: {0}',
+  S070: "Failed to create the remote server's install directory",
   S075: 'Failed to install the VS Code Server',
   S077: 'Help',
   S079: 'Hostname contains invalid characters',

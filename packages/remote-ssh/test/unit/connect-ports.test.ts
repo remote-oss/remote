@@ -458,7 +458,7 @@ describe("the assembled ports' settings", () => {
     );
   });
 
-  it('F-2405 AC-20, F-2404 BR-12: a refused host download, a rejected proxy value, an install folder that cannot be created and a failed client download are kept as hints of their status', () => {
+  it('F-2405 AC-20, F-2404 BR-12: a refused host download, a rejected proxy value, an install folder setting that is rejected, an install folder that cannot be created and a failed client download are kept as hints of their status', () => {
     const {surfaces, machine, recorded} = assemblyInputs({});
     const kept: string[] = [];
     const ports = wiringPortsOf(
@@ -479,12 +479,14 @@ describe("the assembled ports' settings", () => {
     ports.server.onHostDownloadRefused('downloadFailed');
     ports.server.onHostDownloadRefused('noDownloader');
     ports.server.onProxyRejected({value: 'p', error: 'e'});
+    ports.server.onInstallFolderInvalid('~x');
     ports.server.onInstallFolderRefused();
     ports.server.onLocalDownloadFailed('Failed to fetch');
     deepStrictEqual(kept, [
       'ServerDownloadFailed',
       'NoDownloaderAvailable',
       'InvalidProxyUrl',
+      'InvalidCustomServerPath',
       'CreateInstallDirFailed',
       'LocalDownloadFailed',
     ]);

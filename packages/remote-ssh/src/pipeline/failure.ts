@@ -102,6 +102,9 @@ function logged(
 /** The reason of a server install that failed: the extension's own text. */
 const INSTALL_FAILED: FailureReason = {id: 'S075'};
 
+/** The reason of a host that could not create the install folder. */
+const INSTALL_FOLDER_FAILED: FailureReason = {id: 'S070'};
+
 /** The reason of a server download that failed: the extension's own text. */
 const DOWNLOAD_FAILED: FailureReason = {id: 'S043'};
 
@@ -178,9 +181,13 @@ function ofStatus(
     return {kind, reason: DOWNLOAD_FAILED};
   }
   if (kind === 'serverInstall') {
+    const reason =
+      status === 'CreateInstallDirFailed'
+        ? INSTALL_FOLDER_FAILED
+        : INSTALL_FAILED;
     return writeFailure === undefined
-      ? {kind, reason: INSTALL_FAILED}
-      : logged(kind, writeDetail(writeFailure), INSTALL_FAILED);
+      ? {kind, reason}
+      : logged(kind, writeDetail(writeFailure), reason);
   }
   return {kind};
 }
