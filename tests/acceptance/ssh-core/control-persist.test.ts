@@ -10,11 +10,11 @@ import {deepStrictEqual} from 'node:assert';
 import {
   appendScript,
   closeWindow,
+  hostAnswer,
   inWindow,
   windowState,
 } from '../windows/harness.ts';
 import {connectWith, launchSsh} from '../windows/config-keywords-support.ts';
-import {pickHost} from '../windows/maintenance.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -59,8 +59,9 @@ describe('a ControlPersist master and the end of the attempt (card #2664, F-2102
       async (connect, file) => {
         const before = await masters(alias);
         if (ending === 'kill') {
-          // Kill Local Connection Server For Host... asks which host; the script takes the alias.
-          appendScript([pickHost(alias)]);
+          // Kill Local Connection Server For Host... asks which host. The entry is the window's own: one without a
+          // window is answered once by every window, so a later row's host pick would meet it.
+          appendScript([hostAnswer(alias, {label: alias})]);
           await inWindow(alias, 'opensshremotes.cleanLocalServer');
         } else {
           await closeWindow(alias);
