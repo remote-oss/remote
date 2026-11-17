@@ -95,7 +95,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
             'harness-bash',
             'sh',
             '-c',
-            `ls -A '${serverFolder}' 2>/dev/null || true`,
+            `if test -e '${serverFolder}'; then echo exists; else echo absent; fi`,
           )
         ).trim(),
       },
@@ -106,7 +106,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
         beforeTimeout: true,
         logged: true,
         connected: false,
-        serverFolder: '',
+        serverFolder: 'absent',
       },
       `the dialog came ${String(failed.dialog.milliseconds)} ms after the window was asked for and ${String(failed.dialog.sinceConnectStarted)} ms after the connect started`,
     );
