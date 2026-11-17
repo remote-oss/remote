@@ -16,11 +16,13 @@ import {
   editorArguments,
   editorLogsEnvironment,
   extensionsFolderOf,
+  homeArgvFileOf,
   launchFiles,
   languagePackVsixOf,
   packageLanguagePack,
   packageWindowAgent,
   preSeedArgv,
+  preSeedHomeArgv,
   type RelaunchRequest,
   registerLanguagePack,
   type PlainSteps,
@@ -473,9 +475,12 @@ describe('runPlainLaunch', () => {
   beforeEach(() => {
     workspace = new TemporaryWorkspace('plain-run');
     runFolder = workspace.root;
+    workspace.write('editor/resources/app/product.json', {
+      dataFolderName: '.data-folder',
+    });
     plainRun = {
       runFolder,
-      executable: '/editor',
+      executable: path.join(runFolder, 'editor', 'code'),
       environment: {HARNESS_RUN_FOLDER: runFolder},
     };
   });
@@ -1172,9 +1177,16 @@ describe('the launch argv.json the harness stands before its editor starts (card
     workspace.remove();
   });
 
-  it('coverage-38: it stands a parsing argv.json with the crash-reporter keys in the launch user-data folder, and leaves no temp file behind', () => {
-    preSeedArgv(workspace.root, LAUNCH);
-    const folder = userDataFolderOf(workspace.root, LAUNCH);
+  /** The editor executable of the workspace, its `product.json` naming the data folder of its home. */
+  function seedExecutable(): string {
+    workspace.write('editor/resources/app/product.json', {
+      dataFolderName: '.data-folder',
+    });
+    return path.join(workspace.root, 'editor', 'code');
+  }
+
+  /** What the pre-seed stood in `folder`: a parsing argv.json with the crash-reporter keys, and no temp file. */
+  function seedStanding(folder: string): void {
     deepStrictEqual(
       [
         readdirSync(folder).sort(),
@@ -1185,6 +1197,23 @@ describe('the launch argv.json the harness stands before its editor starts (card
         {'enable-crash-reporter': false, 'crash-reporter-id': ''},
       ],
     );
+  }
+
+  it('coverage-38: it stands a parsing argv.json with the crash-reporter keys in the launch user-data folder, and leaves no temp file behind', () => {
+    preSeedArgv(workspace.root, LAUNCH);
+    seedStanding(userDataFolderOf(workspace.root, LAUNCH));
+  });
+
+  it('coverage-38: the home file of an executable is its product.json dataFolderName argv.json under the home', () => {
+    strictEqual(
+      homeArgvFileOf(seedExecutable(), path.join(workspace.root, 'home')),
+      path.join(workspace.root, 'home', '.data-folder', 'argv.json'),
+    );
+  });
+
+  it('coverage-38: it stands a parsing argv.json with the crash-reporter keys in the home folder, making its folder, and leaves no temp file behind', () => {
+    preSeedHomeArgv(seedExecutable(), path.join(workspace.root, 'home'));
+    seedStanding(path.join(workspace.root, 'home', '.data-folder'));
   });
 });
 
