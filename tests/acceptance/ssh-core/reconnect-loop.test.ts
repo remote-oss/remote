@@ -283,33 +283,47 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     );
   });
 
-  for (const [label, settings] of [
-    ['default', {}],
-    ['limit-0', {'remote.SSH.maxReconnectionAttempts': 0}],
-    [
-      'per-window',
-      {
-        'remote.SSH.useLocalServer': false,
-        'remote.SSH.remotePlatform': {harness: 'linux'},
-      },
-    ],
-  ] as const) {
-    it(`F-2505 AC-10 (c2703-ssh-killed-${label}): when the window’s local ssh dies the window reconnects within about 1 s, showing Setting up SSH tunnel briefly`, async () => {
-      const name = `c2703-ssh-killed-${label}`;
-      await userSettings(settings);
-      await connectedWindow(name);
-      const {before, toasts, reconnectedAfter} = await killedSsh(name);
-      deepStrictEqual(
-        [
-          before.length > 0,
-          reconnectedAfter !== undefined && reconnectedAfter <= 2000,
-          toasts.includes(`${SETTING_UP}: Setting up SSH tunnel`),
-        ],
-        [true, true, true],
-        `it reconnected after ${String(reconnectedAfter)} ms, the notifications seen were ${JSON.stringify(toasts)}`,
-      );
-    });
+  /** Kills the local ssh of window `name` under `settings` and checks that the window reconnects within about a second. */
+  async function reconnectedAfterKill(
+    name: string,
+    settings: Readonly<Record<string, unknown>>,
+  ) {
+    await userSettings(settings);
+    await connectedWindow(name);
+    const {before, toasts, reconnectedAfter} = await killedSsh(name);
+    deepStrictEqual(
+      [
+        before.length > 0,
+        reconnectedAfter !== undefined && reconnectedAfter <= 2000,
+        toasts.some(text =>
+          // The terminal mode's notification carries the details link, as F-2304 has it.
+          new RegExp(
+            `^${SETTING_UP}: (\\(details\\) )?Setting up SSH tunnel$`,
+            'u',
+          ).test(text),
+        ),
+      ],
+      [true, true, true],
+      `it reconnected after ${String(reconnectedAfter)} ms, the notifications seen were ${JSON.stringify(toasts)}`,
+    );
   }
+
+  it('F-2505 AC-10 (c2703-ssh-killed-default): when the window’s local ssh dies the window reconnects within about 1 s, showing Setting up SSH tunnel briefly', async () => {
+    await reconnectedAfterKill('c2703-ssh-killed-default', {});
+  });
+
+  it('F-2505 AC-10 (c2703-ssh-killed-limit-0): the same with the limit 0', async () => {
+    await reconnectedAfterKill('c2703-ssh-killed-limit-0', {
+      'remote.SSH.maxReconnectionAttempts': 0,
+    });
+  });
+
+  it('F-2505 AC-10 (c2703-ssh-killed-per-window): the same with remote.SSH.useLocalServer false', async () => {
+    await reconnectedAfterKill('c2703-ssh-killed-per-window', {
+      'remote.SSH.useLocalServer': false,
+      'remote.SSH.remotePlatform': {harness: 'linux'},
+    });
+  });
 
   /**
    * The process ids on the host of the server's own processes (the server, the remote extension host and the others that
@@ -403,35 +417,59 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     await answerDialog(name, 'Cancel');
   });
 
-  for (const [value, label] of [
-    [-1, 'minus-one'],
-    ['abc', 'text'],
-  ] as const) {
-    it(`F-2505 AC-18 (c2703-value-${label}): the limit ${JSON.stringify(value)} ${value === -1 ? 'behaves like 0: one attempt, then core gives up' : 'means no limit: the attempts go on past the fourth'}`, async () => {
-      const name = `c2703-value-${label}`;
-      await userSettings({'remote.SSH.maxReconnectionAttempts': value});
-      const mark = await connectedWindow(name);
-      outageBegins();
-      if (value !== -1) {
-        await waitFor(
-          'attempt 6',
-          () => attemptsSince(mark, 'harness').length >= 5,
-          240_000,
-        );
-      }
-      const shown = value === -1 ? await givenUp(name) : undefined;
-      deepStrictEqual(
-        [
-          attemptsSince(mark, 'harness').map(attempt => attempt.number),
-          shown?.details,
-          (await dialogOf(name))?.details === GIVEN_UP,
-        ],
-        value === -1
-          ? [[2], GIVEN_UP, true]
-          : [[2, 3, 4, 5, 6], undefined, false],
-      );
-    });
-  }
+  it('F-2505 AC-18 (c2703-value-minus-one): the limit -1 behaves like 0: one attempt, then core gives up', async () => {
+    const name = 'c2703-value-minus-one';
+    await userSettings({'remote.SSH.maxReconnectionAttempts': -1});
+    const mark = await connectedWindow(name);
+    outageBegins();
+    const shown = await givenUp(name);
+    deepStrictEqual(
+      [
+        attemptsSince(mark, 'harness').map(attempt => attempt.number),
+        shown.details,
+      ],
+      [[2], GIVEN_UP],
+    );
+    await answerDialog(name, 'Cancel');
+  });
+
+  it('F-2505 AC-18 (c2703-value-text): the limit "abc" means no limit: the attempts go on past the fourth', async () => {
+    const name = 'c2703-value-text';
+    await userSettings({'remote.SSH.maxReconnectionAttempts': 'abc'});
+    const mark = await connectedWindow(name);
+    outageBegins();
+    await waitFor(
+      'attempt 6',
+      () => attemptsSince(mark, 'harness').length >= 5,
+      240_000,
+    );
+    deepStrictEqual(
+      [
+        attemptsSince(mark, 'harness').map(attempt => attempt.number),
+        (await dialogOf(name))?.details === GIVEN_UP,
+      ],
+      [[2, 3, 4, 5, 6], false],
+    );
+  });
+
+  it('F-2505 AC-18 (c2703-value-twenty): the limit 20 is not clamped: the attempts go on past the tenth', async () => {
+    const name = 'c2703-value-twenty';
+    await userSettings({'remote.SSH.maxReconnectionAttempts': 20});
+    const mark = await connectedWindow(name);
+    outageBegins();
+    await waitFor(
+      'attempt 12',
+      () => attemptsSince(mark, 'harness').length >= 11,
+      480_000,
+    );
+    deepStrictEqual(
+      [
+        attemptsSince(mark, 'harness').map(attempt => attempt.number),
+        (await dialogOf(name))?.details === GIVEN_UP,
+      ],
+      [[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], false],
+    );
+  });
 
   it('F-2505 AC-30 (c2703-reload-0): with the limit 0 a reload of the window on a host that does not answer runs the connect as attempt 1, not stopped by the limit, and Retry of the failure dialog reloads the window', async () => {
     const name = 'c2703-reload-0';
