@@ -314,6 +314,41 @@ describe('Node.js process spawner', () => {
     strictEqual(await session.exit(), undefined);
   });
 
+  it('ends the processes the client started when it is killed', async () => {
+    const session = sessionOf(
+      await spawnSession(
+        nodeProcessSpawner,
+        {
+          program: process.execPath,
+          arguments: [
+            '-e',
+            'const {spawn} = require("node:child_process"); const child = spawn(process.execPath, ["-e", "setTimeout(() => undefined, 30000)"], {stdio: "ignore"}); console.log(child.pid); setTimeout(() => undefined, 30000);',
+          ],
+          environment: {},
+        },
+        {},
+        {},
+      ),
+    );
+    const grandchild = await new Promise<number>(resolve => {
+      session.onOutput(chunk => {
+        resolve(Number(chunk.trim()));
+      });
+    });
+    session.kill();
+    await session.exit();
+    let alive = true;
+    for (let attempt = 0; attempt < 50 && alive; attempt += 1) {
+      try {
+        process.kill(grandchild, 0);
+        await new Promise(resolve => setTimeout(resolve, 50));
+      } catch {
+        alive = false;
+      }
+    }
+    strictEqual(alive, false);
+  });
+
   it('fails as clientVanished for a program that is not there', async () => {
     const outcome = await spawnSession(
       nodeProcessSpawner,
