@@ -403,6 +403,9 @@ export async function registerResolver(
     isReconnection: boolean,
   ): Promise<Error> {
     const message = messageOf(failed);
+    trace(
+      `errorFor: disposed=${String(state.disposed)} leaving=${String(state.leaving)} isReconnection=${String(isReconnection)}`,
+    );
     if (state.disposed) {
       return editor.notAvailable(message, true);
     }
@@ -413,6 +416,7 @@ export async function registerResolver(
       silent: failed.silent,
       userAlreadyNotified: failed.userAlreadyNotified,
     });
+    trace(`errorFor: outcome=${JSON.stringify(outcome)}`);
     if (outcome.kind === 'temporarilyNotAvailable') {
       return editor.temporarilyNotAvailable(message);
     }
