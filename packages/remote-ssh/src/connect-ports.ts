@@ -243,6 +243,17 @@ function definedEnvironment(
   );
 }
 
+/** `prober`, answering that each port of `skipped` is in use without probing it. */
+export function skipping(
+  prober: PortProber,
+  skipped: ReadonlySet<number>,
+): PortProber {
+  return {
+    probe: port =>
+      skipped.has(port) ? Promise.resolve('open') : prober.probe(port),
+  };
+}
+
 /** The window's local port: the first free one in the preferred range, else any free one; or why there is none. */
 async function chooseLocalPort(
   prober: PortProber,
@@ -289,10 +300,15 @@ export function wiringPortsOf(
       attachTerminalQuestions(login, surfaces.prompts, hostAlias(input.target)),
     revealLoginTerminals: () => switchOf(settings, 'showLoginTerminal'),
   };
-  /** A loopback port for the window, the tunnel's or the CLI bridge's, in the preferred range when one is free. */
-  function chooseWindowPort(): Promise<PortChoice> {
+  /**
+   * A loopback port for the window, the tunnel's or the CLI bridge's, in the preferred range when one is free, never one
+   * of `skipped`: the ports this connect already failed to listen on, which the search takes as busy without probing.
+   */
+  function chooseWindowPort(
+    skipped: ReadonlySet<number> = new Set(),
+  ): Promise<PortChoice> {
     return chooseLocalPort(
-      machine.prober,
+      skipping(machine.prober, skipped),
       valueOf(settings, 'preferredLocalPortRange'),
       logger,
     );
