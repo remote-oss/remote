@@ -1,9 +1,11 @@
 import {
   closeWindow,
+  connectedWithin,
   editorCommandLine,
   inWindow,
   isOpen,
   onHostAs,
+  openWindow,
   waitFor,
 } from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
@@ -27,6 +29,10 @@ describe('what the Open Recent pick shows after many folders were opened (card #
   beforeEach(closeAllButLocal);
 
   it('the rounds', async () => {
+    const host = 'zz-recent-host';
+    await onHostAs('harness', 'mkdir', '-p', `${HOME}/${host}`);
+    await openWindow('harness', host);
+    await connectedWithin(host, 120_000);
     for (const count of [5, 15, 30]) {
       const folders = Array.from(
         {length: count},
@@ -60,15 +66,15 @@ describe('what the Open Recent pick shows after many folders were opened (card #
         `${HOME}/zz-r.dot-${String(count)}`,
       );
       await pause(10_000);
-      void inWindow('local', 'workbench.action.openRecent');
-      await waitForQuickPick('local', 30_000);
-      const rows = await quickPickRows('local');
+      void inWindow(host, 'workbench.action.openRecent');
+      await waitForQuickPick(host, 30_000);
+      const rows = await quickPickRows(host);
       const target = `zz-r.dot-${String(count)}`;
       const found = rows.some(each => each.label.startsWith(target));
-      await typeInQuickPick('local', target);
+      await typeInQuickPick(host, target);
       await pause(1500);
-      const filtered = await quickPickRows('local');
-      await pressEscape('local');
+      const filtered = await quickPickRows(host);
+      await pressEscape(host);
       process.stdout.write(
         `RECENT ${JSON.stringify({
           count,

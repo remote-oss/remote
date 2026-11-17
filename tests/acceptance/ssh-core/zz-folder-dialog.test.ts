@@ -28,7 +28,7 @@ describe('what the folder dialog does with a typed folder (card #2756, throwaway
     await openWindow('harness', window);
     await connectedWithin(window, 120_000);
     try {
-      for (let round = 0; round < 40; round += 1) {
+      for (let round = 0; round < 150; round += 1) {
         const sub = `zz-fd-sub-${String(round)}`;
         await onHostAs('harness', 'mkdir', '-p', `${HOME}/${sub}`);
         void inWindow(window, 'workbench.action.files.openFolder');
@@ -41,23 +41,34 @@ describe('what the folder dialog does with a typed folder (card #2756, throwaway
         const initial = await folderDialogFacts(window);
         const began = Date.now();
         await typeInFolderDialog(window, `${HOME}/${sub}`);
-        const readings: string[] = [];
         let firstDots: number | undefined;
-        for (let step = 0; step < 100; step += 1) {
+        let stalled: string[] = [];
+        let retypedAfter: number | undefined;
+        for (let step = 0; step < 40; step += 1) {
           const facts = await folderDialogFacts(window);
-          const head = facts.rows.slice(0, 3);
-          if (step % 5 === 0 || (head[0] === '..' && firstDots === undefined)) {
-            readings.push(
-              `${String(Date.now() - began)}ms ${JSON.stringify([facts.value, head, facts.rows.length])}`,
-            );
-          }
-          if (head[0] === '..' && firstDots === undefined) {
+          if (facts.rows[0] === '..' && facts.value === `${HOME}/${sub}`) {
             firstDots = Date.now() - began;
-          }
-          if (firstDots !== undefined && step > 5) {
             break;
           }
           await pause(100);
+        }
+        if (firstDots === undefined) {
+          const facts = await folderDialogFacts(window);
+          stalled = [
+            facts.value,
+            JSON.stringify(facts.rows.slice(0, 6)),
+            String(facts.rows.length),
+          ];
+          const retyped = Date.now();
+          await typeInFolderDialog(window, `${HOME}/${sub}`);
+          for (let step = 0; step < 50; step += 1) {
+            const again = await folderDialogFacts(window);
+            if (again.rows[0] === '..' && again.value === `${HOME}/${sub}`) {
+              retypedAfter = Date.now() - retyped;
+              break;
+            }
+            await pause(100);
+          }
         }
         process.stdout.write(
           `ROUND ${JSON.stringify({
@@ -65,7 +76,8 @@ describe('what the folder dialog does with a typed folder (card #2756, throwaway
             initialRows: initial.rows.slice(0, 3),
             initialCount: initial.rows.length,
             dotsAfterMs: firstDots ?? null,
-            readings: firstDots === undefined ? readings : readings.slice(-2),
+            stalled,
+            retypedAfterMs: retypedAfter ?? null,
           })}\n`,
         );
         await cancelFolderDialog(window).catch(() => undefined);
