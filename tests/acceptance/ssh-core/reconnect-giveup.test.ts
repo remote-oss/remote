@@ -124,6 +124,9 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
         );
       },
     );
+    console.log(
+      `PROBE ${name} dialog after ${String(Date.now() - endedAt)} ms\n${await reconnectionState(name, mark, endedAt)}`,
+    );
     // Time for an attempt the extension should not make.
     await new Promise(resolve => setTimeout(resolve, 20_000));
     return {
