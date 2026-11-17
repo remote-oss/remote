@@ -191,6 +191,11 @@ function portsOf(
       },
     },
     configuredHosts: changes.configuredHosts ?? (() => ({hosts: []})),
+    legacySettings: {
+      read: () => undefined,
+      write: () => Promise.resolve(),
+      logger,
+    },
     preconnect: {
       readFile: () => Promise.resolve(new Uint8Array()),
       exists: () => Promise.resolve(false),
@@ -407,6 +412,27 @@ function stepsOf(ports: WiringPorts): ReturnType<typeof stepsWith> {
 }
 
 describe("the composition of a connect's steps", () => {
+  it('F-2506 6.3: the legacy settings step moves the legacy key through the legacy ports', async () => {
+    const {ports} = portsOf();
+    const written: Array<[string, unknown]> = [];
+    ports.legacySettings = {
+      ...ports.legacySettings,
+      read: key =>
+        key === 'remote.SSH.defaultExtensionsIfInstalledLocally'
+          ? ['a.b']
+          : undefined,
+      write: (key, value) => {
+        written.push([key, value]);
+        return Promise.resolve();
+      },
+    };
+    await stepsOf(ports).migrateLegacySettings();
+    deepStrictEqual(written, [
+      ['remote.defaultExtensionsIfInstalledLocally', ['a.b']],
+      ['remote.SSH.defaultExtensionsIfInstalledLocally', undefined],
+    ]);
+  });
+
   it("connect-14: checkInstallFolder reads the server settings of this connect's host alias", () => {
     const {ports} = portsOf({server: {serverInstallPath: {[ALIAS]: '/$bad'}}});
     deepStrictEqual(

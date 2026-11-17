@@ -99,6 +99,17 @@ function directInstall(recording: Recording): Partial<ConnectSteps> {
 }
 
 describe('the connect for an exec server', () => {
+  it('F-2506 BR-10: the control connection of an exec server moves no legacy settings', async () => {
+    const moves: string[] = [];
+    await controlled(() => ({
+      migrateLegacySettings: () => {
+        moves.push('moved');
+        return Promise.resolve();
+      },
+    }));
+    deepStrictEqual(moves, []);
+  });
+
   it('brief-remote-ssh-engines §2: holds the authenticated control connection', async () => {
     const {result} = await controlled();
     deepStrictEqual(Object.keys(heldOf(result)).sort(), [
