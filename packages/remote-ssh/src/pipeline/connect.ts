@@ -357,7 +357,7 @@ async function runSteps(
     return cancellation.aborted ? failure({kind: 'cancelled'}) : undefined;
   }
 
-  if (purpose === 'window' && input.attempt === 1) {
+  if (purpose === 'window') {
     // Not waited for and not tied to the cancellation: a settings write of a window that is still resolving can wait
     // for the resolve, and waiting here held every connect at its first line (acceptance run 43793703309).
     void quietly('the legacy settings move', () =>

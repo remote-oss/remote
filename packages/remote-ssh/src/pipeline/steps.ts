@@ -124,7 +124,7 @@ export interface TunnelOpening {
 export interface ConnectSteps {
   /**
    * Moves the legacy `remote.SSH.defaultExtensionsIfInstalledLocally` of the user's settings into the editor's key; the
-   * pipeline starts it on the first attempt of a window's connect, before anything else, and does not wait for it: a
+   * pipeline starts it at every resolve of a window, a reconnection included, before anything else, and does not wait for it: a
    * settings write of a window that is still resolving can wait for the resolve. It never fails.
    */
   migrateLegacySettings(): Promise<void>;

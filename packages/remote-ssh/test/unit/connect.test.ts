@@ -197,7 +197,7 @@ describe('the connect pipeline, when it works', () => {
     );
   });
 
-  it('F-2506 BR-10: moves the legacy settings first, once, on the first attempt of a window', async () => {
+  it('F-2506 BR-10: moves the legacy settings first at every resolve of a window, a reconnection included', async () => {
     const {recording, options} = setup();
     const moves: string[] = [];
     await connect(
@@ -220,7 +220,7 @@ describe('the connect pipeline, when it works', () => {
       }),
       options,
     );
-    deepStrictEqual(moves, ['after nothing']);
+    deepStrictEqual(moves, ['after nothing', 'again']);
   });
 
   it('F-2506 BR-10: does not wait for the legacy settings move, and logs one that fails', async () => {
