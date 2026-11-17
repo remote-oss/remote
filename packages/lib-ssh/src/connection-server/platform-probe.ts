@@ -62,3 +62,11 @@ export class PlatformProbeReader {
 export function isProbeExecLine(line: string): boolean {
   return bareLine(line) === PROBE_EXEC_LINE;
 }
+
+/** ssh's `-v` line that says it entered the session: the host's output can only come after it. */
+const SESSION_ENTERED = 'debug1: Entering interactive session.';
+
+/** Whether `line` of ssh's own output says it entered the session. */
+export function isSessionEntered(line: string): boolean {
+  return line.replace(/\r$/, '') === SESSION_ENTERED;
+}
