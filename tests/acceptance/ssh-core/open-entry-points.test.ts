@@ -176,11 +176,23 @@ function loginQuestions(mark: number): string[] {
     .map(line => `${line.window}: ${line.question}`);
 }
 
-/** Opens the Open Recent pick of window `name` and gives its rows, the pick left open. */
-async function recentRows(name: string) {
+/**
+ * Opens the Open Recent pick of window `name`, filters it by `filter` and gives its rows, the pick left open. The pick
+ * draws only the rows that fit its height, about seventeen, and lists files after the folders, so after the many
+ * folders a whole run has opened an entry the row looks for is not drawn at all until the list is filtered to it.
+ */
+async function recentRows(name: string, filter: string) {
   void inWindow(name, 'workbench.action.openRecent');
   await waitForQuickPick(name, 30_000);
-  return quickPickRows(name);
+  await typeInQuickPick(name, filter);
+  let rows = await quickPickRows(name);
+  for (let steady = 0; steady < 2;) {
+    await settle(250);
+    const next = await quickPickRows(name);
+    steady = JSON.stringify(next) === JSON.stringify(rows) ? steady + 1 : 0;
+    rows = next;
+  }
+  return rows;
 }
 
 /** The label and the description of each row of `rows` whose label starts with one of `names`. */
@@ -433,7 +445,7 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
     );
     await settle(10_000);
     const afterPlain = otherNames();
-    const rows = await recentRows(window);
+    const rows = await recentRows(window, 'c2623.dot-a');
     await pressEscape(window);
     const files = described(rows, ['c2623.dot-a']);
     await commandLine('--remote', 'ssh-remote+harness', `${HOME}/c2623.dot-b/`);
@@ -933,13 +945,19 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
       await closeWindow(path.basename(folder));
     }
     const names = ['c2623-labels-home', 'c2623-labels-tmp'];
-    const connected = described(await recentRows(window), names);
+    const connected = described(
+      await recentRows(window, 'c2623-labels'),
+      names,
+    );
     await pressEscape(window);
     const fresh = await newLocalWindow();
-    const freshRows = described(await recentRows(fresh), names);
+    const freshRows = described(await recentRows(fresh, 'c2623-labels'), names);
     await pressEscape(fresh);
     await closeWindow(fresh);
-    const original = described(await recentRows('local'), names);
+    const original = described(
+      await recentRows('local', 'c2623-labels'),
+      names,
+    );
     await pressEscape('local');
     deepStrictEqual(
       {connected, fresh: freshRows, original},
@@ -1107,7 +1125,9 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
     await shows('c2623-recent-gone');
     await closeWindow('c2623-recent-gone');
     const window = await newLocalWindow();
-    const before = described(await recentRows(window), ['c2623-recent-gone']);
+    const before = described(await recentRows(window, 'c2623-recent-gone'), [
+      'c2623-recent-gone',
+    ]);
     await pressQuickPickRowButton(
       window,
       'c2623-recent-gone [SSH: harness]',
