@@ -6,7 +6,9 @@
 import {
   inWindow,
   openWindow,
+  readUserSettings,
   recordLines,
+  restoreUserSettings,
   userSettings,
   waitFor,
 } from './harness.ts';
@@ -94,10 +96,18 @@ export async function troubleshootingTabs(name: string): Promise<string[]> {
   return (await terminalTabsOf(name)).filter(label => label.includes(NAME));
 }
 
-/** The header and the first row of the troubleshooting table of window `name`, with the tab list of a lone terminal shown. */
+/**
+ * The header and the first row of the troubleshooting table of window `name`, with the tab list of a lone terminal
+ * shown while they are read; the user settings are back as they were afterwards.
+ */
 export async function tableShown(name: string) {
-  // Core hides the tab list of a single terminal; the rows read what the panel lists.
-  await userSettings({'terminal.integrated.tabs.hideCondition': 'never'});
-  const table = await wholeTableOf(name);
-  return {header: cellsOf(table[1]), first: firstRowOf(table)};
+  const saved = readUserSettings();
+  try {
+    // Core hides the tab list of a single terminal; the rows read what the panel lists.
+    await userSettings({'terminal.integrated.tabs.hideCondition': 'never'});
+    const table = await wholeTableOf(name);
+    return {header: cellsOf(table[1]), first: firstRowOf(table)};
+  } finally {
+    restoreUserSettings(saved);
+  }
 }

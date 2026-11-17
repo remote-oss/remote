@@ -7,6 +7,7 @@ import {
   connectedWithin,
   connectionLog,
   openWindow,
+  readUserSettings,
   recordLines,
   waitFor,
 } from '../windows/harness.ts';
@@ -250,15 +251,23 @@ describe('the pre-connection script that fails the connect (card connect-87)', f
     const script = writeScript('table-exit-one.sh', 'exit 1');
     appendScript([answerEntry('pf20', 'Allow'), ...dismissals('pf20')]);
     await withSetting(script, () => failureOf('pf20'));
+    const before = readUserSettings();
     const {header, first} = await tableShown('pf20');
     // A long cell wraps inside its column, so the mitigations are compared without their spaces.
     deepStrictEqual(
-      [header, first[0], first[1], first[2]?.replaceAll(' ', '')],
+      [
+        header,
+        first[0],
+        first[1],
+        first[2]?.replaceAll(' ', ''),
+        readUserSettings(),
+      ],
       [
         ['Status', 'Message', 'Mitigations'],
         'PreconnectScriptFailure',
         'The pre-connect script has failed (non-zero exit code 1)',
         '•Updatetheremote.SSH.preconnectsetting•Ensuretheprovidedpathisexecutableandthescriptexitssuccessfully(exitcode0)•ChecktheRemote-SSHlogforoutputfromthescript(prefixedwith[preconnect])',
+        before,
       ],
     );
   });
