@@ -47,6 +47,7 @@ import {
   pressQuickInputButton,
   pressQuickPickRowButton,
   quickPickOf,
+  type QuickPickRow,
   quickPickRows,
   rememberPage,
   statusBarText,
@@ -185,24 +186,37 @@ const RECENT_SETTLE_MILLISECONDS = 10_000;
  * draws only the rows that fit its height, about seventeen, and lists files after the folders, so after the many
  * folders a whole run has opened an entry the row looks for is not drawn at all until the list is filtered to it.
  */
-async function recentRows(name: string, filter: string) {
+async function recentRows(
+  name: string,
+  filter: string,
+): Promise<{rows: QuickPickRow[]; note: string}> {
+  /** The pick's rows once two reads 250 ms apart agree; a pick that keeps changing past the deadline says what it last read. */
+  async function steadyRows(what: string): Promise<QuickPickRow[]> {
+    let rows = await quickPickRows(name);
+    const began = Date.now();
+    for (let steady = 0; steady < 2;) {
+      if (Date.now() - began > RECENT_SETTLE_MILLISECONDS) {
+        throw new Error(
+          `the Open Recent pick of window ${name}, ${what}, did not settle within ${String(RECENT_SETTLE_MILLISECONDS / 1000)} s; it last read ${JSON.stringify(rows)}`,
+        );
+      }
+      await settle(250);
+      const next = await quickPickRows(name);
+      steady = JSON.stringify(next) === JSON.stringify(rows) ? steady + 1 : 0;
+      rows = next;
+    }
+    return rows;
+  }
   void inWindow(name, 'workbench.action.openRecent');
   await waitForQuickPick(name, 30_000);
+  const unfiltered = await steadyRows('before the filter');
   await typeInQuickPick(name, filter);
-  let rows = await quickPickRows(name);
-  const began = Date.now();
-  for (let steady = 0; steady < 2;) {
-    if (Date.now() - began > RECENT_SETTLE_MILLISECONDS) {
-      throw new Error(
-        `the Open Recent pick of window ${name}, filtered by ${JSON.stringify(filter)}, did not settle within ${String(RECENT_SETTLE_MILLISECONDS / 1000)} s; it last read ${JSON.stringify(rows)}`,
-      );
-    }
-    await settle(250);
-    const next = await quickPickRows(name);
-    steady = JSON.stringify(next) === JSON.stringify(rows) ? steady + 1 : 0;
-    rows = next;
-  }
-  return rows;
+  const rows = await steadyRows(`filtered by ${JSON.stringify(filter)}`);
+  const drawn = unfiltered.some(entry => entry.label.startsWith(filter));
+  return {
+    rows,
+    note: `the Open Recent pick of window ${name} drew ${String(unfiltered.length)} rows before the filter ${JSON.stringify(filter)}, ${drawn ? 'with' : 'without'} an entry for it among them, and ${String(rows.length)} rows after it`,
+  };
 }
 
 /** The label and the description of each row of `rows` whose label starts with one of `names`. */
@@ -455,9 +469,9 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
     );
     await settle(10_000);
     const afterPlain = otherNames();
-    const rows = await recentRows(window, 'c2623.dot-a');
+    const read = await recentRows(window, 'c2623.dot-a');
     await pressEscape(window);
-    const files = described(rows, ['c2623.dot-a']);
+    const files = described(read.rows, ['c2623.dot-a']);
     await commandLine('--remote', 'ssh-remote+harness', `${HOME}/c2623.dot-b/`);
     await shows('c2623.dot-b');
     await commandLine(
@@ -473,6 +487,7 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
         files: ['c2623.dot-a [SSH: harness] | ~'],
         windows: [window, 'c2623.dot-b', 'c2623.dot-c'],
       },
+      read.note,
     );
   });
 
@@ -955,19 +970,16 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
       await closeWindow(path.basename(folder));
     }
     const names = ['c2623-labels-home', 'c2623-labels-tmp'];
-    const connected = described(
-      await recentRows(window, 'c2623-labels'),
-      names,
-    );
+    const connectedRead = await recentRows(window, 'c2623-labels');
+    const connected = described(connectedRead.rows, names);
     await pressEscape(window);
     const fresh = await newLocalWindow();
-    const freshRows = described(await recentRows(fresh, 'c2623-labels'), names);
+    const freshRead = await recentRows(fresh, 'c2623-labels');
+    const freshRows = described(freshRead.rows, names);
     await pressEscape(fresh);
     await closeWindow(fresh);
-    const original = described(
-      await recentRows('local', 'c2623-labels'),
-      names,
-    );
+    const originalRead = await recentRows('local', 'c2623-labels');
+    const original = described(originalRead.rows, names);
     await pressEscape('local');
     deepStrictEqual(
       {connected, fresh: freshRows, original},
@@ -985,6 +997,7 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
           'c2623-labels-home [SSH] | /home/harness',
         ],
       },
+      [connectedRead.note, freshRead.note, originalRead.note].join('; '),
     );
   });
 
@@ -1135,9 +1148,8 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
     await shows('c2623-recent-gone');
     await closeWindow('c2623-recent-gone');
     const window = await newLocalWindow();
-    const before = described(await recentRows(window, 'c2623-recent-gone'), [
-      'c2623-recent-gone',
-    ]);
+    const read = await recentRows(window, 'c2623-recent-gone');
+    const before = described(read.rows, ['c2623-recent-gone']);
     await pressQuickPickRowButton(
       window,
       'c2623-recent-gone [SSH: harness]',
@@ -1157,6 +1169,7 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
         stillOpen: true,
         after: [],
       },
+      read.note,
     );
   });
 
