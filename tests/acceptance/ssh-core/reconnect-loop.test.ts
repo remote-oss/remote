@@ -1,7 +1,10 @@
 /**
  * @fileoverview The reconnection loop of a window whose host stops answering (F-2505, card #2703): when core starts
- * it, how the attempts follow each other, and how the limit and the grace time end it. The host is paused, which stops
- * its packets.
+ * it, how the attempts follow each other, and how the limit and the grace time end it. The host is paused, which
+ * freezes its processes so that nothing answers.
+ *
+ * Every bound on a time below is the spec's "about" with a stated tolerance, not a measured run. The rows print what
+ * they measured in every run, so a drift toward a bound shows in green runs.
  */
 
 import {deepStrictEqual} from 'node:assert';
@@ -45,6 +48,9 @@ import {
 
 /** The text of core's dialog that ends a reconnection. */
 const GIVEN_UP = 'Cannot reconnect. Please reload the window.';
+
+/** The seconds an "about" of the spec allows either side of its value (card #2703). */
+const ABOUT_SECONDS = 2;
 
 /** Seconds, to one decimal, from `milliseconds`. */
 function seconds(milliseconds: number): number {
@@ -119,8 +125,17 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     );
     const [first] = attemptsSince(mark, 'harness');
     const delay = seconds(between(began, first?.startedAt ?? 0));
+    console.log(
+      `F-2505 AC-2: attempt 2 started ${String(delay)} s after the pause`,
+    );
+    // Core ends a connection after 20 s without an acknowledgement of its oldest unacknowledged message and without
+    // any data received [oss] (src/vs/base/parts/ipc/common/ipc.net.ts: ProtocolConstants.TimeoutTime, checked in
+    // `_recvAckCheck`). That message is the first one written after the pause, up to KeepAliveSendTime (5 s) later, or
+    // one the other side had not yet acknowledged (AcknowledgeTime, 2 s) before it, and the check re-arms with a 0.5 s
+    // floor. So the reconnection starts between 20 - 2 = 18 s and 20 + 5 + 0.5 s after the pause, and the bound adds
+    // 1 s for the pause command and the clock of the log.
     deepStrictEqual(
-      [first?.number, delay >= 18 && delay <= 23, delay],
+      [first?.number, delay >= 18 && delay <= 26.5, delay],
       [2, true, delay],
     );
   });
@@ -149,7 +164,8 @@ describe('the reconnection loop of a window whose host stops answering (card #27
       [
         attempts.map(attempt => attempt.number),
         waits.map((wait, index) =>
-          wait !== undefined && Math.abs(wait - (expected[index] ?? 0)) <= 2
+          wait !== undefined &&
+          Math.abs(wait - (expected[index] ?? 0)) <= ABOUT_SECONDS
             ? 'ok'
             : wait,
         ),
@@ -336,6 +352,7 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     deepStrictEqual(
       [
         before.length > 0,
+        // "About 1 s": the spec's value and an "about" of 1 s.
         reconnectedAfter !== undefined && reconnectedAfter <= 2000,
         toasts.some(text =>
           // The terminal mode's notification carries the details link, as F-2304 has it.
@@ -560,7 +577,8 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     );
     deepStrictEqual(
       [
-        lasted.map(each => each !== undefined && each >= 15 && each <= 17),
+        // The spec's "about 15 to 17 s" (the 15 s default connect timeout, 2 s of the extension's extra wait), 1 s either side.
+        lasted.map(each => each !== undefined && each >= 14 && each <= 18),
         connectionLog()
           .slice(mark)
           .some(line =>
@@ -643,7 +661,14 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     await answerDialog(name, 'Reload Window');
     await connectedWithin(name, 180_000);
     deepStrictEqual(
-      [shown.details, into >= 30 && into <= 40, into],
+      // "About 30 to 40 s" with the "about" of 2 s either side. The end comes at the first attempt failure after the
+      // grace time, which the schedule of the attempts puts at about 37 s here (attempt 3 starts about 22 s after
+      // attempt 2 and fails 15.2 s later).
+      [
+        shown.details,
+        into >= 30 - ABOUT_SECONDS && into <= 40 + ABOUT_SECONDS,
+        into,
+      ],
       [GIVEN_UP, true, into],
     );
     await freshHost();
