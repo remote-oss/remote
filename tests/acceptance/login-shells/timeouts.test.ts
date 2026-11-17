@@ -5,7 +5,9 @@ import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
   appendScript,
   closeWindow,
+  connected,
   connectionLog,
+  editorProduct,
   emptyWindows,
   onHostAs,
   openWindow,
@@ -64,10 +66,12 @@ describe('login shells that do not finish or end early: the connect fails or wai
     );
   });
 
-  it('F-2704 AC-11 (ruling-1221-read): a .bash_profile that reads a line ends the connect within 5 s with the dialog of AC-13, and the log names the cause', async () => {
+  it('F-2704 AC-11 (ruling-1221-read): a .bash_profile that reads a line ends the connect within 5 s with the dialog of AC-13 (the criterion accepts it or the timeout dialog), the window does not connect, no server folder is created, and the log names the cause', async () => {
     const timeoutSeconds = 10;
+    const serverFolder = `/home/harness-bash/${editorProduct().serverDataFolderName}`;
     await setting('remote.SSH.connectTimeout', timeoutSeconds);
     await freshServer('harness-bash');
+    await onHostAs('harness-bash', 'rm', '-rf', serverFolder);
     await writeHomeFile('harness-bash', '.bash_profile', 'read answer\n');
     const mark = connectionLog().length;
     const failed = await failedOn('harness-bash', 'to-ac11-read', 60_000);
@@ -85,6 +89,15 @@ describe('login shells that do not finish or end early: the connect fails or wai
             'the SSH session ended before the host reported its platform',
           ),
         ),
+        connected: await connected('to-ac11-read'),
+        serverFolder: (
+          await onHostAs(
+            'harness-bash',
+            'sh',
+            '-c',
+            `if test -e '${serverFolder}'; then echo exists; else echo absent; fi`,
+          )
+        ).trim(),
       },
       {
         question: 'Could not establish connection to "harness-bash".',
@@ -92,6 +105,8 @@ describe('login shells that do not finish or end early: the connect fails or wai
         quick: true,
         beforeTimeout: true,
         logged: true,
+        connected: false,
+        serverFolder: 'absent',
       },
       `the dialog came ${String(failed.dialog.milliseconds)} ms after the window was asked for and ${String(failed.dialog.sinceConnectStarted)} ms after the connect started`,
     );

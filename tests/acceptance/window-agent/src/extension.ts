@@ -241,7 +241,10 @@ export function activate(context: vscode.ExtensionContext): void {
   );
   const name = activationName(agentFolder);
   windowName = name;
-  report(agentFolder, name, {event: 'activated'});
+  report(agentFolder, name, {
+    event: 'activated',
+    logFolder: context.logUri.fsPath,
+  });
   // The terminals the window opens and the one that becomes active, with their times, for the rows that read why a palette did not show.
   context.subscriptions.push(
     vscode.window.onDidOpenTerminal(terminal => {

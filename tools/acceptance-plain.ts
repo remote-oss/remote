@@ -12,6 +12,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -339,6 +340,30 @@ export function registerLanguagePack(
     }),
   );
 }
+
+/**
+ * The launch's own argv.json, stood before its editor starts: the editor creates the file on its first run and
+ * rewrites it, neither atomically, when the crash-reporter keys are missing, and a launch that starts on a user-data
+ * folder its earlier, stopped editor left reads the file as it stands, which a write still in flight leaves invalid,
+ * and the launch's window shows the runtime-arguments notice for it. The keys stand in the file, written by temp and
+ * rename, so the editor finds them and rewrites nothing, and the file the launch starts on parses whatever it met. A
+ * row that edits the file of its own and relaunches the editor stands the seed back over its edit.
+ */
+export function preSeedArgv(runFolder: string, launch: Launch): void {
+  const folder = userDataFolderOf(runFolder, launch);
+  mkdirSync(folder, {recursive: true});
+  const target = path.join(folder, 'argv.json');
+  const pending = `${target}.${String(process.pid)}.tmp`;
+  writeFileSync(pending, ARGV_JSON);
+  renameSync(pending, target);
+}
+
+/**
+ * The pre-seeded argv.json: the crash-reporter keys the editor reads, the enable one at the value the editor itself
+ * holds, so its rewrite is a no-op, and nothing else the editor parses there.
+ */
+const ARGV_JSON =
+  '{\n\t"enable-crash-reporter": false,\n\t"crash-reporter-id": ""\n}\n';
 
 /**
  * Packages the fixture language pack for `language`, which carries no translation, from the language suite's fixtures
@@ -741,6 +766,7 @@ export async function runPlainLaunch(
   // A request an earlier attempt left would restart the editor for a row that is gone, so it counts as answered. The
   // folder itself is the row's to make and is not touched here: the run folder may be a path the harness cannot write.
   const handled = new Set<string>(staleRequestIds(relaunchFolder));
+  preSeedArgv(session.runFolder, launch);
   const current = {
     editor: steps.start(
       plainEditorOf(session.executable, session.runFolder, launch, environment),
@@ -762,6 +788,7 @@ export async function runPlainLaunch(
           recursive: true,
           force: true,
         });
+        preSeedArgv(session.runFolder, launch);
         return plainEditorOf(session.executable, session.runFolder, launch, {
           ...environment,
           ...Object.fromEntries(
