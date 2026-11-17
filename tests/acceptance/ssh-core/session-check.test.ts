@@ -44,15 +44,22 @@ async function sharedSshIds(): Promise<number[]> {
 
 /** Resets every connection of the runner's side of window port `port`, as a broken transport of that window alone does. */
 async function breakConnectionsOf(port: number): Promise<void> {
-  await execFileAsync('sudo', [
-    '-n',
-    'ss',
-    '-K',
-    '-tn',
-    'state',
-    'established',
-    `( sport = :${String(port)} or dport = :${String(port)} )`,
-  ]);
+  try {
+    await execFileAsync('sudo', [
+      '-n',
+      'ss',
+      '-K',
+      '-tn',
+      'state',
+      'established',
+      `( sport = :${String(port)} or dport = :${String(port)} )`,
+    ]);
+  } catch (caught) {
+    throw new Error(
+      `the row needs a passwordless sudo and a kernel that lets ss reset sockets, and \`sudo -n ss -K\` failed: ${String(caught)}`,
+      {cause: caught},
+    );
+  }
 }
 
 describe('the session check of a window that lost its transport (card #2751)', function () {

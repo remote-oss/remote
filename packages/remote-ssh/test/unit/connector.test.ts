@@ -539,7 +539,7 @@ describe('the connector over the connect pipeline', () => {
     deepStrictEqual(seen, [
       [
         'connected',
-        'the held connection was checked: its session did not answer and was ended',
+        'the held connection was checked: no live session answered: it did not within the bound and was ended, or there was none',
       ],
       [
         'connected',

@@ -235,7 +235,7 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
     dependencies.options.logger.info(
       found === 'unchecked'
         ? 'the held connection could not be checked: its helper did not answer the check'
-        : `the held connection was checked: its session ${found === 'alive' ? 'answers' : 'did not answer and was ended'}`,
+        : `the held connection was checked: ${found === 'alive' ? 'its session answers' : 'no live session answered: it did not within the bound and was ended, or there was none'}`,
     );
   }
 
