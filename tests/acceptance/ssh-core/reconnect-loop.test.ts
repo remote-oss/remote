@@ -111,32 +111,47 @@ describe('the reconnection loop of a window whose host stops answering (card #27
   it('F-2505 AC-2 (c2703-start): when the packets stop for about 20 s core shows Reconnecting and the resolver is called again at once as attempt 2', async () => {
     const name = 'c2703-start';
     const mark = await connectedWindow(name);
-    const began = outageBegins();
+    const pausedAt = Date.now();
+    outageBegins();
+    // Core starts the reconnection when it shows Reconnecting. The log's line for attempt 2 comes later: since the
+    // session check of #2759 the extension waits up to its 3 s probe on a host that does not answer before it logs the
+    // attempt, so counted from that line the delay would be core's timeout plus 3 s.
+    let reconnectingAt: number | undefined;
+    const limit = pausedAt + 90_000;
+    while (reconnectingAt === undefined && Date.now() < limit) {
+      if (
+        (await statusBarText(name, 'status.host').catch(() => '')) ===
+        'Reconnecting to SSH: harness...'
+      ) {
+        reconnectingAt = Date.now();
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
     await waitFor(
       'attempt 2',
       () => attemptsSince(mark, 'harness').length > 0,
       90_000,
     );
-    await waitFor(
-      'the Reconnecting indicator',
-      async () =>
-        (await statusBarText(name, 'status.host')) ===
-        'Reconnecting to SSH: harness...',
-      60_000,
-    );
     const [first] = attemptsSince(mark, 'harness');
-    const delay = seconds(between(began, first?.startedAt ?? 0));
+    const delay =
+      reconnectingAt === undefined
+        ? undefined
+        : seconds(reconnectingAt - pausedAt);
     console.log(
-      `F-2505 AC-2: attempt 2 started ${String(delay)} s after the pause`,
+      `F-2505 AC-2: core showed Reconnecting ${String(delay)} s after the pause`,
     );
     // Core ends a connection after 20 s without an acknowledgement of its oldest unacknowledged message and without
     // any data received [oss] (src/vs/base/parts/ipc/common/ipc.net.ts: ProtocolConstants.TimeoutTime, checked in
     // `_recvAckCheck`). That message is the first one written after the pause, up to KeepAliveSendTime (5 s) later, or
     // one the other side had not yet acknowledged (AcknowledgeTime, 2 s) before it, and the check re-arms with a 0.5 s
     // floor. So the reconnection starts between 20 - 2 = 18 s and 20 + 5 + 0.5 s after the pause, and the bound adds
-    // 1 s for the pause command and the clock of the log.
+    // 1 s for the pause command and the poll of the indicator.
     deepStrictEqual(
-      [first?.number, delay >= 18 && delay <= 26.5, delay],
+      [
+        first?.number,
+        delay !== undefined && delay >= 18 && delay <= 26.5,
+        delay,
+      ],
       [2, true, delay],
     );
   });
@@ -704,9 +719,11 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     await answerDialog(name, 'Reload Window');
     await connectedWithin(name, 180_000);
     deepStrictEqual(
-      // The spec's "about 30 to 40 s", unwidened. The end is the first attempt failure after the grace time, and the
-      // schedule fixes it: attempt 2 fails 17 s after it starts (the 15 s ConnectTimeout plus the extension's 2 s),
-      // core waits 5 s, and attempt 3 fails 15.2 s after it starts, about 37.2 s in all.
+      // The spec's "about 30 to 40 s" of attempts, unwidened, counted from the log's line for attempt 2. The end is
+      // the first attempt failure after the grace time, and the schedule fixes it: attempt 2 fails 15.2 s after its
+      // line (ssh's 15 s ConnectTimeout), core waits 5 s, and attempt 3 fails 15.2 s after it starts, about 35.4 s in
+      // all, with timer jitter up to about 39 s. Core's own start (the Reconnecting indicator) is 3 s before that line
+      // since #2759's session check, which waits its 3 s probe on a paused host.
       [shown.details, into >= 30 && into <= 40, into],
       [GIVEN_UP, true, into],
     );
