@@ -78,6 +78,10 @@ import {
 import type {PreconnectPorts} from '../preconnect/ports.ts';
 import {preconnectStep} from './preconnect-step.ts';
 import {
+  type LegacyExtensionPorts,
+  migrateLegacyExtensions,
+} from '../settings/legacy-extensions.ts';
+import {
   createServerSteps,
   type ServerStepDependencies,
 } from './server-steps.ts';
@@ -146,6 +150,8 @@ export interface WiringPorts {
   configuredHosts(): HostListResult;
   /** The pre-connection step's machine and editor ports. */
   preconnect: PreconnectPorts;
+  /** The user's settings, where the legacy extensions key is moved from. */
+  legacySettings: LegacyExtensionPorts;
   settings: WiringSettings;
   /** The editor's tunnel service, which the default forwarded ports are opened through. */
   tunnels: TunnelOpener;
@@ -466,6 +472,7 @@ export function stepsOf(
     validate: input => serverSteps(input).validate(input),
     checkInstallFolder: input => serverSteps(input).checkInstallFolder(input),
     checkProxy: input => serverSteps(input).checkProxy(input),
+    migrateLegacySettings: () => migrateLegacyExtensions(ports.legacySettings),
     preconnect: preconnectStep({
       setting: ports.settings.preconnect,
       ports: ports.preconnect,

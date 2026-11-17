@@ -286,6 +286,22 @@ describe("the connect's surfaces over the editor", () => {
     ]);
   });
 
+  it("F-2506 6.3: a setting is written to the user's settings as given, and removed when it is undefined", async () => {
+    const {surfaces, calls} = surfacesWith();
+    await surfaces.writeUserSetting(
+      'remote.defaultExtensionsIfInstalledLocally',
+      ['a.b'],
+    );
+    await surfaces.writeUserSetting(
+      'remote.SSH.defaultExtensionsIfInstalledLocally',
+      undefined,
+    );
+    deepStrictEqual(calls.writes, [
+      ['remote.defaultExtensionsIfInstalledLocally', ['a.b']],
+      ['remote.SSH.defaultExtensionsIfInstalledLocally', undefined],
+    ]);
+  });
+
   it('F-2206 BR-6: a map that is not one starts empty', async () => {
     const {surfaces, calls} = surfacesWith({writtenPlatforms: ['linux']});
     await surfaces.writePlatform('devbox', 'linux');

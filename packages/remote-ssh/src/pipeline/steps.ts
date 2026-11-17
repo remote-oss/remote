@@ -122,6 +122,12 @@ export interface TunnelOpening {
 
 /** The steps of one connect, each over the real thing in the extension and over a fake in a test. */
 export interface ConnectSteps {
+  /**
+   * Moves the legacy `remote.SSH.defaultExtensionsIfInstalledLocally` of the user's settings into the editor's key; the
+   * pipeline starts it on the first attempt of a window's connect, before anything else, and does not wait for it: a
+   * settings write of a window that is still resolving can wait for the resolve. It never fails.
+   */
+  migrateLegacySettings(): Promise<void>;
   /** The SSH configuration files in effect, read and parsed before anything runs. */
   checkConfigFile(input: ConnectInput): StepResult<undefined>;
   /** The settings that decide how the server starts, checked before anything runs; a window's connect alone runs it. */

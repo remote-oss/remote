@@ -228,6 +228,7 @@ export function surfacesOf(
   return {
     settings,
     configuredHosts: () => ({hosts: []}),
+    writeUserSetting: () => Promise.resolve(),
     translate,
     prompts: SILENT_PROMPTS,
     terminals: new RecordingTerminals(),

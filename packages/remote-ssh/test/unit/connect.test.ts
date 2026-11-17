@@ -197,6 +197,65 @@ describe('the connect pipeline, when it works', () => {
     );
   });
 
+  it('F-2506 BR-10: moves the legacy settings first, once, on the first attempt of a window', async () => {
+    const {recording, options} = setup();
+    const moves: string[] = [];
+    await connect(
+      INPUT,
+      steps(recording, {
+        migrateLegacySettings: () => {
+          moves.push(`after ${recording.calls.join(',') || 'nothing'}`);
+          return Promise.resolve();
+        },
+      }),
+      options,
+    );
+    await connect(
+      {...INPUT, attempt: 2, isReconnection: true},
+      steps(recording, {
+        migrateLegacySettings: () => {
+          moves.push('again');
+          return Promise.resolve();
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(moves, ['after nothing']);
+  });
+
+  it('F-2506 BR-10: does not wait for the legacy settings move, and logs one that fails', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        migrateLegacySettings: () => never(),
+      }),
+      options,
+    );
+    const failing = setup();
+    await connect(
+      INPUT,
+      steps(failing.recording, {
+        migrateLegacySettings: () => Promise.reject(new Error('no settings')),
+      }),
+      failing.options,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result,
+        logSink.lines.some(line => line.message.includes('did not work')),
+        failing.logSink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('legacy settings move')),
+      ],
+      [
+        true,
+        false,
+        ['the legacy settings move did not work: Error: no settings'],
+      ],
+    );
+  });
+
   it('runs the pre-connection script on the first attempt only', async () => {
     const {recording, options} = setup();
     await connect(
