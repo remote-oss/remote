@@ -9,6 +9,7 @@ import {
   appendScript,
   connectedWithin,
   connectionLog,
+  editorProduct,
   inWindow,
   onHost,
   openWindow,
@@ -310,7 +311,10 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     });
   }
 
-  /** The process ids on the host of the server, the remote extension host and the shells of the terminals of the window. */
+  /**
+   * The process ids on the host of the server's own processes (the server, the remote extension host and the others that
+   * run from its folder) and of the shells below them, which are the terminals'.
+   */
   async function hostProcesses() {
     async function pids(...pattern: string[]): Promise<number[]> {
       try {
@@ -322,11 +326,14 @@ describe('the reconnection loop of a window whose host stops answering (card #27
         return [];
       }
     }
-    const [ptyHost] = await pids('-f', '--type=ptyHost');
+    const folder = `/home/harness/${editorProduct().serverDataFolderName}/bin/`;
+    const server = await pids('-f', folder);
+    const below = (
+      await Promise.all(server.map(parent => pids('-P', String(parent))))
+    ).flat();
     return {
-      server: await pids('-f', 'server-main'),
-      extensionHost: await pids('-f', '--type=extensionHost'),
-      shells: ptyHost === undefined ? [] : await pids('-P', String(ptyHost)),
+      server,
+      shells: below.filter(each => !server.includes(each)),
     };
   }
 
@@ -353,14 +360,18 @@ describe('the reconnection loop of a window whose host stops answering (card #27
           each => !before.some(earlier => earlier.port === each.port),
         ),
         found: Object.values(hostBefore).map(list => list.length > 0),
-        kept: hostAfter,
+        kept: hostBefore.server
+          .concat(hostBefore.shells)
+          .every(each =>
+            hostAfter.server.concat(hostAfter.shells).includes(each),
+          ),
       },
       {
         reconnected: true,
         newSsh: true,
         newPort: true,
-        found: [true, true, true],
-        kept: hostBefore,
+        found: [true, true],
+        kept: true,
       },
     );
   });

@@ -102,7 +102,8 @@ export function localSshOfHarness(): LocalSsh[] {
   return execFileSync('ps', ['-eo', 'pid=,args='], {encoding: 'utf8'})
     .split('\n')
     .flatMap(line => {
-      const match = /^\s*(\d+) ssh .*ssh_config .* harness( |$)/u.exec(line);
+      const match =
+        /^\s*(\d+) (?:\S*\/)?ssh .*ssh_config .* harness( |$)/u.exec(line);
       return match?.[1] === undefined
         ? []
         : [
