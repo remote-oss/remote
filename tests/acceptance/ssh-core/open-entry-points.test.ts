@@ -209,13 +209,18 @@ async function recentRows(
   }
   void inWindow(name, 'workbench.action.openRecent');
   await waitForQuickPick(name, 30_000);
-  const unfiltered = await steadyRows('before the filter');
+  // One read, only for the failure message of the rows: it never throws, so the diagnostic cannot fail a row that passes.
+  await settle(500);
+  const unfiltered = await quickPickRows(name).catch(() => undefined);
   await typeInQuickPick(name, filter);
   const rows = await steadyRows(`filtered by ${JSON.stringify(filter)}`);
-  const drawn = unfiltered.some(entry => entry.label.startsWith(filter));
+  const before =
+    unfiltered === undefined
+      ? 'an unread number of rows'
+      : `${String(unfiltered.length)} rows, ${unfiltered.some(entry => entry.label.startsWith(filter)) ? 'with' : 'without'} an entry for it among them`;
   return {
     rows,
-    note: `the Open Recent pick of window ${name} drew ${String(unfiltered.length)} rows before the filter ${JSON.stringify(filter)}, ${drawn ? 'with' : 'without'} an entry for it among them, and ${String(rows.length)} rows after it`,
+    note: `the Open Recent pick of window ${name} drew ${before} before the filter ${JSON.stringify(filter)}, and ${String(rows.length)} rows after it`,
   };
 }
 
