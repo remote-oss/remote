@@ -7,9 +7,14 @@
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {deepStrictEqual} from 'node:assert';
-import {closeWindow, windowState} from '../windows/harness.ts';
-import {killSharedConnection} from '../windows/key-windows.ts';
+import {
+  appendScript,
+  closeWindow,
+  inWindow,
+  windowState,
+} from '../windows/harness.ts';
 import {connectWith, launchSsh} from '../windows/config-keywords-support.ts';
+import {pickHost} from '../windows/maintenance.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -54,7 +59,9 @@ describe('a ControlPersist master and the end of the attempt (card #2664, F-2102
       async (connect, file) => {
         const before = await masters(alias);
         if (ending === 'kill') {
-          await killSharedConnection(alias, alias);
+          // Kill Local Connection Server For Host... asks which host; the script takes the alias.
+          appendScript([pickHost(alias)]);
+          await inWindow(alias, 'opensshremotes.cleanLocalServer');
         } else {
           await closeWindow(alias);
         }
