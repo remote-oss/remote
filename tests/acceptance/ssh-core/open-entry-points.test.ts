@@ -252,6 +252,17 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
       'files.simpleDialog.enable': true,
     });
     await rememberPage('local');
+    // Throwaway (card #2772): the folders a whole run has opened before these rows, so that the Open Recent list is long.
+    for (let index = 0; index < 30; index += 1) {
+      const folder = `zz-lead-${String(index)}`;
+      await onHost([folder]);
+      await commandLine(
+        '--folder-uri',
+        `vscode-remote://ssh-remote+harness${HOME}/${folder}`,
+      );
+      await shows(folder);
+      await closeWindow(folder);
+    }
   });
 
   afterEach(async () => {
