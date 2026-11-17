@@ -3797,16 +3797,16 @@ async function keyInFolderDialog(
     () => `the folder dialog of window ${name}`,
     async () => ((await folderDialogOpen(name)) ? true : undefined),
   );
-  /** Focuses the dialog's input and, when `typed` is given, sets its value as a user's typing would. */
-  function typeInto(): Promise<null> {
+  /** Focuses the dialog's input and, when `text` is given, sets its value as a user's typing would. */
+  function typeInto(text: string | undefined = typed): Promise<null> {
     return evaluate<null>(
       name,
       `(() => {
       const input = ${FOLDER_DIALOG_INPUT};
       input.focus();
-      if (${JSON.stringify(typed ?? null)} !== null) {
+      if (${JSON.stringify(text ?? null)} !== null) {
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        setter.call(input, ${JSON.stringify(typed ?? '')});
+        setter.call(input, ${JSON.stringify(text ?? '')});
         input.dispatchEvent(new Event('input', {bubbles: true}));
       }
       return null;
@@ -3829,9 +3829,11 @@ async function keyInFolderDialog(
   }
   if (waiting !== undefined && typed !== undefined) {
     let lastReading: FolderDialogReading | undefined;
+    let waitingForList: number | undefined;
+    let withSlash = false;
     await settled(
       () =>
-        `the folder dialog of window ${name} to show ${typed}; it last read ${JSON.stringify(lastReading)}`,
+        `the folder dialog of window ${name} to show ${typed}${withSlash ? ' (typed again with a closing slash)' : ''}; it last read ${JSON.stringify(lastReading)}`,
       async () => {
         lastReading = await read();
         const shown =
@@ -3839,10 +3841,26 @@ async function keyInFolderDialog(
         if (!shown) {
           // The dialog fills its input with its own folder once its first listing is in, which can come after the typing:
           // what was typed is typed again.
+          waitingForList = undefined;
           await typeInto();
           return undefined;
         }
-        return lastReading.rows[0] === '..' ? true : undefined;
+        if (lastReading.rows[0] === '..') {
+          return true;
+        }
+        // The input holds the typed path and the list stays the parent's listing, as for a name that is not a folder
+        // (about one dialog in a hundred, measured on a folder that exists): the same text typed again changes nothing
+        // for the dialog, a closing slash makes it list the folder at once.
+        waitingForList ??= Date.now();
+        if (
+          !withSlash &&
+          !typed.endsWith('/') &&
+          Date.now() - waitingForList > 2000
+        ) {
+          withSlash = true;
+          await typeInto(`${typed}/`);
+        }
+        return undefined;
       },
     );
   }
