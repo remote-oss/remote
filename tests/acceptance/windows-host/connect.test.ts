@@ -2,7 +2,7 @@
  * @fileoverview The run's Windows SSH host (card #2652): `winhost`, Windows' OpenSSH Server on 127.0.0.1, which the
  * platform workflow's Windows job starts with key authentication and Windows PowerShell as its shell. The first row
  * reaches it with plain `ssh` through the run's ssh_config, as the product's windows will; the second opens a window on
- * it with no platform stored.
+ * it with no platform stored, and the third with its platform stored as Windows and pseudo-terminals permitted.
  */
 
 import {deepStrictEqual} from 'node:assert';
@@ -23,6 +23,57 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+/** The command lines of this machine's `ssh` processes that forward a SOCKS port: the connection helpers' clients. */
+async function helperSshCommands(): Promise<string[]> {
+  const {stdout} = await execFileAsync('powershell', [
+    '-NoProfile',
+    '-Command',
+    'Get-CimInstance Win32_Process -Filter "Name=\'ssh.exe\'" | ForEach-Object { $_.CommandLine }',
+  ]);
+  return stdout.split(/\r?\n/).filter(line => line.includes(' -D 127.0.0.1:'));
+}
+
+/** Waits until no connection helper's `ssh` runs, so that the next window starts its own. */
+function noHelperSsh(): Promise<void> {
+  return waitFor(
+    'no connection helper ssh to run',
+    async () => (await helperSshCommands()).length === 0,
+    60_000,
+  );
+}
+
+/**
+ * Opens window `name` on winhost and waits until it is on the remote and `ready` holds, gathering the helpers' `ssh`
+ * command lines meanwhile; gives them and the log lines since the open, with the window closed again.
+ */
+async function connectedOnWinhost(
+  name: string,
+  ready: (logged: readonly string[]) => boolean,
+): Promise<{commands: string[]; logged: string[]}> {
+  await noHelperSsh();
+  const mark = connectionLog().length;
+  const commands = new Set<string>();
+  try {
+    await openWindow('winhost', name);
+    await waitFor(
+      `${name} to be on the remote`,
+      async () => {
+        for (const command of await helperSshCommands()) {
+          commands.add(command);
+        }
+        return (
+          (await windowState(name)).remoteName === 'ssh-remote' &&
+          ready(connectionLog().slice(mark))
+        );
+      },
+      480_000,
+    );
+    return {commands: [...commands], logged: connectionLog().slice(mark)};
+  } finally {
+    await closeWindow(name).catch(() => undefined);
+  }
+}
+
 describe('the Windows SSH host of the run (card #2652)', function () {
   this.timeout(60_000);
 
@@ -40,27 +91,41 @@ describe('the Windows SSH host of the run (card #2652)', function () {
     this.timeout(600_000);
     const saved = readUserSettings();
     await userSettings({'remote.SSH.remotePlatform': {}});
-    const mark = connectionLog().length;
     try {
-      await openWindow('winhost', 'c1835-win');
-      await waitFor(
-        'c1835-win to be on the remote with the platform logged',
-        async () =>
-          (await windowState('c1835-win')).remoteName === 'ssh-remote' &&
-          connectionLog().slice(mark).includes('Platform: windows'),
-        480_000,
+      const {logged} = await connectedOnWinhost('c1835-win', lines =>
+        lines.includes('Platform: windows'),
       );
       deepStrictEqual(
         [
           recordLines('platformPick', 'c1835-win'),
-          connectionLog()
-            .slice(mark)
-            .filter(line => line.startsWith('Platform: ')),
+          logged.filter(line => line.startsWith('Platform: ')),
         ],
         [[], ['Platform: windows']],
       );
     } finally {
-      await closeWindow('c1835-win').catch(() => undefined);
+      restoreUserSettings(saved);
+      await userSettings({});
+    }
+  });
+
+  it('F-2106 AC-14 (ruling-1606-no-tty-warning): on a host decided as Windows, with the setting on and no RequestTTY in the shared mode, the connection command has no -T, ssh writes no warning, and the window connects', async function () {
+    this.timeout(600_000);
+    const saved = readUserSettings();
+    await userSettings({'remote.SSH.permitPtyAllocation': true});
+    try {
+      const {commands, logged} = await connectedOnWinhost(
+        'r1606-win',
+        () => true,
+      );
+      deepStrictEqual(
+        [
+          commands.length > 0,
+          commands.some(command => command.split(' ').includes('-T')),
+          logged.filter(line => line.includes('Pseudo-terminal')),
+        ],
+        [true, false, []],
+      );
+    } finally {
       restoreUserSettings(saved);
       await userSettings({});
     }

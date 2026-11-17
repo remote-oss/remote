@@ -9,7 +9,10 @@ import {
   runProcessTask,
   terminalNamed,
 } from '../windows/harness.ts';
-import {INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
+import {
+  fishWithoutProbe,
+  INSTALL_MILLISECONDS,
+} from '../windows/maintenance.ts';
 import {terminalsNamed} from './shell-support.ts';
 
 /** One account per login shell, side by side on one host (card tooling-55). */
@@ -198,7 +201,8 @@ describe('one account per login shell (card tooling-55)', function () {
     }
   });
 
-  it("#1220: harness-fish connects, a task reads the server's environment, and a new terminal is named after the login shell, and with no platform stored the log names it linux (#1835)", async () => {
+  it("#1220: harness-fish connects, a task reads the server's environment, and a new terminal is named after the login shell, and, connected in the non-local mode with its platform stored since fish answers no platform probe, the log names no platform (#1835)", async () => {
+    await fishWithoutProbe();
     const mark = connectionLog().length;
     await openWindow('harness-fish', 'ls-fish');
     try {
@@ -221,10 +225,11 @@ describe('one account per login shell (card tooling-55)', function () {
           shellTerminal,
           platform: connectionLog().slice(mark).includes('Platform: linux'),
         },
-        {exitCode: 0, homeLine: true, shellTerminal: true, platform: true},
+        {exitCode: 0, homeLine: true, shellTerminal: true, platform: false},
       );
     } finally {
       await closeWindow('ls-fish');
+      await fishWithoutProbe(false);
     }
   });
 });
