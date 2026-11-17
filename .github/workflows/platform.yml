@@ -235,7 +235,10 @@ jobs:
           mkdir -p ~/.docker && printf '{"cliPluginsExtraDirs": ["%s/lib/docker/cli-plugins"]}\n' "$(brew --prefix)" > ~/.docker/config.json
           mkdir -p /tmp/colima
           colima start --cpu 3 --memory 8 --mount "$HOME:w" --mount /tmp/colima:w
-          docker version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}'
+          # the launches that bring a Docker configuration of their own (containers-trust, containers-context) do not see
+          # colima's context and fall back to the default socket, which is colima's here as it is the engine's on Linux
+          sudo ln -sf "$HOME/.colima/default/docker.sock" /var/run/docker.sock
+          docker --context default version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}'
           docker buildx version
       - name: The launches
         run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
