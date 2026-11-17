@@ -22,7 +22,7 @@ import {
   hostBlock,
   writeConfig,
 } from '../windows/config-keywords-support.ts';
-import {closeAllButLocal} from '../windows/maintenance.ts';
+import {closeAllButLocal, freshHost} from '../windows/maintenance.ts';
 import {
   chooseQuickPickRow,
   clickToastLink,
@@ -91,6 +91,8 @@ describe('"details" while ssh waits for a host-key answer (card #2654)', functio
 
   it('F-2304 AC-12 (c2654-terminal): with the login terminal shown, "details" reveals it focused with ssh’s question, and the answer typed there lets the connect go on to installing the server', async () => {
     const name = 'c2654-terminal';
+    // Earlier rows of the launch left a server on the host, and a connect that finds one has no install phase to show.
+    await freshHost();
     await openAsking(name, true);
     await waitFor(
       'ssh’s question in the login terminal',
