@@ -52,8 +52,11 @@ describe('pseudo-locale', () => {
       'ÿ',
     ];
     deepStrictEqual(
-      [letters.map(letter => pseudoLocalize(letter)), pseudoLocalize('Fgzt')],
-      [counterparts, 'Fgzt'],
+      [
+        letters.map(letter => pseudoLocalize(letter)),
+        pseudoLocalize('FGHJKMPQRTVWXZfghjklmpqrstvwxz'),
+      ],
+      [counterparts, 'FGHJKMPQRTVWXZfghjklmpqrstvwxz'],
     );
   });
 
