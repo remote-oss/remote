@@ -25,7 +25,7 @@ import type {CliBridgeLoss} from '../../src/cli/cli-bridge.ts';
 import type {DownloadProgressPort} from '../../src/cli/server-download-progress.ts';
 import type {AgentLinkPlan} from '../../src/environment/agent-link.ts';
 import type {ForwardingPlans} from '../../src/environment/forwarding.ts';
-import type {ConnectionNotice, SharedRecord} from 'lib-ssh';
+import type {ConnectionNotice, SessionCheck, SharedRecord} from 'lib-ssh';
 import type {ConnectOptions, PhaseEvent} from '../../src/pipeline/connect.ts';
 import type {PromptEditor} from '../../src/surfaces/prompt-surface.ts';
 import type {
@@ -120,6 +120,10 @@ export interface Recording {
   tunnelClosed?: (detail: string) => void;
   calls: string[];
   releases: number;
+  /** What the lease answers to a session check, `alive` unless a test says otherwise. */
+  sessionCheck?: SessionCheck;
+  /** How many leases had been released each time the session was checked. */
+  releasesAtCheck: number[];
   tunnelCloses: number;
   records: SharedRecord[];
   phases: PhaseEvent[];
@@ -270,6 +274,10 @@ export function leaseOf(recording: Recording): ConnectionLease {
     },
     answer: () => Promise.resolve(false),
     refuse: () => Promise.resolve(false),
+    checkSession: () => {
+      recording.releasesAtCheck.push(recording.releases);
+      return Promise.resolve(recording.sessionCheck ?? 'alive');
+    },
     release: () => {
       recording.releases += 1;
     },
@@ -398,6 +406,7 @@ export function emptyRecording(): Recording {
   return {
     calls: [],
     releases: 0,
+    releasesAtCheck: [],
     tunnelCloses: 0,
     records: [],
     phases: [],

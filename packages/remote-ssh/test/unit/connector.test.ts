@@ -498,6 +498,56 @@ describe('the connector over the connect pipeline', () => {
     deepStrictEqual(recording.releases, 1);
   });
 
+  it('F-2505 AC-25: the first reconnection attempt asks the held connection whether its session answers, before it gives the connection back, and says what it found', async () => {
+    const {connector, recording, logged} = connectorFor();
+    await connector.connect(HOST_INPUT);
+    await connector.connect({...HOST_INPUT, attempt: 2, isReconnection: true});
+    deepStrictEqual(
+      [
+        recording.releasesAtCheck,
+        recording.releases,
+        logged().filter(line => line.startsWith('the held connection was')),
+      ],
+      [[0], 1, ['the held connection was checked: its session answers']],
+    );
+  });
+
+  it('F-2505 AC-25: a connect that is not a reconnection asks nothing', async () => {
+    const {connector, recording} = connectorFor();
+    await connector.connect(HOST_INPUT);
+    await connector.connect(HOST_INPUT);
+    deepStrictEqual(recording.releasesAtCheck, []);
+  });
+
+  it('F-2505 AC-25: a session that did not answer is said to have been ended, and a connection that cannot be checked is said so and the attempt goes on as before', async () => {
+    const seen: string[][] = [];
+    for (const found of ['ended', 'unchecked'] as const) {
+      const {connector, recording, logged} = connectorFor();
+      recording.sessionCheck = found;
+      await connector.connect(HOST_INPUT);
+      const result = await connector.connect({
+        ...HOST_INPUT,
+        attempt: 2,
+        isReconnection: true,
+      });
+      seen.push([
+        'connectionToken' in result ? 'connected' : 'failed',
+        ...logged().filter(line => line.startsWith('the held connection was')),
+        ...logged().filter(line => line.includes('could not be checked')),
+      ]);
+    }
+    deepStrictEqual(seen, [
+      [
+        'connected',
+        'the held connection was checked: no live session answered: it did not within the bound and was ended, or there was none',
+      ],
+      [
+        'connected',
+        'the held connection could not be checked: its helper did not answer the check',
+      ],
+    ]);
+  });
+
   /** Which transport listeners hear `notice` sent through the lease of a connection that worked. */
   async function transportHeard(
     notice: Parameters<NonNullable<Recording['notice']>>[0],

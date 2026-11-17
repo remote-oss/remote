@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {scriptedProbe, type ProbeScript} from './scripted-probe.ts';
 import {
   type ClientEnvironment,
   type HelperLease,
@@ -50,6 +51,7 @@ describe('the window side of the shared connection (S9)', () => {
   let files: MemoryFilePort;
   let endpoints: FakeEndpointPort;
   let sshRuns: ScriptedSpawner;
+  let probeScript: ProbeScript;
   let helperEnds: Array<Promise<unknown>>;
   let spawnFails: boolean;
   let environment: {
@@ -132,6 +134,7 @@ describe('the window side of the shared connection (S9)', () => {
     files = new MemoryFilePort();
     endpoints = new FakeEndpointPort();
     sshRuns = new ScriptedSpawner(() => undefined);
+    probeScript = {answers: true};
     helperEnds = [];
     spawnFails = false;
     environment = {
@@ -153,6 +156,7 @@ describe('the window side of the shared connection (S9)', () => {
                 port: endpoints,
                 clock: () => clock.now(),
                 scheduler: clock.scheduler(),
+                socksProbe: scriptedProbe(clock.scheduler(), probeScript),
                 files,
                 launcherFiles: {writeExecutable: () => Promise.resolve()},
                 newNonce: () => 'askpass-nonce',
@@ -523,6 +527,27 @@ describe('the window side of the shared connection (S9)', () => {
     deepStrictEqual(
       [await outcome, order],
       [{kind: 'failed', failure: {kind: 'timeout'}}, ['kill']],
+    );
+  });
+
+  it('F-2505 AC-25: checks the session of the helper: alive when it answers', async () => {
+    const {connection, outcome} = await connectFirst();
+    authenticate(sshRuns.started[0]);
+    await outcome;
+    deepStrictEqual(await driven(connection.checkSession()), 'alive');
+  });
+
+  it('F-2505 AC-25: checks the session of the helper: ended when it stays silent for three seconds, and ssh is killed', async () => {
+    const {connection, outcome} = await connectFirst();
+    authenticate(sshRuns.started[0]);
+    await outcome;
+    probeScript.answers = false;
+    const checking = connection.checkSession();
+    await drive();
+    clock.advance(3000);
+    deepStrictEqual(
+      [await driven(checking), sshRuns.started[0]?.killed],
+      ['ended', true],
     );
   });
 

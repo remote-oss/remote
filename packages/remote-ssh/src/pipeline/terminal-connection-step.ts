@@ -283,6 +283,7 @@ export function openTerminalConnectionStep(
               };
             },
             answer: () => Promise.resolve(false),
+            checkSession: () => Promise.resolve('unchecked'),
             refuse: () => Promise.resolve(false),
             release: disposeTerminal,
           },

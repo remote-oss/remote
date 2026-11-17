@@ -176,6 +176,11 @@ export {
   type StoredDisplay,
 } from './connection-server/messages.ts';
 export {LoginOwnership} from './connection-server/ownership.ts';
+export {
+  type SocksProbe,
+  type SocksProbeRequest,
+  socksProbeOver,
+} from './connection-server/socks-probe.ts';
 export {LocalCommandLog} from './connection-server/local-command-log.ts';
 export {
   ConnectionHandler,
@@ -200,6 +205,7 @@ export {
   CONNECTION_NAMESPACE,
   type ConnectOutcome,
   killConnection,
+  type SessionCheck,
   type SessionRun,
   type SessionRunEnd,
   SharedConnection,

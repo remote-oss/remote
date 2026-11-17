@@ -925,4 +925,16 @@ describe('the connection step', () => {
       [false, {type: 'refuse', promptId: 3}],
     );
   });
+
+  it('F-2505 AC-25: passes the check of the session to the connection, and a reply that is no check is unchecked', async () => {
+    const {lease, outcome} = await loggedIn();
+    if (outcome.kind !== 'done') {
+      throw new Error('the connect should be done');
+    }
+    const found = await outcome.value.checkSession();
+    deepStrictEqual(
+      [found, lease.asked.at(-1)],
+      ['unchecked', {type: 'checkSession'}],
+    );
+  });
 });

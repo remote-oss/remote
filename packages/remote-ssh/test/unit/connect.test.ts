@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import type {MemorySink} from 'lib-log/testing/memory-sink';
+import type {SessionCheck} from 'lib-ssh';
 import type {
   ProbedHost,
   StartOutcome,
@@ -1971,6 +1972,8 @@ describe('the connect pipeline, the transport of a connection that worked', () =
     send: (notice: Parameters<NonNullable<Recording['notice']>>[0]) => void;
     endTunnel: (detail: string) => void;
     release: () => void;
+    checkSession: () => Promise<SessionCheck>;
+    recording: Recording;
     heard: TransportEvent[];
     stop: () => void;
     logSink: MemorySink;
@@ -1994,6 +1997,8 @@ describe('the connect pipeline, the transport of a connection that worked', () =
       release: () => {
         result.release();
       },
+      checkSession: () => result.checkSession(),
+      recording,
       heard,
       stop,
       logSink,
@@ -2005,6 +2010,15 @@ describe('the connect pipeline, the transport of a connection that worked', () =
     send({type: 'transportLost'});
     send({type: 'helperGone'});
     deepStrictEqual(heard, ['lost', 'closed']);
+  });
+
+  it('F-2505 AC-25: the connection asks its lease whether the session answers, and gives the answer', async () => {
+    const {checkSession, recording} = await connected();
+    recording.sessionCheck = 'ended';
+    deepStrictEqual(
+      [await checkSession(), recording.releasesAtCheck],
+      ['ended', [0]],
+    );
   });
 
   it('R1: the other notices of the lease are not transport events', async () => {
