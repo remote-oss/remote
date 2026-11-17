@@ -20,6 +20,7 @@ import {
   userSettings,
   waitFor,
 } from '../windows/harness.ts';
+import {hostBlock, writeConfig} from '../windows/config-keywords-support.ts';
 import {
   closeAllButLocal,
   dismissals,
@@ -468,6 +469,46 @@ describe('the reconnection loop of a window whose host stops answering (card #27
         (await dialogOf(name))?.details === GIVEN_UP,
       ],
       [[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], false],
+    );
+  });
+
+  it('F-2505 AC-28 (c2703-silent): on a host whose packets are dropped an attempt fails after about 15 to 17 s as The connection timed out, a temporary failure, and core keeps retrying', async () => {
+    const name = 'c2703-silent';
+    // The run's own block for the harness host sets ConnectTimeout 10; a host that names none gets the extension's 15 s.
+    const file = writeConfig(name, [hostBlock(name, [], ['ConnectTimeout'])]);
+    await userSettings({
+      'remote.SSH.configFile': file,
+      'remote.SSH.remotePlatform': {[name]: 'linux'},
+    });
+    await openWindow(name, name);
+    await connectedWithin(name, 120_000);
+    const mark = connectionLog().length;
+    outageBegins();
+    await waitFor(
+      'attempt 5',
+      () => attemptsSince(mark, name).length >= 4,
+      240_000,
+    );
+    const attempts = attemptsSince(mark, name);
+    const lasted = attempts
+      .slice(1, 3)
+      .map(attempt =>
+        attempt.failedAt === undefined
+          ? undefined
+          : seconds(between(attempt.startedAt, attempt.failedAt)),
+      );
+    deepStrictEqual(
+      [
+        lasted.map(each => each !== undefined && each >= 15 && each <= 17.5),
+        connectionLog()
+          .slice(mark)
+          .some(line =>
+            line.includes('OfflineError (The connection timed out)'),
+          ),
+        (await dialogOf(name))?.details === GIVEN_UP,
+      ],
+      [[true, true], true, false],
+      `attempts 3 and 4 lasted ${JSON.stringify(lasted)} s`,
     );
   });
 
