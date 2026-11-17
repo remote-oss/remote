@@ -41,10 +41,12 @@ import {
 import {LoginOwnership} from './ownership.ts';
 import {
   type DetectedPlatform,
+  isProbeAnswer,
   isProbeExecLine,
   isSessionEntered,
-  PLATFORM_PROBE_INPUT,
+  platformProbeInput,
   PlatformProbeReader,
+  probeHandOverLine,
 } from './platform-probe.ts';
 import {
   type BootstrapEvent,
@@ -449,8 +451,9 @@ export class ConnectionHandler implements MessageHandler {
    * The opening of `session`: what is written once ssh reports the login, and the reader of the output lines that belong
    * to the opening rather than to the bootstrap. A known platform writes its prelude and starts the runs at once; an
    * unknown one writes the probe, takes the output lines until the answers end, then writes the platform's line, and on
-   * POSIX the prelude once the shell has handed over. Until ssh says it entered the session, the output is a
-   * LocalCommand's, which ssh runs to its end first, its last words with no line end included; after that the lines it takes are the host shell's banner,
+   * POSIX the prelude once the shell has handed over. Until ssh says it entered the session, or a line of the
+   * connection's nonce on the output shows it did first, the output is a LocalCommand's, which ssh runs to its end
+   * first, its last words with no line end included; after that the lines it takes are the host shell's banner,
    * prompts, echoes and answers, so none of them is a LocalCommand's output or a run's.
    */
   private opened(
@@ -472,11 +475,12 @@ export class ConnectionHandler implements MessageHandler {
         hear: () => false,
       };
     }
-    const probe = new PlatformProbeReader();
+    const nonce = this.options.newMarker();
+    const probe = new PlatformProbeReader(nonce);
     let phase: 'local' | 'probing' | 'handing' | 'open' = 'local';
     return {
       authenticated: () => {
-        void session.write(PLATFORM_PROBE_INPUT);
+        void session.write(platformProbeInput(nonce));
       },
       sshLine: (line, endLocal) => {
         if (phase === 'local' && isSessionEntered(line)) {
@@ -486,7 +490,10 @@ export class ConnectionHandler implements MessageHandler {
       },
       hear: line => {
         if (phase === 'local') {
-          return false;
+          if (!isProbeAnswer(line, nonce)) {
+            return false;
+          }
+          phase = 'probing';
         }
         if (phase === 'probing') {
           const found = probe.hear(line);
@@ -498,12 +505,12 @@ export class ConnectionHandler implements MessageHandler {
           } else if (found === 'posix') {
             this.detected = found;
             phase = 'handing';
-            void session.write(opening.posix.line);
+            void session.write(probeHandOverLine(nonce, opening.posix.program));
           }
           return true;
         }
         if (phase === 'handing') {
-          if (isProbeExecLine(line)) {
+          if (isProbeExecLine(line, nonce)) {
             startRuns('posixShell');
             phase = 'open';
             void session.write(opening.posix.prelude);

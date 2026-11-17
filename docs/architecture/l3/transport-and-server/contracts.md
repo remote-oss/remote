@@ -146,7 +146,13 @@ The argument rules:
   remote program is instead the fixed PowerShell session loop, `powershell -EncodedCommand <loop>` (athena on #1835,
   option (i); `reading-1835-loop-length`): it prints `LAYER1-READY` and reads framed runs on standard input, each run's
   environment, script and input reaching a child PowerShell on its standard input only (S10). With
-  `remoteCommandInEffect` the loop's command line goes first on standard input without `exec`. **When `remoteCommandInEffect` is true, every connection
+  `remoteCommandInEffect` the loop's command line goes first on standard input without `exec`. For a host whose
+  platform is unknown, the shared connection's `ssh` has no remote program: once ssh reports `Entering interactive
+  session.`, the host's own login shell reads the platform probe on standard input (echo lines carrying a
+  per-connection nonce). A whole line of cmd's `%OS%` answer or of a drive-path `$HOME` means Windows and starts the
+  PowerShell session loop; otherwise the shell is POSIX and is handed over with `exec sh -c '<reader>'` once the
+  hand-over line has come back (athena on #1835, part 2b). A login shell that runs none of its piped input (fish) never
+  answers, and the connect fails at the connect wait (F-2206 7.E5, AC-28). **When `remoteCommandInEffect` is true, every connection
   `ssh`, the shared connection's and terminal mode's, gets no remote program on its command line**, since ssh refuses one beside the host's `RemoteCommand`. The program
   goes first on standard input as `exec <program>`, read by the shell the `RemoteCommand` starts, and the prelude
   follows unchanged; no TTY, the same markers and bounds (athena on #1221, F-2704 6.7, AC-30).
@@ -342,7 +348,9 @@ Rulings of 2026-10-08 for S9 and S10 (the process side):
 - Secrets never touch the registry file: lib-helper's record carries only endpoint, nonce, process id and the SOCKS
   port; the shared record of F-2102 (remote port, OS, architecture, temp folder, connection token) lives in the
   helper's memory, set once after the connection completes, and reaches a later lease through a `sharedRecord`
-  request after its hello. This satisfies "written only after the connection completes".
+  request after its hello. The `sharedRecord` reply also carries `detectedPlatform` (`windows`, `posix`, or null when
+  the platform was known or not yet found), which a window whose platform is unknown uses to build its channel; a
+  missing field reads as null (#1835, part 2b). This satisfies "written only after the connection completes".
 - Helper messages are plain data over lib-helper's channel: requests `connect` (owner only), `sharedRecord`,
   `setSharedRecord`, `answer {promptId, text}`, `kill`, `checkSession` (a window that lost its transport, at its first reconnection attempt: one probe of the shared session with a 3 s deadline (a SOCKS connect through the helper's dynamic forward to the host's loopback port 22: within the deadline, any data after the connect request, or ssh closing the socket after it, means alive, since ssh gives its SOCKS reply only once the host has answered the channel open and closes the socket when the host refuses it, which a runner showed for OpenSSH 9.6 with the host paused; silence means not alive); `alive` when it answers, otherwise the helper ends the session, which ends ssh by S3's group rule, sends `transportLost` to every lease and replies `ended`; with no live session `ended` at once; concurrent checks share one probe; F-2505 AC-25, ruling-2751-session-check); events `prompt {promptId, surface, text}`, `promptClosed`,
   `ownerChanged`, `connected {socksPort}`, `loginFailed {kind, reason?, hints, exitStatus?, detail?}` (`exitStatus`: ssh's exit status, `null` when it ended on a signal, absent from an earlier helper; connect-64; `detail`: the helper's own log line for a login shell that timed out or ended early, which the window logs with the failure (F-2704 AC-25); absent from an earlier helper and from any other failure; it is one of two fixed sentences with a number in them, so nothing of the host's output or of the user's secrets is in it),
