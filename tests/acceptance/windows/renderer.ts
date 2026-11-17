@@ -4306,6 +4306,14 @@ export function answerFolderDialog(
   return keyInFolderDialog(name, 'Enter', folder, {retries: 3});
 }
 
+/** Types `folder` into window `name`'s folder dialog without a key (a probe of what the dialog does with it). */
+export function typeInFolderDialog(
+  name: string,
+  folder: string,
+): Promise<void> {
+  return keyInFolderDialog(name, undefined, folder);
+}
+
 /** Closes window `name`'s folder dialog with Escape. */
 export function cancelFolderDialog(name: string): Promise<void> {
   return keyInFolderDialog(name, 'Escape', undefined, {retries: 1});
