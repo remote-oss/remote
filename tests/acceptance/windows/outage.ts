@@ -116,13 +116,3 @@ export function localSshOfHarness(): LocalSsh[] {
           ];
     });
 }
-
-/** Whether process `processId` of this machine still runs. */
-export function running(processId: number): boolean {
-  try {
-    process.kill(processId, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
