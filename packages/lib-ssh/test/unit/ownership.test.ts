@@ -92,4 +92,12 @@ describe('login ownership (F-2102 BR-4, BR-5)', () => {
     leaseIds.shift();
     deepStrictEqual([ownership.waiting(), ownership.current()], [[2], 1]);
   });
+
+  it('F-2505 AC-25: reopens the login for the oldest live lease after it finished, with no lease given up', () => {
+    ownership.leasesChanged([1, 2]);
+    ownership.ownerGaveUp();
+    ownership.finish();
+    ownership.reopen();
+    deepStrictEqual([ownership.current(), changes], [1, [1, 2, 1]]);
+  });
 });

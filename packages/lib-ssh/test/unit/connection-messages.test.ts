@@ -16,10 +16,15 @@ const RECORD: SharedRecord = {
 describe('connection requests (contracts §4 S9)', () => {
   it('reads the requests that carry nothing', () => {
     deepStrictEqual(
-      ['connect', 'sharedRecord', 'kill'].map(type =>
+      ['connect', 'sharedRecord', 'kill', 'checkSession'].map(type =>
         readConnectionRequest({type}),
       ),
-      [{type: 'connect'}, {type: 'sharedRecord'}, {type: 'kill'}],
+      [
+        {type: 'connect'},
+        {type: 'sharedRecord'},
+        {type: 'kill'},
+        {type: 'checkSession'},
+      ],
     );
   });
 
@@ -71,6 +76,23 @@ describe('connection requests (contracts §4 S9)', () => {
         undefined,
         undefined,
         {type: 'refused', reason: 'notOwner'},
+        undefined,
+      ],
+    );
+  });
+
+  it('F-2505 AC-25: reads the answer of a session check, and nothing from one without its flag', () => {
+    deepStrictEqual(
+      [
+        readConnectionReply({type: 'sessionChecked', alive: true}),
+        readConnectionReply({type: 'sessionChecked', alive: false}),
+        readConnectionReply({type: 'sessionChecked'}),
+        readConnectionReply({type: 'sessionChecked', alive: 'yes'}),
+      ],
+      [
+        {type: 'sessionChecked', alive: true},
+        {type: 'sessionChecked', alive: false},
+        undefined,
         undefined,
       ],
     );

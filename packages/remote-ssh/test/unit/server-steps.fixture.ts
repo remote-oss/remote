@@ -197,6 +197,7 @@ export function leaseOn(channel: RecordingChannel): ConnectionLease {
     onNotice: () => () => undefined,
     answer: () => Promise.resolve(false),
     refuse: () => Promise.resolve(false),
+    checkSession: () => Promise.resolve('alive'),
     release: () => undefined,
   };
 }

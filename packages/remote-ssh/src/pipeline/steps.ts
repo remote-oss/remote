@@ -27,7 +27,12 @@ import type {AgentLinkPlan} from '../environment/agent-link.ts';
 import type {ForwardingPlans} from '../environment/forwarding.ts';
 import type {PortRange, TunnelPath} from 'lib-forwarding';
 import type {HostChannel, PlatformHint} from 'lib-host';
-import type {ConnectionNotice, FailureHint, SharedRecord} from 'lib-ssh';
+import type {
+  ConnectionNotice,
+  FailureHint,
+  SessionCheck,
+  SharedRecord,
+} from 'lib-ssh';
 import type {FailureDetail} from './failure.ts';
 import type {RemotePlatform} from './platform.ts';
 
@@ -95,6 +100,11 @@ export interface ConnectionLease {
   storedRecord: SharedRecord | undefined;
   /** Leaves what a later window needs to reuse the server; true when the connection took it. */
   storeSharedRecord(record: SharedRecord): Promise<boolean>;
+  /**
+   * Asks the connection whether its session still answers, when the window's transport was lost: a session that does
+   * not is ended. A connection with no helper to ask, the terminal mode's own session, is `unchecked`.
+   */
+  checkSession(): Promise<SessionCheck>;
   /** Gives the lease back, or ends the direct session; called once, after a failure or when the window ends. */
   release(): void;
   /** Hears the notices of the login; the returned function stops it. */

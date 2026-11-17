@@ -94,6 +94,14 @@ describe('connection handler (contracts §4 S9)', () => {
     handler.attach(control);
   }
 
+  /** Two windows, the first connected through a session that is authenticated. */
+  async function connected(): Promise<void> {
+    handler.onLeasesChanged([1, 2]);
+    await send(1, {type: 'connect'});
+    authenticate(spawner.started[0]);
+    events.length = 0;
+  }
+
   function send(lease: number, body: PlainData): Promise<PlainData> {
     return handler.onRequest(body, {
       lease,
@@ -930,13 +938,6 @@ describe('connection handler (contracts §4 S9)', () => {
       deadlineMilliseconds: 1000,
     } as const;
 
-    async function connected(): Promise<void> {
-      handler.onLeasesChanged([1, 2]);
-      await send(1, {type: 'connect'});
-      authenticate(spawner.started[0]);
-      events.length = 0;
-    }
-
     it('are refused before the connection is set up', async () => {
       handler.onLeasesChanged([1]);
       deepStrictEqual(await send(1, RUN_REQUEST), {
@@ -1030,6 +1031,81 @@ describe('connection handler (contracts §4 S9)', () => {
       deepStrictEqual(
         [text.includes('m1:st'), text.includes('m2:st')],
         [true, false],
+      );
+    });
+  });
+
+  describe('checkSession (card #2751)', () => {
+    const CHECK = {type: 'checkSession'} as const;
+
+    it('F-2505 AC-25: finds no session to answer before the connection is set up, and ends nothing', async () => {
+      handler.onLeasesChanged([1]);
+      deepStrictEqual(
+        [await send(1, CHECK), wasKilled(), stops],
+        [{type: 'sessionChecked', alive: false}, false, 0],
+      );
+    });
+
+    it('F-2505 AC-25: answers alive when the session answers a trivial run, and ends nothing', async () => {
+      await connected();
+      const reply = send(1, CHECK);
+      await settled();
+      spawner.started[0]?.output('m1:start\nm1:end 0\n');
+      deepStrictEqual(
+        [await reply, wasKilled(), events, stops],
+        [{type: 'sessionChecked', alive: true}, false, [], 0],
+      );
+    });
+
+    it('F-2505 AC-25: ends a session that does not answer within three seconds, tells every lease its transport is lost and keeps the helper', async () => {
+      await connected();
+      const reply = send(2, CHECK);
+      await settled();
+      clock.advance(3000);
+      deepStrictEqual(
+        [await reply, wasKilled(), eventTypes(), stops],
+        [
+          {type: 'sessionChecked', alive: false},
+          true,
+          ['transportLost', 'ownerChanged'],
+          0,
+        ],
+      );
+    });
+
+    it('F-2505 AC-25: lets the next connect start a fresh session on the same helper after the session ended', async () => {
+      await connected();
+      const reply = send(1, CHECK);
+      await settled();
+      clock.advance(3000);
+      await reply;
+      deepStrictEqual(
+        [await send(1, {type: 'connect'}), spawner.started.length],
+        [{type: 'accepted'}, 2],
+      );
+    });
+
+    it('F-2505 AC-25: shares one probe among checks that come while it runs', async () => {
+      await connected();
+      const first = send(1, CHECK);
+      const second = send(2, CHECK);
+      await settled();
+      const text = spawner.started[0]?.inputText() ?? '';
+      spawner.started[0]?.output('m1:start\nm1:end 0\n');
+      deepStrictEqual(
+        [
+          [await first, await second],
+          text.includes('m1:st'),
+          text.includes('m2:st'),
+        ],
+        [
+          [
+            {type: 'sessionChecked', alive: true},
+            {type: 'sessionChecked', alive: true},
+          ],
+          true,
+          false,
+        ],
       );
     });
   });

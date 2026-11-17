@@ -192,6 +192,7 @@ export {
   CONNECTION_NAMESPACE,
   type ConnectOutcome,
   killConnection,
+  type SessionCheck,
   type SessionRun,
   type SessionRunEnd,
   SharedConnection,

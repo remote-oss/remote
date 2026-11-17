@@ -34,6 +34,7 @@ import {
   type ConnectionReply,
   type ConnectionRequest,
   readConnectionRequest,
+  SESSION_PROBE_MILLISECONDS,
   type SharedRecord,
 } from './messages.ts';
 import {LoginOwnership} from './ownership.ts';
@@ -87,6 +88,9 @@ export class ConnectionHandler implements MessageHandler {
   private feed: SshLineFeed | undefined;
   private sharedRecord: SharedRecord | null = null;
   private killed = false;
+  /** The session a check is probing, until the check has ended it or found it alive. */
+  private probing: SshSession | undefined;
+  private probe: Promise<boolean> | undefined;
 
   /** A handler with no connection yet. */
   constructor(options: ConnectionHandlerOptions) {
@@ -176,9 +180,59 @@ export class ConnectionHandler implements MessageHandler {
         this.close();
         this.control.stop();
         return {type: 'accepted'};
+      case 'checkSession':
+        return {type: 'sessionChecked', alive: await this.sessionAnswers()};
       default:
         throw new Error('not a connection request');
     }
+  }
+
+  /**
+   * Whether the shared session answers one trivial run within the probe's bound. A session that does not is ended,
+   * which ends `ssh`, and the windows are told its transport is lost; the helper and its leases stay, so the next
+   * connect starts a fresh session. With no session set up there is nothing to answer. Checks that come while a probe
+   * is running share it.
+   */
+  private sessionAnswers(): Promise<boolean> {
+    if (this.state !== 'connected' || this.runs === undefined) {
+      return Promise.resolve(false);
+    }
+    this.probe ??= this.probeSession(this.runs, this.session).finally(() => {
+      this.probe = undefined;
+    });
+    return this.probe;
+  }
+
+  private async probeSession(
+    runs: ShellRuns,
+    session: SshSession | undefined,
+  ): Promise<boolean> {
+    this.probing = session;
+    const end = await runs.execute(
+      {
+        script: ':',
+        environment: {},
+        inputBase64: null,
+        deadlineMilliseconds: SESSION_PROBE_MILLISECONDS,
+      },
+      () => undefined,
+    );
+    if (end.kind === 'ended') {
+      this.probing = undefined;
+      return true;
+    }
+    // The run past its deadline ended the session; its exit, which the watch of the session handles, comes next.
+    await session?.exit();
+    this.probing = undefined;
+    return false;
+  }
+
+  /** The session of a check ended: its windows are told, and the login is to be made again by the oldest lease. */
+  private sessionEnded(): void {
+    this.state = 'idle';
+    this.session = undefined;
+    this.tell({type: 'transportLost'});
+    this.ownership.reopen();
   }
 
   private async runScript(
@@ -358,6 +412,10 @@ export class ConnectionHandler implements MessageHandler {
         return;
       }
       if (this.state === 'connected') {
+        if (session === this.probing) {
+          this.sessionEnded();
+          return;
+        }
         this.tell({type: 'transportLost'});
         this.control.stop();
         return;

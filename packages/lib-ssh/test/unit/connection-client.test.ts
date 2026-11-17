@@ -526,6 +526,29 @@ describe('the window side of the shared connection (S9)', () => {
     );
   });
 
+  it('F-2505 AC-25: checks the session of the helper: alive when it answers', async () => {
+    const {connection, outcome} = await connectFirst();
+    authenticate(sshRuns.started[0]);
+    await outcome;
+    const checking = connection.checkSession();
+    await drive();
+    sshRuns.started[0]?.output('askpass-nonce:start\naskpass-nonce:end 0\n');
+    deepStrictEqual(await driven(checking), 'alive');
+  });
+
+  it('F-2505 AC-25: checks the session of the helper: ended when it does not answer within three seconds, and ssh is killed', async () => {
+    const {connection, outcome} = await connectFirst();
+    authenticate(sshRuns.started[0]);
+    await outcome;
+    const checking = connection.checkSession();
+    await drive();
+    clock.advance(3000);
+    deepStrictEqual(
+      [await driven(checking), sshRuns.started[0]?.killed],
+      ['ended', true],
+    );
+  });
+
   it('runs a script on the session of the helper, with its lines and its exit status', async () => {
     const {connection, outcome} = await connectFirst();
     authenticate(sshRuns.started[0]);
