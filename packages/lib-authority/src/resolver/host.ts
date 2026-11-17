@@ -1,3 +1,11 @@
+import {appendFileSync} from 'node:fs';
+/** Probe only. */
+function trace(line: string): void {
+  appendFileSync(
+    '/tmp/c2753-resolve-trace.log',
+    `${new Date().toISOString().slice(11, 23)} ${line}\n`,
+  );
+}
 /**
  * @fileoverview The resolver host: the one place where an extension's connector meets the editor's remote authority
  * resolution. For each resolve the editor asks, it decodes the authority, runs the connector with progress the user
@@ -629,6 +637,9 @@ export async function registerResolver(
     serve: NonNullable<Connector['execServer']>,
   ): Promise<ExecServerHandle> {
     const decoded = decodedFor(authority);
+    trace(
+      `resolveExecServerOne enters attempt ${String(context.resolveAttempt)}`,
+    );
     let result: Awaited<ReturnType<typeof serve>>;
     try {
       result = await connect(decoded, () =>
@@ -654,6 +665,9 @@ export async function registerResolver(
   ): Promise<ResolvedConnection> {
     const decoded = decodedFor(authority);
     const isReconnection = memory.connectedBefore;
+    trace(
+      `resolveOne enters attempt ${String(context.resolveAttempt)} reconnection=${String(isReconnection)}`,
+    );
     applyAndAnnounce({
       kind: 'resolveStarted',
       target: decoded,
@@ -682,12 +696,21 @@ export async function registerResolver(
     if (isConnected(result)) {
       memory.connectedBefore = true;
       applyAndAnnounce({kind: 'resolveSucceeded'});
+      trace(`resolveOne attempt ${String(context.resolveAttempt)} succeeded`);
       return connectionOf(result, options.allowsTrust);
     }
-    throw presented ?? (await failedWith(result));
+    trace(
+      `resolveOne attempt ${String(context.resolveAttempt)} failed: kind=${result.kind} retryable=${String(result.retryable)} silent=${String(result.silent)}`,
+    );
+    const thrown = presented ?? (await failedWith(result));
+    trace(
+      `resolveOne attempt ${String(context.resolveAttempt)} throws: ${String(thrown)}`,
+    );
+    throw thrown;
   }
 
   function queued<Result>(work: () => Promise<Result>): Promise<Result> {
+    trace('queued: a resolve call arrives');
     const turn = state.queue.then(work);
     state.queue = turn.then(
       () => undefined,

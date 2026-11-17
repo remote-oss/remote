@@ -5,6 +5,9 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
+import {existsSync, readFileSync, rmSync} from 'node:fs';
+import path from 'node:path';
+import {windowEvents} from '../windows/harness.ts';
 import {
   appendScript,
   closeWindow,
@@ -60,12 +63,37 @@ async function reconnectionState(
     `the indicator: ${indicator}`,
     `the dialog now: ${shown === undefined ? 'none' : `${shown.message} / ${shown.details}`}`,
     `the notifications now: ${JSON.stringify(await notifications(name).catch(() => []))}`,
+    `the resolver trace:\n${existsSync('/tmp/c2753-resolve-trace.log') ? readFileSync('/tmp/c2753-resolve-trace.log', 'utf8') : '(none)'}`,
+    `the renderer log's [remote-connection] lines:\n${rendererLines(name)}`,
     'the last lines of the connection log since then:',
     ...connectionLog()
       .slice(mark)
       .filter(line => !line.startsWith('Searched for ssh in:'))
       .slice(-60),
   ].join('\n');
+}
+
+/** The [remote-connection] lines of the renderer log of window `name`, the last 80. */
+function rendererLines(name: string): string {
+  try {
+    const logFolder = windowEvents(name)
+      .filter(each => each.event === 'activated')
+      .at(-1)?.logFolder;
+    if (logFolder === undefined) {
+      return '(no log folder)';
+    }
+    const renderer = path.join(
+      path.dirname(path.dirname(logFolder)),
+      'renderer.log',
+    );
+    return readFileSync(renderer, 'utf8')
+      .split('\n')
+      .filter(line => line.includes('remote-connection'))
+      .slice(-80)
+      .join('\n');
+  } catch (caught) {
+    return `(unreadable: ${String(caught)})`;
+  }
 }
 
 describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)', function () {
@@ -114,6 +142,7 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     await connectedWithin(name, 120_000, ACCOUNT);
     const mark = connectionLog().length;
     const asked = recordLines('maskedInput', name).length;
+    rmSync('/tmp/c2753-resolve-trace.log', {force: true});
     const endedAt = Date.now();
     const timeline: string[] = [];
     let polling = true;
