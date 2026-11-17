@@ -1,6 +1,8 @@
 /**
- * @fileoverview The opening of a session whose host's platform is unknown: three lines written to the host's own shell,
- * which only cmd and PowerShell on Windows expand to one of the Windows answers, and the reader of the answers. Every
+ * @fileoverview The opening of a session whose host's platform is unknown: four lines written to the host's own shell,
+ * of which only cmd and PowerShell on Windows expand the second and third to one of the Windows answers, and the
+ * reader of the answers. The first answers nothing: when a LocalCommand's last words with no line end reach the output
+ * after it, they join that line, never an answer. Every
  * line carries the connection's nonce, and only a whole output line that is exactly one of the marked forms with that
  * nonce counts, so the echo of the input after a prompt, a banner, a message of the day, a prompt, an error or a line a
  * startup file prints never does.
@@ -27,6 +29,7 @@ const WINDOWS_HOME = /^[A-Za-z]:\\/;
 /** The lines the session's shell reads first when the platform is unknown, with the connection's `nonce`. */
 export function platformProbeInput(nonce: string): string {
   return [
+    `echo ${probeMark(nonce)}START`,
     `echo ${probeMark(nonce)}%OS%`,
     `echo ${homeMark(nonce)}$HOME`,
     `echo ${probeMark(nonce)}DONE`,
