@@ -23,6 +23,7 @@ import {
   type ConnectMachine,
   type ConnectSurfaces,
   sshOverridePolicy,
+  skipping,
   wiringPortsOf,
 } from '../../src/connect-ports.ts';
 import {settings as SETTINGS} from '../../src/identifiers.generated.ts';
@@ -457,7 +458,7 @@ describe("the assembled ports' settings", () => {
     );
   });
 
-  it('F-2405 AC-20, F-2404 BR-12: a refused host download and a rejected proxy value are kept as hints of their status', () => {
+  it('F-2405 AC-20, F-2404 BR-12: a refused host download, a rejected proxy value, an install folder that cannot be created and a failed client download are kept as hints of their status', () => {
     const {surfaces, machine, recorded} = assemblyInputs({});
     const kept: string[] = [];
     const ports = wiringPortsOf(
@@ -478,10 +479,14 @@ describe("the assembled ports' settings", () => {
     ports.server.onHostDownloadRefused('downloadFailed');
     ports.server.onHostDownloadRefused('noDownloader');
     ports.server.onProxyRejected({value: 'p', error: 'e'});
+    ports.server.onInstallFolderRefused();
+    ports.server.onLocalDownloadFailed('Failed to fetch');
     deepStrictEqual(kept, [
       'ServerDownloadFailed',
       'NoDownloaderAvailable',
       'InvalidProxyUrl',
+      'CreateInstallDirFailed',
+      'LocalDownloadFailed',
     ]);
   });
 
@@ -1467,6 +1472,17 @@ describe('the logged channel of both connect modes (card connect-67)', () => {
         .map(line => line.message)
         .filter(message => message.startsWith('[remote] ')),
       ['[remote] a'],
+    );
+  });
+});
+
+describe('the window port search skipping the ports a connect failed to listen on (ruling-2731-listen-retry)', () => {
+  it('F-2104 6.2 step 3: a skipped port answers in use without a probe, and every other port is probed as before', async () => {
+    const prober = new FakeProber({20002: 'refused', 20003: 'refused'});
+    const skipped = skipping(prober, new Set([20002]));
+    deepStrictEqual(
+      [await skipped.probe(20002), await skipped.probe(20003), prober.probed],
+      ['open', 'refused', [20003]],
     );
   });
 });

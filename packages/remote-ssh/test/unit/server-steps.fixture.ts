@@ -118,6 +118,8 @@ export function dependencies(
 ): ServerStepDependencies {
   return {
     onHostDownloadRefused: () => undefined,
+    onInstallFolderRefused: () => undefined,
+    onLocalDownloadFailed: () => undefined,
     copyAvailable: () => Promise.resolve(true),
     profile: PROFILE,
     policy: SSH_POLICY,

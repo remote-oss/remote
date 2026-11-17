@@ -5,7 +5,12 @@
 
 import {SSH_LABEL_PREFIX_ID} from '../window/label-suffix.ts';
 import type {StringRef} from '../connect/picker-model.ts';
-import {type Translate, filled} from './strings.ts';
+import {
+  type Translate,
+  filled,
+  filledWithRanges,
+  type TextRange,
+} from './strings.ts';
 
 /** The ids of the strings that are ours alone, and their English templates. */
 export const OWN_TEMPLATES = {
@@ -46,6 +51,12 @@ export const OWN_TEMPLATES = {
   S159: 'When first establishing a connection to the remote server, various resources must be installed from the internet. A program (either "wget" or "curl") is used to download these resources, but they are not installed on the remote server.  When this step fails, the extension attempts to use the local machine to download the resources and then upload them to the remote server.',
   S049: 'Enable {0} to allow VS Code to download the required resources locally',
   S050: 'Enable {0} to allow VS Code to download the required resources via your local machine and then upload them to the remote server',
+  S053: 'Ensure that the parent directory exists',
+  S056: 'Ensure that the remote user has write permissions to the parent directory',
+  S061: 'Ensure there is sufficient free disk space on the remote machine',
+  S070: "Failed to create the remote server's install directory",
+  S112: 'Remove or edit setting {0}',
+  S139: "The install directory on the remote host could not be created. By default this is the '{0}' directory and can be overridden with the setting {1}",
   S116: 'Restart the SSH server on the remote machine to apply any changes to the configuration',
   showLogLinkText: 'Show log',
   S138: 'The following issues were detected in your most recent Remote - SSH session',
@@ -69,5 +80,32 @@ export function ownText(reference: StringRef, translate: Translate): string {
     translate,
     OWN_TEMPLATES[reference.id as keyof typeof OWN_TEMPLATES],
     reference.values,
+  );
+}
+
+/**
+ * The places of the strings whose value is a setting key drawn as a link, by string id; the key of every other string
+ * is shown plain.
+ */
+export const LINK_SLOTS: Readonly<Record<string, readonly number[]>> = {
+  S016: [0],
+  S048: [0],
+  S112: [0],
+  S139: [1],
+};
+
+/** The text of a string of our own, and where the setting keys that are links sit in it. */
+export function ownTextWithLinks(
+  reference: StringRef,
+  translate: Translate,
+): {text: string; ranges: TextRange[]} {
+  if (!Object.hasOwn(OWN_TEMPLATES, reference.id)) {
+    throw new Error(`no template for the string id ${reference.id}`);
+  }
+  return filledWithRanges(
+    translate,
+    OWN_TEMPLATES[reference.id as keyof typeof OWN_TEMPLATES],
+    reference.values,
+    LINK_SLOTS[reference.id] ?? [],
   );
 }
