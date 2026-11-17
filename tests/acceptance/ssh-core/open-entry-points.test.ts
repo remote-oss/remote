@@ -46,6 +46,7 @@ import {
   pressEscape,
   pressQuickInputButton,
   pressQuickPickRowButton,
+  quickPickOf,
   quickPickRows,
   rememberPage,
   statusBarText,
@@ -176,6 +177,9 @@ function loginQuestions(mark: number): string[] {
     .map(line => `${line.window}: ${line.question}`);
 }
 
+/** How long the filtered Open Recent pick has to stop changing: it settles within a second, so ten is a hang. */
+const RECENT_SETTLE_MILLISECONDS = 10_000;
+
 /**
  * Opens the Open Recent pick of window `name`, filters it by `filter` and gives its rows, the pick left open. The pick
  * draws only the rows that fit its height, about seventeen, and lists files after the folders, so after the many
@@ -186,7 +190,13 @@ async function recentRows(name: string, filter: string) {
   await waitForQuickPick(name, 30_000);
   await typeInQuickPick(name, filter);
   let rows = await quickPickRows(name);
+  const began = Date.now();
   for (let steady = 0; steady < 2;) {
+    if (Date.now() - began > RECENT_SETTLE_MILLISECONDS) {
+      throw new Error(
+        `the Open Recent pick of window ${name}, filtered by ${JSON.stringify(filter)}, did not settle within ${String(RECENT_SETTLE_MILLISECONDS / 1000)} s; it last read ${JSON.stringify(rows)}`,
+      );
+    }
     await settle(250);
     const next = await quickPickRows(name);
     steady = JSON.stringify(next) === JSON.stringify(rows) ? steady + 1 : 0;
@@ -1134,13 +1144,17 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
       'Remove from Recently Opened',
     );
     await settle(2_000);
+    // An empty list is also what a closed pick reads as, so the pick is read open first.
+    const stillOpen = (await quickPickOf(window)) !== undefined;
     deepStrictEqual(
       {
         before,
+        stillOpen,
         after: described(await quickPickRows(window), ['c2623-recent-gone']),
       },
       {
         before: ['c2623-recent-gone [SSH: harness] | /home/harness'],
+        stillOpen: true,
         after: [],
       },
     );
