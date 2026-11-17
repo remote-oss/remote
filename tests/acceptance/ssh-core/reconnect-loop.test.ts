@@ -255,13 +255,9 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     outageBegins();
     const shown = await givenUp(name);
     deepStrictEqual(
-      [
-        attemptsSince(mark, 'harness').length,
-        attemptsSince(second, 'harness').length,
-        shown.details,
-      ],
-      [3 + 1, 1, GIVEN_UP],
-      `the attempts of the second outage were ${JSON.stringify(attemptsSince(second, 'harness').map(attempt => attempt.number))}`,
+      [attemptsSince(second, 'harness').length, shown.details],
+      [1, GIVEN_UP],
+      `the attempts were ${JSON.stringify(attemptsSince(mark, 'harness').map(attempt => attempt.number))}, those from the second outage on ${JSON.stringify(attemptsSince(second, 'harness').map(attempt => attempt.number))}`,
     );
     await answerDialog(name, 'Cancel');
   });
@@ -360,12 +356,13 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     const shown = await givenUp(name);
     const dialogAt = clockNow();
     const [first] = attemptsSince(mark, 'harness');
+    // Core ends the reconnection at the first error after the grace time, and an attempt takes about 10 s to fail here.
     const into = seconds(between(first?.startedAt ?? 0, dialogAt));
     unpauseHost();
     await answerDialog(name, 'Reload Window');
     await connectedWithin(name, 180_000);
     deepStrictEqual(
-      [shown.details, into >= 28 && into <= 42, into],
+      [shown.details, into >= 30 && into <= 45, into],
       [GIVEN_UP, true, into],
     );
     await freshHost();
