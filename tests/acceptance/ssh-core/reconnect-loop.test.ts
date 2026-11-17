@@ -593,35 +593,44 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     );
   });
 
-  it('F-2505 AC-25 (c2703-old-ssh): when packets stop and core starts reconnecting, the previous connection’s local ssh ends within about 5 s of the first reconnection attempt, without waiting for an ssh timeout (7 s allowed, the criterion’s 2 s tolerance on the probe’s 3 s bound; the row prints the measured time in every run)', async () => {
+  it('F-2505 AC-25 (c2703-old-ssh): when packets stop and core starts reconnecting, the previous connection’s local ssh ends within about 5 s of the first reconnection attempt, counted from core showing Reconnecting, without waiting for an ssh timeout (7 s allowed, the criterion’s 2 s tolerance on the probe’s 3 s bound; the row prints the measured time in every run)', async () => {
     const name = 'c2703-old-ssh';
-    const mark = await connectedWindow(name);
+    await connectedWindow(name);
     const earlier = localSshOfHarness().map(each => each.processId);
     outageBegins();
-    await waitFor(
-      'attempt 2',
-      () => attemptsSince(mark, 'harness').length > 0,
-      90_000,
-    );
-    const attemptAt = attemptsSince(mark, 'harness')[0]?.startedAt ?? 0;
-    let endedAfter: number | undefined;
+    // Core starts the reconnection when it shows Reconnecting, which the log's first attempt line follows only once the
+    // extension has checked the held connection: counted from the log line the old ssh would be gone at 0 s.
+    let reconnectingAt: number | undefined;
+    let goneAt: number | undefined;
+    const limit = Date.now() + 90_000;
     while (
-      endedAfter === undefined &&
-      between(attemptAt, clockNow()) < 20_000
+      (reconnectingAt === undefined || goneAt === undefined) &&
+      Date.now() < limit
     ) {
-      if (earlier.every(each => !running(each))) {
-        endedAfter = seconds(between(attemptAt, clockNow()));
+      if (
+        reconnectingAt === undefined &&
+        (await statusBarText(name, 'status.host').catch(() => '')) ===
+          'Reconnecting to SSH: harness...'
+      ) {
+        reconnectingAt = Date.now();
       }
-      await new Promise(resolve => setTimeout(resolve, 200));
+      if (goneAt === undefined && earlier.every(each => !running(each))) {
+        goneAt = Date.now();
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
+    const endedAfter =
+      reconnectingAt === undefined || goneAt === undefined
+        ? undefined
+        : seconds(Math.max(0, goneAt - reconnectingAt));
     // Printed in green runs too, so a drift toward the bound shows before it fails.
     console.log(
-      `F-2505 AC-25: the old ssh ended ${String(endedAfter)} s after attempt 2 started`,
+      `F-2505 AC-25: the old ssh ended ${String(endedAfter)} s after core showed Reconnecting`,
     );
     deepStrictEqual(
       [earlier.length > 0, endedAfter !== undefined && endedAfter <= 7],
       [true, true],
-      `the old ssh ${JSON.stringify(earlier)} ended ${String(endedAfter)} s after attempt 2 started`,
+      `the old ssh ${JSON.stringify(earlier)} ended ${String(endedAfter)} s after core showed Reconnecting`,
     );
   });
 
