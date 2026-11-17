@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {spawn} from 'node:child_process';
+import {idleGroupLeader} from 'lib-ssh/testing/idle-leader';
 import type * as vscode from 'vscode';
 import type {Invocation, TerminalEnd} from 'lib-ssh';
 import {loginTerminalsOf} from '../../src/surfaces/login-terminal.ts';
@@ -244,12 +244,7 @@ describe('loginTerminalsOf (card ssh-18 table)', () => {
     if (process.platform === 'win32') {
       this.skip();
     }
-    const leader = spawn(
-      process.execPath,
-      ['-e', 'setTimeout(() => undefined, 30000)'],
-      {detached: true, stdio: 'ignore'},
-    );
-    const exited = new Promise(resolve => leader.once('exit', resolve));
+    const {leader, exited} = idleGroupLeader();
     const made = opened();
     made.terminal.processId = Promise.resolve(leader.pid);
     made.session.dispose();

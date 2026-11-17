@@ -1,5 +1,5 @@
 import {deepStrictEqual, doesNotThrow} from 'node:assert';
-import {spawn} from 'node:child_process';
+import {idleGroupLeader} from '../../src/testing/idle-leader.ts';
 import {
   endProcessGroup,
   GROUP_GRACE_MILLISECONDS,
@@ -49,12 +49,7 @@ describe('ending a process group', () => {
       this.skip();
     }
     // Only the group of a process of this row is ever signalled, never a group id written in the row.
-    const leader = spawn(
-      process.execPath,
-      ['-e', 'setTimeout(() => undefined, 30000)'],
-      {detached: true, stdio: 'ignore'},
-    );
-    const exited = new Promise(resolve => leader.once('exit', resolve));
+    const {leader, exited} = idleGroupLeader();
     NODE_GROUP_SYSTEM.signalGroup(leader.pid ?? 0, 'SIGTERM');
     await exited;
     doesNotThrow(() => {
