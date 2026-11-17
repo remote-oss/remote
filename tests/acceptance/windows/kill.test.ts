@@ -41,6 +41,7 @@ import {
   perWindowMode,
   pickHost,
   runWith,
+  serverMainProcesses,
   serverProcesses,
   serversGoneWithin,
   setting,
@@ -527,10 +528,10 @@ describe('Kill VS Code Server (card coverage-39)', function () {
   it('F-2411 AC-19: Kill Current in a default-mode window makes it an empty local window and leaves the server', async () => {
     await closeAllButLocal();
     await openConnected('x1');
-    const servers = await serverProcesses();
+    const servers = await serverMainProcesses();
     const name = await nextEmptyWindow(() => killCurrent('x1'));
     const state = await windowState(name);
-    const after = await serverProcesses();
+    const after = await serverMainProcesses();
     try {
       deepStrictEqual(
         [state.remoteName, state.folders, after],
