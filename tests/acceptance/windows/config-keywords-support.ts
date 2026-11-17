@@ -73,6 +73,25 @@ export function hostBlock(
   ];
 }
 
+/** The `ssh` lines of a row whose host keys are unknown: it asks, and its known-hosts file is `known`. */
+export function askLines(known: string): string[] {
+  return ['StrictHostKeyChecking ask', `UserKnownHostsFile ${known}`];
+}
+
+/** The keywords of the harness block that the ask lines replace. */
+export const ASK_WITHOUT = [
+  'BatchMode',
+  'StrictHostKeyChecking',
+  'UserKnownHostsFile',
+];
+
+/** An empty known-hosts file of the run for row `alias`. */
+export function freshKnown(alias: string): string {
+  const file = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.known`);
+  writeFileSync(file, '');
+  return file;
+}
+
 /**
  * Writes the file `name` of the run from `blocks`, each the lines of a `Host` block, and gives its path. The run's
  * shared known-hosts file is replaced by one of the row's own: other rows of the launch write host keys to the shared

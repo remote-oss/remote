@@ -34,7 +34,10 @@ import {
   windowEvents,
 } from '../windows/harness.ts';
 import {
+  ASK_WITHOUT,
+  askLines,
   connectWith,
+  freshKnown,
   hostBlock,
   plainSsh,
   resolvedCount,
@@ -51,25 +54,6 @@ function reasonless(alias: string): string {
 /** The target behind a jump host: the harness host's own sshd, at its port inside. */
 function target(alias: string, jump: string): string[] {
   return hostBlock(alias, [`ProxyJump ${jump}`, 'Port 22'], ['Port']);
-}
-
-/** The `ssh` lines of a row whose host keys are unknown: it asks, and its known-hosts file is `known`. */
-function askLines(known: string): string[] {
-  return ['StrictHostKeyChecking ask', `UserKnownHostsFile ${known}`];
-}
-
-/** The keywords of the harness block that `ASK` replaces. */
-const ASK_WITHOUT = [
-  'BatchMode',
-  'StrictHostKeyChecking',
-  'UserKnownHostsFile',
-];
-
-/** An empty known-hosts file of the run for row `alias`. */
-function freshKnown(alias: string): string {
-  const file = path.join(variable('HARNESS_RUN_FOLDER'), `${alias}.known`);
-  writeFileSync(file, '');
-  return file;
 }
 
 /** What is wrong with the password hosts of a row: only passwords are tried, three times for a jump that is told so. */

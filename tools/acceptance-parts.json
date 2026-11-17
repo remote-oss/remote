@@ -461,7 +461,8 @@
     "terminal-login": {
       "chat-absence.test.ts": 0.7,
       "login.test.ts": 3.4,
-      "preconnect-skip.test.ts": 1
+      "preconnect-skip.test.ts": 1,
+      "progress-details.test.ts": 1.5
     },
     "terminal-odd": {"ask.test.ts": 0.3},
     "terminal-pick": {
