@@ -65,8 +65,9 @@ const LINUX_PWSH_OUTPUT =
   `\u001b[?1lREMOTE-OSS-PROBE-${NONCE}-DONE\n`;
 
 describe('the platform probe of a session whose host platform is unknown (card server-27, #1835)', () => {
-  it("#1835: the probe is three echo lines carrying the connection's nonce: the OS name for cmd, the home for PowerShell, and the end", () => {
+  it("#1835: the probe is four echo lines carrying the connection's nonce: a start that answers nothing, the OS name for cmd, the home for PowerShell, and the end", () => {
     deepStrictEqual(platformProbeInput(NONCE).split('\n'), [
+      `echo REMOTE-OSS-PROBE-${NONCE}-START`,
       `echo REMOTE-OSS-PROBE-${NONCE}-%OS%`,
       `echo REMOTE-OSS-HOME-${NONCE}-$HOME`,
       `echo REMOTE-OSS-PROBE-${NONCE}-DONE`,

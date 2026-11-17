@@ -429,6 +429,27 @@ describe('connection handler (contracts §4 S9)', () => {
       spawner.started[0]?.error(AUTHENTICATED);
     }
 
+    /**
+     * What the opening wrote and the LocalCommand lines it told, once the owner's connect logged in, the host's output
+     * `pieces` came, and only then ssh's line of the session.
+     */
+    async function outputFirst(
+      pieces: readonly string[],
+    ): Promise<[string | undefined, PlainData[]]> {
+      await loggedIn();
+      for (const piece of pieces) {
+        spawner.started[0]?.output(piece);
+      }
+      spawner.started[0]?.error(SESSION_ENTERED);
+      await settled();
+      return [
+        written(),
+        events.filter(
+          event => (event as {type: string}).type === 'localCommandLines',
+        ),
+      ];
+    }
+
     function written(): string | undefined {
       return spawner.started[0]?.inputText();
     }
@@ -563,20 +584,29 @@ describe('connection handler (contracts §4 S9)', () => {
     });
 
     it("#1835: an answer of this connection's nonce that comes before ssh's line of the session shows the session was entered, and the answers are read", async () => {
-      await loggedIn();
-      spawner.started[0]?.output(
-        'REMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-PROBE-m1-DONE\n',
-      );
-      spawner.started[0]?.error(SESSION_ENTERED);
-      await settled();
       deepStrictEqual(
-        [
-          written(),
-          events.filter(
-            event => (event as {type: string}).type === 'localCommandLines',
-          ),
-        ],
+        await outputFirst([
+          'REMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-PROBE-m1-DONE\n',
+        ]),
         [`${PROBE}${HAND_OVER}`, []],
+      );
+    });
+
+    it("#2598 (F-2109 AC-12), #1835: a LocalCommand's last words with no line end, then a cmd host's answers before ssh's line of the session, join only the probe's start line, and Windows is found", async () => {
+      deepStrictEqual(
+        await outputFirst([
+          'out-marker-tail',
+          'REMOTE-OSS-PROBE-m1-START\r\nREMOTE-OSS-PROBE-m1-Windows_NT\r\nREMOTE-OSS-PROBE-m1-DONE\r\n',
+        ]),
+        [
+          `${PROBE}WINDOWS-LINE\n`,
+          [
+            {
+              type: 'localCommandLines',
+              lines: ['out-marker-tailREMOTE-OSS-PROBE-m1-START'],
+            },
+          ],
+        ],
       );
     });
 
