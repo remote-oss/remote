@@ -8,6 +8,7 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {views} from '../../src/identifiers.generated.ts';
 import {pseudoLocalize} from '../../../../tools/pseudo-locale.ts';
+import {englishEntry} from '../../../../tools/locale-tables.ts';
 
 const PACKAGE = path.join(import.meta.dirname, '..', '..');
 
@@ -72,14 +73,29 @@ const STANDING_DOWN = '!remote-containers:standingDown';
 
 /** The welcome texts of the view as 0.4 contributes them: the links to commands the package registers stay, and the other links are gone. */
 const WELCOME_TEXTS = {
-  'viewsWelcome.targetsContainers.needsDockerStartOrInstall':
-    'Get started with containers by installing Docker or by visiting the help view. [Refresh](command:remote-containers.explorerTargetsRefresh) after installation and startup.',
-  'viewsWelcome.targetsContainers.needsSSHCredentials':
-    '[Refresh](command:remote-containers.explorerTargetsRefresh) to provide SSH credentials.',
-  'viewsWelcome.targetsContainers.noContainersWithFolder':
-    "Get started with containers by running one of the Dev Containers commands. You can [reopen the current folder in a container](command:remote-containers.reopenInContainer), or open another folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
-  'viewsWelcome.targetsContainers.noContainersWithoutFolder':
-    "Get started with containers by running one of the Dev Containers commands. You can open an existing folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
+  'viewsWelcome.targetsContainers.needsDockerStartOrInstall': {
+    message:
+      'Get started with containers by installing Docker or by visiting the help view. [Refresh](command:remote-containers.explorerTargetsRefresh) after installation and startup.',
+    comment: ["{Locked='](command:remote-containers.explorerTargetsRefresh)'}"],
+  },
+  'viewsWelcome.targetsContainers.needsSSHCredentials': {
+    message:
+      '[Refresh](command:remote-containers.explorerTargetsRefresh) to provide SSH credentials.',
+    comment: ["{Locked='](command:remote-containers.explorerTargetsRefresh)'}"],
+  },
+  'viewsWelcome.targetsContainers.noContainersWithFolder': {
+    message:
+      "Get started with containers by running one of the Dev Containers commands. You can [reopen the current folder in a container](command:remote-containers.reopenInContainer), or open another folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
+    comment: [
+      "{Locked='](command:remote-containers.reopenInContainer)'}",
+      "{Locked='](command:remote-containers.openFolder)'}",
+    ],
+  },
+  'viewsWelcome.targetsContainers.noContainersWithoutFolder': {
+    message:
+      "Get started with containers by running one of the Dev Containers commands. You can open an existing folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
+    comment: ["{Locked='](command:remote-containers.openFolder)'}"],
+  },
 };
 
 /** The `when` of a row action: the view's rows that carry `token`, with `extra` between it and the stand-down clause. */
@@ -1380,9 +1396,9 @@ describe('the manifest', () => {
     const registered = VIEW_PARTS.commands.map(entry => entry.command);
     const linked = VIEW_PARTS.viewsWelcome.flatMap(welcome =>
       [
-        ...String(
+        ...englishEntry(
           readJson('package.nls.json')[welcome.contents.replaceAll('%', '')],
-        ).matchAll(/\]\(command:([^)]+)\)/g),
+        ).text.matchAll(/\]\(command:([^)]+)\)/g),
       ].map(match => String(match[1])),
     );
     deepStrictEqual(
@@ -1644,15 +1660,16 @@ describe('the manifest', () => {
     );
   });
 
-  // The qps-ploc tables as the generator makes them: the English tables letter for letter.
+  // The qps-ploc tables as the generator makes them: the English tables letter for letter, the locked strings
+  // of an object entry standing in its text.
   function qpsPlocTables(): [Record<string, unknown>, Record<string, unknown>] {
     const nlsTable = readJson('package.nls.json');
     return [
       Object.fromEntries(
-        Object.entries(nlsTable).map(([key, text]) => [
-          key,
-          pseudoLocalize(String(text)),
-        ]),
+        Object.entries(nlsTable).map(([key, value]) => {
+          const entry = englishEntry(value);
+          return [key, pseudoLocalize(entry.text, entry.locked)];
+        }),
       ),
       Object.fromEntries(
         Object.keys(readJson('l10n/bundle.l10n.json')).map(text => [
@@ -1667,12 +1684,21 @@ describe('the manifest', () => {
     const identifiers = readJson('identifiers.json');
     const locales = (identifiers.locales ?? []) as string[];
     const nlsTable = readJson('package.nls.json');
+    const englishTexts = Object.fromEntries(
+      Object.entries(nlsTable).map(([key, value]) => [
+        key,
+        englishEntry(value).text,
+      ]),
+    );
     const bundle = Object.keys(readJson('l10n/bundle.l10n.json'));
     function expected(
       locale: string,
     ): [Record<string, unknown>, Record<string, unknown>] {
       if (locale !== 'qps-ploc' || identifiers.pseudoLocalized !== true) {
-        return [nlsTable, Object.fromEntries(bundle.map(text => [text, text]))];
+        return [
+          englishTexts,
+          Object.fromEntries(bundle.map(text => [text, text])),
+        ];
       }
       return qpsPlocTables();
     }
@@ -1695,6 +1721,22 @@ describe('the manifest', () => {
         readJson('l10n/bundle.l10n.qps-ploc.json'),
       ],
       qpsPlocTables(),
+    );
+  });
+
+  it('F-0103 AC-9 (c2503-qps-locked): a manifest value whose base entry locks a string keeps that string byte for byte in qps-ploc', () => {
+    const nlsTable = readJson('package.nls.json');
+    const ploc = readJson('package.nls.qps-ploc.json');
+    const locked: Array<[string, string]> = Object.entries(nlsTable).flatMap(
+      ([key, value]) =>
+        englishEntry(value).locked.map(kept => [key, kept] as [string, string]),
+    );
+    deepStrictEqual(
+      [
+        locked.length > 0,
+        locked.every(([key, kept]) => (ploc[key] as string).includes(kept)),
+      ],
+      [true, true],
     );
   });
 

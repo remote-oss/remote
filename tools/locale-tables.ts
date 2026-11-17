@@ -99,7 +99,7 @@ interface DefaultTable {
 }
 
 /** The English text and the locked strings of one value of an English table. */
-function englishEntry(value: unknown): {text: string; locked: string[]} {
+export function englishEntry(value: unknown): {text: string; locked: string[]} {
   if (typeof value === 'string') {
     return {text: value, locked: []};
   }
