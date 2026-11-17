@@ -118,6 +118,7 @@ export function dependencies(
 ): ServerStepDependencies {
   return {
     onHostDownloadRefused: () => undefined,
+    onInstallFolderInvalid: () => undefined,
     onInstallFolderRefused: () => undefined,
     onLocalDownloadFailed: () => undefined,
     copyAvailable: () => Promise.resolve(true),

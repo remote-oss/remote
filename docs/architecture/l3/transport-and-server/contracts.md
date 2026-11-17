@@ -1103,7 +1103,8 @@ Rules:
   (F-2003), never into `Failed.reason`. A reason is an id: one from the spec's string table, or our own named entry,
   set per kind where the spec places it. `serverDownload` carries **S043** (`Downloading VS Code Server failed. Please
   try again later.`, F-2403 7.E1, POST-4), `serverInstall` carries **S075** (`Failed to install the VS Code Server`,
-  F-2403 7.E2/7.E3), and a kind with no placement in the spec has no reason (S030). ssh's own failure lines still
+  F-2403 7.E2/7.E3), except a host that could not create its install folder (the script status `CreateInstallDirFailed`),
+  which carries **S070** (`Failed to create the remote server's install directory`, F-2407 7.E2), and a kind with no placement in the spec has no reason (S030). ssh's own failure lines still
   reach the dialog through S5's `classify`: they are ssh's words, which F-2601 shows.
 - Every recorded hang becomes a bound wait followed by F-2601's dialog (R-79). This covers:
   - F-2103 Q1, F-2104 Q1, F-2304 Q2, F-2308 7.E2, 7.E8, BR-6 and BR-11 (the former Q3 and Q4), F-2405 Q3;

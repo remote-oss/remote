@@ -112,7 +112,7 @@
     },
     {
       "alias": "readonly",
-      "cite": "#668",
+      "cite": "F-2407 AC-11, AC-12",
       "script": [
         {
           "surface": "failureDialog",
@@ -125,7 +125,7 @@
           "answer": "dismiss"
         }
       ],
-      "dialog": "Could not establish connection to \"readonly\": Failed to install the VS Code Server.",
+      "dialog": "Could not establish connection to \"readonly\": Failed to create the remote server's install directory.",
       "bound": {
         "from": "progress",
         "milliseconds": 15000,
@@ -235,7 +235,7 @@
     {
       "label": "install-path-nocreate",
       "alias": "harness",
-      "cite": "F-2602 AC-4",
+      "cite": "F-2602 AC-4, F-2407 AC-11",
       "settings": {
         "remote.SSH.serverInstallPath": {
           "harness": "/proc/nope/dir"
@@ -253,7 +253,7 @@
           "answer": "dismiss"
         }
       ],
-      "dialog": "Could not establish connection to \"harness\": Failed to install the VS Code Server."
+      "dialog": "Could not establish connection to \"harness\": Failed to create the remote server's install directory."
     },
     {
       "label": "manual-bootstrap",
