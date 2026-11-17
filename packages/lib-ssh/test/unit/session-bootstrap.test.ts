@@ -88,16 +88,13 @@ describe('the session opening by platform (card server-27, #1835)', () => {
     );
   });
 
-  it('#1835: an unknown platform has no remote program, with or without a RemoteCommand, and its two lines go on from the probe', () => {
+  it('#1835: an unknown platform has no remote program, with or without a RemoteCommand, and its program and the Windows line go on from the probe', () => {
     const posix = sessionStartFor(WAIT, false, 'unknown');
     const detect = {
       remoteProgram: undefined,
       opening: {
         kind: 'detect',
-        posix: {
-          line: `echo REMOTE-OSS-PROBE-EXEC; exec ${posix.remoteProgram}\n`,
-          prelude: posix.prelude,
-        },
+        posix: {program: posix.remoteProgram, prelude: posix.prelude},
         windows: {line: `${powershellSessionStart().remoteProgram}\n`},
       },
     };

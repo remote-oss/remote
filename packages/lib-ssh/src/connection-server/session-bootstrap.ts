@@ -12,7 +12,6 @@ import {
 import {type Interpreter, type PlatformHint, posixQuote} from 'lib-host';
 import {TUNNEL_COMMAND} from '../arguments/invocation.ts';
 import {preludeProgram} from '../process/remote-program.ts';
-import {PROBE_EXEC_LINE} from './platform-probe.ts';
 import {
   interpreterOfPlatform,
   powershellSessionStart,
@@ -161,16 +160,16 @@ export function connectionStart(
 
 /**
  * How the connection's session opens. A known platform has its remote program, and its prelude written once ssh
- * reports the login. An unknown one has no remote program: the host's own shell reads `PLATFORM_PROBE_INPUT`, and the
- * answers choose the line that goes on, the PowerShell loop's line on Windows, or on POSIX a line that prints
- * `PROBE_EXEC_LINE` and starts the bootstrap's reader, whose prelude is written only once that line is back, so that
- * no shell that reads its input ahead can take it.
+ * reports the login. An unknown one has no remote program: the host's own shell reads the platform probe, and the
+ * answers choose the line that goes on, the PowerShell loop's line on Windows, or on POSIX a line that prints the
+ * hand-over line and starts `program`, the bootstrap's reader, whose prelude is written only once that line is back, so
+ * that no shell that reads its input ahead can take it.
  */
 export type SessionOpening =
   | {kind: 'known'; prelude: string; interpreter: Interpreter}
   | {
       kind: 'detect';
-      posix: {line: string; prelude: string};
+      posix: {program: string; prelude: string};
       windows: {line: string};
     };
 
@@ -204,10 +203,7 @@ export function sessionOpeningFor(
     remoteProgram: undefined,
     opening: {
       kind: 'detect',
-      posix: {
-        line: `echo ${PROBE_EXEC_LINE}; exec ${posix.remoteProgram}\n`,
-        prelude: posix.prelude,
-      },
+      posix: {program: posix.remoteProgram, prelude: posix.prelude},
       windows: {line: `${powershellSessionStart().remoteProgram}\n`},
     },
   };
