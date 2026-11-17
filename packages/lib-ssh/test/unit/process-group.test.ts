@@ -4,6 +4,7 @@ import {
   GROUP_GRACE_MILLISECONDS,
   type GroupSystem,
   NODE_GROUP_SYSTEM,
+  reapProcessGroup,
 } from '../../src/process/process-group.ts';
 
 /** A system that records what was done to it, and runs what was scheduled when asked. */
@@ -52,5 +53,18 @@ describe('ending a process group', () => {
     doesNotThrow(() => {
       NODE_GROUP_SYSTEM.later(() => undefined, 60_000);
     });
+  });
+
+  it('#2664: after the client exited, the group of a POSIX client is ended as when it is killed', () => {
+    const made = recording(true);
+    reapProcessGroup(4321, made.system);
+    made.scheduled[0]?.action();
+    deepStrictEqual(made.done, ['SIGTERM -4321', 'SIGKILL -4321']);
+  });
+
+  it('#2664: after the client exited, a Windows client’s process id is left alone, as another process may hold it now', () => {
+    const made = recording(false);
+    reapProcessGroup(4321, made.system);
+    deepStrictEqual([made.done, made.scheduled.length], [[], 0]);
   });
 });

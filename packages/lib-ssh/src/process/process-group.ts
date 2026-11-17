@@ -35,14 +35,25 @@ export const NODE_GROUP_SYSTEM: GroupSystem = {
     spawn('taskkill', ['/pid', String(leader), '/T', '/F'], {
       stdio: 'ignore',
       windowsHide: true,
-    }).once('error', () => undefined);
+      // Without taskkill the client alone is ended, as the tree kill would have ended it.
+    }).once('error', () => {
+      try {
+        process.kill(leader);
+      } catch {
+        // The client is already gone.
+      }
+    });
   },
   later: (action, milliseconds) => {
     setTimeout(action, milliseconds).unref();
   },
 };
 
-/** Ends every process `leader` started: its group, which is what a client's own children (ProxyCommand, ProxyJump) are in. */
+/**
+ * Ends every process `leader` started while it runs: its group on POSIX, which is what a client's own children
+ * (ProxyCommand, ProxyJump) are in, and on Windows its process tree, `leader` included, which only a running parent can
+ * give.
+ */
 export function endProcessGroup(
   leader: number | undefined,
   system: GroupSystem = NODE_GROUP_SYSTEM,
@@ -58,4 +69,17 @@ export function endProcessGroup(
   system.later(() => {
     system.signalGroup(leader, 'SIGKILL');
   }, GROUP_GRACE_MILLISECONDS);
+}
+
+/**
+ * Ends what `leader` left behind once it has exited: its group on POSIX, where a group's id stays reserved while any
+ * member lives. On Windows it does nothing: an exited client's process id may be another process's now.
+ */
+export function reapProcessGroup(
+  leader: number | undefined,
+  system: GroupSystem = NODE_GROUP_SYSTEM,
+): void {
+  if (system.posix) {
+    endProcessGroup(leader, system);
+  }
 }

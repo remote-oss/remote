@@ -7,7 +7,8 @@
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {deepStrictEqual} from 'node:assert';
-import {closeWindow} from '../windows/harness.ts';
+import {closeWindow, windowState} from '../windows/harness.ts';
+import {killSharedConnection} from '../windows/key-windows.ts';
 import {connectWith, launchSsh} from '../windows/config-keywords-support.ts';
 
 const execFileAsync = promisify(execFile);
@@ -28,10 +29,19 @@ async function masters(alias: string): Promise<string[]> {
 describe('a ControlPersist master and the end of the attempt (card #2664, F-2102 6.8)', function () {
   this.timeout(300_000);
 
-  /** The answer of `ssh -O check` once the window of `mode` ended its attempt, and the master as `ps` shows it before. */
+  /**
+   * The answer of `ssh -O check` once the window of `mode` ended its attempt, by closing the window or, in the local-server
+   * mode, by Kill Local Connection Server, whether the window is then still connected, and the master as `ps` shows it before.
+   */
   async function checkAfterEnd(
     mode: 'server' | 'terminal',
-  ): Promise<{connected: boolean; before: string[]; check: string}> {
+    ending: 'close' | 'kill' = 'close',
+  ): Promise<{
+    connected: boolean;
+    before: string[];
+    check: string;
+    stillConnected: boolean | undefined;
+  }> {
     const alias = `c2664-cp-${mode}`;
     return connectWith(
       alias,
@@ -43,8 +53,16 @@ describe('a ControlPersist master and the end of the attempt (card #2664, F-2102
       'connects',
       async (connect, file) => {
         const before = await masters(alias);
-        await closeWindow(alias);
+        if (ending === 'kill') {
+          await killSharedConnection(alias, alias);
+        } else {
+          await closeWindow(alias);
+        }
         await new Promise(resolve => setTimeout(resolve, 2000));
+        const stillConnected =
+          ending === 'kill'
+            ? (await windowState(alias)).remoteName === 'ssh-remote'
+            : undefined;
         let after: string;
         try {
           after = (
@@ -60,7 +78,12 @@ describe('a ControlPersist master and the end of the attempt (card #2664, F-2102
           'exit',
           alias,
         ]).catch(() => undefined);
-        return {connected: connect.connected, before, check: after};
+        return {
+          connected: connect.connected,
+          before,
+          check: after,
+          stillConnected,
+        };
       },
       {
         settings: {
@@ -85,6 +108,15 @@ describe('a ControlPersist master and the end of the attempt (card #2664, F-2102
     deepStrictEqual(
       found.check.startsWith('Master running'),
       true,
+      JSON.stringify(found),
+    );
+  });
+
+  it('card #2664 (c2664-control-persist-kill): Kill Local Connection Server leaves the master running and the window connected', async () => {
+    const found = await checkAfterEnd('server', 'kill');
+    deepStrictEqual(
+      [found.check.startsWith('Master running'), found.stillConnected],
+      [true, true],
       JSON.stringify(found),
     );
   });

@@ -6,7 +6,7 @@
 
 import type * as vscode from 'vscode';
 import {
-  endProcessGroup,
+  reapProcessGroup,
   type LoginTerminals,
   type TerminalEnd,
   TerminalStream,
@@ -88,7 +88,9 @@ export function loginTerminalsOf(
             // recursion leaves no ssh process behind.
             const leader = Promise.resolve(created.processId);
             created.dispose();
-            void leader.then(endProcessGroup);
+            void leader.then(processId => {
+              reapProcessGroup(processId);
+            });
           }
         },
       };

@@ -285,6 +285,7 @@ Rules:
   askpass, and stops at the first setup report (F-2105, F-2308 BR-5). The maximum for `ConnectTimeout 0` is an R-79
   bound: `unboundedWaitSeconds`, a policy value the package passes in, and it is the final limit (no +2 s margin;
   ruled 2026-10-08).
+- **One process group per session (POSIX clients).** S3 starts `ssh` as the leader of a process group of its own. Ending a session (`kill`, an attempt's end, or the spawned `ssh`'s own exit) signals that group: SIGTERM, then SIGKILL after 2 s to what is left, so ProxyCommand and ProxyJump children never outlive their attempt (F-2310 7.E9, AC-32). In terminal mode the terminal adapter ends the group the same way on dispose. A process that has left the group by itself, such as OpenSSH's `ControlPersist` master, is the user's and is never ended (F-2102 6.8 step 3, BR-11). On Windows clients, which have no process groups, `kill` ends the session's process tree (`taskkill /PID <ssh> /T /F`) while `ssh` still runs; nothing more is promised there until it is measured on windows-2025.
 - Remote - SSH's start values (ruled on #253 Q8, 2026-10-12):
   - `settings.connectTimeout` is the setting through F-2105 BR-1's fallback (absent, not a number, negative or
     fractional → 15); the setting's own 0 stays 0 (F-2105 BR-4, AC-9: ssh gets 0, the extension waits 2 s).
