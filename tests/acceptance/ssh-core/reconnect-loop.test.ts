@@ -142,6 +142,9 @@ describe('the reconnection loop of a window whose host stops answering (card #27
         : seconds(between(attempt.failedAt, next.startedAt));
     });
     const expected = [5, 5, 10, 10, 10, 10, 10, 30, 30];
+    console.log(
+      `F-2505 AC-5: the waits between attempts were ${JSON.stringify(waits)} s`,
+    );
     deepStrictEqual(
       [
         attempts.map(attempt => attempt.number),
@@ -164,7 +167,14 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     outageBegins();
     const shown = await givenUp(name);
     deepStrictEqual(
-      [attemptsSince(mark, 'harness').map(attempt => attempt.number), shown],
+      [
+        attemptsSince(mark, 'harness').map(attempt => attempt.number),
+        {
+          details: shown.details,
+          buttons: shown.buttons,
+          indicator: shown.indicator,
+        },
+      ],
       [
         [2, 3],
         {
@@ -320,6 +330,9 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     await userSettings(settings);
     await connectedWindow(name);
     const {before, toasts, reconnectedAfter} = await killedSsh(name);
+    console.log(
+      `F-2505 AC-10: ${name} reconnected ${String(reconnectedAfter)} ms after the kill`,
+    );
     deepStrictEqual(
       [
         before.length > 0,
@@ -542,6 +555,9 @@ describe('the reconnection loop of a window whose host stops answering (card #27
           ? undefined
           : seconds(between(attempt.startedAt, attempt.failedAt)),
       );
+    console.log(
+      `F-2505 AC-28: attempts 3 and 4 lasted ${JSON.stringify(lasted)} s`,
+    );
     deepStrictEqual(
       [
         lasted.map(each => each !== undefined && each >= 15 && each <= 17),
@@ -619,6 +635,10 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     const shown = await givenUp(name);
     const [first] = attemptsSince(mark, name);
     const into = seconds(between(first?.startedAt ?? 0, shown.shownAt));
+    // Printed in green runs too, so a drift toward the bound shows before it fails.
+    console.log(
+      `F-2505 AC-20: core ended the reconnection ${String(into)} s after attempt 2 started`,
+    );
     unpauseHost();
     await answerDialog(name, 'Reload Window');
     await connectedWithin(name, 180_000);
