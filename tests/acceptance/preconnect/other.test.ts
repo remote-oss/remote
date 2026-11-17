@@ -69,7 +69,7 @@ describe('the pre-connection script and what else a window does (card connect-87
     deepStrictEqual([shown('po30'), markerOf(script)], [1, 'ran\n']);
   });
 
-  it('F-2108 AC-32 (workspace-and-folder-settings): the setting of a local workspace file applies on the first load, and the one of the remote folder from the second load on', async () => {
+  it('F-2108 AC-32 (workspace-and-folder-settings): the setting of a local workspace file applies on the first load, and the one of the remote folder from the second load on, each with the confirmation dialog for that path', async () => {
     const script = writeScript('scoped.sh', 'echo ran >> "$MARKER"');
     const home = '/home/harness';
     await onHost('mkdir', '-p', `${home}/po32/.vscode`, `${home}/po32w`);
@@ -113,7 +113,15 @@ describe('the pre-connection script and what else a window does (card connect-87
     const first = shown('po32');
     await reloadWindow('po32');
     await connectedWithin('po32', 120_000);
-    deepStrictEqual([shown(name), first, shown('po32')], [1, 0, 1]);
+    const named = ['po32', name].map(window =>
+      dialogLines(window)
+        .filter(line => line.held !== true)
+        .map(line => line.detail?.includes(script) === true),
+    );
+    deepStrictEqual(
+      [shown(name), first, shown('po32'), named],
+      [1, 0, 1, [[true], [true]]],
+    );
   });
 
   it("F-2108 AC-35 (deleted): a confirmed script that was deleted fails with the read's detail and no dialog, and its entry stays", async () => {
