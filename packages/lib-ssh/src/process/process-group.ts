@@ -4,6 +4,7 @@
  */
 
 import {spawn} from 'node:child_process';
+import type {EventEmitter} from 'node:events';
 import {sep} from 'node:path';
 
 /** How long a process group has to end on SIGTERM before it gets SIGKILL. */
@@ -21,6 +22,41 @@ export interface GroupSystem {
   later(action: () => void, milliseconds: number): void;
 }
 
+/** Starts `taskkill` for the process tree of `leader`. */
+function startTaskkill(leader: number): EventEmitter {
+  return spawn('taskkill', ['/pid', String(leader), '/T', '/F'], {
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+}
+
+/** Ends the client `leader` alone, which a tree kill that could not start falls back to; a client that is gone is no failure. */
+export function killClientAlone(
+  leader: number,
+  kill: (processId: number) => unknown = processId => process.kill(processId),
+): void {
+  try {
+    kill(leader);
+  } catch {
+    // The client is already gone.
+  }
+}
+
+/**
+ * The tree kill over `start`, which starts `taskkill` for a client: when it cannot start, `killAlone` ends the client
+ * itself, as the tree kill would have.
+ */
+export function treeKillerOver(
+  start: (leader: number) => EventEmitter,
+  killAlone: (leader: number) => void,
+): (leader: number) => void {
+  return leader => {
+    start(leader).once('error', () => {
+      killAlone(leader);
+    });
+  };
+}
+
 /** The system of this Node.js process; the path separator tells the platform. */
 export const NODE_GROUP_SYSTEM: GroupSystem = {
   posix: sep === '/',
@@ -31,19 +67,7 @@ export const NODE_GROUP_SYSTEM: GroupSystem = {
       // The group is already gone.
     }
   },
-  killTree: leader => {
-    spawn('taskkill', ['/pid', String(leader), '/T', '/F'], {
-      stdio: 'ignore',
-      windowsHide: true,
-      // Without taskkill the client alone is ended, as the tree kill would have ended it.
-    }).once('error', () => {
-      try {
-        process.kill(leader);
-      } catch {
-        // The client is already gone.
-      }
-    });
-  },
+  killTree: treeKillerOver(startTaskkill, killClientAlone),
   later: (action, milliseconds) => {
     setTimeout(action, milliseconds).unref();
   },
