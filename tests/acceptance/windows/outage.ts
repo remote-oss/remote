@@ -1,6 +1,7 @@
 /**
  * @fileoverview An outage of the SSH harness host and the reconnection attempts a window makes during it: the host's
- * container is paused, which stops its packets, and the log says when each attempt started and when it failed.
+ * container is paused, which freezes its processes so that nothing answers (the kernel still completes TCP handshakes),
+ * and the log says when each attempt started and when it failed.
  */
 
 import {execFileSync} from 'node:child_process';
@@ -18,7 +19,7 @@ export interface Attempt {
 /** The lines that say a reconnection attempt failed: the shared connection's own timeout, or ssh's banner timeout. */
 const FAILED = /^(connect failed: |\[ssh\] Connection timed out)/u;
 
-/** Stops the packets of the host: its sshd stays up and answers nothing. */
+/** Freezes the host's processes: its sshd stays up and answers nothing, though the kernel still completes TCP handshakes. */
 export function pauseHost(): void {
   execFileSync('docker', ['pause', variable('HARNESS_CONTAINER')]);
 }

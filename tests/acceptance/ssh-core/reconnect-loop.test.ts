@@ -90,9 +90,11 @@ describe('the reconnection loop of a window whose host stops answering (card #27
       async () => (await dialogOf(name))?.details === GIVEN_UP,
       240_000,
     );
+    const shownAt = clockNow();
     const dialog = await waitForDialog(name, 10_000);
     await indicatorDisconnects(name);
     return {
+      shownAt,
       details: dialog.details,
       buttons: [...dialog.buttons],
       indicator: await statusBarText(name, 'status.host'),
@@ -503,17 +505,29 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     );
   });
 
-  it('F-2505 AC-28 (c2703-silent): on a host whose packets are dropped an attempt fails after about 15 to 17 s as The connection timed out, a temporary failure, and core keeps retrying', async () => {
-    const name = 'c2703-silent';
-    // The run's own block for the harness host sets ConnectTimeout 10; a host that names none gets the extension's 15 s.
+  /**
+   * Opens window `name` on a host entry of its own that names no ConnectTimeout, which the run's `harness` block does
+   * (10 s): the attempts then fail after the extension's 15 s, as on a host that drops packets. Gives the log's length
+   * once the window is connected, with `settings` set besides the entry.
+   */
+  async function windowOnUnboundedHost(
+    name: string,
+    settings: Readonly<Record<string, unknown>> = {},
+  ): Promise<number> {
     const file = writeConfig(name, [hostBlock(name, [], ['ConnectTimeout'])]);
     await userSettings({
       'remote.SSH.configFile': file,
       'remote.SSH.remotePlatform': {[name]: 'linux'},
+      ...settings,
     });
     await openWindow(name, name);
     await connectedWithin(name, 120_000);
-    const mark = connectionLog().length;
+    return connectionLog().length;
+  }
+
+  it('F-2505 AC-28 (c2703-silent): on a host whose packets are dropped an attempt fails after about 15 to 17 s as The connection timed out, a temporary failure, and core keeps retrying', async () => {
+    const name = 'c2703-silent';
+    const mark = await windowOnUnboundedHost(name);
     outageBegins();
     await waitFor(
       'attempt 5',
@@ -591,26 +605,25 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     );
   });
 
-  it('F-2505 AC-20 (c2703-grace): with the grace time 30 core ends the reconnection about 30 to 40 s into the attempts (45 s allowed: core ends it at the first error after the grace time, and an attempt fails after 10 s on the run’s host, which measured 42.6 s in run 44031853143), and Reload Window reconnects once the host answers', async () => {
+  it('F-2505 AC-20 (c2703-grace): with the grace time 30 core ends the reconnection about 30 to 40 s into the attempts, and Reload Window reconnects once the host answers', async () => {
     const name = 'c2703-grace';
-    // The grace time reaches core when the server starts, so the server that earlier rows left is replaced.
+    // The grace time reaches core when the server starts, so the server that earlier rows left is replaced. The host
+    // entry names no ConnectTimeout, so an attempt fails after 15 s and core's first error after the grace time comes
+    // inside the criterion's window.
     await freshHost();
-    await userSettings({
+    const mark = await windowOnUnboundedHost(name, {
       'remote.SSH.reconnectionGraceTime': 30,
       'window.dialogStyle': 'custom',
     });
-    const mark = await connectedWindow(name);
     outageBegins();
     const shown = await givenUp(name);
-    const dialogAt = clockNow();
-    const [first] = attemptsSince(mark, 'harness');
-    // Core ends the reconnection at the first error after the grace time, and an attempt takes about 10 s to fail here.
-    const into = seconds(between(first?.startedAt ?? 0, dialogAt));
+    const [first] = attemptsSince(mark, name);
+    const into = seconds(between(first?.startedAt ?? 0, shown.shownAt));
     unpauseHost();
     await answerDialog(name, 'Reload Window');
     await connectedWithin(name, 180_000);
     deepStrictEqual(
-      [shown.details, into >= 30 && into <= 45, into],
+      [shown.details, into >= 30 && into <= 40, into],
       [GIVEN_UP, true, into],
     );
     await freshHost();
