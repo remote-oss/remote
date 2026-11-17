@@ -90,3 +90,38 @@ export function attemptsSince(mark: number, alias: string): Attempt[] {
   }
   return attempts;
 }
+
+/** A local `ssh` that carries a window's connection to the harness host: its process id and the port of its `-D` listener, when it has one. */
+export interface LocalSsh {
+  processId: number;
+  port: number | undefined;
+}
+
+/** The `ssh` processes of this machine that run against the run's `ssh_config` for the harness host. */
+export function localSshOfHarness(): LocalSsh[] {
+  return execFileSync('ps', ['-eo', 'pid=,args='], {encoding: 'utf8'})
+    .split('\n')
+    .flatMap(line => {
+      const match = /^\s*(\d+) ssh .*ssh_config .* harness( |$)/u.exec(line);
+      return match?.[1] === undefined
+        ? []
+        : [
+            {
+              processId: Number(match[1]),
+              port: /-D 127\.0\.0\.1:(\d+)/u.exec(line)?.[1]
+                ? Number(/-D 127\.0\.0\.1:(\d+)/u.exec(line)?.[1])
+                : undefined,
+            },
+          ];
+    });
+}
+
+/** Whether process `processId` of this machine still runs. */
+export function running(processId: number): boolean {
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
