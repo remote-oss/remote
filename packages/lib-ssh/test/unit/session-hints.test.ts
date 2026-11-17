@@ -88,19 +88,20 @@ describe('the environment hints of a session record (card connect-135, F-2605 BR
 
 describe('the numbers of the error statuses (card connect-135)', () => {
   it('pins the whole table: no number is ever changed or used twice', () => {
-    deepStrictEqual(STATUS_NUMBERS, {
-      PermissionDenied: 1,
-      InvalidHostName: 2,
-      OfflineError: 3,
-      MitmPortForwardingDisabled: 4,
-      AllowTcpForwardingDisabled: 5,
-      SendDisconnectBrokenPipe: 6,
-      ServerDownloadFailed: 7,
-      NoDownloaderAvailable: 8,
-      InvalidProxyUrl: 9,
-      CreateInstallDirFailed: 10,
-      LocalDownloadFailed: 11,
-    });
+    deepStrictEqual(Object.entries(STATUS_NUMBERS), [
+      ['PermissionDenied', 1],
+      ['InvalidHostName', 2],
+      ['OfflineError', 3],
+      ['MitmPortForwardingDisabled', 4],
+      ['AllowTcpForwardingDisabled', 5],
+      ['SendDisconnectBrokenPipe', 6],
+      ['ServerDownloadFailed', 7],
+      ['NoDownloaderAvailable', 8],
+      ['InvalidProxyUrl', 9],
+      ['CreateInstallDirFailed', 10],
+      ['LocalDownloadFailed', 11],
+      ['PreconnectScriptFailure', 12],
+    ]);
   });
 
   it('gives each status of the table its number, and a status it does not hold none', () => {

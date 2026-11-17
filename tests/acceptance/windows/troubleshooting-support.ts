@@ -3,7 +3,15 @@
  * and the cells of the table.
  */
 
-import {inWindow, openWindow, recordLines, waitFor} from './harness.ts';
+import {
+  inWindow,
+  openWindow,
+  readUserSettings,
+  recordLines,
+  restoreUserSettings,
+  userSettings,
+  waitFor,
+} from './harness.ts';
 import {INSTALL_MILLISECONDS} from './maintenance.ts';
 import {terminalTabsOf, terminalText} from './renderer.ts';
 
@@ -86,4 +94,20 @@ export function firstRowOf(table: readonly string[]): string[] {
 /** The terminals of window `name` that are the troubleshooting one. */
 export async function troubleshootingTabs(name: string): Promise<string[]> {
   return (await terminalTabsOf(name)).filter(label => label.includes(NAME));
+}
+
+/**
+ * The header and the first row of the troubleshooting table of window `name`, with the tab list of a lone terminal
+ * shown while they are read; the user settings are back as they were afterwards.
+ */
+export async function tableShown(name: string) {
+  const saved = readUserSettings();
+  try {
+    // Core hides the tab list of a single terminal; the rows read what the panel lists.
+    await userSettings({'terminal.integrated.tabs.hideCondition': 'never'});
+    const table = await wholeTableOf(name);
+    return {header: cellsOf(table[1]), first: firstRowOf(table)};
+  } finally {
+    restoreUserSettings(saved);
+  }
 }

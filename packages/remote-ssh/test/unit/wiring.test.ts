@@ -209,6 +209,7 @@ function portsOf(
       },
       dialog: {askUser: () => Promise.resolve('skip')},
       logger,
+      recordHint: () => undefined,
     },
     settings: {
       preconnect: () => changes.preconnect,
