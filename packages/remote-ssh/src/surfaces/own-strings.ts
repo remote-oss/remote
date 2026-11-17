@@ -65,15 +65,12 @@ export const OWN_TEMPLATES = {
   S155: 'Update the {0} setting',
   S059: 'Ensure the provided path is executable and the script exits successfully (exit code 0)',
   S019: 'Check the Remote - SSH log for output from the script (prefixed with {0})',
-  showLogLinkText: 'Show log',
   S138: 'The following issues were detected in your most recent Remote - SSH session',
   S125: 'See verbose information in the',
   S134: 'Status',
   S090: 'Message',
   S091: 'Mitigations',
   S115: 'Resources',
-  socksForwardingFailedNotice:
-    'Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. ({0})',
   configFileNotAbsolute:
     'remote.SSH.configFile must be an absolute path or start with ~/: "{0}"',
 } as const;
