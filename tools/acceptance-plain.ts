@@ -24,6 +24,7 @@ import {
   withRunTokens,
   type Launch,
 } from './acceptance-launches.ts';
+import {productFileOf} from './acceptance-cli-editor.ts';
 import {resolveBinary} from './repository.ts';
 import {windowNameOf} from '../tests/acceptance/window-agent/src/window-name.ts';
 
@@ -364,6 +365,33 @@ export function preSeedArgv(runFolder: string, launch: Launch): void {
  */
 const ARGV_JSON =
   '{\n\t"enable-crash-reporter": false,\n\t"crash-reporter-id": ""\n}\n';
+
+/**
+ * The argv.json file the editor of a launch reads in the home of the launch's own, which the launch's `HOME` is
+ * `home`: `$home/<dataFolderName>/argv.json`, the `dataFolderName` the editor at `executable` names in its
+ * `product.json`.
+ */
+export function homeArgvFileOf(executable: string, home: string): string {
+  const product = JSON.parse(
+    readFileSync(productFileOf(executable), 'utf8'),
+  ) as {dataFolderName: string};
+  return path.join(home, product.dataFolderName, 'argv.json');
+}
+
+/**
+ * Stands `ARGV_JSON` in the home-based argv.json file of a launch, before its editor starts and before each of its
+ * relaunches: the editor creates the file on its first run and rewrites it, neither atomically, when the
+ * crash-reporter keys are missing, and a read of the file in flight shows the runtime-arguments notice in the
+ * launch's window. With the keys standing in the file, the editor's rewrite is a no-op, and the file the launch
+ * starts on parses whatever it met.
+ */
+export function preSeedHomeArgv(executable: string, home: string): void {
+  const target = homeArgvFileOf(executable, home);
+  mkdirSync(path.dirname(target), {recursive: true});
+  const pending = `${target}.${String(process.pid)}.tmp`;
+  writeFileSync(pending, ARGV_JSON);
+  renameSync(pending, target);
+}
 
 /**
  * Packages the fixture language pack for `language`, which carries no translation, from the language suite's fixtures
@@ -766,7 +794,19 @@ export async function runPlainLaunch(
   // A request an earlier attempt left would restart the editor for a row that is gone, so it counts as answered. The
   // folder itself is the row's to make and is not touched here: the run folder may be a path the harness cannot write.
   const handled = new Set<string>(staleRequestIds(relaunchFolder));
-  preSeedArgv(session.runFolder, launch);
+  // The launch's own user-data folder, and, for a launch whose home is in the run's folder, the argv.json file the
+  // editor reads in that home: the editor's first run creates and rewrites that file, so it is stood before the
+  // start and before each relaunch, as the user-data one is.
+  function seedArgv(
+    environment: Readonly<Record<string, string | undefined>> | undefined,
+  ): void {
+    preSeedArgv(session.runFolder, launch);
+    const home = environment?.HOME;
+    if (home?.startsWith(session.runFolder + path.sep)) {
+      preSeedHomeArgv(session.executable, home);
+    }
+  }
+  seedArgv(launchEnvironment);
   const current = {
     editor: steps.start(
       plainEditorOf(session.executable, session.runFolder, launch, environment),
@@ -788,8 +828,7 @@ export async function runPlainLaunch(
           recursive: true,
           force: true,
         });
-        preSeedArgv(session.runFolder, launch);
-        return plainEditorOf(session.executable, session.runFolder, launch, {
+        const relaunchEnvironment = {
           ...environment,
           ...Object.fromEntries(
             Object.entries(request.environment).map(([key, value]) => [
@@ -797,7 +836,14 @@ export async function runPlainLaunch(
               value ?? undefined,
             ]),
           ),
-        });
+        };
+        seedArgv(relaunchEnvironment);
+        return plainEditorOf(
+          session.executable,
+          session.runFolder,
+          launch,
+          relaunchEnvironment,
+        );
       },
       {
         start: steps.start,

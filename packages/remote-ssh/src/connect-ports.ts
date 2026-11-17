@@ -75,6 +75,7 @@ import {ownText} from './surfaces/own-strings.ts';
 import type {HintRecorder} from './diagnostics/hint-recorder.ts';
 import {downloadRefusalHint} from './diagnostics/download-refusal.ts';
 import {installFolderHint} from './diagnostics/install-folder-hint.ts';
+import {installPathHint} from './diagnostics/install-path-hint.ts';
 import {localDownloadHint} from './diagnostics/local-download-hint.ts';
 import {invalidProxyHint} from './diagnostics/invalid-proxy.ts';
 import {
@@ -463,6 +464,9 @@ export function wiringPortsOf(
       files: machine.clientFiles,
       onHostDownloadRefused: cause => {
         surfaces.hints.record(downloadRefusalHint(cause, surfaces.translate));
+      },
+      onInstallFolderInvalid: value => {
+        surfaces.hints.record(installPathHint(value, surfaces.translate));
       },
       onInstallFolderRefused: () => {
         surfaces.hints.record(installFolderHint());

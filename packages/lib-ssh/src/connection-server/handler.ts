@@ -29,11 +29,13 @@ import {LineSplitter} from '../process/line-splitter.ts';
 import type {ProcessSpawner} from '../process/ports.ts';
 import {spawnSession, type SshSession} from '../process/session.ts';
 import {SshLineFeed} from './ssh-line-feed.ts';
+import type {SocksProbe} from './socks-probe.ts';
 import {
   type ConnectionEvent,
   type ConnectionReply,
   type ConnectionRequest,
   readConnectionRequest,
+  SESSION_PROBE_MILLISECONDS,
   type SharedRecord,
 } from './messages.ts';
 import {LoginOwnership} from './ownership.ts';
@@ -69,9 +71,14 @@ export interface ConnectionHandlerOptions {
   /** What the session runs its scripts with, from the host's platform. */
   interpreter: Interpreter;
   logLine: (line: string) => void;
+  /** The probe of the shared session over its SOCKS forward. */
+  socksProbe: SocksProbe;
 }
 
 type ConnectionState = 'idle' | 'connecting' | 'connected';
+
+/** The port on the host's loopback the session check connects to: the host's own sshd. */
+const PROBE_TARGET_PORT = 22;
 
 /** The events and requests of one shared connection. */
 export class ConnectionHandler implements MessageHandler {
@@ -87,6 +94,9 @@ export class ConnectionHandler implements MessageHandler {
   private feed: SshLineFeed | undefined;
   private sharedRecord: SharedRecord | null = null;
   private killed = false;
+  /** The session a check is probing, until the check has ended it or found it alive. */
+  private probing: SshSession | undefined;
+  private probe: Promise<boolean> | undefined;
 
   /** A handler with no connection yet. */
   constructor(options: ConnectionHandlerOptions) {
@@ -176,9 +186,57 @@ export class ConnectionHandler implements MessageHandler {
         this.close();
         this.control.stop();
         return {type: 'accepted'};
+      case 'checkSession':
+        return {type: 'sessionChecked', alive: await this.sessionAnswers()};
       default:
         throw new Error('not a connection request');
     }
+  }
+
+  /**
+   * Whether the shared session answers one trivial run within the probe's bound. A session that does not is ended,
+   * which ends `ssh`, and the windows are told its transport is lost; the helper and its leases stay, so the next
+   * connect starts a fresh session. With no session set up there is nothing to answer. Checks that come while a probe
+   * is running share it.
+   */
+  private sessionAnswers(): Promise<boolean> {
+    if (this.state !== 'connected') {
+      return Promise.resolve(false);
+    }
+    this.probe ??= this.probeSession(this.session).finally(() => {
+      this.probe = undefined;
+    });
+    return this.probe;
+  }
+
+  private async probeSession(
+    session: SshSession | undefined,
+  ): Promise<boolean> {
+    this.probing = session;
+    // A connect through the forward to the host's own sshd, which never waits for a run on the session: a run of S10
+    // would queue behind the one that is active, and a healthy session busy with another window's long run would
+    // answer late.
+    const alive = await this.options.socksProbe({
+      socksPort: this.options.socksPort,
+      targetPort: PROBE_TARGET_PORT,
+      deadlineMilliseconds: SESSION_PROBE_MILLISECONDS,
+    });
+    if (alive) {
+      this.probing = undefined;
+      return true;
+    }
+    session?.kill();
+    await session?.exit();
+    this.probing = undefined;
+    return false;
+  }
+
+  /** The session of a check ended: its windows are told, and the login is to be made again by the oldest lease. */
+  private sessionEnded(): void {
+    this.state = 'idle';
+    this.session = undefined;
+    this.tell({type: 'transportLost'});
+    this.ownership.reopen();
   }
 
   private async runScript(
@@ -358,6 +416,10 @@ export class ConnectionHandler implements MessageHandler {
         return;
       }
       if (this.state === 'connected') {
+        if (session === this.probing) {
+          this.sessionEnded();
+          return;
+        }
         this.tell({type: 'transportLost'});
         this.control.stop();
         return;

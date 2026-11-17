@@ -183,6 +183,7 @@ export function openConnectionStep(
         onNotice: listener => connection.onNotice(listener),
         answer: (promptId, text) => connection.answer(promptId, text),
         refuse: promptId => connection.refuse(promptId),
+        checkSession: () => connection.checkSession(),
         release: end,
       },
     };

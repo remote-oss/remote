@@ -145,6 +145,7 @@ describe('host channel over the shared ssh session: the lib-host contract', func
                 };
               },
             },
+            socksProbe: () => Promise.resolve(true),
             files,
             launcherFiles: {writeExecutable: () => Promise.resolve()},
             newNonce,

@@ -1245,6 +1245,7 @@ export const GLIBC_IMAGE =
 export interface EditorProduct {
   applicationName: string;
   commit: string;
+  dataFolderName: string;
   nameLong: string;
   quality: string;
   serverApplicationName: string;

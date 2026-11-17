@@ -1,4 +1,6 @@
 import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
+import {scriptedProbe, type ProbeScript} from './scripted-probe.ts';
+import type {SocksProbe} from '../../src/index.ts';
 import type {EndpointConnection, HelperControl, PlainData} from 'lib-helper';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeEndpointPort} from 'lib-helper/testing/fake-endpoint';
@@ -50,10 +52,13 @@ describe('connection handler (contracts §4 S9)', () => {
   let logged: string[];
   let markers: number;
   let notices: PlainData[];
+  let probeScript: ProbeScript;
+  let probes: Array<Parameters<SocksProbe>[0]>;
 
   function create(changes: Partial<ConnectionHandlerOptions> = {}): void {
     handler = new ConnectionHandler({
       invocation: INVOCATION,
+      socksProbe: scriptedProbe(clock.scheduler(), probeScript, probes),
       socksPort: 41000,
       spawner: spawner.spawn,
       askpassEnvironment: {},
@@ -94,6 +99,14 @@ describe('connection handler (contracts §4 S9)', () => {
     handler.attach(control);
   }
 
+  /** Two windows, the first connected through a session that is authenticated. */
+  async function connected(): Promise<void> {
+    handler.onLeasesChanged([1, 2]);
+    await send(1, {type: 'connect'});
+    authenticate(spawner.started[0]);
+    events.length = 0;
+  }
+
   function send(lease: number, body: PlainData): Promise<PlainData> {
     return handler.onRequest(body, {
       lease,
@@ -120,6 +133,8 @@ describe('connection handler (contracts §4 S9)', () => {
     logged = [];
     markers = 0;
     notices = [];
+    probeScript = {answers: true};
+    probes = [];
     create();
   });
 
@@ -930,13 +945,6 @@ describe('connection handler (contracts §4 S9)', () => {
       deadlineMilliseconds: 1000,
     } as const;
 
-    async function connected(): Promise<void> {
-      handler.onLeasesChanged([1, 2]);
-      await send(1, {type: 'connect'});
-      authenticate(spawner.started[0]);
-      events.length = 0;
-    }
-
     it('are refused before the connection is set up', async () => {
       handler.onLeasesChanged([1]);
       deepStrictEqual(await send(1, RUN_REQUEST), {
@@ -1030,6 +1038,110 @@ describe('connection handler (contracts §4 S9)', () => {
       deepStrictEqual(
         [text.includes('m1:st'), text.includes('m2:st')],
         [true, false],
+      );
+    });
+  });
+
+  describe('checkSession (card #2751)', () => {
+    const CHECK = {type: 'checkSession'} as const;
+
+    it('F-2505 AC-25: finds no session to answer before the connection is set up, asks no probe and ends nothing', async () => {
+      handler.onLeasesChanged([1]);
+      deepStrictEqual(
+        [await send(1, CHECK), probes, wasKilled(), stops],
+        [{type: 'sessionChecked', alive: false}, [], false, 0],
+      );
+    });
+
+    it('F-2505 AC-25: asks the forward for a connect to the host’s own sshd within three seconds and writes nothing to the session', async () => {
+      await connected();
+      deepStrictEqual(
+        [
+          await send(1, CHECK),
+          probes,
+          (spawner.started[0]?.inputText() ?? '').includes('m1:st'),
+          wasKilled(),
+          events,
+        ],
+        [
+          {type: 'sessionChecked', alive: true},
+          [{socksPort: 41000, targetPort: 22, deadlineMilliseconds: 3000}],
+          false,
+          false,
+          [],
+        ],
+      );
+    });
+
+    it('F-2505 AC-25: a session that stays silent is ended after three seconds, every lease is told its transport is lost and the helper stays', async () => {
+      await connected();
+      probeScript.answers = false;
+      const reply = send(2, CHECK);
+      await settled();
+      clock.advance(3000);
+      deepStrictEqual(
+        [await reply, wasKilled(), eventTypes(), stops],
+        [
+          {type: 'sessionChecked', alive: false},
+          true,
+          ['transportLost', 'ownerChanged'],
+          0,
+        ],
+      );
+    });
+
+    it('F-2505 AC-25: lets the next connect start a fresh session on the same helper after the session ended', async () => {
+      await connected();
+      probeScript.answers = false;
+      const reply = send(1, CHECK);
+      await settled();
+      clock.advance(3000);
+      await reply;
+      deepStrictEqual(
+        [await send(1, {type: 'connect'}), spawner.started.length],
+        [{type: 'accepted'}, 2],
+      );
+    });
+
+    it('F-2505 AC-25: shares one probe among checks that come while it runs', async () => {
+      await connected();
+      probeScript.answers = false;
+      const first = send(1, CHECK);
+      const second = send(2, CHECK);
+      await settled();
+      clock.advance(3000);
+      deepStrictEqual(
+        [[await first, await second], probes.length],
+        [
+          [
+            {type: 'sessionChecked', alive: false},
+            {type: 'sessionChecked', alive: false},
+          ],
+          1,
+        ],
+      );
+    });
+
+    it('F-2505 AC-25: answers while another window’s run is on the session, since it does not wait for the run', async () => {
+      await connected();
+      const running = send(1, {
+        type: 'runScript',
+        runId: 7,
+        script: 'tar x',
+        environment: {},
+        inputBase64: null,
+        deadlineMilliseconds: 600000,
+      });
+      await settled();
+      const reply = await send(2, CHECK);
+      let ended = false;
+      void running.then(() => {
+        ended = true;
+      });
+      await settled();
+      deepStrictEqual(
+        [reply, ended],
+        [{type: 'sessionChecked', alive: true}, false],
       );
     });
   });

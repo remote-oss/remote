@@ -25,6 +25,7 @@ import {
   closeWindow,
   dirtyDocumentsOf,
   activeEditorTextOf,
+  editorProduct,
   heldLines,
   inWindow,
   nextEmptyName,
@@ -146,9 +147,13 @@ async function shown(name: string) {
   return withoutActivity(await windowState(name));
 }
 
-/** The launch's own argv.json as it stands: its age in whole seconds and its content; 'absent' when the file does not exist, no age when it vanished between the read and the stat. */
+/** The argv.json file the launch's editor reads in the launch's own home, as it stands: its age in whole seconds and its content; 'absent' when the file does not exist, no age when it vanished between the read and the stat. */
 function argvStanding(): string {
-  const file = path.join(RUN_FOLDER, 'user-data-add-host', 'argv.json');
+  const file = path.join(
+    HOME_FOLDER,
+    editorProduct().dataFolderName,
+    'argv.json',
+  );
   let content: string;
   try {
     content = readFileSync(file, 'utf8');

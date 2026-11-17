@@ -32,6 +32,9 @@ export interface SharedRecord {
   display?: StoredDisplay;
 }
 
+/** How long the shared session has to answer the probe of a session check, in milliseconds. */
+export const SESSION_PROBE_MILLISECONDS = 3000;
+
 /** What a window asks of the helper. */
 export type ConnectionRequest =
   | {type: 'connect'}
@@ -50,7 +53,8 @@ export type ConnectionRequest =
       /** How long the run may take once it has started, in milliseconds. */
       deadlineMilliseconds: number;
     }
-  | {type: 'kill'};
+  | {type: 'kill'}
+  | {type: 'checkSession'};
 
 /** Why a script did not run to its end. */
 export type ScriptFailureReason = 'notConnected' | 'channelClosed' | 'timeout';
@@ -66,7 +70,8 @@ export type ConnectionReply =
   | {type: 'sharedRecord'; record: SharedRecord | null}
   | {type: 'answered'; accepted: boolean}
   | {type: 'scriptEnded'; status: number}
-  | {type: 'scriptFailed'; reason: ScriptFailureReason; detail: string};
+  | {type: 'scriptFailed'; reason: ScriptFailureReason; detail: string}
+  | {type: 'sessionChecked'; alive: boolean};
 
 /** The kind of question `ssh` asked. */
 export type PromptSurface =
@@ -193,6 +198,7 @@ export function readConnectionRequest(
     case 'connect':
     case 'sharedRecord':
     case 'kill':
+    case 'checkSession':
       return {type: body.type};
     case 'setSharedRecord': {
       const record = readSharedRecord(body.record);
@@ -289,6 +295,10 @@ export function readConnectionReply(
             reason: body.reason as ScriptFailureReason,
             detail: body.detail,
           }
+        : undefined;
+    case 'sessionChecked':
+      return typeof body.alive === 'boolean'
+        ? {type: 'sessionChecked', alive: body.alive}
         : undefined;
     default:
       return undefined;

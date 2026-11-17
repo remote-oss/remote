@@ -28,6 +28,7 @@ import {
   readConnectionReply,
   type Refusal,
   type ScriptFailureReason,
+  SESSION_PROBE_MILLISECONDS,
   type SharedRecord,
 } from './messages.ts';
 
@@ -76,6 +77,12 @@ export interface ConnectionClientEnvironment {
   /** A free loopback port for the SOCKS forward; it is bound and released, never held. */
   freePort: () => Promise<number>;
 }
+
+/**
+ * What a session check found: the helper's shared session answers, it did not and was ended, or the check could not
+ * be made (a helper of an earlier build, or no helper to ask).
+ */
+export type SessionCheck = 'alive' | 'ended' | 'unchecked';
 
 /** The limits of the waits of one connection, all in milliseconds and all policy values. */
 export interface ConnectionLimits {
@@ -483,6 +490,25 @@ export class SharedConnection {
     return reply?.type === 'scriptFailed'
       ? {kind: 'failed', reason: reply.reason, detail: reply.detail}
       : {kind: 'failed', reason: 'channelClosed', detail: 'unreadable reply'};
+  }
+
+  /**
+   * Asks the helper whether its shared session still answers, which the window asks when its own transport was lost:
+   * a session that does not answer is ended, so that the next connect starts a fresh one.
+   */
+  async checkSession(): Promise<SessionCheck> {
+    const outcome = await this.lease.request(
+      {type: 'checkSession'},
+      this.limits().requestMilliseconds + SESSION_PROBE_MILLISECONDS,
+    );
+    if (outcome.kind !== 'reply') {
+      return 'unchecked';
+    }
+    const reply = readConnectionReply(outcome.body);
+    if (reply?.type !== 'sessionChecked') {
+      return 'unchecked';
+    }
+    return reply.alive ? 'alive' : 'ended';
   }
 
   /** Ends this window's lease; the helper ends a short grace after the last one. */

@@ -344,7 +344,7 @@ Rulings of 2026-10-08 for S9 and S10 (the process side):
   helper's memory, set once after the connection completes, and reaches a later lease through a `sharedRecord`
   request after its hello. This satisfies "written only after the connection completes".
 - Helper messages are plain data over lib-helper's channel: requests `connect` (owner only), `sharedRecord`,
-  `setSharedRecord`, `answer {promptId, text}`, `kill`; events `prompt {promptId, surface, text}`, `promptClosed`,
+  `setSharedRecord`, `answer {promptId, text}`, `kill`, `checkSession` (a window that lost its transport, at its first reconnection attempt: one probe of the shared session with a 3 s deadline (a SOCKS connect through the helper's dynamic forward to the host's loopback port 22: within the deadline, any data after the connect request, or ssh closing the socket after it, means alive, since ssh gives its SOCKS reply only once the host has answered the channel open and closes the socket when the host refuses it, which a runner showed for OpenSSH 9.6 with the host paused; silence means not alive); `alive` when it answers, otherwise the helper ends the session, which ends ssh by S3's group rule, sends `transportLost` to every lease and replies `ended`; with no live session `ended` at once; concurrent checks share one probe; F-2505 AC-25, ruling-2751-session-check); events `prompt {promptId, surface, text}`, `promptClosed`,
   `ownerChanged`, `connected {socksPort}`, `loginFailed {kind, reason?, hints, exitStatus?, detail?}` (`exitStatus`: ssh's exit status, `null` when it ended on a signal, absent from an earlier helper; connect-64; `detail`: the helper's own log line for a login shell that timed out or ended early, which the window logs with the failure (F-2704 AC-25); absent from an earlier helper and from any other failure; it is one of two fixed sentences with a number in them, so nothing of the host's output or of the user's secrets is in it),
   `spawnFailed {cause, detail}` (the `ssh` program could not be started: `clientVanished` or `spawnFailed`),
   `transportLost`, `waitingForOtherWindow`, and `sshLines {lines}` (ssh's error-stream lines, in order: batches of at most
@@ -1103,7 +1103,8 @@ Rules:
   (F-2003), never into `Failed.reason`. A reason is an id: one from the spec's string table, or our own named entry,
   set per kind where the spec places it. `serverDownload` carries **S043** (`Downloading VS Code Server failed. Please
   try again later.`, F-2403 7.E1, POST-4), `serverInstall` carries **S075** (`Failed to install the VS Code Server`,
-  F-2403 7.E2/7.E3), and a kind with no placement in the spec has no reason (S030). ssh's own failure lines still
+  F-2403 7.E2/7.E3), except a host that could not create its install folder (the script status `CreateInstallDirFailed`),
+  which carries **S070** (`Failed to create the remote server's install directory`, F-2407 7.E2), and a kind with no placement in the spec has no reason (S030). ssh's own failure lines still
   reach the dialog through S5's `classify`: they are ssh's words, which F-2601 shows.
 - Every recorded hang becomes a bound wait followed by F-2601's dialog (R-79). This covers:
   - F-2103 Q1, F-2104 Q1, F-2304 Q2, F-2308 7.E2, 7.E8, BR-6 and BR-11 (the former Q3 and Q4), F-2405 Q3;

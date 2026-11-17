@@ -221,6 +221,24 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
     windowExec = undefined;
   }
 
+  /**
+   * Core started a reconnection, so the window's transport was lost: asks the helper of the connection the window
+   * holds whether its shared session still answers, and says what it found. A session that does not answer is ended,
+   * so this attempt starts a fresh one instead of joining it.
+   */
+  async function checkHeldSession(): Promise<void> {
+    const current = held;
+    if (current === undefined) {
+      return;
+    }
+    const found = await current.connection.checkSession();
+    dependencies.options.logger.info(
+      found === 'unchecked'
+        ? 'the held connection could not be checked: its helper did not answer the check'
+        : `the held connection was checked: ${found === 'alive' ? 'its session answers' : 'no live session answered: it did not within the bound and was ended, or there was none'}`,
+    );
+  }
+
   /** Gives back the control connection a nested window holds. */
   function releaseHeldExec(reason: string): void {
     const current = heldExec;
@@ -355,8 +373,11 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
 
   return {
     async connect(hostInput): Promise<Connected | Failed> {
-      releaseHeld('a new connect starts');
       const input = pipelineInputOf(hostInput);
+      if (input?.isReconnection === true) {
+        await checkHeldSession();
+      }
+      releaseHeld('a new connect starts');
       if (input === undefined) {
         return NOT_SSH_TARGET;
       }

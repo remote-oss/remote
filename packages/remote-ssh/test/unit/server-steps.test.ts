@@ -1269,6 +1269,27 @@ describe('the host download that is refused with local download off (card connec
   });
 });
 
+describe('the hint of an install folder setting the check rejects (card #2712)', () => {
+  /** What `onInstallFolderInvalid` heard when the check ran over the install folder `setting`. */
+  function heard(setting: string): string[] {
+    const values: string[] = [];
+    const steps = createServerSteps(
+      dependencies({
+        settings: settingsWith({serverInstallPath: {devbox: setting}}),
+        onInstallFolderInvalid: value => {
+          values.push(value);
+        },
+      }),
+    );
+    steps.checkInstallFolder(INPUT);
+    return values;
+  }
+
+  it('F-2407 AC-9: a value that is not a plain absolute path is told as written, and a path that is one is not', () => {
+    deepStrictEqual([heard('~x'), heard('/srv/vs')], [['~x'], []]);
+  });
+});
+
 describe('the hints of an install folder the host cannot create and a download the client cannot make (card #2708)', () => {
   /** How many times `onInstallFolderRefused` was told when the host answered `status` to the transfer, and to the start. */
   async function installFolderTold(

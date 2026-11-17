@@ -13,6 +13,7 @@ import {
   closeWindow,
   connectedWithin,
   connectionLog,
+  onHostAs,
   openWindow,
   readUserSettings,
   recordLines,
@@ -277,4 +278,85 @@ export function resolvedCount(alias: string): number {
   return connectionLog().filter(line =>
     line.includes(`Resolved ssh-remote+${alias} to local port`),
   ).length;
+}
+
+/** A user-level sshd on the host, run as the harness account with a host key of its own. */
+export interface HostSshd {
+  /** The fingerprint (SHA256:...) of its host key. */
+  fingerprint: string | undefined;
+  /** Ends it and removes its folder. */
+  stop(): Promise<void>;
+}
+
+/** The fingerprint (SHA256:...) of the public key file `publicKey` on the host. */
+async function fingerprintOf(publicKey: string): Promise<string | undefined> {
+  return (await onHostAs('harness', 'ssh-keygen', '-lf', publicKey)).split(
+    ' ',
+  )[1];
+}
+
+/** The fingerprint of the host key of the harness host's own sshd, the one every jump host of the run's entries shows. */
+export function harnessHostFingerprint(): Promise<string | undefined> {
+  return fingerprintOf('/etc/ssh/ssh_host_ed25519_key.pub');
+}
+
+/**
+ * Starts a user-level sshd on 127.0.0.1 of the host at `port`, for the harness account's own key logins, with a new
+ * ed25519 host key, so that a hop behind the harness host shows a fingerprint of its own; waits until it listens.
+ */
+export async function startHostSshd(port: number): Promise<HostSshd> {
+  const folder = `/tmp/sshd-${String(port)}`;
+  await onHostAs(
+    'harness',
+    'sh',
+    '-c',
+    `rm -rf ${folder}; mkdir -p ${folder} && ssh-keygen -q -t ed25519 -N '' -f ${folder}/hostkey && printf '%s\\n' 'HostKey ${folder}/hostkey' 'PidFile ${folder}/sshd.pid' 'UsePAM no' 'StrictModes no' 'AuthorizedKeysFile /home/harness/.ssh/authorized_keys' 'ListenAddress 127.0.0.1' > ${folder}/sshd_config && (setsid /usr/sbin/sshd -D -e -f ${folder}/sshd_config -p ${String(port)} > ${folder}/sshd.log 2>&1 < /dev/null &)`,
+  );
+  await waitFor(
+    `the sshd of port ${String(port)} to listen`,
+    async () =>
+      onHostAs(
+        'harness',
+        'sh',
+        '-c',
+        `nc -z 127.0.0.1 ${String(port)} && echo up`,
+      )
+        .then(text => text.includes('up'))
+        .catch(() => false),
+    30_000,
+  );
+  return {
+    fingerprint: await fingerprintOf(`${folder}/hostkey.pub`),
+    stop: async () => {
+      await onHostAs(
+        'harness',
+        'sh',
+        '-c',
+        `kill $(cat ${folder}/sshd.pid) 2>/dev/null; rm -rf ${folder}; true`,
+      );
+      await waitFor(
+        `the sshd of port ${String(port)} to be gone, with no process and no listener left`,
+        async () =>
+          (
+            await onHostAs(
+              'harness',
+              'sh',
+              '-c',
+              `if nc -z 127.0.0.1 ${String(port)}; then echo listening; elif pgrep -f '[s]shd -D -e -f ${folder}/sshd_config' > /dev/null; then echo running; else echo gone; fi`,
+            )
+          ).trim() === 'gone',
+        15_000,
+      );
+    },
+  };
+}
+
+/** The target behind a jump host: the harness host's own sshd, at its port inside. */
+export function target(alias: string, jump: string): string[] {
+  return hostBlock(alias, [`ProxyJump ${jump}`, 'Port 22'], ['Port']);
+}
+
+/** The questions window `alias` was asked on `surface`, in order. */
+export function questionsOn(alias: string, surface: string): string[] {
+  return recordLines(surface, alias).map(line => line.question);
 }

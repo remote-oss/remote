@@ -911,16 +911,20 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual(made.questions, []);
   });
 
-  it('contracts: a lease answers and refuses nothing, since no notice carries a question', async () => {
+  it('contracts: a lease answers and refuses nothing, since no notice carries a question, and has no helper to check (F-2505 AC-25)', async () => {
     const made = fixture();
     const {result, terminal} = await started(made);
     terminal.write(AUTHENTICATED);
     const outcome = await result;
     deepStrictEqual(
       outcome.kind === 'done'
-        ? [await outcome.value.answer(1, 'x'), await outcome.value.refuse(1)]
+        ? [
+            await outcome.value.answer(1, 'x'),
+            await outcome.value.refuse(1),
+            await outcome.value.checkSession(),
+          ]
         : outcome,
-      [false, false],
+      [false, false, 'unchecked'],
     );
   });
 

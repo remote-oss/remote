@@ -1,4 +1,5 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
+import {scriptedProbe} from './scripted-probe.ts';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeEndpointPort} from 'lib-helper/testing/fake-endpoint';
 import {MemoryFilePort} from 'lib-helper/testing/memory-file-port';
@@ -103,6 +104,7 @@ describe('connection helper', () => {
       port,
       clock: () => clock.now(),
       scheduler: clock.scheduler(),
+      socksProbe: scriptedProbe(clock.scheduler()),
       files,
       launcherFiles: {
         writeExecutable: (file, text) => {
@@ -494,6 +496,7 @@ describe('connection helper', () => {
         port,
         clock: () => clock.now(),
         scheduler: clock.scheduler(),
+        socksProbe: scriptedProbe(clock.scheduler()),
         files,
         launcherFiles: {
           writeExecutable: () =>

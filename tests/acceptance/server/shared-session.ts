@@ -21,6 +21,7 @@ import {
   nodeProcessSpawner,
   runConnectionHelper,
   SharedSessionChannel,
+  socksProbeOver,
   type SshRequest,
 } from 'lib-ssh';
 import type {RunningHost} from './host-fixture.ts';
@@ -105,6 +106,7 @@ export async function attemptSharedSession(
             port: endpoints,
             clock: Date.now,
             scheduler: {setTimer},
+            socksProbe: socksProbeOver({setTimer}),
             files,
             launcherFiles: nodeLauncherFiles,
             newNonce,

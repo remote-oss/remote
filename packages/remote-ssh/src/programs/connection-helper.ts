@@ -16,7 +16,7 @@ import {
 } from 'lib-helper';
 import {helperLogLineOf} from '../diagnostics/helper-log.ts';
 import {helperLogFileOf} from '../surfaces/scripted-adapters.ts';
-import {nodeProcessSpawner, runConnectionHelper} from 'lib-ssh';
+import {nodeProcessSpawner, runConnectionHelper, socksProbeOver} from 'lib-ssh';
 
 /** How long a connection to the helper may take to say hello, in milliseconds. */
 const HELLO_LIMIT_MILLISECONDS = 2000;
@@ -35,11 +35,13 @@ process.on('exit', code => {
   logLine(`the connection helper exits with ${String(code)}`);
 });
 
+const scheduler = {setTimer: nodeTimer};
+
 runConnectionHelper({
   parameters: helperParameters(process.env),
   port: nodeEndpointPort(process.platform),
   clock: Date.now,
-  scheduler: {setTimer: nodeTimer},
+  scheduler,
   files: nodeFilePort,
   launcherFiles: nodeLauncherFiles,
   newNonce: () => randomBytes(16).toString('hex'),
@@ -48,6 +50,7 @@ runConnectionHelper({
   editorEnvironment: inheritedEnvironment(process.env),
   helloLimitMilliseconds: HELLO_LIMIT_MILLISECONDS,
   logLine,
+  socksProbe: socksProbeOver(scheduler),
 }).catch((caught: unknown) => {
   logLine(
     `the connection helper stopped: ${caught instanceof Error ? caught.message : String(caught)}`,

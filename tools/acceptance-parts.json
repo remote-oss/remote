@@ -500,7 +500,7 @@
       "platform-mute.test.ts": 0.5,
       "platform-pick.test.ts": 4.4,
       "platform-reuse.test.ts": 0.3,
-      "progress.test.ts": 0.4,
+      "progress.test.ts": 0.8,
       "proxy-check.test.ts": 0.9,
       "remote-log.test.ts": 0.4,
       "renderer.test.ts": 0,

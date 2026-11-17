@@ -10,6 +10,7 @@
 import type {Connected, Failed} from 'lib-authority';
 import {shouldApplyDefaults} from 'lib-forwarding';
 import type {Logger} from 'lib-log';
+import type {SessionCheck} from 'lib-ssh';
 import type {
   CliControl,
   ProbedHost,
@@ -165,6 +166,8 @@ export interface Connection {
   serverPort: number;
   /** The window's agent link and display plans, which set its terminals' environment. */
   forwarding: ForwardingPlans;
+  /** Asks the connection whether its session still answers, which an attempt does when core starts a reconnection. */
+  checkSession(): Promise<SessionCheck>;
   /** Closes the tunnel and gives the lease on the connection back; the connector calls it when the window ends. */
   release(): void;
   /** Hears what happens to the connection's transport; the returned function stops it. */
@@ -720,6 +723,7 @@ async function runSteps(
     },
     serverPort: endpoint.kind === 'port' ? endpoint.port : 0,
     forwarding,
+    checkSession: () => lease.checkSession(),
     release: () => {
       tunnel.value.close();
       lease.release();
