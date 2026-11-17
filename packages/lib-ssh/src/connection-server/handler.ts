@@ -29,6 +29,7 @@ import {LineSplitter} from '../process/line-splitter.ts';
 import type {ProcessSpawner} from '../process/ports.ts';
 import {spawnSession, type SshSession} from '../process/session.ts';
 import {SshLineFeed} from './ssh-line-feed.ts';
+import type {SocksProbe} from './socks-probe.ts';
 import {
   type ConnectionEvent,
   type ConnectionReply,
@@ -70,6 +71,8 @@ export interface ConnectionHandlerOptions {
   /** What the session runs its scripts with, from the host's platform. */
   interpreter: Interpreter;
   logLine: (line: string) => void;
+  /** The probe over the SOCKS forward; none when the helper has no way to open one, and the session check then runs S10. */
+  socksProbe?: SocksProbe;
 }
 
 type ConnectionState = 'idle' | 'connecting' | 'connected';
@@ -208,6 +211,34 @@ export class ConnectionHandler implements MessageHandler {
     session: SshSession | undefined,
   ): Promise<boolean> {
     this.probing = session;
+    const alive = await this.sessionCarriesTraffic(runs);
+    if (alive) {
+      this.probing = undefined;
+      return true;
+    }
+    // A probe over a SOCKS connect ends nothing by itself, and one over a run has already wedged the session.
+    session?.kill();
+    await session?.exit();
+    this.probing = undefined;
+    return false;
+  }
+
+  /**
+   * Whether the session answers within the probe's bound. With the server's port known the probe is a SOCKS connect to
+   * it through the forward, which never waits for a run on the session. Without one the probe is a run of S10, which
+   * waits behind the run that is active, so a frozen session with a long run is found only when that run's own
+   * deadline ends it.
+   */
+  private async sessionCarriesTraffic(runs: ShellRuns): Promise<boolean> {
+    const {socksProbe} = this.options;
+    const targetPort = this.sharedRecord?.remotePort;
+    if (socksProbe !== undefined && targetPort !== undefined) {
+      return socksProbe({
+        socksPort: this.options.socksPort,
+        targetPort,
+        deadlineMilliseconds: SESSION_PROBE_MILLISECONDS,
+      });
+    }
     const end = await runs.execute(
       {
         script: ':',
@@ -217,14 +248,7 @@ export class ConnectionHandler implements MessageHandler {
       },
       () => undefined,
     );
-    if (end.kind === 'ended') {
-      this.probing = undefined;
-      return true;
-    }
-    // The run past its deadline ended the session; its exit, which the watch of the session handles, comes next.
-    await session?.exit();
-    this.probing = undefined;
-    return false;
+    return end.kind === 'ended';
   }
 
   /** The session of a check ended: its windows are told, and the login is to be made again by the oldest lease. */

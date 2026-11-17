@@ -19,6 +19,7 @@ import {
 import {buildInvocation, type SshRequest} from '../arguments/invocation.ts';
 import type {ProcessSpawner} from '../process/ports.ts';
 import {ConnectionHandler} from './handler.ts';
+import type {SocksProbe} from './socks-probe.ts';
 import {connectionStart, sessionStartFor} from './session-bootstrap.ts';
 import {interpreterOfPlatform} from './powershell-session.ts';
 import type {PlatformHint} from 'lib-host';
@@ -65,6 +66,8 @@ export interface ConnectionHelperEnvironment {
   editorEnvironment: Readonly<Record<string, string | undefined>>;
   helloLimitMilliseconds: number;
   logLine: (line: string) => void;
+  /** The probe of the session over its SOCKS forward; none in a helper that cannot open sockets, whose check runs S10. */
+  socksProbe?: SocksProbe;
 }
 
 /** Serves until the policy or a stop ends the helper; its own record is removed whichever way it ends. */
@@ -129,6 +132,9 @@ export async function runConnectionHelper(
       newMarker: environment.newNonce,
       interpreter: interpreterOfPlatform(options.hostPlatform),
       logLine: environment.logLine,
+      ...(environment.socksProbe === undefined
+        ? {}
+        : {socksProbe: environment.socksProbe}),
     });
     const askpassServer = await environment.port.listen(
       askpassSocket,

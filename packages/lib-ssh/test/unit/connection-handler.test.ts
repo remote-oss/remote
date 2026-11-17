@@ -1108,6 +1108,108 @@ describe('connection handler (contracts §4 S9)', () => {
         ],
       );
     });
+    describe('with the server’s port known, the probe is a SOCKS connect', () => {
+      let probes: Array<{
+        socksPort: number;
+        targetPort: number;
+        deadlineMilliseconds: number;
+      }>;
+      let answer: boolean;
+
+      beforeEach(async () => {
+        probes = [];
+        answer = true;
+        create({
+          socksProbe: request => {
+            probes.push(request);
+            return Promise.resolve(answer);
+          },
+        });
+        await connected();
+        await send(1, {type: 'setSharedRecord', record: RECORD});
+      });
+
+      it('F-2505 AC-25: asks the forward for the server’s port within three seconds and writes nothing to the session', async () => {
+        const reply = await send(1, CHECK);
+        deepStrictEqual(
+          [
+            reply,
+            probes,
+            (spawner.started[0]?.inputText() ?? '').includes('m1:st'),
+            wasKilled(),
+          ],
+          [
+            {type: 'sessionChecked', alive: true},
+            [
+              {
+                socksPort: 41000,
+                targetPort: RECORD.remotePort,
+                deadlineMilliseconds: 3000,
+              },
+            ],
+            false,
+            false,
+          ],
+        );
+      });
+
+      it('F-2505 AC-25: a session that does not answer the connect is ended, its leases are told and the helper stays', async () => {
+        answer = false;
+        deepStrictEqual(
+          [await send(2, CHECK), wasKilled(), eventTypes(), stops],
+          [
+            {type: 'sessionChecked', alive: false},
+            true,
+            ['transportLost', 'ownerChanged'],
+            0,
+          ],
+        );
+      });
+
+      it('F-2505 AC-25: answers while another window’s run is on the session, since it does not wait for the run', async () => {
+        const running = send(1, {
+          type: 'runScript',
+          runId: 7,
+          script: 'tar x',
+          environment: {},
+          inputBase64: null,
+          deadlineMilliseconds: 600000,
+        });
+        await settled();
+        const reply = await send(2, CHECK);
+        let ended = false;
+        void running.then(() => {
+          ended = true;
+        });
+        await settled();
+        deepStrictEqual(
+          [reply, ended],
+          [{type: 'sessionChecked', alive: true}, false],
+        );
+      });
+    });
+
+    it('F-2505 AC-25: runs the S10 probe when no server port is known, though the handler has a SOCKS probe', async () => {
+      const asked: unknown[] = [];
+      create({
+        socksProbe: request => {
+          asked.push(request);
+          return Promise.resolve(true);
+        },
+      });
+      await connected();
+      const reply = send(1, CHECK);
+      await settled();
+      spawner.started[0]?.output('m1:start\nm1:end 0\n');
+      deepStrictEqual(
+        [
+          await reply,
+          asked,
+          (spawner.started[0]?.inputText() ?? '').includes('m1:st'),
+        ],
+        [{type: 'sessionChecked', alive: true}, [], true],
+      );
+    });
   });
 
   describe('close', () => {
