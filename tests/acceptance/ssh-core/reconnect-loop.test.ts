@@ -577,8 +577,9 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     );
     deepStrictEqual(
       [
-        // The spec's "about 15 to 17 s" (the 15 s default connect timeout, 2 s of the extension's extra wait), 1 s either side.
-        lasted.map(each => each !== undefined && each >= 14 && each <= 18),
+        // The spec's "about 15 to 17 s", unwidened: ssh gives up after the entry's 15 s ConnectTimeout, never before it, and
+        // the extension's own wait is that plus 2 s (17 s), which an attempt that ssh does not end first meets.
+        lasted.map(each => each !== undefined && each >= 15 && each <= 17),
         connectionLog()
           .slice(mark)
           .some(line =>
@@ -661,14 +662,10 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     await answerDialog(name, 'Reload Window');
     await connectedWithin(name, 180_000);
     deepStrictEqual(
-      // "About 30 to 40 s" with the "about" of 2 s either side. The end comes at the first attempt failure after the
-      // grace time, which the schedule of the attempts puts at about 37 s here (attempt 3 starts about 22 s after
-      // attempt 2 and fails 15.2 s later).
-      [
-        shown.details,
-        into >= 30 - ABOUT_SECONDS && into <= 40 + ABOUT_SECONDS,
-        into,
-      ],
+      // The spec's "about 30 to 40 s", unwidened. The end is the first attempt failure after the grace time, and the
+      // schedule fixes it: attempt 2 fails 17 s after it starts (the 15 s ConnectTimeout plus the extension's 2 s),
+      // core waits 5 s, and attempt 3 fails 15.2 s after it starts, about 37.2 s in all.
+      [shown.details, into >= 30 && into <= 40, into],
       [GIVEN_UP, true, into],
     );
     await freshHost();
