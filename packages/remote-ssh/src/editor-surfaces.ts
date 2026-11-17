@@ -194,6 +194,9 @@ export function editorSurfacesOf(
         [alias]: platform,
       });
     },
+    writeUserSetting: async (settingId: string, value: unknown) => {
+      await operations.writeUserSetting(settingId, value);
+    },
     notice: adapters.notice,
     noticeState: context.noticeState,
     parseUri: context.parseUri,

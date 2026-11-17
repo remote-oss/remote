@@ -2,7 +2,7 @@
  * @fileoverview What the pre-connection step needs of the machine and of the editor.
  */
 
-import type {ProcessSpawner} from 'lib-ssh';
+import type {FailureHint, ProcessSpawner} from 'lib-ssh';
 import type {Logger} from 'lib-log';
 import type {PreconnectDialog} from '../surfaces/preconnect-dialog.ts';
 import type {PreconnectApprovals} from './approvals.ts';
@@ -23,4 +23,6 @@ export interface PreconnectPorts {
   approvals: PreconnectApprovals;
   dialog: PreconnectDialog;
   logger: Logger;
+  /** Keeps a hint for the session's troubleshooting view. */
+  recordHint(hint: FailureHint): void;
 }

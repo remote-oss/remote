@@ -56,7 +56,10 @@ export type DiagnosticStringId =
   | 'S137'
   | 'S140'
   | 'S142'
-  | 'S150';
+  | 'S150'
+  | 'S155'
+  | 'S059'
+  | 'S019';
 
 /** How the connection runs: through the shared local connection server, or in a terminal of its own. */
 export type ConnectionMode = 'shared' | 'terminal';

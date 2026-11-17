@@ -118,8 +118,6 @@ F-2104.AC-16	acceptance
 F-2104.AC-17	acceptance	
 F-2104.AC-18	todo	
 F-2104.AC-19	acceptance	
-F-2104.AC-20	acceptance	
-F-2104.AC-21	acceptance	
 F-2104.AC-22	acceptance	
 F-2104.AC-23	acceptance	
 F-2104.AC-24	acceptance	
@@ -154,14 +152,12 @@ F-2106.AC-4	acceptance
 F-2106.AC-5	acceptance	
 F-2106.AC-6	acceptance	
 F-2106.AC-7	acceptance	
-F-2106.AC-8	acceptance	
 F-2106.AC-9	acceptance	
 F-2106.AC-10	acceptance	
 F-2106.AC-11	unit	
 F-2106.AC-12	acceptance	
 F-2106.AC-13	todo	
 F-2106.AC-14	acceptance	
-F-2106.AC-15	acceptance	
 F-2106.AC-16	acceptance	
 F-2106.AC-17	acceptance	
 F-2108.AC-1	unit	
@@ -183,14 +179,14 @@ F-2108.AC-16	unit
 F-2108.AC-17	unit	
 F-2108.AC-18	acceptance	
 F-2108.AC-19	acceptance	
-F-2108.AC-20	todo	
+F-2108.AC-20	acceptance	
 F-2108.AC-21	acceptance	
 F-2108.AC-22	acceptance	
 F-2108.AC-23	acceptance	
-F-2108.AC-24	todo	
-F-2108.AC-25	todo	
+F-2108.AC-24	acceptance	
+F-2108.AC-25	acceptance	
 F-2108.AC-26	acceptance	
-F-2108.AC-27	todo	
+F-2108.AC-27	acceptance	
 F-2108.AC-28	todo	
 F-2108.AC-29	acceptance	
 F-2108.AC-30	acceptance	
@@ -198,7 +194,7 @@ F-2108.AC-31	unit
 F-2108.AC-32	acceptance	
 F-2108.AC-33	unit	
 F-2108.AC-34	acceptance	
-F-2108.AC-35	todo	
+F-2108.AC-35	acceptance	
 F-2108.AC-36	acceptance	
 F-2108.AC-37	acceptance	
 F-2108.AC-38	acceptance	
@@ -471,7 +467,7 @@ F-2304.AC-8	acceptance
 F-2304.AC-9	todo	
 F-2304.AC-10	todo	
 F-2304.AC-11	acceptance	
-F-2304.AC-12	todo	
+F-2304.AC-12	acceptance	
 F-2304.AC-13	acceptance	
 F-2304.AC-14	acceptance	
 F-2304.AC-15	todo	
@@ -483,7 +479,6 @@ F-2304.AC-20	acceptance
 F-2304.AC-21	todo	
 F-2304.AC-22	acceptance	
 F-2304.AC-23	todo	
-F-2304.AC-24	todo	
 F-2304.AC-25	core	core: the Command Palette staying usable during a connect
 F-2304.AC-27	acceptance	
 F-2304.AC-28	todo	
@@ -491,7 +486,7 @@ F-2304.AC-29	unit
 F-2304.AC-30	todo	
 F-2304.AC-31	todo	
 F-2304.AC-32	todo	
-F-2304.AC-33	todo	
+F-2304.AC-33	acceptance	
 F-2304.AC-34	todo	
 F-2305.AC-1	todo	
 F-2305.AC-2	unit	
@@ -823,16 +818,14 @@ F-2410.AC-20	acceptance
 F-2410.AC-21	todo	
 F-2410.AC-22	acceptance	
 F-2410.AC-23	acceptance	
-F-2410.AC-24	acceptance	
 F-2410.AC-25	acceptance	
-F-2410.AC-26	acceptance	
-F-2410.AC-27	acceptance	
 F-2410.AC-28	acceptance	
 F-2410.AC-29	acceptance	
 F-2410.AC-30	acceptance	
 F-2410.AC-31	acceptance	
 F-2410.AC-32	acceptance	
 F-2410.AC-33	acceptance	
+F-2410.AC-34	todo	
 F-2411.AC-1	unit	
 F-2411.AC-2	acceptance	
 F-2411.AC-3	acceptance	
@@ -1030,7 +1023,6 @@ F-2508.AC-9	acceptance
 F-2508.AC-10	acceptance	
 F-2508.AC-11	acceptance	
 F-2508.AC-12	acceptance	
-F-2508.AC-13	core	core: the debugger's modal; on this server build js-debug falls back to the server's node
 F-2508.AC-14	acceptance	
 F-2508.AC-15	acceptance	
 F-2508.AC-16	acceptance	
@@ -1051,7 +1043,6 @@ F-2508.AC-30	acceptance
 F-2508.AC-31	acceptance	
 F-2508.AC-32	acceptance	
 F-2508.AC-33	acceptance	
-F-2508.AC-34	core	core: the debugger's modal; on this server build js-debug falls back to the server's node
 F-2508.AC-35	core	core: the trust prompt's Manage action and the Workspace Trust editor are core's; the pinned editor's startup prompt has no Manage button
 F-2508.AC-36	acceptance	
 F-2508.AC-37	acceptance	
@@ -1116,12 +1107,8 @@ F-2601.AC-37	core	core: the dialog's rendering: icon, no heading
 F-2604.AC-1	acceptance	
 F-2604.AC-2	acceptance	
 F-2604.AC-3	unit	
-F-2604.AC-4	acceptance	
-F-2604.AC-5	acceptance	
-F-2604.AC-6	acceptance	
 F-2604.AC-7	acceptance	
 F-2604.AC-8	todo	
-F-2604.AC-9	todo	
 F-2604.AC-10	acceptance	
 F-2604.AC-11	unit	
 F-2604.AC-12	acceptance	
@@ -1129,12 +1116,11 @@ F-2604.AC-13	acceptance
 F-2604.AC-14	todo	
 F-2604.AC-15	acceptance	
 F-2604.AC-16	acceptance	
-F-2604.AC-17	acceptance	
-F-2604.AC-18	todo	
 F-2604.AC-19	acceptance	
 F-2604.AC-20	acceptance	
 F-2604.AC-21	acceptance	
 F-2604.AC-22	acceptance	
+F-2604.AC-24	acceptance	
 F-2605.AC-1	unit	
 F-2605.AC-2	acceptance	
 F-2605.AC-3	acceptance	

@@ -312,7 +312,7 @@ describe('F-2106: pseudo-terminal allocation', function () {
     });
   });
 
-  it('F-2106 AC-15 (reading-1779-forced-pty): with the setting on and RequestTTY force the window connects on a terminal of the host with no failure dialog', async () => {
+  it('F-2106 AC-7 (reading-1779-forced-pty): with the setting on and RequestTTY force the window connects on a terminal of the host with no failure dialog', async () => {
     await keepingSettings(async () => {
       const found = await ptyConnect('c86-force-dialog', 'pty-force', {
         [PERMIT]: true,
@@ -328,7 +328,7 @@ describe('F-2106: pseudo-terminal allocation', function () {
     });
   });
 
-  it('F-2106 AC-8 (reading-1779-forced-pty): a window on RequestTTY force reconnects by itself after its connection is killed, on a terminal of the host, with no Cannot reconnect dialog and no failure dialog', async () => {
+  it('F-2106 AC-7 (reading-1779-forced-pty): a window on RequestTTY force reconnects by itself after its connection is killed, on a terminal of the host, with no Cannot reconnect dialog and no failure dialog', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS, [PERMIT]: true});
       await freshHost();

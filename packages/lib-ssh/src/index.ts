@@ -112,7 +112,15 @@ export {
   connectWaitMilliseconds,
   type ConnectWaitSettings,
 } from './process/connect-wait.ts';
-export {nodeProcessSpawner} from './process/node-spawner.ts';
+export {
+  createNodeProcessSpawner,
+  nodeProcessSpawner,
+} from './process/node-spawner.ts';
+export {
+  endProcessGroup,
+  type GroupSystem,
+  reapProcessGroup,
+} from './process/process-group.ts';
 export type {
   ProcessHandle,
   ProcessSpawner,

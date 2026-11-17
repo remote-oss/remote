@@ -2,7 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import path from 'node:path';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import type {ProcessHandle, ProcessSpecification} from 'lib-ssh';
+import type {FailureHint, ProcessHandle, ProcessSpecification} from 'lib-ssh';
 import {connect} from '../../src/pipeline/connect.ts';
 import {preconnectStep} from '../../src/pipeline/preconnect-step.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
@@ -80,6 +80,7 @@ class Scene {
   };
   processes: FakeProcess[] = [];
   phases: string[] = [];
+  hints: FailureHint[] = [];
   prompts = 0;
   readonly sink = new MemorySink();
   readonly abort = new AbortController();
@@ -150,6 +151,9 @@ class Scene {
           },
         },
         logger: createLogger(this.sink, {minimumLevel: (): Level => 'info'}),
+        recordHint: hint => {
+          this.hints.push(hint);
+        },
       },
     });
     return step(input, this.abort.signal);
@@ -163,12 +167,9 @@ function failedWith(text: string) {
   return {kind: 'failed', failure: {kind: 'preconnectFailed', reason: {text}}};
 }
 
-/** The two error lines a failure with this detail logs. */
+/** The error lines a failure with this detail logs. */
 function failureLines(detail: string): string[] {
-  return [
-    `error: the pre-connection script failed: ${detail}`,
-    `error: [PreconnectScriptFailure]: The pre-connect script has failed (${detail})`,
-  ];
+  return [`error: the pre-connection script failed: ${detail}`];
 }
 
 describe('the pre-connection script step (card connect-87)', () => {
@@ -393,6 +394,7 @@ describe('the pre-connection script step (card connect-87)', () => {
         },
         dialog: {askUser: () => Promise.resolve('allow')},
         logger: createLogger(scene.sink, {minimumLevel: (): Level => 'info'}),
+        recordHint: () => undefined,
       },
     });
     deepStrictEqual(
@@ -420,7 +422,7 @@ describe('the pre-connection script step (card connect-87)', () => {
         [],
         ['running'],
         failureLines(
-          'The value of remote.SSH.preconnect for "dev" is a number, not the path of a script.',
+          'The value of remote.SSH.preconnect for "dev" is a number, not the path of a script',
         ),
       ],
     );
@@ -564,5 +566,61 @@ describe('the pre-connection script step (card connect-87)', () => {
       options,
     );
     deepStrictEqual(['connected' in result, scene.prompts], [true, 0]);
+  });
+
+  const MITIGATIONS = [
+    {id: 'S155', values: ['remote.SSH.preconnect']},
+    {id: 'S059', values: []},
+    {id: 'S019', values: ['[preconnect]']},
+  ];
+
+  it('F-2108 AC-20: a script that exits with 1 leaves the hint PreconnectScriptFailure with the text of the log line and the three mitigations in order', async () => {
+    const scene = new Scene();
+    scene.behaviour = process => {
+      process.end(1);
+    };
+    await scene.execute(SCRIPT);
+    deepStrictEqual(scene.hints, [
+      {
+        status: 'PreconnectScriptFailure',
+        message: 'The pre-connect script has failed (non-zero exit code 1)',
+        mitigations: MITIGATIONS,
+        resources: [],
+      },
+    ]);
+  });
+
+  it('F-2108 AC-24: a script ended by a signal leaves the hint with that detail', async () => {
+    const scene = new Scene();
+    scene.behaviour = process => {
+      process.end(undefined);
+    };
+    await scene.execute(SCRIPT);
+    deepStrictEqual(
+      scene.hints.map(hint => hint.message),
+      ['The pre-connect script has failed (ended by a signal)'],
+    );
+  });
+
+  it('F-2108 AC-25, AC-26: a script the system cannot start, and one that is not there, leave the hint with the system’s text', async () => {
+    const refused = new Scene();
+    refused.spawnError = new Error(`spawn ${SCRIPT} EACCES`);
+    await refused.execute(SCRIPT);
+    const missing = new Scene();
+    missing.present.delete(SCRIPT);
+    await missing.execute(SCRIPT);
+    deepStrictEqual(
+      [...refused.hints, ...missing.hints].map(hint => hint.message),
+      [
+        `The pre-connect script has failed (spawn ${SCRIPT} EACCES)`,
+        `The pre-connect script has failed (script not found: ${SCRIPT})`,
+      ],
+    );
+  });
+
+  it('F-2108 AC-20: a script that works leaves no hint', async () => {
+    const scene = new Scene();
+    await scene.execute(SCRIPT);
+    deepStrictEqual(scene.hints, []);
   });
 });

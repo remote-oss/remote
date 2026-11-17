@@ -5,7 +5,12 @@
  */
 
 import type * as vscode from 'vscode';
-import {type LoginTerminals, type TerminalEnd, TerminalStream} from 'lib-ssh';
+import {
+  reapProcessGroup,
+  type LoginTerminals,
+  type TerminalEnd,
+  TerminalStream,
+} from 'lib-ssh';
 
 /** The reason names the port tells, by the editor's exit reason. */
 function reasonOf(
@@ -79,7 +84,13 @@ export function loginTerminalsOf(
         dispose: () => {
           if (!disposed) {
             disposed = true;
+            // The terminal's process leads its own group on POSIX; the group ends with the terminal, so a ProxyJump's
+            // recursion leaves no ssh process behind.
+            const leader = Promise.resolve(created.processId);
             created.dispose();
+            void leader.then(processId => {
+              reapProcessGroup(processId);
+            });
           }
         },
       };

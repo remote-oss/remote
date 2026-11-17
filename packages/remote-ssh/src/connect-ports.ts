@@ -150,6 +150,8 @@ export interface ConnectSurfaces {
   ) => Promise<RemotePlatform | undefined>;
   /** Sets the exact key for the alias in `remote.SSH.remotePlatform`, in the user's settings. */
   writePlatform: (alias: string, platform: RemotePlatform) => Promise<void>;
+  /** Sets the key in the user's settings; `undefined` removes it. */
+  writeUserSetting: (settingId: string, value: unknown) => Promise<void>;
   /** The non-modal notices, and the profile's record of the answers to them. */
   notice: NoticePort;
   noticeState: AcceptanceState;
@@ -326,6 +328,11 @@ export function wiringPortsOf(
   };
   return {
     configuredHosts: () => surfaces.configuredHosts(),
+    legacySettings: {
+      read: key => settings.inspectSetting(key).globalValue,
+      write: surfaces.writeUserSetting,
+      logger,
+    },
     preconnect: {
       ...machine.preconnectFiles,
       spawner: machine.spawner,
@@ -335,6 +342,9 @@ export function wiringPortsOf(
       approvals: surfaces.preconnectApprovals,
       dialog: surfaces.preconnectDialog,
       logger,
+      recordHint: hint => {
+        surfaces.hints.record(hint);
+      },
     },
     settings: {
       preconnect: () => valueOf(settings, 'preconnect'),

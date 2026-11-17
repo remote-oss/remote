@@ -287,6 +287,7 @@ export function steps(
     return value;
   }
   return {
+    migrateLegacySettings: () => Promise.resolve(),
     checkConfigFile: () =>
       note('checkConfigFile', {kind: 'done', value: undefined}),
     checkStartSettings: () =>

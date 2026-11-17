@@ -1,8 +1,9 @@
-import {chmodSync, mkdirSync, utimesSync} from 'node:fs';
+import {chmodSync, mkdirSync, rmSync, utimesSync} from 'node:fs';
 import {deepStrictEqual} from 'node:assert';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import path from 'node:path';
 import {appendScript, connectionLog} from '../windows/harness.ts';
+import {tableShown} from '../windows/troubleshooting-support.ts';
 import {
   answerEntry,
   dialogLines,
@@ -116,6 +117,42 @@ describe('the pre-connection scripts the user trusts (card connect-87)', functio
         ],
         undefined,
         undefined,
+      ],
+    );
+  });
+
+  it("F-2108 AC-35 (deleted-table): after Don't Ask Again a deleted script fails the next connect at once with the file read's detail and no dialog, the table names the failure, and the entry is still there: the same file put back runs with no dialog", async () => {
+    const script = writeScript('deleted-35.sh', 'echo ran >> "$MARKER"');
+    appendScript([
+      answerEntry('pc35a', "Allow and Don't Ask Again"),
+      ...dismissals('pc35b'),
+    ]);
+    await withSetting(script, () => openConnected('pc35a'));
+    rmSync(script);
+    const detail = (await withSetting(script, () => failureOf('pc35b')))
+      .question;
+    const {first} = await tableShown('pc35b');
+    writeScript('deleted-35.sh', 'echo ran >> "$MARKER"');
+    await withSetting(script, () => openConnected('pc35c'));
+    deepStrictEqual(
+      [
+        detail,
+        first[0],
+        first[1]?.replaceAll(' ', ''),
+        asked('pc35b'),
+        asked('pc35c'),
+        markerOf(script),
+      ],
+      [
+        `Could not establish connection to "harness": ENOENT: no such file or directory, open '${script}'.`,
+        'PreconnectScriptFailure',
+        `Thepre-connectscripthasfailed(ENOENT:nosuchfileordirectory,open'${script}')`.replaceAll(
+          ' ',
+          '',
+        ),
+        [],
+        [],
+        'ran\nran\n',
       ],
     );
   });

@@ -15,6 +15,7 @@ export {
   type ContextKeyHost,
   setContextKey,
 } from './context-keys.ts';
+export {appendExtensionIds} from './extension-ids.ts';
 export {
   type CommandManifest,
   type EditorApi,
