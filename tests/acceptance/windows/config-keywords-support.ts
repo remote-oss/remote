@@ -334,6 +334,19 @@ export async function startHostSshd(port: number): Promise<HostSshd> {
         '-c',
         `kill $(cat ${folder}/sshd.pid) 2>/dev/null; rm -rf ${folder}; true`,
       );
+      await waitFor(
+        `the sshd of port ${String(port)} to be gone, with no process and no listener left`,
+        async () =>
+          (
+            await onHostAs(
+              'harness',
+              'sh',
+              '-c',
+              `if nc -z 127.0.0.1 ${String(port)}; then echo listening; elif pgrep -f '[s]shd -D -e -f ${folder}/sshd_config' > /dev/null; then echo running; else echo gone; fi`,
+            )
+          ).trim() === 'gone',
+        15_000,
+      );
     },
   };
 }
