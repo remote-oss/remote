@@ -64,13 +64,21 @@ export function acceptanceRunId(
 }
 
 /**
- * The folder the run's own folder is made in: the machine's temporary folder, except on macOS, where the per-user
- * one (`/var/folders/…/T`) is so long that the editor's main socket in the run's user data folder passes the 104
- * bytes of a Unix socket path (`listen EINVAL`), so `/tmp` there. The clean-up looks in the same folder.
+ * The folder the run's own folder is made in: `HARNESS_RUN_BASE` when it is set, else the machine's temporary folder,
+ * except on macOS, where the per-user one (`/var/folders/…/T`) is so long that the editor's main socket in the run's
+ * user data folder passes the 104 bytes of a Unix socket path (`listen EINVAL`), so `/tmp` there. A Docker engine in a
+ * VM that shares other folders than Docker Desktop's (colima shares the home folder and `/tmp/colima`, not `/tmp`)
+ * needs the variable, or every bind mount from the run's folder is empty in the container. The clean-up looks in the
+ * same folder.
  */
 export function runFolderBase(
   platform: NodeJS.Platform = process.platform,
+  environment: NodeJS.ProcessEnv = process.env,
 ): string {
+  const chosen = environment.HARNESS_RUN_BASE;
+  if (chosen !== undefined && chosen !== '') {
+    return chosen;
+  }
   return platform === 'darwin' ? '/tmp' : tmpdir();
 }
 

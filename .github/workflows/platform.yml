@@ -11,7 +11,9 @@
 # - macos-15-intel: the macOS client, with colima's Docker for linux/x86_64 (about 10 minutes to start).
 #
 # Each job runs `node tools/acceptance.ts --editor vscodium` for its launch list and leaves the run's summary in the job
-# summary. The run folder holds keys, so it is never uploaded.
+# summary. The run folder holds keys, so it is never uploaded. The Windows launches come in groups separated by `;`, and
+# each group is a job of its own (the schedule's containers launches each take hours there, and one job held all of them
+# past its 240 minutes: #2763).
 name: platform
 
 on:
@@ -20,9 +22,9 @@ on:
   workflow_dispatch:
     inputs:
       windows-launches:
-        description: The launches of the Windows job, joined by commas; none skips the job
+        description: The launches of the Windows jobs, joined by commas, in groups separated by semicolons with one job per group; none skips them
         type: string
-        default: containers-a,containers-b,containers-trust,local,remote,wsl,windows-host
+        default: local,remote,wsl,windows-host;containers-a;containers-b;containers-trust
       macos-launches:
         description: The launches of the macOS job, joined by commas; none skips the job
         type: string
@@ -32,18 +34,35 @@ permissions:
   contents: read
 
 jobs:
-  windows:
+  # the Windows launch groups as a JSON list, one matrix job each
+  windows-groups:
     if: github.event_name == 'schedule' || inputs.windows-launches != 'none'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      groups: ${{ steps.groups.outputs.groups }}
+    steps:
+      - id: groups
+        env:
+          GROUPS_TEXT: ${{ inputs.windows-launches || 'local,remote,wsl,windows-host;containers-a;containers-b;containers-trust' }}
+        run: echo "groups=$(jq -cn --arg text "$GROUPS_TEXT" '$text | split(";") | map(gsub("\\s"; "")) | map(select(. != ""))')" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: windows-groups
     runs-on: windows-2025
     timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        launches: ${{ fromJSON(needs.windows-groups.outputs.groups) }}
     concurrency:
-      group: platform-windows-${{ github.ref }}
+      group: platform-windows-${{ github.ref }}-${{ matrix.launches }}
       cancel-in-progress: false
     defaults:
       run:
         shell: pwsh
     env:
-      LAUNCHES: ${{ inputs.windows-launches || 'containers-a,containers-b,containers-trust,local,remote,wsl,windows-host' }}
+      LAUNCHES: ${{ matrix.launches }}
       WSL_UTF8: '1'
     steps:
       # the host images and their scripts are built in the WSL engine from this checkout, so they keep the repository's
@@ -198,6 +217,9 @@ jobs:
       cancel-in-progress: false
     env:
       LAUNCHES: ${{ inputs.macos-launches || 'containers-a,containers-b,containers-trust,local,remote' }}
+      # colima's VM shares the folders it mounts, and /tmp is not one of them: a bind mount from a run folder there is
+      # empty in the container (#2763). /tmp/colima is mounted and stays short enough for the editor's socket path.
+      HARNESS_RUN_BASE: /tmp/colima
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -211,7 +233,8 @@ jobs:
         run: |
           brew install colima docker docker-buildx >/dev/null
           mkdir -p ~/.docker && printf '{"cliPluginsExtraDirs": ["%s/lib/docker/cli-plugins"]}\n' "$(brew --prefix)" > ~/.docker/config.json
-          colima start --cpu 3 --memory 8
+          mkdir -p /tmp/colima
+          colima start --cpu 3 --memory 8 --mount "$HOME:w" --mount /tmp/colima:w
           docker version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}'
           docker buildx version
       - name: The launches
