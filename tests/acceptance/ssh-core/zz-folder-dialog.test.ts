@@ -28,7 +28,7 @@ describe('what the folder dialog does with a typed folder (card #2756, throwaway
     await openWindow('harness', window);
     await connectedWithin(window, 120_000);
     try {
-      for (let round = 0; round < 150; round += 1) {
+      for (let round = 0; round < 400; round += 1) {
         const sub = `zz-fd-sub-${String(round)}`;
         await onHostAs('harness', 'mkdir', '-p', `${HOME}/${sub}`);
         void inWindow(window, 'workbench.action.files.openFolder');
@@ -42,8 +42,6 @@ describe('what the folder dialog does with a typed folder (card #2756, throwaway
         const began = Date.now();
         await typeInFolderDialog(window, `${HOME}/${sub}`);
         let firstDots: number | undefined;
-        let stalled: string[] = [];
-        let retypedAfter: number | undefined;
         for (let step = 0; step < 40; step += 1) {
           const facts = await folderDialogFacts(window);
           if (facts.rows[0] === '..' && facts.value === `${HOME}/${sub}`) {
@@ -52,23 +50,44 @@ describe('what the folder dialog does with a typed folder (card #2756, throwaway
           }
           await pause(100);
         }
+        let recovery: Record<string, unknown> = {};
         if (firstDots === undefined) {
           const facts = await folderDialogFacts(window);
-          stalled = [
-            facts.value,
-            JSON.stringify(facts.rows.slice(0, 6)),
-            String(facts.rows.length),
-          ];
-          const retyped = Date.now();
-          await typeInFolderDialog(window, `${HOME}/${sub}`);
-          for (let step = 0; step < 50; step += 1) {
-            const again = await folderDialogFacts(window);
-            if (again.rows[0] === '..' && again.value === `${HOME}/${sub}`) {
-              retypedAfter = Date.now() - retyped;
-              break;
+          const target = `${HOME}/${sub}`;
+          const tried: Record<string, unknown> = {
+            value: facts.value,
+            rows: facts.rows,
+            onHost: (
+              await onHostAs(
+                'harness',
+                'sh',
+                '-c',
+                `ls -d '${target}' 2>&1; true`,
+              )
+            ).trim(),
+          };
+          async function dotsWithin(
+            milliseconds: number,
+          ): Promise<number | null> {
+            const started = Date.now();
+            while (Date.now() - started < milliseconds) {
+              const again = await folderDialogFacts(window);
+              if (again.rows[0] === '..') {
+                return Date.now() - started;
+              }
+              await pause(100);
             }
-            await pause(100);
+            return null;
           }
+          await typeInFolderDialog(window, `${target}/`);
+          tried.trailingSlashDotsAfterMs = await dotsWithin(3000);
+          if (tried.trailingSlashDotsAfterMs === null) {
+            await typeInFolderDialog(window, `${HOME}/`);
+            await pause(1500);
+            await typeInFolderDialog(window, target);
+            tried.clearedAndRetypedDotsAfterMs = await dotsWithin(3000);
+          }
+          recovery = tried;
         }
         process.stdout.write(
           `ROUND ${JSON.stringify({
@@ -76,8 +95,7 @@ describe('what the folder dialog does with a typed folder (card #2756, throwaway
             initialRows: initial.rows.slice(0, 3),
             initialCount: initial.rows.length,
             dotsAfterMs: firstDots ?? null,
-            stalled,
-            retypedAfterMs: retypedAfter ?? null,
+            recovery,
           })}\n`,
         );
         await cancelFolderDialog(window).catch(() => undefined);
