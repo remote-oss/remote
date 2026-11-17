@@ -219,6 +219,22 @@ describe('the script parameters', () => {
     );
   });
 
+  it('F-2701 AC-18: name the launcher batch file on a Windows host and the launcher script on every other', () => {
+    deepStrictEqual(
+      (['win32', 'linux', 'darwin', undefined] as const).map(
+        hostOperatingSystem =>
+          scriptParametersFor(input(settingsOf(), {hostOperatingSystem}))
+            .launcher,
+      ),
+      [
+        `${input(settingsOf()).names.launcher}.cmd`,
+        input(settingsOf()).names.launcher,
+        input(settingsOf()).names.launcher,
+        input(settingsOf()).names.launcher,
+      ],
+    );
+  });
+
   it('take the lock with flock only on Linux and when the setting allows it', () => {
     const methods = [
       scriptParametersFor(input(settingsOf())).lock.method,

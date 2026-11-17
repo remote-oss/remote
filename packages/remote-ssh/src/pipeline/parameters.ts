@@ -93,7 +93,11 @@ export function scriptParametersFor(input: ParameterInput): ScriptParameters {
         ? settings.installFolder.folder
         : '',
     dataFolderName: input.names.dataFolderName,
-    launcher: input.names.launcher,
+    // A Windows server's launcher is the batch file beside the POSIX script of the same name.
+    launcher:
+      input.hostOperatingSystem === 'win32'
+        ? `${input.names.launcher}.cmd`
+        : input.names.launcher,
     commit: input.names.commit,
     archiveUrl: input.archiveUrl,
     archivePath: '',

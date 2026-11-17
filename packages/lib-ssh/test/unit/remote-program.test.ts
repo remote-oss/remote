@@ -5,6 +5,7 @@ import type {ScriptRequest} from 'lib-host';
 import {POWERSHELL_COMMAND_LIMIT, powershellPlan} from '../../src/index.ts';
 import {
   planScript,
+  POWERSHELL_SESSION_INPUT,
   powershellReader,
 } from '../../src/process/remote-program.ts';
 
@@ -52,13 +53,28 @@ describe('the PowerShell plan', () => {
         powershellReader(12),
         [
           '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false',
-          '$Stream = [Console]::OpenStandardInput()',
+          ...POWERSHELL_SESSION_INPUT,
           '$Bytes = New-Object byte[] 12',
           '$Read = 0',
           'while ($Read -lt 12) { $Count = $Stream.Read($Bytes, $Read, 12 - $Read); if ($Count -le 0) { break }; $Read += $Count }',
           '& ([ScriptBlock]::Create([System.Text.Encoding]::UTF8.GetString($Bytes, 0, $Read)))',
         ].join('\n'),
       );
+    });
+
+    it('F-2701 AC-5: Windows PowerShell reads the session input through an overlapped FileStream on its handle, and PowerShell 7 through the console stream', () => {
+      deepStrictEqual(POWERSHELL_SESSION_INPUT, [
+        '$Stream = [Console]::OpenStandardInput()',
+        "if ($PSVersionTable.PSVersion.Major -lt 6) { try { $Stream = New-Object System.IO.FileStream($Stream.GetType().GetField('_handle', [Reflection.BindingFlags]'NonPublic,Instance').GetValue($Stream), [IO.FileAccess]::Read, 1, $true) } catch {} }",
+      ]);
+    });
+
+    it("F-2701 AC-5: the loop child's reader reads its ordinary pipe through the console stream", () => {
+      deepStrictEqual(powershellReader(12, 'pipe').split('\n').slice(0, 3), [
+        '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false',
+        '$Stream = [Console]::OpenStandardInput()',
+        '$Bytes = New-Object byte[] 12',
+      ]);
     });
 
     it('F-2701 AC-5: is the golden file for a count of one', () => {

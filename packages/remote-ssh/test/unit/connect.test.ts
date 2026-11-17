@@ -61,6 +61,7 @@ describe('the connect pipeline, when it works', () => {
       'gate',
       'transfer',
       'start',
+      'cleanup',
       'openTunnel',
       'rememberPlatform',
       'applyDefaults',
@@ -1400,14 +1401,98 @@ describe('the connect pipeline, what it keeps and gives back', () => {
     server: {...STARTED.server, reused: true},
   };
 
-  it('installs the default extensions on a server that was already running', async () => {
+  /** The recording of a connect whose start found the server already running. */
+  async function connectReusing(): Promise<
+    ReturnType<typeof setup>['recording']
+  > {
     const {recording, options} = setup();
     await connect(
       INPUT,
       steps(recording, {start: () => Promise.resolve(REUSED)}),
       options,
     );
-    deepStrictEqual(recording.calls.includes('installExtensions'), true);
+    return recording;
+  }
+
+  it('installs the default extensions on a server that was already running', async () => {
+    deepStrictEqual(
+      (await connectReusing()).calls.includes('installExtensions'),
+      true,
+    );
+  });
+
+  it('F-2413 6.4 step 1: the connect prunes the older installs once the server runs, before the tunnel opens', async () => {
+    const {recording, options} = setup();
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(
+      recording.calls.filter(call =>
+        ['start', 'cleanup', 'openTunnel'].includes(call),
+      ),
+      ['start', 'cleanup', 'openTunnel'],
+    );
+  });
+
+  it('F-2413.BR-9: the clean-up gets the probed host, so it takes the locks as the install did', async () => {
+    const {recording, options} = setup();
+    const hosts: Array<string | undefined> = [];
+    await connect(
+      INPUT,
+      steps(recording, {
+        maintain: (input, lease, action, cancellation, host) => {
+          hosts.push(host?.operatingSystem);
+          return Promise.resolve({kind: 'done'});
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(hosts, ['linux']);
+  });
+
+  it('F-2413 6.4 step 5: a connect that reuses the running server prunes too', async () => {
+    deepStrictEqual((await connectReusing()).calls.includes('cleanup'), true);
+  });
+
+  it('F-2413 6.4 step 8: a clean-up that cannot run is logged and the connect goes on', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        maintain: () => Promise.reject(new Error('the channel broke')),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result,
+        logSink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('clean-up')),
+      ],
+      [
+        true,
+        ['the clean-up of old installs did not work: Error: the channel broke'],
+      ],
+    );
+  });
+
+  it('F-2413 6.4: a clean-up that ends in another status than done is logged and the connect goes on', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        maintain: () => Promise.resolve({kind: 'noResultBlock'}),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result,
+        logSink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('clean-up')),
+      ],
+      [true, ['the clean-up of old installs ended with noResultBlock']],
+    );
   });
 
   it('leaves the default extensions alone on a server it started', async () => {

@@ -22,6 +22,7 @@ import {
   type ArchiveCache,
   type ClientFilePort,
   classifyServerLicence,
+  cleanup,
   type DownloadBounds,
   type DirectReason,
   type CredentialsPort,
@@ -117,6 +118,9 @@ type BoundedStop = (
     cancellation: AbortSignal,
   ]
 ) => Promise<void>;
+
+/** The maintenance of a host's server that each action of the `maintain` step runs. */
+const MAINTENANCE = {kill, uninstall, cleanup} as const;
 
 type ServerStepNames =
   | 'checkStartSettings'
@@ -319,10 +323,10 @@ export function createServerSteps(
     },
     probe: (input, lease, cancellation) =>
       probe(lease.channel, parametersFor({}), cancellation),
-    maintain: (input, lease, action, cancellation) =>
-      (action === 'kill' ? kill : uninstall)(
+    maintain: (input, lease, action, cancellation, host) =>
+      MAINTENANCE[action](
         lease.channel,
-        parametersFor({}),
+        parametersFor({hostOperatingSystem: host?.operatingSystem}),
         cancellation,
       ),
     plan: (input, host, options) => {

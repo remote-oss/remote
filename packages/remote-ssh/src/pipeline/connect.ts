@@ -631,6 +631,24 @@ async function runSteps(
   if (started.server.endpoint.kind === 'port') {
     options.logger.info(listeningLine(started.server.endpoint.port));
   }
+  // The direct install, which is the legacy mode and the exec server mode of an editor that names no CLI source, prunes
+  // the installs older than the five newest on every connect and reload, once this connect's server runs, taking the
+  // locks as the install did (the host's system decides the method); a connect over the CLI never gets here. A failure
+  // is only logged.
+  await quietly('the clean-up of old installs', async () => {
+    const outcome = await steps.maintain(
+      input,
+      lease,
+      'cleanup',
+      cancellation,
+      host,
+    );
+    if (outcome.kind !== 'done') {
+      options.logger.warn(
+        `the clean-up of old installs ended with ${outcome.kind}`,
+      );
+    }
+  });
   if (started.server.reused) {
     await quietly('the default extensions', () =>
       steps.installExtensions(input, lease, cancellation),

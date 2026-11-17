@@ -1493,6 +1493,25 @@ describe('the PowerShell cleanup, run under pwsh', function () {
     );
   });
 
+  it('F-2413: keepNewest removes a leftover that was modified two hours ago, and one modified a minute ago stays, as does another folder', () => {
+    const host = powershellHost();
+    const parameters = {
+      ...parametersFor(),
+      cleanup: {kind: 'keepNewest' as const, count: 5},
+    };
+    const installs = installsAged(host, parameters, {
+      [parameters.commit]: 10,
+      [`${COMMIT_A}-1700000000000`]: 7200,
+      [`${COMMIT_B}-1700000000000`]: 60,
+      notes: 40,
+    });
+    runOn(host, single('cleanup'), parameters);
+    deepStrictEqual(
+      readdirSync(installs).sort(),
+      [`${COMMIT_B}-1700000000000`, 'notes', parameters.commit].sort(),
+    );
+  });
+
   it('F-2413: onlyCurrentRemoveLeftovers removes other commits and leftovers, and keeps the rest', () => {
     const host = powershellHost();
     const parameters = {
@@ -1907,6 +1926,23 @@ describe('the PowerShell bootstrap script, as text', () => {
           parametersFor(),
         ),
       /no prepare step/,
+    );
+  });
+
+  it('F-2701 AC-18: the start words go bare, so the batch launcher reads its first word, and a word that needs quotes is quoted', () => {
+    const parameters = parametersFor();
+    const line = scriptFor(single('start'), 'powershell', {
+      ...parameters,
+      start: {...parameters.start, extensions: ['pub.name@1.0.0']},
+    })
+      .split('\n')
+      .find(each => each.includes('$SERVER_ARGUMENTS = '));
+    deepStrictEqual(
+      [
+        line?.includes("@('--start-server', "),
+        line?.includes(`'--install-extension', '"pub.name@1.0.0"'`),
+      ],
+      [true, true],
     );
   });
 
