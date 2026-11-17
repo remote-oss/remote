@@ -66,6 +66,7 @@ export function endProcessGroup(
     return;
   }
   system.signalGroup(leader, 'SIGTERM');
+  // The SIGKILL is scheduled whether or not the group is still there: a signal to a gone group is no failure.
   system.later(() => {
     system.signalGroup(leader, 'SIGKILL');
   }, GROUP_GRACE_MILLISECONDS);

@@ -1,4 +1,5 @@
 import {deepStrictEqual, doesNotThrow} from 'node:assert';
+import {spawn} from 'node:child_process';
 import {
   endProcessGroup,
   GROUP_GRACE_MILLISECONDS,
@@ -43,9 +44,21 @@ describe('ending a process group', () => {
     deepStrictEqual([made.done, made.scheduled.length], [[], 0]);
   });
 
-  it('#2664: signalling a group that is gone is no failure', () => {
+  it('#2664: signalling a group that is gone is no failure; the group signalled is the one of a process this row started', async function () {
+    if (!NODE_GROUP_SYSTEM.posix) {
+      this.skip();
+    }
+    // Only the group of a process of this row is ever signalled, never a group id written in the row.
+    const leader = spawn(
+      process.execPath,
+      ['-e', 'setTimeout(() => undefined, 30000)'],
+      {detached: true, stdio: 'ignore'},
+    );
+    const exited = new Promise(resolve => leader.once('exit', resolve));
+    NODE_GROUP_SYSTEM.signalGroup(leader.pid ?? 0, 'SIGTERM');
+    await exited;
     doesNotThrow(() => {
-      NODE_GROUP_SYSTEM.signalGroup(2 ** 22 - 3, 'SIGTERM');
+      NODE_GROUP_SYSTEM.signalGroup(leader.pid ?? 0, 'SIGTERM');
     });
   });
 
