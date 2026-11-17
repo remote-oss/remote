@@ -35,6 +35,7 @@ import {
   clockNow,
   localSshOfHarness,
   pauseHost,
+  running,
   unpauseHost,
 } from '../windows/outage.ts';
 import {
@@ -589,6 +590,34 @@ describe('the reconnection loop of a window whose host stops answering (card #27
       ],
       [[true, true], true, false],
       `attempts 3 and 4 lasted ${JSON.stringify(lasted)} s`,
+    );
+  });
+
+  it('F-2505 AC-25 (c2703-old-ssh): when packets stop and core starts reconnecting, the previous connection’s local ssh ends within about 5 s of the first reconnection attempt, without waiting for an ssh timeout', async () => {
+    const name = 'c2703-old-ssh';
+    const mark = await connectedWindow(name);
+    const earlier = localSshOfHarness().map(each => each.processId);
+    outageBegins();
+    await waitFor(
+      'attempt 2',
+      () => attemptsSince(mark, 'harness').length > 0,
+      90_000,
+    );
+    const attemptAt = attemptsSince(mark, 'harness')[0]?.startedAt ?? 0;
+    let endedAfter: number | undefined;
+    while (
+      endedAfter === undefined &&
+      between(attemptAt, clockNow()) < 20_000
+    ) {
+      if (earlier.every(each => !running(each))) {
+        endedAfter = seconds(between(attemptAt, clockNow()));
+      }
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    deepStrictEqual(
+      [earlier.length > 0, endedAfter !== undefined && endedAfter <= 7],
+      [true, true],
+      `the old ssh ${JSON.stringify(earlier)} ended ${String(endedAfter)} s after attempt 2 started`,
     );
   });
 
