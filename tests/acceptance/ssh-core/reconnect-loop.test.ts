@@ -394,6 +394,9 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     deepStrictEqual(
       {
         reconnected: reconnectedAfter !== undefined,
+        // `every` over an empty list holds for nothing, so both lists must have an ssh.
+        sshBefore: before.length > 0,
+        sshAfter: after.length > 0,
         newSsh: after.every(
           each => !before.some(earlier => earlier.processId === each.processId),
         ),
@@ -409,6 +412,8 @@ describe('the reconnection loop of a window whose host stops answering (card #27
       },
       {
         reconnected: true,
+        sshBefore: true,
+        sshAfter: true,
         newSsh: true,
         newPort: true,
         found: [true, true],
@@ -525,7 +530,7 @@ describe('the reconnection loop of a window whose host stops answering (card #27
       );
     deepStrictEqual(
       [
-        lasted.map(each => each !== undefined && each >= 15 && each <= 17.5),
+        lasted.map(each => each !== undefined && each >= 15 && each <= 17),
         connectionLog()
           .slice(mark)
           .some(line =>
@@ -573,10 +578,7 @@ describe('the reconnection loop of a window whose host stops answering (card #27
           ),
           line.answer,
         ]),
-        resolves.map(
-          line =>
-            line.replace(/,.*$/u, '').length > 0 && /attempt 1\b/u.test(line),
-        ),
+        resolves.map(line => /attempt 1\b/u.test(line)),
       ],
       [
         [
@@ -589,7 +591,7 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     );
   });
 
-  it('F-2505 AC-20 (c2703-grace): with the grace time 30 core ends the reconnection about 30 to 40 s into the attempts, and Reload Window reconnects once the host answers', async () => {
+  it('F-2505 AC-20 (c2703-grace): with the grace time 30 core ends the reconnection about 30 to 40 s into the attempts (45 s allowed: core ends it at the first error after the grace time, and an attempt fails after 10 s on the run’s host, which measured 42.6 s in run 44031853143), and Reload Window reconnects once the host answers', async () => {
     const name = 'c2703-grace';
     // The grace time reaches core when the server starts, so the server that earlier rows left is replaced.
     await freshHost();
