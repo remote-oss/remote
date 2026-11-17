@@ -9,6 +9,7 @@ import {
   appendScript,
   connectedWithin,
   connectionLog,
+  inWindow,
   onHost,
   openWindow,
   readUserSettings,
@@ -27,6 +28,7 @@ import {
   attemptsSince,
   between,
   clockNow,
+  localSshOfHarness,
   pauseHost,
   unpauseHost,
 } from '../windows/outage.ts';
@@ -34,6 +36,7 @@ import {
   answerDialog,
   dialogOf,
   indicatorDisconnects,
+  notifications,
   statusBarText,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -232,6 +235,133 @@ describe('the reconnection loop of a window whose host stops answering (card #27
         (await dialogOf(name))?.details === GIVEN_UP,
       ],
       [[2, 3, 4], false],
+    );
+  });
+
+  /** Ends the connection of window `name` by killing its local ssh, and gives what the window showed in the next seconds. */
+  async function killedSsh(name: string) {
+    const before = localSshOfHarness();
+    for (const each of before) {
+      process.kill(each.processId, 'SIGTERM');
+    }
+    const began = Date.now();
+    const toasts = new Set<string>();
+    let reconnectedAfter: number | undefined;
+    while (Date.now() - began < 8000) {
+      for (const text of await notifications(name).catch(() => [])) {
+        toasts.add(text);
+      }
+      if (
+        reconnectedAfter === undefined &&
+        (await statusBarText(name, 'status.host').catch(() => '')) ===
+          'SSH: harness' &&
+        localSshOfHarness().some(
+          each => !before.some(earlier => earlier.processId === each.processId),
+        )
+      ) {
+        reconnectedAfter = Date.now() - began;
+      }
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    return {before, toasts: [...toasts], reconnectedAfter};
+  }
+
+  const SETTING_UP = 'Setting up SSH Host harness';
+
+  it('F-2505 AC-3 (c2703-progress): during a reconnection attempt the progress notification Setting up SSH Host with its details link and Initializing VS Code Server shows, and it is gone when the attempt ends', async () => {
+    const name = 'c2703-progress';
+    await connectedWindow(name);
+    const {toasts} = await killedSsh(name);
+    deepStrictEqual(
+      [
+        toasts.includes(`${SETTING_UP}: (details) Initializing VS Code Server`),
+        (await notifications(name)).filter(text => text.startsWith(SETTING_UP)),
+      ],
+      [true, []],
+      `the notifications seen were ${JSON.stringify(toasts)}`,
+    );
+  });
+
+  for (const [label, settings] of [
+    ['default', {}],
+    ['limit-0', {'remote.SSH.maxReconnectionAttempts': 0}],
+    [
+      'per-window',
+      {
+        'remote.SSH.useLocalServer': false,
+        'remote.SSH.remotePlatform': {harness: 'linux'},
+      },
+    ],
+  ] as const) {
+    it(`F-2505 AC-10 (c2703-ssh-killed-${label}): when the window’s local ssh dies the window reconnects within about 1 s, showing Setting up SSH tunnel briefly`, async () => {
+      const name = `c2703-ssh-killed-${label}`;
+      await userSettings(settings);
+      await connectedWindow(name);
+      const {before, toasts, reconnectedAfter} = await killedSsh(name);
+      deepStrictEqual(
+        [
+          before.length > 0,
+          reconnectedAfter !== undefined && reconnectedAfter <= 2000,
+          toasts.includes(`${SETTING_UP}: Setting up SSH tunnel`),
+        ],
+        [true, true, true],
+        `it reconnected after ${String(reconnectedAfter)} ms, the notifications seen were ${JSON.stringify(toasts)}`,
+      );
+    });
+  }
+
+  /** The process ids on the host of the server, the remote extension host and the shells of the terminals of the window. */
+  async function hostProcesses() {
+    async function pids(...pattern: string[]): Promise<number[]> {
+      try {
+        return (await onHost('pgrep', '-u', 'harness', ...pattern))
+          .split('\n')
+          .filter(line => line !== '')
+          .map(Number);
+      } catch {
+        return [];
+      }
+    }
+    const [ptyHost] = await pids('-f', '--type=ptyHost');
+    return {
+      server: await pids('-f', 'server-main'),
+      extensionHost: await pids('-f', '--type=extensionHost'),
+      shells: ptyHost === undefined ? [] : await pids('-P', String(ptyHost)),
+    };
+  }
+
+  it('F-2505 AC-4 (c2703-new-ssh): a reconnection uses a new local ssh and a new forwarding port, and the server, the remote extension host and the terminal’s shell keep their process ids', async () => {
+    const name = 'c2703-new-ssh';
+    await connectedWindow(name);
+    await inWindow(name, 'workbench.action.terminal.new');
+    await waitFor(
+      'the terminal’s shell on the host',
+      async () => (await hostProcesses()).shells.length > 0,
+      60_000,
+    );
+    const hostBefore = await hostProcesses();
+    const {before, reconnectedAfter} = await killedSsh(name);
+    const after = localSshOfHarness();
+    const hostAfter = await hostProcesses();
+    deepStrictEqual(
+      {
+        reconnected: reconnectedAfter !== undefined,
+        newSsh: after.every(
+          each => !before.some(earlier => earlier.processId === each.processId),
+        ),
+        newPort: after.every(
+          each => !before.some(earlier => earlier.port === each.port),
+        ),
+        found: Object.values(hostBefore).map(list => list.length > 0),
+        kept: hostAfter,
+      },
+      {
+        reconnected: true,
+        newSsh: true,
+        newPort: true,
+        found: [true, true, true],
+        kept: hostBefore,
+      },
     );
   });
 
