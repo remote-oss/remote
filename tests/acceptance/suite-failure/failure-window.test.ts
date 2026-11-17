@@ -8,6 +8,7 @@ import {
 } from '../suite-local/script.ts';
 import {connectionLog} from '../suite/harness.ts';
 import {requestsOfLaunch} from '../suite-install/install.ts';
+import {forbiddenAmong} from '../../../tools/forbidden-texts.ts';
 import casesFile from './cases.json' with {type: 'json'};
 
 /** One failing connect of the run, as tests/acceptance/suite-failure/cases.json lists it. */
@@ -140,6 +141,19 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
       );
     });
   }
+
+  it('F-2602 AC-21: no dialog, pick or notice of the failure offers More Info or a search in settings', () => {
+    deepStrictEqual(
+      forbiddenAmong(
+        lines.flatMap(line => [
+          line.question,
+          ...(line.buttons ?? []),
+          ...(line.items ?? []),
+        ]),
+      ),
+      [],
+    );
+  });
 
   it('F-2601 AC-14: once the pick of actions is dismissed, nothing more is asked', async () => {
     await new Promise(resolve => setTimeout(resolve, 5000));

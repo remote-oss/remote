@@ -27,72 +27,24 @@ import {
 } from '../windows/maintenance.ts';
 import {
   notifications,
-  terminalTabsOf,
   terminalText,
   typeInTerminal,
 } from '../windows/renderer.ts';
+import {
+  cellsOf,
+  failedOn,
+  firstRowOf,
+  tableOf,
+  TERMINAL_MILLISECONDS,
+  troubleshootingTabs,
+} from '../windows/troubleshooting-support.ts';
 
-const NAME = 'Remote - SSH: Session Troubleshooting';
 const CLEAR = 'opensshremotes.clearAllSessionHints';
-
-/** How long the terminal has, after the failure dialog, to be among the terminals: about a second, and a margin. */
-const TERMINAL_MILLISECONDS = 5_000;
-
-/** Opens window `name` on `alias` and waits until its failure dialog was shown. */
-async function failedOn(alias: string, name: string): Promise<void> {
-  await openWindow(alias, name);
-  await waitFor(
-    `the failure dialog of ${name}`,
-    () => recordLines('failureDialog', name).length > 0,
-    INSTALL_MILLISECONDS,
-  );
-}
 
 /** Opens window `name` on `nowhere`, whose name never resolves, and waits until its failure dialog was shown. */
 async function failed(name: string): Promise<void> {
   appendScript(dismissals(name));
   await failedOn('nowhere', name);
-}
-
-/** Waits for the troubleshooting terminal of window `name`, and gives the lines of its table, whitespace as spaces. */
-async function tableOf(name: string): Promise<string[]> {
-  await waitFor(
-    'the troubleshooting terminal',
-    async () => (await troubleshootingTabs(name)).length > 0,
-    TERMINAL_MILLISECONDS,
-  );
-  return (await terminalText(name))
-    .replaceAll('\u00a0', ' ')
-    .split('\n')
-    .map(line => line.trimEnd())
-    .filter(line => /^[╔║╟╚]/u.test(line));
-}
-
-/** The cells of a table row, trimmed. */
-function cellsOf(line: string | undefined): string[] {
-  return (line ?? '')
-    .replace(/^║|║$/gu, '')
-    .split('│')
-    .map(cell => cell.trim());
-}
-
-/** The cells of the first data row of `table`, each with its wrapped lines joined by one space. */
-function firstRowOf(table: readonly string[]): string[] {
-  const end = table.findIndex(
-    (line, index) => index > 2 && /^[╟╚]/u.test(line),
-  );
-  const lines = table.slice(3, end).map(cellsOf);
-  return (lines[0] ?? []).map((unused, column) =>
-    lines
-      .map(cells => cells[column] ?? '')
-      .filter(cell => cell !== '')
-      .join(' '),
-  );
-}
-
-/** The terminals of window `name` that are the troubleshooting one. */
-async function troubleshootingTabs(name: string): Promise<string[]> {
-  return (await terminalTabsOf(name)).filter(label => label.includes(NAME));
 }
 
 describe('the session troubleshooting terminal (card connect-136)', function () {
