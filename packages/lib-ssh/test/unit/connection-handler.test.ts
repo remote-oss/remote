@@ -9,7 +9,8 @@ import {
   type ConnectionHandlerOptions,
 } from '../../src/index.ts';
 import {ScriptedSpawner, startError} from './fake-client-process.ts';
-import {authenticate} from './connection-fixture.ts';
+import {AUTHENTICATED, authenticate} from './connection-fixture.ts';
+import {PLATFORM_PROBE_INPUT} from '../../src/connection-server/platform-probe.ts';
 import {LOCAL_COMMAND_DROPPED_LINE} from '../../src/connection-server/local-command-log.ts';
 
 const INVOCATION = {
@@ -63,7 +64,7 @@ describe('connection handler (contracts §4 S9)', () => {
       spawner: spawner.spawn,
       askpassEnvironment: {},
       editorEnvironment: {},
-      sessionPrelude: 'P\n',
+      opening: {kind: 'known', prelude: 'P\n', interpreter: 'posixShell'},
       waitSettings: {
         connectTimeoutSeconds: 10,
         fromHost: false,
@@ -75,7 +76,6 @@ describe('connection handler (contracts §4 S9)', () => {
         displayHost: 'h.invalid',
         firstMessageMilliseconds: 5000,
       },
-      interpreter: 'posixShell',
       newMarker: () => {
         markers += 1;
         return `m${String(markers)}`;
@@ -384,6 +384,127 @@ describe('connection handler (contracts §4 S9)', () => {
       authenticate(spawner.started[0]);
       handler.onLeasesChanged([2]);
       deepStrictEqual(eventTypes(), ['connected']);
+    });
+  });
+
+  describe('a session whose host platform is unknown (#1835)', () => {
+    const OPENING = {
+      kind: 'detect',
+      posix: {line: 'POSIX-LINE\n', prelude: 'P\n'},
+      windows: {line: 'WINDOWS-LINE\n'},
+    } as const;
+    const RUN_REQUEST = {
+      type: 'runScript',
+      runId: 7,
+      script: 'echo hello',
+      environment: {},
+      inputBase64: null,
+      deadlineMilliseconds: 1000,
+    } as const;
+
+    /** The owner's connect, up to ssh's report that the login is done. */
+    async function authenticated(): Promise<void> {
+      create({opening: OPENING});
+      handler.onLeasesChanged([1, 2]);
+      events.length = 0;
+      await send(1, {type: 'connect'});
+      spawner.started[0]?.error(AUTHENTICATED);
+      await settled();
+    }
+
+    function written(): string | undefined {
+      return spawner.started[0]?.inputText();
+    }
+
+    it('#1835: the probe is written once ssh reports the login, and nothing before', async () => {
+      create({opening: OPENING});
+      handler.onLeasesChanged([1]);
+      await send(1, {type: 'connect'});
+      await settled();
+      const before = written();
+      spawner.started[0]?.error(AUTHENTICATED);
+      await settled();
+      deepStrictEqual([before, written()], ['', PLATFORM_PROBE_INPUT]);
+    });
+
+    it("#1835: Windows answers write the loop's line, the session frames its scripts for the PowerShell loop, and the record request tells windows", async () => {
+      await authenticated();
+      spawner.started[0]?.output(
+        'C:\\>echo REMOTE-OSS-PROBE-%OS%\nREMOTE-OSS-PROBE-Windows_NT\r\n\r\nREMOTE-OSS-PROBE-DONE\r\n',
+      );
+      await settled();
+      const afterAnswers = written() ?? '';
+      spawner.started[0]?.output('\nLAYER1-READY\n');
+      void send(1, RUN_REQUEST);
+      await settled();
+      deepStrictEqual(
+        [
+          afterAnswers,
+          eventTypes(),
+          /^m1 [0-9]+ 0$/.test(
+            (written() ?? '').slice(afterAnswers.length).split('\n')[0] ?? '',
+          ),
+          await send(2, {type: 'sharedRecord'}),
+        ],
+        [
+          `${PLATFORM_PROBE_INPUT}WINDOWS-LINE\n`,
+          ['connected'],
+          true,
+          {type: 'sharedRecord', record: null, detectedPlatform: 'windows'},
+        ],
+      );
+    });
+
+    it('#1835: POSIX answers write the hand-over line, the prelude only once the shell has printed the hand-over, then POSIX runs', async () => {
+      await authenticated();
+      spawner.started[0]?.output(
+        'REMOTE-OSS-PROBE-%OS%\nREMOTE-OSS-HOME-/home/h\nREMOTE-OSS-PROBE-DONE\n',
+      );
+      await settled();
+      const handing = written();
+      spawner.started[0]?.output('REMOTE-OSS-PROBE-EXEC\n');
+      await settled();
+      const handed = written();
+      spawner.started[0]?.output('LAYER1-READY\n');
+      void send(1, RUN_REQUEST);
+      await settled();
+      deepStrictEqual(
+        [
+          handing,
+          handed,
+          (written() ?? '').slice(handed?.length).split('\n')[0],
+          await send(2, {type: 'sharedRecord'}),
+        ],
+        [
+          `${PLATFORM_PROBE_INPUT}POSIX-LINE\n`,
+          `${PLATFORM_PROBE_INPUT}POSIX-LINE\nP\n`,
+          "printf '%s%s\\n' 'm1:st' 'art'",
+          {type: 'sharedRecord', record: null, detectedPlatform: 'posix'},
+        ],
+      );
+    });
+
+    it("#1835: a hand-over line before the answers end writes no prelude, and the probe's lines are no LocalCommand's output", async () => {
+      await authenticated();
+      spawner.started[0]?.output(
+        'banner\nREMOTE-OSS-PROBE-EXEC\nREMOTE-OSS-PROBE-%OS%\nREMOTE-OSS-PROBE-DONE\n',
+      );
+      await settled();
+      deepStrictEqual(
+        [written(), eventTypes()],
+        [`${PLATFORM_PROBE_INPUT}POSIX-LINE\n`, []],
+      );
+    });
+
+    it('#1835: a session that ends before the answers end fails the login as any other, and is written nothing more', async () => {
+      await authenticated();
+      spawner.started[0]?.output('REMOTE-OSS-PROBE-%OS%\n');
+      spawner.started[0]?.exit(255);
+      await settled();
+      deepStrictEqual(
+        [written(), eventTypes()],
+        [PLATFORM_PROBE_INPUT, ['loginFailed', 'ownerChanged']],
+      );
     });
   });
 
@@ -1167,6 +1288,7 @@ describe('connection handler (contracts §4 S9)', () => {
       deepStrictEqual(await send(1, {type: 'sharedRecord'}), {
         type: 'sharedRecord',
         record: null,
+        detectedPlatform: null,
       });
     });
 
@@ -1186,7 +1308,10 @@ describe('connection handler (contracts §4 S9)', () => {
       const shared = await send(2, {type: 'sharedRecord'});
       deepStrictEqual(
         [stored, shared],
-        [{type: 'accepted'}, {type: 'sharedRecord', record: RECORD}],
+        [
+          {type: 'accepted'},
+          {type: 'sharedRecord', record: RECORD, detectedPlatform: null},
+        ],
       );
     });
   });

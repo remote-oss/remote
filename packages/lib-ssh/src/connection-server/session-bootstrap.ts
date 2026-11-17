@@ -9,10 +9,14 @@ import {
   type ConnectWaitSettings,
   connectWaitMilliseconds,
 } from '../process/connect-wait.ts';
-import {type PlatformHint, posixQuote} from 'lib-host';
+import {type Interpreter, type PlatformHint, posixQuote} from 'lib-host';
 import {TUNNEL_COMMAND} from '../arguments/invocation.ts';
 import {preludeProgram} from '../process/remote-program.ts';
-import {powershellSessionStart} from './powershell-session.ts';
+import {PROBE_EXEC_LINE} from './platform-probe.ts';
+import {
+  interpreterOfPlatform,
+  powershellSessionStart,
+} from './powershell-session.ts';
 
 /** The fewest and the most seconds the login shell's startup may take. */
 const LAYER_ONE_SECONDS = {minimum: 1, maximum: 600} as const;
@@ -153,6 +157,60 @@ export function connectionStart(
       ? start.remoteProgram
       : `exec ${start.remoteProgram}`;
   return {remoteProgram: undefined, prelude: `${line}\n${start.prelude}`};
+}
+
+/**
+ * How the connection's session opens. A known platform has its remote program, and its prelude written once ssh
+ * reports the login. An unknown one has no remote program: the host's own shell reads `PLATFORM_PROBE_INPUT`, and the
+ * answers choose the line that goes on, the PowerShell loop's line on Windows, or on POSIX a line that prints
+ * `PROBE_EXEC_LINE` and starts the bootstrap's reader, whose prelude is written only once that line is back, so that
+ * no shell that reads its input ahead can take it.
+ */
+export type SessionOpening =
+  | {kind: 'known'; prelude: string; interpreter: Interpreter}
+  | {
+      kind: 'detect';
+      posix: {line: string; prelude: string};
+      windows: {line: string};
+    };
+
+/**
+ * The remote program and the opening of the connection's session: a known platform's start as `connectionStart` gives
+ * it; with the platform unknown, no remote program and the opening that detects it, whether or not the host's
+ * RemoteCommand is in effect, since either way a shell reads the session's input.
+ */
+export function sessionOpeningFor(
+  settings: ConnectWaitSettings,
+  remoteCommandInEffect: boolean,
+  platform: PlatformHint,
+): {remoteProgram: string | undefined; opening: SessionOpening} {
+  if (platform !== 'unknown') {
+    const start = connectionStart(
+      sessionStartFor(settings, false, platform),
+      remoteCommandInEffect,
+      platform,
+    );
+    return {
+      remoteProgram: start.remoteProgram,
+      opening: {
+        kind: 'known',
+        prelude: start.prelude,
+        interpreter: interpreterOfPlatform(platform),
+      },
+    };
+  }
+  const posix = sessionStartFor(settings, false, 'unknown');
+  return {
+    remoteProgram: undefined,
+    opening: {
+      kind: 'detect',
+      posix: {
+        line: `echo ${PROBE_EXEC_LINE}; exec ${posix.remoteProgram}\n`,
+        prelude: posix.prelude,
+      },
+      windows: {line: `${powershellSessionStart().remoteProgram}\n`},
+    },
+  };
 }
 
 /**

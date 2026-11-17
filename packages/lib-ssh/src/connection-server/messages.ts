@@ -8,6 +8,7 @@ import type {PlainData} from 'lib-helper';
 import type {FailureHint, FailureReason} from '../diagnostics/classify.ts';
 import type {FailureKind} from '../diagnostics/rules.ts';
 import type {SpawnFailure} from '../process/session.ts';
+import type {DetectedPlatform} from './platform-probe.ts';
 
 /** The agent link a connection's first window planned: none and why, or the link's path and its target. */
 export type StoredAgentLink =
@@ -67,7 +68,12 @@ export type ConnectionReply =
   | {type: 'accepted'}
   | {type: 'refused'; reason: Refusal}
   | {type: 'questionRefused'; accepted: boolean}
-  | {type: 'sharedRecord'; record: SharedRecord | null}
+  | {
+      type: 'sharedRecord';
+      record: SharedRecord | null;
+      /** What the session's opening found when the host's platform was unknown; null when it was known. */
+      detectedPlatform: DetectedPlatform | null;
+    }
   | {type: 'answered'; accepted: boolean}
   | {type: 'scriptEnded'; status: number}
   | {type: 'scriptFailed'; reason: ScriptFailureReason; detail: string}
@@ -241,6 +247,8 @@ const REFUSALS: readonly string[] = [
   'alreadyConnected',
 ];
 
+const DETECTED_PLATFORMS: readonly DetectedPlatform[] = ['windows', 'posix'];
+
 const SCRIPT_FAILURES: readonly string[] = [
   'notConnected',
   'channelClosed',
@@ -272,11 +280,25 @@ export function readConnectionReply(
         ? {type: 'questionRefused', accepted: body.accepted}
         : undefined;
     case 'sharedRecord': {
-      if (body.record === null) {
-        return {type: 'sharedRecord', record: null};
+      const detectedPlatform = DETECTED_PLATFORMS.find(
+        each => each === body.detectedPlatform,
+      );
+      if (
+        body.detectedPlatform !== undefined &&
+        body.detectedPlatform !== null &&
+        detectedPlatform === undefined
+      ) {
+        return undefined;
       }
-      const record = readSharedRecord(body.record);
-      return record === undefined ? undefined : {type: 'sharedRecord', record};
+      const record =
+        body.record === null ? null : readSharedRecord(body.record);
+      return record === undefined
+        ? undefined
+        : {
+            type: 'sharedRecord',
+            record,
+            detectedPlatform: detectedPlatform ?? null,
+          };
     }
     case 'answered':
       return typeof body.accepted === 'boolean'

@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {
   closeWindow,
   connectedWithin,
+  connectionLog,
   inWindow,
   onHostAs,
   openWindow,
@@ -15,7 +16,8 @@ import {terminalsNamed} from './shell-support.ts';
 describe('one account per login shell (card tooling-55)', function () {
   this.timeout(600_000);
 
-  it("#1220: harness-bash connects, a task reads the server's environment, and a new terminal is named after the login shell", async () => {
+  it("#1220: harness-bash connects, a task reads the server's environment, and a new terminal is named after the login shell, and with no platform stored the log names it linux (#1835)", async () => {
+    const mark = connectionLog().length;
     await openWindow('harness-bash', 'ls-bash');
     try {
       await connectedWithin('ls-bash', INSTALL_MILLISECONDS);
@@ -32,8 +34,13 @@ describe('one account per login shell (card tooling-55)', function () {
       const terminals = await terminalsNamed('ls-bash', 'bash');
       const shellTerminal = terminals.includes('bash');
       deepStrictEqual(
-        {exitCode, homeLine, shellTerminal},
-        {exitCode: 0, homeLine: true, shellTerminal: true},
+        {
+          exitCode,
+          homeLine,
+          shellTerminal,
+          platform: connectionLog().slice(mark).includes('Platform: linux'),
+        },
+        {exitCode: 0, homeLine: true, shellTerminal: true, platform: true},
         `the terminals: ${JSON.stringify(terminals)}`,
       );
     } finally {
@@ -41,7 +48,8 @@ describe('one account per login shell (card tooling-55)', function () {
     }
   });
 
-  it("#1220: harness-zsh connects, a task reads the server's environment, and a new terminal is named after the login shell", async () => {
+  it("#1220: harness-zsh connects, a task reads the server's environment, and a new terminal is named after the login shell, and with no platform stored the log names it linux (#1835)", async () => {
+    const mark = connectionLog().length;
     await openWindow('harness-zsh', 'ls-zsh');
     try {
       await connectedWithin('ls-zsh', INSTALL_MILLISECONDS);
@@ -56,8 +64,13 @@ describe('one account per login shell (card tooling-55)', function () {
       const terminals = await terminalsNamed('ls-zsh', 'zsh');
       const shellTerminal = terminals.includes('zsh');
       deepStrictEqual(
-        {exitCode, homeLine, shellTerminal},
-        {exitCode: 0, homeLine: true, shellTerminal: true},
+        {
+          exitCode,
+          homeLine,
+          shellTerminal,
+          platform: connectionLog().slice(mark).includes('Platform: linux'),
+        },
+        {exitCode: 0, homeLine: true, shellTerminal: true, platform: true},
         `the terminals: ${JSON.stringify(terminals)}`,
       );
     } finally {
@@ -65,7 +78,8 @@ describe('one account per login shell (card tooling-55)', function () {
     }
   });
 
-  it("#1220: harness-dash connects, a task reads the server's environment, and a new terminal is named after the login shell", async () => {
+  it("#1220: harness-dash connects, a task reads the server's environment, and a new terminal is named after the login shell, and with no platform stored the log names it linux (#1835)", async () => {
+    const mark = connectionLog().length;
     await openWindow('harness-dash', 'ls-dash');
     try {
       await connectedWithin('ls-dash', INSTALL_MILLISECONDS);
@@ -82,8 +96,13 @@ describe('one account per login shell (card tooling-55)', function () {
       const terminals = await terminalsNamed('ls-dash', 'sh');
       const shellTerminal = terminals.includes('sh');
       deepStrictEqual(
-        {exitCode, homeLine, shellTerminal},
-        {exitCode: 0, homeLine: true, shellTerminal: true},
+        {
+          exitCode,
+          homeLine,
+          shellTerminal,
+          platform: connectionLog().slice(mark).includes('Platform: linux'),
+        },
+        {exitCode: 0, homeLine: true, shellTerminal: true, platform: true},
         `the terminals: ${JSON.stringify(terminals)}`,
       );
     } finally {
@@ -91,7 +110,8 @@ describe('one account per login shell (card tooling-55)', function () {
     }
   });
 
-  it("#1220: harness-ksh connects, a task reads the server's environment, and a new terminal is named after the login shell", async () => {
+  it("#1220: harness-ksh connects, a task reads the server's environment, and a new terminal is named after the login shell, and with no platform stored the log names it linux (#1835)", async () => {
+    const mark = connectionLog().length;
     await openWindow('harness-ksh', 'ls-ksh');
     try {
       await connectedWithin('ls-ksh', INSTALL_MILLISECONDS);
@@ -106,8 +126,13 @@ describe('one account per login shell (card tooling-55)', function () {
       const terminals = await terminalsNamed('ls-ksh', 'ksh');
       const shellTerminal = terminals.includes('ksh');
       deepStrictEqual(
-        {exitCode, homeLine, shellTerminal},
-        {exitCode: 0, homeLine: true, shellTerminal: true},
+        {
+          exitCode,
+          homeLine,
+          shellTerminal,
+          platform: connectionLog().slice(mark).includes('Platform: linux'),
+        },
+        {exitCode: 0, homeLine: true, shellTerminal: true, platform: true},
         `the terminals: ${JSON.stringify(terminals)}`,
       );
     } finally {
@@ -115,7 +140,8 @@ describe('one account per login shell (card tooling-55)', function () {
     }
   });
 
-  it("#1220: harness-csh connects, a task reads the server's environment, and a new terminal is named after the login shell", async () => {
+  it("#1220: harness-csh connects, a task reads the server's environment, and a new terminal is named after the login shell, and with no platform stored the log names it linux (#1835)", async () => {
+    const mark = connectionLog().length;
     await openWindow('harness-csh', 'ls-csh');
     try {
       await connectedWithin('ls-csh', INSTALL_MILLISECONDS);
@@ -129,15 +155,21 @@ describe('one account per login shell (card tooling-55)', function () {
       await inWindow('ls-csh', 'workbench.action.terminal.new');
       const shellTerminal = await terminalNamed('ls-csh', 'tcsh');
       deepStrictEqual(
-        {exitCode, homeLine, shellTerminal},
-        {exitCode: 0, homeLine: true, shellTerminal: true},
+        {
+          exitCode,
+          homeLine,
+          shellTerminal,
+          platform: connectionLog().slice(mark).includes('Platform: linux'),
+        },
+        {exitCode: 0, homeLine: true, shellTerminal: true, platform: true},
       );
     } finally {
       await closeWindow('ls-csh');
     }
   });
 
-  it("#1220: harness-tcsh connects, a task reads the server's environment, and a new terminal is named after the login shell", async () => {
+  it("#1220: harness-tcsh connects, a task reads the server's environment, and a new terminal is named after the login shell, and with no platform stored the log names it linux (#1835)", async () => {
+    const mark = connectionLog().length;
     await openWindow('harness-tcsh', 'ls-tcsh');
     try {
       await connectedWithin('ls-tcsh', INSTALL_MILLISECONDS);
@@ -153,15 +185,21 @@ describe('one account per login shell (card tooling-55)', function () {
       await inWindow('ls-tcsh', 'workbench.action.terminal.new');
       const shellTerminal = await terminalNamed('ls-tcsh', 'tcsh');
       deepStrictEqual(
-        {exitCode, homeLine, shellTerminal},
-        {exitCode: 0, homeLine: true, shellTerminal: true},
+        {
+          exitCode,
+          homeLine,
+          shellTerminal,
+          platform: connectionLog().slice(mark).includes('Platform: linux'),
+        },
+        {exitCode: 0, homeLine: true, shellTerminal: true, platform: true},
       );
     } finally {
       await closeWindow('ls-tcsh');
     }
   });
 
-  it("#1220: harness-fish connects, a task reads the server's environment, and a new terminal is named after the login shell", async () => {
+  it("#1220: harness-fish connects, a task reads the server's environment, and a new terminal is named after the login shell, and with no platform stored the log names it linux (#1835)", async () => {
+    const mark = connectionLog().length;
     await openWindow('harness-fish', 'ls-fish');
     try {
       await connectedWithin('ls-fish', INSTALL_MILLISECONDS);
@@ -177,8 +215,13 @@ describe('one account per login shell (card tooling-55)', function () {
       await inWindow('ls-fish', 'workbench.action.terminal.new');
       const shellTerminal = await terminalNamed('ls-fish', 'fish');
       deepStrictEqual(
-        {exitCode, homeLine, shellTerminal},
-        {exitCode: 0, homeLine: true, shellTerminal: true},
+        {
+          exitCode,
+          homeLine,
+          shellTerminal,
+          platform: connectionLog().slice(mark).includes('Platform: linux'),
+        },
+        {exitCode: 0, homeLine: true, shellTerminal: true, platform: true},
       );
     } finally {
       await closeWindow('ls-fish');

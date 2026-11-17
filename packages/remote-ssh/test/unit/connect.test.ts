@@ -15,6 +15,7 @@ import {
 } from '../../src/pipeline/connect.ts';
 import type {
   ConnectionLease,
+  ConnectionTerms,
   ConnectSteps,
   StepFailure,
   StepResult,
@@ -112,6 +113,45 @@ describe('the connect pipeline, when it works', () => {
         .filter(message => message.startsWith('Host platform:')),
       ['Host platform: linux x64'],
     );
+  });
+
+  /** The `Platform:` lines of a connect whose terms name `platform` and whose probe reports `operatingSystem`. */
+  async function platformLines(
+    platform: ConnectionTerms['platform'],
+    operatingSystem: 'linux' | 'darwin' | 'win32',
+  ): Promise<string[]> {
+    const {recording, options, logSink} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        decideTerms: () =>
+          Promise.resolve({kind: 'done', value: {...TERMS, platform}}),
+        probe: () =>
+          Promise.resolve({
+            kind: 'probed',
+            host: {...HOST, operatingSystem},
+          }),
+      }),
+      options,
+    );
+    return logSink.lines
+      .map(line => line.message)
+      .filter(message => message.startsWith('Platform: '));
+  }
+
+  it('F-2206 5.1 step 2 (#1835): with the platform unknown the log names the probed platform in words, once', async () => {
+    deepStrictEqual(
+      [
+        await platformLines('unknown', 'linux'),
+        await platformLines('unknown', 'darwin'),
+        await platformLines('unknown', 'win32'),
+      ],
+      [['Platform: linux'], ['Platform: macOS'], ['Platform: windows']],
+    );
+  });
+
+  it('#1835: with the platform known from the settings there is no Platform line', async () => {
+    deepStrictEqual(await platformLines('linux', 'linux'), []);
   });
 
   /** The login shell lines a connect writes, with the probe's host given by `loginShell` or the fixture's. */
