@@ -495,7 +495,7 @@ describe('the hint recorder (card connect-119)', () => {
     );
   });
 
-  it('F-2604 AC-5 (c2326-early-error): an error recognised before the step ends is stored when it is recognised, not when the step ends', async () => {
+  it('F-2604 AC-24 (c2326-early-error): an error recognised before the step ends is stored when it is recognised, not when the step ends', async () => {
     const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
     recorder.begin();
     await settled();

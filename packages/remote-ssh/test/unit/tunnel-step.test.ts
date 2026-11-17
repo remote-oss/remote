@@ -231,7 +231,7 @@ async function pastTheBound(clock: FakeClock): Promise<void> {
 }
 
 describe('the step that opens the window tunnel', () => {
-  it('F-2604 AC-6 (ruling-1985-forwarding-fails): a relay that closes every probe before its reply tells the window once and fails the connect as a refused forward, with the reason and the hint, before the bound', async () => {
+  it('F-2604 AC-24 (ruling-1985-forwarding-fails): a relay that closes every probe before its reply tells the window once and fails the connect as a refused forward, with the reason and the hint, before the bound', async () => {
     const {open, clock, refused} = stepWith({
       dialScript: ['closedBeforeReply'],
       prohibited: true,

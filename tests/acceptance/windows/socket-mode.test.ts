@@ -194,7 +194,7 @@ describe('the server on a socket (card coverage-81)', function () {
     );
   });
 
-  it('F-2410 AC-26 (ruling-299-socket-reuse): after the reload the earlier connect’s socket still listens and is still a file in /tmp, and nothing removed it', async () => {
+  it('F-2410 AC-8 (ruling-299-socket-reuse): after the reload the earlier connect’s socket still listens and is still a file in /tmp, and nothing removed it', async () => {
     const [socket] = await listeningSockets();
     await reloadWindow('s4');
     await connectedWithin('s4', 60_000);
