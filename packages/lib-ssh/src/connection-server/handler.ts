@@ -42,6 +42,7 @@ import {LoginOwnership} from './ownership.ts';
 import {
   type DetectedPlatform,
   isProbeExecLine,
+  isSessionEntered,
   PLATFORM_PROBE_INPUT,
   PlatformProbeReader,
 } from './platform-probe.ts';
@@ -409,6 +410,7 @@ export class ConnectionHandler implements MessageHandler {
         preludeWritten = true;
         opened.authenticated();
       }
+      opened.sshLine(line);
       feed.push(line);
       if (this.state === 'connecting') {
         errorLines.push(line);
@@ -445,30 +447,44 @@ export class ConnectionHandler implements MessageHandler {
    * The opening of `session`: what is written once ssh reports the login, and the reader of the output lines that belong
    * to the opening rather than to the bootstrap. A known platform writes its prelude and starts the runs at once; an
    * unknown one writes the probe, takes the output lines until the answers end, then writes the platform's line, and on
-   * POSIX the prelude once the shell has handed over. The lines it takes are the host shell's banner, prompts, echoes
-   * and answers, so none of them is a LocalCommand's output or a run's.
+   * POSIX the prelude once the shell has handed over. Until ssh says it entered the session, the output is a
+   * LocalCommand's, which ssh runs to its end first; after that the lines it takes are the host shell's banner,
+   * prompts, echoes and answers, so none of them is a LocalCommand's output or a run's.
    */
   private opened(
     opening: SessionOpening,
     session: SshSession,
     startRuns: (interpreter: Interpreter) => void,
-  ): {authenticated(): void; hear(line: string): boolean} {
+  ): {
+    authenticated(): void;
+    sshLine(line: string): void;
+    hear(line: string): boolean;
+  } {
     if (opening.kind === 'known') {
       startRuns(opening.interpreter);
       return {
         authenticated: () => {
           void session.write(opening.prelude);
         },
+        sshLine: () => undefined,
         hear: () => false,
       };
     }
     const probe = new PlatformProbeReader();
-    let phase: 'probing' | 'handing' | 'open' = 'probing';
+    let phase: 'local' | 'probing' | 'handing' | 'open' = 'local';
     return {
       authenticated: () => {
         void session.write(PLATFORM_PROBE_INPUT);
       },
+      sshLine: line => {
+        if (phase === 'local' && isSessionEntered(line)) {
+          phase = 'probing';
+        }
+      },
       hear: line => {
+        if (phase === 'local') {
+          return false;
+        }
         if (phase === 'probing') {
           const found = probe.hear(line);
           if (found === 'windows') {

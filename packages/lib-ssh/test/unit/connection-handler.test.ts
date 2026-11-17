@@ -388,6 +388,7 @@ describe('connection handler (contracts §4 S9)', () => {
   });
 
   describe('a session whose host platform is unknown (#1835)', () => {
+    const SESSION_ENTERED = 'debug1: Entering interactive session.\n';
     const OPENING = {
       kind: 'detect',
       posix: {line: 'POSIX-LINE\n', prelude: 'P\n'},
@@ -409,6 +410,7 @@ describe('connection handler (contracts §4 S9)', () => {
       events.length = 0;
       await send(1, {type: 'connect'});
       spawner.started[0]?.error(AUTHENTICATED);
+      spawner.started[0]?.error(SESSION_ENTERED);
       await settled();
     }
 
@@ -493,6 +495,26 @@ describe('connection handler (contracts §4 S9)', () => {
       deepStrictEqual(
         [written(), eventTypes()],
         [`${PLATFORM_PROBE_INPUT}POSIX-LINE\n`, []],
+      );
+    });
+
+    it("#2598 (F-2109 AC-12), #1835: what comes before ssh enters the session is a LocalCommand's output, and the host shell's lines after it are not", async () => {
+      create({opening: OPENING});
+      handler.onLeasesChanged([1]);
+      events.length = 0;
+      await send(1, {type: 'connect'});
+      spawner.started[0]?.error(AUTHENTICATED);
+      spawner.started[0]?.output('out-marker\n');
+      spawner.started[0]?.error(SESSION_ENTERED);
+      spawner.started[0]?.output(
+        'Windows PowerShell\r\nREMOTE-OSS-HOME-C:\\Users\\x\r\nREMOTE-OSS-PROBE-DONE\r\n',
+      );
+      await settled();
+      deepStrictEqual(
+        events.filter(
+          event => (event as {type: string}).type === 'localCommandLines',
+        ),
+        [{type: 'localCommandLines', lines: ['out-marker']}],
       );
     });
 
