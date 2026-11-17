@@ -1269,6 +1269,74 @@ describe('the host download that is refused with local download off (card connec
   });
 });
 
+describe('the hints of an install folder the host cannot create and a download the client cannot make (card #2708)', () => {
+  /** How many times `onInstallFolderRefused` was told when the host answered `status` to the transfer, and to the start. */
+  async function installFolderTold(
+    status: string,
+  ): Promise<{transfer: number; start: number}> {
+    const told = {transfer: 0, start: 0};
+    await transferWith(
+      {
+        download: {
+          download: () =>
+            Promise.resolve({kind: 'failed' as const, detail: 'offline'}),
+        },
+        onInstallFolderRefused: () => {
+          told.transfer += 1;
+        },
+      },
+      status,
+    );
+    const steps = createServerSteps(
+      dependencies({
+        onInstallFolderRefused: () => {
+          told.start += 1;
+        },
+      }),
+    );
+    await steps.start(
+      INPUT,
+      leaseOn(channelAnswering(lines(status))),
+      HOST,
+      false,
+      NEVER_CANCELLED,
+    );
+    return told;
+  }
+
+  it('F-2602 AC-14: a transfer and a start that end in CreateInstallDirFailed tell the install folder, each once', async () => {
+    deepStrictEqual(await installFolderTold('CreateInstallDirFailed'), {
+      transfer: 1,
+      start: 1,
+    });
+  });
+
+  it('F-2602 AC-14: another status of the script tells nothing', async () => {
+    deepStrictEqual(await installFolderTold('UnpackFailed'), {
+      transfer: 0,
+      start: 0,
+    });
+  });
+
+  it('F-2602 AC-17: a download the client cannot make tells its reason, and a download that works tells nothing', async () => {
+    const told: string[] = [];
+    await transferWith(
+      {
+        policy: sshPolicyFor('always'),
+        download: {
+          download: () =>
+            Promise.resolve({kind: 'failed' as const, detail: 'offline'}),
+        },
+        onLocalDownloadFailed: value => {
+          told.push(value);
+        },
+      },
+      'Ok',
+    );
+    deepStrictEqual(told, ['Failed to fetch']);
+  });
+});
+
 describe('the stall bounds of the transfer (card connect-122)', () => {
   /** The stall bound the client download is asked with under `policy`. */
   async function downloadStallUnder(

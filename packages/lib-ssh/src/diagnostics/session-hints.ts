@@ -80,6 +80,8 @@ export const STATUS_NUMBERS: Readonly<Record<string, number>> = {
   ServerDownloadFailed: 7,
   NoDownloaderAvailable: 8,
   InvalidProxyUrl: 9,
+  CreateInstallDirFailed: 10,
+  LocalDownloadFailed: 11,
 };
 
 /** The number of `status`, or none for a status the table does not hold. */

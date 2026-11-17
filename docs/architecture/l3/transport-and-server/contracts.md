@@ -183,7 +183,7 @@ Never: add `ControlMaster`, `ControlPath`, `ControlPersist`, host-key, identity 
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `classify` | ssh's error lines of one run, in order; the run's exit status; the purpose; the connection mode (`shared` or `terminal`) | a failure kind (`unreachable`, `timeout`, `authentication`, `hostKeyChanged`, `hostKeyRejected`, `forwardingDisabled`, `channelClosed`, `brokenPipe`, `unknown`), the reason, and hints (message, status, mitigations, resources) | none |
+| `classify` | ssh's error lines of one run, in order; the run's exit status; the purpose; the connection mode (`shared` or `terminal`) | a failure kind (`unreachable`, `timeout`, `authentication`, `hostKeyChanged`, `hostKeyRejected`, `forwardingDisabled`, `channelClosed`, `brokenPipe`, `unknown`), the reason, and hints (message, status, mitigations, resources, and the ranges of the setting-key links in the message and the mitigations, F-2602 3.4) | none |
 
 The rules are the specs' tables, by reference:
 - the network reasons, their substring and case rule, and their priority when several lines match (F-2603);

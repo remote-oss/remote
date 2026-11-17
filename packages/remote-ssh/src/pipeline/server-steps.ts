@@ -41,10 +41,12 @@ import {
   type ScriptParameters,
   type ServerPolicyRecord,
   startCli,
+  type StartFailure,
   startOrReuse,
   stopCli,
   templatePlatformOf,
   transfer,
+  type TransferFailure,
   uninstall,
 } from 'lib-server';
 import {validateTarget} from 'lib-ssh';
@@ -63,6 +65,7 @@ import {
 import {english, textOfId} from '../surfaces/failure-strings.ts';
 import type {ConnectSteps} from './steps.ts';
 import {proxyProblem, type ProxyProblem} from './proxy-check.ts';
+import {localDownloadValue} from './failure.ts';
 
 /** What the server steps of one connect are made from. */
 export interface ServerStepDependencies {
@@ -96,6 +99,10 @@ export interface ServerStepDependencies {
   files: ClientFilePort;
   /** Tells that the host could not download the archive while the client may not: `downloadFailed`, or `noDownloader`. */
   onHostDownloadRefused: (cause: 'downloadFailed' | 'noDownloader') => void;
+  /** Keeps the hint of an install folder the host could not create, for the troubleshooting view. */
+  onInstallFolderRefused: () => void;
+  /** Keeps the hint of a download the client could not make, `value` being the reason the dialog gives. */
+  onLocalDownloadFailed: (value: string) => void;
   /** Whether the program the client's archive is copied to the host with can be started. */
   copyAvailable: () => Promise<boolean>;
   lockLoop: HostLockLoop;
@@ -230,6 +237,21 @@ export function createServerSteps(
       socketMode: dependencies.socketMode(),
       ...changes,
     });
+  }
+
+  /**
+   * Keeps the hint of a failure that has one: an install folder the host could not create, or a download the client
+   * could not make.
+   */
+  function recordFailureHint(failure: TransferFailure | StartFailure): void {
+    if (
+      failure.kind === 'scriptFailed' &&
+      failure.status === 'CreateInstallDirFailed'
+    ) {
+      dependencies.onInstallFolderRefused();
+    } else if (failure.kind === 'localDownload') {
+      dependencies.onLocalDownloadFailed(localDownloadValue(failure));
+    }
   }
 
   /** The CLI archive's address, which a CLI plan always comes with: asking for it before such a plan is a defect. */
@@ -485,10 +507,13 @@ export function createServerSteps(
       ) {
         dependencies.onHostDownloadRefused(outcome.failure.cause);
       }
+      if (outcome.kind === 'failed') {
+        recordFailureHint(outcome.failure);
+      }
       return outcome;
     },
-    start: (input, lease, host, licenceAccepted, cancellation) =>
-      startOrReuse(
+    start: async (input, lease, host, licenceAccepted, cancellation) => {
+      const outcome = await startOrReuse(
         lease.channel,
         parametersFor({hostOperatingSystem: host.operatingSystem}),
         runtimeOptionsFor(
@@ -500,7 +525,12 @@ export function createServerSteps(
         dependencies.policy,
         {lockLoop: dependencies.lockLoop, logger: dependencies.logger},
         cancellation,
-      ),
+      );
+      if (outcome.kind === 'failed') {
+        recordFailureHint(outcome.failure);
+      }
+      return outcome;
+    },
     installCli: async (input, lease, host, cliPlan, onPhase, cancellation) =>
       installCli(
         cliParametersFor(cliPlan, host),

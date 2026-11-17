@@ -14,6 +14,7 @@ import {
 import {escapeControls, type Logger} from 'lib-log';
 import type {ResolveOutcome} from '../pipeline/connector.ts';
 import type {SessionHint} from './hint-store.ts';
+import type {TextRange} from '../surfaces/strings.ts';
 import {DISABLED_LINE, NO_HINTS_LINE, summaryLines} from './session-summary.ts';
 
 /** The name of the terminal. */
@@ -133,20 +134,43 @@ export interface Troubleshooting {
   ): void;
 }
 
+/**
+ * The ranges that still sit where they did once `text` has its control characters written out: none when writing them
+ * out changed its length, since the ranges would then point elsewhere.
+ */
+function rangesAfterEscaping(
+  text: string,
+  ranges: readonly TextRange[] | undefined,
+): TextRange[] {
+  return escapeControls(text).length === text.length ? [...(ranges ?? [])] : [];
+}
+
 /** The rows of the table for the error hints among `hints`, in the order they were recorded. */
 export function rowsOf(hints: readonly SessionHint[]): HintTableRow[] {
-  return hints.flatMap(hint =>
-    hint.kind === 'error'
-      ? [
-          {
-            status: hint.status,
-            message: escapeControls(messageCellOf(hint.message, hint.details)),
-            mitigations: (hint.mitigations ?? []).map(escapeControls),
-            resources: (hint.resources ?? []).map(escapeControls),
-          },
-        ]
-      : [],
-  );
+  return hints.flatMap(hint => {
+    if (hint.kind !== 'error') {
+      return [];
+    }
+    const mitigations = hint.mitigations ?? [];
+    return [
+      {
+        status: hint.status,
+        message: escapeControls(messageCellOf(hint.message, hint.details)),
+        mitigations: mitigations.map(escapeControls),
+        resources: (hint.resources ?? []).map(escapeControls),
+        ...(hint.links === undefined
+          ? {}
+          : {
+              links: {
+                message: rangesAfterEscaping(hint.message, hint.links.message),
+                mitigations: mitigations.map((text, index) =>
+                  rangesAfterEscaping(text, hint.links?.mitigations?.[index]),
+                ),
+              },
+            }),
+      },
+    ];
+  });
 }
 
 /** The check over `ports`. */

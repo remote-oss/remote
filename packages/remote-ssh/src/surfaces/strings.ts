@@ -17,3 +17,40 @@ export function filled(
     (place: string, digits: string) => values[Number(digits)] ?? place,
   );
 }
+
+/** A stretch of a filled string: where it starts and how many characters it has, counted in the string's own characters. */
+export interface TextRange {
+  start: number;
+  length: number;
+}
+
+/**
+ * Translates the template and puts the values into its `{n}` places, and says where the values of the places in
+ * `slots` ended up in the text.
+ */
+export function filledWithRanges(
+  translate: Translate,
+  template: string,
+  values: readonly string[],
+  slots: readonly number[],
+): {text: string; ranges: TextRange[]} {
+  let text = '';
+  const ranges: TextRange[] = [];
+  let next = 0;
+  const translated = translate(template);
+  for (const place of translated.matchAll(/\{(\d+)\}/g)) {
+    text += translated.slice(next, place.index);
+    const given = values[Number(place[1])];
+    const value = given ?? place[0];
+    if (
+      given !== undefined &&
+      given !== '' &&
+      slots.includes(Number(place[1]))
+    ) {
+      ranges.push({start: text.length, length: value.length});
+    }
+    text += value;
+    next = place.index + place[0].length;
+  }
+  return {text: text + translated.slice(next), ranges};
+}
