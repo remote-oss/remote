@@ -335,6 +335,9 @@ export function wiringPortsOf(
       approvals: surfaces.preconnectApprovals,
       dialog: surfaces.preconnectDialog,
       logger,
+      recordHint: hint => {
+        surfaces.hints.record(hint);
+      },
     },
     settings: {
       preconnect: () => valueOf(settings, 'preconnect'),
