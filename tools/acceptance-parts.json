@@ -337,6 +337,7 @@
     "install-local-404-nocors": 0.2,
     "install-local-allow-false": 0.1,
     "install-local-always": 0.3,
+    "install-local-copy-fails": 0.3,
     "install-local-auto-online": 0.3,
     "install-local-fallback": 0.3,
     "install-local-junk": 0.2,

@@ -351,12 +351,14 @@ describe('the engine stand-in in front of a WSL engine (card #2511)', () => {
       deepStrictEqual(
         {
           status: answer.status,
-          reason: answer.body.startsWith(
-            'engine-stand-in: connect ECONNREFUSED',
-          ),
+          body: answer.body,
           logged: lines.length,
         },
-        {status: 502, reason: true, logged: 1},
+        {
+          status: 502,
+          body: `engine-stand-in: connect ECONNREFUSED 127.0.0.1:${String(port)}`,
+          logged: 1,
+        },
       );
     } finally {
       await absent.close();

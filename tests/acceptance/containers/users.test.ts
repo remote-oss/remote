@@ -11,6 +11,7 @@ import {
   devContainersOf,
   inWindow,
   reloadWindow,
+  reloadingCommand,
   reopenInContainer,
   reopenStarted,
   runLabelArguments,
@@ -794,7 +795,7 @@ describe('F-0416 users and the UID image (card containers-42)', function () {
     }
   });
 
-  it('F-0416 AC-35 (ruling-16): the switch connects: switching remoteUser to another account and reloading connects to the same container, running, as the new account, with no dialog (a recorded deviation, athena ruling 16 on #1068)', async () => {
+  it('F-0416 AC-35 (ruling-16): the switch: switching remoteUser to another account and reloading either connects or shows the S034 error with its three buttons; either way the container is the same one, the account keeps its original ids until the rebuild, and Rebuild Container reaches a connected window whose -uid image targets the new account', async () => {
     const lines = `${freeHostIdsLines()}${accountLines('tester', OTHER_ID)}${accountLines('builder', THIRD_ID)}`;
     const folder = dockerfileFolder('c42-switch-connects', lines, {
       remoteUser: 'tester',
@@ -804,19 +805,79 @@ describe('F-0416 users and the UID image (card containers-42)', function () {
       const containerId = await containerOf(folder);
       editConfiguration(folder, 'remoteUser', 'builder');
       await reloadWindow(name);
-      await connectedToContainer(name);
-      const terminalUser = await terminalUserOf(name);
-      const status = (await stateOf(containerId)).status;
+      let outcome = '';
+      const settledAt = Date.now() + 180_000;
+      while (outcome === '' && Date.now() < settledAt) {
+        if ((await dialogOf(name)) !== undefined) {
+          outcome = 'dialog';
+        } else {
+          try {
+            await connectedToContainer(name, 2_000);
+            outcome = 'connected';
+          } catch {
+            await new Promise(resolve => setTimeout(resolve, 1_000));
+          }
+        }
+      }
+      const before = {
+        containers: await devContainersOf(folder),
+        terminalUser: outcome === 'connected' ? await terminalUserOf(name) : '',
+        accountIds:
+          outcome === 'connected' ? await idsOf(containerId, 'builder') : '',
+      };
       const dialog = await dialogOf(name);
-      const containers = await devContainersOf(folder);
+      const activated = activations(name);
+      if (dialog === undefined) {
+        await reloadingCommand(name, 'remote-containers.rebuildContainer');
+      } else {
+        await answerDialog(name, 'More Actions...');
+        await waitForQuickPick(name, 30_000);
+        await chooseQuickPickItem(name, 'Rebuild Container');
+      }
+      await waitFor(
+        `window ${name} to activate again`,
+        () => activations(name) > activated,
+        300_000,
+      );
+      await connectedToContainer(name, 300_000);
+      const rebuilt = await containerOf(folder);
+      const uidImages = await uidImagesOf(folder);
+      const uidUser = await docker(
+        'run',
+        '--rm',
+        '--entrypoint',
+        '/bin/sh',
+        uidImages[0] ?? '',
+        '-c',
+        'id -u builder',
+      );
       await closeWindow(name);
       deepStrictEqual(
-        {terminalUser, status, dialog, containers},
         {
-          terminalUser: 'builder',
-          status: 'running',
-          dialog: undefined,
-          containers: [containerId],
+          outcome,
+          dialog: dialog === undefined ? undefined : sayingAndButtons(dialog),
+          before,
+          rebuilt: rebuilt !== containerId,
+          uidUser,
+          uidImages,
+        },
+        {
+          outcome,
+          dialog:
+            outcome === 'dialog'
+              ? {details: S034, buttons: RECOVERY_BUTTONS}
+              : undefined,
+          before: {
+            containers: [containerId],
+            terminalUser: outcome === 'connected' ? 'builder' : '',
+            accountIds:
+              outcome === 'connected'
+                ? `${String(THIRD_ID)}:${String(THIRD_ID)}`
+                : '',
+          },
+          rebuilt: true,
+          uidUser: String(HOST_UID),
+          uidImages: [uidImageName(folder)],
         },
       );
     } finally {
