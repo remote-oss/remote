@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {explainedFailure, section} from '../windows/connect-failure.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {mkdirSync} from 'node:fs';
 import path from 'node:path';
@@ -108,13 +109,33 @@ describe('the pre-connection script that fails the connect (card connect-87)', f
       },
       ...dismissals('pf23'),
     ]);
+    const mark = connectionLog().length;
     await withSetting(script, async () => {
       await openWindow('harness', 'pf23');
+      // On a timeout the failure also says what the window recorded and logged, which tells whether Retry started a
+      // second attempt at all (card #2719): the record of pf23 as the scripted answers left it, the script's marker and
+      // the end of the connection log since the row began.
       await waitFor(
         'the second failure dialog of pf23',
         () => recordLines('failureDialog', 'pf23').length >= 2,
         180_000,
-      );
+      ).catch(async (caught: unknown) => {
+        throw await explainedFailure(caught, () =>
+          Promise.resolve(
+            [
+              section('the record of pf23', () =>
+                recordLines(undefined, 'pf23')
+                  .map(line => JSON.stringify(line))
+                  .join('\n'),
+              ),
+              section("the script's marker", () => String(markerOf(script))),
+              section('the connection log since the row began', () =>
+                logSince(mark).slice(-60).join('\n'),
+              ),
+            ].join('\n'),
+          ),
+        );
+      });
     });
     deepStrictEqual(
       [

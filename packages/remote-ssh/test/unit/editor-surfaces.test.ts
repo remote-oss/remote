@@ -143,6 +143,7 @@ function surfacesWith(
         return Promise.resolve();
       },
     },
+    confirmationCopies: {read: () => undefined, write: () => Promise.resolve()},
     noticeState: {get: () => undefined, update: () => Promise.resolve()},
     logger: createLogger(calls.logged, {minimumLevel: () => 'info'}),
     applyTerminalEnvironment: () => undefined,

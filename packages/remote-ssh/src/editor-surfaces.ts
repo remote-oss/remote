@@ -42,6 +42,7 @@ import {
 } from './surfaces/mitigation-picker.ts';
 import type {Logger} from 'lib-log';
 import {approvalsOf} from './preconnect/approvals.ts';
+import type {ConfirmationCopies} from './preconnect/confirmation-files.ts';
 import {timerDelay} from './state/confirmed-update.ts';
 import type {NoticePort} from './surfaces/notice.ts';
 import {ownText} from './surfaces/own-strings.ts';
@@ -107,6 +108,8 @@ export interface SurfaceContext {
   names: PresenterNames;
   /** The profile's own record of accepted terms, never synced. */
   acceptanceState: AcceptanceState;
+  /** The profile's copy of the pre-connection confirmations, files in its global storage that a reload keeps. */
+  confirmationCopies: ConfirmationCopies;
   /** The profile's record of the notices the user asked not to see again. */
   noticeState: AcceptanceState;
   /** The extension's global state, where the hints of a connect are kept. */
@@ -218,10 +221,14 @@ export function editorSurfacesOf(
     ),
     acceptances,
     preconnectDialog: preconnectDialogOf(adapters.preconnectDialog, translate),
-    preconnectApprovals: approvalsOf(context.acceptanceState, {
-      delay: timerDelay,
-      logger: context.logger,
-    }),
+    preconnectApprovals: approvalsOf(
+      context.acceptanceState,
+      context.confirmationCopies,
+      {
+        delay: timerDelay,
+        logger: context.logger,
+      },
+    ),
     presenter: failurePresenterOf(
       adapters.failureDialog,
       {
