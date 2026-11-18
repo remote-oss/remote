@@ -1,7 +1,7 @@
 /**
  * @fileoverview The window states that the rows of F-2006 (cards #2815, #2817) read the palette in: an empty local
- * window, an empty window on the harness host, a window whose first connection failed and was dismissed, and the wait
- * for the remote indicator to read a text.
+ * window, a window whose first connection failed and was dismissed, and the wait for the remote indicator to read a
+ * text.
  */
 
 import {
@@ -28,26 +28,6 @@ async function takingLocalPage(): Promise<void> {
 export async function emptyLocalWindow(): Promise<string> {
   await takingLocalPage();
   return nextEmptyWindow(() => inWindow('local', 'workbench.action.newWindow'));
-}
-
-/** An empty window on `harness`, with no folder, once its remote indicator reads that it is connected. */
-export async function emptyRemoteWindow(): Promise<string> {
-  await takingLocalPage();
-  const name = await nextEmptyWindow(() =>
-    inWindow(
-      'local',
-      'acceptance.agent.openWindow',
-      'vscode-remote://ssh-remote+harness',
-    ),
-  );
-  await waitFor(
-    `the indicator of ${name} to read SSH: harness`,
-    async () =>
-      (await statusBarText(name, 'status.host').catch(() => '')) ===
-      'SSH: harness',
-    120_000,
-  );
-  return name;
 }
 
 /** A window named `name` on the host `alias`, whose first connection failed and whose failure dialog was dismissed. */
