@@ -85,6 +85,9 @@ export interface ConnectionHandlerOptions {
 
 type ConnectionState = 'idle' | 'connecting' | 'connected';
 
+/** ssh's own exit status for a failure of its own; any other status is the remote command's or the host shell's. */
+const SSH_OWN_FAILURE = 255;
+
 /** The port on the host's loopback the session check connects to: the host's own sshd. */
 const PROBE_TARGET_PORT = 22;
 
@@ -443,6 +446,16 @@ export class ConnectionHandler implements MessageHandler {
         this.control.stop();
         return;
       }
+      if (
+        early === undefined &&
+        !timedOut &&
+        status !== undefined &&
+        status !== SSH_OWN_FAILURE &&
+        opened.inOpening()
+      ) {
+        early = {kind: 'exited', status};
+        this.options.logLine(bootstrapLogLine(early));
+      }
       this.loginFailed(errorLines, status, timedOut, early);
     });
   }
@@ -464,6 +477,7 @@ export class ConnectionHandler implements MessageHandler {
     authenticated(): void;
     sshLine(line: string, endLocal: () => void): void;
     hear(line: string): boolean;
+    inOpening(): boolean;
   } {
     if (opening.kind === 'known') {
       startRuns(opening.interpreter);
@@ -473,6 +487,7 @@ export class ConnectionHandler implements MessageHandler {
         },
         sshLine: () => undefined,
         hear: () => false,
+        inOpening: () => false,
       };
     }
     const nonce = this.options.newMarker();
@@ -482,6 +497,7 @@ export class ConnectionHandler implements MessageHandler {
       authenticated: () => {
         void session.write(platformProbeInput(nonce));
       },
+      inOpening: () => phase !== 'open',
       sshLine: (line, endLocal) => {
         if (phase === 'local' && isSessionEntered(line)) {
           endLocal();

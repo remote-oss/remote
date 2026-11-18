@@ -610,6 +610,37 @@ describe('connection handler (contracts §4 S9)', () => {
       );
     });
 
+    it('F-2704 AC-13, #1835: a login shell that ends during the opening, with its own status, fails the login as one that ended at its startup, and is logged', async () => {
+      await authenticated();
+      spawner.started[0]?.exit(3);
+      await settled();
+      const detail =
+        "the SSH session ended before the host reported its platform: the login shell's startup exited with status 3";
+      deepStrictEqual(
+        [events[0], logged],
+        [
+          {
+            type: 'loginFailed',
+            kind: 'unknown',
+            hints: [],
+            exitStatus: 3,
+            detail,
+          },
+          [detail],
+        ],
+      );
+    });
+
+    it("#1835: ssh's own failure, status 255, during the opening is no login shell's end", async () => {
+      await authenticated();
+      spawner.started[0]?.exit(255);
+      await settled();
+      deepStrictEqual(
+        [(events[0] as {detail?: string}).detail, logged],
+        [undefined, []],
+      );
+    });
+
     it('#1835: a session that ends before the answers end fails the login as any other, and is written nothing more', async () => {
       await authenticated();
       spawner.started[0]?.output('REMOTE-OSS-PROBE-m1-%OS%\n');
@@ -692,6 +723,15 @@ describe('connection handler (contracts §4 S9)', () => {
           ],
           ['the login shell did not finish its startup within 5 s'],
         ],
+      );
+    });
+
+    it('#1835: with the platform known, a session that ends with its own status and no line of the bootstrap is no startup end: the bootstrap reports its own', async () => {
+      spawner.started[0]?.exit(1);
+      await settled();
+      deepStrictEqual(
+        [(events[0] as {detail?: string}).detail, logged],
+        [undefined, []],
       );
     });
 
