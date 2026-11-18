@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {readdirSync} from 'node:fs';
+import {mkdirSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {
   appendScript,
@@ -15,6 +15,7 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {indicatorGroups} from '../windows/activation-support.ts';
+import {closeAllButLocal} from '../windows/maintenance.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {paletteItems, runFromPalette} from '../windows/palette.ts';
 import {dialogOf, notifications, pageText} from '../windows/renderer.ts';
@@ -62,10 +63,13 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   this.timeout(600_000);
 
   it('F-2004 AC-1 (c2486-listed-part): in an empty and a local folder window, the palette lists Help and Settings', async () => {
+    await closeAllButLocal();
     const empty = await nextEmptyWindow(() =>
       inWindow('local', 'workbench.action.newWindow'),
     );
-    const folder = await openFolderWindow('c2486-listed');
+    const runDir = path.join(variable('HARNESS_RUN_FOLDER'), 'c2486-listed');
+    mkdirSync(runDir, {recursive: true});
+    const folder = await openFolderWindow(runDir);
     try {
       const [emptyItems, folderItems] = [
         await paletteItems(empty, 'Remote-SSH:'),
@@ -87,10 +91,13 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   });
 
   it('F-2004 AC-2 (c2486-local): in an empty and a local folder window, Get Started is listed and Provide Feedback is not', async () => {
+    await closeAllButLocal();
     const empty = await nextEmptyWindow(() =>
       inWindow('local', 'workbench.action.newWindow'),
     );
-    const folder = await openFolderWindow('c2486-local');
+    const runDir = path.join(variable('HARNESS_RUN_FOLDER'), 'c2486-local');
+    mkdirSync(runDir, {recursive: true});
+    const folder = await openFolderWindow(runDir);
     try {
       const [emptyItems, folderItems] = [
         await paletteItems(empty, 'Remote-SSH:'),
@@ -150,6 +157,7 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   });
 
   it('F-2004 AC-5 (c2486-help-part): Help shows no notification, dialog, quick pick or editor in any window', async () => {
+    await closeAllButLocal();
     const empty = await nextEmptyWindow(() =>
       inWindow('local', 'workbench.action.newWindow'),
     );
@@ -169,7 +177,12 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   });
 
   it('F-2004 AC-6 (c2486-getstarted-part): Get Started opens no walkthrough or editor', async () => {
-    const folder = await openFolderWindow('c2486-getstarted');
+    const runDir = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'c2486-getstarted',
+    );
+    mkdirSync(runDir, {recursive: true});
+    const folder = await openFolderWindow(runDir);
     try {
       const before = (await pageText(folder)).length;
       await runFromPalette(folder, 'Remote-SSH: Get Started with SSH');
@@ -200,7 +213,9 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   });
 
   it('F-2004 AC-9 (c2486-settings-filter-part): in a local folder window, Settings opens the extension and companion filter', async () => {
-    const folder = await openFolderWindow('c2486-filter');
+    const runDir = path.join(variable('HARNESS_RUN_FOLDER'), 'c2486-filter');
+    mkdirSync(runDir, {recursive: true});
+    const folder = await openFolderWindow(runDir);
     try {
       await inWindow(folder, HELP_COMMANDS.settings);
       await waitFor(
@@ -215,7 +230,9 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   });
 
   it('F-2004 AC-11 (c2486-settings-reuse-part): a Settings editor with another query is reused, its query replaced by the filter', async () => {
-    const folder = await openFolderWindow('c2486-reuse');
+    const runDir = path.join(variable('HARNESS_RUN_FOLDER'), 'c2486-reuse');
+    mkdirSync(runDir, {recursive: true});
+    const folder = await openFolderWindow(runDir);
     try {
       await inWindow(
         folder,
@@ -244,7 +261,9 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   });
 
   it('F-2004 AC-12 (c2486-no-companion): with no Remote Explorer companion, the filter still names all three ids and the settings found are only those of the extension', async () => {
-    const folder = await openFolderWindow('c2486-companion');
+    const runDir = path.join(variable('HARNESS_RUN_FOLDER'), 'c2486-companion');
+    mkdirSync(runDir, {recursive: true});
+    const folder = await openFolderWindow(runDir);
     try {
       await inWindow(folder, HELP_COMMANDS.settings);
       await waitFor(
@@ -263,7 +282,12 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   });
 
   it('F-2004 AC-16 (c2486-keybinding-part): the palette-hidden invocations write no setting or file and leave the window usable', async () => {
-    const folder = await openFolderWindow('c2486-keybinding');
+    const runDir = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'c2486-keybinding',
+    );
+    mkdirSync(runDir, {recursive: true});
+    const folder = await openFolderWindow(runDir);
     const storageBefore = storageOf();
     const commandsBefore = await commandsOf(folder, 'opensshremotes.');
     try {
@@ -286,27 +310,33 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
 
   it('F-2004 AC-17 (c2486-settings-disconnected): in a disconnected SSH window, Settings leaves the window usable and shows no message of the extension', async () => {
     appendScript(failureEntries('c2486-down-settings'));
-    await openWindow('refused', 'c2486-down-settings');
-    await waitFor(
-      'the dismissed failure',
-      () => recordLines('mitigationPick', 'c2486-down-settings').length > 0,
-      120_000,
-    );
-    await inWindow('c2486-down-settings', HELP_COMMANDS.settings);
-    await waitFor('the window to settle', () => true, 3_000);
-    const dialog = await dialogOf('c2486-down-settings');
-    deepStrictEqual(
-      [
-        (await notifications('c2486-down-settings')).length === 0,
-        !dialog?.message.toLowerCase().includes('remote-ssh'),
-        (await paletteItems('c2486-down-settings', 'Remote-SSH: Help'))
-          .length === 1,
-      ],
-      [true, true, true],
-    );
+    try {
+      await openWindow('refused', 'c2486-down-settings');
+      await waitFor(
+        'the dismissed failure',
+        () => recordLines('mitigationPick', 'c2486-down-settings').length > 0,
+        120_000,
+      );
+      await inWindow('c2486-down-settings', HELP_COMMANDS.settings);
+      await waitFor('the window to settle', () => true, 3_000);
+      const dialog = await dialogOf('c2486-down-settings');
+      // The first value reads the toasts as they are, so a core error the criterion accepts names itself in the diff.
+      deepStrictEqual(
+        [
+          await notifications('c2486-down-settings'),
+          !dialog?.message.toLowerCase().includes('remote-ssh'),
+          (await paletteItems('c2486-down-settings', 'Remote-SSH: Help'))
+            .length === 1,
+        ],
+        [[], true, true],
+      );
+    } finally {
+      await closeWindow('c2486-down-settings').catch(() => undefined);
+    }
   });
 
   it('F-2004 AC-19 (c2486-first-help-part): a first Help run activates the extension and adds no output channel line', async () => {
+    await closeAllButLocal();
     const empty = await nextEmptyWindow(() =>
       inWindow('local', 'workbench.action.newWindow'),
     );
@@ -331,7 +361,9 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   });
 
   it('F-2004 AC-21 (c2486-no-writes-part): each of the four commands writes nothing to settings, state or the global-storage folder', async () => {
-    const folder = await openFolderWindow('c2486-no-writes');
+    const runDir = path.join(variable('HARNESS_RUN_FOLDER'), 'c2486-no-writes');
+    mkdirSync(runDir, {recursive: true});
+    const folder = await openFolderWindow(runDir);
     try {
       const storageBefore = storageOf();
       const commandsBefore = await commandsOf(folder, 'opensshremotes.');
@@ -361,7 +393,9 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   });
 
   it('F-2004 AC-23 (c2486-indicator-part): the remote indicator menu of a local folder window holds no help, documentation or feedback entry', async () => {
-    const folder = await openFolderWindow('c2486-indicator');
+    const runDir = path.join(variable('HARNESS_RUN_FOLDER'), 'c2486-indicator');
+    mkdirSync(runDir, {recursive: true});
+    const folder = await openFolderWindow(runDir);
     try {
       const rows = await indicatorGroups(folder);
       deepStrictEqual(
@@ -378,7 +412,12 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   });
 
   it('F-2004 AC-25 (c2486-companion-less-part): with no companion, the help commands run with no notification', async () => {
-    const folder = await openFolderWindow('c2486-no-companion');
+    const runDir = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'c2486-no-companion',
+    );
+    mkdirSync(runDir, {recursive: true});
+    const folder = await openFolderWindow(runDir);
     try {
       await runFromPalette(folder, 'Remote-SSH: Help');
       await runFromPalette(folder, 'Remote-SSH: Get Started with SSH');
