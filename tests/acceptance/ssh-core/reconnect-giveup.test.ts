@@ -139,7 +139,7 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     });
   });
 
-  for (const index of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+  for (const index of Array.from({length: 24}, (each, place) => place + 1)) {
     it(`F-2505 AC-12 (c2663-tw${String(index)}): the third wrong password at the reconnection’s input makes core show Cannot reconnect at once, with no further attempt`, async () => {
       const wrong = {text: 'not-the-password'};
       const result = await reconnectionAnswered(`c2663-tw${String(index)}`, [
