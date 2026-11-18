@@ -4347,6 +4347,29 @@ export async function terminalText(name: string): Promise<string> {
   );
 }
 
+/** One row of the active terminal: its text, and the texts of the runs in it that are drawn underlined, as a link is. */
+export interface TerminalRow {
+  text: string;
+  underlined: string[];
+}
+
+/** The rows of window `name`'s active terminal that are in view, each with its underlined runs. */
+export async function terminalRows(name: string): Promise<TerminalRow[]> {
+  return evaluate<TerminalRow[]>(
+    name,
+    `(() => {
+      const containers = document.querySelectorAll('.xterm-rows');
+      const rows = [...(containers[containers.length - 1]?.children ?? [])];
+      return rows.map(entry => ({
+        text: entry.innerText,
+        underlined: [...entry.querySelectorAll('span[class*="xterm-underline"]')].map(
+          span => span.textContent ?? '',
+        ),
+      }));
+    })()`,
+  );
+}
+
 /** A run of text in the active terminal, with the number of the palette colour it is drawn in; none for the default. */
 export interface TerminalSpan {
   text: string;

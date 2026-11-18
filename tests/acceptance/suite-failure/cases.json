@@ -256,6 +256,75 @@
       "dialog": "Could not establish connection to \"harness\": Failed to create the remote server's install directory."
     },
     {
+      "label": "install-path-root",
+      "alias": "harness",
+      "cite": "F-2407 AC-11",
+      "settings": {
+        "remote.SSH.serverInstallPath": {
+          "harness": "/"
+        }
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"harness\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"harness\": Failed to create the remote server's install directory."
+    },
+    {
+      "label": "install-path-file",
+      "alias": "harness",
+      "cite": "F-2407 AC-11",
+      "settings": {
+        "remote.SSH.serverInstallPath": {
+          "harness": "/etc/hostname"
+        }
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"harness\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"harness\": Failed to create the remote server's install directory."
+    },
+    {
+      "label": "install-path-readonly",
+      "alias": "harness",
+      "cite": "F-2407 AC-11",
+      "settings": {
+        "remote.SSH.serverInstallPath": {
+          "harness": "/etc"
+        }
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"harness\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"harness\": Failed to create the remote server's install directory."
+    },
+    {
       "label": "manual-bootstrap",
       "alias": "harness",
       "cite": "F-2602 AC-4",
