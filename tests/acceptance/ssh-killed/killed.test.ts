@@ -25,13 +25,22 @@ const KILLED_CASE = process.env.HARNESS_KILLED_CASE ?? '';
 /** The setting of the grace time. */
 const GRACE = 'remote.SSH.reconnectionGraceTime';
 
-/** The process ids of the host's processes whose command line holds `pattern`, none when no process does. */
+/**
+ * The process ids of the host's processes whose command line holds `pattern`. `pgrep` ends with status 1 when no process
+ * does, which is none; any other failure (the container gone, `pgrep` missing, a bad pattern) fails the call, so a read
+ * that did not work is never taken for a server that has ended.
+ */
 async function processesOf(pattern: string): Promise<string[]> {
-  return (
-    await onHost('pgrep', '-u', 'harness', '-f', '--', pattern).catch(() => '')
-  )
-    .split('\n')
-    .filter(line => line !== '');
+  let found: string;
+  try {
+    found = await onHost('pgrep', '-u', 'harness', '-f', '--', pattern);
+  } catch (caught) {
+    if ((caught as {code?: unknown}).code === 1) {
+      return [];
+    }
+    throw caught;
+  }
+  return found.split('\n').filter(line => line !== '');
 }
 
 /** The server itself, not its children. */
@@ -81,7 +90,7 @@ function pause(milliseconds: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
-/** Connects window `name` to the host with the grace time `grace` (the default for null) and gives its server and extension hosts. */
+/** Connects window `name` to the host with the grace time `grace` (the default for null) and gives its server and extension hosts, which it checks are there. */
 async function connected(
   name: string,
   grace: number | null,
@@ -91,7 +100,16 @@ async function connected(
   await openWindow('harness', name);
   await connectedWithin(name, 180_000);
   await pause(5000);
-  return {server: await serverMains(), extensionHosts: await extensionHosts()};
+  const standing = {
+    server: await serverMains(),
+    extensionHosts: await extensionHosts(),
+  };
+  deepStrictEqual(
+    [standing.server.length > 0, standing.extensionHosts.length > 0],
+    [true, true],
+    `the server and an extension host of ${name} stand on the host before its editor is killed: ${JSON.stringify(standing)}`,
+  );
+  return standing;
 }
 
 /** The row of each case, registered by its launch. */
