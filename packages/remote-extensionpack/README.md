@@ -34,7 +34,8 @@ Install the pack from the Extensions view of your editor, or from the page of th
 installs the members of this release, Dev Containers and Remote - SSH, and Remote Explorer with them.
 
 - Install one Remote Development pack, not two. Running two packs whose extensions share the same identifiers is
-  unsupported, and this family's extensions stand down next to extensions with those identifiers.
+  unsupported, and this family's extensions stand down next to extensions with those identifiers: they stay inactive,
+  with one warning each.
 - If the gallery does not have one of the members, the pack installs without it and says nothing. Install that member
   on its own once the gallery offers it.
 - Uninstalling the pack also uninstalls the members it installed.
