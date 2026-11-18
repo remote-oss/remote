@@ -8,6 +8,11 @@ import {deepStrictEqual} from 'node:assert';
 import {appendFileSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {
+  explainedFailure,
+  section,
+  settledSection,
+} from '../windows/connect-failure.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
@@ -58,38 +63,48 @@ function configOf(name: string, hosts: readonly string[]): string {
 }
 
 /**
- * What tells why a listing did not follow `remote.SSH.configFile` after a Refresh (card #2796): the time since the click,
- * the setting as the window and the settings file hold it, the end of the extensions' log with its times, and whether
- * a second Refresh lists `host`.
+ * What tells why a listing did not follow `remote.SSH.configFile` after a Refresh (card #2796), one section for each
+ * fact so that one that cannot be read is told in its place: the time since the click, the setting as the window and
+ * as the settings file hold it, the end of the extensions' log with its times, and whether a second Refresh lists
+ * `host`.
  */
 async function refreshFacts(
   window: string,
   host: string,
   clickedAt: number,
 ): Promise<string> {
-  const waited = Date.now() - clickedAt;
-  const inWindowValue = await settingIn(window, 'remote.SSH.configFile').catch(
-    (caught: unknown) => `(unreadable: ${String(caught)})`,
-  );
-  const inFile = /"remote\.SSH\.configFile":\s*("[^"]*"|[^,}\s]+)/u.exec(
-    readUserSettings() ?? '',
-  )?.[1];
-  const tail = connectionLog({withTimes: true}).slice(-12);
-  await titleAction(window, VIEW, 'Refresh');
-  const second = await waitFor(
-    `a second Refresh to list ${host}`,
-    async () => (await hostLabels(window)).includes(host),
-    10_000,
-  ).then(
-    () => 'it does',
-    () => 'it does not',
-  );
-  const after = (await hostLabels(window)).slice(0, 6).join(', ');
   return [
-    `${String(waited)} ms after the Refresh click`,
-    `the window reads remote.SSH.configFile as ${JSON.stringify(inWindowValue)}; the settings file holds ${String(inFile)}`,
-    `a second Refresh listing ${host}: ${second}; the view then lists ${after}`,
-    `the end of the extensions' log:\n${tail.join('\n')}`,
+    section(
+      'the time since the Refresh click',
+      () => `${String(Date.now() - clickedAt)} ms`,
+    ),
+    await settledSection(
+      'remote.SSH.configFile as the window reads it',
+      async () =>
+        JSON.stringify(await settingIn(window, 'remote.SSH.configFile')),
+    ),
+    section('remote.SSH.configFile as the settings file holds it', () =>
+      String(
+        /"remote\.SSH\.configFile":\s*("[^"]*"|[^,}\s]+)/u.exec(
+          readUserSettings() ?? '',
+        )?.[1],
+      ),
+    ),
+    section("the end of the extensions' log", () =>
+      connectionLog({withTimes: true}).slice(-12).join('\n'),
+    ),
+    await settledSection(`a second Refresh listing ${host}`, async () => {
+      await titleAction(window, VIEW, 'Refresh');
+      const lists = await waitFor(
+        `a second Refresh to list ${host}`,
+        async () => (await hostLabels(window)).includes(host),
+        10_000,
+      ).then(
+        () => 'it does',
+        () => 'it does not',
+      );
+      return `${lists}; the view then lists ${(await hostLabels(window)).slice(0, 6).join(', ')}`;
+    }),
   ].join('\n');
 }
 
@@ -195,9 +210,8 @@ describe('when the SSH group reads its hosts again (card coverage-25c, part b)',
       const clickedAt = Date.now();
       await titleAction(window, VIEW, 'Refresh');
       await listing(window, ['saved-before']).catch(async (caught: unknown) => {
-        throw new Error(
-          `${String(caught)}\n${await refreshFacts(window, 'saved-before', clickedAt)}`,
-          {cause: caught},
+        throw await explainedFailure(caught, () =>
+          refreshFacts(window, 'saved-before', clickedAt),
         );
       });
       await inWindow(
