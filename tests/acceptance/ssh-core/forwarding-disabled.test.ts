@@ -28,9 +28,6 @@ import {
 import {hintRecords, type HintRecords} from '../windows/hint-store.ts';
 import {keepingSettings, PLATFORMS} from '../windows/tunnel-support.ts';
 
-/** The notice of a refused SOCKS forward. */
-const REFUSED = 'Failed to set up';
-
 /** The text of the log line that names the forwarding setting. */
 const SETTING_LINE = 'TCP port forwarding appears to be disabled';
 
@@ -54,12 +51,9 @@ function forwardingHints(since: string): number {
 /** The reason the dialog gives for a refused forward: S046 without its "ERROR: " lead. */
 const REFUSED_REASON = SETTING_TEXT.replace(/^ERROR: /u, '');
 
-/** Opens window `name` on `alias` with the notice of a refusal and the dialog and the pick after it dismissed. */
+/** Opens window `name` on `alias` with the dialog of its failure and the pick after it dismissed. */
 async function opened(alias: string, name: string): Promise<void> {
-  appendScript([
-    {surface: 'notice', match: REFUSED, answer: 'dismiss', window: name},
-    ...dismissals(name),
-  ]);
+  appendScript([...dismissals(name)]);
   await openWindow(alias, name);
 }
 
@@ -112,7 +106,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     );
   });
 
-  it('F-2604 AC-24 (ruling-1985-forwarding-fails): the refusal shows the notice, and the connect then fails with F-2601’s dialog that names the refused forward, with no wait', async () => {
+  it('F-2604 AC-24 (ruling-1985-forwarding-fails): the refusal shows no notification (reading-2713-forwarding-notice, #2749), and the connect fails at once with F-2601’s dialog that names the refused forward', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS});
       const name = 'c85-wait';
@@ -121,7 +115,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       deepStrictEqual(
         [await failureOf(name), dialogText(name)],
         [
-          [1, 1, 'Disconnected from SSH: noforward'],
+          [0, 1, 'Disconnected from SSH: noforward'],
           refusedDialog('noforward'),
         ],
       );
@@ -268,8 +262,8 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       [seen.map(entry => entry.slice(0, 2)), ended.length > 0],
       [
         [
-          [1, 1],
-          [1, 1],
+          [0, 1],
+          [0, 1],
         ],
         true,
       ],
