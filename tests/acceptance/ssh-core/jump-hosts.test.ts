@@ -1290,15 +1290,28 @@ describe('jump hosts and proxy commands (card #2601)', function () {
         outcome => {
           const picks = recordLines('pick', alias);
           const first = picks[0];
+          const answered = picks.find(line => line.answer !== 'held');
+          const dialogTime = outcome.dialogTime ?? 0;
           return {
             dialog: outcome.dialog,
             stillOpen:
-              first !== undefined &&
-              picks.every(line => line.answer === 'dismiss') &&
-              first.time < (outcome.dialogTime ?? 0),
+              first?.held === true &&
+              first.time < dialogTime &&
+              (answered === undefined || answered.time >= dialogTime),
           };
         },
-        {file, script: null},
+        {
+          file,
+          script: [
+            {
+              surface: 'pick',
+              match: 'fingerprint',
+              answer: 'dismiss',
+              window: alias,
+              after: 'never',
+            },
+          ],
+        },
       );
       deepStrictEqual(result, {
         dialog: `Could not establish connection to "${alias}": The connection timed out.`,
