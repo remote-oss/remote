@@ -224,8 +224,8 @@ export interface ConnectMachine {
 export interface ConnectAssembly {
   connector: SshConnector;
   options: ResolverOptions;
-  /** Ends the local connection server of a host string; silent, also when none runs. */
-  killLocalServer(hostString: string): Promise<void>;
+  /** Ends the local connection server of a host string, reporting the record it looked up; also when none runs. */
+  killLocalServer(hostString: string): Promise<'found' | 'none'>;
   /** Runs the kill or the uninstall on a host in a connection of its own, outside any window. */
   maintain(
     action: 'kill' | 'uninstall',

@@ -201,6 +201,60 @@ describe('the window side of the shared connection (S9)', () => {
     });
   });
 
+  it('F-2102 §9: the starter connect carries the ssh pid from the event, and the connection names the helper', async () => {
+    const {connection, outcome} = await connectFirst();
+    const client = sshRuns.started[0];
+    if (client === undefined) {
+      throw new Error('no ssh was started');
+    }
+    client.processId = 7331;
+    authenticate(client);
+    deepStrictEqual(
+      [await outcome, connection.helperProcessId],
+      [
+        {
+          kind: 'connected',
+          runFacts: RUN_FACTS,
+          socksPort: SOCKS_PORT,
+          sharedRecord: null,
+          detectedPlatform: null,
+          sshProcessId: 7331,
+        },
+        process.pid,
+      ],
+    );
+  });
+
+  it('F-2102 §9: a join refused as already connected carries the ssh pid from the record answer', async () => {
+    const {connection, outcome} = await connectFirst();
+    authenticate(sshRuns.started[0]);
+    const client = sshRuns.started[0];
+    if (client === undefined) {
+      throw new Error('no ssh was started');
+    }
+    client.processId = 7331;
+    await outcome;
+    await connection.storeSharedRecord(RECORD);
+    const second = await acquired();
+    deepStrictEqual(
+      [
+        await second.connect(new AbortController().signal),
+        second.helperProcessId,
+      ],
+      [
+        {
+          kind: 'connected',
+          runFacts: RUN_FACTS,
+          socksPort: SOCKS_PORT,
+          sharedRecord: RECORD,
+          detectedPlatform: null,
+          sshProcessId: 7331,
+        },
+        process.pid,
+      ],
+    );
+  });
+
   it('starts ssh once, for the first window only', async () => {
     const {outcome} = await connectFirst();
     authenticate(sshRuns.started[0]);

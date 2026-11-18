@@ -39,6 +39,12 @@ interface Fakes {
   /** The model function the pick was given. */
   modelOf: Array<(typedText: string) => PickerModel>;
   initial: PickerModel[];
+  /** The answers the kill gives for its record lookup, in order; `none` when unset. */
+  killAnswers: Array<'found' | 'none'>;
+  /** The lines the connection's log took. */
+  logged: string[];
+  /** The connection's log, which the handlers take. */
+  logger: {info(message: string): void};
 }
 
 /** The row of a pick with `typedText` over `HOSTS`: a listed or typed row by its label, a fixed row by its kind. */
@@ -76,6 +82,8 @@ function runWith(
     commandsRun: [],
     modelOf: [],
     initial: [],
+    killAnswers: [],
+    logged: [],
     editor: {
       listHosts: () => {
         fakes.asked.push('listHosts');
@@ -101,9 +109,14 @@ function runWith(
     connection: {
       killLocalServer: hostString => {
         fakes.killed.push(hostString);
-        return Promise.resolve();
+        return Promise.resolve(fakes.killAnswers.shift() ?? 'none');
       },
       current: () => options.current,
+    },
+    logger: {
+      info: message => {
+        fakes.logged.push(message);
+      },
     },
   };
   return fakes;
@@ -120,6 +133,7 @@ describe('Connect to Host... (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindow.execute();
     deepStrictEqual(fakes.opened, [['ssh-remote+dev', 'new']]);
   });
@@ -129,6 +143,7 @@ describe('Connect to Host... (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindowInCurrentWindow.execute();
     deepStrictEqual(fakes.opened, [['ssh-remote+dev', 'current']]);
   });
@@ -138,6 +153,7 @@ describe('Connect to Host... (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindow.execute();
     deepStrictEqual(fakes.opened, [
       [`ssh-remote+${hexOf({hostName: 'Upper-Alias'})}`, 'new'],
@@ -149,6 +165,7 @@ describe('Connect to Host... (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindow.execute();
     deepStrictEqual(fakes.opened, [
       [`ssh-remote+${hexOf({hostName: 'host.invalid', user: 'lab'})}`, 'new'],
@@ -160,6 +177,7 @@ describe('Connect to Host... (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindow.execute();
     deepStrictEqual(fakes.opened, [
       [`ssh-remote+${hexOf({hostName: 'host.invalid', port: 2222})}`, 'new'],
@@ -171,6 +189,7 @@ describe('Connect to Host... (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindow.execute({host: 'dev'});
     deepStrictEqual(
       [fakes.opened, fakes.asked],
@@ -183,6 +202,7 @@ describe('Connect to Host... (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindowInCurrentWindow.execute({host: 'dev'});
     deepStrictEqual(fakes.opened, [['ssh-remote+dev', 'current']]);
   });
@@ -192,6 +212,7 @@ describe('Connect to Host... (card connect-21)', () => {
     const handler = connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindow;
     await handler.execute({host: 'lab@x.invalid:2222'});
     await handler.execute({host: 'UPPER-Alias'});
@@ -206,6 +227,7 @@ describe('Connect to Host... (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindow.execute({host: ''});
     deepStrictEqual(fakes.opened, [['ssh-remote+', 'new']]);
   });
@@ -215,6 +237,7 @@ describe('Connect to Host... (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindow.execute({});
     deepStrictEqual(fakes.asked, ['listHosts', 'pickHost']);
   });
@@ -224,6 +247,7 @@ describe('Connect to Host... (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindow.execute();
     deepStrictEqual([fakes.opened, fakes.commandsRun], [[], []]);
   });
@@ -233,6 +257,7 @@ describe('Connect to Host... (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindow.execute();
     deepStrictEqual(
       [fakes.commandsRun, fakes.opened],
@@ -245,6 +270,7 @@ describe('Connect to Host... (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindow.execute();
     deepStrictEqual(
       [fakes.commandsRun, fakes.opened],
@@ -257,6 +283,7 @@ describe('Connect to Host... (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindow.execute();
     deepStrictEqual(fakes.initial, [pickerModel(HOSTS, '')]);
   });
@@ -266,6 +293,7 @@ describe('Connect to Host... (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindow.execute();
     deepStrictEqual(fakes.modelOf[0]?.('dev'), pickerModel(HOSTS, 'dev'));
   });
@@ -275,6 +303,7 @@ describe('Connect to Host... (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindow.execute();
     fakes.modelOf[0]?.('d');
     fakes.modelOf[0]?.('de');
@@ -285,7 +314,11 @@ describe('Connect to Host... (card connect-21)', () => {
     const fakes = runWith(undefined, {
       listing: UNPARSEABLE,
     });
-    const message = await connectCommandHandlers(fakes.editor, fakes.connection)
+    const message = await connectCommandHandlers(
+      fakes.editor,
+      fakes.connection,
+      fakes.logger,
+    )
       .openEmptyWindow.execute()
       .then(
         () => 'completed',
@@ -301,7 +334,11 @@ describe('Connect to Host... (card connect-21)', () => {
     const fakes = runWith(undefined, {
       listing: UNPARSEABLE,
     });
-    const message = await connectCommandHandlers(fakes.editor, fakes.connection)
+    const message = await connectCommandHandlers(
+      fakes.editor,
+      fakes.connection,
+      fakes.logger,
+    )
       .openEmptyWindowInCurrentWindow.execute()
       .then(
         () => 'completed',
@@ -317,7 +354,7 @@ describe('Connect to Host... (card connect-21)', () => {
     const fakes = runWith(undefined, {
       listing: UNPARSEABLE,
     });
-    await connectCommandHandlers(fakes.editor, fakes.connection)
+    await connectCommandHandlers(fakes.editor, fakes.connection, fakes.logger)
       .openEmptyWindow.execute()
       .catch(() => undefined);
     deepStrictEqual([fakes.opened, fakes.commandsRun], [[], []]);
@@ -330,6 +367,7 @@ describe('Connect to Host... (card connect-21)', () => {
       connectCommandHandlers(
         fakes.editor,
         fakes.connection,
+        fakes.logger,
       ).openEmptyWindow.execute(),
       {message: 'refused'},
     );
@@ -347,6 +385,7 @@ describe('Connect to the active host (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindowOnCurrentHost.execute();
     deepStrictEqual(fakes.opened, [['ssh-remote+dev', 'new']]);
   });
@@ -362,6 +401,7 @@ describe('Connect to the active host (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindowOnCurrentHost.execute();
     deepStrictEqual(fakes.opened, [
       [
@@ -376,10 +416,12 @@ describe('Connect to the active host (card connect-21)', () => {
       remoteName: 'ssh-remote',
       current: CONNECTED,
     });
-    await connectCommandHandlers(
+    const handlers = connectCommandHandlers(
       fakes.editor,
       fakes.connection,
-    ).openEmptyWindowOnCurrentHost.execute();
+      fakes.logger,
+    );
+    await handlers.openEmptyWindowOnCurrentHost.execute();
     deepStrictEqual(fakes.asked, []);
   });
 
@@ -388,6 +430,7 @@ describe('Connect to the active host (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindowOnCurrentHost.execute();
     deepStrictEqual(fakes.opened, []);
   });
@@ -397,6 +440,7 @@ describe('Connect to the active host (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindowOnCurrentHost.execute();
     deepStrictEqual(fakes.opened, []);
   });
@@ -409,6 +453,7 @@ describe('Connect to the active host (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindowOnCurrentHost.execute();
     deepStrictEqual(fakes.opened, []);
   });
@@ -421,6 +466,7 @@ describe('Connect to the active host (card connect-21)', () => {
     const handler: CommandHandler = connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).openEmptyWindowOnCurrentHost;
     await handler.execute('other');
     await handler.execute({host: 'other'});
@@ -437,8 +483,29 @@ describe('Kill Local Connection Server (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).cleanLocalServer.execute();
     deepStrictEqual(fakes.killed, ['dev']);
+  });
+
+  it('F-2102 §9: Kill logs the host and the record', async () => {
+    const withRecord = runWith(rowFor('', 'dev'));
+    withRecord.killAnswers = ['found'];
+    await connectCommandHandlers(
+      withRecord.editor,
+      withRecord.connection,
+      withRecord.logger,
+    ).cleanLocalServer.execute();
+    const withoutRecord = runWith(rowFor('', 'dev'));
+    await connectCommandHandlers(
+      withoutRecord.editor,
+      withoutRecord.connection,
+      withoutRecord.logger,
+    ).cleanLocalServer.execute();
+    deepStrictEqual(
+      [withRecord.logged, withoutRecord.logged],
+      [['Kill: host dev, record found'], ['Kill: host dev, record none']],
+    );
   });
 
   it('F-2102 AC-17: a typed user@address and an alias reach the kill as two different strings', async () => {
@@ -447,10 +514,12 @@ describe('Kill Local Connection Server (card connect-21)', () => {
     await connectCommandHandlers(
       typed.editor,
       typed.connection,
+      typed.logger,
     ).cleanLocalServer.execute();
     await connectCommandHandlers(
       alias.editor,
       alias.connection,
+      alias.logger,
     ).cleanLocalServer.execute();
     deepStrictEqual(
       [
@@ -468,10 +537,12 @@ describe('Kill Local Connection Server (card connect-21)', () => {
     await connectCommandHandlers(
       kill.editor,
       kill.connection,
+      kill.logger,
     ).cleanLocalServer.execute();
     await connectCommandHandlers(
       open.editor,
       open.connection,
+      open.logger,
     ).openEmptyWindow.execute();
     strictEqual(`ssh-remote+${kill.killed[0] ?? ''}`, open.opened[0]?.[0]);
   });
@@ -481,6 +552,7 @@ describe('Kill Local Connection Server (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).cleanLocalServer.execute();
     deepStrictEqual([fakes.commandsRun, fakes.opened], [[], []]);
   });
@@ -490,6 +562,7 @@ describe('Kill Local Connection Server (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).cleanLocalServer.execute();
     deepStrictEqual(fakes.killed, []);
   });
@@ -499,6 +572,7 @@ describe('Kill Local Connection Server (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).cleanLocalServer.execute();
     deepStrictEqual(
       [fakes.killed, fakes.commandsRun],
@@ -511,6 +585,7 @@ describe('Kill Local Connection Server (card connect-21)', () => {
     await connectCommandHandlers(
       fakes.editor,
       fakes.connection,
+      fakes.logger,
     ).cleanLocalServer.execute();
     deepStrictEqual(
       [fakes.killed, fakes.commandsRun],
@@ -522,7 +597,11 @@ describe('Kill Local Connection Server (card connect-21)', () => {
     const fakes = runWith(undefined, {
       listing: {parseError: {file: '/f', reason: 'r'}},
     });
-    const message = await connectCommandHandlers(fakes.editor, fakes.connection)
+    const message = await connectCommandHandlers(
+      fakes.editor,
+      fakes.connection,
+      fakes.logger,
+    )
       .cleanLocalServer.execute()
       .then(
         () => 'completed',

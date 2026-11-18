@@ -214,7 +214,7 @@ describe('the Kill Local Connection Server of the assembled connect (card connec
   /** The assembly over a helper client on a file port the test can read afterwards. */
   function killing(): {
     files: MemoryFilePort;
-    kill: (hostString: string) => Promise<void>;
+    kill: (hostString: string) => Promise<'found' | 'none'>;
   } {
     const files = new MemoryFilePort();
     const assembly = assemblyOverFiles(files);

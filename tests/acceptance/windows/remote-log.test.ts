@@ -1,9 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   closeWindow,
+  connectedWithin,
   connectionLog,
   onHost,
   readUserSettings,
+  reloadWindow,
   restoreUserSettings,
   userSettings,
 } from './harness.ts';
@@ -69,6 +71,30 @@ describe('the remote install and start output in the log (card connect-67)', fun
       );
     } finally {
       await closeWindow('rl1');
+    }
+  });
+
+  it('F-2003 AC-29 (terminal-reload): a terminal-mode connect and its reload log no local-server line, started, reused or stale (BR-16)', async () => {
+    const saved = readUserSettings();
+    await userSettings({
+      'remote.SSH.useLocalServer': false,
+      'remote.SSH.remotePlatform': {harness: 'linux'},
+    });
+    try {
+      await freshHost();
+      await openConnected('rl3', INSTALL_MILLISECONDS);
+      try {
+        await reloadWindow('rl3');
+        await connectedWithin('rl3', 120_000);
+        deepStrictEqual(
+          connectionLog().filter(line => /local connection server/i.test(line)),
+          [],
+        );
+      } finally {
+        await closeWindow('rl3');
+      }
+    } finally {
+      restoreUserSettings(saved);
     }
   });
 
