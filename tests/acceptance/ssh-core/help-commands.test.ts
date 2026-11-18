@@ -1,24 +1,34 @@
 import {deepStrictEqual} from 'node:assert';
-import {mkdirSync, readdirSync} from 'node:fs';
+import {existsSync, mkdirSync, readFileSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {
   appendScript,
+  closeContained,
   closeWindow,
-  commandsOf,
   connectionLog,
   extensionActive,
+  extensionPresent,
   inWindow,
   nextEmptyWindow,
   openWindow,
   recordLines,
+  startInWindow,
   variable,
   waitFor,
+  windowEvents,
+  windowState,
 } from '../windows/harness.ts';
 import {indicatorGroups} from '../windows/activation-support.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {paletteItems, runFromPalette} from '../windows/palette.ts';
-import {dialogOf, notifications, pageText} from '../windows/renderer.ts';
+import {
+  dialogOf,
+  notifications,
+  outputChannelOf,
+  pageText,
+  pressEscape,
+} from '../windows/renderer.ts';
 
 /** The commands of the four help entries, as the extension registers them. */
 const HELP_COMMANDS = {
@@ -39,6 +49,16 @@ function storageOf(): string[] {
   )
     .filter(name => name !== 'state.vscdb-journal')
     .sort();
+}
+
+/** What the editor holds in the user's settings file: its text, or `none` when the file is not there. */
+function userSettingsText(): string {
+  const file = path.join(
+    variable('HARNESS_USER_DATA'),
+    'User',
+    'settings.json',
+  );
+  return existsSync(file) ? readFileSync(file, 'utf8') : 'none';
 }
 
 /** The failing new window's entries: the dialog, then the pick of actions, both dismissed. */
@@ -184,10 +204,23 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
     mkdirSync(runDir, {recursive: true});
     const folder = await openFolderWindow(runDir);
     try {
-      const before = (await pageText(folder)).length;
+      await waitFor('the window to settle', () => true, 2_000);
+      await inWindow(folder, 'acceptance.agent.state');
+      const before = await windowState(folder);
       await runFromPalette(folder, 'Remote-SSH: Get Started with SSH');
       await waitFor('the window to settle', () => true, 3_000);
-      deepStrictEqual((await pageText(folder)).length <= before + 64, true);
+      await inWindow(folder, 'acceptance.agent.state');
+      const after = await windowState(folder);
+      deepStrictEqual(
+        [
+          JSON.stringify(after.activeTab) === JSON.stringify(before.activeTab),
+          !after.activeTab?.uri.startsWith('walkthrough:'),
+        ],
+        [true, true],
+        `the tab before was ${JSON.stringify(before.activeTab)}, after ${JSON.stringify(
+          after.activeTab,
+        )}; the page now reads ${JSON.stringify((await pageText(folder)).slice(0, 400))}`,
+      );
     } finally {
       await closeWindow(folder);
     }
@@ -288,23 +321,29 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
     );
     mkdirSync(runDir, {recursive: true});
     const folder = await openFolderWindow(runDir);
-    const storageBefore = storageOf();
-    const commandsBefore = await commandsOf(folder, 'opensshremotes.');
     try {
-      await inWindow(folder, HELP_COMMANDS.feedback);
+      const settingsBefore = userSettingsText();
+      const storageBefore = storageOf();
+      const logBefore = connectionLog().length;
+      await inWindow(folder, 'acceptance.agent.state');
+      const state = await windowState(folder);
+      // The manifest holds no keybinding, so the command is invoked directly, as the keybinding would invoke it.
+      await startInWindow(folder, HELP_COMMANDS.feedback);
       await waitFor('the window to settle', () => true, 3_000);
       deepStrictEqual(
         [
-          storageOf().length === storageBefore.length,
-          (await commandsOf(folder, 'opensshremotes.')).join('\n') ===
-            commandsBefore.join('\n'),
+          userSettingsText() === settingsBefore,
+          storageOf().join('\n') === storageBefore.join('\n'),
+          state.remoteName === null && state.remoteAuthority === null,
+          connectionLog().length === logBefore,
           (await dialogOf(folder)) === undefined,
           (await notifications(folder)).length === 0,
         ],
-        [true, true, true, true],
+        [true, true, true, true, true, true],
       );
     } finally {
-      await closeWindow(folder);
+      // The command's external open never settles in the run's editor, so the agent is busy and the close ends its host.
+      await closeContained(folder, pressEscape, 30_000);
     }
   });
 
@@ -320,40 +359,51 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
       await inWindow('c2486-down-settings', HELP_COMMANDS.settings);
       await waitFor('the window to settle', () => true, 3_000);
       const dialog = await dialogOf('c2486-down-settings');
-      // The first value reads the toasts as they are, so a core error the criterion accepts names itself in the diff.
+      const items = await paletteItems(
+        'c2486-down-settings',
+        'Remote-SSH: Help',
+      );
+      // The criterion accepts core's editor error, whose toasts name the refused host; the extension's own show none.
       deepStrictEqual(
         [
-          await notifications('c2486-down-settings'),
+          (await notifications('c2486-down-settings')).filter(
+            toast => !toast.startsWith('Setting up SSH Host'),
+          ).length === 0,
           !dialog?.message.toLowerCase().includes('remote-ssh'),
-          (await paletteItems('c2486-down-settings', 'Remote-SSH: Help'))
-            .length === 1,
+          items.length === 1 && items[0] === 'Remote-SSH: Help',
         ],
-        [[], true, true],
+        [true, true, true],
+        `the toasts: ${JSON.stringify(await notifications('c2486-down-settings'))}, the palette found: ${JSON.stringify(items)}`,
       );
     } finally {
       await closeWindow('c2486-down-settings').catch(() => undefined);
     }
   });
 
-  it('F-2004 AC-19 (c2486-first-help-part): a first Help run activates the extension and adds no output channel line', async () => {
+  it('F-2004 AC-19 (c2486-first-help-part): a first Help run activates the extension and reveals no output panel', async () => {
     await closeAllButLocal();
     const empty = await nextEmptyWindow(() =>
       inWindow('local', 'workbench.action.newWindow'),
     );
     try {
-      const before = connectionLog().length;
       await runFromPalette(empty, 'Remote-SSH: Help');
       await waitFor(
         'the activation',
         async () => await extensionActive(empty, 'remote-oss.remote-ssh'),
         30_000,
       );
+      await inWindow(empty, 'acceptance.agent.state');
+      const lastState = windowEvents(empty)
+        .filter(each => each.event === 'state')
+        .at(-1);
       deepStrictEqual(
         [
-          connectionLog().length === before,
-          (await notifications(empty)).length === 0,
+          await extensionActive(empty, 'remote-oss.remote-ssh'),
+          await outputChannelOf(empty),
+          lastState?.visibleOutputChannel ?? null,
         ],
-        [true, true],
+        [true, undefined, null],
+        `the panel shows: ${JSON.stringify(await outputChannelOf(empty))}, the toasts: ${JSON.stringify(await notifications(empty))}`,
       );
     } finally {
       await closeWindow(empty);
@@ -361,35 +411,36 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   });
 
   it('F-2004 AC-21 (c2486-no-writes-part): each of the four commands writes nothing to settings, state or the global-storage folder', async () => {
-    const runDir = path.join(variable('HARNESS_RUN_FOLDER'), 'c2486-no-writes');
-    mkdirSync(runDir, {recursive: true});
-    const folder = await openFolderWindow(runDir);
-    try {
-      const storageBefore = storageOf();
-      const commandsBefore = await commandsOf(folder, 'opensshremotes.');
-      await inWindow(folder, HELP_COMMANDS.help);
-      await inWindow(folder, HELP_COMMANDS.getStarted);
-      await inWindow(folder, 'workbench.action.openSettings');
-      await waitFor(
-        'the plain settings editor',
-        async () => (await pageText(folder)).includes('Settings'),
-        30_000,
-      );
-      await inWindow(folder, 'workbench.action.closeActiveEditor');
-      await inWindow(folder, HELP_COMMANDS.feedback);
-      await waitFor('the window to settle', () => true, 3_000);
-      deepStrictEqual(
-        [
-          storageOf().length === storageBefore.length,
-          (await commandsOf(folder, 'opensshremotes.')).join('\n') ===
-            commandsBefore.join('\n'),
-          (await notifications(folder)).length === 0,
-        ],
-        [true, true, true],
-      );
-    } finally {
-      await closeWindow(folder);
+    const settingsBefore = userSettingsText();
+    const storageBefore = storageOf();
+    for (const [name, command] of [
+      ['c2486-no-writes-help', HELP_COMMANDS.help],
+      ['c2486-no-writes-getstarted', HELP_COMMANDS.getStarted],
+      ['c2486-no-writes-settings', HELP_COMMANDS.settings],
+      ['c2486-no-writes-feedback', HELP_COMMANDS.feedback],
+    ] as const) {
+      const runDir = path.join(variable('HARNESS_RUN_FOLDER'), name);
+      mkdirSync(runDir, {recursive: true});
+      const window = await openFolderWindow(runDir);
+      try {
+        // A URL command's open never settles in the run's editor, so it starts and is left; the settings editor answers.
+        if (command === HELP_COMMANDS.settings) {
+          await inWindow(window, command);
+        } else {
+          await startInWindow(window, command);
+        }
+        await waitFor('the window to settle', () => true, 3_000);
+      } finally {
+        await closeContained(window, pressEscape, 30_000);
+      }
     }
+    deepStrictEqual(
+      [
+        userSettingsText() === settingsBefore,
+        storageOf().join('\n') === storageBefore.join('\n'),
+      ],
+      [true, true],
+    );
   });
 
   it('F-2004 AC-23 (c2486-indicator-part): the remote indicator menu of a local folder window holds no help, documentation or feedback entry', async () => {
@@ -419,13 +470,22 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
     mkdirSync(runDir, {recursive: true});
     const folder = await openFolderWindow(runDir);
     try {
+      // The launch installs no Remote Explorer companion; the row asserts the given with the then.
+      const companion = await extensionPresent(
+        folder,
+        'remote-oss.remote-explorer',
+      );
       await runFromPalette(folder, 'Remote-SSH: Help');
       await runFromPalette(folder, 'Remote-SSH: Get Started with SSH');
-      await inWindow(folder, HELP_COMMANDS.feedback);
+      // The command the palette hides: invoked as the window's own command, whose open never settles in the run's editor.
+      await startInWindow(folder, HELP_COMMANDS.feedback);
       await waitFor('the window to settle', () => true, 3_000);
-      deepStrictEqual((await notifications(folder)).length, 0);
+      deepStrictEqual(
+        [!companion, (await notifications(folder)).length === 0],
+        [true, true],
+      );
     } finally {
-      await closeWindow(folder);
+      await closeContained(folder, pressEscape, 30_000);
     }
   });
 });
