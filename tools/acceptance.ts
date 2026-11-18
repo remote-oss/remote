@@ -1326,7 +1326,7 @@ async function prepare(
       : dependencies.cliEditor(
           vscodium,
           runFolder,
-          `${downloads.variables.HARNESS_DOWNLOADS_HTTP ?? ''}${CLI_TEMPLATE_PATH}`,
+          `${cliBaseOf(downloads.variables, chosen)}${CLI_TEMPLATE_PATH}`,
         );
   const clientCommit =
     cliEditor === undefined ? undefined : commitOfEditor(cliEditor);
@@ -2604,6 +2604,23 @@ export function runTestCli(
     {cwd: root, env: {...process.env, ...variables}},
     undefined,
     launchLimits(variables.HARNESS_RUN_FOLDER, runCommand),
+  );
+}
+
+/**
+ * The download host's base that the CLI-source copy's template names: the host's own (`downloads`), where a chosen
+ * launch (`cli-path`) has the host's downloader fetch real CLI archives, else the client's loopback, where the client
+ * itself downloads the stand-in archive of a chosen install case, since the client cannot resolve `downloads`.
+ */
+function cliBaseOf(
+  variables: Readonly<Record<string, string | undefined>>,
+  chosen: readonly Launch[],
+): string {
+  return (
+    (chosen.some(startsPinnedCliEditor)
+      ? variables.HARNESS_DOWNLOADS_HTTP
+      : (variables.HARNESS_DOWNLOADS_LOCAL ??
+        variables.HARNESS_DOWNLOADS_HTTP)) ?? ''
   );
 }
 

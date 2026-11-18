@@ -3659,7 +3659,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('#2735: a run that chooses an install case with a stand-in CLI asks for the stand-in archives, not the pinned ones, and makes the CLI-source editor', async () => {
+    it('#2735: a run that chooses an install case with a stand-in CLI asks for the stand-in archives, not the pinned ones, and makes the CLI-source editor with the client’s loopback base, which the client can resolve', async () => {
       workspace.write(
         'tests/acceptance/suite-install/cases.json',
         JSON.stringify({
@@ -3687,7 +3687,7 @@ describe('acceptance', () => {
           [false],
           [true],
           [
-            'cli editor of codium-insiders: http://downloads:8080/cli/${os}-${arch}/${commit}/cli-${os}-${arch}.tar.gz',
+            'cli editor of codium-insiders: http://127.0.0.1:8080/cli/${os}-${arch}/${commit}/cli-${os}-${arch}.tar.gz',
           ],
         ],
       );

@@ -226,15 +226,18 @@ describe(`the install case "${installCase?.label ?? 'unknown'}" of the VSCodium 
 
   if (installCase?.cliIn !== undefined) {
     const {cliIn} = installCase;
-    // No user-agent filter: the copy's template names the download host as the host's container reaches it, which the
-    // client cannot resolve, so under the default placement the host's downloader fetches the archive on the install's
-    // behalf. The criterion is that the install asks for this CLI, once, whoever's request it is.
-    it(`${cite}: the install asked once for the CLI of the host's platform and of the client's commit`, async () => {
+    // The copy's template names the client's loopback and the case forces the local download, so the request is the
+    // client's own: the host's downloader, which cannot reach a loopback, makes none.
+    it(`${cite}: the client asked once for the CLI of the host's platform and of its own commit`, async () => {
       const platform = await hostPlatform();
       const seen = downloadRequests(label);
       deepStrictEqual(
         seen
-          .filter(each => each.path.startsWith('/cli/'))
+          .filter(
+            each =>
+              each.path.startsWith('/cli/') &&
+              !isHostDownloader(each.userAgent),
+          )
           .map(each => each.path),
         [
           `/cli/${platform}/${runVariable('HARNESS_CLIENT_COMMIT')}/cli-${platform}.tar.gz`,

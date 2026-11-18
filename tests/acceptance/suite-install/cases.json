@@ -428,7 +428,8 @@
       "cite": "F-2405 AC-8 (local-exec-cli)",
       "cliStandIn": true,
       "settings": {
-        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}"
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "always"
       },
       "outcome": "any",
       "cliIn": "/home/harness/.vscodium-server-insiders"
