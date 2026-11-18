@@ -11,6 +11,7 @@ import {
   windowState,
 } from '../windows/harness.ts';
 import {removeContainers} from '../windows/folder-windows.ts';
+import {containerLabel, coreButtons} from '../windows/platform-forms.ts';
 import {
   answerDialog,
   answerNotification,
@@ -133,9 +134,9 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
       await closeWindow(name);
       deepStrictEqual(state, {
         details: CANNOT_RECONNECT,
-        buttons: ['Cancel', 'Reload Window'],
+        buttons: coreButtons(['Cancel', 'Reload Window']),
         withinFifteenSeconds: true,
-        indicator: 'Disconnected from Dev Container: c43-stop',
+        indicator: `Disconnected from ${containerLabel('c43-stop')}`,
         attempts: ['Reconnection attempt 1'],
         status: 'running',
         newPort: true,
@@ -179,10 +180,10 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
         {...state, newPort},
         {
           details: CANNOT_RECONNECT,
-          buttons: ['Cancel', 'Reload Window'],
+          buttons: coreButtons(['Cancel', 'Reload Window']),
           withinSixSeconds: true,
           stillShown: CANNOT_RECONNECT,
-          indicator: 'Disconnected from Dev Container: c43-restart',
+          indicator: `Disconnected from ${containerLabel('c43-restart')}`,
           running: 'running',
           attempts: 1,
           newPort: true,
@@ -317,7 +318,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
         {
           indicatorWithinTen: true,
           dialogAfterForty: true,
-          buttons: ['Reload Window', 'Dismiss', 'Reconnect Now'],
+          buttons: coreButtons(['Reload Window', 'Dismiss', 'Reconnect Now']),
           numbers: [1, 2, 3, 4],
           firstAtOnce: true,
           gapsNearSchedule: [true, true, true],
@@ -363,7 +364,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
         },
         {
           atOnce: true,
-          restarted: ['Reload Window', 'Dismiss', 'Reconnect Now'],
+          restarted: coreButtons(['Reload Window', 'Dismiss', 'Reconnect Now']),
           notice: [true, ['Reconnect Now', 'Reload Window']],
         },
       );
@@ -489,17 +490,16 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
         seen: {
           details: CANNOT_RECONNECT,
           message: '',
-          buttons: ['Cancel', 'Reload Window'],
+          buttons: coreButtons(['Cancel', 'Reload Window']),
           kind: 'error',
           primary: 'Reload Window',
-          indicator: `Disconnected from Dev Container: c67-host-stop-${variant}`,
+          indicator: `Disconnected from ${containerLabel(`c67-host-stop-${variant}`)}`,
         },
         afterCancel:
           variant === 'cancel'
             ? {
                 dialog: undefined,
-                indicator:
-                  'Disconnected from Dev Container: c67-host-stop-cancel',
+                indicator: `Disconnected from ${containerLabel('c67-host-stop-cancel')}`,
               }
             : null,
         reattached: `Dev Container: c67-host-stop-${variant}`,
@@ -565,9 +565,9 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
       await closeWindow(name);
       deepStrictEqual(state, {
         details: CANNOT_RECONNECT,
-        buttons: ['Cancel', 'Reload Window'],
+        buttons: coreButtons(['Cancel', 'Reload Window']),
         withinFifteenSeconds: true,
-        indicator: `Disconnected from Dev Container: c110-removed`,
+        indicator: `Disconnected from ${containerLabel('c110-removed')}`,
         logNamesIt: true,
         palette: [
           'Dev Containers: Reopen Folder Locally',
