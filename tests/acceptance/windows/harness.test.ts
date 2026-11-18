@@ -1,5 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
-import {completeLines, withLogTail} from './harness.ts';
+import type {AgentEvent, RecordLine} from './harness.ts';
+import {completeLines, reloadReadout, withLogTail} from './harness.ts';
+import type {ShownDialog} from './renderer.ts';
 
 describe('withLogTail', () => {
   it('tooling-90: a message with no log lines is the message', () => {
@@ -113,6 +115,181 @@ describe('completeLines (card #2650)', () => {
         completeLines(''),
       ],
       [[{event: 'state'}], [{event: 'state'}, {event: 'report'}], [], []],
+    );
+  });
+});
+
+describe('reloadReadout (card #2803)', () => {
+  const windowName = 'volume-user';
+  const message = `timed out waiting for window ${windowName} to activate again after remote-containers.reopenInContainer`;
+
+  function questionLine(
+    surface: string,
+    question: string,
+    buttons?: string[],
+  ): RecordLine {
+    return {
+      surface,
+      question,
+      answer: '',
+      matched: false,
+      window: windowName,
+      time: 0,
+      ...(buttons === undefined ? {} : {buttons}),
+    };
+  }
+
+  function displayLine(question: string): RecordLine {
+    return {
+      surface: 'progress',
+      question,
+      answer: '',
+      matched: false,
+      window: windowName,
+      time: 0,
+    };
+  }
+
+  function commandEvent(
+    event: AgentEvent['event'],
+    commandMessage?: string,
+  ): AgentEvent {
+    return {
+      event,
+      time: 0,
+      id: 'cmd',
+      ...(commandMessage === undefined ? {} : {message: commandMessage}),
+    };
+  }
+
+  it('#2803: a readout whose window and reload show nothing carries the wait alone', () => {
+    deepStrictEqual(
+      reloadReadout(message, [], undefined, [], [], []),
+      [
+        message,
+        "the window's dialog: none",
+        "the window's toasts: none",
+        "the window's question lines: none",
+        "the command's state: never accepted",
+      ].join('\n'),
+    );
+  });
+
+  it('#2803: the last lines of the Dev Containers log go after the wait, as withLogTail carries them', () => {
+    deepStrictEqual(
+      reloadReadout(message, ['building', 'starting'], undefined, [], [], []),
+      [
+        message,
+        'building',
+        'starting',
+        "the window's dialog: none",
+        "the window's toasts: none",
+        "the window's question lines: none",
+        "the command's state: never accepted",
+      ].join('\n'),
+    );
+  });
+
+  it(`#2803: a dialog and toasts the page still shows are named, with the dialog's buttons`, () => {
+    const dialog: ShownDialog = {
+      message: 'The container failed to start',
+      details: 'its detail text',
+      buttons: ['Retry', 'Close'],
+    };
+    deepStrictEqual(
+      reloadReadout(
+        message,
+        [],
+        dialog,
+        ['Could not reopen in container'],
+        [],
+        [],
+      ),
+      [
+        message,
+        "the window's dialog: The container failed to start (buttons: Retry, Close)",
+        `the window's toasts: ["Could not reopen in container"]`,
+        "the window's question lines: none",
+        "the command's state: never accepted",
+      ].join('\n'),
+    );
+  });
+
+  it('#2803: a dialog without buttons carries no button line', () => {
+    const dialog: ShownDialog = {message: 'Reloaded', details: '', buttons: []};
+    deepStrictEqual(
+      reloadReadout(message, [], dialog, [], [], [commandEvent('accepted')]),
+      [
+        message,
+        "the window's dialog: Reloaded",
+        "the window's toasts: none",
+        "the window's question lines: none",
+        "the command's state: accepted",
+      ].join('\n'),
+    );
+  });
+
+  it('#2803: the question lines the record holds are listed, its display lines not', () => {
+    deepStrictEqual(
+      reloadReadout(
+        message,
+        [],
+        undefined,
+        [],
+        [
+          questionLine('failureDialog', 'The container failed to start', [
+            'Close',
+          ]),
+          questionLine('maskedInput', 'Password'),
+          displayLine('building the container'),
+        ],
+        [],
+      ),
+      [
+        message,
+        "the window's dialog: none",
+        "the window's toasts: none",
+        "the window's question lines:",
+        '  failureDialog: The container failed to start (buttons: Close)',
+        '  maskedInput: Password',
+        "the command's state: never accepted",
+      ].join('\n'),
+    );
+  });
+
+  it('#2803: the state of the command the window answered with, event by event', () => {
+    deepStrictEqual(
+      reloadReadout(
+        message,
+        [],
+        undefined,
+        [],
+        [],
+        [
+          commandEvent('accepted'),
+          commandEvent('failed', 'the container start failed'),
+        ],
+      ),
+      [
+        message,
+        "the window's dialog: none",
+        "the window's toasts: none",
+        "the window's question lines: none",
+        "the command's state: accepted; failed: the container start failed",
+      ].join('\n'),
+    );
+  });
+
+  it('#2803: a page it cannot read reads as unreadable, in both parts', () => {
+    deepStrictEqual(
+      reloadReadout(message, [], 'unreadable', 'unreadable', [], []),
+      [
+        message,
+        "the window's dialog: unreadable",
+        "the window's toasts: unreadable",
+        "the window's question lines: none",
+        "the command's state: never accepted",
+      ].join('\n'),
     );
   });
 });

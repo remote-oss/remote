@@ -28,6 +28,7 @@ import {
 import {runCommand} from '../../../tools/command-runner.ts';
 import {oneTimeCode} from '../../../tools/one-time-code.ts';
 import {filesHolding} from '../../../tools/secret-search.ts';
+import type {ShownDialog} from './renderer.ts';
 import {processIdsOf} from '../../../tools/process-ids.ts';
 import {runWithinWait} from './state-database.ts';
 import {
@@ -960,34 +961,63 @@ export async function reopenStarted(name: string): Promise<void> {
 
 /**
  * Does `action` in window `name`, something that reloads the window, and resolves on the window's next `activated`.
- * The window can be read from then on, and not while it reloads.
+ * The window can be read from then on, and not while it reloads. When the wait times out and `readout` is set, the
+ * error's message is the readout's: the wait's own message, enriched with what the window and the reload show then.
  */
 export async function reloadingAction(
   name: string,
   what: string,
   action: () => Promise<void>,
+  readout?: (message: string) => Promise<string>,
 ): Promise<void> {
   const before = countOf(name, 'activated');
   await action();
-  await waitUntil(
-    `window ${name} to activate again after ${what}`,
-    () => countOf(name, 'activated') > before,
-  );
+  try {
+    await waitUntil(
+      `window ${name} to activate again after ${what}`,
+      () => countOf(name, 'activated') > before,
+    );
+  } catch (caught) {
+    const message = caught instanceof Error ? caught.message : String(caught);
+    throw readout === undefined
+      ? caught
+      : new Error(await readout(message), {cause: caught});
+  }
 }
 
 /**
  * Runs `command` in window `name`, a command that reloads the window, and resolves on the window's next `activated`.
- * The command isn't awaited: the reload ends the extension host before it can answer.
+ * The command isn't awaited: the reload ends the extension host before it can answer. When the wait times out, its
+ * error carries the window's dialog and toasts, the window's question lines, the last lines of the Dev Containers
+ * log, and the state of the command, as `connectedToContainer`'s readout does for its wait (card #2803).
  */
 export async function reloadingCommand(
   name: string,
   command: string,
   ...parameters: unknown[]
 ): Promise<void> {
-  await reloadingAction(name, command, () => {
-    send(name, command, parameters);
-    return Promise.resolve();
-  });
+  const mark = containersLog().length;
+  let commandId = '';
+  await reloadingAction(
+    name,
+    command,
+    () => {
+      commandId = send(name, command, parameters);
+      return Promise.resolve();
+    },
+    async message => {
+      const [dialog, toasts] = await reloadPageReads(name);
+      const events = windowEvents(name).filter(each => each.id === commandId);
+      return reloadReadout(
+        message,
+        containersLogSince(mark),
+        dialog,
+        toasts,
+        recordLines(undefined, name),
+        events,
+      );
+    },
+  );
 }
 
 /**
@@ -1075,6 +1105,111 @@ export async function reopenInContainer(
 ): Promise<void> {
   await reloadingCommand(name, command);
   await connectedToContainer(name, milliseconds);
+}
+
+/** How long a page read of a window that may be reloading may take before the readout names it unreadable. */
+const RELOAD_READOUT_PAGE_MILLISECONDS = 15_000;
+
+/** `read`'s value, or `unreadable` when it fails or does not answer within the bound. */
+async function boundedRead<Value>(
+  read: () => Promise<Value>,
+): Promise<Value | 'unreadable'> {
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<'unreadable'>(resolve => {
+    timer = setTimeout(() => {
+      resolve('unreadable');
+    }, RELOAD_READOUT_PAGE_MILLISECONDS);
+  });
+  try {
+    return await Promise.race([read(), expired]);
+  } catch {
+    return 'unreadable';
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * What window `name`'s page shows of its dialog and toasts, each read best-effort: a page that is reloading ends its
+ * read as `unreadable`.
+ */
+async function reloadPageReads(
+  name: string,
+): Promise<[ShownDialog | 'unreadable' | undefined, string[] | 'unreadable']> {
+  let dialog: ShownDialog | 'unreadable' | undefined = 'unreadable';
+  let toasts: string[] | 'unreadable' = 'unreadable';
+  try {
+    // The renderer module imports this one, so it is loaded when it is needed.
+    const {dialogOf, notifications} = await import('./renderer.ts');
+    [dialog, toasts] = await Promise.all([
+      boundedRead(() => dialogOf(name)),
+      boundedRead(() => notifications(name)),
+    ]);
+  } catch {
+    // No module, no page: the readout carries the other parts.
+  }
+  return [dialog, toasts];
+}
+
+/**
+ * The message a `reloadingCommand` wait that times out carries (card #2803): `message`, then what the window and the
+ * reload show — its dialog and toasts, the question lines its record holds, the last lines of the
+ * Dev Containers log, and the state of the command. Each part names what it could not read, so the message tells
+ * whether the reload is still running, where it stands, or has failed.
+ */
+export function reloadReadout(
+  message: string,
+  logLines: readonly string[],
+  dialog: ShownDialog | 'unreadable' | undefined,
+  toasts: readonly string[] | 'unreadable',
+  record: readonly RecordLine[],
+  commandEvents: readonly AgentEvent[],
+): string {
+  const dialogText =
+    dialog === 'unreadable'
+      ? 'unreadable'
+      : dialog === undefined
+        ? 'none'
+        : `${dialog.message}${
+            dialog.buttons.length === 0
+              ? ''
+              : ` (buttons: ${dialog.buttons.join(', ')})`
+          }`;
+  const toastsText =
+    toasts === 'unreadable'
+      ? 'unreadable'
+      : toasts.length === 0
+        ? 'none'
+        : JSON.stringify(toasts);
+  const lines = record
+    .filter(line => isQuestion(line))
+    .map(
+      line =>
+        `${line.surface}: ${line.question}${
+          line.buttons === undefined
+            ? ''
+            : ` (buttons: ${line.buttons.join(', ')})`
+        }`,
+    );
+  const state =
+    commandEvents.length === 0
+      ? 'never accepted'
+      : commandEvents
+          .map(
+            each =>
+              each.event +
+              (each.message === undefined ? '' : `: ${each.message}`),
+          )
+          .join('; ');
+  return [
+    withLogTail(message, logLines),
+    `the window's dialog: ${dialogText}`,
+    `the window's toasts: ${toastsText}`,
+    lines.length === 0
+      ? "the window's question lines: none"
+      : `the window's question lines:\n${lines.map(line => `  ${line}`).join('\n')}`,
+    `the command's state: ${state}`,
+  ].join('\n');
 }
 
 /** How many lines of the Dev Containers log a connect that times out carries. */
