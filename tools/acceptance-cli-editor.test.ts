@@ -17,6 +17,7 @@ import {
   commitOfEditor,
   productFileOf,
   STAND_IN_CLI_SCRIPT,
+  STAND_IN_CLI_TRACE,
   withCliTemplate,
 } from './acceptance-cli-editor.ts';
 import {type CommandResult, runCommand} from './command-runner.ts';
@@ -81,10 +82,11 @@ describe('the CLI-source editor', () => {
     ]);
   });
 
-  it('#2735: the stand-in CLI is a script that fails, with the line a row looks for on the host', () => {
+  it('#2735: the stand-in CLI is a script that writes the path it was run as to its trace in the account’s home and fails', () => {
     deepStrictEqual(STAND_IN_CLI_SCRIPT.split('\n'), [
       '#!/bin/sh',
       '# the stand-in CLI of the acceptance run',
+      `echo "$0" > "$HOME/${STAND_IN_CLI_TRACE}"`,
       'exit 1',
       '',
     ]);

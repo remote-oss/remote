@@ -17,12 +17,15 @@ import {checked, type CommandRunner} from './command-runner.ts';
 export const CLI_TEMPLATE_PATH =
   '/cli/${os}-${arch}/${commit}/cli-${os}-${arch}.tar.gz';
 
+/** The file, in the home folder of the account that runs it, where the stand-in CLI writes the path it was run as. */
+export const STAND_IN_CLI_TRACE = 'stand-in-cli-ran';
+
 /**
- * What the stand-in CLI archive of a run holds: one script that does nothing but fail, whose text a row looks for on the
- * host to tell the stand-in from any other file.
+ * What the stand-in CLI archive of a run holds: one script that writes the path it was run as to `STAND_IN_CLI_TRACE`
+ * in its account's home and fails. The install that fails on it removes the file it was copied to, so the trace is what
+ * a row reads on the host to tell that the archive's file reached the server folder and was run from there.
  */
-export const STAND_IN_CLI_SCRIPT =
-  '#!/bin/sh\n# the stand-in CLI of the acceptance run\nexit 1\n';
+export const STAND_IN_CLI_SCRIPT = `#!/bin/sh\n# the stand-in CLI of the acceptance run\necho "$0" > "$HOME/${STAND_IN_CLI_TRACE}"\nexit 1\n`;
 
 /** The folder of the copy in the run's folder. */
 export const CLI_EDITOR_FOLDER = 'cli-editor';

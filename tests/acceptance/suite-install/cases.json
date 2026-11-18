@@ -431,6 +431,7 @@
         "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}",
         "remote.SSH.localServerDownload": "always"
       },
+      "setup": ["rm -f /home/harness/stand-in-cli-ran"],
       "outcome": "any",
       "cliIn": "/home/harness/.vscodium-server-insiders"
     },

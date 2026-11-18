@@ -3659,7 +3659,8 @@ describe('acceptance', () => {
       );
     });
 
-    it('#2735: a run that chooses an install case with a stand-in CLI asks for the stand-in archives, not the pinned ones, and makes the CLI-source editor with the client’s loopback base, which the client can resolve', async () => {
+    /** Makes the workspace's install cases one, `standin`, whose launch starts the CLI-source copy against a stand-in CLI. */
+    function writeStandInCase(): void {
       workspace.write(
         'tests/acceptance/suite-install/cases.json',
         JSON.stringify({
@@ -3674,6 +3675,10 @@ describe('acceptance', () => {
           ],
         }),
       );
+    }
+
+    it('#2735: a run that chooses an install case with a stand-in CLI asks for the stand-in archives, not the pinned ones, and makes the CLI-source editor with the client’s loopback base, which the client can resolve', async () => {
+      writeStandInCase();
       await runAcceptance(workspace.root, harness, 'vscodium', [
         'install-standin',
       ]);
@@ -3693,21 +3698,28 @@ describe('acceptance', () => {
       );
     });
 
-    it('#2735: a run that chooses no stand-in case asks for no stand-in archive, and the launch of a stand-in case starts the CLI-source copy where the run made one', () => {
-      workspace.write(
-        'tests/acceptance/suite-install/cases.json',
-        JSON.stringify({
-          cases: [
-            {
-              label: 'standin',
-              cite: 'F-2405 AC-8 (standin)',
-              cliStandIn: true,
-              settings: {},
-              outcome: 'any',
-            },
-          ],
-        }),
+    it('#2735: a run that names cli-path and an install case with a stand-in CLI fails before anything starts, naming both', async () => {
+      writeStandInCase();
+      const {result, lines} = await withErrorLines(() =>
+        runAcceptance(workspace.root, harness, 'vscodium', [
+          'cli-path',
+          'install-standin',
+        ]),
       );
+      deepStrictEqual(
+        [result, lines, harness.calls],
+        [
+          2,
+          [
+            'acceptance: the run names a launch with real CLI archives (cli-path) and one with a stand-in CLI (install-standin): the CLI-source copy has one template, so name them in separate runs',
+          ],
+          [],
+        ],
+      );
+    });
+
+    it('#2735: a run that chooses no stand-in case asks for no stand-in archive, and the launch of a stand-in case starts the CLI-source copy where the run made one', () => {
+      writeStandInCase();
       function started(environment: Record<string, string>): string[] {
         return vscodiumConfigurations(
           workspace.root,

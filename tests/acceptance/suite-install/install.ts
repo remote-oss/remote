@@ -6,7 +6,7 @@
 import {readdirSync, readFileSync, statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import * as path from 'node:path';
-import {STAND_IN_CLI_SCRIPT} from '../../../tools/acceptance-cli-editor.ts';
+import {STAND_IN_CLI_TRACE} from '../../../tools/acceptance-cli-editor.ts';
 import {onHost} from '../suite/harness.ts';
 
 /** One request the download host logged: its path and the user agent that sent it. */
@@ -162,36 +162,15 @@ export async function hostPlatform(): Promise<string> {
 }
 
 /**
- * The files directly in `folder` on the host whose name ends in a dash and `commit` and that hold the stand-in CLI's
- * text (`STAND_IN_CLI_SCRIPT`): where the install puts the CLI archive's file under the commit-keyed name.
+ * The path the stand-in CLI was run as on the host, from the trace it writes in the home of the account `harness`; empty
+ * when it was never run.
  */
-export async function standInCliFiles(
-  folder: string,
-  commit: string,
-): Promise<string[]> {
-  const marker = STAND_IN_CLI_SCRIPT.split('\n')[1] ?? '';
+export async function standInCliRanAs(): Promise<string> {
   return (
     await onHost(
       'sh',
       '-c',
-      `grep -l -F -e '${marker}' '${folder}'/*-${commit} 2>/dev/null; true`,
+      `cat "$HOME/${STAND_IN_CLI_TRACE}" 2>/dev/null; true`,
     )
-  )
-    .split('\n')
-    .filter(line => line !== '');
-}
-
-/**
- * Where the stand-in CLI's text is on the host and what `folder` holds, for the message of a row that did not find the
- * archive's file where it expected it: the files under the home and temporary folders with the text, and the folder's
- * entries with their sizes.
- */
-export async function standInCliWhereabouts(folder: string): Promise<string> {
-  const marker = STAND_IN_CLI_SCRIPT.split('\n')[1] ?? '';
-  const found = await onHost(
-    'sh',
-    '-c',
-    `grep -rl -F -e '${marker}' /home/harness /tmp 2>/dev/null; echo '--'; ls -la '${folder}' 2>&1; true`,
-  );
-  return found.trim();
+  ).trim();
 }

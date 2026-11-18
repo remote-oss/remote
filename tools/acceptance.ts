@@ -1852,6 +1852,11 @@ export async function runAcceptance(
       return 0;
     }
   }
+  const conflict = cliTemplateConflict(chosen);
+  if (conflict !== undefined) {
+    console.error(`acceptance: ${conflict}`);
+    return 2;
+  }
   const genuine = genuineVersionIn(process.env);
   if (typeof genuine === 'object') {
     console.error(`acceptance: ${genuine.problem}`);
@@ -2608,9 +2613,29 @@ export function runTestCli(
 }
 
 /**
+ * Why a selection cannot run, when it names a launch with real CLI archives and a launch with a stand-in CLI: the
+ * CLI-source copy has one template, which the host's downloader and the client reach by different bases. Nothing when it
+ * names at most one of them.
+ */
+function cliTemplateConflict(chosen: readonly Launch[]): string | undefined {
+  const pinned = chosen.filter(startsPinnedCliEditor);
+  const standIn = chosen.filter(startsStandInCliEditor);
+  return pinned.length === 0 || standIn.length === 0
+    ? undefined
+    : `the run names a launch with real CLI archives (${pinned
+        .map(launch => launch.label)
+        .join(', ')}) and one with a stand-in CLI (${standIn
+        .map(launch => launch.label)
+        .join(
+          ', ',
+        )}): the CLI-source copy has one template, so name them in separate runs`;
+}
+
+/**
  * The download host's base that the CLI-source copy's template names: the host's own (`downloads`), where a chosen
  * launch (`cli-path`) has the host's downloader fetch real CLI archives, else the client's loopback, where the client
- * itself downloads the stand-in archive of a chosen install case, since the client cannot resolve `downloads`.
+ * itself downloads the stand-in archive of a chosen install case, since the client cannot resolve `downloads`. A run
+ * that chooses both is refused at its selection (`cliTemplateConflict`).
  */
 function cliBaseOf(
   variables: Readonly<Record<string, string | undefined>>,

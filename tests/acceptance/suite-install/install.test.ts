@@ -12,8 +12,7 @@ import {
   installedCommits,
   isHostDownloader,
   runVariable,
-  standInCliFiles,
-  standInCliWhereabouts,
+  standInCliRanAs,
 } from './install.ts';
 
 /** The download host's requests a case expects: a count, all of one path, or only the client's. */
@@ -248,14 +247,19 @@ describe(`the install case "${installCase?.label ?? 'unknown'}" of the VSCodium 
       );
     });
 
-    it(`${cite}: the CLI archive's file is in the server folder of the host`, async () => {
+    // The install removes the CLI's file when the CLI fails, so the stand-in writes the path it was run as: that path is
+    // the archive's file in the server folder, under the commit-keyed name, and it was run from there.
+    it(`${cite}: the CLI archive's file was run from the server folder of the host under its commit-keyed name`, async () => {
       const commit = runVariable('HARNESS_CLIENT_COMMIT');
+      const ranAs = await standInCliRanAs();
       deepStrictEqual(
-        (await standInCliFiles(cliIn, commit)).map(file =>
-          file.endsWith(`-${commit}`),
-        ),
-        [true],
-        `where the stand-in's text is on the host, then ${cliIn}:\n${await standInCliWhereabouts(cliIn)}\nthe log lines that name the CLI: ${JSON.stringify(
+        [
+          ranAs.startsWith(`${cliIn}/`),
+          ranAs.slice(cliIn.length + 1).endsWith(`-${commit}`),
+          ranAs.slice(cliIn.length + 1).includes('/'),
+        ],
+        [true, true, false],
+        `the stand-in CLI was run as ${JSON.stringify(ranAs)}; the log lines that name the CLI: ${JSON.stringify(
           connectionLog().filter(line => /\bCLI\b/i.test(line)),
         )}`,
       );
