@@ -456,8 +456,14 @@
       "unparsable.test.ts": 0.1,
       "x11.test.ts": 10.2
     },
-    "ssh-newclient": 1.6,
-    "ssh-newclient-pickers": 1.1,
+    "ssh-newclient": {
+      "jump-hosts-new-wording.test.ts": 0.7,
+      "newer-keywords.test.ts": 1.6
+    },
+    "ssh-newclient-pickers": {
+      "jump-hosts-focus.test.ts": 0.4,
+      "maintenance-host-key.test.ts": 1.1
+    },
     "terminal": 0.3,
     "terminal-login": {
       "chat-absence.test.ts": 0.7,
