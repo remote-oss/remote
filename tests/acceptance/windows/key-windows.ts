@@ -9,6 +9,7 @@ import {
   answerInputBox,
   connectSurface,
   inputBoxOf,
+  quickPickClosed,
   quickPickOf,
 } from './renderer.ts';
 
@@ -65,6 +66,7 @@ export async function killSharedConnection(
   name: string,
   alias: string,
 ): Promise<void> {
+  await quickPickClosed(name);
   void inWindow(name, 'opensshremotes.cleanLocalServer');
   await waitFor(
     'the host pick',

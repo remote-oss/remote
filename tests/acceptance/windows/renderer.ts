@@ -10,7 +10,7 @@
 import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {isOpen, variable, windowState} from './harness.ts';
+import {isOpen, variable, waitFor, windowState} from './harness.ts';
 
 /** How long a wait for the renderer lasts, in milliseconds. */
 const WAIT_MILLISECONDS = 60_000;
@@ -3378,6 +3378,18 @@ export async function pressQuickPickRowButton(
       `window ${name}: no button ${JSON.stringify(button)} on the row ${JSON.stringify(label)}`,
     );
   }
+}
+
+/**
+ * Waits until no quick pick is open in window `name`. A row that starts a command in a window where an earlier command
+ * showed a pick calls it first, or its wait for the new pick would take the old one for it (card #2840).
+ */
+export async function quickPickClosed(name: string): Promise<void> {
+  await waitFor(
+    `the quick pick of ${name} to close`,
+    async () => (await quickPickOf(name)) === undefined,
+    60_000,
+  );
 }
 
 /** Waits until window `name` shows a quick pick and returns it. */
