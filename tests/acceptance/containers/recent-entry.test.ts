@@ -1,5 +1,7 @@
+import {execFile} from 'node:child_process';
 import {deepStrictEqual} from 'node:assert';
 import {rmSync} from 'node:fs';
+import {promisify} from 'node:util';
 import {
   closeWindow,
   connectedToContainer,
@@ -13,6 +15,24 @@ import {
   startInWindow,
 } from '../windows/harness.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
+
+const execFileAsync = promisify(execFile);
+
+/** The id, state and start time of each container of `folder`, as `docker inspect` says them. */
+async function containerStates(folder: string): Promise<string[]> {
+  const containerIds = await devContainersOf(folder);
+  return Promise.all(
+    containerIds.map(async containerId => {
+      const {stdout} = await execFileAsync('docker', [
+        'inspect',
+        '-f',
+        '{{.Id}}|{{.State.Status}}|{{.State.StartedAt}}',
+        containerId,
+      ]);
+      return stdout.trim();
+    }),
+  );
+}
 import {
   answerDialog,
   chooseQuickPickRow,
@@ -27,17 +47,22 @@ import {
   windowTitle,
 } from '../windows/renderer.ts';
 
-/** The dialog of a setup that fails, as F-0410 words it, and its buttons sorted. */
+/** The texts a setup that fails may show in its dialog: the general one of F-0410 (STR:S034) or, as in the reference, the missing-Docker one (STR:S339). */
+const SETUP_DETAILS = [
+  'An error occurred setting up the container.',
+  "The 'docker' command was not found. Make sure Docker is installed.",
+];
+
+/** The setup-failure dialog as the rows compare it, its details excepted: the message and its buttons. */
 const SETUP_FAILED = {
   message: '',
-  details: 'An error occurred setting up the container.',
   buttons: ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
 };
 
 describe('The Open Recent entry and the label of a connected window (cards containers-43 and coverage-74)', function () {
   this.timeout(600_000);
 
-  it('F-0502 AC-23 (ruling-1053-folder): picking a stored dev-container entry whose host folder was deleted shows the remembered title and indicator, the setup error with Retry primary, More Actions... with its four items, and the same error again after Retry and after Reload Window, with the folder named in the log', async () => {
+  it('F-0502 AC-23 (ruling-1053-folder): picking a stored dev-container entry whose host folder was deleted makes no connection and creates nothing, shows the remembered title and indicator, the setup error with its buttons and Retry primary, More Actions... with its four items, the same error again after Retry and after Reload Window, and, once the dialog is dismissed, the Disconnected status with the container named', async () => {
     const folder = devContainerFolder('c43-recent', {name: 'C43 Recent'});
     const starter = await openFolderWindow(
       devContainerFolder('c43-recent-starter'),
@@ -54,6 +79,7 @@ describe('The Open Recent entry and the label of a connected window (cards conta
       );
       rmSync(folder, {recursive: true, force: true});
       const mark = containersLog().length;
+      const kept = await containerStates(folder);
       void inWindow(starter, 'acceptance.agent.openWindow', entry?.uri ?? '');
       const dialog = await waitForDialog(window, 180_000);
       const shown = {
@@ -61,23 +87,35 @@ describe('The Open Recent entry and the label of a connected window (cards conta
         indicator: (await statusItem(window, 'status.host')).text,
         dialog: {
           message: dialog.message,
-          details: dialog.details,
-          buttons: [...dialog.buttons].sort(),
+          buttons: dialog.buttons,
         },
         primary: await primaryButtonOf(window),
       };
       await answerDialog(window, 'More Actions...');
       await waitForQuickPick(window, 30_000);
-      const pick = (await quickPickRows(window)).map(entry => entry.label);
+      const pick = (await quickPickRows(window)).map(item => item.label);
       await chooseQuickPickRow(window, 'Reload Window');
       const afterReload = (await waitForDialog(window, 180_000)).details;
       await answerDialog(window, 'Retry');
       const afterRetry = (await waitForDialog(window, 180_000)).details;
+      await pressEscape(window);
+      const dismissed = await statusItemText(
+        window,
+        'status.host',
+        'Disconnected from Dev Container: C43 Recent',
+        120_000,
+      );
       deepStrictEqual(
         {
           shown,
           pick,
-          again: [afterRetry, afterReload],
+          details: [dialog.details, afterReload, afterRetry].every(text =>
+            SETUP_DETAILS.includes(text),
+          ),
+          dismissed,
+          containersChanged:
+            JSON.stringify(await containerStates(folder)) ===
+            JSON.stringify(kept),
           logged:
             containersLog()
               .slice(mark)
@@ -96,7 +134,9 @@ describe('The Open Recent entry and the label of a connected window (cards conta
             'Open Recent...',
             'Open Documentation',
           ],
-          again: [SETUP_FAILED.details, SETUP_FAILED.details],
+          details: true,
+          dismissed: 'Disconnected from Dev Container: C43 Recent',
+          containersChanged: true,
           logged: true,
         },
       );
