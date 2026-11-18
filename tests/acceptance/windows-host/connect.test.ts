@@ -43,8 +43,9 @@ function noHelperSsh(): Promise<void> {
 }
 
 /**
- * Opens window `name` on winhost and waits until it is on the remote and `ready` holds, gathering the helpers' `ssh`
- * command lines meanwhile; gives them and the log lines since the open, with the window closed again.
+ * Opens window `name` on winhost and waits until its connect resolved, with a helper's `ssh` seen meanwhile, and `ready`
+ * holds; gives the helpers' `ssh` command lines and the log lines since the open, with the window closed again. A
+ * window on a remote authority names the remote at once, before its connect resolves, so that alone says nothing.
  */
 async function connectedOnWinhost(
   name: string,
@@ -61,9 +62,12 @@ async function connectedOnWinhost(
         for (const command of await helperSshCommands()) {
           commands.add(command);
         }
+        const logged = connectionLog().slice(mark);
         return (
           (await windowState(name)).remoteName === 'ssh-remote' &&
-          ready(connectionLog().slice(mark))
+          logged.some(line => line.startsWith('Resolved ssh-remote+')) &&
+          commands.size > 0 &&
+          ready(logged)
         );
       },
       480_000,
