@@ -20,6 +20,8 @@ import {
   userSettings,
 } from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
+import {explainedFailure} from '../windows/connect-failure.ts';
+import {reconnectionState} from '../windows/reconnection-state.ts';
 import {
   dialogOf,
   notifications,
@@ -33,40 +35,6 @@ const ACCOUNT = 'harness-pwonly';
 /** The line that starts a reconnection attempt of the alias in the log. */
 const RECONNECTION =
   /^Resolving ssh-remote\+password-retry, attempt \d+, reconnection/u;
-
-/**
- * What window `name` recorded and the launch's connection log held since its shared connection was ended at `endedAt`
- * (a time in milliseconds), with the log's length at that time as `mark`, and what the window shows now: where a wait
- * for core's dialog stopped.
- */
-async function reconnectionState(
-  name: string,
-  mark: number,
-  endedAt: number,
-): Promise<string> {
-  const recorded = recordLines(undefined, name)
-    .filter(line => line.time >= endedAt)
-    .map(
-      line =>
-        `[+${((line.time - endedAt) / 1000).toFixed(1)} s] ${line.surface}: ${line.question} (${line.answer})`,
-    );
-  const indicator = await statusBarText(name, 'status.host').catch(
-    (caught: unknown) => `(unreadable: ${String(caught)})`,
-  );
-  const shown = await dialogOf(name).catch(() => undefined);
-  return [
-    `what ${name} recorded since the shared connection ended:`,
-    ...recorded,
-    `the indicator: ${indicator}`,
-    `the dialog now: ${shown === undefined ? 'none' : `${shown.message} / ${shown.details}`}`,
-    `the notifications now: ${JSON.stringify(await notifications(name).catch(() => []))}`,
-    'the last lines of the connection log since then:',
-    ...connectionLog()
-      .slice(mark)
-      .filter(line => !line.startsWith('Searched for ssh in:'))
-      .slice(-60),
-  ].join('\n');
-}
 
 describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)', function () {
   this.timeout(600_000);
@@ -118,9 +86,19 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     await inWindow(name, 'opensshremotes.cleanLocalServer');
     const dialog = await waitForDialog(name, 180_000).catch(
       async (caught: unknown) => {
-        throw new Error(
-          `${String(caught)}\n${await reconnectionState(name, mark, endedAt)}`,
-          {cause: caught},
+        throw await explainedFailure(caught, () =>
+          reconnectionState(
+            {
+              recorded: () => recordLines(undefined, name),
+              indicator: () => statusBarText(name, 'status.host'),
+              dialog: () => dialogOf(name),
+              notifications: () => notifications(name),
+              logLines: () => connectionLog(),
+            },
+            name,
+            mark,
+            endedAt,
+          ),
         );
       },
     );

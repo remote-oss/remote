@@ -15,6 +15,20 @@ export function section(title: string, read: () => string): string {
   return `${title}:\n${text}`;
 }
 
+/** A titled section of an explanation read in time: its text, or why it could not be read. */
+export async function settledSection(
+  title: string,
+  read: () => Promise<string>,
+): Promise<string> {
+  let text: string;
+  try {
+    text = await read();
+  } catch (caught) {
+    text = `(unreadable: ${String(caught)})`;
+  }
+  return `${title}:\n${text}`;
+}
+
 /** The failure `caught`, with `explain`'s text after it, or, when `explain` fails, the line that says so. */
 export async function explainedFailure(
   caught: unknown,

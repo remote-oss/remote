@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {
   explainedFailure,
   section,
+  settledSection,
 } from '../tests/acceptance/windows/connect-failure.ts';
 
 describe('the failure of a wait for a connect and its explanation (card #2490)', () => {
@@ -44,6 +45,23 @@ describe('the failure of a wait for a connect and its explanation (card #2490)',
       [
         'what a2 recorded:\nprogress: Setting up SSH Host',
         'what a2 recorded:\n(unreadable: Error: ENOENT: record.jsonl)',
+      ],
+    );
+  });
+
+  it('#2753: a section read in time gives its title and its text, or why it could not be read', async () => {
+    deepStrictEqual(
+      [
+        await settledSection('the indicator', () =>
+          Promise.resolve('Reconnecting'),
+        ),
+        await settledSection('the indicator', () =>
+          Promise.reject(new Error('window closed')),
+        ),
+      ],
+      [
+        'the indicator:\nReconnecting',
+        'the indicator:\n(unreadable: Error: window closed)',
       ],
     );
   });
