@@ -318,8 +318,18 @@ describe('the activation', () => {
   it('opens the log channel before any command is registered', async () => {
     const {inputs, seen} = surroundings({otherRuns: false});
     await activateRemoteSsh(inputs);
-    deepStrictEqual(seen.channelLines, [
-      '[00:00:00.000] Log level: debug',
+    deepStrictEqual(seen.channelLines, ['[00:00:00.000] Log level: debug']);
+  });
+
+  it('F-2003 BR-5: writes the versions once, when the window asks', async () => {
+    const {inputs, seen} = surroundings({otherRuns: false});
+    const result = await activateRemoteSsh(inputs);
+    if (result.kind !== 'serving') {
+      throw new Error('expected the activation to serve');
+    }
+    result.writeWindowStart();
+    result.writeWindowStart();
+    deepStrictEqual(seen.channelLines.slice(1), [
       '[00:00:00.000] Editor version: 1.139.1',
       '[00:00:00.000] Remote - SSH 0.1.0',
       '[00:00:00.000] Client: linux x64',

@@ -259,6 +259,7 @@ export function surfacesOf(
     presenter: {present: () => Promise.resolve('handled')},
     downloadProgress: SILENT_PROGRESS,
     revealLog,
+    writeWindowStart: () => undefined,
     rejectBindHost: () => undefined,
     parseUri: () => undefined,
     linkTerminals: {runProgram: () => Promise.resolve()},

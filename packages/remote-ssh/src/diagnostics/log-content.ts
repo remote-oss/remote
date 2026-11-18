@@ -44,6 +44,19 @@ export function configFileLine(file: string): string {
   return `SSH configuration file in use: ${file}`;
 }
 
+/**
+ * The lines of the settings listing, one for each setting: `remote.SSH.<name> = <JSON value>`, in the order given. A value
+ * that has no JSON form, a setting nothing sets, shows as `undefined`.
+ */
+export function settingLines(
+  entries: ReadonlyArray<readonly [string, unknown]>,
+): string[] {
+  return entries.map(
+    ([name, value]) =>
+      `${name} = ${(JSON.stringify(value) as string | undefined) ?? 'undefined'}`,
+  );
+}
+
 /** The value of `remote.SSH.path` as the log shows it: JSON text, `""` when it is unset. */
 export function pathSettingLine(value: string): string {
   return `remote.SSH.path = ${JSON.stringify(value)}`;
@@ -82,6 +95,11 @@ export function rejectedLine(program: string, reason: string): string {
 /** The setting named a program that was rejected. */
 export function notValidLine(value: string): string {
   return `remote.SSH.path "${value}" is not a valid SSH binary`;
+}
+
+/** The line that tells this connect started an ssh. */
+export function sshStartedLine(): string {
+  return 'Started ssh';
 }
 
 /** The folders of the search path, one line each, in order. */

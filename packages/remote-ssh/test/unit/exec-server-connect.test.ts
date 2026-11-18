@@ -320,6 +320,8 @@ function connectorOverCli(
       logger: settings.logger,
       serve: settings.serve,
       useExecServer: settings.useExecServer,
+      settingLines: settings.settingLines,
+      writeWindowStart: settings.writeWindowStart,
     },
     revealLog: () => undefined,
     applyTerminalEnvironment: () => undefined,

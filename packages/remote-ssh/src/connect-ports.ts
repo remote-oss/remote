@@ -96,6 +96,7 @@ import {
   connectionSettingsOf,
   localDownloadModeOf,
   overrideOf,
+  listedSettings,
   serverSettingsOf,
   switchOf,
   terminalModeOf,
@@ -105,6 +106,7 @@ import {
   valueOf,
   x11ForwardingOf,
 } from './pipeline/connect-settings.ts';
+import {settingLines} from './diagnostics/log-content.ts';
 import type {ConnectionRequestEnvironment} from './pipeline/connection-request.ts';
 import type {LinkTerminals} from './pipeline/forwarding-step.ts';
 import {connectorOf, type SshConnector} from './pipeline/connector.ts';
@@ -168,6 +170,8 @@ export interface ConnectSurfaces {
   downloadProgress: DownloadProgressPort;
   /** Reveals the connection's log. */
   revealLog: () => void;
+  /** Writes the editor version, the extension and the platform to the log, once per window. */
+  writeWindowStart: () => void;
   /** Tells the user that the host's bind host entry is not valid; does not wait for the user. */
   rejectBindHost: (alias: string, configured: string) => void;
   /** The editor's strict URI parser, which throws for a text that is no URI. */
@@ -586,6 +590,10 @@ export function connectAssemblyOf(
       get useExecServer() {
         return switchOf(surfaces.settings, 'useExecServer');
       },
+      get settingLines() {
+        return settingLines(listedSettings(surfaces.settings));
+      },
+      writeWindowStart: surfaces.writeWindowStart,
     },
     revealLog: () => {
       tracker.revealDetails(

@@ -17,6 +17,7 @@ import {
   resolverLine,
   searchedLines,
   serverResultLine,
+  settingLines,
   usingLine,
 } from '../../src/diagnostics/log-content.ts';
 
@@ -187,6 +188,29 @@ describe('the server result and the progress in the log (card connect-67)', () =
     deepStrictEqual(
       serverResultLine(parsedBlock({hostFacts: {sshAuthSock: '/tmp/a'}})),
       'Server result: Ok',
+    );
+  });
+});
+
+describe('the settings listing (F-2003 BR-6 item 2, card connect-71)', () => {
+  it('has a line for each setting, its name, an equal sign and its value as JSON, in the order given', () => {
+    deepStrictEqual(
+      settingLines([
+        ['remote.SSH.useFlock', true],
+        ['remote.SSH.bindHost', 'localhost'],
+        ['remote.SSH.preferredLocalPortRange', {first: 1, second: 2}],
+        ['remote.SSH.defaultExtensions', ['a.b']],
+        ['remote.SSH.httpProxy', undefined],
+        ['remote.SSH.connectTimeout', null],
+      ]),
+      [
+        'remote.SSH.useFlock = true',
+        'remote.SSH.bindHost = "localhost"',
+        'remote.SSH.preferredLocalPortRange = {"first":1,"second":2}',
+        'remote.SSH.defaultExtensions = ["a.b"]',
+        'remote.SSH.httpProxy = undefined',
+        'remote.SSH.connectTimeout = null',
+      ],
     );
   });
 });
