@@ -16,7 +16,10 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     `packages/remote-explorer/test/unit/manifest.test.ts`.
 - **A `Host` line with no pattern in the SSH configuration doesn't hide the hosts after it.** The Remotes view lists
   every host of the file, as Remote - SSH's host picker does, and the empty line itself gives no row.
-  - F-5102 7.E4 and AC-26 describe the reference dropping every host after such a line. Ours shows the companion's
-    list (F-5102 BR-7), which follows F-2202 7.E4: "an empty `Host` line does not disturb later lines" (athena on
-    #253; spec question on remote-oss/remote-explorer#9). The row is `F-5102 AC-26 (ruling-f2202-empty-host)` in
-    `tests/acceptance/explorer-rows/host-list.test.ts`.
+  - F-5102 7.E4 describes the reference dropping every host after such a line. Ours shows the companion's list
+    (F-5102 BR-7), which follows F-2202 7.E4: "an empty `Host` line does not disturb later lines" (athena on #253).
+    The republished AC-26 (2026-11-16) asserts only the hosts before the line and every host after the option line that
+    follows it, and nothing about a host written directly after the pattern-less line, so a reimplementation that
+    lists it passes: the spec now leaves that open, and athena's answer on remote-oss/remote-explorer#9 decides whether
+    this entry stays. The row is `F-5102 AC-26 (odd-lines)` in `tests/acceptance/explorer-rows/host-list.test.ts`, and
+    `F-2202.7.E4` in `packages/lib-ssh/test/unit/hosts.test.ts` asserts it the same way.
