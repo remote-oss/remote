@@ -37,6 +37,7 @@ import {
   indicatorReads,
 } from '../windows/window-states.ts';
 import {paletteItems} from '../windows/palette.ts';
+import {bindKeys, keybindingsFile} from '../windows/key-bindings.ts';
 import {
   answerDialog,
   dialogOf,
@@ -242,18 +243,25 @@ describe('the Remote-SSH command catalogue in the palette (F-2006, card #2815)',
   });
 
   it('F-2006 AC-25 (c2815-keybindings): the Keyboard Shortcuts editor filtered by Remote-SSH lists the 17 commands and none of them shows a keybinding', async () => {
-    const name = await emptyLocalWindow();
-    const rows = await keybindingRows(name, 'Remote-SSH');
-    deepStrictEqual(
-      {
-        count: rows.length,
-        unnamed: rows.filter(each => each.command === '').length,
-        withKeybinding: rows
-          .filter(each => each.keybinding !== '')
-          .map(each => `${each.command}: ${each.keybinding}`),
-      },
-      {count: 17, unnamed: 0, withKeybinding: []},
-    );
+    // The rows of other cards write user keybindings in this launch: the Given is a profile without any.
+    const restore = bindKeys([]);
+    try {
+      const name = await emptyLocalWindow();
+      const rows = await keybindingRows(name, 'Remote-SSH');
+      deepStrictEqual(
+        {
+          count: rows.length,
+          unnamed: rows.filter(each => each.command === '').length,
+          withKeybinding: rows
+            .filter(each => each.keybinding !== '')
+            .map(each => `${each.command}: ${each.keybinding}`),
+        },
+        {count: 17, unnamed: 0, withKeybinding: []},
+        `the user keybindings file ${keybindingsFile()} was emptied before the table was read`,
+      );
+    } finally {
+      restore();
+    }
   });
 
   it('F-2006 AC-13 (c2815-indicator-menu): the remote indicator menu of a connected window still holds "Connect to Host..." and "Connect Current Window to Host..." in the group "Remote-SSH"', async () => {
