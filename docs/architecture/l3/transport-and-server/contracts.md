@@ -541,8 +541,9 @@ setting at run time are filled in by the extension's adapter before the call.
 
 Rulings of 2026-10-08 for the script parameters: a profile without `serverDataFolderName` gets the derived
 `.<applicationName>-server` from lib-product's `serverDataFolderNameOrDefault(profile)` (product-scoped, never
-`~/.vscode-server`; an adaptation); the host lock file is `remote-lock.<user>.<commit>` in the lock folder, `<user>`
-from the effective ssh config (interop with the reference's name is not a goal); the proxy variable text of F-2404
+`~/.vscode-server`; an adaptation); the host lock file is `vscode-remote-lock.<user>.<commit>` (with the `.target` second name under `ln`) in the lock
+folder, `<user>` from the effective ssh config, so that windows of the reference and of ours exclude each other
+(F-2408 BR-1, ruling-2818-host-lock-name); the proxy variable text of F-2404
 BR-5 (empty path → "/", host lower-cased, `$` encoded) is built by lib-server's pure `proxyVariableText`.
 
 ### V1 bootstrap-scripts

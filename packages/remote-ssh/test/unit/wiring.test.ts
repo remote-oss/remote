@@ -779,7 +779,7 @@ describe("the composition's forwarding of the later server steps", () => {
     const [call] = channel.calls;
     deepStrictEqual(
       call?.operation === 'runScript' &&
-        call.request.script.includes('remote-lock.alex'),
+        call.request.script.includes('vscode-remote-lock.alex'),
       true,
     );
   });

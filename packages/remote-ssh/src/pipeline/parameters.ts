@@ -119,7 +119,7 @@ export function scriptParametersFor(input: ParameterInput): ScriptParameters {
           ? 'flock'
           : 'link',
       inTemporaryFolder: settings.lockfilesInTmp,
-      filePrefix: `remote-lock.${input.remoteUser}`,
+      filePrefix: `vscode-remote-lock.${input.remoteUser}`,
     },
     environmentSetup: policy.environmentSetup ?? '',
     installUmask: policy.installUmask,

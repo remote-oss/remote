@@ -40,7 +40,7 @@ async function makeOld(
   await onHost(
     'sh',
     '-c',
-    `mkdir -p '${root}/bin/${commit}/bin' && touch '${root}/bin/${commit}/remote-lock.harness.${commit}' && ${withoutLog ? 'true' : `touch '${root}/.${commit}.log'`} && printf '99999' > '${root}/.${commit}.pid' && touch -d '${when}' '${root}/bin/${commit}'`,
+    `mkdir -p '${root}/bin/${commit}/bin' && touch '${root}/bin/${commit}/vscode-remote-lock.harness.${commit}' && ${withoutLog ? 'true' : `touch '${root}/.${commit}.log'`} && printf '99999' > '${root}/.${commit}.pid' && touch -d '${when}' '${root}/bin/${commit}'`,
   );
 }
 
@@ -196,7 +196,7 @@ describe('the clean-up of old server installs in the legacy mode (card #2651, F-
     for (let index = 1; index <= 8; index += 1) {
       await makeOld(DATA_FOLDER, index, index);
     }
-    const lock = `${DATA_FOLDER}/bin/${oldCommit(2)}/remote-lock.harness.${oldCommit(2)}`;
+    const lock = `${DATA_FOLDER}/bin/${oldCommit(2)}/vscode-remote-lock.harness.${oldCommit(2)}`;
     await onHost(
       'sh',
       '-c',
