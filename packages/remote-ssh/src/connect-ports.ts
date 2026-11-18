@@ -71,7 +71,6 @@ import type {PlatformPickVariant} from './connect/platform-picker.ts';
 import type {RemotePlatform} from './pipeline/platform.ts';
 import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
-import {ownText} from './surfaces/own-strings.ts';
 import type {HintRecorder} from './diagnostics/hint-recorder.ts';
 import {downloadRefusalHint} from './diagnostics/download-refusal.ts';
 import {installFolderHint} from './diagnostics/install-folder-hint.ts';
@@ -83,7 +82,6 @@ import {
   type RefusalWatch,
   refusalWatchOf,
 } from './diagnostics/forwarding-refusal.ts';
-import {commands} from './identifiers.generated.ts';
 import {
   CLIENT_CHECK_MILLISECONDS,
   HOST_LOCK_ATTEMPTS,
@@ -296,7 +294,6 @@ export function wiringPortsOf(
   refusal?: Pick<RefusalWatch, 'warned' | 'prohibited'>,
 ): WiringPorts {
   const {settings} = surfaces;
-  let refusedTold = false;
   /** What every login terminal shares: its questions, and whether it is shown. */
   const loginSurfaces = {
     attachQuestions: (login: TerminalLogin, input: ConnectInput) =>
@@ -528,26 +525,6 @@ export function wiringPortsOf(
       chooseLocalPort: chooseWindowPort,
       warnedForwardingDisabled: () => refusal?.warned() ?? false,
       prohibitedForwarding: () => refusal?.prohibited() ?? false,
-      forwardRefused: () => {
-        // The extension host is the window's, so a flag of this assembly is a flag of the window.
-        if (refusedTold) {
-          return;
-        }
-        refusedTold = true;
-        // A link that runs the Show Log command in a message with no button, which core would not hide.
-        void surfaces.notice.showError(
-          ownText(
-            {
-              id: 'socksForwardingFailedNotice',
-              values: [
-                `[${ownText({id: 'showLogLinkText', values: []}, surfaces.translate)}](command:${commands.showLog.id})`,
-              ],
-            },
-            surfaces.translate,
-          ),
-          [],
-        );
-      },
       logger,
     },
     logger,

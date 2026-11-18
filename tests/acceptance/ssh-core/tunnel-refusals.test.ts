@@ -236,7 +236,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
     ]);
   });
 
-  it('F-2104 AC-22, AC-47, F-2604 AC-24 (ruling-1985-forwarding-fails): the refusal recognised during the resolve, F-2604 AC-24’s case: when the host refuses forwarding on the SOCKS path, whether by sshd or by ClearAllForwardings, the window shows the error notification once, with a Show log link and no button, whose command opens the Remote - SSH channel holding the refusal, and the connect then fails with F-2601’s dialog that names the refused forward', async () => {
+  it('F-2104 AC-22, AC-47, F-2604 AC-24 (ruling-1985-forwarding-fails): the refusal recognised during the resolve, F-2604 AC-24’s case: when the host refuses forwarding on the SOCKS path, whether by sshd or by ClearAllForwardings, the window shows no notification (reading-2713-forwarding-notice, #2749): the connect fails with F-2601’s dialog that names the refused forward, its one surface, and Show Log opens the Remote - SSH channel holding the refusal', async () => {
     const seen: Array<{
       notices: Array<[string, string[] | undefined]>;
       dialogs: Array<string | undefined>;
@@ -248,22 +248,13 @@ describe('the tunnel of a window that its host or its configuration refuses (car
       await keepingSettings(async () => {
         await userSettings({...PLATFORMS});
         const name = `c79-socks-${alias}`;
-        appendScript([
-          {
-            surface: 'notice',
-            match: 'Failed to set up',
-            answer: 'dismiss',
-            window: name,
-          },
-          ...dismissals(name),
-        ]);
+        appendScript([...dismissals(name)]);
         await openWindow(alias, name);
         await waitFor(
           'the failure dialog',
           () => recordLines('failureDialog', name).length > 0,
           120_000,
         );
-        // The link of the message runs this command, which the row then runs, as the editor does for a click.
         await inWindow(name, 'opensshremotes.showLog');
         // The channel is shown a moment after the command ran: the state is read again until it names one.
         let channel: string | null | undefined;
@@ -295,12 +286,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
       });
     }
     const expected = {
-      notices: [
-        [
-          'Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. ([Show log](command:opensshremotes.showLog))',
-          [],
-        ],
-      ],
+      notices: [],
       channel: 'Remote - SSH',
       refusal: true,
     };

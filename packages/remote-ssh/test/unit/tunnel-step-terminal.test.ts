@@ -132,7 +132,6 @@ function stepWith(
     revealLoginTerminals: () => options.reveal ?? false,
     warnedForwardingDisabled: () => options.warned ?? false,
     prohibitedForwarding: () => false,
-    forwardRefused: () => undefined,
     connectWait: () =>
       options.connectWait ?? {
         connectTimeoutSeconds: 0,

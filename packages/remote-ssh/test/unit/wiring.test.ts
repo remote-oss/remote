@@ -319,7 +319,6 @@ function portsOf(
         dispose: () => undefined,
       }),
       revealLoginTerminals: () => false,
-      forwardRefused: () => undefined,
       warnedForwardingDisabled: () => false,
       prohibitedForwarding: () => false,
       settings: () => ({
