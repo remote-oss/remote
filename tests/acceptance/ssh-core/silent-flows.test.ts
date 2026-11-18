@@ -134,105 +134,108 @@ function debugSessionStanding(
 describe('the extension in the core flows of an SSH window (card connect-125)', function () {
   this.timeout(600_000);
 
-  it('F-2508 AC-21 (c125-silent): after the terminal, the code command, the remote settings, a node program debugged to its end, a shell task and the Extensions view, the extension has shown no notification, logged no line, added nothing to the profile’s globalStorage, and registered no command or setting it lacked before', async () => {
-    const folder = 'c125-silent';
-    await onHost(
-      'sh',
-      '-c',
-      `mkdir -p /home/harness/${folder} && echo note > /home/harness/${folder}/note.txt`,
-    );
-    const host = (await onHost('hostname')).trim();
-    await onHost(
-      'sh',
-      '-c',
-      `cat > /home/harness/${folder}/app.js <<'EOF'\nconsole.log('c125-ran-on-' + require('os').hostname());\nEOF\nmkdir -p /home/harness/${folder}/.vscode && cat > /home/harness/${folder}/.vscode/launch.json <<'EOF'\n{"version":"0.2.0","configurations":[{"type":"node","request":"launch","name":"Run app","program":"\${workspaceFolder}/app.js"}]}\nEOF`,
-    );
-    await openWindow('harness', folder);
-    try {
-      await inWindow(folder, 'workbench.action.terminal.new');
-      await waitFor(
-        'the first terminal',
-        async () => (await terminalNames(folder)).length === 1,
-        30_000,
+  for (const round of Array.from({length: 10}, (each, place) => place + 1)) {
+    it(`F-2508 AC-21 (c125-silent-${String(round)}): after the terminal, the code command, the remote settings, a node program debugged to its end, a shell task and the Extensions view, the extension has shown no notification, logged no line, added nothing to the profile’s globalStorage, and registered no command or setting it lacked before`, async () => {
+      const folder = `c125-silent-${String(round)}`;
+      await onHost(
+        'sh',
+        '-c',
+        `mkdir -p /home/harness/${folder} && echo note > /home/harness/${folder}/note.txt`,
       );
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      const before = await footprintOf(folder);
+      const host = (await onHost('hostname')).trim();
+      await onHost(
+        'sh',
+        '-c',
+        `cat > /home/harness/${folder}/app.js <<'EOF'\nconsole.log('c125-ran-on-' + require('os').hostname());\nEOF\nmkdir -p /home/harness/${folder}/.vscode && cat > /home/harness/${folder}/.vscode/launch.json <<'EOF'\n{"version":"0.2.0","configurations":[{"type":"node","request":"launch","name":"Run app","program":"\${workspaceFolder}/app.js"}]}\nEOF`,
+      );
+      await openWindow('harness', folder);
+      try {
+        await inWindow(folder, 'workbench.action.terminal.new');
+        await waitFor(
+          'the first terminal',
+          async () => (await terminalNames(folder)).length === 1,
+          30_000,
+        );
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        const before = await footprintOf(folder);
 
-      // 5.1: a second terminal.
-      await inWindow(folder, 'workbench.action.terminal.new');
-      await waitFor(
-        'two terminals',
-        async () => (await terminalNames(folder)).length === 2,
-        30_000,
-      );
-      // 5.2: the code command opens a host file in the window.
-      await typeInTerminal(
-        folder,
-        `${editorProduct().applicationName} /home/harness/${folder}/note.txt\n`,
-      );
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      // 5.3: the remote settings of the host.
-      await runFromPalette(
-        folder,
-        'Preferences: Open Remote Settings (JSON) (SSH: harness)',
-      );
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      // 5.4: a node program is debugged to its end.
-      // The start returns once the session is up, which on a slow host takes longer than a command may; the program's
-      // output below is what the row waits for.
-      const debugStartAt = Date.now();
-      await startInWindow(folder, 'workbench.action.debug.start');
-      await waitFor(
-        'the program to print in the Debug Console',
-        async () => (await pageText(folder)).includes(`c125-ran-on-${host}`),
-        90_000,
-      ).catch(async (caught: unknown) => {
-        // What the window shows when the wait ends tells a program that did not start (a pick, a dialog) from one whose
-        // output did not reach the console; the standing names the session's state and the seconds since the start.
-        const seconds = Math.round((Date.now() - debugStartAt) / 1000);
-        const shown = await pageText(folder).catch(() => '(unreadable)');
-        // Then the Debug Console is asked for, so that a program that ran while another panel was shown reads
-        // differently from a session that never started.
-        await startInWindow(folder, 'workbench.debug.action.toggleRepl').catch(
-          () => undefined,
+        // 5.1: a second terminal.
+        await inWindow(folder, 'workbench.action.terminal.new');
+        await waitFor(
+          'two terminals',
+          async () => (await terminalNames(folder)).length === 2,
+          30_000,
+        );
+        // 5.2: the code command opens a host file in the window.
+        await typeInTerminal(
+          folder,
+          `${editorProduct().applicationName} /home/harness/${folder}/note.txt\n`,
+        );
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        // 5.3: the remote settings of the host.
+        await runFromPalette(
+          folder,
+          'Preferences: Open Remote Settings (JSON) (SSH: harness)',
         );
         await new Promise(resolve => setTimeout(resolve, 3000));
-        const revealed = await pageText(folder).catch(() => '(unreadable)');
-        const standing = debugSessionStanding(shown, revealed);
-        throw new Error(
-          `${String(caught)}; ${String(seconds)} s after the debug start, the session stood at ${standing.state} (${standing.evidence}); the window shows (its last 1500 characters): ${JSON.stringify(shown.slice(-1500))}; after the Debug Console was asked for, the program's line is ${revealed.includes(`c125-ran-on-${host}`) ? 'there' : 'not there'} and the window shows (its last 600 characters): ${JSON.stringify(revealed.slice(-600))}`,
-          {cause: caught},
+        // 5.4: a node program is debugged to its end.
+        // The start returns once the session is up, which on a slow host takes longer than a command may; the program's
+        // output below is what the row waits for.
+        const debugStartAt = Date.now();
+        await startInWindow(folder, 'workbench.action.debug.start');
+        await waitFor(
+          'the program to print in the Debug Console',
+          async () => (await pageText(folder)).includes(`c125-ran-on-${host}`),
+          90_000,
+        ).catch(async (caught: unknown) => {
+          // What the window shows when the wait ends tells a program that did not start (a pick, a dialog) from one whose
+          // output did not reach the console; the standing names the session's state and the seconds since the start.
+          const seconds = Math.round((Date.now() - debugStartAt) / 1000);
+          const shown = await pageText(folder).catch(() => '(unreadable)');
+          // Then the Debug Console is asked for, so that a program that ran while another panel was shown reads
+          // differently from a session that never started.
+          await startInWindow(
+            folder,
+            'workbench.debug.action.toggleRepl',
+          ).catch(() => undefined);
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          const revealed = await pageText(folder).catch(() => '(unreadable)');
+          const standing = debugSessionStanding(shown, revealed);
+          throw new Error(
+            `${String(caught)}; ${String(seconds)} s after the debug start, the session stood at ${standing.state} (${standing.evidence}); the window shows (its last 1500 characters): ${JSON.stringify(shown.slice(-1500))}; after the Debug Console was asked for, the program's line is ${revealed.includes(`c125-ran-on-${host}`) ? 'there' : 'not there'} and the window shows (its last 600 characters): ${JSON.stringify(revealed.slice(-600))}`,
+            {cause: caught},
+          );
+        });
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        await inWindow(folder, 'workbench.action.debug.stop').catch(
+          () => undefined,
         );
-      });
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      await inWindow(folder, 'workbench.action.debug.stop').catch(
-        () => undefined,
-      );
-      // 5.5: a shell task runs to its end.
-      const taskExit = await runShellTask(folder, 'echo c125-task');
-      // 5.6: the Extensions view.
-      await inWindow(folder, 'workbench.view.extensions');
-      await new Promise(resolve => setTimeout(resolve, 5000));
+        // 5.5: a shell task runs to its end.
+        const taskExit = await runShellTask(folder, 'echo c125-task');
+        // 5.6: the Extensions view.
+        await inWindow(folder, 'workbench.view.extensions');
+        await new Promise(resolve => setTimeout(resolve, 5000));
 
-      const after = await footprintOf(folder);
-      // The toasts and the centre are read together, with the centre open, and none is the extension's.
-      await notificationCentre(folder);
-      const ours = (await toastFacts(folder)).filter(each =>
-        each.source.includes('Remote - SSH'),
-      );
-      deepStrictEqual(
-        [
-          after,
-          before.settings.length > 0,
-          before.commands.length > 0,
-          before.palette.length > 0,
-          ours,
-          taskExit,
-        ],
-        [before, true, true, true, [], 0],
-      );
-    } finally {
-      await closeWindow(folder).catch(() => undefined);
-    }
-  });
+        const after = await footprintOf(folder);
+        // The toasts and the centre are read together, with the centre open, and none is the extension's.
+        await notificationCentre(folder);
+        const ours = (await toastFacts(folder)).filter(each =>
+          each.source.includes('Remote - SSH'),
+        );
+        deepStrictEqual(
+          [
+            after,
+            before.settings.length > 0,
+            before.commands.length > 0,
+            before.palette.length > 0,
+            ours,
+            taskExit,
+          ],
+          [before, true, true, true, [], 0],
+        );
+      } finally {
+        await closeWindow(folder).catch(() => undefined);
+      }
+    });
+  }
 });
