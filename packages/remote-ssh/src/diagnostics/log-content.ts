@@ -44,17 +44,53 @@ export function configFileLine(file: string): string {
   return `SSH configuration file in use: ${file}`;
 }
 
+/** A text with a scheme and `://`, its userinfo, its query values and its fragment, which the groups take apart. */
+const URL_PARTS =
+  /^([a-z][a-z0-9+.-]*:\/\/)(?:([^/?#@]*)@)?([^?#]*)(?:\?([^#]*))?(#.*)?$/iu;
+
+/** `query` with each value masked and each key kept. */
+function queryMasked(query: string): string {
+  return query
+    .split('&')
+    .map(pair => {
+      const equals = pair.indexOf('=');
+      return equals < 0
+        ? maskOf(pair)
+        : `${pair.slice(0, equals + 1)}${maskOf(pair.slice(equals + 1))}`;
+    })
+    .join('&');
+}
+
 /**
- * The lines of the settings listing, one for each setting: `remote.SSH.<name> = <JSON value>`, in the order given. A value
- * that has no JSON form, a setting nothing sets, shows as `undefined`.
+ * `value` with the userinfo and the query values of a URL masked, its scheme, host, port and path kept; any value that is
+ * not a text with a scheme and `://` as it is.
+ */
+function urlMasked(value: unknown): unknown {
+  const parts = typeof value === 'string' ? URL_PARTS.exec(value) : null;
+  if (parts === null) {
+    return value;
+  }
+  const [, scheme = '', userinfo, rest = '', query, fragment = ''] = parts;
+  const credentials = userinfo === undefined ? '' : `${maskOf(userinfo)}@`;
+  const search = query === undefined ? '' : `?${queryMasked(query)}`;
+  return `${scheme}${credentials}${rest}${search}${fragment}`;
+}
+
+/**
+ * The lines of the settings listing, one for each setting: `remote.SSH.<name> = <JSON value>`, sorted by name. The userinfo
+ * and the query values of a URL are masked. A value that has no JSON form, a setting nothing sets, shows as `undefined`.
  */
 export function settingLines(
   entries: ReadonlyArray<readonly [string, unknown]>,
 ): string[] {
-  return entries.map(
-    ([name, value]) =>
-      `${name} = ${(JSON.stringify(value) as string | undefined) ?? 'undefined'}`,
-  );
+  return entries
+    .toSorted(
+      ([first], [second]) => Number(first > second) - Number(first < second),
+    )
+    .map(
+      ([name, value]) =>
+        `${name} = ${(JSON.stringify(urlMasked(value)) as string | undefined) ?? 'undefined'}`,
+    );
 }
 
 /** The value of `remote.SSH.path` as the log shows it: JSON text, `""` when it is unset. */

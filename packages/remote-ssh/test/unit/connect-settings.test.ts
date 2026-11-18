@@ -33,11 +33,10 @@ describe('the settings listing of the log (F-2003 BR-6 item 2, card connect-71)'
         listed.includes('remote.SSH.useLocalServer'),
         listed.includes('remote.SSH.path'),
         listed.includes('remote.SSH.permitPtyAllocation'),
-        listed.toSorted().join('|') === listed.join('|'),
         new Set(listed).size === listed.length,
         listed.every(setting => setting.startsWith('remote.SSH.')),
       ],
-      [true, true, true, false, false, true, true, true],
+      [true, true, true, false, false, true, true],
     );
   });
 

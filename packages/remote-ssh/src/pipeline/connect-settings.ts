@@ -32,16 +32,13 @@ const LISTED_BY_THE_SEARCH: ReadonlyArray<keyof typeof settings> = [
   'permitPtyAllocation',
 ];
 
-/** The settings of the log's listing: every setting of the table but those the client search lists, each with its id and its effective value, sorted by id. */
+/** The settings of the log's listing: every setting of the table but those the client search lists, each with its id and its effective value. */
 export function listedSettings(
   host: SettingHost,
 ): Array<readonly [string, unknown]> {
   return (Object.keys(settings) as Array<keyof typeof settings>)
     .filter(entry => !LISTED_BY_THE_SEARCH.includes(entry))
-    .map(entry => [settings[entry].id, valueOf(host, entry)] as const)
-    .toSorted(
-      ([first], [second]) => Number(first > second) - Number(first < second),
-    );
+    .map(entry => [settings[entry].id, valueOf(host, entry)] as const);
 }
 
 /** A switch's value: true only for the boolean true. */
