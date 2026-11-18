@@ -120,6 +120,26 @@ export async function serverProcesses(): Promise<number[]> {
 }
 
 /**
+ * The main processes of the servers on the host, the shell that starts one and its node process. A server that an earlier
+ * row left is counted too, since the window of a row attaches to it: they are the processes a Kill Current must leave.
+ * The children of a server (a window's extension host, a terminal host) come and go with the windows and are not counted.
+ */
+export async function serverMainProcesses(): Promise<number[]> {
+  // A status of 1 is no match; any other status of pgrep, a bad pattern or a failure, fails the call. The pattern is
+  // written so that the shell's own command line does not match it.
+  return (
+    await onHost(
+      'sh',
+      '-c',
+      `pgrep -u harness -f '${DATA_FOLDER}/.* [-]-start-server'; status=$?; [ $status -le 1 ] || exit $status`,
+    )
+  )
+    .split('\n')
+    .filter(line => line !== '')
+    .map(Number);
+}
+
+/**
  * Waits until none of the server processes `servers` runs on the host any more, for up to `milliseconds`; on a
  * timeout it fails naming the processes that still run, with their command lines.
  */
