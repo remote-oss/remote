@@ -7,8 +7,9 @@
  */
 
 /**
- * The buttons of a core dialog in the order the platform lays them out. `linuxOrder` is the order on Linux and macOS,
- * which put the primary button last; Windows puts it first and leaves the others as they are.
+ * The buttons of a core dialog in the order the platform lays them out. `linuxOrder` is the order observed on Linux, which
+ * puts the primary button last; Windows puts it first and leaves the others as they are (observed on the Windows job).
+ * macOS is not observed (its job never reached these rows), so it is taken as Linux.
  */
 export function coreButtons(
   linuxOrder: readonly string[],

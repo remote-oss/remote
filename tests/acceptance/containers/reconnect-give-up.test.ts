@@ -226,7 +226,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
       };
       await docker('unpause', containerId);
       const returned = await eventually(
-        'the indicator to return',
+        `the indicator to return (${labelNote('c43-pause')})`,
         async () => {
           const text = await statusBarText(name, 'status.host');
           return text === containerLabel('c43-pause') ? text : undefined;
@@ -272,6 +272,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
           newPort: [],
           clientReconnected: true,
         },
+        labelNote('c43-pause'),
       );
     } finally {
       await docker('unpause', containerId).catch(() => undefined);
@@ -436,7 +437,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
           newPort: true,
           started: true,
         },
-        `the reload took ${String(seconds)} s from the click to the connected window; the log since the click: ${JSON.stringify(logSince(reloadMark).filter(line => /Resolving Remote|Starting container|Starting VS Code Server|server listening|lifecycle commands finished|Reading configuration/.test(line)))}`,
+        `the reload took ${String(seconds)} s from the click to the connected window; the log since the click: ${JSON.stringify(logSince(reloadMark).filter(line => /Resolving Remote|Starting container|Starting VS Code Server|server listening|lifecycle commands finished|Reading configuration/.test(line)))}; ${labelNote('c43-five')}`,
       );
     } finally {
       await removeContainers(folder);
@@ -514,7 +515,9 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
         reattached: containerLabel(`c67-host-stop-${variant}`),
         containers: 1,
       })),
-      labelNote('c67-host-stop-cancel'),
+      ['cancel', 'button']
+        .map(variant => labelNote(`c67-host-stop-${variant}`))
+        .join('; '),
     );
   });
 
