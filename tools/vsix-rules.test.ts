@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {EDITOR_ENGINE} from './editor-floor.ts';
 import {
+  BASE_BUNDLE_LEFT_OUT,
   BUNDLED_DEPENDENCY_FOLDERS,
   SHIPPED_EXTENSION_IDS,
   vsixProblems,
@@ -289,5 +290,36 @@ describe('vsix-rules', () => {
       'remote-oss.vscode-remote-extensionpack',
       'remote-oss.remote-wsl',
     ]);
+  });
+
+  it('c2501-base-bundle-part: the base-bundle list is the remote-containers id alone', () => {
+    deepStrictEqual(BASE_BUNDLE_LEFT_OUT, ['remote-oss.remote-containers']);
+  });
+
+  it('c2501-base-bundle-part: the remote-containers VSIX holds its locale bundles but not the English base table', () => {
+    const containers = {...manifest, name: 'remote-containers'};
+    deepStrictEqual(
+      [
+        vsixProblems('remote-containers', containers, [
+          ...files,
+          'l10n/bundle.l10n.json',
+        ]),
+        vsixProblems('remote-containers', containers, [
+          ...files,
+          'l10n/bundle.l10n.de.json',
+        ]),
+        vsixProblems('remote-ssh', manifest, [
+          ...files,
+          'l10n/bundle.l10n.json',
+        ]),
+      ],
+      [
+        [
+          'packages/remote-containers: remote-oss.remote-containers ships l10n/bundle.l10n.json, the English base table; only its locale bundles ship',
+        ],
+        [],
+        [],
+      ],
+    );
   });
 });
