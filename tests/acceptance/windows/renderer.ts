@@ -4461,6 +4461,14 @@ export async function quickPickTitle(name: string): Promise<string> {
   );
 }
 
+/** Whether the keyboard focus of window `name` is inside the quick input, as it is for a pick that holds focus. */
+export async function quickPickHasFocus(name: string): Promise<boolean> {
+  return evaluate<boolean>(
+    name,
+    `document.querySelector('${QUICK_WIDGET}')?.contains(document.activeElement) ?? false`,
+  );
+}
+
 /** Presses the Back button of the title bar of the quick pick open in window `name`. */
 export async function pressQuickPickBack(name: string): Promise<void> {
   await evaluate<null>(
