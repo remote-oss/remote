@@ -125,23 +125,19 @@ export async function serverProcesses(): Promise<number[]> {
  * windows and are not counted.
  */
 export async function serverMainProcesses(): Promise<number[]> {
-  try {
-    return (
-      await onHost(
-        'pgrep',
-        '-u',
-        'harness',
-        '-f',
-        `${DATA_FOLDER}/.* --start-server`,
-      )
+  // A status of 1 is no match; any other status of pgrep, a bad pattern or a failure, fails the call. The pattern is
+  // written so that the shell's own command line does not match it.
+  return (
+    await onHost(
+      'sh',
+      '-c',
+      `pgrep -u harness -f '${DATA_FOLDER}/.* [-]-start-server'; status=$?; [ $status -le 1 ] || exit $status`,
     )
-      .split('\n')
-      .filter(line => line !== '')
-      .map(Number)
-      .filter(server => !leftBefore.includes(server));
-  } catch {
-    return [];
-  }
+  )
+    .split('\n')
+    .filter(line => line !== '')
+    .map(Number)
+    .filter(server => !leftBefore.includes(server));
 }
 
 /**

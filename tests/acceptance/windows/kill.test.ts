@@ -529,13 +529,16 @@ describe('Kill VS Code Server (card coverage-39)', function () {
     await closeAllButLocal();
     await openConnected('x1');
     const servers = await serverMainProcesses();
+    console.log(
+      `      server main processes before the kill: ${servers.join(', ')}`,
+    );
     const name = await nextEmptyWindow(() => killCurrent('x1'));
     const state = await windowState(name);
     const after = await serverMainProcesses();
     try {
       deepStrictEqual(
-        [state.remoteName, state.folders, after],
-        [null, [], servers],
+        [state.remoteName, state.folders, after, servers.length > 0],
+        [null, [], servers, true],
       );
     } catch (caught) {
       // Read only when the servers differ: a host call that fails must not fail a row that passed.
