@@ -472,7 +472,7 @@
       "killed.test.ts": 5.5
     },
     "ssh-locks": {
-      "exec-mode-locks.test.ts": 4
+      "host-locks.test.ts": 12
     },
     "ssh-newclient": {
       "jump-hosts-new-wording.test.ts": 0.7,

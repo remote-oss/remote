@@ -12,7 +12,7 @@ import {onHost} from '../windows/harness.ts';
 export interface Look {
   /** The install folders `bin/<commit>` that exist, by name. */
   installs: string[];
-  /** The files named `*remote-lock.*` in the install folders and in `/tmp`, as paths with the data folder cut off. */
+  /** The files named `*remote-lock.*` in the install folders and in `/tmp`: `<path>|<bytes>|<links>`, the data folder cut off the path. */
   locks: string[];
 }
 
@@ -24,7 +24,7 @@ export async function lookAtHost(): Promise<Look> {
   const listing = await onHost(
     'sh',
     '-c',
-    `ls -1 ${DATA_FOLDER}/bin 2>/dev/null; echo '${SEPARATOR}'; find ${DATA_FOLDER}/bin /tmp -maxdepth 2 -name '*remote-lock.*' 2>/dev/null; true`,
+    `ls -1 ${DATA_FOLDER}/bin 2>/dev/null; echo '${SEPARATOR}'; find ${DATA_FOLDER}/bin /tmp -maxdepth 2 -name '*remote-lock.*' -printf '%p|%s|%n\\n' 2>/dev/null; true`,
   );
   const [installs = '', locks = ''] = listing.split(`${SEPARATOR}\n`);
   return {
