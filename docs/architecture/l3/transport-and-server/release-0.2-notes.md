@@ -47,11 +47,6 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     VS Code 1.139.1 and VSCodium); the settings file opens there (athena on #737; spec question on
     remote-oss/remote-ssh#79).
 
-- **A server download that the client makes and that gets an HTTP 404 always says "Server returned 404"**, whether
-  or not the answer carries an `Access-Control-Allow-Origin` header.
-  - F-2405 AC-29 describes the reference reading "Failed to fetch" for a 404 without that header, as a browser's fetch
-    does. Ours runs in the extension host, where no such header matters (athena on #253; spec question on
-    remote-oss/remote-ssh#50).
 - **A password you dismiss in the window that New Window on Active Host opens fails that window with "Permission denied
   (password,keyboard-interactive)"**, not with "Connecting was canceled".
   - F-2303 AC-15 describes the cancel message. F-2306 7.E2 and AC-20 govern every first connection, the new window's
