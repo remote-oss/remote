@@ -134,24 +134,24 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
   });
 
   for (const index of Array.from({length: 24}, (each, place) => place + 1)) {
-  it(`F-2505 AC-12 (c2663-tw${String(index)}): the third wrong password at the reconnection’s input makes core show Cannot reconnect at once, with no further attempt`, async () => {
-    const wrong = {text: 'not-the-password'};
-    const result = await reconnectionAnswered(`c2663-tw${String(index)}`, [
-      wrong,
-      wrong,
-      wrong,
-    ]);
-    await closeWindow(`c2663-tw${String(index)}`).catch(() => undefined);
-    deepStrictEqual(result, {
-      dialog: {
-        details: 'Cannot reconnect. Please reload the window.',
-        buttons: ['Cancel', 'Reload Window'],
-      },
-      later: 'Cannot reconnect. Please reload the window.',
-      indicator: 'Disconnected from SSH: password-retry',
-      attempts: 1,
-      asked: 3,
+    it(`F-2505 AC-12 (c2663-tw${String(index)}): the third wrong password at the reconnection’s input makes core show Cannot reconnect at once, with no further attempt`, async () => {
+      const wrong = {text: 'not-the-password'};
+      const result = await reconnectionAnswered(`c2663-tw${String(index)}`, [
+        wrong,
+        wrong,
+        wrong,
+      ]);
+      await closeWindow(`c2663-tw${String(index)}`).catch(() => undefined);
+      deepStrictEqual(result, {
+        dialog: {
+          details: 'Cannot reconnect. Please reload the window.',
+          buttons: ['Cancel', 'Reload Window'],
+        },
+        later: 'Cannot reconnect. Please reload the window.',
+        indicator: 'Disconnected from SSH: password-retry',
+        attempts: 1,
+        asked: 3,
+      });
     });
   }
-  });
 });
