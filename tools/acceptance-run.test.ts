@@ -111,9 +111,21 @@ describe('runFolderBase (card tooling-195)', () => {
   it("#2350: the run's folder is made in /tmp on macOS, whose own temporary folder is too long for the editor's socket, and in the temporary folder elsewhere", () => {
     deepStrictEqual(
       (['darwin', 'linux', 'win32'] as const).map(platform =>
-        runFolderBase(platform),
+        runFolderBase(platform, {}),
       ),
       ['/tmp', tmpdir(), tmpdir()],
+    );
+  });
+
+  it('#2763: HARNESS_RUN_BASE chooses the folder on every platform, and an empty value counts as unset', () => {
+    deepStrictEqual(
+      [
+        ...(['darwin', 'linux', 'win32'] as const).map(platform =>
+          runFolderBase(platform, {HARNESS_RUN_BASE: '/tmp/colima'}),
+        ),
+        runFolderBase('darwin', {HARNESS_RUN_BASE: ''}),
+      ],
+      ['/tmp/colima', '/tmp/colima', '/tmp/colima', '/tmp'],
     );
   });
 });
