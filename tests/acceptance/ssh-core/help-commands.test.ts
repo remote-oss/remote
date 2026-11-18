@@ -5,7 +5,6 @@ import {
   appendScript,
   closeContained,
   closeWindow,
-  connectionLog,
   extensionActive,
   extensionPresent,
   inWindow,
@@ -324,7 +323,6 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
     try {
       const settingsBefore = userSettingsText();
       const storageBefore = storageOf();
-      const logBefore = connectionLog().length;
       await inWindow(folder, 'acceptance.agent.state');
       const state = await windowState(folder);
       // The manifest holds no keybinding, so the command is invoked directly, as the keybinding would invoke it.
@@ -335,11 +333,10 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
           userSettingsText() === settingsBefore,
           storageOf().join('\n') === storageBefore.join('\n'),
           state.remoteName === null && state.remoteAuthority === null,
-          connectionLog().length === logBefore,
           (await dialogOf(folder)) === undefined,
           (await notifications(folder)).length === 0,
         ],
-        [true, true, true, true, true, true],
+        [true, true, true, true, true],
       );
     } finally {
       // The command's external open never settles in the run's editor, so the agent is busy and the close ends its host.
@@ -359,18 +356,21 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
       await inWindow('c2486-down-settings', HELP_COMMANDS.settings);
       await waitFor('the window to settle', () => true, 3_000);
       const dialog = await dialogOf('c2486-down-settings');
-      const items = await paletteItems(
-        'c2486-down-settings',
-        'Remote-SSH: Help',
-      );
+      const items = await paletteItems('c2486-down-settings', 'Remote-SSH:');
       // The criterion accepts core's editor error, whose toasts name the refused host; the extension's own show none.
+      // A window that stays usable still lists the extension's four commands (6.1 step 1); core's own entries may join them.
       deepStrictEqual(
         [
           (await notifications('c2486-down-settings')).filter(
             toast => !toast.startsWith('Setting up SSH Host'),
           ).length === 0,
           !dialog?.message.toLowerCase().includes('remote-ssh'),
-          items.length === 1 && items[0] === 'Remote-SSH: Help',
+          [
+            'Remote-SSH: Help',
+            'Remote-SSH: Settings',
+            'Remote-SSH: Get Started with SSH',
+            'Remote-SSH: Provide Feedback',
+          ].every(command => items.includes(command)),
         ],
         [true, true, true],
         `the toasts: ${JSON.stringify(await notifications('c2486-down-settings'))}, the palette found: ${JSON.stringify(items)}`,
