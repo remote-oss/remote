@@ -300,6 +300,9 @@ describe('Remote-SSH commands run where they do not apply (F-2006, card #2817)',
   before(async () => {
     saved = readUserSettings();
     await userSettings({'remote.SSH.remotePlatform': PLATFORMS});
+    // The launch's own window is empty too: the renderer tells two empty windows apart only by which of them it has taken
+    // for a name already, so `local`'s page is taken before the rows open empty windows of their own.
+    await statusBarText('local', 'status.host').catch(() => '');
     unbind = bindKeys([
       ...COMMANDS.map(command => ({
         key: `ctrl+alt+${command.letter}`,
@@ -397,12 +400,16 @@ describe('Remote-SSH commands run where they do not apply (F-2006, card #2817)',
         await userSettings({'remote.SSH.useLocalServer': false});
       }
       try {
+        // A window that stays connected to `harness` through the presses: a connection server that a press stopped would end
+        // its connection, which no read of the helper processes can tell from a helper that left on its own after the
+        // refused window's failure.
+        await openConnected(`${name}-keeper`);
         await failedWindow('refused', name);
         await bindingsAreLive(name);
         const results: Array<{
           command: string;
           settingsChanged: boolean;
-          helpers: boolean;
+          keeperConnected: boolean;
           servers: boolean;
           stillSsh: boolean;
           usable: boolean;
@@ -421,10 +428,10 @@ describe('Remote-SSH commands run where they do not apply (F-2006, card #2817)',
             command: command.title,
             settingsChanged:
               JSON.stringify(before.files) !== JSON.stringify(done.files),
-            helpers:
-              JSON.stringify(before.helpers) === JSON.stringify(done.helpers),
-            servers:
-              JSON.stringify(before.servers) === JSON.stringify(done.servers),
+            keeperConnected: await connected(`${name}-keeper`),
+            servers: before.servers.every(server =>
+              done.servers.includes(server),
+            ),
             stillSsh: (await windowState(name)).remoteName === 'ssh-remote',
             usable: await usable(name),
             reloaded: before.activations !== done.activations,
@@ -436,7 +443,7 @@ describe('Remote-SSH commands run where they do not apply (F-2006, card #2817)',
           [NEW_WINDOW, KILL_CURRENT, WEB_UI].map(command => ({
             command: command.title,
             settingsChanged: false,
-            helpers: true,
+            keeperConnected: true,
             servers: true,
             stillSsh: true,
             usable: true,
