@@ -8,7 +8,9 @@
  * For each locale of a package's `identifiers.json` `locales`, `package.nls.<locale>.json` holds every key of
  * `package.nls.json`, and `l10n/bundle.l10n.<locale>.json` every key of `l10n/bundle.l10n.json`, in the default
  * table's order. A text is the one in `translations/<locale>.json` (`manifest` for the first, `runtime` for the
- * second) when there is one, else the English text. The generated tables are git-ignored.
+ * second) when there is one, else the English text. A package that declares `pseudoLocalized` gets its qps-ploc
+ * tables generated from its English tables, letter for letter, with its locked strings kept as they are. The
+ * generated tables are git-ignored.
  */
 
 import {
@@ -20,6 +22,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import {readDeclared} from './identifier-sources.ts';
+import {pseudoLocalize} from './pseudo-locale.ts';
 import {readObject} from './string-tables.ts';
 import {
   isMainModule,
@@ -33,6 +36,7 @@ const BUNDLE_SOURCE = 'l10n/bundle.l10n.json';
 const TRANSLATIONS_FOLDER = 'translations';
 const TRANSLATION_FILE = /^(.+)\.json$/;
 const PARTS = ['manifest', 'runtime'] as const;
+const QPS_PLOC = 'qps-ploc';
 
 type Table = Record<string, string>;
 
@@ -88,18 +92,54 @@ function readTranslations(
   return tables;
 }
 
+/** The texts of an English table with the locked strings of each key; a value is a string or the editor's object form. */
+interface DefaultTable {
+  texts: Table;
+  locked: Record<string, string[]>;
+}
+
+/** The English text and the locked strings of one value of an English table. */
+export function englishEntry(value: unknown): {text: string; locked: string[]} {
+  if (typeof value === 'string') {
+    return {text: value, locked: []};
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return {text: '', locked: []};
+  }
+  const form = value as Record<string, unknown>;
+  const comments = Array.isArray(form.comment)
+    ? form.comment.filter((item): item is string => typeof item === 'string')
+    : [];
+  return {
+    text: typeof form.message === 'string' ? form.message : '',
+    locked: comments.flatMap(comment => {
+      const found = /^\{Locked='(.*)'\}$/.exec(comment);
+      return found === null ? [] : [found[1] ?? ''];
+    }),
+  };
+}
+
 /** The default table of a package, or none when the package has none or its file cannot be read. */
 function defaultTable(
   directory: string,
   file: string,
   problems: string[],
-): Table | undefined {
+): DefaultTable | undefined {
   if (!existsSync(path.join(directory, file))) {
     return undefined;
   }
   const before = problems.length;
-  const table = readTable(directory, file, problems);
-  return problems.length > before ? undefined : table;
+  const whole = readTable(directory, file, problems) as Record<string, unknown>;
+  if (problems.length > before) {
+    return undefined;
+  }
+  const table: DefaultTable = {texts: {}, locked: {}};
+  for (const [key, value] of Object.entries(whole)) {
+    const entry = englishEntry(value);
+    table.texts[key] = entry.text;
+    table.locked[key] = entry.locked;
+  }
+  return table;
 }
 
 /** The problems of one part of a translations file against its default table. */
@@ -107,10 +147,10 @@ function translationProblems(
   file: string,
   part: string,
   translated: Table,
-  source: Table | undefined,
+  source: DefaultTable | undefined,
 ): string[] {
   return Object.entries(translated).flatMap(([key, text]) => [
-    ...(source !== undefined && key in source
+    ...(source !== undefined && key in source.texts
       ? []
       : [`${file}: '${key}' is not a key of the default ${part} table`]),
     ...(typeof text === 'string' && text.trim() !== ''
@@ -124,12 +164,14 @@ export function generatedTables(root: string, folder: string): Generated {
   const directory = path.join(root, 'packages', folder);
   const declaredFile = path.join(directory, 'identifiers.json');
   const generated: Generated = {files: new Map(), problems: []};
-  const locales = existsSync(declaredFile)
-    ? readDeclared(declaredFile, `packages/${folder}/identifiers.json`).locales
+  const declared = existsSync(declaredFile)
+    ? readDeclared(declaredFile, `packages/${folder}/identifiers.json`)
     : undefined;
-  if (locales === undefined) {
+  const locales = declared?.locales;
+  if (declared === undefined || locales === undefined) {
     return generated;
   }
+  const pseudo = declared.pseudoLocalized === true;
   const {files, problems} = generated;
   const sources = {
     manifest: defaultTable(directory, NLS_SOURCE, problems),
@@ -141,6 +183,10 @@ export function generatedTables(root: string, folder: string): Generated {
     if (locale === undefined || !locales.includes(locale)) {
       problems.push(
         `${TRANSLATIONS_FOLDER}/${name}: not a translations file of the package's locales`,
+      );
+    } else if (pseudo && locale === QPS_PLOC) {
+      problems.push(
+        `${TRANSLATIONS_FOLDER}/${name}: qps-ploc is generated for this package, never written`,
       );
     }
   }
@@ -167,9 +213,12 @@ export function generatedTables(root: string, folder: string): Generated {
           targets[part],
           printed(
             Object.fromEntries(
-              Object.entries(source).map(([key, text]) => [
+              Object.entries(source.texts).map(([key, text]) => [
                 key,
-                translations[part][key] ?? text,
+                translations[part][key] ??
+                  (pseudo && locale === QPS_PLOC
+                    ? pseudoLocalize(text, source.locked[key])
+                    : text),
               ]),
             ),
           ),

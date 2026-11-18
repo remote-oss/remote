@@ -179,6 +179,29 @@ describe('string-tables', () => {
     ]);
   });
 
+  it('accepts an entry in the object form, its message the text', () => {
+    write('package.nls.json', {
+      description: {message: 'Edits files'},
+    });
+    deepStrictEqual(problems(), []);
+  });
+
+  it('reports an object-form entry whose message is empty', () => {
+    write('package.nls.json', {description: {message: ''}});
+    deepStrictEqual(problems(), [
+      "packages/remote-x/package.nls.json: key 'description' has no text",
+    ]);
+  });
+
+  it('reports an object-form entry that has no message', () => {
+    write('package.nls.json', {
+      description: {comment: ['a comment without a message']},
+    });
+    deepStrictEqual(problems(), [
+      "packages/remote-x/package.nls.json: key 'description' has no text",
+    ]);
+  });
+
   function unreadableFiles(): string[] {
     return problems().map(problem =>
       problem.replace(/: cannot be read: .*/, ''),
