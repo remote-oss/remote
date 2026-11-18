@@ -24,6 +24,8 @@ import {explainedFailure} from '../windows/connect-failure.ts';
 import {reconnectionState} from '../windows/reconnection-state.ts';
 import {
   dialogOf,
+  dialogTrace,
+  startDialogTrace,
   notifications,
   statusBarText,
   waitForDialog,
@@ -83,9 +85,13 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     const mark = connectionLog().length;
     const asked = recordLines('maskedInput', name).length;
     const endedAt = Date.now();
+    await startDialogTrace(name);
     await inWindow(name, 'opensshremotes.cleanLocalServer');
     const dialog = await waitForDialog(name, 180_000).catch(
       async (caught: unknown) => {
+        console.log(
+          `PROBE ${name} RED trace:\n${(await dialogTrace(name).catch(() => ['(unreadable)'])).join('\n')}`,
+        );
         throw await explainedFailure(caught, () =>
           reconnectionState(
             {
@@ -101,6 +107,9 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
           ),
         );
       },
+    );
+    console.log(
+      `PROBE ${name} GREEN trace:\n${(await dialogTrace(name).catch(() => ['(unreadable)'])).join('\n')}`,
     );
     // Time for an attempt the extension should not make.
     await new Promise(resolve => setTimeout(resolve, 20_000));
@@ -130,23 +139,25 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     });
   });
 
-  it('F-2505 AC-12 (c2663-third-wrong): the third wrong password at the reconnection’s input makes core show Cannot reconnect at once, with no further attempt', async () => {
-    const wrong = {text: 'not-the-password'};
-    const result = await reconnectionAnswered('c2663-third-wrong', [
-      wrong,
-      wrong,
-      wrong,
-    ]);
-    await closeWindow('c2663-third-wrong').catch(() => undefined);
-    deepStrictEqual(result, {
-      dialog: {
-        details: 'Cannot reconnect. Please reload the window.',
-        buttons: ['Cancel', 'Reload Window'],
-      },
-      later: 'Cannot reconnect. Please reload the window.',
-      indicator: 'Disconnected from SSH: password-retry',
-      attempts: 1,
-      asked: 3,
+  for (const index of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+    it(`F-2505 AC-12 (c2663-tw${String(index)}): the third wrong password at the reconnection’s input makes core show Cannot reconnect at once, with no further attempt`, async () => {
+      const wrong = {text: 'not-the-password'};
+      const result = await reconnectionAnswered(`c2663-tw${String(index)}`, [
+        wrong,
+        wrong,
+        wrong,
+      ]);
+      await closeWindow(`c2663-tw${String(index)}`).catch(() => undefined);
+      deepStrictEqual(result, {
+        dialog: {
+          details: 'Cannot reconnect. Please reload the window.',
+          buttons: ['Cancel', 'Reload Window'],
+        },
+        later: 'Cannot reconnect. Please reload the window.',
+        indicator: 'Disconnected from SSH: password-retry',
+        attempts: 1,
+        asked: 3,
+      });
     });
-  });
+  }
 });

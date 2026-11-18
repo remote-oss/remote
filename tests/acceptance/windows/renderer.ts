@@ -4698,3 +4698,34 @@ export async function markedTerminalTabs(name: string): Promise<string[]> {
     `[...document.querySelectorAll('.single-terminal-tab, .terminal-tabs-entry')].filter(tab => tab.querySelector('.codicon-warning') !== null).map(tab => tab.getAttribute('aria-label') ?? tab.getAttribute('title') ?? (tab.textContent ?? '').trim())`,
   );
 }
+
+/** Probe: records, with times, the dialog, notification, progress and quick input nodes added to and removed from window `name`'s page. */
+export async function startDialogTrace(name: string): Promise<void> {
+  await evaluate<undefined>(
+    name,
+    `(() => {
+      window.__trace = [];
+      const start = performance.now();
+      const wanted = /dialog|notification|quick-input-widget|progress/i;
+      const note = (op, node) => {
+        if (!(node instanceof Element)) { return; }
+        const own = String(node.className);
+        const inner = [...node.querySelectorAll('[class]')].map(each => String(each.className)).find(each => wanted.test(each));
+        if (wanted.test(own) || inner !== undefined) {
+          window.__trace.push(((performance.now() - start) / 1000).toFixed(3) + ' ' + op + ' ' + own.slice(0, 60) + ' | ' + (node.textContent ?? '').replace(/\\s+/g, ' ').slice(0, 70));
+        }
+      };
+      new MutationObserver(records => {
+        for (const record of records) {
+          record.addedNodes.forEach(node => note('+', node));
+          record.removedNodes.forEach(node => note('-', node));
+        }
+      }).observe(document.body, {childList: true, subtree: true});
+    })()`,
+  );
+}
+
+/** Probe: the trace of nodes `startDialogTrace` collected. */
+export async function dialogTrace(name: string): Promise<string[]> {
+  return evaluate<string[]>(name, 'window.__trace ?? []');
+}
