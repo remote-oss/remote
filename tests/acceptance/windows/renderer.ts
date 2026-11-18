@@ -10,7 +10,7 @@
 import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {isOpen, variable, windowState} from './harness.ts';
+import {inWindow, isOpen, variable, windowState} from './harness.ts';
 
 /** How long a wait for the renderer lasts, in milliseconds. */
 const WAIT_MILLISECONDS = 60_000;
@@ -2672,6 +2672,57 @@ export async function vscodeWindowId(name: string): Promise<number | null> {
     name,
     `(() => (typeof window.vscodeWindowId === 'number' ? window.vscodeWindowId : null))()`,
   );
+}
+
+/** One row of the Keyboard Shortcuts editor: the command's own text and the keybinding it shows, empty for none. */
+export interface KeybindingRow {
+  command: string;
+  keybinding: string;
+}
+
+/**
+ * The rows window `name`'s Keyboard Shortcuts editor shows once its search holds `query`, read when their number has
+ * stood for two seconds. The editor takes the keyboard focus in its search box when it opens, where the query is typed;
+ * a row's cells are an empty one for its actions, then the command, the keybinding, the `when` and the source. A table
+ * with no row fails with what the editor shows, so that an empty read is never taken for a list of commands without a
+ * keybinding.
+ */
+export async function keybindingRows(
+  name: string,
+  query: string,
+): Promise<KeybindingRow[]> {
+  await inWindow(name, 'workbench.action.openGlobalKeybindings');
+  await typeInFocus(name, query);
+  function read(): Promise<KeybindingRow[]> {
+    return evaluate<KeybindingRow[]>(
+      name,
+      `[...document.querySelectorAll('.keybindings-editor .monaco-table-tr')].map(row => {
+        const cells = [...row.querySelectorAll('.monaco-table-td')].map(cell => (cell.textContent ?? '').trim());
+        return {command: cells[1] ?? '', keybinding: cells[2] ?? ''};
+      })`,
+    );
+  }
+  let rows: KeybindingRow[] = [];
+  let steady = 0;
+  for (let attempt = 0; attempt < 60 && steady < 4; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const next = await read();
+    steady =
+      next.length > 0 && JSON.stringify(next) === JSON.stringify(rows)
+        ? steady + 1
+        : 0;
+    rows = next;
+  }
+  if (rows.length === 0) {
+    const shown = await evaluate<string>(
+      name,
+      `(document.querySelector('.keybindings-editor')?.innerText ?? '(no keybindings editor)').slice(0, 600)`,
+    );
+    throw new Error(
+      `window ${name}'s Keyboard Shortcuts editor shows no row for ${JSON.stringify(query)}: it shows ${JSON.stringify(shown)}`,
+    );
+  }
+  return rows;
 }
 
 /** Window `name`'s title, as its page has it. */

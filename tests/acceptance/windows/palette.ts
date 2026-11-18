@@ -1,6 +1,7 @@
 import {startInWindow, terminalFacts, windowEvents} from './harness.ts';
 import {
   chooseQuickPickRow,
+  moveQuickPickFocus,
   pageFocusFacts,
   pressEscape,
   quickPickOf,
@@ -92,8 +93,46 @@ export async function paletteItems(
     }
     items = next;
   }
+  items = await withTheRowsBelow(name, items);
   await pressEscape(name);
   return items;
+}
+
+/**
+ * `above`, the rows the palette's list renders at its top, and the rows it renders at its end: the list draws only the
+ * rows that fit the window, and an ArrowUp from the first row moves the focus to the last and scrolls it into view. The
+ * two reads overlap, or meet, and are joined at that overlap.
+ */
+async function withTheRowsBelow(
+  name: string,
+  above: readonly string[],
+): Promise<string[]> {
+  if (above.length === 0) {
+    return [...above];
+  }
+  await moveQuickPickFocus(name, 'ArrowUp');
+  await new Promise(resolve => setTimeout(resolve, SETTLE_MILLISECONDS));
+  const bottom = (await quickPickOf(name))?.items ?? [];
+  if (above.join('\n') === bottom.join('\n')) {
+    // Every row fits the window: the end of the list is the top.
+    return [...above];
+  }
+  for (
+    let shared = Math.min(above.length, bottom.length);
+    shared >= 1;
+    shared -= 1
+  ) {
+    if (
+      above.slice(above.length - shared).join('\n') ===
+      bottom.slice(0, shared).join('\n')
+    ) {
+      return [...above, ...bottom.slice(shared)];
+    }
+  }
+  // Joined with no row in common the reads could have a row between them, which would be dropped without a word.
+  throw new Error(
+    `the two reads of the palette of window ${name} share no row: the top reads ${JSON.stringify(above)} and the end reads ${JSON.stringify(bottom)}`,
+  );
 }
 
 /** Runs the command of the Command Palette whose title is exactly `title` in window `name`, not the first match. */
