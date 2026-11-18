@@ -1287,6 +1287,15 @@ export function launchesOf(root: string): Launch[] {
         PATH: '<run>/askpass-bin:<path>',
       },
     },
+    // A window on the SSH host whose editor is killed, one case per launch like `containers-killed-*`: the harness kills the
+    // launch's editor tree (the connection is not closed), and the row goes on against the host, with an editor of its own
+    // only where its case relaunches one. Each case names itself in `HARNESS_KILLED_CASE`.
+    ...['12', '13', '14'].map(killedCase => ({
+      ...RENDERER_LAUNCH,
+      label: `ssh-killed-${killedCase}`,
+      suite: 'ssh-killed',
+      environment: {HARNESS_KILLED_CASE: killedCase},
+    })),
     // Dev Containers beside Remote - SSH, in a window on the SSH host: the commands that edit a configuration where it lives.
     {
       ...RENDERER_LAUNCH,

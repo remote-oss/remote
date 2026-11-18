@@ -59,6 +59,7 @@
         "ssh-askpass/*.test.ts",
         "ssh-askpass-env/*.test.ts",
         "ssh-askpass-space/*.test.ts",
+        "ssh-killed/*.test.ts",
         "ssh-containers/*.test.ts",
         "terminal-pick/*.test.ts",
         "preconnect/*.test.ts",
