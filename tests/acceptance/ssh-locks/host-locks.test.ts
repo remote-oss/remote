@@ -99,7 +99,7 @@ describe('the host lock files (card #2820, F-2408)', function () {
     await closeAllButLocal();
   });
 
-  it('F-2408 (c2820-listing-sees): the listing sees a lock-named file where one is, with its size and link count, whichever find and stat the host has, so an empty list means none', async () => {
+  it('c2820-listing-sees: the listing sees a lock-named file where one is, with its size and link count, whichever find and stat the host has, so an empty list means none', async () => {
     const name = '/tmp/vscode-remote-lock.harness.c2820probe';
     await onHost('sh', '-c', `: > ${name}`);
     try {
@@ -109,18 +109,27 @@ describe('the host lock files (card #2820, F-2408)', function () {
     }
   });
 
-  for (const execServer of [false, true]) {
-    it(`F-2408 AC-4, AC-29 (c2820-install-lock-${String(execServer)}): with useExecServer ${String(execServer)} and the default lock settings the install holds one 0-byte lock file in the install folder of the data folder and none in /tmp`, async () => {
-      await installedWith(
-        `c2820-lock-${String(execServer)}`,
-        {'remote.SSH.useExecServer': execServer},
-        install => {
-          deepStrictEqual(distinctLocks(install.during), [INSTALL_LOCK]);
-          return Promise.resolve();
-        },
-      );
-    });
-  }
+  it('F-2408 AC-4, AC-29 (c2820-install-lock-false): with useExecServer false and the default lock settings the install holds one 0-byte lock file in the install folder of the data folder and none in /tmp', async () => {
+    await installedWith(
+      'c2820-lock-false',
+      {'remote.SSH.useExecServer': false},
+      install => {
+        deepStrictEqual(distinctLocks(install.during), [INSTALL_LOCK]);
+        return Promise.resolve();
+      },
+    );
+  });
+
+  it('F-2408 AC-4, AC-29 (c2820-install-lock-true): with useExecServer true and the default lock settings the install holds one 0-byte lock file in the install folder of the data folder and none in /tmp', async () => {
+    await installedWith(
+      'c2820-lock-true',
+      {'remote.SSH.useExecServer': true},
+      install => {
+        deepStrictEqual(distinctLocks(install.during), [INSTALL_LOCK]);
+        return Promise.resolve();
+      },
+    );
+  });
 
   it('F-2408 AC-7 (c2820-lock-tmp): with lockfilesInTmp true the lock file is in /tmp and the install folder holds none', async () => {
     await installedWith(
