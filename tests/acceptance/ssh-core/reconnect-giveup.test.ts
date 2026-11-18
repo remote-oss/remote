@@ -20,7 +20,14 @@ import {
   userSettings,
 } from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
-import {dialogOf, statusBarText, waitForDialog} from '../windows/renderer.ts';
+import {explainedFailure} from '../windows/connect-failure.ts';
+import {reconnectionState} from '../windows/reconnection-state.ts';
+import {
+  dialogOf,
+  notifications,
+  statusBarText,
+  waitForDialog,
+} from '../windows/renderer.ts';
 
 /** The account of the `password-retry` alias, which asks for its password up to three times. */
 const ACCOUNT = 'harness-pwonly';
@@ -75,8 +82,26 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     await connectedWithin(name, 120_000, ACCOUNT);
     const mark = connectionLog().length;
     const asked = recordLines('maskedInput', name).length;
+    const endedAt = Date.now();
     await inWindow(name, 'opensshremotes.cleanLocalServer');
-    const dialog = await waitForDialog(name, 180_000);
+    const dialog = await waitForDialog(name, 180_000).catch(
+      async (caught: unknown) => {
+        throw await explainedFailure(caught, () =>
+          reconnectionState(
+            {
+              recorded: () => recordLines(undefined, name),
+              indicator: () => statusBarText(name, 'status.host'),
+              dialog: () => dialogOf(name),
+              notifications: () => notifications(name),
+              logLines: () => connectionLog(),
+            },
+            name,
+            mark,
+            endedAt,
+          ),
+        );
+      },
+    );
     // Time for an attempt the extension should not make.
     await new Promise(resolve => setTimeout(resolve, 20_000));
     return {
