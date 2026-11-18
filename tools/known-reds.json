@@ -133,5 +133,14 @@
     "owner": "triton",
     "evidence": 44046752757,
     "added": "2026-11-17"
+  },
+  {
+    "launch": "ssh-core",
+    "file": "ssh-core/silent-flows.test.ts",
+    "title": "F-2508 AC-21 (c125-silent): after the terminal, the code command, the remote settings, a node program debugged to its end, a shell task and the Extensions view, the extension has shown no notification, logged no line, added nothing to the profile’s globalStorage, and registered no command or setting it lacked before",
+    "card": 2646,
+    "owner": "selene",
+    "evidence": 44289456794,
+    "added": "2026-11-18"
   }
 ]
