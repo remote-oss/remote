@@ -229,7 +229,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
         'the indicator to return',
         async () => {
           const text = await statusBarText(name, 'status.host');
-          return text === 'Dev Container: c43-pause' ? text : undefined;
+          return text === containerLabel('c43-pause') ? text : undefined;
         },
         60_000,
       );
@@ -260,13 +260,13 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
           clientReconnected: serverLog !== '',
         },
         {
-          reconnecting: 'Reconnecting to Dev Container: c43-pause...',
+          reconnecting: `Reconnecting to ${containerLabel('c43-pause')}...`,
           terminal: false,
           attemptsWhilePaused: true,
           gaveUp: false,
           notRunning: false,
           numbered: true,
-          returned: 'Dev Container: c43-pause',
+          returned: containerLabel('c43-pause'),
           dialog: undefined,
           startedAgain: false,
           newPort: [],
@@ -431,7 +431,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
           everyThirty: true,
           tail: true,
           countdown: true,
-          indicator: 'Reconnecting to Dev Container: c43-five...',
+          indicator: `Reconnecting to ${containerLabel('c43-five')}...`,
           withinEightSeconds: true,
           newPort: true,
           started: true,
@@ -553,7 +553,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
         'the connected indicator',
         async () =>
           (await statusBarText(name, 'status.host')) ===
-          'Dev Container: c110-removed'
+          containerLabel('c110-removed')
             ? true
             : undefined,
         120_000,
@@ -588,7 +588,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
           local: [null, 1],
           freshCreated: true,
           count: 1,
-          host: 'Dev Container: c110-removed',
+          host: containerLabel('c110-removed'),
         },
         labelNote('c110-removed'),
       );
