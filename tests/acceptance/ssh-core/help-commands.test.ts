@@ -28,6 +28,7 @@ import {
   outputChannelOf,
   pageText,
   pressEscape,
+  statusBarText,
 } from '../windows/renderer.ts';
 
 /** The commands of the four help entries, as the extension registers them. */
@@ -86,6 +87,11 @@ function failureEntries(window: string) {
 
 describe('the help commands of Remote - SSH (card #2486)', function () {
   this.timeout(600_000);
+
+  before(async () => {
+    // One renderer call to the run's `local` window, so that an empty window opened later is not ambiguous with it.
+    await statusBarText('local', 'status.host').catch(() => '');
+  });
 
   it('F-2004 AC-1 (c2486-listed-part): in an empty and a local folder window, the palette lists Help and Settings', async () => {
     await closeAllButLocal();
