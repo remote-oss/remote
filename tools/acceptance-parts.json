@@ -254,6 +254,7 @@
       "ssh-group-absent.test.ts": 0.3
     },
     "explorer-folders": {
+      "history-rounds.test.ts": 20,
       "commands-kinds.test.ts": 8.2,
       "commands.test.ts": 19.8,
       "failed-connect.test.ts": 0.2,
