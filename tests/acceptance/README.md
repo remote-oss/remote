@@ -382,6 +382,14 @@ with junk and any other client with the archive. Before each launch the run note
 `<run>/<label>-requests-start`, so `downloadRequests()` of `suite-install/install.ts` reads only the case's own. The
 host's downloaders send a `Wget` or `curl` user agent, and the editor's download doesn't.
 
+A case with `cliStandIn: true` (`local-exec-cli`, F-2405 AC-8's exec half) starts the run's CLI-source copy of VSCodium, whose
+`product.json` names `cliDownloadUrlTemplate` on the download host (`tools/acceptance-cli-editor.ts`), and the download host
+serves under `/cli/<os>-<arch>/<commit>/` a stand-in archive of the editor's CLI that the run makes: a gzipped tar of one
+script that fails, with no pin and no token, so the case runs in the gate. The case's rows check what the client asked
+for (the CLI of the host's platform and of the copy's commit, `HARNESS_CLIENT_COMMIT`) and that the archive's file reached
+the server folder under its commit-keyed name; the stand-in is no CLI, so the case's outcome is `any`. Where a run also
+names the `cli-path` launch, whose pins give real CLI archives, the host serves those for the platforms they cover.
+
 A case that keeps what an earlier connect left (`keepServer`, `keepFiles`) names a primer in `needs`: the case listed right
 before it with `primer: true`, whose connect makes that state. The primer's launch is `named only` and a part of the
 case's launch, so a selection that names the case runs the primer right before it, and none runs the primer alone; the

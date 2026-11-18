@@ -31,6 +31,7 @@ import {
   servedControlFolder,
   servedTemplatesFolder,
 } from './acceptance-templates.ts';
+import {STAND_IN_CLI_SCRIPT} from './acceptance-cli-editor.ts';
 import {type CommandRunner, checked} from './command-runner.ts';
 
 /**
@@ -933,6 +934,29 @@ function packFeatureTarball(
   ]);
 }
 
+/** The file name of the stand-in CLI inside its archive, as the editor's own CLI archives name their one file. */
+const STAND_IN_CLI_NAME = 'code';
+
+/**
+ * The stand-in archive of the editor's CLI for `platform`, made by the run in `runFolder` for a launch whose case only
+ * needs the client to fetch it and the host to receive it: a gzipped tar of one script that does nothing, with no pin and
+ * no token. It is not a CLI, so a step that runs it fails; the file is its path.
+ */
+export function standInCliArchiveOf(
+  command: CommandRunner,
+  runFolder: string,
+  platform: string,
+): string {
+  const folder = path.join(runFolder, 'downloads', 'cli-stand-in', platform);
+  mkdirSync(folder, {recursive: true});
+  writeFileSync(path.join(folder, STAND_IN_CLI_NAME), STAND_IN_CLI_SCRIPT, {
+    mode: 0o755,
+  });
+  const archive = path.join(folder, `cli-${platform}.tar.gz`);
+  checked(command, 'tar', ['-czf', archive, '-C', folder, STAND_IN_CLI_NAME]);
+  return archive;
+}
+
 /** `file` with forward slashes, as the variables carry a path on every client, Windows included. */
 export function forwardSlashes(file: string): string {
   return file.replaceAll('\\', '/');
@@ -1107,7 +1131,8 @@ export interface RunDownloads {
  * architecture from the cache under `root`, the run's certificate, and the two ports on the client addresses
  * `clientReachOf` gives for `clientPlatform`. With `earlier`, the archives of that release too, served under `/earlier/<platform>/`; with
  * `cliSource`, the editor CLI's archives its pins name for those platforms, fetched with its own download and served under
- * `/cli/<platform>/`.
+ * `/cli/<platform>/`; with `cliStandIn`, a stand-in archive of the CLI (`standInCliArchiveOf`) there for each platform
+ * the pins give none.
  */
 export async function startRunDownloads(
   command: CommandRunner,
@@ -1122,6 +1147,7 @@ export async function startRunDownloads(
     download: Download;
   },
   clientPlatform: NodeJS.Platform = process.platform,
+  cliStandIn = false,
 ): Promise<RunDownloads> {
   const platforms = servedPlatforms(architecture);
   const archiveFiles: Record<string, string> = {};
@@ -1157,6 +1183,12 @@ export async function startRunDownloads(
           );
     if (cliFile !== undefined) {
       cliArchiveFiles[platform] = cliFile;
+    } else if (cliStandIn) {
+      cliArchiveFiles[platform] = standInCliArchiveOf(
+        command,
+        runFolder,
+        platform,
+      );
     }
   }
   for (const file of removeStaleClientArchives(

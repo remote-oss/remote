@@ -98,6 +98,12 @@ export interface RunnerLaunch extends LaunchCommon {
   kind?: undefined;
   /** The development extension the tests run in: `runner` (a local window) or `runner-remote` (a remote one). */
   runner: 'runner' | 'runner-remote';
+  /**
+   * Whether the launch starts the run's CLI-source copy of VSCodium (`tools/acceptance-cli-editor.ts`) and the download
+   * host serves a stand-in archive of the editor's CLI under `/cli/<platform>/`, made by the run, with no pin and no
+   * token: for a host case that only needs the client to fetch the CLI and the host to receive it.
+   */
+  cliStandIn?: true;
   /** The suite folder under tests/acceptance, bundled into `dist-<suite without "suite-">`. */
   suite: string;
   /** Whether the launch answers from its own script and record files (`<label>-script.json`, `<label>-record.jsonl`). */
@@ -710,6 +716,8 @@ export interface HostCase {
    * a run makes it only when the case is named.
    */
   primer?: true;
+  /** Whether the case's launch starts the CLI-source editor, with a stand-in CLI archive on the download host. */
+  cliStandIn?: true;
   /** Further commands the host's `sh` runs, in order, after the suite's own setup. */
   setup?: string[];
   /** The script the case's window answers from; the suite's dialog script when absent. */
@@ -1809,6 +1817,7 @@ export function launchesOf(root: string): Launch[] {
               partOf: hostCaseLabel(suite, cases[position + 1] ?? hostCase),
             }
           : {}),
+        ...(hostCase.cliStandIn === true ? {cliStandIn: true as const} : {}),
         ownScript: true,
         hostSetup: hostSetupOf(hostCase, suite),
       })),

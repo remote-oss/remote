@@ -44,10 +44,12 @@ import {
   serverArchiveName,
   serverArchiveOf,
   startDownloadHost,
+  standInCliArchiveOf,
   startRunDownloads,
   updateServicePinCommand,
 } from './acceptance-downloads.ts';
-import {type CommandResult} from './command-runner.ts';
+import {STAND_IN_CLI_SCRIPT} from './acceptance-cli-editor.ts';
+import {type CommandResult, runCommand} from './command-runner.ts';
 
 /** What a request got: the status, the declared length, the body received, and whether the connection broke. */
 interface Received {
@@ -1116,18 +1118,28 @@ function temporaryRun(): {root: string; runFolder: string; cache: string} {
   return {root: path.join(base, 'root'), runFolder: base, cache};
 }
 
+/** The checksums an arm64 run pins for its two server archives, and the bytes the fake download answers for each. */
+function armServerArchives(): {
+  pinned: Record<string, string>;
+  answers: Record<string, string>;
+} {
+  return {
+    pinned: {
+      'alpine-arm64': createHash('sha256').update('alpine').digest('hex'),
+      'linux-arm64': createHash('sha256').update('glibc').digest('hex'),
+    },
+    answers: {
+      [serverArchiveName('alpine-arm64')]: 'alpine',
+      [serverArchiveName('linux-arm64')]: 'glibc',
+    },
+  };
+}
+
 describe('the download host in the run', () => {
   it('tooling-111: a run given CLI pins serves the pinned platform under /cli/, and one given none downloads no CLI', async () => {
     const {root, runFolder} = temporaryRun();
     try {
-      const pinned = {
-        'alpine-arm64': createHash('sha256').update('alpine').digest('hex'),
-        'linux-arm64': createHash('sha256').update('glibc').digest('hex'),
-      };
-      const answers: Record<string, string> = {
-        [serverArchiveName('alpine-arm64')]: 'alpine',
-        [serverArchiveName('linux-arm64')]: 'glibc',
-      };
+      const {pinned, answers} = armServerArchives();
       const asked: string[] = [];
       function download(address: string): Promise<Uint8Array> {
         asked.push(path.basename(address));
@@ -1194,6 +1206,90 @@ describe('the download host in the run', () => {
       );
     } finally {
       rmSync(root, {recursive: true, force: true});
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
+  it('#2735: a run given a stand-in CLI serves, under /cli/, a tar of the stand-in script for each platform with no pin, with no pin and no token asked for', async () => {
+    const {root, runFolder} = temporaryRun();
+    try {
+      const {pinned, answers} = armServerArchives();
+      const asked: string[] = [];
+      const downloads = await startRunDownloads(
+        // The stand-in is made with the real tar; every other command answers as the gateway does.
+        (program, programArguments) =>
+          program === 'tar' && programArguments.includes('code')
+            ? runCommand(program, programArguments)
+            : gateway(),
+        address => {
+          asked.push(address);
+          return Promise.resolve(
+            Buffer.from(answers[path.basename(address)] ?? ''),
+          );
+        },
+        root,
+        runFolder,
+        'arm64',
+        pinned,
+        undefined,
+        undefined,
+        process.platform,
+        true,
+      );
+      const port = Number(
+        /:(\d+)$/.exec(downloads.variables.HARNESS_DOWNLOADS_LOCAL ?? '')?.[1],
+      );
+      const served = await Promise.all(
+        [
+          '/cli/linux-arm64/0123/cli-linux-arm64.tar.gz',
+          '/cli/alpine-arm64/0123/cli-alpine-arm64.tar.gz',
+          '/cli/darwin-arm64/0123/cli-darwin-arm64.tar.gz',
+        ].map(async pathName => {
+          const body = await getFrom('127.0.0.1', port, pathName);
+          const unpacked = mkdtempSync(path.join(tmpdir(), 'stand-in-'));
+          try {
+            writeFileSync(path.join(unpacked, 'served.tar.gz'), body);
+            runCommand('tar', [
+              '-xzf',
+              path.join(unpacked, 'served.tar.gz'),
+              '-C',
+              unpacked,
+            ]);
+            return existsSync(path.join(unpacked, 'code'))
+              ? readFileSync(path.join(unpacked, 'code'), 'utf8')
+              : '';
+          } finally {
+            rmSync(unpacked, {recursive: true, force: true});
+          }
+        }),
+      );
+      await downloads.stop();
+      deepStrictEqual(
+        [served, asked.filter(address => address.includes('cli-archives'))],
+        [[STAND_IN_CLI_SCRIPT, STAND_IN_CLI_SCRIPT, ''], []],
+      );
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
+  it('#2735: the stand-in CLI archive of a platform is a gzipped tar of one executable script named code, in the run folder', () => {
+    const {runFolder} = temporaryRun();
+    try {
+      const archive = standInCliArchiveOf(runCommand, runFolder, 'linux-x64');
+      const listed = runCommand('tar', ['-tzvf', archive]).stdout.trim();
+      deepStrictEqual(
+        [
+          archive.startsWith(runFolder),
+          path.basename(archive),
+          listed.split('\n').length,
+          listed.startsWith('-rwx'),
+          listed.endsWith(' code'),
+        ],
+        [true, 'cli-linux-x64.tar.gz', 1, true, true],
+      );
+    } finally {
       rmSync(runFolder, {recursive: true, force: true});
     }
   });

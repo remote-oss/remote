@@ -8,8 +8,11 @@ import {
   binEntries,
   downloadRequests,
   existsOnHost,
+  hostPlatform,
   installedCommits,
   isHostDownloader,
+  runVariable,
+  standInCliFiles,
 } from './install.ts';
 
 /** The download host's requests a case expects: a count, all of one path, or only the client's. */
@@ -40,6 +43,8 @@ interface InstallCase {
   requests?: ExpectedRequests;
   licenceDetail?: string;
   noArchiveLeft?: boolean;
+  /** The server folder the CLI archive of an exec-mode install reaches under its commit-keyed name. */
+  cliIn?: string;
   /** File names, as `find -name` patterns, that nothing under the host's home and temporary folders may carry. */
   noHostFiles?: string[];
   /** Whether the case only makes the state of the case that needs it, so its only row is its own connect. */
@@ -214,6 +219,35 @@ describe(`the install case "${installCase?.label ?? 'unknown'}" of the VSCodium 
         ],
         [seen.length, [], true, true, true],
         `requests: ${JSON.stringify(seen)}`,
+      );
+    });
+  }
+
+  if (installCase?.cliIn !== undefined) {
+    const {cliIn} = installCase;
+    it(`${cite}: the client asked for the CLI of the host's platform and of its own commit, once`, async () => {
+      const platform = await hostPlatform();
+      deepStrictEqual(
+        downloadRequests(label)
+          .filter(
+            each =>
+              !isHostDownloader(each.userAgent) &&
+              each.path.startsWith('/cli/'),
+          )
+          .map(each => each.path),
+        [
+          `/cli/${platform}/${runVariable('HARNESS_CLIENT_COMMIT')}/cli-${platform}.tar.gz`,
+        ],
+      );
+    });
+
+    it(`${cite}: the CLI archive's file is in the server folder of the host`, async () => {
+      const commit = runVariable('HARNESS_CLIENT_COMMIT');
+      deepStrictEqual(
+        (await standInCliFiles(cliIn, commit)).map(file =>
+          file.endsWith(`-${commit}`),
+        ),
+        [true],
       );
     });
   }

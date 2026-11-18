@@ -10,9 +10,19 @@ import {checked, type CommandRunner} from './command-runner.ts';
 
 /**
  * The path, after the download host's base, that the copy's template names. VSCodium bakes its release into its
- * templates, so only `${os}` and `${arch}` remain; the download host serves `/cli/<os>-<arch>/` from the run's pins.
+ * templates, so only `${os}`, `${arch}` and `${commit}` remain; the download host serves `/cli/<os>-<arch>/...` from the
+ * run's pins, or a stand-in archive where it has none, whatever follows the platform, and the commit in the path tells a
+ * row which commit the client asked for.
  */
-export const CLI_TEMPLATE_PATH = '/cli/${os}-${arch}/cli-${os}-${arch}.tar.gz';
+export const CLI_TEMPLATE_PATH =
+  '/cli/${os}-${arch}/${commit}/cli-${os}-${arch}.tar.gz';
+
+/**
+ * What the stand-in CLI archive of a run holds: one script that does nothing but fail, whose text a row looks for on the
+ * host to tell the stand-in from any other file.
+ */
+export const STAND_IN_CLI_SCRIPT =
+  '#!/bin/sh\n# the stand-in CLI of the acceptance run\nexit 1\n';
 
 /** The folder of the copy in the run's folder. */
 export const CLI_EDITOR_FOLDER = 'cli-editor';
@@ -31,6 +41,18 @@ export function productFileOf(executable: string): string {
     'app',
     'product.json',
   );
+}
+
+/** The commit the `product.json` of the editor whose executable is `executable` names; none when it has no readable one. */
+export function commitOfEditor(executable: string): string | undefined {
+  try {
+    const {commit} = JSON.parse(
+      readFileSync(productFileOf(executable), 'utf8'),
+    ) as {commit?: unknown};
+    return typeof commit === 'string' && commit !== '' ? commit : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
