@@ -14,6 +14,7 @@ import {
   terminalNames,
   variable,
   waitFor,
+  windowEvents,
 } from '../windows/harness.ts';
 import {runFromPalette} from '../windows/palette.ts';
 import {
@@ -191,6 +192,19 @@ describe('the extension in the core flows of an SSH window (card connect-125)', 
           // What the window shows when the wait ends tells a program that did not start (a pick, a dialog) from one whose
           // output did not reach the console; the standing names the session's state and the seconds since the start.
           const seconds = Math.round((Date.now() - debugStartAt) / 1000);
+          const agentEvents = windowEvents(folder)
+            .filter(
+              each =>
+                each.time >= debugStartAt - 2000 &&
+                ['accepted', 'done', 'failed', 'called'].includes(each.event),
+            )
+            .map(
+              each =>
+                `[+${((each.time - debugStartAt) / 1000).toFixed(1)} s] ${each.event} ${String(each.id ?? '')} ${String(each.message ?? '')}`,
+            );
+          console.log(
+            `PROBE ${folder} agent events after the debug start:\n${agentEvents.join('\n')}`,
+          );
           const shown = await pageText(folder).catch(() => '(unreadable)');
           // Then the Debug Console is asked for, so that a program that ran while another panel was shown reads
           // differently from a session that never started.
