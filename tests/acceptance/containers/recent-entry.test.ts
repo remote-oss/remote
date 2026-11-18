@@ -1,5 +1,7 @@
+import {execFile} from 'node:child_process';
 import {deepStrictEqual} from 'node:assert';
 import {rmSync} from 'node:fs';
+import {promisify} from 'node:util';
 import {
   closeWindow,
   connectedToContainer,
@@ -13,6 +15,24 @@ import {
   startInWindow,
 } from '../windows/harness.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
+
+const execFileAsync = promisify(execFile);
+
+/** The id, state and start time of each container of `folder`, as `docker inspect` says them. */
+async function containerStates(folder: string): Promise<string[]> {
+  const containerIds = await devContainersOf(folder);
+  return Promise.all(
+    containerIds.map(async containerId => {
+      const {stdout} = await execFileAsync('docker', [
+        'inspect',
+        '-f',
+        '{{.Id}}|{{.State.Status}}|{{.State.StartedAt}}',
+        containerId,
+      ]);
+      return stdout.trim();
+    }),
+  );
+}
 import {
   answerDialog,
   chooseQuickPickRow,
@@ -59,6 +79,7 @@ describe('The Open Recent entry and the label of a connected window (cards conta
       );
       rmSync(folder, {recursive: true, force: true});
       const mark = containersLog().length;
+      const kept = await containerStates(folder);
       void inWindow(starter, 'acceptance.agent.openWindow', entry?.uri ?? '');
       const dialog = await waitForDialog(window, 180_000);
       const shown = {
@@ -87,7 +108,9 @@ describe('The Open Recent entry and the label of a connected window (cards conta
             SETUP_DETAILS.includes(text),
           ),
           dismissed,
-          containers: await devContainersOf(folder),
+          containersChanged:
+            JSON.stringify(await containerStates(folder)) ===
+            JSON.stringify(kept),
           logged:
             containersLog()
               .slice(mark)
@@ -108,7 +131,7 @@ describe('The Open Recent entry and the label of a connected window (cards conta
           ],
           details: true,
           dismissed: 'Disconnected from Dev Container: C43 Recent',
-          containers: [],
+          containersChanged: true,
           logged: true,
         },
       );

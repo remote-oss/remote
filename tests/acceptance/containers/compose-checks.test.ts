@@ -128,7 +128,7 @@ describe('the checks of a Compose configuration before and while it connects (ca
         titled: true,
         opened: [
           {
-            label: 'devcontainer.json',
+            label: 'devcontainer',
             active: true,
             preview: true,
             dirty: false,

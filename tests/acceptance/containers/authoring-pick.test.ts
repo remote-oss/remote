@@ -144,6 +144,7 @@ describe('the template pick and what follows it, against the run’s pinned temp
     const base: string[] = [];
     const results: unknown[] = [];
     await withWindow('c101-pick-base', {'main.c': ''}, async window => {
+      await screenOf(window);
       const seen = await curatedPick(window);
       base.push(...seen.rows);
       results.push({
@@ -158,6 +159,7 @@ describe('the template pick and what follows it, against the run’s pinned temp
       await closeScreen(window);
     });
     await withWindow('c101-pick-curated', {'go.mod': ''}, async window => {
+      await screenOf(window);
       const seen = await curatedPick(window);
       const learn = (await detailedQuickPickRows(window)).find(
         each => each.label === 'Learn More',

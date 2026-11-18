@@ -841,8 +841,16 @@ describe('F-0416 users and the UID image (card containers-42)', function () {
       );
       await connectedToContainer(name, 300_000);
       const rebuilt = await containerOf(folder);
-      const rebuiltUser = await configuredUserOf(rebuilt);
       const uidImages = await uidImagesOf(folder);
+      const uidUser = await docker(
+        'run',
+        '--rm',
+        '--entrypoint',
+        '/bin/sh',
+        uidImages[0] ?? '',
+        '-c',
+        'id -u builder',
+      );
       await closeWindow(name);
       deepStrictEqual(
         {
@@ -850,7 +858,7 @@ describe('F-0416 users and the UID image (card containers-42)', function () {
           dialog: dialog === undefined ? undefined : sayingAndButtons(dialog),
           before,
           rebuilt: rebuilt !== containerId,
-          rebuiltUser,
+          uidUser,
           uidImages,
         },
         {
@@ -868,7 +876,7 @@ describe('F-0416 users and the UID image (card containers-42)', function () {
                 : '',
           },
           rebuilt: true,
-          rebuiltUser: 'builder',
+          uidUser: String(HOST_UID),
           uidImages: [uidImageName(folder)],
         },
       );
