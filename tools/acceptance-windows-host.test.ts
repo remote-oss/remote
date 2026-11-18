@@ -33,7 +33,7 @@ async function refusalOf(
 }
 
 describe('the Windows SSH host of the windows-host launch (card #2652)', () => {
-  it('#2652: a Windows client whose server answers gets the winhost alias, its paths with forward slashes', async () => {
+  it('#2652, #1835: a Windows client whose server answers gets the winhost and winhost-unknown aliases in one block, its paths with forward slashes', async () => {
     const asked: number[] = [];
     deepStrictEqual(
       [
@@ -51,7 +51,7 @@ describe('the Windows SSH host of the windows-host launch (card #2652)', () => {
       [
         [
           '',
-          'Host winhost',
+          'Host winhost winhost-unknown',
           '  HostName 127.0.0.1',
           '  Port 2222',
           '  User runneradmin',
