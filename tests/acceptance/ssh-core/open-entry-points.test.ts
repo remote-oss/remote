@@ -46,6 +46,8 @@ import {
   pressEscape,
   pressQuickInputButton,
   pressQuickPickRowButton,
+  quickPickOf,
+  type QuickPickRow,
   quickPickRows,
   rememberPage,
   statusBarText,
@@ -176,11 +178,50 @@ function loginQuestions(mark: number): string[] {
     .map(line => `${line.window}: ${line.question}`);
 }
 
-/** Opens the Open Recent pick of window `name` and gives its rows, the pick left open. */
-async function recentRows(name: string) {
+/** How long the filtered Open Recent pick has to stop changing: it settles within a second, so ten is a hang. */
+const RECENT_SETTLE_MILLISECONDS = 10_000;
+
+/**
+ * Opens the Open Recent pick of window `name`, filters it by `filter` and gives its rows, the pick left open. The pick
+ * draws only the rows that fit its height, about seventeen, and lists files after the folders, so after the many
+ * folders a whole run has opened an entry the row looks for is not drawn at all until the list is filtered to it.
+ */
+async function recentRows(
+  name: string,
+  filter: string,
+): Promise<{rows: QuickPickRow[]; note: string}> {
+  /** The pick's rows once two reads 250 ms apart agree; a pick that keeps changing past the deadline says what it last read. */
+  async function steadyRows(what: string): Promise<QuickPickRow[]> {
+    let rows = await quickPickRows(name);
+    const began = Date.now();
+    for (let steady = 0; steady < 2;) {
+      if (Date.now() - began > RECENT_SETTLE_MILLISECONDS) {
+        throw new Error(
+          `the Open Recent pick of window ${name}, ${what}, did not settle within ${String(RECENT_SETTLE_MILLISECONDS / 1000)} s; it last read ${JSON.stringify(rows)}`,
+        );
+      }
+      await settle(250);
+      const next = await quickPickRows(name);
+      steady = JSON.stringify(next) === JSON.stringify(rows) ? steady + 1 : 0;
+      rows = next;
+    }
+    return rows;
+  }
   void inWindow(name, 'workbench.action.openRecent');
   await waitForQuickPick(name, 30_000);
-  return quickPickRows(name);
+  // One read, only for the failure message of the rows: it never throws, so the diagnostic cannot fail a row that passes.
+  await settle(500);
+  const unfiltered = await quickPickRows(name).catch(() => undefined);
+  await typeInQuickPick(name, filter);
+  const rows = await steadyRows(`filtered by ${JSON.stringify(filter)}`);
+  const before =
+    unfiltered === undefined
+      ? 'an unread number of rows'
+      : `${String(unfiltered.length)} rows, ${unfiltered.some(entry => entry.label.startsWith(filter)) ? 'with' : 'without'} an entry for it among them`;
+  return {
+    rows,
+    note: `the Open Recent pick of window ${name} drew ${before} before the filter ${JSON.stringify(filter)}, and ${String(rows.length)} rows after it`,
+  };
 }
 
 /** The label and the description of each row of `rows` whose label starts with one of `names`. */
@@ -433,9 +474,9 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
     );
     await settle(10_000);
     const afterPlain = otherNames();
-    const rows = await recentRows(window);
+    const read = await recentRows(window, 'c2623.dot-a');
     await pressEscape(window);
-    const files = described(rows, ['c2623.dot-a']);
+    const files = described(read.rows, ['c2623.dot-a']);
     await commandLine('--remote', 'ssh-remote+harness', `${HOME}/c2623.dot-b/`);
     await shows('c2623.dot-b');
     await commandLine(
@@ -451,6 +492,7 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
         files: ['c2623.dot-a [SSH: harness] | ~'],
         windows: [window, 'c2623.dot-b', 'c2623.dot-c'],
       },
+      read.note,
     );
   });
 
@@ -933,13 +975,16 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
       await closeWindow(path.basename(folder));
     }
     const names = ['c2623-labels-home', 'c2623-labels-tmp'];
-    const connected = described(await recentRows(window), names);
+    const connectedRead = await recentRows(window, 'c2623-labels');
+    const connected = described(connectedRead.rows, names);
     await pressEscape(window);
     const fresh = await newLocalWindow();
-    const freshRows = described(await recentRows(fresh), names);
+    const freshRead = await recentRows(fresh, 'c2623-labels');
+    const freshRows = described(freshRead.rows, names);
     await pressEscape(fresh);
     await closeWindow(fresh);
-    const original = described(await recentRows('local'), names);
+    const originalRead = await recentRows('local', 'c2623-labels');
+    const original = described(originalRead.rows, names);
     await pressEscape('local');
     deepStrictEqual(
       {connected, fresh: freshRows, original},
@@ -957,6 +1002,7 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
           'c2623-labels-home [SSH] | /home/harness',
         ],
       },
+      [connectedRead.note, freshRead.note, originalRead.note].join('; '),
     );
   });
 
@@ -1107,22 +1153,28 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
     await shows('c2623-recent-gone');
     await closeWindow('c2623-recent-gone');
     const window = await newLocalWindow();
-    const before = described(await recentRows(window), ['c2623-recent-gone']);
+    const read = await recentRows(window, 'c2623-recent-gone');
+    const before = described(read.rows, ['c2623-recent-gone']);
     await pressQuickPickRowButton(
       window,
       'c2623-recent-gone [SSH: harness]',
       'Remove from Recently Opened',
     );
     await settle(2_000);
+    // An empty list is also what a closed pick reads as, so the pick is read open first.
+    const stillOpen = (await quickPickOf(window)) !== undefined;
     deepStrictEqual(
       {
         before,
+        stillOpen,
         after: described(await quickPickRows(window), ['c2623-recent-gone']),
       },
       {
         before: ['c2623-recent-gone [SSH: harness] | /home/harness'],
+        stillOpen: true,
         after: [],
       },
+      read.note,
     );
   });
 
