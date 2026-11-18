@@ -20,8 +20,7 @@ import {buildInvocation, type SshRequest} from '../arguments/invocation.ts';
 import type {ProcessSpawner} from '../process/ports.ts';
 import {ConnectionHandler} from './handler.ts';
 import type {SocksProbe} from './socks-probe.ts';
-import {connectionStart, sessionStartFor} from './session-bootstrap.ts';
-import {interpreterOfPlatform} from './powershell-session.ts';
+import {sessionOpeningFor} from './session-bootstrap.ts';
 import type {PlatformHint} from 'lib-host';
 
 /** The start values a client gives the helper in `HelperParameters.options`. */
@@ -99,8 +98,8 @@ export async function runConnectionHelper(
       fromHost: request.effective.connectTimeout !== undefined,
       unboundedWaitSeconds: options.unboundedWaitSeconds,
     };
-    const start = connectionStart(
-      sessionStartFor(waitSettings, false, options.hostPlatform),
+    const start = sessionOpeningFor(
+      waitSettings,
       request.settings.remoteCommandInEffect,
       options.hostPlatform,
     );
@@ -112,7 +111,7 @@ export async function runConnectionHelper(
           : {remoteProgram: start.remoteProgram}),
         forwards: [{kind: 'dynamic', localPort: options.socksPort}],
       }),
-      sessionPrelude: start.prelude,
+      opening: start.opening,
       socksPort: options.socksPort,
       spawner: environment.spawner,
       askpassEnvironment: askpassEnvironment({
@@ -130,7 +129,6 @@ export async function runConnectionHelper(
         firstMessageMilliseconds: options.askpassFirstMessageMilliseconds,
       },
       newMarker: environment.newNonce,
-      interpreter: interpreterOfPlatform(options.hostPlatform),
       logLine: environment.logLine,
       socksProbe: environment.socksProbe,
     });

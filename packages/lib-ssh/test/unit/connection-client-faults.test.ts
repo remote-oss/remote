@@ -214,6 +214,7 @@ describe('the window side against a helper that does not follow the protocol', (
       runFacts: RUN_FACTS,
       socksPort: 41000,
       sharedRecord: null,
+      detectedPlatform: null,
     });
   });
 
@@ -228,6 +229,7 @@ describe('the window side against a helper that does not follow the protocol', (
       runFacts: RUN_FACTS,
       socksPort: 41000,
       sharedRecord: RECORD,
+      detectedPlatform: null,
     });
   });
 

@@ -40,9 +40,19 @@ import {
 } from './messages.ts';
 import {LoginOwnership} from './ownership.ts';
 import {
+  type DetectedPlatform,
+  isProbeAnswer,
+  isProbeExecLine,
+  isSessionEntered,
+  platformProbeInput,
+  PlatformProbeReader,
+  probeHandOverLine,
+} from './platform-probe.ts';
+import {
   type BootstrapEvent,
   bootstrapEventOf,
   bootstrapLogLine,
+  type SessionOpening,
 } from './session-bootstrap.ts';
 import {ShellRuns} from './shell-runs.ts';
 
@@ -57,8 +67,8 @@ export interface ConnectionHandlerOptions {
   askpassEnvironment: Readonly<Record<string, string>>;
   editorEnvironment: Readonly<Record<string, string | undefined>>;
   waitSettings: ConnectWaitSettings;
-  /** Written to the session's standard input once, before any run's commands: the session bootstrap. */
-  sessionPrelude: string;
+  /** How the session opens: the bootstrap written once, before any run's commands, or the platform's detection first. */
+  opening: SessionOpening;
   scheduler: Scheduler;
   /** What the askpass endpoint needs: the nonce its program presents, the host's name and its first-message deadline. */
   askpass: {
@@ -68,14 +78,15 @@ export interface ConnectionHandlerOptions {
   };
   /** A marker for the commands of one script run on the session; unguessable and new on every call. */
   newMarker: () => string;
-  /** What the session runs its scripts with, from the host's platform. */
-  interpreter: Interpreter;
   logLine: (line: string) => void;
   /** The probe of the shared session over its SOCKS forward. */
   socksProbe: SocksProbe;
 }
 
 type ConnectionState = 'idle' | 'connecting' | 'connected';
+
+/** ssh's own exit status for a failure of its own; any other status is the remote command's or the host shell's. */
+const SSH_OWN_FAILURE = 255;
 
 /** The port on the host's loopback the session check connects to: the host's own sshd. */
 const PROBE_TARGET_PORT = 22;
@@ -93,6 +104,7 @@ export class ConnectionHandler implements MessageHandler {
   private session: SshSession | undefined;
   private feed: SshLineFeed | undefined;
   private sharedRecord: SharedRecord | null = null;
+  private detected: DetectedPlatform | null = null;
   private killed = false;
   /** The session a check is probing, until the check has ended it or found it alive. */
   private probing: SshSession | undefined;
@@ -169,6 +181,7 @@ export class ConnectionHandler implements MessageHandler {
         return {
           type: 'sharedRecord',
           record: this.sharedRecord && {...this.sharedRecord},
+          detectedPlatform: this.detected,
         };
       case 'setSharedRecord':
         if (this.state !== 'connected') {
@@ -343,23 +356,29 @@ export class ConnectionHandler implements MessageHandler {
       },
     );
     this.wait = wait;
-    const runs = new ShellRuns({
-      write: text => {
-        void session.write(text);
-      },
-      scheduler: this.options.scheduler,
-      newMarker: this.options.newMarker,
-      interpreter: this.options.interpreter,
-      onWedged: () => {
-        session.kill();
-      },
-    });
-    this.runs = runs;
+    const startRuns = (interpreter: Interpreter): void => {
+      this.runs = new ShellRuns({
+        write: text => {
+          void session.write(text);
+        },
+        scheduler: this.options.scheduler,
+        newMarker: this.options.newMarker,
+        interpreter,
+        onWedged: () => {
+          session.kill();
+        },
+      });
+    };
+    const {opening} = this.options;
+    const opened = this.opened(opening, session, startRuns);
     let ready = false;
     let early: Exclude<BootstrapEvent, {kind: 'ready'}> | undefined;
     const commandLog = new LocalCommandLog();
     let bootstrapped = false;
     const output = new LineSplitter(line => {
+      if (opened.hear(line)) {
+        return;
+      }
       const event = ready ? undefined : bootstrapEventOf(line);
       if (event !== undefined) {
         bootstrapped = true;
@@ -369,7 +388,7 @@ export class ConnectionHandler implements MessageHandler {
         if (logged !== undefined) {
           this.tell({type: 'localCommandLines', lines: [logged]});
         }
-        runs.hear(line);
+        this.runs?.hear(line);
       } else if (event.kind === 'ready') {
         ready = true;
         if (this.state === 'connecting') {
@@ -394,8 +413,11 @@ export class ConnectionHandler implements MessageHandler {
     const lines = new LineSplitter(line => {
       if (!preludeWritten && setupMarkerOf(line) === 'authenticated') {
         preludeWritten = true;
-        void session.write(this.options.sessionPrelude);
+        opened.authenticated();
       }
+      opened.sshLine(line, () => {
+        output.flush();
+      });
       feed.push(line);
       if (this.state === 'connecting') {
         errorLines.push(line);
@@ -406,7 +428,7 @@ export class ConnectionHandler implements MessageHandler {
     });
     wait.start();
     void session.exit().then(status => {
-      runs.end();
+      this.runs?.end();
       wait.stop();
       this.askpass.closeAll();
       lines.flush();
@@ -424,8 +446,96 @@ export class ConnectionHandler implements MessageHandler {
         this.control.stop();
         return;
       }
+      if (
+        early === undefined &&
+        !timedOut &&
+        status !== undefined &&
+        status !== SSH_OWN_FAILURE &&
+        opened.inOpening()
+      ) {
+        early = {kind: 'exited', status};
+        this.options.logLine(bootstrapLogLine(early));
+      }
       this.loginFailed(errorLines, status, timedOut, early);
     });
+  }
+
+  /**
+   * The opening of `session`: what is written once ssh reports the login, and the reader of the output lines that belong
+   * to the opening rather than to the bootstrap. A known platform writes its prelude and starts the runs at once; an
+   * unknown one writes the probe, takes the output lines until the answers end, then writes the platform's line, and on
+   * POSIX the prelude once the shell has handed over. Until ssh says it entered the session, or a line of the
+   * connection's nonce on the output shows it did first, the output is a LocalCommand's, which ssh runs to its end
+   * first, its last words with no line end included; after that the lines it takes are the host shell's banner,
+   * prompts, echoes and answers, so none of them is a LocalCommand's output or a run's.
+   */
+  private opened(
+    opening: SessionOpening,
+    session: SshSession,
+    startRuns: (interpreter: Interpreter) => void,
+  ): {
+    authenticated(): void;
+    sshLine(line: string, endLocal: () => void): void;
+    hear(line: string): boolean;
+    inOpening(): boolean;
+  } {
+    if (opening.kind === 'known') {
+      startRuns(opening.interpreter);
+      return {
+        authenticated: () => {
+          void session.write(opening.prelude);
+        },
+        sshLine: () => undefined,
+        hear: () => false,
+        inOpening: () => false,
+      };
+    }
+    const nonce = this.options.newMarker();
+    const probe = new PlatformProbeReader(nonce);
+    let phase: 'local' | 'probing' | 'handing' | 'open' = 'local';
+    return {
+      authenticated: () => {
+        void session.write(platformProbeInput(nonce));
+      },
+      inOpening: () => phase !== 'open',
+      sshLine: (line, endLocal) => {
+        if (phase === 'local' && isSessionEntered(line)) {
+          endLocal();
+          phase = 'probing';
+        }
+      },
+      hear: line => {
+        if (phase === 'local') {
+          if (!isProbeAnswer(line, nonce)) {
+            return false;
+          }
+          phase = 'probing';
+        }
+        if (phase === 'probing') {
+          const found = probe.hear(line);
+          if (found === 'windows') {
+            this.detected = found;
+            startRuns('powershell');
+            phase = 'open';
+            void session.write(opening.windows.line);
+          } else if (found === 'posix') {
+            this.detected = found;
+            phase = 'handing';
+            void session.write(probeHandOverLine(nonce, opening.posix.program));
+          }
+          return true;
+        }
+        if (phase === 'handing') {
+          if (isProbeExecLine(line, nonce)) {
+            startRuns('posixShell');
+            phase = 'open';
+            void session.write(opening.posix.prelude);
+          }
+          return true;
+        }
+        return false;
+      },
+    };
   }
 
   private loginFailed(

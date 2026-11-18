@@ -1,15 +1,19 @@
 /**
  * @fileoverview The Windows SSH host of the `windows-host` launch. The platform workflow's Windows job starts Windows'
  * OpenSSH Server on 127.0.0.1 for the job's account, with key authentication only and Windows PowerShell as its shell,
- * and passes its port, user and key as HARNESS_WINHOST_*. The run gives the launch's windows the alias `winhost` for
- * it, and refuses the launch where there is no such server.
+ * and passes its port, user and key as HARNESS_WINHOST_*. The run gives the launch's windows two aliases for it,
+ * `winhost`, whose platform the launch stores, and `winhost-unknown`, which has none, and refuses the launch where there
+ * is no such server.
  */
 
 import {connect} from 'node:net';
 import {sshConfigPath} from './acceptance-keys.ts';
 
-/** The alias the `windows-host` launch's windows open. */
-const WINDOWS_HOST_ALIAS = 'winhost';
+/**
+ * The aliases the `windows-host` launch's windows open, one host behind both: `winhost` with its platform stored, and
+ * `winhost-unknown` with none, for the rows that need the platform unknown without writing a setting.
+ */
+const WINDOWS_HOST_ALIASES = ['winhost', 'winhost-unknown'];
 
 /** The variables the platform workflow's Windows job exports for the run's Windows SSH host. */
 export interface WindowsHostVariables {
@@ -42,7 +46,7 @@ export async function answersOn(
 }
 
 /**
- * The `winhost` block of the run's ssh_config, for the Windows SSH host that `environment` names, once its server
+ * The block of the run's ssh_config for both aliases of the Windows SSH host that `environment` names, once its server
  * answers. A client that is not Windows (`platform`), a variable that is missing and a server that does not answer each
  * refuse the launch, so its rows never run against another host.
  */
@@ -72,7 +76,7 @@ export async function windowsHostBlock(
   }
   return [
     '',
-    `Host ${WINDOWS_HOST_ALIAS}`,
+    `Host ${WINDOWS_HOST_ALIASES.join(' ')}`,
     '  HostName 127.0.0.1',
     `  Port ${String(port)}`,
     `  User ${user}`,

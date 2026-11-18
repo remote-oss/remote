@@ -78,6 +78,8 @@ class FakeLease {
   connectReplies: PlainData[] = [];
   /** The record an earlier window left, which the helper gives back when asked; none when unset. */
   storedRecord: PlainData | undefined;
+  /** What the helper's opening found when the platform was unknown; null when it found nothing. */
+  detectedPlatform: string | null = null;
   private readonly listeners: Array<(event: unknown) => void> = [];
 
   onEvent(listener: (event: unknown) => void): void {
@@ -90,8 +92,13 @@ class FakeLease {
     const reply =
       type === 'connect'
         ? (this.connectReplies.shift() ?? {type: 'accepted'})
-        : type === 'sharedRecord' && this.storedRecord !== undefined
-          ? {type: 'sharedRecord', record: this.storedRecord}
+        : type === 'sharedRecord' &&
+            (this.storedRecord !== undefined || this.detectedPlatform !== null)
+          ? {
+              type: 'sharedRecord',
+              record: this.storedRecord ?? null,
+              detectedPlatform: this.detectedPlatform,
+            }
           : {type: 'accepted'};
     return Promise.resolve({kind: 'reply', body: reply});
   }
@@ -580,6 +587,42 @@ describe('the connection step', () => {
     it('keeps the terms of the settings when the helper holds no record, so the entry decides after the server is gone', async () => {
       const {channelsFor} = await loggedIn(undefined, WINDOWS_TERMS);
       deepStrictEqual(channelsFor, [[true, WINDOWS_TERMS, 'harness']]);
+    });
+  });
+
+  describe('#1835: the platform the helper found when the settings left it unknown', () => {
+    const UNKNOWN_TERMS: ConnectionTerms = {...TERMS, platform: 'unknown'};
+
+    /** The channel terms of a connect whose helper found `detected`, with `terms`. */
+    async function channelTerms(
+      detected: string | null,
+      terms: ConnectionTerms,
+    ): Promise<unknown> {
+      const ready = fixture('acquired');
+      ready.lease.detectedPlatform = detected;
+      const pending = ready.connecting(undefined, undefined, terms);
+      await settled();
+      ready.lease.emit({type: 'connected', socksPort: 41000});
+      await pending;
+      return ready.channelsFor;
+    }
+
+    it('#1835: Windows found gives the channel the Windows platform', async () => {
+      deepStrictEqual(await channelTerms('windows', UNKNOWN_TERMS), [
+        [true, {...UNKNOWN_TERMS, platform: 'windows'}, 'harness'],
+      ]);
+    });
+
+    it('#1835: POSIX found keeps the unknown terms, which the server probe names later', async () => {
+      deepStrictEqual(await channelTerms('posix', UNKNOWN_TERMS), [
+        [true, UNKNOWN_TERMS, 'harness'],
+      ]);
+    });
+
+    it('#1835: a Windows answer leaves a known platform as it is', async () => {
+      deepStrictEqual(await channelTerms('windows', TERMS), [
+        [true, TERMS, 'harness'],
+      ]);
     });
   });
 

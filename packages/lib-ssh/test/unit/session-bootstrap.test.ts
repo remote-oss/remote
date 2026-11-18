@@ -21,6 +21,7 @@ import {
   sessionStartFor,
 } from '../../src/index.ts';
 import {TUNNEL_COMMAND} from '../../src/arguments/invocation.ts';
+import {sessionOpeningFor} from '../../src/connection-server/session-bootstrap.ts';
 import {powershellSessionStart} from '../../src/connection-server/powershell-session.ts';
 import {planScript} from '../../src/process/remote-program.ts';
 
@@ -52,6 +53,58 @@ describe('the session start by platform (card #1899)', () => {
       remoteProgram: undefined,
       prelude: `${start.remoteProgram}\n`,
     });
+  });
+});
+
+describe('the session opening by platform (card server-27, #1835)', () => {
+  const WAIT = {
+    connectTimeoutSeconds: 10,
+    fromHost: false,
+    unboundedWaitSeconds: 120,
+  };
+
+  it('#1835: a known platform keeps its start exactly, with the interpreter of its platform', () => {
+    const linux = connectionStart(sessionStartFor(WAIT, false, 'linux'), false);
+    const windows = powershellSessionStart();
+    deepStrictEqual(
+      [
+        sessionOpeningFor(WAIT, false, 'linux'),
+        sessionOpeningFor(WAIT, false, 'windows'),
+      ],
+      [
+        {
+          remoteProgram: linux.remoteProgram,
+          opening: {
+            kind: 'known',
+            prelude: linux.prelude,
+            interpreter: 'posixShell',
+          },
+        },
+        {
+          remoteProgram: windows.remoteProgram,
+          opening: {kind: 'known', prelude: '', interpreter: 'powershell'},
+        },
+      ],
+    );
+  });
+
+  it('#1835: an unknown platform has no remote program, with or without a RemoteCommand, and its program and the Windows line go on from the probe', () => {
+    const posix = sessionStartFor(WAIT, false, 'unknown');
+    const detect = {
+      remoteProgram: undefined,
+      opening: {
+        kind: 'detect',
+        posix: {program: posix.remoteProgram, prelude: posix.prelude},
+        windows: {line: `${powershellSessionStart().remoteProgram}\n`},
+      },
+    };
+    deepStrictEqual(
+      [
+        sessionOpeningFor(WAIT, false, 'unknown'),
+        sessionOpeningFor(WAIT, true, 'unknown'),
+      ],
+      [detect, detect],
+    );
   });
 });
 
