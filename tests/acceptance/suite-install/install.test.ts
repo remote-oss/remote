@@ -12,6 +12,7 @@ import {
   installedCommits,
   isHostDownloader,
   runVariable,
+  folderListing,
   standInCliRanAs,
 } from './install.ts';
 
@@ -259,9 +260,12 @@ describe(`the install case "${installCase?.label ?? 'unknown'}" of the VSCodium 
           ranAs.slice(cliIn.length + 1).includes('/'),
         ],
         [true, true, false],
-        `the stand-in CLI was run as ${JSON.stringify(ranAs)}; the log lines that name the CLI: ${JSON.stringify(
-          connectionLog().filter(line => /\bCLI\b/i.test(line)),
-        )}`,
+        `the stand-in CLI was run as ${JSON.stringify(ranAs)}\nthe server folder:\n${await folderListing(cliIn)}\nthe log lines of the install, without the progress lines:\n${connectionLog()
+          .filter(
+            line => !/Downloading VS Code Server: |unpack \d+$/.test(line),
+          )
+          .slice(-40)
+          .join('\n')}`,
       );
     });
   }

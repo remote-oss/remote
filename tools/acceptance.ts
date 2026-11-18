@@ -65,6 +65,7 @@ import {
   CLI_TEMPLATE_PATH,
   cliSourceEditorOf,
   commitOfEditor,
+  standInNameProblem,
 } from './acceptance-cli-editor.ts';
 import {
   acceptanceRunId,
@@ -1328,6 +1329,13 @@ async function prepare(
           runFolder,
           `${cliBaseOf(downloads.variables, chosen)}${CLI_TEMPLATE_PATH}`,
         );
+  const nameProblem =
+    cliEditor === undefined || !chosen.some(startsStandInCliEditor)
+      ? undefined
+      : standInNameProblem(cliEditor);
+  if (nameProblem !== undefined) {
+    throw new Error(nameProblem);
+  }
   const clientCommit =
     cliEditor === undefined ? undefined : commitOfEditor(cliEditor);
   const vsixFiles = packagedExtensions(root);

@@ -390,7 +390,7 @@ script that fails, with no pin and no token, so the case runs in the gate. The c
 `remote.SSH.localServerDownload` to `always`, so the client itself fetches the archive. The case's rows check that the
 client asked once for the CLI of the host's platform and of the copy's commit (`HARNESS_CLIENT_COMMIT`), and that the
 archive's file was run from the server folder under its commit-keyed name: the stand-in writes the path it was run as to
-`stand-in-cli-ran` in the account's home, since the install removes the file of a CLI that fails. The stand-in is no CLI, so
+`/tmp/stand-in-cli-ran`, since the install removes the file of a CLI that fails; the file in the archive is named by the product's `applicationName`, which the install unpacks the CLI by, and a run whose editor names another is refused. The stand-in is no CLI, so
 the case's outcome is `any`. Where a run also
 names the `cli-path` launch, whose pins give real CLI archives for the host's downloader, the copy's template names the host's own base (`downloads`) and the host serves those archives for the platforms they cover.
 

@@ -48,7 +48,10 @@ import {
   startRunDownloads,
   updateServicePinCommand,
 } from './acceptance-downloads.ts';
-import {STAND_IN_CLI_SCRIPT} from './acceptance-cli-editor.ts';
+import {
+  STAND_IN_CLI_NAME,
+  STAND_IN_CLI_SCRIPT,
+} from './acceptance-cli-editor.ts';
 import {type CommandResult, runCommand} from './command-runner.ts';
 
 /** What a request got: the status, the declared length, the body received, and whether the connection broke. */
@@ -1151,7 +1154,7 @@ async function servedCliOf(
     const {pinned, answers} = armServerArchives();
     const downloads = await startRunDownloads(
       (program, programArguments) =>
-        program === 'tar' && programArguments.includes('code')
+        program === 'tar' && programArguments.includes(STAND_IN_CLI_NAME)
           ? runCommand(program, programArguments)
           : gateway(),
       address =>
@@ -1192,8 +1195,8 @@ async function servedCliOf(
             '-C',
             unpacked,
           ]);
-          return existsSync(path.join(unpacked, 'code'))
-            ? readFileSync(path.join(unpacked, 'code'), 'utf8')
+          return existsSync(path.join(unpacked, STAND_IN_CLI_NAME))
+            ? readFileSync(path.join(unpacked, STAND_IN_CLI_NAME), 'utf8')
             : body.toString();
         } finally {
           rmSync(unpacked, {recursive: true, force: true});
@@ -1314,7 +1317,7 @@ describe('the download host in the run', () => {
     );
   });
 
-  it('#2735: the stand-in CLI archive of a platform is a gzipped tar of one executable script named code, in the run folder', () => {
+  it('#2735: the stand-in CLI archive of a platform is a gzipped tar of one executable script named after the product’s application, in the run folder', () => {
     const {runFolder} = temporaryRun();
     try {
       const archive = standInCliArchiveOf(runCommand, runFolder, 'linux-x64');
@@ -1325,7 +1328,7 @@ describe('the download host in the run', () => {
           path.basename(archive),
           listed.split('\n').length,
           listed.startsWith('-rwx'),
-          listed.endsWith(' code'),
+          listed.endsWith(` ${STAND_IN_CLI_NAME}`),
         ],
         [true, 'cli-linux-x64.tar.gz', 1, true, true],
       );

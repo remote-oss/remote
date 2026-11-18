@@ -31,7 +31,10 @@ import {
   servedControlFolder,
   servedTemplatesFolder,
 } from './acceptance-templates.ts';
-import {STAND_IN_CLI_SCRIPT} from './acceptance-cli-editor.ts';
+import {
+  STAND_IN_CLI_NAME,
+  STAND_IN_CLI_SCRIPT,
+} from './acceptance-cli-editor.ts';
 import {type CommandRunner, checked} from './command-runner.ts';
 
 /**
@@ -933,9 +936,6 @@ function packFeatureTarball(
     '.',
   ]);
 }
-
-/** The file name of the stand-in CLI inside its archive, as the editor's own CLI archives name their one file. */
-const STAND_IN_CLI_NAME = 'code';
 
 /**
  * The stand-in archive of the editor's CLI for `platform`, made by the run in `runFolder` for a launch whose case only

@@ -17,15 +17,46 @@ import {checked, type CommandRunner} from './command-runner.ts';
 export const CLI_TEMPLATE_PATH =
   '/cli/${os}-${arch}/${commit}/cli-${os}-${arch}.tar.gz';
 
-/** The file, in the home folder of the account that runs it, where the stand-in CLI writes the path it was run as. */
-export const STAND_IN_CLI_TRACE = 'stand-in-cli-ran';
+/** The file where the stand-in CLI writes the path it was run as, on the host. */
+export const STAND_IN_CLI_TRACE = '/tmp/stand-in-cli-ran';
+
+/**
+ * The name of the stand-in CLI's file inside its archive: the CLI's name in an archive is the product's
+ * `applicationName`, which the install unpacks by, and the VSCodium build of the harness names it so.
+ */
+export const STAND_IN_CLI_NAME = 'codium-insiders';
 
 /**
  * What the stand-in CLI archive of a run holds: one script that writes the path it was run as to `STAND_IN_CLI_TRACE`
- * in its account's home and fails. The install that fails on it removes the file it was copied to, so the trace is what
- * a row reads on the host to tell that the archive's file reached the server folder and was run from there.
+ * and fails. The install that fails on it removes the file it was copied to, so the trace is what a row reads on the
+ * host to tell that the archive's file reached the server folder and was run from there.
  */
-export const STAND_IN_CLI_SCRIPT = `#!/bin/sh\n# the stand-in CLI of the acceptance run\necho "$0" > "$HOME/${STAND_IN_CLI_TRACE}"\nexit 1\n`;
+export const STAND_IN_CLI_SCRIPT = `#!/bin/sh\n# the stand-in CLI of the acceptance run\necho "$0" > ${STAND_IN_CLI_TRACE}\nexit 1\n`;
+
+/** The `applicationName` the `product.json` of the editor whose executable is `executable` names; none when it has none. */
+export function applicationNameOf(executable: string): string | undefined {
+  try {
+    const {applicationName} = JSON.parse(
+      readFileSync(productFileOf(executable), 'utf8'),
+    ) as {applicationName?: unknown};
+    return typeof applicationName === 'string' && applicationName !== ''
+      ? applicationName
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Why the stand-in CLI would not be unpacked as the CLI of the editor at `executable`: the product names its CLI by
+ * another name than the stand-in's file; none when the names agree or the product names none.
+ */
+export function standInNameProblem(executable: string): string | undefined {
+  const name = applicationNameOf(executable);
+  return name === undefined || name === STAND_IN_CLI_NAME
+    ? undefined
+    : `the editor's applicationName is ${name}, and the stand-in CLI's file is named ${STAND_IN_CLI_NAME}: the install unpacks the CLI by the product's name`;
+}
 
 /** The folder of the copy in the run's folder. */
 export const CLI_EDITOR_FOLDER = 'cli-editor';

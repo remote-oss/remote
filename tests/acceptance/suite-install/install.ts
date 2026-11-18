@@ -161,16 +161,14 @@ export async function hostPlatform(): Promise<string> {
   return `${system}-${architectures[machine] ?? machine}`;
 }
 
-/**
- * The path the stand-in CLI was run as on the host, from the trace it writes in the home of the account `harness`; empty
- * when it was never run.
- */
+/** The path the stand-in CLI was run as on the host, from the trace it writes; empty when it was never run. */
 export async function standInCliRanAs(): Promise<string> {
   return (
-    await onHost(
-      'sh',
-      '-c',
-      `cat "$HOME/${STAND_IN_CLI_TRACE}" 2>/dev/null; true`,
-    )
+    await onHost('sh', '-c', `cat '${STAND_IN_CLI_TRACE}' 2>/dev/null; true`)
   ).trim();
+}
+
+/** The entries of `folder` on the host with their sizes and times, for the message of a row that expected one in it. */
+export async function folderListing(folder: string): Promise<string> {
+  return (await onHost('sh', '-c', `ls -laR '${folder}' 2>&1; true`)).trim();
 }

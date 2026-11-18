@@ -16,6 +16,9 @@ import {
   cliSourceEditorOf,
   commitOfEditor,
   productFileOf,
+  applicationNameOf,
+  standInNameProblem,
+  STAND_IN_CLI_NAME,
   STAND_IN_CLI_SCRIPT,
   STAND_IN_CLI_TRACE,
   withCliTemplate,
@@ -82,13 +85,42 @@ describe('the CLI-source editor', () => {
     ]);
   });
 
-  it('#2735: the stand-in CLI is a script that writes the path it was run as to its trace in the account’s home and fails', () => {
-    deepStrictEqual(STAND_IN_CLI_SCRIPT.split('\n'), [
-      '#!/bin/sh',
-      '# the stand-in CLI of the acceptance run',
-      `echo "$0" > "$HOME/${STAND_IN_CLI_TRACE}"`,
-      'exit 1',
-      '',
+  it('#2735: the stand-in CLI is a script that writes the path it was run as to its trace on the host and fails', () => {
+    deepStrictEqual(
+      [STAND_IN_CLI_TRACE, STAND_IN_CLI_SCRIPT.split('\n')],
+      [
+        '/tmp/stand-in-cli-ran',
+        [
+          '#!/bin/sh',
+          '# the stand-in CLI of the acceptance run',
+          'echo "$0" > /tmp/stand-in-cli-ran',
+          'exit 1',
+          '',
+        ],
+      ],
+    );
+  });
+
+  it('#2735: the stand-in CLI’s file is named by the product’s applicationName, and an editor whose product names another is a problem', () => {
+    const outcomes: unknown[] = [];
+    for (const product of [
+      {applicationName: STAND_IN_CLI_NAME},
+      {applicationName: 'code-insiders'},
+      {},
+    ]) {
+      writeFileSync(productFileOf(executable), JSON.stringify(product));
+      outcomes.push([
+        applicationNameOf(executable),
+        standInNameProblem(executable),
+      ]);
+    }
+    deepStrictEqual(outcomes, [
+      [STAND_IN_CLI_NAME, undefined],
+      [
+        'code-insiders',
+        `the editor's applicationName is code-insiders, and the stand-in CLI's file is named ${STAND_IN_CLI_NAME}: the install unpacks the CLI by the product's name`,
+      ],
+      [undefined, undefined],
     ]);
   });
 
