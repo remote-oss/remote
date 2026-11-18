@@ -1,16 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {readFileSync} from 'node:fs';
-import path from 'node:path';
-
-const FOLDER = path.join(import.meta.dirname, '..', '..');
-
-/** The JSON file of the package folder. */
-function jsonOf(file: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(path.join(FOLDER, file), 'utf8')) as Record<
-    string,
-    unknown
-  >;
-}
+import {jsonOf} from './manifest.fixture.ts';
 
 describe('the manifest of remote.SSH.preconnect (card connect-87)', () => {
   it('F-2108 AC-1: the setting has its type, default, tag, examples and description, with the two spaces', () => {
