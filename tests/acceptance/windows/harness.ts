@@ -43,6 +43,7 @@ import {
   type AppendedEntry,
 } from '../../../tools/script-file.ts';
 import {commandEventLines} from './agent-events.ts';
+import {unfinishedCommands} from './agent-standing.ts';
 import {explainedFailure, section} from './connect-failure.ts';
 import {editorFolderOf} from './editor-folder.ts';
 
@@ -724,7 +725,7 @@ export async function inWindow(
   }
   await waitUntil(
     () =>
-      `window ${name} to finish ${command} (events: ${JSON.stringify(windowEvents(name))})`,
+      `window ${name} to finish ${command} (the commands its agent took and has not finished: ${JSON.stringify(unfinishedCommands(windowEvents(name), linesOf<{id: string; command?: string}>(agentFile(name, 'commands')), Date.now()))}; its last events: ${JSON.stringify(windowEvents(name).slice(-5))})`,
     () => concerning().some(each => each.event !== 'accepted'),
   );
   const failed = concerning().find(each => each.event === 'failed');
@@ -1476,17 +1477,7 @@ function closeStateOf(name: string, commandId: string): string {
         'a command'
       );
     }
-    const ended = new Set(
-      events
-        .filter(each => each.event === 'done' || each.event === 'failed')
-        .map(each => each.id),
-    );
-    const running = events
-      .filter(each => each.event === 'accepted' && !ended.has(each.id))
-      .map(
-        each =>
-          `${nameOf(each.id)} accepted ${String(Math.round((now - each.time) / 1000))} s ago`,
-      );
+    const running = unfinishedCommands(events, commands, now);
     const last = events
       .slice(-5)
       .map(
