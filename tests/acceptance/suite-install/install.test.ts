@@ -13,6 +13,7 @@ import {
   isHostDownloader,
   runVariable,
   standInCliFiles,
+  standInCliWhereabouts,
 } from './install.ts';
 
 /** The download host's requests a case expects: a count, all of one path, or only the client's. */
@@ -251,6 +252,9 @@ describe(`the install case "${installCase?.label ?? 'unknown'}" of the VSCodium 
           file.endsWith(`-${commit}`),
         ),
         [true],
+        `where the stand-in's text is on the host, then ${cliIn}:\n${await standInCliWhereabouts(cliIn)}\nthe log lines that name the CLI: ${JSON.stringify(
+          connectionLog().filter(line => /\bCLI\b/i.test(line)),
+        )}`,
       );
     });
   }

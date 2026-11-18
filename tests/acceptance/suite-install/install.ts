@@ -180,3 +180,18 @@ export async function standInCliFiles(
     .split('\n')
     .filter(line => line !== '');
 }
+
+/**
+ * Where the stand-in CLI's text is on the host and what `folder` holds, for the message of a row that did not find the
+ * archive's file where it expected it: the files under the home and temporary folders with the text, and the folder's
+ * entries with their sizes.
+ */
+export async function standInCliWhereabouts(folder: string): Promise<string> {
+  const marker = STAND_IN_CLI_SCRIPT.split('\n')[1] ?? '';
+  const found = await onHost(
+    'sh',
+    '-c',
+    `grep -rl -F -e '${marker}' /home/harness /tmp 2>/dev/null; echo '--'; ls -la '${folder}' 2>&1; true`,
+  );
+  return found.trim();
+}
