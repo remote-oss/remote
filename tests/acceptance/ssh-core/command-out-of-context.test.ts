@@ -123,6 +123,13 @@ function outOfContext(command: PressedCommand): string {
   return `'${command.title}' is not possible in the current context.`;
 }
 
+/**
+ * The lines of the log that a connect writes and a window's activation does not: the resolver, the search for ssh, the
+ * start of ssh and the progress phases. The activation writes its own four (level, editor version, extension, client).
+ */
+const CONNECTION_LINE =
+  /^(Resolving ssh-remote|Searched for ssh|Using ssh client|Started ssh|Progress: )/u;
+
 /** The hosts the rows need no platform pick for. */
 const PLATFORMS = {harness: 'linux', refused: 'linux', nowhere: 'linux'};
 
@@ -341,7 +348,9 @@ describe('Remote-SSH commands run where they do not apply (F-2006, card #2817)',
     deepStrictEqual(
       {
         results,
-        connectionLines: connectionLog().length - logBefore,
+        connecting: connectionLog()
+          .slice(logBefore)
+          .filter(line => CONNECTION_LINE.test(line)),
         usable: await usable(name),
         // The presses reached the extension: it was inactive and the first command activated it.
         activations: sshActivations(logFile),
@@ -353,7 +362,7 @@ describe('Remote-SSH commands run where they do not apply (F-2006, card #2817)',
           changed: [],
           unexpected: [],
         })),
-        connectionLines: 0,
+        connecting: [],
         usable: true,
         activations: [`onCommand:${NEW_WINDOW.id}`],
         active: true,
@@ -390,69 +399,76 @@ describe('Remote-SSH commands run where they do not apply (F-2006, card #2817)',
     );
   });
 
-  for (const useLocalServer of [true, false]) {
-    it(`F-2006 AC-16 (c2817-disconnected-${useLocalServer ? 'default' : 'no-local-server'}): in a disconnected SSH window${useLocalServer ? ' with the default settings' : ' with remote.SSH.useLocalServer false'}, New Window on Active Host, Kill Current VS Code Server and Open Web UI run by keybinding leave it an SSH window and usable, change no settings file, stop no connection server, kill no server and show at most R-46’s notice`, async () => {
-      const name = `c2817-disconnected-${useLocalServer ? 'default' : 'no-local-server'}`;
-      if (!useLocalServer) {
-        await userSettings({'remote.SSH.useLocalServer': false});
-      }
-      try {
-        // A window that stays connected to `harness` through the presses: a connection server that a press stopped would end
-        // its connection, which no read of the helper processes can tell from a helper that left on its own after the
-        // refused window's failure.
-        await openConnected(`${name}-keeper`);
-        await failedWindow('refused', name);
-        await bindingsAreLive(name);
-        const results: Array<{
-          command: string;
-          settingsChanged: boolean;
-          keeperConnected: boolean;
-          servers: boolean;
-          stillSsh: boolean;
-          usable: boolean;
-          reloaded: boolean;
-          unexpected: string[];
-        }> = [];
-        for (const command of [NEW_WINDOW, KILL_CURRENT, WEB_UI]) {
-          const {before, after} = await pressed(name, command);
-          // A confirmation the command asks for is not answered: Escape leaves the window as it was.
-          if (after.dialog) {
-            await pressEscape(name);
-            await settle(1000);
-          }
-          const done = await effectsOf(name);
-          results.push({
-            command: command.title,
-            settingsChanged:
-              JSON.stringify(before.files) !== JSON.stringify(done.files),
-            keeperConnected: await connected(`${name}-keeper`),
-            servers: before.servers.every(server =>
-              done.servers.includes(server),
-            ),
-            stillSsh: (await windowState(name)).remoteName === 'ssh-remote',
-            usable: await usable(name),
-            reloaded: before.activations !== done.activations,
-            unexpected: unexpectedToasts(before, done, [outOfContext(command)]),
-          });
+  /** The AC-16 row of a disconnected window, with the default settings or with `remote.SSH.useLocalServer` false. */
+  async function disconnectedWindowRow(useLocalServer: boolean): Promise<void> {
+    const name = `c2817-disconnected-${useLocalServer ? 'default' : 'no-local-server'}`;
+    if (!useLocalServer) {
+      await userSettings({'remote.SSH.useLocalServer': false});
+    }
+    try {
+      // A window that stays connected to `harness` through the presses: a connection server that a press stopped would end
+      // its connection, which no read of the helper processes can tell from a helper that left on its own after the
+      // refused window's failure.
+      await openConnected(`${name}-keeper`);
+      await failedWindow('refused', name);
+      await bindingsAreLive(name);
+      const results: Array<{
+        command: string;
+        settingsChanged: boolean;
+        keeperConnected: boolean;
+        servers: boolean;
+        stillSsh: boolean;
+        usable: boolean;
+        reloaded: boolean;
+        unexpected: string[];
+      }> = [];
+      for (const command of [NEW_WINDOW, KILL_CURRENT, WEB_UI]) {
+        const {before, after} = await pressed(name, command);
+        // A confirmation the command asks for is not answered: Escape leaves the window as it was.
+        if (after.dialog) {
+          await pressEscape(name);
+          await settle(1000);
         }
-        deepStrictEqual(
-          results,
-          [NEW_WINDOW, KILL_CURRENT, WEB_UI].map(command => ({
-            command: command.title,
-            settingsChanged: false,
-            keeperConnected: true,
-            servers: true,
-            stillSsh: true,
-            usable: true,
-            reloaded: false,
-            unexpected: [],
-          })),
-        );
-      } finally {
-        await userSettings({'remote.SSH.useLocalServer': undefined});
+        const done = await effectsOf(name);
+        results.push({
+          command: command.title,
+          settingsChanged:
+            JSON.stringify(before.files) !== JSON.stringify(done.files),
+          keeperConnected: await connected(`${name}-keeper`),
+          servers: before.servers.every(server =>
+            done.servers.includes(server),
+          ),
+          stillSsh: (await windowState(name)).remoteName === 'ssh-remote',
+          usable: await usable(name),
+          reloaded: before.activations !== done.activations,
+          unexpected: unexpectedToasts(before, done, [outOfContext(command)]),
+        });
       }
-    });
+      deepStrictEqual(
+        results,
+        [NEW_WINDOW, KILL_CURRENT, WEB_UI].map(command => ({
+          command: command.title,
+          settingsChanged: false,
+          keeperConnected: true,
+          servers: true,
+          stillSsh: true,
+          usable: true,
+          reloaded: false,
+          unexpected: [],
+        })),
+      );
+    } finally {
+      await userSettings({'remote.SSH.useLocalServer': undefined});
+    }
   }
+
+  it('F-2006 AC-16 (c2817-disconnected-default): in a disconnected SSH window with the default settings, New Window on Active Host, Kill Current VS Code Server and Open Web UI run by keybinding leave it an SSH window and usable, change no settings file, stop no connection server, kill no server and show at most R-46’s notice', async () => {
+    await disconnectedWindowRow(true);
+  });
+
+  it('F-2006 AC-16 (c2817-disconnected-no-local-server): in a disconnected SSH window with remote.SSH.useLocalServer false, New Window on Active Host, Kill Current VS Code Server and Open Web UI run by keybinding leave it an SSH window and usable, change no settings file, stop no connection server, kill no server and show at most R-46’s notice', async () => {
+    await disconnectedWindowRow(false);
+  });
 
   it('F-2006 AC-17 (c2817-kill-local-escape): with remote.SSH.useLocalServer false, Kill Local Connection Server For Host... run by keybinding in a local and in a connected window changes nothing when Escape is pressed in any picker, and a host pick it shows has the placeholder of STR:S127', async () => {
     await userSettings({'remote.SSH.useLocalServer': false});
@@ -595,47 +611,6 @@ describe('Remote-SSH commands run where they do not apply (F-2006, card #2817)',
     );
   });
 
-  it('F-2006 AC-22 (c2817-notice): R-46’s notice, where a press shows it, is a non-modal information notification reading "\'<title>\' is not possible in the current context." with the command’s title without the category', async () => {
-    const local = await emptyLocalWindow();
-    await openConnected('c2817-notice');
-    await bindingsAreLive(local);
-    await bindingsAreLive('c2817-notice');
-    const seen: Array<{window: string; toast: string; modal: boolean}> = [];
-    for (const [name, label, commands] of [
-      [local, 'local', [NEW_WINDOW, FEEDBACK, KILL_CURRENT, WEB_UI]],
-      ['c2817-notice', 'connected', [GET_STARTED, WEB_UI]],
-    ] as const) {
-      for (const command of commands) {
-        const {before, after} = await pressed(name, command);
-        for (const toast of after.toasts.filter(
-          each => !before.toasts.includes(each),
-        )) {
-          seen.push({
-            window: `${label}: ${command.title}`,
-            toast,
-            modal: after.dialog,
-          });
-        }
-      }
-    }
-    const notices = seen.filter(each =>
-      each.toast.endsWith('is not possible in the current context.'),
-    );
-    deepStrictEqual(
-      {
-        // At least one press showed the notice, or this row proved nothing.
-        shown: notices.length > 0,
-        wrongTexts: notices.filter(
-          each =>
-            !COMMANDS.some(command => each.toast === outOfContext(command)),
-        ),
-        modal: notices.filter(each => each.modal),
-      },
-      {shown: true, wrongTexts: [], modal: []},
-      `the toasts the presses showed: ${JSON.stringify(seen)}`,
-    );
-  });
-
   it('F-2006 AC-23 (c2817-connecting): in an SSH window that is connecting, New Window on Active Host, Kill Current VS Code Server and Kill Local Connection Server For Host... (Escape in any picker) run by keybinding leave the attempt going, which ends as a control run does, and the window is not closed or reloaded', async () => {
     await userSettings({
       'remote.SSH.useLocalServer': false,
@@ -697,47 +672,58 @@ describe('Remote-SSH commands run where they do not apply (F-2006, card #2817)',
     }
   });
 
-  for (const chat of [undefined, true, false]) {
-    it(`F-2006 AC-26 (c2817-clear-hints-palette-${chat === undefined ? 'default' : String(chat)}): with ${chat === undefined ? 'the default settings' : `remote.SSH.experimental.chat as ${String(chat)}`}, "Remote-SSH: ${CLEAR_HINTS.title}" typed into the palette of a local and of a connected window is listed and runs with no UI, and the connected window stays connected`, async () => {
-      await userSettings({'remote.SSH.experimental.chat': chat});
-      try {
-        const local = await emptyLocalWindow();
-        await openConnected('c2817-hints');
-        const entry = `Remote-SSH: ${CLEAR_HINTS.title}`;
-        const results: Array<{window: string; listed: boolean; ui: string[]}> =
-          [];
-        for (const [name, label] of [
-          [local, 'local'],
-          ['c2817-hints', 'connected'],
-        ] as const) {
-          const listed = (await remoteSshEntries(name)).includes(entry);
-          await runFromPalette(name, entry);
-          await settle();
-          results.push({
-            window: label,
-            listed,
-            ui: [
-              ...((await quickPickOf(name)) === undefined
-                ? []
-                : ['a quick pick']),
-              ...((await dialogOf(name)) === undefined ? [] : ['a dialog']),
-              ...(await notifications(name)),
-            ],
-          });
-        }
-        deepStrictEqual(
-          [results, await connected('c2817-hints')],
-          [
-            [
-              {window: 'local', listed: true, ui: []},
-              {window: 'connected', listed: true, ui: []},
-            ],
-            true,
+  /** The AC-26 row, with `remote.SSH.experimental.chat` as `chat` (not set when undefined). */
+  async function clearHintsRow(chat: boolean | undefined): Promise<void> {
+    await userSettings({'remote.SSH.experimental.chat': chat});
+    try {
+      const local = await emptyLocalWindow();
+      await openConnected('c2817-hints');
+      const entry = `Remote-SSH: ${CLEAR_HINTS.title}`;
+      const results: Array<{window: string; listed: boolean; ui: string[]}> =
+        [];
+      for (const [name, label] of [
+        [local, 'local'],
+        ['c2817-hints', 'connected'],
+      ] as const) {
+        const listed = (await remoteSshEntries(name)).includes(entry);
+        await runFromPalette(name, entry);
+        await settle();
+        results.push({
+          window: label,
+          listed,
+          ui: [
+            ...((await quickPickOf(name)) === undefined
+              ? []
+              : ['a quick pick']),
+            ...((await dialogOf(name)) === undefined ? [] : ['a dialog']),
+            ...(await notifications(name)),
           ],
-        );
-      } finally {
-        await userSettings({'remote.SSH.experimental.chat': undefined});
+        });
       }
-    });
+      deepStrictEqual(
+        [results, await connected('c2817-hints')],
+        [
+          [
+            {window: 'local', listed: true, ui: []},
+            {window: 'connected', listed: true, ui: []},
+          ],
+          true,
+        ],
+      );
+    } finally {
+      await userSettings({'remote.SSH.experimental.chat': undefined});
+    }
   }
+
+  it('F-2006 AC-26 (c2817-clear-hints-palette-default): with the default settings, "Remote-SSH: Clear previous session metadata (used for enhanced error reporting)" typed into the palette of a local and of a connected window is listed and runs with no UI, and the connected window stays connected', async () => {
+    await clearHintsRow(undefined);
+  });
+
+  it('F-2006 AC-26 (c2817-clear-hints-palette-true): with remote.SSH.experimental.chat as true, "Remote-SSH: Clear previous session metadata (used for enhanced error reporting)" typed into the palette of a local and of a connected window is listed and runs with no UI, and the connected window stays connected', async () => {
+    await clearHintsRow(true);
+  });
+
+  it('F-2006 AC-26 (c2817-clear-hints-palette-false): with remote.SSH.experimental.chat as false, "Remote-SSH: Clear previous session metadata (used for enhanced error reporting)" typed into the palette of a local and of a connected window is listed and runs with no UI, and the connected window stays connected', async () => {
+    await clearHintsRow(false);
+  });
 });

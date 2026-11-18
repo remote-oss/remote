@@ -20,6 +20,8 @@ const MANIFEST: CommandManifest = {
 interface EditorCalls {
   registered: string[];
   informations: string[];
+  /** What each information line was given besides its text: options (a modal one) and buttons. */
+  informationExtras: unknown[][];
   executed: unknown[][];
   inspected: string[];
 }
@@ -40,8 +42,9 @@ function fakeEditor(
       },
     },
     window: {
-      showInformationMessage: (text: string) => {
+      showInformationMessage: (text: string, ...extras: unknown[]) => {
         calls.informations.push(text);
+        calls.informationExtras.push(extras);
         return Promise.resolve(undefined);
       },
     },
@@ -66,7 +69,13 @@ describe('identifierHost', () => {
   let calls: EditorCalls;
 
   beforeEach(() => {
-    calls = {registered: [], informations: [], executed: [], inspected: []};
+    calls = {
+      registered: [],
+      informations: [],
+      informationExtras: [],
+      executed: [],
+      inspected: [],
+    };
   });
 
   it('registers a command with the editor', () => {
@@ -77,13 +86,14 @@ describe('identifierHost', () => {
     deepStrictEqual(calls.registered, ['remote-x.open']);
   });
 
-  it('shows the out-of-context line with the title in the user language (F-2006 AC-22)', () => {
+  it('F-2006 AC-22: the out-of-context line is a non-modal information notification reading "\'{0}\' is not possible in the current context." with the command’s title, in the user language', () => {
     identifierHost(fakeEditor(calls, undefined), MANIFEST).showOutOfContext(
       OPEN,
     );
-    deepStrictEqual(calls.informations, [
-      "'Öffnen' is not possible in the current context.",
-    ]);
+    deepStrictEqual(
+      [calls.informations, calls.informationExtras],
+      [["'Öffnen' is not possible in the current context."], [[]]],
+    );
   });
 
   it("falls back to the table's title for a command the manifest does not list", () => {
