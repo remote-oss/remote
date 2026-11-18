@@ -416,6 +416,7 @@ describe('Remote-SSH commands run where they do not apply (F-2006, card #2817)',
         command: string;
         settingsChanged: boolean;
         keeperConnected: boolean;
+        serversBefore: boolean;
         servers: boolean;
         stillSsh: boolean;
         usable: boolean;
@@ -435,6 +436,8 @@ describe('Remote-SSH commands run where they do not apply (F-2006, card #2817)',
           settingsChanged:
             JSON.stringify(before.files) !== JSON.stringify(done.files),
           keeperConnected: await connected(`${name}-keeper`),
+          // The keeper's server runs before the press, so "every server still runs" is not true of an empty list.
+          serversBefore: before.servers.length > 0,
           servers: before.servers.every(server =>
             done.servers.includes(server),
           ),
@@ -450,6 +453,7 @@ describe('Remote-SSH commands run where they do not apply (F-2006, card #2817)',
           command: command.title,
           settingsChanged: false,
           keeperConnected: true,
+          serversBefore: true,
           servers: true,
           stillSsh: true,
           usable: true,
@@ -509,6 +513,8 @@ describe('Remote-SSH commands run where they do not apply (F-2006, card #2817)',
       deepStrictEqual(
         {
           results,
+          // The spec allows no host pick at all ("if a host pick is shown"): an empty list passes, and a pick that is shown must
+          // carry STR:S127's placeholder.
           placeholders: picks.filter(
             question => question !== HOST_PICK_PLACEHOLDER,
           ),
