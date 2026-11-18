@@ -1,6 +1,6 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
 import * as vscode from 'vscode';
-import {onHost, recordLines} from '../suite/harness.ts';
+import {connectionLog, onHost, recordLines} from '../suite/harness.ts';
 import casesFile from './cases.json' with {type: 'json'};
 import {
   archiveCopiesLeft,
@@ -225,19 +225,19 @@ describe(`the install case "${installCase?.label ?? 'unknown'}" of the VSCodium 
 
   if (installCase?.cliIn !== undefined) {
     const {cliIn} = installCase;
-    it(`${cite}: the client asked for the CLI of the host's platform and of its own commit, once`, async () => {
+    it(`${cite}: the install asked once for the CLI of the host's platform and of the client's commit`, async () => {
       const platform = await hostPlatform();
+      const seen = downloadRequests(label);
       deepStrictEqual(
-        downloadRequests(label)
-          .filter(
-            each =>
-              !isHostDownloader(each.userAgent) &&
-              each.path.startsWith('/cli/'),
-          )
+        seen
+          .filter(each => each.path.startsWith('/cli/'))
           .map(each => each.path),
         [
           `/cli/${platform}/${runVariable('HARNESS_CLIENT_COMMIT')}/cli-${platform}.tar.gz`,
         ],
+        `all the requests of the case: ${JSON.stringify(seen)}; the log lines that name the CLI: ${JSON.stringify(
+          connectionLog().filter(line => /\bCLI\b/i.test(line)),
+        )}`,
       );
     });
 

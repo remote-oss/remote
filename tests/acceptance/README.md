@@ -385,9 +385,11 @@ host's downloaders send a `Wget` or `curl` user agent, and the editor's download
 A case with `cliStandIn: true` (`local-exec-cli`, F-2405 AC-8's exec half) starts the run's CLI-source copy of VSCodium, whose
 `product.json` names `cliDownloadUrlTemplate` on the download host (`tools/acceptance-cli-editor.ts`), and the download host
 serves under `/cli/<os>-<arch>/<commit>/` a stand-in archive of the editor's CLI that the run makes: a gzipped tar of one
-script that fails, with no pin and no token, so the case runs in the gate. The case's rows check what the client asked
-for (the CLI of the host's platform and of the copy's commit, `HARNESS_CLIENT_COMMIT`) and that the archive's file reached
-the server folder under its commit-keyed name; the stand-in is no CLI, so the case's outcome is `any`. Where a run also
+script that fails, with no pin and no token, so the case runs in the gate. The copy's template names the download host as
+the host's container reaches it (`downloads`), which the client cannot resolve, so the case keeps the default placement and
+the host's downloader fetches the archive for the install. The case's rows check that the download host was asked once for
+the CLI of the host's platform and of the copy's commit (`HARNESS_CLIENT_COMMIT`), whoever asked, and that the archive's
+file reached the server folder under its commit-keyed name; the stand-in is no CLI, so the case's outcome is `any`. Where a run also
 names the `cli-path` launch, whose pins give real CLI archives, the host serves those for the platforms they cover.
 
 A case that keeps what an earlier connect left (`keepServer`, `keepFiles`) names a primer in `needs`: the case listed right
