@@ -113,7 +113,7 @@ describe('the host lock files (card #2820, F-2408)', function () {
     await closeAllButLocal();
   });
 
-  it('F-2408 (c2820-listing-sees): the listing sees a lock-named file where one is, with its size and link count, so an empty list means none', async () => {
+  it('F-2408 (c2820-listing-sees): the listing sees a lock-named file where one is, with its size and link count, whichever find and stat the host has, so an empty list means none', async () => {
     const name = '/tmp/vscode-remote-lock.harness.c2820probe';
     await onHost('sh', '-c', `: > ${name}`);
     try {
