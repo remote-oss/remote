@@ -24,7 +24,7 @@ export async function lookAtHost(): Promise<Look> {
   const listing = await onHost(
     'sh',
     '-c',
-    `ls -1 ${DATA_FOLDER}/bin 2>/dev/null; echo '${SEPARATOR}'; find ${DATA_FOLDER}/bin /tmp -maxdepth 2 -name '*remote-lock.*' -printf '%p|%s|%n\\n' 2>/dev/null; true`,
+    `ls -1 ${DATA_FOLDER}/bin 2>/dev/null; echo '${SEPARATOR}'; find ${DATA_FOLDER}/bin /tmp -maxdepth 2 -name '*remote-lock.*' -exec stat -c '%n|%s|%h' {} \\; 2>/dev/null; true`,
   );
   const [installs = '', locks = ''] = listing.split(`${SEPARATOR}\n`);
   return {
