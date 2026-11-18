@@ -4,16 +4,14 @@
  */
 
 import {deepStrictEqual, strictEqual} from 'node:assert';
-import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
-import path from 'node:path';
 import {
   readUserSettings,
   recordLines,
-  variable,
   waitFor,
   windowEvents,
   windowNames,
 } from './harness.ts';
+import {bindKey} from './key-bindings.ts';
 import {
   activeSideBar,
   notifications,
@@ -148,27 +146,9 @@ export async function nothingFails(name: string): Promise<void> {
 /** The user keybinding the Refresh rows press: the key and the command it runs. */
 const REFRESH_KEY = 'ctrl+alt+r';
 
-/**
- * Writes a user keybinding for `remote-explorer.refresh` on Ctrl+Alt+R into the launch's profile and returns the
- * function that puts the profile's `keybindings.json` back as it was.
- */
+/** Writes the user keybinding for `remote-explorer.refresh` on Ctrl+Alt+R into the launch's profile; the function it returns puts `keybindings.json` back. */
 export function bindRefreshKey(): () => void {
-  const file = path.join(
-    variable('HARNESS_USER_DATA'),
-    'User/keybindings.json',
-  );
-  const before = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
-  writeFileSync(
-    file,
-    JSON.stringify([{key: REFRESH_KEY, command: 'remote-explorer.refresh'}]),
-  );
-  return () => {
-    if (before === undefined) {
-      rmSync(file, {force: true});
-    } else {
-      writeFileSync(file, before);
-    }
-  };
+  return bindKey(REFRESH_KEY, 'remote-explorer.refresh');
 }
 
 /** What pressing the refresh key did beyond refreshing: every field is its resting value when it did nothing. */
