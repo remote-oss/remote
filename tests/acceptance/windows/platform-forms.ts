@@ -33,7 +33,12 @@ export function engineSuffix(
     : '';
 }
 
-/** How many characters of a remote label the status bar shows before it cuts the label with an ellipsis. */
+/**
+ * How many characters of a remote label the status bar shows before it cuts the label with an ellipsis. Observed, not
+ * documented: 40 characters, read off the indicators of the Windows job (`Dev Container: c43-stop @ tcp://127.0.0.…` and
+ * `Dev Container: c43-restart @ tcp://127.0…`), so a row that compares a label says the label before the cut on a mismatch
+ * ({@link labelNote}), and a different cut shows itself.
+ */
 const SHOWN_LABEL_LENGTH = 40;
 
 /** A remote label as the status bar shows it: cut to its first characters and an ellipsis when it is longer. */
@@ -52,4 +57,13 @@ export function containerLabel(
   return shownLabel(
     `Dev Container: ${name}${engineSuffix(address ?? process.env.DOCKER_HOST, platform)}`,
   );
+}
+
+/** What a row adds to the message of a label that did not match: the label as the product writes it, before the status bar's cut. */
+export function labelNote(
+  name: string,
+  address?: string,
+  platform: string = process.platform,
+): string {
+  return `the label of ${name} before the status bar's cut is "Dev Container: ${name}${engineSuffix(address ?? process.env.DOCKER_HOST, platform)}", which is shown cut to its first ${String(SHOWN_LABEL_LENGTH)} characters and an ellipsis`;
 }

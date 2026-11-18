@@ -11,7 +11,11 @@ import {
   windowState,
 } from '../windows/harness.ts';
 import {removeContainers} from '../windows/folder-windows.ts';
-import {containerLabel, coreButtons} from '../windows/platform-forms.ts';
+import {
+  containerLabel,
+  coreButtons,
+  labelNote,
+} from '../windows/platform-forms.ts';
 import {
   answerDialog,
   answerNotification,
@@ -132,15 +136,19 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
         newPort: serverPortsOf(logSince(mark)).every(each => each !== port),
       };
       await closeWindow(name);
-      deepStrictEqual(state, {
-        details: CANNOT_RECONNECT,
-        buttons: coreButtons(['Cancel', 'Reload Window']),
-        withinFifteenSeconds: true,
-        indicator: `Disconnected from ${containerLabel('c43-stop')}`,
-        attempts: ['Reconnection attempt 1'],
-        status: 'running',
-        newPort: true,
-      });
+      deepStrictEqual(
+        state,
+        {
+          details: CANNOT_RECONNECT,
+          buttons: coreButtons(['Cancel', 'Reload Window']),
+          withinFifteenSeconds: true,
+          indicator: `Disconnected from ${containerLabel('c43-stop')}`,
+          attempts: ['Reconnection attempt 1'],
+          status: 'running',
+          newPort: true,
+        },
+        labelNote('c43-stop'),
+      );
     } finally {
       await removeContainers(folder);
     }
@@ -188,6 +196,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
           attempts: 1,
           newPort: true,
         },
+        labelNote('c43-restart'),
       );
     } finally {
       await removeContainers(folder);
@@ -502,9 +511,10 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
                 indicator: `Disconnected from ${containerLabel('c67-host-stop-cancel')}`,
               }
             : null,
-        reattached: `Dev Container: c67-host-stop-${variant}`,
+        reattached: containerLabel(`c67-host-stop-${variant}`),
         containers: 1,
       })),
+      labelNote('c67-host-stop-cancel'),
     );
   });
 
@@ -563,21 +573,25 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
         host: await statusBarText(name, 'status.host'),
       };
       await closeWindow(name);
-      deepStrictEqual(state, {
-        details: CANNOT_RECONNECT,
-        buttons: coreButtons(['Cancel', 'Reload Window']),
-        withinFifteenSeconds: true,
-        indicator: `Disconnected from ${containerLabel('c110-removed')}`,
-        logNamesIt: true,
-        palette: [
-          'Dev Containers: Reopen Folder Locally',
-          "Dev Containers: Reset Don't Show Reopen Notification",
-        ],
-        local: [null, 1],
-        freshCreated: true,
-        count: 1,
-        host: 'Dev Container: c110-removed',
-      });
+      deepStrictEqual(
+        state,
+        {
+          details: CANNOT_RECONNECT,
+          buttons: coreButtons(['Cancel', 'Reload Window']),
+          withinFifteenSeconds: true,
+          indicator: `Disconnected from ${containerLabel('c110-removed')}`,
+          logNamesIt: true,
+          palette: [
+            'Dev Containers: Reopen Folder Locally',
+            "Dev Containers: Reset Don't Show Reopen Notification",
+          ],
+          local: [null, 1],
+          freshCreated: true,
+          count: 1,
+          host: 'Dev Container: c110-removed',
+        },
+        labelNote('c110-removed'),
+      );
     } finally {
       await removeContainers(folder);
     }
