@@ -126,7 +126,7 @@ describe('the template pick and what follows it, against the run’s pinned temp
     };
   }
 
-  it('F-0403 AC-6 (reading-1808-pinned-index): a folder with a marker of no curated set shows the whole catalogue, the curated list shows Show All Templates... then Learn More at the top with their texts, its first item focused, an alphabetical base set of eight or nine items and the marker extra templates, and choosing Show All swaps in the whole catalogue with no Back button', async () => {
+  it('F-0403 AC-6 (reading-1808-pinned-index): a folder with a marker of no curated set shows the whole catalogue, the curated list shows Show All Templates... then Learn More at the top with their texts, its first item focused, an alphabetical base set of eight or nine items, no extra templates for the go.mod marker, and choosing Show All swaps in the whole catalogue with no Back button', async () => {
     const whole: string[][] = [];
     for (const [name, contents] of [
       ['c101-pick-none', {}],
@@ -218,7 +218,7 @@ describe('the template pick and what follows it, against the run’s pinned temp
         whole: true,
         head: ['Show All Templates...', 'Learn More'],
         first: true,
-        extras: true,
+        extras: false,
         ordered: true,
         baseKept: true,
         inCatalog: true,

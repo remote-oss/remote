@@ -99,7 +99,12 @@ describe('The Open Recent entry and the label of a connected window (cards conta
       await answerDialog(window, 'Retry');
       const afterRetry = (await waitForDialog(window, 180_000)).details;
       await pressEscape(window);
-      const dismissed = (await statusItem(window, 'status.host')).text;
+      const dismissed = await statusItemText(
+        window,
+        'status.host',
+        'Disconnected from Dev Container: C43 Recent',
+        120_000,
+      );
       deepStrictEqual(
         {
           shown,
