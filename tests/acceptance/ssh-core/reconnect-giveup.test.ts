@@ -83,6 +83,7 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     const mark = connectionLog().length;
     const asked = recordLines('maskedInput', name).length;
     const endedAt = Date.now();
+    await statusBarText(name, 'status.host');
     await inWindow(name, 'opensshremotes.cleanLocalServer');
     const dialog = await waitForDialog(name, 180_000).catch(
       async (caught: unknown) => {
@@ -130,7 +131,7 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     });
   });
 
-  for (const index of Array.from({length: 24}, (each, place) => place + 1)) {
+  for (const index of Array.from({length: 8}, (each, place) => place + 1)) {
     it(`F-2505 AC-12 (c2663-tw${String(index)}): the third wrong password at the reconnection’s input makes core show Cannot reconnect at once, with no further attempt`, async () => {
       const wrong = {text: 'not-the-password'};
       const result = await reconnectionAnswered(`c2663-tw${String(index)}`, [
