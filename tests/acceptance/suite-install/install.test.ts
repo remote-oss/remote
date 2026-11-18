@@ -17,6 +17,8 @@ interface ExpectedRequests {
   count?: number;
   path?: string;
   clientOnly?: boolean;
+  /** How many requests the client itself made, whatever the host's downloader asked: one for a client that does not retry. */
+  clientCount?: number;
   /** The host's downloader asked first and failed, and the client's followed. */
   hostThenClient?: boolean;
 }
@@ -202,12 +204,15 @@ describe(`the install case "${installCase?.label ?? 'unknown'}" of the VSCodium 
             ? seen.length > 0 &&
               seen.every(each => !isHostDownloader(each.userAgent))
             : true,
+          requests.clientCount === undefined ||
+            seen.filter(each => !isHostDownloader(each.userAgent)).length ===
+              requests.clientCount,
           requests.hostThenClient === true
             ? seen.findIndex(each => isHostDownloader(each.userAgent)) === 0 &&
               seen.some(each => !isHostDownloader(each.userAgent))
             : true,
         ],
-        [seen.length, [], true, true],
+        [seen.length, [], true, true, true],
         `requests: ${JSON.stringify(seen)}`,
       );
     });
