@@ -3,6 +3,7 @@ import {readdirSync} from 'node:fs';
 import path from 'node:path';
 import {
   closeWindow,
+  commandEventsSince,
   commandsOf,
   connectionLog,
   editorProduct,
@@ -15,6 +16,7 @@ import {
   variable,
   waitFor,
 } from '../windows/harness.ts';
+import {section} from '../windows/connect-failure.ts';
 import {runFromPalette} from '../windows/palette.ts';
 import {
   notificationCentre,
@@ -199,8 +201,17 @@ describe('the extension in the core flows of an SSH window (card connect-125)', 
         await new Promise(resolve => setTimeout(resolve, 3000));
         const revealed = await pageText(folder).catch(() => '(unreadable)');
         const standing = debugSessionStanding(shown, revealed);
+        // What the agent reported about the command, in its own section: a start the agent only accepted is still running,
+        // one that failed says why, and one that is done with no session standing is the editor's.
+        const agentEvents = section(
+          'the window agent’s events about the commands since the debug start',
+          () => {
+            const lines = commandEventsSince(folder, debugStartAt);
+            return lines.length === 0 ? 'none' : lines.join('\n');
+          },
+        );
         throw new Error(
-          `${String(caught)}; ${String(seconds)} s after the debug start, the session stood at ${standing.state} (${standing.evidence}); the window shows (its last 1500 characters): ${JSON.stringify(shown.slice(-1500))}; after the Debug Console was asked for, the program's line is ${revealed.includes(`c125-ran-on-${host}`) ? 'there' : 'not there'} and the window shows (its last 600 characters): ${JSON.stringify(revealed.slice(-600))}`,
+          `${String(caught)}; ${String(seconds)} s after the debug start, the session stood at ${standing.state} (${standing.evidence}); the window shows (its last 1500 characters): ${JSON.stringify(shown.slice(-1500))}; after the Debug Console was asked for, the program's line is ${revealed.includes(`c125-ran-on-${host}`) ? 'there' : 'not there'} and the window shows (its last 600 characters): ${JSON.stringify(revealed.slice(-600))}\n${agentEvents}`,
           {cause: caught},
         );
       });
