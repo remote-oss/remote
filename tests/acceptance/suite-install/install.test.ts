@@ -225,6 +225,9 @@ describe(`the install case "${installCase?.label ?? 'unknown'}" of the VSCodium 
 
   if (installCase?.cliIn !== undefined) {
     const {cliIn} = installCase;
+    // No user-agent filter: the copy's template names the download host as the host's container reaches it, which the
+    // client cannot resolve, so under the default placement the host's downloader fetches the archive on the install's
+    // behalf. The criterion is that the install asks for this CLI, once, whoever's request it is.
     it(`${cite}: the install asked once for the CLI of the host's platform and of the client's commit`, async () => {
       const platform = await hostPlatform();
       const seen = downloadRequests(label);
