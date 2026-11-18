@@ -1304,6 +1304,13 @@ export function launchesOf(root: string): Launch[] {
       suite: 'ssh-killed',
       environment: {HARNESS_KILLED_CASE: killedCase},
     })),
+    // The host's lock files while a window installs from the run's slow download source: one plain launch, each row a window of
+    // its own on a fresh host, with the settings it needs written to the user settings.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-locks',
+      suite: 'ssh-locks',
+    },
     // Dev Containers beside Remote - SSH, in a window on the SSH host: the commands that edit a configuration where it lives.
     {
       ...RENDERER_LAUNCH,
