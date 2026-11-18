@@ -5,7 +5,8 @@
 
 import {execFile, execFileSync} from 'node:child_process';
 import {deepStrictEqual} from 'node:assert';
-import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {chmodSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {createServer, type AddressInfo, type Socket} from 'node:net';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {openFolderWindow} from '../windows/folder-windows.ts';
@@ -57,6 +58,35 @@ const execFileAsync = promisify(execFile);
 /** The dialog without a reason that a failed connect of `alias` shows. */
 function reasonless(alias: string): string {
   return `Could not establish connection to "${alias}".`;
+}
+
+/**
+ * A Node server on 127.0.0.1 that accepts every connection and never writes: the port it took, and what closes it.
+ */
+async function silentServer(): Promise<{port: number; close: () => void}> {
+  const sockets = new Set<Socket>();
+  const server = createServer(socket => {
+    sockets.add(socket);
+    socket.on('close', () => {
+      sockets.delete(socket);
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('listening', () => {
+      resolve();
+    });
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1');
+  });
+  return {
+    port: (server.address() as AddressInfo).port,
+    close: () => {
+      for (const socket of sockets) {
+        socket.destroy();
+      }
+      server.close();
+    },
+  };
 }
 
 /** What is wrong with the password hosts of a row: only passwords are tried, three times for a jump that is told so. */
@@ -1245,5 +1275,127 @@ describe('jump hosts and proxy commands (card #2601)', function () {
       },
     );
     deepStrictEqual(result, {before: 2, asked: 0});
+  });
+
+  it('F-2310 AC-10 (c2608-jump-timeout-open): the two-jump chain with unknown keys and no answers times out with the timeout reason while the first jump host’s pick is still open', async () => {
+    const alias = 'c2608-jumpopen';
+    const file = chain(alias, freshKnown(alias));
+    const result = await connectWith(
+      alias,
+      [],
+      'fails',
+      outcome => {
+        const picks = recordLines('pick', alias);
+        const first = picks[0];
+        return {
+          dialog: outcome.dialog,
+          stillOpen:
+            first !== undefined &&
+            picks.every(line => line.answer === 'dismiss') &&
+            first.time < (outcome.dialogTime ?? 0),
+        };
+      },
+      {file, script: null},
+    );
+    deepStrictEqual(result, {
+      dialog: `Could not establish connection to "${alias}": The connection timed out.`,
+      stillOpen: true,
+    });
+  });
+
+  it('F-2310 AC-12 (c2608-silent-jump-timeout): a jump host that accepts the port and answers nothing fails with the timeout reason, 13 to 25 s after the connect begins', async () => {
+    const alias = 'c2608-silent';
+    const silent = await silentServer();
+    try {
+      const file = writeConfig(alias, [
+        hostBlock(
+          alias,
+          [`ProxyJump ${alias}-silent`, 'HostName 127.0.0.2', 'Port 22'],
+          ['Port', 'HostName', 'ConnectTimeout', ...ASK_WITHOUT],
+        ),
+        hostBlock(
+          `${alias}-silent`,
+          [`HostName 127.0.0.1`, `Port ${String(silent.port)}`],
+          ['Port', 'HostName', 'ConnectTimeout', ...ASK_WITHOUT],
+        ),
+      ]);
+      const result = await connectWith(
+        alias,
+        [],
+        'fails',
+        outcome => ({
+          dialog: outcome.dialog,
+          band:
+            outcome.failedAfter !== undefined &&
+            outcome.failedAfter >= 13_000 &&
+            outcome.failedAfter <= 25_000,
+        }),
+        {file, script: null},
+      );
+      deepStrictEqual(result, {
+        dialog: `Could not establish connection to "${alias}": The connection timed out.`,
+        band: true,
+      });
+    } finally {
+      silent.close();
+    }
+  });
+
+  it('F-2105.AC-14 (c2608-banner-timeout-reason): a direct host that accepts the port and never the banner, with the connect timeout from the setting, fails with the timeout reason', async () => {
+    const alias = 'c2608-banner';
+    const silent = await silentServer();
+    try {
+      const file = writeConfig(alias, [
+        hostBlock(
+          alias,
+          [`HostName 127.0.0.1`, `Port ${String(silent.port)}`],
+          ['Port', 'HostName', 'ConnectTimeout', ...ASK_WITHOUT],
+        ),
+      ]);
+      const result = await connectWith(
+        alias,
+        [],
+        'fails',
+        outcome => outcome.dialog,
+        {
+          file,
+          script: null,
+          settings: {'remote.SSH.connectTimeout': 15},
+        },
+      );
+      deepStrictEqual(
+        result,
+        `Could not establish connection to "${alias}": The connection timed out.`,
+      );
+    } finally {
+      silent.close();
+    }
+  });
+
+  it('F-2105.AC-14 (c2608-caseless-timeout-reason): ssh error text with the timeout in another case, "Connection Timed Out", fails with no reason', async () => {
+    const alias = 'c2608-caseless';
+    const standIn = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      `${alias}-ssh.sh`,
+    );
+    writeFileSync(
+      standIn,
+      [
+        '#!/bin/bash',
+        'echo "ssh: connect to host h port 22: Connection Timed Out" >&2',
+        'exit 255',
+        '',
+      ].join('\n'),
+    );
+    chmodSync(standIn, 0o755);
+    const file = writeConfig(alias, [hostBlock(alias, [], [])]);
+    const result = await connectWith(
+      alias,
+      [],
+      'fails',
+      outcome => outcome.dialog,
+      {file, script: null, settings: {'remote.SSH.path': standIn}},
+    );
+    deepStrictEqual(result, reasonless(alias));
   });
 });
