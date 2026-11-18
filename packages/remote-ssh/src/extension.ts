@@ -15,6 +15,7 @@ import {
 import {readFile} from 'node:fs/promises';
 import {homedir, tmpdir} from 'node:os';
 import path from 'node:path';
+import {confirmationFilesOf} from './preconnect/confirmation-files.ts';
 import * as vscode from 'vscode';
 import {
   familySetupPortsOf,
@@ -479,6 +480,9 @@ async function registerConnectOf(
         displayName: manifest.displayName,
       },
       acceptanceState: context.globalState,
+      confirmationCopies: confirmationFilesOf(
+        path.join(context.globalStorageUri.fsPath, 'preconnect-confirmations'),
+      ),
       noticeState: context.globalState,
       hintState: context.globalState,
       documentation: () => helpLinksOf(manifest).documentation,
