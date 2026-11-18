@@ -1386,14 +1386,19 @@ describe('jump hosts and proxy commands (card #2601)', function () {
 
   it('F-2105.AC-14 (c2608-caseless-timeout-reason): ssh error text with the timeout in another case, "Connection Timed Out", fails with no reason', async () => {
     const alias = 'c2608-caseless';
-    const standIn = path.join(
-      variable('HARNESS_RUN_FOLDER'),
-      `${alias}-ssh.sh`,
-    );
+    const folder = variable('HARNESS_RUN_FOLDER');
+    const standIn = path.join(folder, `${alias}-ssh.sh`);
+    const standInLog = path.join(folder, `${alias}-ssh.log`);
     writeFileSync(
       standIn,
       [
         '#!/bin/bash',
+        `log="${folder}/${alias}-ssh.log"`,
+        '{',
+        '  echo "invoked: $0"',
+        '  for arg in "$@"; do echo "arg: $arg"; done',
+        '  echo "stderr: ssh: connect to host h port 22: Connection Timed Out"',
+        '} >> "$log"',
         'echo "ssh: connect to host h port 22: Connection Timed Out" >&2',
         'exit 255',
         '',
@@ -1401,13 +1406,28 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     );
     chmodSync(standIn, 0o755);
     const file = writeConfig(alias, [hostBlock(alias, [], [])]);
-    const result = await connectWith(
-      alias,
-      [],
-      'fails',
-      outcome => outcome.dialog,
-      {file, script: null, settings: {'remote.SSH.path': standIn}},
-    );
-    deepStrictEqual(result, reasonless(alias));
+    try {
+      const result = await connectWith(
+        alias,
+        [],
+        'fails',
+        outcome => outcome.dialog,
+        {file, script: null, settings: {'remote.SSH.path': standIn}},
+      );
+      deepStrictEqual(result, reasonless(alias));
+    } catch (caught) {
+      let standInText: string;
+      try {
+        standInText = readFileSync(standInLog, 'utf8');
+      } catch (unread) {
+        standInText = `the stand-in wrote no log: ${String(unread)}`;
+      }
+      throw new Error(
+        `${String(caught)}\nthe stand-in's log:\n${standInText}\nthe connection log:\n${connectionLog()
+          .slice(-40)
+          .join('\n')}`,
+        {cause: caught},
+      );
+    }
   });
 });
