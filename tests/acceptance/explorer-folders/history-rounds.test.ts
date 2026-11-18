@@ -1,7 +1,5 @@
 import {HOME, ownPathsOf, visit} from '../windows/explorer-folders.ts';
-
-/** The host key of the harness host in the folder history. */
-const HOST = 'harness';
+import {HOST_B as HOST} from './folders-support.ts';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
