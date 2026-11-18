@@ -424,6 +424,18 @@
       "installedIn": "/home/harness/.vscodium-server-insiders"
     },
     {
+      "label": "local-exec-cli",
+      "cite": "F-2405 AC-8 (local-exec-cli)",
+      "cliStandIn": true,
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "always"
+      },
+      "setup": ["rm -f /tmp/stand-in-cli-ran"],
+      "outcome": "any",
+      "cliIn": "/home/harness/.vscodium-server-insiders"
+    },
+    {
       "label": "local-404-nocors",
       "cite": "F-2405 AC-12 (local-404-nocors)",
       "settings": {

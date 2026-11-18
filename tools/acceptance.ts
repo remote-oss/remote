@@ -61,7 +61,12 @@ import {
   UPDATE_SERVICE_NAME,
   updateServicePinCommand,
 } from './acceptance-downloads.ts';
-import {CLI_TEMPLATE_PATH, cliSourceEditorOf} from './acceptance-cli-editor.ts';
+import {
+  CLI_TEMPLATE_PATH,
+  cliSourceEditorOf,
+  commitOfEditor,
+  standInNameProblem,
+} from './acceptance-cli-editor.ts';
 import {
   acceptanceRunId,
   buildDevContainerImage,
@@ -306,6 +311,8 @@ export interface HarnessVariables {
   HARNESS_VSCODIUM_EXECUTABLE?: string;
   /** The CLI-source copy of VSCodium (`tools/acceptance-cli-editor.ts`), only when a chosen launch starts it. */
   HARNESS_CLI_EDITOR_EXECUTABLE?: string;
+  /** The commit of the CLI-source copy's `product.json`, which a row compares with the one the client's CLI request names. */
+  HARNESS_CLIENT_COMMIT?: string;
   /** The version of the editor the tests run on: the recorded version, or the job's for a genuine launch. */
   HARNESS_EDITOR_VERSION: string;
   /** The VS Code executable of the genuine version, only when a chosen launch starts it. */
@@ -386,6 +393,7 @@ export interface HarnessDependencies {
     runFolder: string,
     earlier: boolean,
     cliArchives: boolean,
+    cliStandIn: boolean,
   ) => Promise<RunDownloads>;
   /** Starts the run's own ssh-agent on `socket`, with no askpass of its own; the VSCodium run only. */
   startAgent: (socket: string) => Started;
@@ -1235,7 +1243,8 @@ async function prepare(
           root,
           runFolder,
           chosen.some(launch => launch.earlierServerArchive === true),
-          chosen.some(startsCliEditor),
+          chosen.some(startsPinnedCliEditor),
+          chosen.some(startsStandInCliEditor),
         )
       : undefined;
   if (downloads !== undefined) {
@@ -1318,8 +1327,17 @@ async function prepare(
       : dependencies.cliEditor(
           vscodium,
           runFolder,
-          `${downloads.variables.HARNESS_DOWNLOADS_HTTP ?? ''}${CLI_TEMPLATE_PATH}`,
+          `${cliBaseOf(downloads.variables, chosen)}${CLI_TEMPLATE_PATH}`,
         );
+  const nameProblem =
+    cliEditor === undefined || !chosen.some(startsStandInCliEditor)
+      ? undefined
+      : standInNameProblem(cliEditor);
+  if (nameProblem !== undefined) {
+    throw new Error(nameProblem);
+  }
+  const clientCommit =
+    cliEditor === undefined ? undefined : commitOfEditor(cliEditor);
   const vsixFiles = packagedExtensions(root);
   if (
     editor === 'vscodium' &&
@@ -1467,6 +1485,9 @@ async function prepare(
     ...(cliEditor === undefined
       ? {}
       : {HARNESS_CLI_EDITOR_EXECUTABLE: cliEditor}),
+    ...(clientCommit === undefined
+      ? {}
+      : {HARNESS_CLIENT_COMMIT: clientCommit}),
     HARNESS_EDITOR_VERSION: EDITOR_VERSION,
     ...(vscode === undefined
       ? {}
@@ -1839,6 +1860,11 @@ export async function runAcceptance(
       return 0;
     }
   }
+  const conflict = cliTemplateConflict(chosen);
+  if (conflict !== undefined) {
+    console.error(`acceptance: ${conflict}`);
+    return 2;
+  }
   const genuine = genuineVersionIn(process.env);
   if (typeof genuine === 'object') {
     console.error(`acceptance: ${genuine.problem}`);
@@ -2123,7 +2149,14 @@ export function vscodiumConfiguration(
   };
   return {
     label: launch.label,
-    useInstallation: {fromPath: executable},
+    // A launch of a case with a stand-in CLI starts the run's CLI-source copy; the run makes the copy only when it chose
+    // such a launch, and the configuration of one it did not choose is never started.
+    useInstallation: {
+      fromPath:
+        launch.cliStandIn === true
+          ? (environment.HARNESS_CLI_EDITOR_EXECUTABLE ?? executable)
+          : executable,
+    },
     extensionDevelopmentPath:
       launch.extraExtensions === undefined
         ? runner
@@ -2587,9 +2620,56 @@ export function runTestCli(
   );
 }
 
+/**
+ * Why a selection cannot run, when it names a launch with real CLI archives and a launch with a stand-in CLI: the
+ * CLI-source copy has one template, which the host's downloader and the client reach by different bases. Nothing when it
+ * names at most one of them.
+ */
+function cliTemplateConflict(chosen: readonly Launch[]): string | undefined {
+  const pinned = chosen.filter(startsPinnedCliEditor);
+  const standIn = chosen.filter(startsStandInCliEditor);
+  return pinned.length === 0 || standIn.length === 0
+    ? undefined
+    : `the run names a launch with real CLI archives (${pinned
+        .map(launch => launch.label)
+        .join(', ')}) and one with a stand-in CLI (${standIn
+        .map(launch => launch.label)
+        .join(
+          ', ',
+        )}): the CLI-source copy has one template, so name them in separate runs`;
+}
+
+/**
+ * The download host's base that the CLI-source copy's template names: the host's own (`downloads`), where a chosen
+ * launch (`cli-path`) has the host's downloader fetch real CLI archives, else the client's loopback, where the client
+ * itself downloads the stand-in archive of a chosen install case, since the client cannot resolve `downloads`. A run
+ * that chooses both is refused at its selection (`cliTemplateConflict`).
+ */
+function cliBaseOf(
+  variables: Readonly<Record<string, string | undefined>>,
+  chosen: readonly Launch[],
+): string {
+  return (
+    (chosen.some(startsPinnedCliEditor)
+      ? variables.HARNESS_DOWNLOADS_HTTP
+      : (variables.HARNESS_DOWNLOADS_LOCAL ??
+        variables.HARNESS_DOWNLOADS_HTTP)) ?? ''
+  );
+}
+
+/** Whether a launch starts the run's CLI-source copy of VSCodium, which needs the CLI archives' token. */
+function startsPinnedCliEditor(launch: Launch): boolean {
+  return launch.kind === 'plain' && launch.cliSource === true;
+}
+
+/** Whether a launch starts the run's CLI-source copy of VSCodium, against a stand-in CLI archive that needs no token. */
+function startsStandInCliEditor(launch: Launch): boolean {
+  return launch.kind === undefined && launch.cliStandIn === true;
+}
+
 /** Whether a launch starts the run's CLI-source copy of VSCodium. */
 function startsCliEditor(launch: Launch): boolean {
-  return launch.kind === 'plain' && launch.cliSource === true;
+  return startsPinnedCliEditor(launch) || startsStandInCliEditor(launch);
 }
 
 /**
@@ -2967,7 +3047,7 @@ if (isMainModule(import.meta.url)) {
             undefined,
             devContainerImage,
           ),
-        startDownloads: (root, runFolder, earlier, cliArchives) =>
+        startDownloads: (root, runFolder, earlier, cliArchives, cliStandIn) =>
           startRunDownloads(
             runCommand,
             downloadWithRetry,
@@ -2986,6 +3066,8 @@ if (isMainModule(import.meta.url)) {
                     ),
                 }
               : undefined,
+            undefined,
+            cliStandIn,
           ),
         runPlain: (root, variables, launch) =>
           runPlainLaunch(
