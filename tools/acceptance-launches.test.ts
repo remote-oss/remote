@@ -1578,6 +1578,23 @@ describe('the launches of the VSCodium run', () => {
   });
 });
 
+describe('the install case with a stand-in CLI', () => {
+  it('#2735: the launch of a case that names a stand-in CLI starts the CLI-source editor, and no other launch of the table does', () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    deepStrictEqual(
+      [
+        launches
+          .filter(launch => launch.kind === undefined && launch.cliStandIn)
+          .map(launch => launch.label),
+        hostCases(REPOSITORY_ROOT, 'suite-install')
+          .filter(hostCase => hostCase.cliStandIn === true)
+          .map(hostCase => `install-${hostCase.label}`),
+      ],
+      [['install-local-exec-cli'], ['install-local-exec-cli']],
+    );
+  });
+});
+
 describe('the ports cases', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
   const cases = hostCases(REPOSITORY_ROOT, 'suite-ports');

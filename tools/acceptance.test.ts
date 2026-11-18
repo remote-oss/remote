@@ -311,16 +311,21 @@ class FakeHarness implements HarnessDependencies {
   /** Whether each start of the download host was asked for the CLI archives. */
   readonly cliAsked: boolean[] = [];
 
+  /** Whether each start of the download host was asked for a stand-in CLI archive. */
+  readonly standInAsked: boolean[] = [];
+
   readonly startDownloads = (
     ...asked: [
       root?: string,
       runFolder?: string,
       earlier?: boolean,
       cli?: boolean,
+      standIn?: boolean,
     ]
   ): Promise<RunDownloads> => {
     this.earlierAsked.push(asked[2] ?? false);
     this.cliAsked.push(asked[3] ?? false);
+    this.standInAsked.push(asked[4] ?? false);
     this.calls.push('downloads started');
     return Promise.resolve({
       variables: {
@@ -3648,9 +3653,88 @@ describe('acceptance', () => {
           [false, true],
           [],
           [
-            'cli editor of codium-insiders: http://downloads:8080/cli/${os}-${arch}/cli-${os}-${arch}.tar.gz',
+            'cli editor of codium-insiders: http://downloads:8080/cli/${os}-${arch}/${commit}/cli-${os}-${arch}.tar.gz',
           ],
         ],
+      );
+    });
+
+    /** Makes the workspace's install cases one, `standin`, whose launch starts the CLI-source copy against a stand-in CLI. */
+    function writeStandInCase(): void {
+      workspace.write(
+        'tests/acceptance/suite-install/cases.json',
+        JSON.stringify({
+          cases: [
+            {
+              label: 'standin',
+              cite: 'F-2405 AC-8 (standin)',
+              cliStandIn: true,
+              settings: {},
+              outcome: 'any',
+            },
+          ],
+        }),
+      );
+    }
+
+    it('#2735: a run that chooses an install case with a stand-in CLI asks for the stand-in archives, not the pinned ones, and makes the CLI-source editor with the client’s loopback base, which the client can resolve', async () => {
+      writeStandInCase();
+      await runAcceptance(workspace.root, harness, 'vscodium', [
+        'install-standin',
+      ]);
+      deepStrictEqual(
+        [
+          harness.cliAsked,
+          harness.standInAsked,
+          harness.calls.filter(call => call.startsWith('cli editor')),
+        ],
+        [
+          [false],
+          [true],
+          [
+            'cli editor of codium-insiders: http://127.0.0.1:8080/cli/${os}-${arch}/${commit}/cli-${os}-${arch}.tar.gz',
+          ],
+        ],
+      );
+    });
+
+    it('#2735: a run that names cli-path and an install case with a stand-in CLI fails before anything starts, naming both', async () => {
+      writeStandInCase();
+      const {result, lines} = await withErrorLines(() =>
+        runAcceptance(workspace.root, harness, 'vscodium', [
+          'cli-path',
+          'install-standin',
+        ]),
+      );
+      deepStrictEqual(
+        [result, lines, harness.calls],
+        [
+          2,
+          [
+            'acceptance: the run names a launch with real CLI archives (cli-path) and one with a stand-in CLI (install-standin): the CLI-source copy has one template, so name them in separate runs',
+          ],
+          [],
+        ],
+      );
+    });
+
+    it('#2735: a run that chooses no stand-in case asks for no stand-in archive, and the launch of a stand-in case starts the CLI-source copy where the run made one', () => {
+      writeStandInCase();
+      function started(environment: Record<string, string>): string[] {
+        return vscodiumConfigurations(
+          workspace.root,
+          {...CONFIGURATION_ENVIRONMENT, ...environment},
+          EXECUTABLE,
+        )
+          .filter(configuration => configuration.label === 'install-standin')
+          .map(configuration => configuration.useInstallation.fromPath);
+      }
+      deepStrictEqual(
+        [
+          started({HARNESS_CLI_EDITOR_EXECUTABLE: '/run/cli-editor/codium'}),
+          started({}),
+        ],
+        [['/run/cli-editor/codium'], [EXECUTABLE]],
       );
     });
 
