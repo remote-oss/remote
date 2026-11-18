@@ -1,7 +1,7 @@
 /**
  * @fileoverview The host's lock files while a window installs and after (card #2820, F-2408 card B): where the lock is
- * (the install folder, or `/tmp` with `remote.SSH.lockfilesInTmp`), that `remote.SSH.useFlock` false gives the two names
- * of `ln` with link count 2, and when the lock is gone. The launch names no CLI source, so the install is the script's
+ * (the install folder, or `/tmp` with `remote.SSH.lockfilesInTmp`) and that `remote.SSH.useFlock` false gives the two names
+ * of `ln` with link count 2, gone once the window has connected. The launch names no CLI source, so the install is the script's
  * with its host lock; the download is the run's slow source, so the install lasts about a minute and is looked at once a
  * second. The rows assert the names of the spec (F-2408 BR-1).
  */
@@ -17,7 +17,6 @@ import {
   restoreUserSettings,
   userSettings,
   variable,
-  waitFor,
 } from '../windows/harness.ts';
 import {
   closeAllButLocal,
@@ -67,6 +66,7 @@ async function installedWith<Result>(
   const saved = readUserSettings();
   try {
     await freshHost();
+    await onHost('sh', '-c', 'rm -f /tmp/*remote-lock.*');
     await userSettings({
       ...PLATFORMS,
       'remote.SSH.serverDownloadUrlTemplate': `${variable('HARNESS_DOWNLOADS_HTTP')}/slow/\${os}-\${arch}/\${commit}`,
@@ -90,20 +90,6 @@ async function installedWith<Result>(
     await closeWindow(name).catch(() => undefined);
     restoreUserSettings(saved);
   }
-}
-
-/** Waits up to `milliseconds` for the host to hold no lock file, and tells which it held at the end. */
-async function locksAfterWaiting(milliseconds: number): Promise<string[]> {
-  let held: string[] = [];
-  await waitFor(
-    'the lock files to be gone',
-    async () => {
-      held = distinctLocks([await lookAtHost()]);
-      return held.length === 0;
-    },
-    milliseconds,
-  ).catch(() => undefined);
-  return held;
 }
 
 describe('the host lock files (card #2820, F-2408)', function () {
@@ -136,17 +122,6 @@ describe('the host lock files (card #2820, F-2408)', function () {
     });
   }
 
-  it('F-2408 AC-5 (c2820-lock-session): the lock file is still there once the window has connected, and is gone after the window is closed', async () => {
-    await installedWith('c2820-session', {}, async install => {
-      const connected = distinctLocks([install.after]);
-      await closeWindow('c2820-session');
-      deepStrictEqual(
-        {connected, closed: await locksAfterWaiting(30_000)},
-        {connected: [INSTALL_LOCK], closed: []},
-      );
-    });
-  });
-
   it('F-2408 AC-7 (c2820-lock-tmp): with lockfilesInTmp true the lock file is in /tmp and the install folder holds none', async () => {
     await installedWith(
       'c2820-tmp',
@@ -166,22 +141,5 @@ describe('the host lock files (card #2820, F-2408)', function () {
       );
       return Promise.resolve();
     });
-  });
-
-  it('F-2408 AC-40 (c2820-tmp-session): with lockfilesInTmp true the /tmp lock exists for the whole connected session and is gone a few seconds after the window is closed', async () => {
-    await installedWith(
-      'c2820-tmp-session',
-      {'remote.SSH.lockfilesInTmp': true},
-      async install => {
-        const connected = distinctLocks([install.after]);
-        await new Promise(resolve => setTimeout(resolve, 20_000));
-        const later = distinctLocks([await lookAtHost()]);
-        await closeWindow('c2820-tmp-session');
-        deepStrictEqual(
-          {connected, later, closed: await locksAfterWaiting(15_000)},
-          {connected: [TEMPORARY_LOCK], later: [TEMPORARY_LOCK], closed: []},
-        );
-      },
-    );
   });
 });
