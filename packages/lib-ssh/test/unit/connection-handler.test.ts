@@ -9,7 +9,11 @@ import {
   type ConnectionHandlerOptions,
 } from '../../src/index.ts';
 import {ScriptedSpawner, startError} from './fake-client-process.ts';
-import {authenticate} from './connection-fixture.ts';
+import {AUTHENTICATED, authenticate} from './connection-fixture.ts';
+import {
+  platformProbeInput,
+  probeHandOverLine,
+} from '../../src/connection-server/platform-probe.ts';
 import {LOCAL_COMMAND_DROPPED_LINE} from '../../src/connection-server/local-command-log.ts';
 
 const INVOCATION = {
@@ -63,7 +67,7 @@ describe('connection handler (contracts §4 S9)', () => {
       spawner: spawner.spawn,
       askpassEnvironment: {},
       editorEnvironment: {},
-      sessionPrelude: 'P\n',
+      opening: {kind: 'known', prelude: 'P\n', interpreter: 'posixShell'},
       waitSettings: {
         connectTimeoutSeconds: 10,
         fromHost: false,
@@ -75,7 +79,6 @@ describe('connection handler (contracts §4 S9)', () => {
         displayHost: 'h.invalid',
         firstMessageMilliseconds: 5000,
       },
-      interpreter: 'posixShell',
       newMarker: () => {
         markers += 1;
         return `m${String(markers)}`;
@@ -387,6 +390,269 @@ describe('connection handler (contracts §4 S9)', () => {
     });
   });
 
+  describe('a session whose host platform is unknown (#1835)', () => {
+    const SESSION_ENTERED = 'debug1: Entering interactive session.\n';
+    /** The connection's probe and hand-over line: its nonce is the first marker drawn. */
+    const PROBE = platformProbeInput('m1');
+    const HAND_OVER = probeHandOverLine('m1', 'POSIX-PROGRAM');
+    const OPENING = {
+      kind: 'detect',
+      posix: {program: 'POSIX-PROGRAM', prelude: 'P\n'},
+      windows: {line: 'WINDOWS-LINE\n'},
+    } as const;
+    const RUN_REQUEST = {
+      type: 'runScript',
+      runId: 7,
+      script: 'echo hello',
+      environment: {},
+      inputBase64: null,
+      deadlineMilliseconds: 1000,
+    } as const;
+
+    /** The owner's connect, up to ssh's report that the login is done. */
+    async function authenticated(): Promise<void> {
+      create({opening: OPENING});
+      handler.onLeasesChanged([1, 2]);
+      events.length = 0;
+      await send(1, {type: 'connect'});
+      spawner.started[0]?.error(AUTHENTICATED);
+      spawner.started[0]?.error(SESSION_ENTERED);
+      await settled();
+    }
+
+    /** The owner's connect, alone, up to ssh's report that the login is done and before it enters the session. */
+    async function loggedIn(): Promise<void> {
+      create({opening: OPENING});
+      handler.onLeasesChanged([1]);
+      events.length = 0;
+      await send(1, {type: 'connect'});
+      spawner.started[0]?.error(AUTHENTICATED);
+    }
+
+    /**
+     * What the opening wrote and the LocalCommand lines it told, once the owner's connect logged in, the host's output
+     * `pieces` came, and only then ssh's line of the session.
+     */
+    async function outputFirst(
+      pieces: readonly string[],
+    ): Promise<[string | undefined, PlainData[]]> {
+      await loggedIn();
+      for (const piece of pieces) {
+        spawner.started[0]?.output(piece);
+      }
+      spawner.started[0]?.error(SESSION_ENTERED);
+      await settled();
+      return [
+        written(),
+        events.filter(
+          event => (event as {type: string}).type === 'localCommandLines',
+        ),
+      ];
+    }
+
+    function written(): string | undefined {
+      return spawner.started[0]?.inputText();
+    }
+
+    it('#1835: the probe is written once ssh reports the login, and nothing before', async () => {
+      create({opening: OPENING});
+      handler.onLeasesChanged([1]);
+      await send(1, {type: 'connect'});
+      await settled();
+      const before = written();
+      spawner.started[0]?.error(AUTHENTICATED);
+      await settled();
+      deepStrictEqual([before, written()], ['', PROBE]);
+    });
+
+    it("#1835: Windows answers write the loop's line, the session frames its scripts for the PowerShell loop, and the record request tells windows", async () => {
+      await authenticated();
+      spawner.started[0]?.output(
+        'C:\\>echo REMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-PROBE-m1-Windows_NT\r\n\r\nREMOTE-OSS-PROBE-m1-DONE\r\n',
+      );
+      await settled();
+      const afterAnswers = written() ?? '';
+      spawner.started[0]?.output('\nLAYER1-READY\n');
+      void send(1, RUN_REQUEST);
+      await settled();
+      deepStrictEqual(
+        [
+          afterAnswers,
+          eventTypes(),
+          /^m2 [0-9]+ 0$/.test(
+            (written() ?? '').slice(afterAnswers.length).split('\n')[0] ?? '',
+          ),
+          await send(2, {type: 'sharedRecord'}),
+        ],
+        [
+          `${PROBE}WINDOWS-LINE\n`,
+          ['connected'],
+          true,
+          {type: 'sharedRecord', record: null, detectedPlatform: 'windows'},
+        ],
+      );
+    });
+
+    it('#1835: POSIX answers write the hand-over line, the prelude only once the shell has printed the hand-over, then POSIX runs', async () => {
+      await authenticated();
+      spawner.started[0]?.output(
+        'REMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-HOME-m1-/home/h\nREMOTE-OSS-PROBE-m1-DONE\n',
+      );
+      await settled();
+      const handing = written();
+      spawner.started[0]?.output('REMOTE-OSS-PROBE-m1-EXEC\n');
+      await settled();
+      const handed = written();
+      spawner.started[0]?.output('LAYER1-READY\n');
+      void send(1, RUN_REQUEST);
+      await settled();
+      deepStrictEqual(
+        [
+          handing,
+          handed,
+          (written() ?? '').slice(handed?.length).split('\n')[0],
+          await send(2, {type: 'sharedRecord'}),
+        ],
+        [
+          `${PROBE}${HAND_OVER}`,
+          `${PROBE}${HAND_OVER}P\n`,
+          "printf '%s%s\\n' 'm2:st' 'art'",
+          {type: 'sharedRecord', record: null, detectedPlatform: 'posix'},
+        ],
+      );
+    });
+
+    it("#1835: a hand-over line before the answers end writes no prelude, and the probe's lines are no LocalCommand's output", async () => {
+      await authenticated();
+      spawner.started[0]?.output(
+        'banner\nREMOTE-OSS-PROBE-m1-EXEC\nREMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-PROBE-m1-DONE\n',
+      );
+      await settled();
+      deepStrictEqual([written(), eventTypes()], [`${PROBE}${HAND_OVER}`, []]);
+    });
+
+    it("#2598 (F-2109 AC-12), #1835: what comes before ssh enters the session is a LocalCommand's output, and the host shell's lines after it are not", async () => {
+      await loggedIn();
+      spawner.started[0]?.output('out-marker\n');
+      spawner.started[0]?.error(SESSION_ENTERED);
+      spawner.started[0]?.output(
+        'Windows PowerShell\r\nREMOTE-OSS-HOME-m1-C:\\Users\\x\r\nREMOTE-OSS-PROBE-m1-DONE\r\n',
+      );
+      await settled();
+      deepStrictEqual(
+        events.filter(
+          event => (event as {type: string}).type === 'localCommandLines',
+        ),
+        [{type: 'localCommandLines', lines: ['out-marker']}],
+      );
+    });
+
+    it("#2598 (F-2109 AC-12), #1835: a LocalCommand's last words with no line end are its own line once ssh enters the session, not part of the host's first line", async () => {
+      await loggedIn();
+      spawner.started[0]?.output('out-marker-tail');
+      spawner.started[0]?.error(SESSION_ENTERED);
+      spawner.started[0]?.output(
+        'REMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-PROBE-m1-DONE\n',
+      );
+      await settled();
+      deepStrictEqual(
+        [
+          events.filter(
+            event => (event as {type: string}).type === 'localCommandLines',
+          ),
+          written(),
+        ],
+        [
+          [{type: 'localCommandLines', lines: ['out-marker-tail']}],
+          `${PROBE}${HAND_OVER}`,
+        ],
+      );
+    });
+
+    it('#1835: lines a startup file could print, with no nonce or another one, never count, and the answers of this connection do', async () => {
+      await authenticated();
+      spawner.started[0]?.output(
+        'REMOTE-OSS-PROBE-Windows_NT\nREMOTE-OSS-HOME-C:\\Users\\x\nREMOTE-OSS-PROBE-DONE\nREMOTE-OSS-PROBE-ffff-DONE\nREMOTE-OSS-PROBE-m1-EXEC\n',
+      );
+      await settled();
+      const forged = written();
+      spawner.started[0]?.output(
+        'REMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-PROBE-m1-DONE\n',
+      );
+      await settled();
+      deepStrictEqual([forged, written()], [PROBE, `${PROBE}${HAND_OVER}`]);
+    });
+
+    it("#1835: an answer of this connection's nonce that comes before ssh's line of the session shows the session was entered, and the answers are read", async () => {
+      deepStrictEqual(
+        await outputFirst([
+          'REMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-PROBE-m1-DONE\n',
+        ]),
+        [`${PROBE}${HAND_OVER}`, []],
+      );
+    });
+
+    it("#2598 (F-2109 AC-12), #1835: a LocalCommand's last words with no line end, then a cmd host's answers before ssh's line of the session, join only the probe's start line, and Windows is found", async () => {
+      deepStrictEqual(
+        await outputFirst([
+          'out-marker-tail',
+          'REMOTE-OSS-PROBE-m1-START\r\nREMOTE-OSS-PROBE-m1-Windows_NT\r\nREMOTE-OSS-PROBE-m1-DONE\r\n',
+        ]),
+        [
+          `${PROBE}WINDOWS-LINE\n`,
+          [
+            {
+              type: 'localCommandLines',
+              lines: ['out-marker-tailREMOTE-OSS-PROBE-m1-START'],
+            },
+          ],
+        ],
+      );
+    });
+
+    it('F-2704 AC-13, #1835: a login shell that ends during the opening, with its own status, fails the login as one that ended at its startup, and is logged', async () => {
+      await authenticated();
+      spawner.started[0]?.exit(3);
+      await settled();
+      const detail =
+        "the SSH session ended before the host reported its platform: the login shell's startup exited with status 3";
+      deepStrictEqual(
+        [events[0], logged],
+        [
+          {
+            type: 'loginFailed',
+            kind: 'unknown',
+            hints: [],
+            exitStatus: 3,
+            detail,
+          },
+          [detail],
+        ],
+      );
+    });
+
+    it("#1835: ssh's own failure, status 255, during the opening is no login shell's end", async () => {
+      await authenticated();
+      spawner.started[0]?.exit(255);
+      await settled();
+      deepStrictEqual(
+        [(events[0] as {detail?: string}).detail, logged],
+        [undefined, []],
+      );
+    });
+
+    it('#1835: a session that ends before the answers end fails the login as any other, and is written nothing more', async () => {
+      await authenticated();
+      spawner.started[0]?.output('REMOTE-OSS-PROBE-m1-%OS%\n');
+      spawner.started[0]?.exit(255);
+      await settled();
+      deepStrictEqual(
+        [written(), eventTypes()],
+        [PROBE, ['loginFailed', 'ownerChanged']],
+      );
+    });
+  });
+
   describe('a login that fails', () => {
     beforeEach(async () => {
       handler.onLeasesChanged([1, 2]);
@@ -457,6 +723,15 @@ describe('connection handler (contracts §4 S9)', () => {
           ],
           ['the login shell did not finish its startup within 5 s'],
         ],
+      );
+    });
+
+    it('#1835: with the platform known, a session that ends with its own status and no line of the bootstrap is no startup end: the bootstrap reports its own', async () => {
+      spawner.started[0]?.exit(1);
+      await settled();
+      deepStrictEqual(
+        [(events[0] as {detail?: string}).detail, logged],
+        [undefined, []],
       );
     });
 
@@ -1167,6 +1442,7 @@ describe('connection handler (contracts §4 S9)', () => {
       deepStrictEqual(await send(1, {type: 'sharedRecord'}), {
         type: 'sharedRecord',
         record: null,
+        detectedPlatform: null,
       });
     });
 
@@ -1186,7 +1462,10 @@ describe('connection handler (contracts §4 S9)', () => {
       const shared = await send(2, {type: 'sharedRecord'});
       deepStrictEqual(
         [stored, shared],
-        [{type: 'accepted'}, {type: 'sharedRecord', record: RECORD}],
+        [
+          {type: 'accepted'},
+          {type: 'sharedRecord', record: RECORD, detectedPlatform: null},
+        ],
       );
     });
   });

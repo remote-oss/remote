@@ -1351,7 +1351,8 @@ export function launchesOf(root: string): Launch[] {
       wslDistros: true,
     },
     // A Windows SSH host: the platform workflow's Windows job runs Windows' OpenSSH Server on 127.0.0.1, and the
-    // launch's windows open it as `winhost`, its platform known so no pick is asked.
+    // launch's windows open it as `winhost`, its platform known so no pick is asked, or as `winhost-unknown`, with none.
+    // Pseudo-terminals are permitted for the launch, so no row writes a setting the editor may read late.
     {
       ...RENDERER_LAUNCH,
       label: 'windows-host',
@@ -1361,6 +1362,7 @@ export function launchesOf(root: string): Launch[] {
       settings: {
         ...RENDERER_LAUNCH.settings,
         'remote.SSH.remotePlatform': {winhost: 'windows'},
+        'remote.SSH.permitPtyAllocation': true,
       },
     },
     {

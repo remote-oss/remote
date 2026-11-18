@@ -13,8 +13,9 @@ const RECORD = {
 const REPLIES: PlainData[] = [
   {type: 'accepted'},
   {type: 'refused', reason: 'notOwner'},
-  {type: 'sharedRecord', record: null},
-  {type: 'sharedRecord', record: RECORD},
+  {type: 'sharedRecord', record: null, detectedPlatform: null},
+  {type: 'sharedRecord', record: RECORD, detectedPlatform: 'windows'},
+  {type: 'sharedRecord', record: null, detectedPlatform: 'posix'},
   {type: 'answered', accepted: true},
   {type: 'scriptEnded', status: 3},
   {type: 'scriptFailed', reason: 'timeout', detail: 'no end in time'},
@@ -55,13 +56,18 @@ describe('connection replies and events (contracts §4 S9)', () => {
         {type: 'other'},
         {type: 'refused', reason: 'because'},
         {type: 'refused'},
-        {type: 'sharedRecord', record: {remotePort: 'x'}},
+        {
+          type: 'sharedRecord',
+          record: {remotePort: 'x'},
+          detectedPlatform: null,
+        },
+        {type: 'sharedRecord', record: null, detectedPlatform: 'macOS'},
         {type: 'answered', accepted: 'yes'},
         {type: 'scriptEnded', status: 'ok'},
         {type: 'scriptFailed', reason: 'because', detail: 'x'},
         {type: 'scriptFailed', reason: 'timeout'},
       ].map(body => readConnectionReply(body)),
-      Array.from({length: 10}, () => undefined),
+      Array.from({length: 11}, () => undefined),
     );
   });
 

@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import type {PlatformHint} from 'lib-host';
 import {createHash, randomBytes} from 'node:crypto';
 import {
   SHELL_VARIANTS,
@@ -195,6 +196,16 @@ function boundedHost(
   };
 }
 
+/**
+ * The platform a session on a host whose login shell is `shellPath` opens with. fish runs none of a piped input before
+ * the input ends, so in the default mode it never answers the platform probe (F-2206 7.E5, AC-28); it reaches the
+ * POSIX bootstrap only with its platform known, as 7.E5's workaround gives it. Every other shell opens as the default
+ * mode opens it, with the platform unknown.
+ */
+function platformOf(shellPath: string): PlatformHint {
+  return shellPath === '/usr/bin/fish' ? 'linux' : 'unknown';
+}
+
 describe('#443, F-2704 BR-4: every login shell hands the session to POSIX sh', function () {
   this.timeout(240000);
 
@@ -262,7 +273,10 @@ describe('#443, F-2704 BR-4: every login shell hands the session to POSIX sh', f
         place(files);
         let session: SharedSession | undefined;
         try {
-          session = await openSharedSession(boundedHost(host));
+          session = await openSharedSession(
+            boundedHost(host),
+            platformOf(shell.path),
+          );
           return await action(session);
         } finally {
           await session?.stop();

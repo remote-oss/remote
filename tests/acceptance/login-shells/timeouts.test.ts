@@ -66,6 +66,26 @@ describe('login shells that do not finish or end early: the connect fails or wai
     );
   });
 
+  it('F-2206 AC-28 (c1835-fish-probe): in the default mode with no platform stored, a fish host shows no platform pick and the connect fails with the timeout dialog once the connect timeout has passed', async () => {
+    await setting('remote.SSH.connectTimeout', 10);
+    await freshServer('harness-fish');
+    const failed = await failedOn('harness-fish', 'to-fish', 120_000);
+    deepStrictEqual(
+      [
+        recordLines('platformPick', 'to-fish'),
+        failed.dialog.question,
+        failed.dialog.buttons,
+        failed.dialog.sinceConnectStarted >= 10_000,
+      ],
+      [
+        [],
+        'Could not establish connection to "harness-fish": Connecting with SSH timed out.',
+        BUTTONS,
+        true,
+      ],
+    );
+  });
+
   it('F-2704 AC-11 (ruling-1221-read): a .bash_profile that reads a line ends the connect within 5 s with the dialog of AC-13 (the criterion accepts it or the timeout dialog), the window does not connect, no server folder is created, and the log names the cause', async () => {
     const timeoutSeconds = 10;
     const serverFolder = `/home/harness-bash/${editorProduct().serverDataFolderName}`;

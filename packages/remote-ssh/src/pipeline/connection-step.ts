@@ -155,10 +155,13 @@ export function openConnectionStep(
         ? `the stored data has no record of host ${hostString}`
         : `the stored data has a record of host ${hostString}: ${record.operatingSystem}`,
     );
+    const {detectedPlatform} = outcome;
     const reused =
-      record === undefined
-        ? terms
-        : {...terms, platform: platformOfRecord(record.operatingSystem)};
+      record !== undefined
+        ? {...terms, platform: platformOfRecord(record.operatingSystem)}
+        : terms.platform === 'unknown' && detectedPlatform === 'windows'
+          ? {...terms, platform: 'windows' as const}
+          : terms;
     try {
       channel = dependencies.channelFor(connection, reused, input);
     } catch (caught) {

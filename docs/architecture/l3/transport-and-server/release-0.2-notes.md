@@ -83,11 +83,15 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     athena on #1773). Each connect still keeps its own hint.
     Rows: (ruling-1773-joiner-lines)
 
-- **With pty allocation permitted and no RequestTTY, ssh writes no pseudo-terminal warning in local-server mode.**
+- **With pty allocation permitted and no RequestTTY, ssh writes no pseudo-terminal warning in local-server mode on a host decided as Windows.**
   - F-2106 AC-14 expects ssh's "Pseudo-terminal will not be allocated…" warning in the log when the setting is on and the
-    host entry has no `RequestTTY`. Our connection command always carries a remote command (the prelude), so with
-    `RequestTTY` unset ssh asks for no terminal and writes no warning. `-T` is still present exactly when the setting is
-    falsy and no terminal is allocated (athena's ruling on #1606; `ruling-1606-no-tty-warning`).
+    host entry has no `RequestTTY`. On a host decided as Windows (a `windows` entry or a `windowsRemotes` listing) our
+    connection command carries the PowerShell loop as its remote command, so with `RequestTTY` unset ssh asks for no
+    terminal and writes no warning. `-T` is still present exactly when the setting is falsy and no terminal is allocated
+    (athena's ruling on #1606; `ruling-1606-no-tty-warning`, narrowed by athena on #1835).
+  - Every other host in local-server mode, with or without a `linux` or `macOS` entry, opens with no remote command, so
+    that its own shell can answer the platform probe, and ssh writes the warning as F-2106 AC-14 expects (row
+    `c1835-unknown-warning`, which is the criterion's, not this deviation's).
     Rows: (ruling-1606-no-tty-warning)
 
 - **In terminal mode with pty allocation permitted and `RequestTTY yes`, the session gets a pseudo-terminal and ssh writes no warning.**

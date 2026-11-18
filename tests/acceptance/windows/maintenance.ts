@@ -496,6 +496,21 @@ export async function fishServerInstalled(name: string): Promise<void> {
   }
 }
 
+/**
+ * Turns the local connection server off and stores the platform of `harness-fish`, or undoes both with `false`. A fish
+ * login shell runs none of a piped input before the input ends, so in the default mode it never answers the platform
+ * probe and its connect fails at the connect wait, as F-2206 AC-28 says, with or without an entry; in the non-local mode
+ * the entry decides the platform and no probe runs (F-2206 7.E5's own workaround). The rows of other features on fish
+ * connect so.
+ */
+export async function fishWithoutProbe(on = true): Promise<void> {
+  await setting('remote.SSH.useLocalServer', on ? false : undefined);
+  await setting(
+    'remote.SSH.remotePlatform',
+    on ? {'harness-fish': 'linux'} : undefined,
+  );
+}
+
 /** Whether a server of `harness-fish` runs on the host; the bracket keeps pgrep from matching its own command line. */
 export function fishServerRuns(): Promise<boolean> {
   return onHostAs(

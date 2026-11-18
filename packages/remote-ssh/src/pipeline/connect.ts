@@ -39,6 +39,7 @@ import {
   resolvedLine,
   resolverLine,
 } from '../diagnostics/log-content.ts';
+import {PLATFORM_OF_PROBE} from './platform.ts';
 import type {
   ConnectInput,
   ConnectionLease,
@@ -492,6 +493,9 @@ async function runSteps(
   const {lease, host} = attempt;
   const tunnelWaits = attempt.waits;
   options.logger.info(hostPlatformLine(host));
+  if (terms.value.platform === 'unknown') {
+    options.logger.info(`Platform: ${PLATFORM_OF_PROBE[host.operatingSystem]}`);
+  }
   const shellLine = loginShellLine(host);
   if (shellLine !== undefined) {
     options.logger.info(shellLine);
