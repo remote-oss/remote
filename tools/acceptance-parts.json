@@ -461,10 +461,10 @@
       "x11.test.ts": 10.2
     },
     "ssh-killed-12": {
-      "killed.test.ts": 6.3
+      "killed.test.ts": 6.5
     },
     "ssh-killed-13": {
-      "killed.test.ts": 9.4
+      "killed.test.ts": 9.2
     },
     "ssh-killed-14": {
       "killed.test.ts": 5.5
