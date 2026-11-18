@@ -16,7 +16,7 @@ export interface KeyBinding {
 }
 
 /** The launch's `keybindings.json`. */
-function keybindingsFile(): string {
+export function keybindingsFile(): string {
   return path.join(variable('HARNESS_USER_DATA'), 'User/keybindings.json');
 }
 
