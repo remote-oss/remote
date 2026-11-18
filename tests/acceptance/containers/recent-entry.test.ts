@@ -113,7 +113,7 @@ describe('The Open Recent entry and the label of a connected window (cards conta
             SETUP_DETAILS.includes(text),
           ),
           dismissed,
-          containersChanged:
+          containersKept:
             JSON.stringify(await containerStates(folder)) ===
             JSON.stringify(kept),
           logged:
@@ -136,7 +136,7 @@ describe('The Open Recent entry and the label of a connected window (cards conta
           ],
           details: true,
           dismissed: 'Disconnected from Dev Container: C43 Recent',
-          containersChanged: true,
+          containersKept: true,
           logged: true,
         },
       );
