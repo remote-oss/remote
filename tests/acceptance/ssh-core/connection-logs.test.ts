@@ -17,7 +17,6 @@ import {
   readUserSettings,
   reloadWindow,
   restoreUserSettings,
-  signal,
   startInWindow,
   userSettings,
   waitFor,
@@ -47,7 +46,6 @@ import {
   INSTALL_MILLISECONDS,
   openConnected,
 } from '../windows/maintenance.ts';
-import {keepingSettings, PLATFORMS} from '../windows/tunnel-support.ts';
 import {paletteItems, runFromPalette} from '../windows/palette.ts';
 
 /** What names a WebSocket compression in a line of a log. */
@@ -435,60 +433,6 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
     } finally {
       await closeWindow(name).catch(() => undefined);
     }
-  });
-
-  it('F-2003 AC-6 (c121-show-log-link): the Show log link of the forwarding refusal notification runs Show Log, the panel comes up on the Remote - SSH channel, and the notification stays open', async () => {
-    await keepingSettings(async () => {
-      await userSettings({...PLATFORMS});
-      const name = 'c121-link';
-      appendScript([
-        {
-          // Held, so the notification stays open until the row releases it.
-          surface: 'notice',
-          match: 'Failed to set up',
-          answer: 'dismiss',
-          after: 'c121-link-free',
-          window: name,
-        },
-        ...dismissals(name),
-      ]);
-      await openWindow('noforward', name);
-      try {
-        function linkNotices() {
-          return recordLines('notice', name).filter(line =>
-            line.question.includes('Show log'),
-          );
-        }
-        try {
-          await waitFor(
-            'the forwarding refusal notice of c121-link',
-            () => linkNotices().some(line => line.held === true),
-            180_000,
-          );
-        } catch (caught) {
-          const events = windowEvents(name).slice(-12);
-          throw new Error(
-            `${(caught as Error).message}: notice record ${JSON.stringify(recordLines('notice', name))}, notifications ${JSON.stringify(await notifications(name))}, dialog ${JSON.stringify(await dialogOf(name))}, events ${JSON.stringify(events)}`,
-            {cause: caught},
-          );
-        }
-        // The link runs the command it names, which the row runs, as the editor does for a click.
-        await inWindow(name, 'opensshremotes.showLog');
-        await windowState(name);
-        deepStrictEqual(
-          {
-            channel: await outputChannelOf(name),
-            focused: await outputPanelFocused(name),
-            // The held notice has no answer line until the row releases it: the notification is still open.
-            still: linkNotices().every(line => line.held === true),
-          },
-          {channel: 'Remote - SSH', focused: true, still: true},
-        );
-      } finally {
-        signal('c121-link-free');
-        await closeWindow(name).catch(() => undefined);
-      }
-    });
   });
 
   it('F-2003 AC-9 (c121-trouble-link): a failure with detected issues shows the troubleshooting terminal, its last line the S125 line with the Output Log... link', async () => {

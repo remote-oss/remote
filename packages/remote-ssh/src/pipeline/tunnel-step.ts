@@ -80,8 +80,6 @@ export interface TunnelStepDependencies {
     login: TerminalLogin,
     input: ConnectInput,
   ): {onQuestion(text: string): void; dispose(): void};
-  /** Tells the user, once for the window, that the host refuses the forwarding the SOCKS relay needs. */
-  forwardRefused(): void;
   /** Whether ssh has warned, in this connect, that it disabled port forwarding itself after a changed host key. */
   warnedForwardingDisabled(): boolean;
   /** Whether ssh has reported, in this connect, that the host's sshd prohibited a forward. */
@@ -624,7 +622,6 @@ export function openTunnelStep(
     }
     stopNotices();
     if (outcome.kind === 'relayRefused') {
-      dependencies.forwardRefused();
       return {kind: 'failed', failure: refusedFailure(dependencies)};
     }
     if (outcome.kind !== 'open') {

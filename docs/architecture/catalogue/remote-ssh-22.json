@@ -163,7 +163,7 @@
   "label": "spec:draft",
   "title": "The Remote - SSH log: output channel, Show Log and log level",
   "epic": "E20",
-  "acCount": 28,
+  "acCount": 29,
   "surfaces": {
    "commands": [
     "opensshremotes.showLog"

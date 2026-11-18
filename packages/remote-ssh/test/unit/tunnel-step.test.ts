@@ -79,8 +79,6 @@ function stepWith(
   socksPorts: number[];
   sink: MemorySink;
   clock: FakeClock;
-  /** How often the step told the window that the host refuses the forwarding, and took the bound off. */
-  refused: number[];
   /** Tells the step that the connection's ssh ended. */
   loseConnection: () => void;
   /** The ports the step asked the search to skip, one list per search. */
@@ -94,7 +92,6 @@ function stepWith(
   const searches: number[][] = [];
   const dialer = new FakeDialer(options.dialScript ?? ['work']);
   const socksPorts: number[] = [];
-  const refused: number[] = [];
   const sink = new MemorySink();
   const port = 'port' in options ? options.port : 50000;
   const choice: PortChoice =
@@ -129,9 +126,6 @@ function stepWith(
     environment: () => ENVIRONMENT,
     warnedForwardingDisabled: () => options.warned ?? false,
     prohibitedForwarding: () => options.prohibited ?? false,
-    forwardRefused: () => {
-      refused.push(1);
-    },
     ...TERMINAL_NOT_USED,
     logger: createLogger(sink, {minimumLevel: (): Level => 'info'}),
   });
@@ -174,7 +168,6 @@ function stepWith(
     socksPorts,
     sink,
     clock,
-    refused,
     loseConnection: () => {
       recording.notice?.({type: 'transportLost'});
     },
@@ -231,28 +224,22 @@ async function pastTheBound(clock: FakeClock): Promise<void> {
 }
 
 describe('the step that opens the window tunnel', () => {
-  it('F-2604 AC-24 (ruling-1985-forwarding-fails): a relay that closes every probe before its reply tells the window once and fails the connect as a refused forward, with the reason and the hint, before the bound', async () => {
-    const {open, clock, refused} = stepWith({
+  it('F-2604 AC-24 (ruling-1985-forwarding-fails): a relay that closes every probe before its reply fails the connect as a refused forward, with the reason and the hint, before the bound', async () => {
+    const {open, clock} = stepWith({
       dialScript: ['closedBeforeReply'],
       prohibited: true,
       limits: {...LIMITS, readyMilliseconds: 10_000, retryMilliseconds: 100},
     });
     const pending = open();
     await pastTheBound(clock);
-    deepStrictEqual(
-      [await pending, refused.length],
-      [
-        {
-          kind: 'failed',
-          failure: {
-            kind: 'forwardingDisabled',
-            reason: {id: 'forwardingRefused'},
-            hints: [FORWARDING_PROHIBITED_HINT],
-          },
-        },
-        1,
-      ],
-    );
+    deepStrictEqual(await pending, {
+      kind: 'failed',
+      failure: {
+        kind: 'forwardingDisabled',
+        reason: {id: 'forwardingRefused'},
+        hints: [FORWARDING_PROHIBITED_HINT],
+      },
+    });
   });
 
   it('F-2604 AC-19 (ruling-1985-forwarding-fails): a refused relay fails with S107 and its own hint when ssh warned of a changed host key, with the server’s reason and hint when ssh reported the forward administratively prohibited, and with the connection closed otherwise', async () => {
@@ -284,7 +271,13 @@ describe('the step that opens the window tunnel', () => {
     ]);
   });
 
-  /** The kind of the step's result, and how often it told the window, for a run that `dialScript` and `listening` steer. */
+  /** The failure kinds of a refused forward, of every cause. */
+  const REFUSAL_KINDS: readonly string[] = [
+    'forwardingDisabled',
+    'channelClosed',
+  ];
+
+  /** The kind of the step's result, and 1 when it failed as a refused forward, for a run that `dialScript` and `listening` steer. */
   async function refusalRun(
     options: Parameters<typeof stepWith>[0],
     beforeBound?: (context: ReturnType<typeof stepWith>) => Promise<void>,
@@ -304,7 +297,10 @@ describe('the step that opens the window tunnel', () => {
     await pastTheBound(context.clock);
     const state = {
       ended: result?.kind,
-      refused: context.refused.length,
+      refused:
+        result?.kind === 'failed' && REFUSAL_KINDS.includes(result.failure.kind)
+          ? 1
+          : 0,
       lines: context.sink.lines.map(line => line.message),
     };
     controller.abort();
@@ -400,11 +396,18 @@ describe('the step that opens the window tunnel', () => {
     deepStrictEqual([outcome.ended, outcome.refused], ['failed', 0]);
   });
 
-  it('connect-106: probes that fail in another way are the failure of an unready tunnel, with no notice', async () => {
-    const {open, clock, refused} = stepWith({dialScript: ['fail']});
+  it('connect-106: probes that fail in another way are the failure of an unready tunnel, not a refused forward', async () => {
+    const {open, clock} = stepWith({dialScript: ['fail']});
     const pending = open();
     await pastTheBound(clock);
-    deepStrictEqual([(await pending).kind, refused.length], ['failed', 0]);
+    deepStrictEqual(await pending, {
+      kind: 'failed',
+      failure: {
+        kind: 'unknown',
+        logDetail:
+          'the window tunnel did not open: no probe of its port worked before the bound',
+      },
+    });
   });
 
   it('connect-107: the step tells its caller that the tunnel stage began once the window’s port is chosen, and not when no port is free', async () => {
