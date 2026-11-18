@@ -4,6 +4,7 @@ import {chmodSync, existsSync, mkdirSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   closeWindow,
+  containersLog,
   devContainerFolder,
   isTrusted,
   connectedToContainer,
@@ -15,6 +16,7 @@ import {
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   DEAD,
+  dockerWith,
   lists,
   ownEngineDocker,
   type SecondEngine,
@@ -68,9 +70,29 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       const second = await showsNoEngine(window);
       folderSettings(folder, {'docker.host': plain.address});
       const third = await lists(plain.marker, window);
+      // Probe: what the third read missed.
+      const reading = third
+        ? ''
+        : await Promise.all([
+            dockerWith(
+              {},
+              '-H',
+              plain.address,
+              'ps',
+              '--format',
+              '{{.Names}}',
+            ).catch((caught: unknown) => `docker -H failed: ${String(caught)}`),
+            dockerWith({}, 'context', 'ls').catch(
+              (caught: unknown) => `context ls failed: ${String(caught)}`,
+            ),
+          ]).then(
+            ([listed, contexts]) =>
+              `docker -H ${plain.address} ps: ${JSON.stringify(listed)}; contexts: ${JSON.stringify(contexts)}; the process's DOCKER_*: ${JSON.stringify(Object.entries(process.env).filter(([key]) => key.startsWith('DOCKER_')))}; the Dev Containers log: ${JSON.stringify(containersLog().slice(-25))}`,
+          );
       deepStrictEqual(
         [trusted, first, second, third],
         [false, true, true, true],
+        reading,
       );
     } finally {
       await closeWindow(window).catch(() => undefined);
