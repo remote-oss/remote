@@ -20,7 +20,7 @@ export interface PinnedX11Row {
 }
 
 /** The X11 tools whose names mark a file that drives the display. */
-export const X11_TOOLS = ['xdotool', 'xprop', 'xwininfo'] as const;
+const X11_TOOLS = ['xdotool', 'xprop', 'xwininfo'] as const;
 
 /** The pinned X11 modules: the files that name an X11 tool. */
 export const PINNED_X11_MODULES: readonly string[] = [
@@ -36,17 +36,17 @@ export const PINNED_X11_ROWS: readonly PinnedX11Row[] = [
 ];
 
 /** The wrap that keeps an X11 row off the displays it cannot drive. */
-export const LINUX_ONLY_WRAP = 'linuxOnly';
+const LINUX_ONLY_WRAP = 'linuxOnly';
 
 /** The functions a X11 module exports: the drivers its rows call. */
-export function driversOf(moduleText: string): string[] {
+function driversOf(moduleText: string): string[] {
   return [...moduleText.matchAll(/^export (?:async )?function (\w+)/gm)].map(
     match => match[1] ?? '',
   );
 }
 
 /** The rows of a file: each name and where its `it(` begins, so the text between two rows is one row's. */
-export function rowsOf(text: string): Array<{name: string; start: number}> {
+function rowsOf(text: string): Array<{name: string; start: number}> {
   return [...text.matchAll(NAME_PATTERN)].map(match => ({
     name: (match[2] ?? match[3] ?? '') + (match[4] ?? ''),
     start: match.index,
@@ -54,7 +54,7 @@ export function rowsOf(text: string): Array<{name: string; start: number}> {
 }
 
 /** The criterion and case label of a row name: its text up to the colon that introduces the rest. */
-export function rowLabel(name: string): string {
+function rowLabel(name: string): string {
   const colon = name.indexOf(':');
   return colon === -1 ? name : name.slice(0, colon);
 }

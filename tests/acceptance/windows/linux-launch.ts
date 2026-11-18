@@ -4,15 +4,15 @@
  */
 
 /** The least of mocha's test context a row needs: the skip that keeps it off a display it cannot drive. */
-export interface SkipContext {
+interface SkipContext {
   skip(): void;
 }
 
 /** A row that runs on its test context. */
-export type LinuxRow = (this: SkipContext) => Promise<void>;
+type LinuxRow = (this: SkipContext) => Promise<void>;
 
 /** Whether the launch host is Linux, the only platform with the display's X11 tools. */
-export function isLinuxLaunch(): boolean {
+function isLinuxLaunch(): boolean {
   return process.platform === 'linux';
 }
 
@@ -21,12 +21,12 @@ export function isLinuxLaunch(): boolean {
  * are absent there, and a row that drove them would fail before it read anything.
  */
 export function linuxOnly(runRow: LinuxRow): LinuxRow {
-  const guarded: LinuxRow = function (this: SkipContext) {
+  function guarded(this: SkipContext): Promise<void> {
     if (!isLinuxLaunch()) {
       this.skip();
       return Promise.resolve();
     }
     return runRow.call(this);
-  };
+  }
   return guarded;
 }
