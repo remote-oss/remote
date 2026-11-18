@@ -24,8 +24,6 @@ import {explainedFailure} from '../windows/connect-failure.ts';
 import {reconnectionState} from '../windows/reconnection-state.ts';
 import {
   dialogOf,
-  dialogTrace,
-  startDialogTrace,
   notifications,
   statusBarText,
   waitForDialog,
@@ -85,13 +83,9 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     const mark = connectionLog().length;
     const asked = recordLines('maskedInput', name).length;
     const endedAt = Date.now();
-    await startDialogTrace(name);
     await inWindow(name, 'opensshremotes.cleanLocalServer');
     const dialog = await waitForDialog(name, 180_000).catch(
       async (caught: unknown) => {
-        console.log(
-          `PROBE ${name} RED trace:\n${(await dialogTrace(name).catch(() => ['(unreadable)'])).join('\n')}`,
-        );
         throw await explainedFailure(caught, () =>
           reconnectionState(
             {
@@ -107,9 +101,6 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
           ),
         );
       },
-    );
-    console.log(
-      `PROBE ${name} GREEN trace:\n${(await dialogTrace(name).catch(() => ['(unreadable)'])).join('\n')}`,
     );
     // Time for an attempt the extension should not make.
     await new Promise(resolve => setTimeout(resolve, 20_000));
