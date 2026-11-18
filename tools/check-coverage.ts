@@ -166,7 +166,7 @@ function unescaped(text: string): string {
  * An `it(` and its name: a quoted name on one line, or a template literal up to its first placeholder, which stays in the name
  * as `${`, or up to its closing backtick, with no newline needed before either.
  */
-const NAME_PATTERN =
+export const NAME_PATTERN =
   /\bit\(\s*(?:(['"])((?:\\.|(?!\1)[^\\\n])*)\1|`((?:\\.|[^\\`$]|\$(?!\{))*)(\$\{)?)/g;
 
 /** The names of the `it(` rows of a file; a template literal with a placeholder is read as the text up to the first one, the `${` included. */

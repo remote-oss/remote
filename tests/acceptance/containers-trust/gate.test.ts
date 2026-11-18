@@ -31,6 +31,7 @@ import {
   windowNames,
   windowState,
 } from '../windows/harness.ts';
+import {linuxOnly} from '../windows/linux-launch.ts';
 import {
   answerDialog,
   answerDialogAt,
@@ -809,27 +810,33 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     });
   });
 
-  it('F-0106 AC-50 (c123-native-dialog): with the editor’s own folder dialog off, Open Folder in Container on an untrusted folder switches the window and shows Opening Remote... before core asks, as with the in-window dialog', async () => {
-    await setUserSetting('files.simpleDialog.enable', false);
-    try {
-      const {shown, folder} = await switchedBeforeCore(
-        'c123-native',
-        async (from, target) => {
-          inWindow(from, 'remote-containers.openFolder').catch(() => undefined);
-          await answerNativeFolderDialog(target);
-        },
-      );
-      deepStrictEqual(shown, {
-        title: true,
-        hostPath: folder,
-        remoteName: 'dev-container',
-        indicator: 'Opening Remote...',
-      });
-    } finally {
-      // The launch's own value, which the row's false replaced in the user settings the launch wrote.
-      await setUserSetting('files.simpleDialog.enable', true);
-    }
-  });
+  it(
+    'F-0106 AC-50 (c123-native-dialog): with the editor’s own folder dialog off, Open Folder in Container on an untrusted folder switches the window and shows Opening Remote... before core asks, as with the in-window dialog',
+    linuxOnly(async () => {
+      // The row answers the host's own folder chooser through the display's X11 driver: only a Linux launch has it.
+      await setUserSetting('files.simpleDialog.enable', false);
+      try {
+        const {shown, folder} = await switchedBeforeCore(
+          'c123-native',
+          async (from, target) => {
+            inWindow(from, 'remote-containers.openFolder').catch(
+              () => undefined,
+            );
+            await answerNativeFolderDialog(target);
+          },
+        );
+        deepStrictEqual(shown, {
+          title: true,
+          hostPath: folder,
+          remoteName: 'dev-container',
+          indicator: 'Opening Remote...',
+        });
+      } finally {
+        // The launch's own value, which the row's false replaced in the user settings the launch wrote.
+        await setUserSetting('files.simpleDialog.enable', true);
+      }
+    }),
+  );
 
   it('F-0106 AC-6a (c69-6a): accepting core’s dialog for a folder with a configuration goes straight to Connecting to Dev Container, with no quick pick', async () => {
     const folder = devContainerFolder('c69-accept', {name: 'C69 Accept'});
