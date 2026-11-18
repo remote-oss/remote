@@ -300,9 +300,6 @@ describe('Remote-SSH commands run where they do not apply (F-2006, card #2817)',
   before(async () => {
     saved = readUserSettings();
     await userSettings({'remote.SSH.remotePlatform': PLATFORMS});
-    // The launch's own window is empty too: the renderer tells two empty windows apart only by which of them it has taken
-    // for a name already, so `local`'s page is taken before the rows open empty windows of their own.
-    await statusBarText('local', 'status.host').catch(() => '');
     unbind = bindKeys([
       ...COMMANDS.map(command => ({
         key: `ctrl+alt+${command.letter}`,
