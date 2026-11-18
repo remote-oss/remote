@@ -243,6 +243,16 @@ async function pages(): Promise<DebugTarget[]> {
 }
 
 /**
+ * The title of a window as the lookup of its page reads it: without the ` [Administrator]` the editor adds to every title
+ * when it runs elevated, as it does on Windows runners, so that the empty window is `[]` there too and a title with the
+ * mark does not read as a remote one. Only the lookup of a page by its title uses it: the pages are listed with the
+ * titles the editor gave them, and a row that asserts a window's title reads `document.title`, with the mark.
+ */
+export function withoutAdministratorMark(title: string): string {
+  return title.replace(/ \[Administrator\]$/u, '');
+}
+
+/**
  * What every renderer page says of its focus and its quick input, for the error of a palette that did not show: the
  * page that has the focus, the element that holds it, and whether the quick input is displayed and has items.
  */
@@ -342,7 +352,10 @@ export async function pageOf(
   return settled(
     () => `one page of window ${name} among ${JSON.stringify(titles)}`,
     async () => {
-      const found = await pages();
+      const found = (await pages()).map(page => ({
+        ...page,
+        title: withoutAdministratorMark(page.title),
+      }));
       titles = found.map(page => page.title);
       const named = pageTitleByName(name, titles);
       if (named !== undefined) {
@@ -3012,7 +3025,7 @@ export async function waitForDialogOfName(
         const address = page.webSocketDebuggerUrl;
         if (
           address !== undefined &&
-          titlesOfName(name, [page.title]).length > 0
+          titlesOfName(name, [withoutAdministratorMark(page.title)]).length > 0
         ) {
           const dialog = await evaluateAt<ShownDialog | null>(
             address,
@@ -3494,16 +3507,26 @@ export async function moveQuickPickFocus(
 
 /** Sets the input of the quick pick open in window `name` to `text`, whether or not the list has a row. */
 async function setQuickPickInput(name: string, text: string): Promise<void> {
-  await evaluate<null>(
-    name,
-    `(() => {
+  // The check and the focus are one evaluate, and a pick that is not there yet or no more is waited for.
+  await settled(
+    () => `the input of the quick pick of window ${name}`,
+    async () =>
+      (await evaluate<boolean>(
+        name,
+        `(() => {
       const input = document.querySelector('${QUICK_WIDGET} .quick-input-box input');
+      if (input === null) {
+        return false;
+      }
       input.focus();
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
       setter.call(input, ${JSON.stringify(text)});
       input.dispatchEvent(new Event('input', {bubbles: true}));
-      return null;
+      return true;
     })()`,
+      ))
+        ? true
+        : undefined,
   );
 }
 
@@ -3840,23 +3863,33 @@ async function keyInFolderDialog(
     () => `the folder dialog of window ${name}`,
     async () => ((await folderDialogOpen(name)) ? true : undefined),
   );
-  /** Focuses the dialog's input and, when `text` is given, sets its value as a user's typing would. */
-  function typeInto(text: string | undefined = typed): Promise<null> {
-    return evaluate<null>(
+  /**
+   * Focuses the dialog's input and, when `text` is given, sets its value as a user's typing would; false when the input
+   * is not in the page now. The check and the focus are one evaluate: an input that the page replaced between two of
+   * them was found and gone, as `Cannot read properties of null (reading 'focus')`.
+   */
+  function typeInto(text: string | undefined = typed): Promise<boolean> {
+    return evaluate<boolean>(
       name,
       `(() => {
       const input = ${FOLDER_DIALOG_INPUT};
+      if (input === null) {
+        return false;
+      }
       input.focus();
       if (${JSON.stringify(text ?? null)} !== null) {
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
         setter.call(input, ${JSON.stringify(text ?? '')});
         input.dispatchEvent(new Event('input', {bubbles: true}));
       }
-      return null;
+      return true;
     })()`,
     );
   }
-  await typeInto();
+  await settled(
+    () => `the input of the folder dialog of window ${name} to take focus`,
+    async () => ((await typeInto()) ? true : undefined),
+  );
   // A key the dialog took can take the window to the folder, and then no page has its name: that reads as closed.
   async function read(): Promise<FolderDialogReading> {
     const address = await pageOf(name, PAGE_LOOKUP_MILLISECONDS).catch(

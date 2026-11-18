@@ -58,6 +58,7 @@ import {
   runCommand,
   runLaunches,
   runTestCli,
+  engineHostVariable,
   standInEngines,
   archiveKindOf,
   releaseAssetUrlOf,
@@ -5541,5 +5542,18 @@ describe('the harness of the windows suites, bundled for the editor', () => {
     } finally {
       rmSync(folder, {recursive: true, force: true});
     }
+  });
+});
+
+describe('the run’s own engine (card #2830)', () => {
+  it('#2830: the run names the DOCKER_HOST it started with, which a launch may replace for its editor, and none when it has none', () => {
+    deepStrictEqual(
+      [
+        engineHostVariable({DOCKER_HOST: 'tcp://127.0.0.1:2375'}),
+        engineHostVariable({DOCKER_HOST: ''}),
+        engineHostVariable({}),
+      ],
+      [{HARNESS_ENGINE_HOST: 'tcp://127.0.0.1:2375'}, {}, {}],
+    );
   });
 });

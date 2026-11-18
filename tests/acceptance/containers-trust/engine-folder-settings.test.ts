@@ -15,8 +15,8 @@ import {
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   DEAD,
-  dockerWith,
   lists,
+  ownEngineDocker,
   type SecondEngine,
   secondEngine,
   showsNoEngine,
@@ -32,20 +32,30 @@ function folderSettings(folder: string, settings: unknown): void {
   );
 }
 
+/** The second engine a `before` hook made, which a row can only reach once the hook succeeded. */
+function secondEngineOf(engine: SecondEngine | undefined): SecondEngine {
+  if (engine === undefined) {
+    throw new Error('the second engine was not made');
+  }
+  return engine;
+}
+
 describe('the engine settings of a folder in Restricted Mode (card containers-133)', function () {
   this.timeout(900_000);
 
-  let plain: SecondEngine;
+  let made: SecondEngine | undefined;
 
   before(async () => {
-    plain = await secondEngine();
+    made = await secondEngine();
   });
 
+  // The hook that makes the engine can fail before it is set, and then there is nothing to stop.
   after(async () => {
-    await plain.stop();
+    await made?.stop();
   });
 
   it('F-0205 AC-34 (c133-folder): in an untrusted folder the endpoint of its .vscode/settings.json is used by the view, and a change of the file is used at the next refresh with no reload', async () => {
+    const plain = secondEngineOf(made);
     const folder = devContainerFolder('c133-folder');
     folderSettings(folder, {
       'containers.environment': {DOCKER_HOST: plain.address},
@@ -114,18 +124,12 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       controlFails = true;
     }
     const own = runScopedName('c133local');
-    await dockerWith(
-      {},
-      '--context',
-      'default',
+    await ownEngineDocker(
       'tag',
       variable('HARNESS_DEVCONTAINER_IMAGE'),
       `${own}:only`,
     );
-    await dockerWith(
-      {},
-      '--context',
-      'default',
+    await ownEngineDocker(
       'run',
       '-d',
       ...runLabelArguments(),
