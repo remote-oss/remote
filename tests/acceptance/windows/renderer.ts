@@ -243,6 +243,16 @@ async function pages(): Promise<DebugTarget[]> {
 }
 
 /**
+ * The title of a window as the lookup of its page reads it: without the ` [Administrator]` the editor adds to every title
+ * when it runs elevated, as it does on Windows runners, so that the empty window is `[]` there too and a title with the
+ * mark does not read as a remote one. Only the lookup of a page by its title uses it: the pages are listed with the
+ * titles the editor gave them, and a row that asserts a window's title reads `document.title`, with the mark.
+ */
+export function withoutAdministratorMark(title: string): string {
+  return title.replace(/ \[Administrator\]$/u, '');
+}
+
+/**
  * What every renderer page says of its focus and its quick input, for the error of a palette that did not show: the
  * page that has the focus, the element that holds it, and whether the quick input is displayed and has items.
  */
@@ -342,7 +352,10 @@ export async function pageOf(
   return settled(
     () => `one page of window ${name} among ${JSON.stringify(titles)}`,
     async () => {
-      const found = await pages();
+      const found = (await pages()).map(page => ({
+        ...page,
+        title: withoutAdministratorMark(page.title),
+      }));
       titles = found.map(page => page.title);
       const named = pageTitleByName(name, titles);
       if (named !== undefined) {
@@ -3012,7 +3025,7 @@ export async function waitForDialogOfName(
         const address = page.webSocketDebuggerUrl;
         if (
           address !== undefined &&
-          titlesOfName(name, [page.title]).length > 0
+          titlesOfName(name, [withoutAdministratorMark(page.title)]).length > 0
         ) {
           const dialog = await evaluateAt<ShownDialog | null>(
             address,
