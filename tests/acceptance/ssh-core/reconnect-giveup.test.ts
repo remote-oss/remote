@@ -83,6 +83,9 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     const mark = connectionLog().length;
     const asked = recordLines('maskedInput', name).length;
     const endedAt = Date.now();
+    // The window's page is read once before the outage: core's dialog did not show in a window whose page the harness
+    // had not read before the shared connection ended (21 of 24 rows of the third wrong password), and shows in one it had.
+    await statusBarText(name, 'status.host');
     await inWindow(name, 'opensshremotes.cleanLocalServer');
     const dialog = await waitForDialog(name, 180_000).catch(
       async (caught: unknown) => {
