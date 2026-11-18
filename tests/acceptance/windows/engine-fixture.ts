@@ -71,9 +71,24 @@ export async function dockerWith(
   return stdout.trim();
 }
 
-/** The output of `docker` run with `parameters` on this machine's own daemon, whatever context the launch has made current. */
-function localDocker(...parameters: string[]): Promise<string> {
-  return dockerWith({}, '--context', 'default', ...parameters);
+/**
+ * The variable that points the `docker` CLI at the run's own engine: the `DOCKER_HOST` the run itself started with, which
+ * is the engine stand-in on a Windows runner, where the CLI's default is Docker Desktop's pipe and nothing listens
+ * there. None where the run has none: on Linux the default is the run's socket.
+ */
+function ownEngineEnvironment(): Record<string, string> {
+  const host = process.env.HARNESS_ENGINE_HOST;
+  return host === undefined || host === '' ? {} : {DOCKER_HOST: host};
+}
+
+/** The output of `docker` run with `parameters` on the run's own engine, whatever context or `DOCKER_HOST` the launch gave its editor. */
+export function ownEngineDocker(...parameters: string[]): Promise<string> {
+  return dockerWith(
+    ownEngineEnvironment(),
+    '--context',
+    'default',
+    ...parameters,
+  );
 }
 
 /** How many times the second engine's image is pulled before its rows fail, and the wait between two tries. */
@@ -91,12 +106,16 @@ let enginePulled: Promise<number> | undefined;
 function engineImageHeld(): Promise<number> {
   enginePulled ??= (async () => {
     try {
-      return await localDocker('image', 'inspect', SECOND_ENGINE_IMAGE).then(
+      return await ownEngineDocker(
+        'image',
+        'inspect',
+        SECOND_ENGINE_IMAGE,
+      ).then(
         () => 0,
         () =>
           pulledWithRetries(
             async () => {
-              await localDocker('pull', '--quiet', SECOND_ENGINE_IMAGE);
+              await ownEngineDocker('pull', '--quiet', SECOND_ENGINE_IMAGE);
             },
             ENGINE_PULL_ATTEMPTS,
             () =>
@@ -152,9 +171,14 @@ async function holdMarker(
   const target = Object.entries(client)
     .map(([key, value]) => `${key}='${value}'`)
     .join(' ');
+  // The image is in the run's own engine: where the run has a DOCKER_HOST that is the one to read it from, and where it
+  // has none the launch's own must not be.
+  const ownHost = ownEngineEnvironment().DOCKER_HOST;
+  const source =
+    ownHost === undefined ? '-u DOCKER_HOST' : `DOCKER_HOST='${ownHost}'`;
   await execFileAsync('sh', [
     '-c',
-    `env -u DOCKER_HOST -u DOCKER_CONTEXT docker save '${image}' | env ${target} docker load >/dev/null`,
+    `env -u DOCKER_CONTEXT ${source} docker save '${image}' | env ${target} docker load >/dev/null`,
   ]);
   await dockerWith(client, 'tag', image, `${marker}:only`);
   await dockerWith(
@@ -189,7 +213,7 @@ export async function secondEngine(
   const marker = runScopedName(`c133${kind}only`);
   const port = withTls ? '2376' : '2375';
   await engineImageHeld();
-  await localDocker(
+  await ownEngineDocker(
     'run',
     '-d',
     '--rm',
@@ -205,7 +229,7 @@ export async function secondEngine(
     SECOND_ENGINE_IMAGE,
   );
   const hostPort =
-    ((await localDocker('port', name, `${port}/tcp`)).split('\n')[0] ?? '')
+    ((await ownEngineDocker('port', name, `${port}/tcp`)).split('\n')[0] ?? '')
       .split(':')
       .pop() ?? '';
   const certificates = withTls
@@ -213,7 +237,7 @@ export async function secondEngine(
     : undefined;
   const engine = {address: `tcp://127.0.0.1:${hostPort}`, certificates};
   async function stop(): Promise<void> {
-    await localDocker('rm', '-f', name).catch(() => undefined);
+    await ownEngineDocker('rm', '-f', name).catch(() => undefined);
     if (certificates !== undefined) {
       rmSync(certificates, {recursive: true, force: true});
     }
@@ -225,7 +249,11 @@ export async function secondEngine(
         try {
           if (certificates !== undefined) {
             mkdirSync(certificates, {recursive: true});
-            await localDocker('cp', `${name}:/certs/client/.`, certificates);
+            await ownEngineDocker(
+              'cp',
+              `${name}:/certs/client/.`,
+              certificates,
+            );
           }
           await dockerWith(clientOf(engine), 'info');
           return true;
@@ -424,7 +452,7 @@ export async function sshEngine(
 ): Promise<SshEngine> {
   await writeSshClient();
   await engineImageHeld();
-  imageBuilt ??= localDocker(
+  imageBuilt ??= ownEngineDocker(
     'build',
     '--quiet',
     '--build-arg',
@@ -442,7 +470,7 @@ export async function sshEngine(
   function keyOf(file: string): string {
     return readFileSync(path.join(runFolder, `${file}.pub`), 'utf8').trim();
   }
-  await localDocker(
+  await ownEngineDocker(
     'run',
     '-d',
     '--rm',
@@ -468,11 +496,11 @@ export async function sshEngine(
     SSH_ENGINE_IMAGE,
   );
   async function stop(): Promise<void> {
-    await localDocker('rm', '-f', name).catch(() => undefined);
+    await ownEngineDocker('rm', '-f', name).catch(() => undefined);
   }
   try {
     const port =
-      ((await localDocker('port', name, '22/tcp')).split('\n')[0] ?? '')
+      ((await ownEngineDocker('port', name, '22/tcp')).split('\n')[0] ?? '')
         .split(':')
         .pop() ?? '';
     /** The `ssh://` address of the daemon for `account`. */
@@ -483,7 +511,7 @@ export async function sshEngine(
     await waitFor(
       `sshd in ${name}`,
       async () => {
-        const key = await localDocker(
+        const key = await ownEngineDocker(
           'exec',
           name,
           'cat',

@@ -307,6 +307,8 @@ export interface HarnessVariables {
   HARNESS_EDITOR: EditorChoice;
   /** The file the log channel's lines are appended to, in the run's folder. */
   REMOTE_OSS_ACCEPTANCE_LOG: string;
+  /** The `DOCKER_HOST` the run itself started with, which a launch may replace for its editor: the run's own engine. */
+  HARNESS_ENGINE_HOST?: string;
   /** The VSCodium executable, in the VSCodium run only. */
   HARNESS_VSCODIUM_EXECUTABLE?: string;
   /** The CLI-source copy of VSCodium (`tools/acceptance-cli-editor.ts`), only when a chosen launch starts it. */
@@ -1481,6 +1483,7 @@ async function prepare(
     HARNESS_VSIX_FILES: vsixFiles.join(path.delimiter),
     HARNESS_EDITOR: editor,
     REMOTE_OSS_ACCEPTANCE_LOG: path.join(runFolder, 'log.txt'),
+    ...engineHostVariable(process.env),
     ...(vscodium === undefined ? {} : {HARNESS_VSCODIUM_EXECUTABLE: vscodium}),
     ...(cliEditor === undefined
       ? {}
@@ -1504,6 +1507,14 @@ async function prepare(
           HARNESS_PASSPHRASE_FILE: keys.passphraseFile,
         }),
   };
+}
+
+/** The variable that names the run's own engine, from the `DOCKER_HOST` the run started with; none when it has none. */
+export function engineHostVariable(environment: NodeJS.ProcessEnv): {
+  HARNESS_ENGINE_HOST?: string;
+} {
+  const host = environment.DOCKER_HOST;
+  return host === undefined || host === '' ? {} : {HARNESS_ENGINE_HOST: host};
 }
 
 /**
