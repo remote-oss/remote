@@ -5,6 +5,7 @@ import {
   appendScript,
   closeContained,
   closeWindow,
+  connectedWithin,
   extensionActive,
   extensionPresent,
   inWindow,
@@ -58,6 +59,11 @@ function userSettingsText(): string {
     'settings.json',
   );
   return existsSync(file) ? readFileSync(file, 'utf8') : 'none';
+}
+
+/** Waits `milliseconds`, for what a window does after a command that nothing tells the end of. */
+async function settle(milliseconds: number): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
 /** The failing new window's entries: the dialog, then the pick of actions, both dismissed. */
@@ -140,11 +146,7 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   it('F-2004 AC-3 (c2486-connected): in a connected SSH window, Provide Feedback is listed and Get Started is not', async () => {
     const window = 'c2486-connected';
     await openWindow('harness', window);
-    await waitFor(
-      'the connection',
-      async () => await extensionActive(window, 'remote-oss.remote-ssh'),
-      120_000,
-    );
+    await connectedWithin(window, 120_000);
     const items = await paletteItems(window, 'Remote-SSH:');
     deepStrictEqual(
       [
@@ -228,13 +230,9 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   it('F-2004 AC-7 (c2486-feedback-part): Provide Feedback shows nothing on screen in an SSH window', async () => {
     const window = 'c2486-feedback';
     await openWindow('harness', window);
-    await waitFor(
-      'the connection',
-      async () => await extensionActive(window, 'remote-oss.remote-ssh'),
-      120_000,
-    );
+    await connectedWithin(window, 120_000);
     await runFromPalette(window, 'Remote-SSH: Provide Feedback');
-    await waitFor('the window to settle', () => true, 3_000);
+    await settle(3_000);
     deepStrictEqual(
       [
         (await notifications(window)).length,
@@ -297,6 +295,11 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
     mkdirSync(runDir, {recursive: true});
     const folder = await openFolderWindow(runDir);
     try {
+      // The launch installs no Remote Explorer companion; the row asserts the given with the then.
+      const companion = await extensionPresent(
+        folder,
+        'remote-oss.remote-explorer',
+      );
       await inWindow(folder, HELP_COMMANDS.settings);
       await waitFor(
         'the settings filter',
@@ -304,9 +307,16 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
         30_000,
       );
       const text = await pageText(folder);
+      // A setting's key is not in the search box, so it can only be in the results.
       deepStrictEqual(
-        [text.includes(SETTINGS_FILTER), text.includes('Remote Explorer')],
-        [true, false],
+        [
+          !companion,
+          text.includes(SETTINGS_FILTER),
+          text.includes('remote.SSH.connectTimeout'),
+          text.includes('Remote Explorer'),
+        ],
+        [true, true, true, false],
+        `the page held: ${JSON.stringify(text)}`,
       );
     } finally {
       await closeWindow(folder);
@@ -345,26 +355,31 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   });
 
   it('F-2004 AC-17 (c2486-settings-disconnected): in a disconnected SSH window, Settings leaves the window usable and shows no message of the extension', async () => {
-    appendScript(failureEntries('c2486-down-settings'));
+    const window = 'c2486-down-settings';
+    appendScript(failureEntries(window));
     try {
-      await openWindow('refused', 'c2486-down-settings');
+      await openWindow('refused', window);
       await waitFor(
         'the dismissed failure',
-        () => recordLines('mitigationPick', 'c2486-down-settings').length > 0,
+        () => recordLines('mitigationPick', window).length > 0,
         120_000,
       );
-      await inWindow('c2486-down-settings', HELP_COMMANDS.settings);
-      await waitFor('the window to settle', () => true, 3_000);
-      const dialog = await dialogOf('c2486-down-settings');
-      const items = await paletteItems('c2486-down-settings', 'Remote-SSH:');
-      // The criterion accepts core's editor error, whose toasts name the refused host; the extension's own show none.
-      // A window that stays usable still lists the extension's four commands (6.1 step 1); core's own entries may join them.
+      // What the window shows before the command, read first: the refused connect's own toasts and dialog,
+      // which the criterion accepts (core's editor error).
+      const toastsBefore = await notifications(window);
+      const dialogBefore = await dialogOf(window);
+      await inWindow(window, HELP_COMMANDS.settings);
+      await settle(3_000);
+      const items = await paletteItems(window, 'Remote-SSH:');
+      // The command may add nothing: no toast it did not already show, the dialog it showed before (or none),
+      // and the four commands still listed (6.1 step 1); core's own entries may join them.
       deepStrictEqual(
         [
-          (await notifications('c2486-down-settings')).filter(
-            toast => !toast.startsWith('Setting up SSH Host'),
-          ).length === 0,
-          !dialog?.message.toLowerCase().includes('remote-ssh'),
+          (await notifications(window)).every(toast =>
+            toastsBefore.includes(toast),
+          ),
+          JSON.stringify(await dialogOf(window)) ===
+            JSON.stringify(dialogBefore),
           [
             'Remote-SSH: Help',
             'Remote-SSH: Settings',
@@ -373,10 +388,10 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
           ].every(command => items.includes(command)),
         ],
         [true, true, true],
-        `the toasts: ${JSON.stringify(await notifications('c2486-down-settings'))}, the palette found: ${JSON.stringify(items)}`,
+        `the toasts before: ${JSON.stringify(toastsBefore)}, the toasts after: ${JSON.stringify(await notifications(window))}, the palette found: ${JSON.stringify(items)}`,
       );
     } finally {
-      await closeWindow('c2486-down-settings').catch(() => undefined);
+      await closeWindow(window).catch(() => undefined);
     }
   });
 
