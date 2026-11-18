@@ -56,6 +56,12 @@ export interface ConnectInput {
   windowWorkspace: string | undefined;
 }
 
+/** The client install lock of a connect's alias, held. */
+export interface ClientLockHold {
+  /** Ends the hold, which removes the lock file; a second call does nothing. */
+  release(): void;
+}
+
 /** A step that did not work: the failure and whatever the step knows to tell around it. */
 export interface StepFailure extends FailureDetail {
   hints?: readonly FailureHint[];
@@ -182,6 +188,15 @@ export interface ConnectSteps {
     input: ConnectInput,
     cancellation: AbortSignal,
   ): Promise<StepResult<ConnectionTerms>>;
+  /**
+   * Takes the alias's client install lock, waiting while another window of the editor holds it; `onWaiting` is called
+   * when the wait begins. The connect holds it until its install phase is over.
+   */
+  holdClientLock(
+    input: ConnectInput,
+    onWaiting: () => void,
+    cancellation: AbortSignal,
+  ): Promise<StepResult<ClientLockHold>>;
   /**
    * Takes a lease from the connection server, or opens a direct session when it is off, and waits for the login.
    * The waits that are the machine's are bounded inside the client; the wait for the user's answers has no limit.

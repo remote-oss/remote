@@ -234,6 +234,14 @@ describe("the connect's CLI path: the window resolves", () => {
     deepStrictEqual(connection.connected.trusted, false);
   });
 
+  it('F-2408 BR-6, BR-9 (card #2844): a connect over the CLI holds the client lock until its bridge is open', async () => {
+    const {recording} = await connectOverCli();
+    deepStrictEqual(recording.clientLock, [
+      'held after locateClient',
+      'released after openBridge',
+    ]);
+  });
+
   it("connect-14: a connect over the CLI remembers the host's platform", async () => {
     const {recording} = await resolved();
     deepStrictEqual(recording.calls.includes('rememberPlatform'), true);

@@ -99,6 +99,11 @@ function directInstall(recording: Recording): Partial<ConnectSteps> {
 }
 
 describe('the connect for an exec server', () => {
+  it('F-2408 BR-6 (card #2844): a connect for an exec server sets up no window, so it takes no client lock', async () => {
+    const {recording} = await controlled();
+    deepStrictEqual(recording.clientLock, []);
+  });
+
   it('F-2506 BR-10: the control connection of an exec server moves no legacy settings', async () => {
     const moves: string[] = [];
     await controlled(() => ({

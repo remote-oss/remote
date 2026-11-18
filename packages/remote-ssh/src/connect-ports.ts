@@ -43,6 +43,7 @@ import {
   type DownloadPort,
   hostLockLoopOf,
   type LicenceModal,
+  type LockFilePort,
   type AcceptanceStore,
 } from 'lib-server';
 import {
@@ -69,6 +70,7 @@ import {
 import {announcePlatform} from './connect/platform-notice.ts';
 import type {PlatformPickVariant} from './connect/platform-picker.ts';
 import type {RemotePlatform} from './pipeline/platform.ts';
+import type {HeldClientLocks} from './pipeline/client-lock-step.ts';
 import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
 import type {HintRecorder} from './diagnostics/hint-recorder.ts';
@@ -212,6 +214,10 @@ export interface ConnectMachine {
   credentials: CredentialsPort;
   scheduler: Scheduler;
   clock: Clock;
+  /** The client install lock's files. */
+  lockFiles: LockFilePort;
+  /** The client install locks this extension holds, which its end removes. */
+  clientLocks: HeldClientLocks;
   local: LocalPort;
   prober: PortProber;
   /** A new token, different in every window and in every call. */
@@ -487,6 +493,12 @@ export function wiringPortsOf(
         surfaces.hints.record(invalidProxyHint(problem, surfaces.translate));
       },
       logger,
+    },
+    clientLock: {
+      port: machine.lockFiles,
+      folder: machine.folders.clientTemporary,
+      clock: machine.clock,
+      held: machine.clientLocks,
     },
     cliPath: {
       local: machine.local,

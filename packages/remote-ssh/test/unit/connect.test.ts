@@ -43,6 +43,7 @@ import {
   WAITS,
   waitsOf,
 } from './pipeline.fixture.ts';
+import {LOCAL_LOCK_TIMEOUT} from '../../src/pipeline/failure.ts';
 
 describe('the connect pipeline, when it works', () => {
   it('runs the steps in the order of the contract, transferring a server that is not there', async () => {
@@ -458,6 +459,80 @@ describe('the connect pipeline, when it works', () => {
     deepStrictEqual(recording.phases.slice(-2), [
       {kind: 'settingUpTunnel'},
       {kind: 'waitingForForwarding'},
+    ]);
+  });
+});
+
+describe('the connect pipeline, with the client install lock (card #2844, F-2408 BR-6, 7.E2)', () => {
+  it('BR-6: the lock is held from after the lookup, before the connection opens, until the server started', async () => {
+    const {recording, options} = setup();
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(recording.clientLock, [
+      'held after locateClient',
+      'released after start',
+    ]);
+  });
+
+  it('6.1 step 2: a wait for the lock shows "Waiting for other windows to connect" before the connection opens', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        holdClientLock: (input, onWaiting) => {
+          onWaiting();
+          return Promise.resolve({
+            kind: 'done',
+            value: {release: () => undefined},
+          });
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(recording.phases.slice(0, 3), [
+      {kind: 'initializing', quiet: true},
+      {kind: 'waitingForOtherWindow'},
+      {kind: 'opened'},
+    ]);
+  });
+
+  it("7.E2: a lock wait that runs out is the connect's failure, with the local startup lock's reason, and no connection opens", async () => {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        holdClientLock: () =>
+          Promise.resolve({kind: 'failed', failure: LOCAL_LOCK_TIMEOUT}),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      {
+        kind: 'kind' in result ? result.kind : 'connected',
+        reason: 'reason' in result ? result.reason : undefined,
+        opened: recording.calls.includes('openConnection'),
+      },
+      {kind: 'lockTimeout', reason: {id: 'localLockTimeout'}, opened: false},
+    );
+  });
+
+  it('BR-6: a connect that fails after it took the lock gives it back', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        openConnection: () => {
+          recording.calls.push('openConnection');
+          return Promise.resolve({
+            kind: 'failed',
+            failure: {kind: 'channelClosed'},
+          });
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(recording.clientLock, [
+      'held after locateClient',
+      'released after openConnection',
     ]);
   });
 });

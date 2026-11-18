@@ -561,6 +561,11 @@ async function registerConnectOf(
       workingDirectory: process.cwd(),
     },
   );
+  context.subscriptions.push({
+    dispose: () => {
+      machine.clientLocks.releaseAll();
+    },
+  });
   const registration = await registerConnect(
     {
       resolverEditor: acceptanceResolverEditorOf(

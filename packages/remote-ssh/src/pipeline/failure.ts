@@ -39,7 +39,7 @@ export type FailedKind =
   /** The in-effect SSH configuration files cannot be parsed; core's own notification names the problem. */
   | 'configFileUnparsable'
   | 'preconnectFailed'
-  /** Reserved for the client-side lock on the host; no step reports it yet. */
+  /** Another window of the editor held the alias's client install lock for the whole wait. */
   | 'lockTimeout'
   | 'retriesExhausted'
   /** The host cannot serve an exec server: the setting is off, there is no command-line program for it, or it could not be set up. */
@@ -98,6 +98,14 @@ function logged(
     ...(logDetail === undefined || logDetail === '' ? {} : {logDetail}),
   };
 }
+
+/** The failure of a client install lock wait that ran out; the log names its summary code. */
+export const LOCAL_LOCK_TIMEOUT: FailureDetail = {
+  kind: 'lockTimeout',
+  reason: {id: 'localLockTimeout'},
+  logDetail:
+    'Timed out while waiting for the local startup lock (LocalLockTimeout)',
+};
 
 /** The reason of a server install that failed: the extension's own text. */
 const INSTALL_FAILED: FailureReason = {id: 'S075'};

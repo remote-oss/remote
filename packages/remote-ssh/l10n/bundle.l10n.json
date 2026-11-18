@@ -121,6 +121,7 @@
   "Enable {0} to allow VS Code to download the required resources locally": "Enable {0} to allow VS Code to download the required resources locally",
   "Enable {0} to allow VS Code to download the required resources via your local machine and then upload them to the remote server": "Enable {0} to allow VS Code to download the required resources via your local machine and then upload them to the remote server",
   "scp installation not found": "scp installation not found",
+  "Timed out while waiting for the local startup lock": "Timed out while waiting for the local startup lock",
   "A VS Code Server matching your local installation could not be downloaded from the internet.": "A VS Code Server matching your local installation could not be downloaded from the internet.",
   "Downloading VS Code Server failed - please install either curl or wget on the remote.": "Downloading VS Code Server failed - please install either curl or wget on the remote.",
   "Ensure curl/wget are on the remote system's '{0}'": "Ensure curl/wget are on the remote system's '{0}'",
