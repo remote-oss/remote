@@ -8,14 +8,22 @@ import {deepStrictEqual} from 'node:assert';
 import {appendFileSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {
+  explainedFailure,
+  section,
+  settledSection,
+} from '../windows/connect-failure.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
+  connectionLog,
   inWindow,
   readUserSettings,
   restoreUserSettings,
+  settingIn,
   userSettings,
   variable,
+  waitFor,
 } from '../windows/harness.ts';
 import {
   notifications,
@@ -52,6 +60,52 @@ function configOf(name: string, hosts: readonly string[]): string {
   const file = path.join(refreshFolder(), name);
   writeFileSync(file, hosts.map(host => `Host ${host}\n`).join(''));
   return file;
+}
+
+/**
+ * What tells why a listing did not follow `remote.SSH.configFile` after a Refresh (card #2796), one section for each
+ * fact so that one that cannot be read is told in its place: the time since the click, the setting as the window and
+ * as the settings file hold it, the end of the extensions' log with its times, and whether a second Refresh lists
+ * `host`.
+ */
+async function refreshFacts(
+  window: string,
+  host: string,
+  clickedAt: number,
+): Promise<string> {
+  return [
+    section(
+      'the time since the Refresh click',
+      () => `${String(Date.now() - clickedAt)} ms`,
+    ),
+    await settledSection(
+      'remote.SSH.configFile as the window reads it',
+      async () =>
+        JSON.stringify(await settingIn(window, 'remote.SSH.configFile')),
+    ),
+    section('remote.SSH.configFile as the settings file holds it', () =>
+      String(
+        /"remote\.SSH\.configFile":\s*("[^"]*"|[^,}\s]+)/u.exec(
+          readUserSettings() ?? '',
+        )?.[1],
+      ),
+    ),
+    section("the end of the extensions' log", () =>
+      connectionLog({withTimes: true}).slice(-12).join('\n'),
+    ),
+    await settledSection(`a second Refresh listing ${host}`, async () => {
+      await titleAction(window, VIEW, 'Refresh');
+      const lists = await waitFor(
+        `a second Refresh to list ${host}`,
+        async () => (await hostLabels(window)).includes(host),
+        10_000,
+      ).then(
+        () => 'it does',
+        () => 'it does not',
+      );
+      return `${lists}; the view then lists ${(await hostLabels(window)).slice(0, 6).join(', ')}`;
+    }),
+  ].join('\n');
 }
 
 /** A new folder window named `name` showing the Remote Explorer. */
@@ -153,8 +207,13 @@ describe('when the SSH group reads its hosts again (card coverage-25c, part b)',
     const window = await viewWindow('refresh-editor');
     try {
       await userSettings({'remote.SSH.configFile': config});
+      const clickedAt = Date.now();
       await titleAction(window, VIEW, 'Refresh');
-      await listing(window, ['saved-before']);
+      await listing(window, ['saved-before']).catch(async (caught: unknown) => {
+        throw await explainedFailure(caught, () =>
+          refreshFacts(window, 'saved-before', clickedAt),
+        );
+      });
       await inWindow(
         window,
         'acceptance.agent.writeFile',

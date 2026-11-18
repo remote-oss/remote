@@ -39,6 +39,7 @@ import {
   clientRefusal,
   CONNECT_WAIT_TIMEOUT,
   ofClassification,
+  UNANSWERED_QUESTION,
 } from './failure.ts';
 import {
   isForwardingLine,
@@ -190,7 +191,7 @@ export function openTerminalConnectionStep(
             asking.questions?.onQuestion(text);
           },
           onUnreachable: () => {
-            fail(CONNECT_WAIT_TIMEOUT);
+            fail(UNANSWERED_QUESTION);
           },
         },
       );

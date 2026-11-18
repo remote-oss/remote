@@ -245,6 +245,16 @@ export const CONNECT_WAIT_TIMEOUT: FailureDetail = {
 };
 
 /**
+ * The failure of a login that asked a question the extension does not recognise, which nobody answered before the connect
+ * wait ended: the dialog names the host and gives no reason, and the log says why.
+ */
+export const UNANSWERED_QUESTION: FailureDetail = {
+  kind: 'unknown',
+  logDetail:
+    'a question the extension does not recognise was left unanswered until the connect wait ended',
+};
+
+/**
  * The failure of a shared connection's login, with the hints the login classification gave. An `ssh` that could not
  * be started is `prerequisiteMissing` when the client vanished after it was found, else unknown; the other cases of the
  * connection are a refused helper, a timeout, a cancel, and a channel that closed.
