@@ -42,6 +42,7 @@ import {
   signalFile,
   type AppendedEntry,
 } from '../../../tools/script-file.ts';
+import {commandEventLines} from './agent-events.ts';
 import {explainedFailure, section} from './connect-failure.ts';
 import {editorFolderOf} from './editor-folder.ts';
 
@@ -264,6 +265,16 @@ export function windowNames(): string[] {
 /** The events the agent of window `name` has reported, in order. */
 export function windowEvents(name: string): AgentEvent[] {
   return linesOf<AgentEvent>(agentFile(name, 'events'));
+}
+
+/** The lines for what window `name`'s agent reported about the commands sent to it from `since` (a time in milliseconds) on: at most a dozen progress events, each with its command's name. */
+export function commandEventsSince(name: string, since: number): string[] {
+  return commandEventLines(
+    windowEvents(name),
+    linesOf<{id: string; command?: string}>(agentFile(name, 'commands')),
+    since,
+    12,
+  );
 }
 
 /**
