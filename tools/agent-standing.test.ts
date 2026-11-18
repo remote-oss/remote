@@ -1,5 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
-import {unfinishedCommands} from '../tests/acceptance/windows/agent-standing.ts';
+import {
+  holdingText,
+  unfinishedCommands,
+} from '../tests/acceptance/windows/agent-standing.ts';
 
 const COMMANDS = [
   {id: 'a', command: 'remote-containers.openFolder'},
@@ -42,6 +45,27 @@ describe('the commands a window’s agent has not finished (card #2829)', () => 
         unfinishedCommands([], COMMANDS, 3000),
       ],
       [[], ['a command accepted 2 s ago'], []],
+    );
+  });
+
+  it('#2829: what holds the agent and its last events are each read in their own section, and a read that throws is told in its place', () => {
+    deepStrictEqual(
+      [
+        holdingText(
+          () => ['remote-containers.openFolder accepted 60 s ago'],
+          () => [{event: 'accepted'}],
+        ),
+        holdingText(
+          () => {
+            throw new Error('commands file is being written');
+          },
+          () => [],
+        ),
+      ],
+      [
+        'the commands its agent took and has not finished:\n["remote-containers.openFolder accepted 60 s ago"]; its last events:\n[{"event":"accepted"}]',
+        'the commands its agent took and has not finished:\n(unreadable: Error: commands file is being written); its last events:\n[]',
+      ],
     );
   });
 });

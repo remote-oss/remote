@@ -4,6 +4,8 @@
  * whose agent is held by one command reads as that and not as a timeout of each command after it.
  */
 
+import {section} from './connect-failure.ts';
+
 /** One event of a window's agent that concerns a command. */
 export interface AgentCommandEvent {
   event: string;
@@ -37,4 +39,21 @@ export function unfinishedCommands(
       each =>
         `${commands.find(sent => sent.id === each.id)?.command ?? 'a command'} accepted ${String(Math.round((now - each.time) / 1000))} s ago`,
     );
+}
+
+/**
+ * What a wait for a window's agent says of what holds it: the commands it took and has not finished, and its last
+ * events, each read in its own section, so a read that throws (a file the agent is writing) is told in its place and
+ * never replaces the timeout it explains.
+ */
+export function holdingText(
+  held: () => readonly string[],
+  last: () => readonly unknown[],
+): string {
+  return [
+    section('the commands its agent took and has not finished', () =>
+      JSON.stringify(held()),
+    ),
+    section('its last events', () => JSON.stringify(last())),
+  ].join('; ');
 }
