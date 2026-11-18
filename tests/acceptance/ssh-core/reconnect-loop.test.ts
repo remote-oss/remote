@@ -335,7 +335,11 @@ describe('the reconnection loop of a window whose host stops answering (card #27
       }
       await new Promise(resolve => setTimeout(resolve, 50));
     }
-    return {before, toasts: [...toasts], reconnectedAfter};
+    // The window's progress record holds every phase it showed, each with its time, whatever the sampling above saw.
+    const phases = recordLines('progress', name)
+      .filter(line => line.time >= began)
+      .map(line => `${line.question} @${String(line.time - began)} ms`);
+    return {before, toasts: [...toasts], reconnectedAfter, phases};
   }
 
   const SETTING_UP = 'Setting up SSH Host harness';
@@ -361,7 +365,7 @@ describe('the reconnection loop of a window whose host stops answering (card #27
   ) {
     await userSettings(settings);
     await connectedWindow(name);
-    const {before, toasts, reconnectedAfter} = await killedSsh(name);
+    const {before, toasts, reconnectedAfter, phases} = await killedSsh(name);
     console.log(
       `F-2505 AC-10: ${name} reconnected ${String(reconnectedAfter)} ms after the kill`,
     );
@@ -370,16 +374,12 @@ describe('the reconnection loop of a window whose host stops answering (card #27
         before.length > 0,
         // "About 1 s": the spec's value and an "about" of 1 s.
         reconnectedAfter !== undefined && reconnectedAfter <= 2000,
-        toasts.some(text =>
-          // The terminal mode's notification carries the details link, as F-2304 has it.
-          new RegExp(
-            `^${SETTING_UP}: (\\(details\\) )?Setting up SSH tunnel$`,
-            'u',
-          ).test(text),
-        ),
+        // The phase is read from the progress record, which keeps every phase with its time: a phase shown for less
+        // than a sampling round is in it all the same.
+        phases.some(phase => phase.startsWith('Setting up SSH tunnel @')),
       ],
       [true, true, true],
-      `it reconnected after ${String(reconnectedAfter)} ms, the notifications seen were ${JSON.stringify(toasts)}`,
+      `it reconnected after ${String(reconnectedAfter)} ms; its progress record since the kill was ${JSON.stringify(phases)}; the notifications seen by sampling were ${JSON.stringify(toasts)}`,
     );
   }
 
