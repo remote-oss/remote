@@ -32,6 +32,7 @@ import {
   restoreHostNetwork,
   restoreUserSettings,
   signal,
+  sshdLog,
   userSettings,
   variable,
   waitFor,
@@ -1279,28 +1280,39 @@ describe('jump hosts and proxy commands (card #2601)', function () {
 
   it('F-2310 AC-10 (c2608-jump-timeout-open): the two-jump chain with unknown keys and no answers times out with the timeout reason while the first jump host’s pick is still open', async () => {
     const alias = 'c2608-jumpopen';
+    const since = new Date().toISOString();
     const file = chain(alias, freshKnown(alias));
-    const result = await connectWith(
-      alias,
-      [],
-      'fails',
-      outcome => {
-        const picks = recordLines('pick', alias);
-        const first = picks[0];
-        return {
-          dialog: outcome.dialog,
-          stillOpen:
-            first !== undefined &&
-            picks.every(line => line.answer === 'dismiss') &&
-            first.time < (outcome.dialogTime ?? 0),
-        };
-      },
-      {file, script: null},
-    );
-    deepStrictEqual(result, {
-      dialog: `Could not establish connection to "${alias}": The connection timed out.`,
-      stillOpen: true,
-    });
+    try {
+      const result = await connectWith(
+        alias,
+        [],
+        'fails',
+        outcome => {
+          const picks = recordLines('pick', alias);
+          const first = picks[0];
+          return {
+            dialog: outcome.dialog,
+            stillOpen:
+              first !== undefined &&
+              picks.every(line => line.answer === 'dismiss') &&
+              first.time < (outcome.dialogTime ?? 0),
+          };
+        },
+        {file, script: null},
+      );
+      deepStrictEqual(result, {
+        dialog: `Could not establish connection to "${alias}": The connection timed out.`,
+        stillOpen: true,
+      });
+    } catch (caught) {
+      const sshd = (await sshdLog(since)).join('\n');
+      throw new Error(
+        `${String(caught)}\nthe connection log:\n${connectionLog()
+          .slice(-40)
+          .join('\n')}\nthe host's sshd log since the row began:\n${sshd}`,
+        {cause: caught},
+      );
+    }
   });
 
   it('F-2310 AC-12 (c2608-silent-jump-timeout): a jump host that accepts the port and answers nothing fails with the timeout reason, 13 to 25 s after the connect begins', async () => {
