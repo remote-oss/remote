@@ -393,12 +393,14 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     });
   });
 
-  it('F-2505 AC-10 (c2703-ssh-killed-per-window): the same with remote.SSH.useLocalServer false', async () => {
-    await reconnectedAfterKill('c2703-ssh-killed-per-window', {
-      'remote.SSH.useLocalServer': false,
-      'remote.SSH.remotePlatform': {harness: 'linux'},
+  for (let round = 1; round <= 10; round += 1) {
+    it.only(`F-2505 AC-10 (c2703-ssh-killed-per-window) round ${String(round)}`, async () => {
+      await reconnectedAfterKill(`c2703-ssh-killed-pw-${String(round)}`, {
+        'remote.SSH.useLocalServer': false,
+        'remote.SSH.remotePlatform': {harness: 'linux'},
+      });
     });
-  });
+  }
 
   /**
    * The process ids on the host of the server's own processes (the server, the remote extension host and the others that
