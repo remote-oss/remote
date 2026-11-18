@@ -15,6 +15,7 @@ import {
   readUserSettings,
   recordLines,
   restoreUserSettings,
+  terminalNames,
   userSettings,
   variable,
   waitFor,
@@ -27,6 +28,7 @@ import {
 } from '../windows/maintenance.ts';
 import {
   notifications,
+  outputChannelOf,
   terminalText,
   typeInTerminal,
 } from '../windows/renderer.ts';
@@ -235,6 +237,34 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
         'remote.SSH.experimental.enhancedSessionLogs': undefined,
       });
       await closeWindow('c136-e').catch(() => undefined);
+    }
+  });
+
+  it("F-2003 AC-30 (c2784-off-panel): with enhancedSessionLogs off, a failure with detected issues shows the panel on the Output view's Remote - SSH channel and opens no troubleshooting terminal", async () => {
+    await inWindow('local', CLEAR);
+    await userSettings({'remote.SSH.experimental.enhancedSessionLogs': false});
+    await failed('c2784-off');
+    try {
+      await waitFor(
+        'the panel on the Remote - SSH output channel',
+        async () => (await outputChannelOf('c2784-off')) === 'Remote - SSH',
+        60_000,
+      );
+      deepStrictEqual(
+        [
+          await outputChannelOf('c2784-off'),
+          (await terminalNames('c2784-off')).filter(each =>
+            each.includes('Session Troubleshooting'),
+          ),
+          recordLines('failureDialog', 'c2784-off').length,
+        ],
+        ['Remote - SSH', [], 1],
+      );
+    } finally {
+      await userSettings({
+        'remote.SSH.experimental.enhancedSessionLogs': undefined,
+      });
+      await closeWindow('c2784-off').catch(() => undefined);
     }
   });
 
