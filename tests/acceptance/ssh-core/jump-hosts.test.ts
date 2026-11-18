@@ -1402,6 +1402,7 @@ describe('jump hosts and proxy commands (card #2601)', function () {
     const folder = variable('HARNESS_RUN_FOLDER');
     const standIn = path.join(folder, `${alias}-ssh.sh`);
     const standInLog = path.join(folder, `${alias}-ssh.log`);
+    const port = hostPort();
     writeFileSync(
       standIn,
       [
@@ -1410,8 +1411,19 @@ describe('jump hosts and proxy commands (card #2601)', function () {
         '{',
         '  echo "invoked: $0"',
         '  for arg in "$@"; do echo "arg: $arg"; done',
-        '  echo "stderr: ssh: connect to host h port 22: Connection Timed Out"',
         '} >> "$log"',
+        'if [ "$1" = "-V" ]; then',
+        '  echo "OpenSSH_9.6p1 Ubuntu-3ubuntu13.20, OpenSSL 3.0.13 30 Jan 2024"',
+        '  exit 0',
+        'fi',
+        'for arg in "$@"; do',
+        '  if [ "$arg" = "-G" ]; then',
+        '    echo hostname 127.0.0.1',
+        '    echo user harness',
+        `    echo port ${String(port)}`,
+        '    exit 0',
+        '  fi',
+        'done',
         'echo "ssh: connect to host h port 22: Connection Timed Out" >&2',
         'exit 255',
         '',
