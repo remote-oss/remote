@@ -61,19 +61,44 @@ function queryMasked(query: string): string {
     .join('&');
 }
 
-/**
- * `value` with the userinfo and the query values of a URL masked, its scheme, host, port and path kept; any value that is
- * not a text with a scheme and `://` as it is.
- */
-function urlMasked(value: unknown): unknown {
-  const parts = typeof value === 'string' ? URL_PARTS.exec(value) : null;
+/** A text that starts with userinfo and `@` and has no scheme, as a proxy may be written: `user:secret@host:port`. */
+const BARE_USERINFO = /^([^/?#@\s]+)@/u;
+
+/** The text with the userinfo and the query values of a URL masked, its scheme, host, port and path kept. */
+function textMasked(text: string): string {
+  const parts = URL_PARTS.exec(text);
   if (parts === null) {
-    return value;
+    const bare = BARE_USERINFO.exec(text);
+    return bare?.[1] === undefined
+      ? text
+      : `${maskOf(bare[1])}${text.slice(bare[1].length)}`;
   }
   const [, scheme = '', userinfo, rest = '', query, fragment = ''] = parts;
   const credentials = userinfo === undefined ? '' : `${maskOf(userinfo)}@`;
   const search = query === undefined ? '' : `?${queryMasked(query)}`;
   return `${scheme}${credentials}${rest}${search}${fragment}`;
+}
+
+/**
+ * `value` with the userinfo and the query values of every URL in it masked, in a text, in the members of a list and in
+ * the keys and values of a map, however deep; what is no text is as it is.
+ */
+function urlMasked(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return textMasked(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(urlMasked);
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, member]) => [
+        textMasked(key),
+        urlMasked(member),
+      ]),
+    );
+  }
+  return value;
 }
 
 /**

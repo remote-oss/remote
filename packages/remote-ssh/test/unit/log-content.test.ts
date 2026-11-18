@@ -237,6 +237,57 @@ describe('the settings listing (F-2003 BR-6 item 2, card connect-71)', () => {
     );
   });
 
+  it('R-26: masks the URLs in the map form of a proxy, in a nested map and in a list', () => {
+    deepStrictEqual(
+      settingLines([
+        [
+          'remote.SSH.httpProxy',
+          {'*': 'http://alex:s3cret@proxy.example:3128/pac'},
+        ],
+        [
+          'remote.SSH.httpsProxy',
+          {outer: {inner: 'https://host.example/x?token=ab12'}},
+        ],
+        [
+          'remote.SSH.defaultExtensions',
+          ['a.b', 'https://alex:s3cret@mirror.example/x.vsix'],
+        ],
+      ]),
+      [
+        'remote.SSH.defaultExtensions = ["a.b","https://aaaa:a1aaaa@mirror.example/x.vsix"]',
+        'remote.SSH.httpProxy = {"*":"http://aaaa:a1aaaa@proxy.example:3128/pac"}',
+        'remote.SSH.httpsProxy = {"outer":{"inner":"https://host.example/x?token=aa11"}}',
+      ],
+    );
+  });
+
+  it('R-26: masks the userinfo of a proxy written without a scheme, and the key of a map that holds a URL', () => {
+    deepStrictEqual(
+      settingLines([
+        ['remote.SSH.httpProxy', 'alex:s3cret@proxy.example:3128'],
+        ['remote.SSH.httpsProxy', {'http://alex:s3cret@key.example': 'x'}],
+      ]),
+      [
+        'remote.SSH.httpProxy = "aaaa:a1aaaa@proxy.example:3128"',
+        'remote.SSH.httpsProxy = {"http://aaaa:a1aaaa@key.example":"x"}',
+      ],
+    );
+  });
+
+  it('R-26: keeps a plain path, a number and null in a map as they are', () => {
+    deepStrictEqual(
+      settingLines([
+        [
+          'remote.SSH.serverInstallPath',
+          {harness: '~/.server', port: 22, none: null},
+        ],
+      ]),
+      [
+        'remote.SSH.serverInstallPath = {"harness":"~/.server","port":22,"none":null}',
+      ],
+    );
+  });
+
   it('R-26: shows a value that is no URL with a scheme, a string, a switch or a number, as it is', () => {
     deepStrictEqual(
       settingLines([
