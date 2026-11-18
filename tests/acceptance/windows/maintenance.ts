@@ -120,9 +120,9 @@ export async function serverProcesses(): Promise<number[]> {
 }
 
 /**
- * The main processes of the servers on the host, the shell that starts one and its node process, but those the run's
- * earlier files left. The children of a server (a window's extension host, a terminal host) come and go with the
- * windows and are not counted.
+ * The main processes of the servers on the host, the shell that starts one and its node process. A server that an earlier
+ * row left is counted too, since the window of a row attaches to it: they are the processes a Kill Current must leave.
+ * The children of a server (a window's extension host, a terminal host) come and go with the windows and are not counted.
  */
 export async function serverMainProcesses(): Promise<number[]> {
   // A status of 1 is no match; any other status of pgrep, a bad pattern or a failure, fails the call. The pattern is
@@ -136,8 +136,7 @@ export async function serverMainProcesses(): Promise<number[]> {
   )
     .split('\n')
     .filter(line => line !== '')
-    .map(Number)
-    .filter(server => !leftBefore.includes(server));
+    .map(Number);
 }
 
 /**
