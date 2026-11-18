@@ -15,6 +15,7 @@ import {
   readUserSettings,
   recordLines,
   restoreUserSettings,
+  terminalNames,
   userSettings,
   variable,
   waitFor,
@@ -252,7 +253,9 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
       deepStrictEqual(
         [
           await outputChannelOf('c2784-off'),
-          await troubleshootingTabs('c2784-off'),
+          (await terminalNames('c2784-off')).filter(each =>
+            each.includes('Session Troubleshooting'),
+          ),
           recordLines('failureDialog', 'c2784-off').length,
         ],
         ['Remote - SSH', [], 1],
