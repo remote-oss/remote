@@ -21,7 +21,7 @@ function keybindingsFile(): string {
 }
 
 /** The bytes of the launch's keybindings file, or nothing when it doesn't exist. */
-export function keybindingsText(): string | undefined {
+function keybindingsText(): string | undefined {
   const file = keybindingsFile();
   return existsSync(file) ? readFileSync(file, 'utf8') : undefined;
 }

@@ -428,6 +428,7 @@
     "ssh-containers": {"configure-features.test.ts": 0.5},
     "ssh-core": {
       "reconnect-loop.test.ts": 23,
+      "command-out-of-context.test.ts": 9,
       "activation.test.ts": 0.9,
       "agent-forwarding-live.test.ts": 1.4,
       "agent-forwarding.test.ts": 5.6,
