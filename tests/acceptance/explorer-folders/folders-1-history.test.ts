@@ -305,13 +305,31 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
         30_000,
       );
     }
+    // The history of the row's folders after each visit, for the message of a settle that fails: card #2757 found c102-c2
+    // missing from it at the read, and this says at which visit it left.
+    const trace: string[] = [];
+    async function visited(name: string): Promise<void> {
+      await visit(HOST_B, name);
+      // Read for the message only: a read that fails is told, and never fails the row.
+      const paths = await ownPathsOf(HOST_B, scope).then(
+        found => JSON.stringify(found),
+        (caught: unknown) => `(unreadable: ${String(caught)})`,
+      );
+      trace.push(`${name}: ${paths}`);
+    }
     try {
-      await visit(HOST_B, 'c102-c1');
-      await visit(HOST_B, 'c102-c2');
-      await visit(HOST_B, 'c102-cgone');
+      await visited('c102-c1');
+      await visited('c102-c2');
+      await visited('c102-cgone');
       await onHost('rm', '-rf', gone);
       from = await viewWindow('c102-from');
-      await foldersSettled(from, HOST_B, [gone, second, first], scope);
+      await foldersSettled(
+        from,
+        HOST_B,
+        [gone, second, first],
+        scope,
+        `the history of the row's folders after each visit was ${trace.join(' then ')}`,
+      );
 
       let before = activations('c102-c1');
       await rowAction(from, VIEW, 'c102-c1', IN_NEW);

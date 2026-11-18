@@ -113,13 +113,14 @@ export async function folderRowsOf(
 /**
  * Waits until the folder rows under `alias` in `window` describe exactly `paths`, then asserts them once. The rows
  * counted are the ones whose path starts with `scope` (the row's own folders: the history of a run outlives a row), or
- * all of them without a `scope`.
+ * all of them without a `scope`. `trace`, when given, is added to the failure's message: what the row saw on its way here.
  */
 export async function foldersSettled(
   window: string,
   alias: string,
   paths: string[],
   scope = '',
+  trace = '',
 ): Promise<void> {
   async function described(): Promise<string[]> {
     return (await folderRowsOf(window, alias))
@@ -141,7 +142,7 @@ export async function foldersSettled(
   deepStrictEqual(
     await described(),
     paths,
-    `the rows of ${alias}; the history is ${JSON.stringify(await historyOf())}`,
+    `the rows of ${alias}; the history is ${JSON.stringify(await historyOf())}${trace === '' ? '' : `; ${trace}`}`,
   );
 }
 
