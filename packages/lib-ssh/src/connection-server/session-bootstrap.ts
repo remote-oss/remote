@@ -43,9 +43,9 @@ const SESSION_BOOTSTRAP_LINES: readonly string[] = [
   'if [ -n "$LAYER1_DIR" ] && [ -n "${SHELL:-}" ] && [ -x "$SHELL" ]; then',
   `  printf 'exec sh -c %s sh "%s"\\n' ${posixQuote(posixQuote(WRITE_ENVIRONMENT))} "$LAYER1_DIR/env" >"$LAYER1_DIR/in"`,
   '  if command -v setsid >/dev/null 2>&1; then',
-  '    setsid "$SHELL" -l <"$LAYER1_DIR/in" >"$LAYER1_DIR/out" 2>/dev/null &',
+  '    setsid "$SHELL" -l <"$LAYER1_DIR/in" >"$LAYER1_DIR/out" 2>"$LAYER1_DIR/err" &',
   '  else',
-  '    "$SHELL" -l <"$LAYER1_DIR/in" >"$LAYER1_DIR/out" 2>/dev/null &',
+  '    "$SHELL" -l <"$LAYER1_DIR/in" >"$LAYER1_DIR/out" 2>"$LAYER1_DIR/err" &',
   '  fi',
   '  LAYER1_PID=$!',
   '  (',
@@ -64,6 +64,39 @@ const SESSION_BOOTSTRAP_LINES: readonly string[] = [
   '  kill -9 -"$LAYER1_PID" 2>/dev/null',
   '  if [ -f "$LAYER1_DIR/env" ]; then',
   '    eval "$(cat "$LAYER1_DIR/env")"',
+  '    LAYER1_B64=',
+  "    if [ \"$(printf 'x' | base64 -w0 2>/dev/null)\" = 'eA==' ]; then",
+  "      LAYER1_B64='base64 -w0'",
+  "    elif [ \"$(printf 'x' | base64 -n 2>/dev/null)\" = 'eA==' ]; then",
+  "      LAYER1_B64='base64 -n'",
+  '    fi',
+  '    LAYER1_PRINTED=0',
+  '    LAYER1_CUT=0',
+  '    if [ -n "$LAYER1_B64" ]; then',
+  '      if [ -f "$LAYER1_DIR/out" ]; then',
+  '        while IFS= read -r LAYER1_LINE || [ -n "$LAYER1_LINE" ]; do',
+  '          if [ "$LAYER1_PRINTED" -lt 1000 ]; then',
+  '            printf \'LAYER1-OUT %s\\n\' "$(printf \'%s\' "$LAYER1_LINE" | $LAYER1_B64)"',
+  '            LAYER1_PRINTED=$((LAYER1_PRINTED + 1))',
+  '          else',
+  '            LAYER1_CUT=$((LAYER1_CUT + 1))',
+  '          fi',
+  '        done < "$LAYER1_DIR/out"',
+  '      fi',
+  '      if [ -f "$LAYER1_DIR/err" ]; then',
+  '        while IFS= read -r LAYER1_LINE || [ -n "$LAYER1_LINE" ]; do',
+  '          if [ "$LAYER1_PRINTED" -lt 1000 ]; then',
+  '            printf \'LAYER1-ERR %s\\n\' "$(printf \'%s\' "$LAYER1_LINE" | $LAYER1_B64)"',
+  '            LAYER1_PRINTED=$((LAYER1_PRINTED + 1))',
+  '          else',
+  '            LAYER1_CUT=$((LAYER1_CUT + 1))',
+  '          fi',
+  '        done < "$LAYER1_DIR/err"',
+  '      fi',
+  '      [ "$LAYER1_CUT" -gt 0 ] && printf \'LAYER1-OUTPUT-CUT %s\\n\' "$LAYER1_CUT"',
+  '    elif [ -s "$LAYER1_DIR/out" ] || [ -s "$LAYER1_DIR/err" ]; then',
+  "      printf 'LAYER1-OUTPUT-SKIPPED no-base64\\n'",
+  '    fi',
   '  elif [ -e "$LAYER1_DIR/timeout" ]; then',
   '    rm -rf "$LAYER1_DIR"',
   '    printf \'\\nLAYER1-TIMEOUT %s\\n\' "$LAYER1_SECONDS"',
@@ -75,7 +108,7 @@ const SESSION_BOOTSTRAP_LINES: readonly string[] = [
   '  fi',
   'fi',
   '[ -n "$LAYER1_DIR" ] && rm -rf "$LAYER1_DIR"',
-  'unset LAYER1_DIR LAYER1_PID LAYER1_WATCH LAYER1_STATUS LAYER1_SECONDS',
+  'unset LAYER1_DIR LAYER1_PID LAYER1_WATCH LAYER1_STATUS LAYER1_SECONDS LAYER1_B64 LAYER1_LINE LAYER1_PRINTED LAYER1_CUT',
   "printf '\\nLAYER1-READY\\n'",
   'exec sh',
 ];
@@ -230,6 +263,54 @@ export type BootstrapEvent =
   | {kind: 'exited'; status: number};
 
 const BOOTSTRAP_LINE = /^LAYER1-(READY|TIMEOUT (\d+)|EXITED (\d+))\r?$/;
+
+/**
+ * The profile lines the bootstrap prints for the login shell's startup output, or none: an encoded line of the
+ * startup's standard output or standard error, the report that the cut dropped lines, or the report that no
+ * base64 could encode them.
+ */
+export type ProfileLine =
+  | {kind: 'out'; text: string}
+  | {kind: 'err'; text: string}
+  | {kind: 'cut'; dropped: number}
+  | {kind: 'skipped'};
+
+/**
+ * The whole of a base64 token: the alphabet, the padding, and a length of four, so that a line that only looks
+ * like an encoded one is not taken for one.
+ */
+const PROFILE_BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
+
+/**
+ * The profile line of `line`, or none: the token is decoded, so that a startup line that looks like one of ours
+ * is seen only inside its `LAYER1-OUT` line.
+ */
+export function profileLineOf(line: string): ProfileLine | undefined {
+  const bare = line.endsWith('\r') ? line.slice(0, -1) : line;
+  const stream = bare.startsWith('LAYER1-OUT ')
+    ? ('out' as const)
+    : bare.startsWith('LAYER1-ERR ')
+      ? ('err' as const)
+      : undefined;
+  if (stream !== undefined) {
+    const token = bare.slice('LAYER1-OUT '.length);
+    if (token.length % 4 === 0 && PROFILE_BASE64.test(token)) {
+      return {
+        kind: stream,
+        text: Buffer.from(token, 'base64').toString('utf8'),
+      };
+    }
+    return undefined;
+  }
+  const match = /^LAYER1-OUTPUT-CUT (\d+)$/.exec(bare);
+  if (match !== null) {
+    return {kind: 'cut', dropped: Number(match[1])};
+  }
+  if (bare === 'LAYER1-OUTPUT-SKIPPED no-base64') {
+    return {kind: 'skipped'};
+  }
+  return undefined;
+}
 
 /** The event a line of a session's output reports, or none for any other line. */
 export function bootstrapEventOf(line: string): BootstrapEvent | undefined {

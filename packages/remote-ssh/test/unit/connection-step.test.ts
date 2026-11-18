@@ -376,6 +376,113 @@ describe('the connection step', () => {
     deepStrictEqual(sshLogged(ready), ['[ssh] Warning: aa11-aa11']);
   });
 
+  /** The profile lines the rows share: one of the standard output's, one of the standard error's. */
+  const PROFILE_LINES: Array<{stream: 'out' | 'err'; text: string}> = [
+    {stream: 'out', text: 'hello'},
+    {stream: 'err', text: 'oops'},
+  ];
+
+  /**
+   * The lines a connect writes with `logProfileOutput`, to a logger of the fixture's level: the helper answers the
+   * connect request with `replies` in order, and the client sends the `before` notices before, and the `after`
+   * notices after, its `profileOutput` event with `lines`.
+   */
+  async function profileLogged(
+    replies: PlainData[],
+    before: readonly PlainData[],
+    after: readonly PlainData[],
+    lines: Array<{stream: 'out' | 'err'; text: string}> = PROFILE_LINES,
+    token?: string,
+  ): Promise<string[]> {
+    const ready = fixture('acquired', undefined, 'info');
+    ready.lease.connectReplies = [...replies];
+    if (token !== undefined) {
+      ready.lease.storedRecord = {
+        remotePort: 1,
+        operatingSystem: 'linux',
+        architecture: 'x64',
+        temporaryFolder: '/tmp',
+        connectionToken: token,
+      };
+    }
+    const pending = ready.connecting();
+    await settled();
+    for (const notice of before) {
+      ready.lease.emit(notice);
+      await settled();
+    }
+    ready.lease.emit({type: 'profileOutput', lines});
+    await settled();
+    for (const notice of after) {
+      ready.lease.emit(notice);
+      await settled();
+    }
+    ready.lease.emit({type: 'connected', socksPort: 41000});
+    const outcome = await pending;
+    if (outcome.kind !== 'done') {
+      throw new Error(`the connect did not open: ${JSON.stringify(outcome)}`);
+    }
+    const sink = new MemorySink();
+    const logger = createLogger(sink, {minimumLevel: (): Level => 'info'});
+    outcome.value.logProfileOutput(logger);
+    return sink.lines.map(line => line.message);
+  }
+
+  it('F-2704 BR-5: the lines are logged with > and stderr>', async () => {
+    deepStrictEqual(await profileLogged([], [], []), [
+      '> hello',
+      'stderr> oops',
+    ]);
+  });
+
+  it('F-2704 6.1: the starter gets the profile output, and a waiting or a joined connect logs none, a takeover logs', async () => {
+    deepStrictEqual(
+      [
+        await profileLogged([], [], []),
+        await profileLogged(
+          [{type: 'refused', reason: 'alreadyConnected'}],
+          [],
+          [],
+        ),
+        await profileLogged(
+          [{type: 'refused', reason: 'alreadyConnecting'}],
+          [],
+          [],
+        ),
+        await profileLogged(
+          [{type: 'refused', reason: 'alreadyConnecting'}],
+          [{type: 'ownerChanged', owner: 1}],
+          [],
+        ),
+      ],
+      [['> hello', 'stderr> oops'], [], [], ['> hello', 'stderr> oops']],
+    );
+  });
+
+  it('F-2704 BR-5: an event that arrives before the start of the login is held, and is logged when the outcome is known', async () => {
+    deepStrictEqual(
+      await profileLogged(
+        [{type: 'refused', reason: 'alreadyConnecting'}],
+        [],
+        [{type: 'ownerChanged', owner: 1}],
+      ),
+      ['> hello', 'stderr> oops'],
+    );
+  });
+
+  it('F-2003 BR-14: the token of the record is masked in the profile lines too', async () => {
+    deepStrictEqual(
+      await profileLogged(
+        [],
+        [],
+        [],
+        [{stream: 'out', text: 'token ab12-cd34'}],
+        'ab12-cd34',
+      ),
+      ['> token aa11-aa11'],
+    );
+  });
+
   it("F-2501 BR-3: asks for the helper of the target's identity, with the connect cancellation", async () => {
     const {requests, connecting} = fixture();
     const controller = new AbortController();

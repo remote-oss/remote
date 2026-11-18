@@ -259,6 +259,58 @@ describe('connection handler (contracts §4 S9)', () => {
       );
     });
 
+    it('F-2704 6.1: the starter gets the profile output, taken out of the stream, in one event with the decoded lines before the ready line', async () => {
+      await send(1, {type: 'connect'});
+      const client = spawner.started[0];
+      client?.error(AUTHENTICATED);
+      client?.output('LAYER1-OUT aGVsbG8=\n');
+      client?.output('LAYER1-ERR b29wcw==\n');
+      client?.output('LAYER1-READY\n');
+      deepStrictEqual(
+        [
+          events.filter(
+            event => (event as {type?: string}).type === 'profileOutput',
+          ),
+          events.filter(
+            event => (event as {type?: string}).type === 'localCommandLines',
+          ),
+          order.filter(type => type !== 'ownerChanged'),
+        ],
+        [
+          [
+            {
+              type: 'profileOutput',
+              lines: [
+                {stream: 'out', text: 'hello'},
+                {stream: 'err', text: 'oops'},
+              ],
+            },
+          ],
+          [],
+          ['profileOutput', 'sshLines', 'connected'],
+        ],
+      );
+    });
+
+    it('F-2704 BR-5: the reports of the cut and the skip are taken out of the stream, and no profileOutput event is sent', async () => {
+      await send(1, {type: 'connect'});
+      const client = spawner.started[0];
+      client?.error(AUTHENTICATED);
+      client?.output('LAYER1-OUTPUT-CUT 5\n');
+      client?.output('LAYER1-OUTPUT-SKIPPED no-base64\n');
+      client?.output('LAYER1-READY\n');
+      deepStrictEqual(
+        [
+          eventTypes().includes('profileOutput'),
+          events.filter(
+            event => (event as {type?: string}).type === 'localCommandLines',
+          ),
+          eventTypes().includes('connected'),
+        ],
+        [false, [], true],
+      );
+    });
+
     /** The lines logged as a LocalCommand's and whether the connection was read as made, after `pieces` of output. */
     async function afterOutput(
       pieces: string[],

@@ -138,6 +138,42 @@ describe('connection replies and events (contracts §4 S9)', () => {
     );
   });
 
+  it('F-2704 BR-5: a profileOutput event holds the decoded lines, each one stream and text, and nothing else', () => {
+    deepStrictEqual(
+      [
+        {
+          type: 'profileOutput',
+          lines: [
+            {stream: 'out', text: 'hello'},
+            {stream: 'err', text: 'oops'},
+          ],
+        },
+        {type: 'profileOutput', lines: []},
+        {
+          type: 'profileOutput',
+          lines: [{stream: 'out', text: 'hello'}, 1],
+        },
+        {type: 'profileOutput', lines: [{stream: 'in', text: 'hello'}]},
+        {type: 'profileOutput', lines: [{stream: 'out'}]},
+        {type: 'profileOutput'},
+      ].map(body => readConnectionEvent(body)),
+      [
+        {
+          type: 'profileOutput',
+          lines: [
+            {stream: 'out', text: 'hello'},
+            {stream: 'err', text: 'oops'},
+          ],
+        },
+        {type: 'profileOutput', lines: []},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      ],
+    );
+  });
+
   it('reads nothing from a body that is no event', () => {
     deepStrictEqual(
       [

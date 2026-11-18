@@ -133,6 +133,8 @@ export interface Recording {
   bridgeLost?: (cause: CliBridgeLoss) => void;
   /** The failures shown after the window resolved. */
   presented: Failed[];
+  /** The lines the lease's `logProfileOutput` writes, in the order they were held. */
+  profileLines: string[];
   /** How many secrets the steps made: the n-th is `secret-<n>`. */
   secrets: number;
   /** The agent link plans the connect started a link for, in order. */
@@ -261,6 +263,11 @@ export function leaseOf(recording: Recording): ConnectionLease {
     waits: undefined,
     socksPort: 1080,
     startedLogin: true,
+    logProfileOutput: logger => {
+      for (const line of recording.profileLines) {
+        logger.info(line);
+      }
+    },
     storedRecord: undefined,
     storeSharedRecord: record => {
       recording.records.push(record);
@@ -411,6 +418,7 @@ export function emptyRecording(): Recording {
     records: [],
     phases: [],
     presented: [],
+    profileLines: [],
     secrets: 0,
     links: [],
   };

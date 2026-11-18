@@ -22,6 +22,7 @@ import type {
   TransferPhase,
 } from 'lib-server';
 import type {Connected, Failed} from 'lib-authority';
+import type {Logger} from 'lib-log';
 import type {CliBridge} from '../cli/cli-bridge.ts';
 import type {AgentLinkPlan} from '../environment/agent-link.ts';
 import type {ForwardingPlans} from '../environment/forwarding.ts';
@@ -96,6 +97,12 @@ export interface ConnectionLease {
   socksPort: number;
   /** Whether this connect started the login of the connection: it was told `loginStarted` or `loginOwned`. A connect that joined a login already running, a reload's included, did not. */
   startedLogin: boolean;
+  /**
+   * Writes to the log the lines the login profile printed before the session was ready, in arrival order, for a
+   * connect that started or took over the login alone; a connect that joined or waited on another window's login,
+   * and terminal mode, write nothing.
+   */
+  logProfileOutput(logger: Logger): void;
   /** What an earlier window of the connection left for reuse; none when nothing was stored. */
   storedRecord: SharedRecord | undefined;
   /** Leaves what a later window needs to reuse the server; true when the connection took it. */

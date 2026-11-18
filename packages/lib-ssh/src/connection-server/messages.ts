@@ -83,6 +83,12 @@ export type ConnectionReply =
 export type PromptSurface =
   'fingerprintPick' | 'continuationPick' | 'maskedInput';
 
+/** A line the login profile printed before the session was ready, with its stream: standard output or standard error. */
+export interface ProfileOutputLine {
+  stream: 'out' | 'err';
+  text: string;
+}
+
 /** What the helper tells its leases. */
 export type ConnectionEvent =
   | {
@@ -111,6 +117,8 @@ export type ConnectionEvent =
   | {type: 'sshLines'; lines: string[]}
   /** Lines a `LocalCommand` wrote to ssh's standard output, for the window's log alone. */
   | {type: 'localCommandLines'; lines: string[]}
+  /** The lines the login profile printed before the session was ready, decoded, in arrival order. */
+  | {type: 'profileOutput'; lines: ProfileOutputLine[]}
   | {type: 'transportLost'};
 
 type Fields = Record<string, unknown>;
@@ -377,12 +385,34 @@ export function readConnectionEvent(
         body.lines.every(line => typeof line === 'string')
         ? {type: body.type, lines: body.lines}
         : undefined;
+    case 'profileOutput':
+      return readProfileOutput(body);
     case 'waitingForOtherWindow':
     case 'transportLost':
       return {type: body.type};
     default:
       return undefined;
   }
+}
+
+/** The `profileOutput` event: a line is one stream's marker and text, and nothing else. */
+function readProfileOutput(fields: Fields): ConnectionEvent | undefined {
+  if (!Array.isArray(fields.lines)) {
+    return undefined;
+  }
+  const lines = fields.lines.map(line =>
+    isFields(line) &&
+    (line.stream === 'out' || line.stream === 'err') &&
+    typeof line.text === 'string'
+      ? {stream: line.stream, text: line.text}
+      : undefined,
+  );
+  return lines.every(line => line !== undefined)
+    ? {
+        type: 'profileOutput',
+        lines: lines as ProfileOutputLine[],
+      }
+    : undefined;
 }
 
 function readLoginFailed(fields: Fields): ConnectionEvent | undefined {

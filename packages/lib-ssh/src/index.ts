@@ -152,6 +152,7 @@ export {
   type BootstrapEvent,
   bootstrapEventOf,
   bootstrapLogLine,
+  profileLineOf,
   connectionStart,
   tunnelStart,
   sessionStart,

@@ -115,6 +115,28 @@ describe('the connect pipeline, when it works', () => {
     );
   });
 
+  it('F-2704 BR-5: the profile lines are logged after the platform line and before the server step’s lines, in the order they were held', async () => {
+    const {recording, options, logSink} = setup();
+    recording.profileLines = ['> hello', 'stderr> oops'];
+    await connect(INPUT, steps(recording), options);
+    const lines = logSink.lines.map(line => line.message);
+    const platform = lines.indexOf('Host platform: linux x64');
+    const stdoutIdx = lines.indexOf('> hello');
+    const stderrIdx = lines.indexOf('stderr> oops');
+    const listening = lines.findIndex(line =>
+      line.startsWith('Remote server listening on port'),
+    );
+    deepStrictEqual(
+      [
+        platform >= 0,
+        stdoutIdx > platform,
+        stderrIdx === stdoutIdx + 1,
+        listening > stderrIdx,
+      ],
+      [true, true, true, true],
+    );
+  });
+
   /** The `Platform:` lines of a connect whose terms name `platform` and whose probe reports `operatingSystem`. */
   async function platformLines(
     platform: ConnectionTerms['platform'],

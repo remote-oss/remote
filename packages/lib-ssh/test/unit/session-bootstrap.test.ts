@@ -8,6 +8,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import {Buffer} from 'node:buffer';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {withNoise} from 'lib-host/testing/noise';
@@ -400,7 +401,16 @@ describe('the session bootstrap run by sh (card ssh-38, #443)', () => {
       5,
       'echo ok\n',
     );
-    deepStrictEqual([output, status], ['\nLAYER1-READY\nok\n', 0]);
+    function encoded(text: string): string {
+      return Buffer.from(text, 'utf8').toString('base64');
+    }
+    deepStrictEqual(
+      [output, status],
+      [
+        `LAYER1-OUT ${encoded('LAYER1-START')}\nLAYER1-OUT ${encoded('exit 3')}\n\nLAYER1-READY\nok\n`,
+        0,
+      ],
+    );
   });
 
   it('ADR-0010: startup output around the environment changes nothing, and the environment arrives', () => {
@@ -409,14 +419,23 @@ describe('the session bootstrap run by sh (card ssh-38, #443)', () => {
         'echo "ERROR: Your fridge is not running"',
         'echo "ERROR: fridge" >&2',
         'echo "exit 3"',
-        'echo "\'; kill -9 $$; echo \'"',
+        'echo "\\\'; kill -9 \\$\\$; echo \\\'"',
         'export FOO=bar',
         'exec sh',
       ].join('\n'),
       5,
       'echo "$FOO"\n',
     );
-    deepStrictEqual([output, status], ['\nLAYER1-READY\nbar\n', 0]);
+    function encoded(text: string): string {
+      return Buffer.from(text, 'utf8').toString('base64');
+    }
+    deepStrictEqual(
+      [output, status],
+      [
+        `LAYER1-OUT ${encoded('ERROR: Your fridge is not running')}\nLAYER1-OUT ${encoded('exit 3')}\nLAYER1-OUT ${encoded("\\'; kill -9 $$; echo \\'")}\nLAYER1-ERR ${encoded('ERROR: fridge')}\n\nLAYER1-READY\nbar\n`,
+        0,
+      ],
+    );
   });
 
   it('F-2704 AC-11: a startup that reads its input takes the command line, so the shell ends without writing the environment', () => {
@@ -430,7 +449,7 @@ describe('the session bootstrap run by sh (card ssh-38, #443)', () => {
       const result = spawnSync('sh', ['-c', sessionStart(5).prelude], {
         encoding: 'utf8',
         input: 'echo ok\n',
-        env: {PATH: process.env.PATH ?? ''},
+        env: {PATH: process.env.PATH ?? '', SHELL: '/no/such/login-shell'},
         timeout: 20_000,
       });
       deepStrictEqual(
@@ -476,6 +495,78 @@ describe('the session bootstrap run by sh (card ssh-38, #443)', () => {
 
   it('#443: the temporary folder is gone after the start line', () => {
     deepStrictEqual(bootstrapWith('exec sh', 5, 'true\n').leftover, []);
+  });
+});
+
+describe("the profile's output lines (card connect-69, #848)", () => {
+  function encoded(text: string): string {
+    return Buffer.from(text, 'utf8').toString('base64');
+  }
+
+  it("F-2704 BR-5: the profile's output is printed encoded, the standard output's lines, then the standard error's, before the ready line", () => {
+    const {output, status} = bootstrapWith(
+      'echo hello; echo oops >&2; exec sh',
+      5,
+      'echo ok\n',
+    );
+    deepStrictEqual(
+      [output, status],
+      ['LAYER1-OUT aGVsbG8=\nLAYER1-ERR b29wcw==\n\nLAYER1-READY\nok\n', 0],
+    );
+  });
+
+  it('ADR-0010: a profile line that looks like ours stays data, inside its encoded line', () => {
+    const {output, status} = bootstrapWith(
+      'echo LAYER1-READY; exec sh',
+      5,
+      'echo ok\n',
+    );
+    deepStrictEqual(
+      [output, status],
+      [`LAYER1-OUT ${encoded('LAYER1-READY')}\n\nLAYER1-READY\nok\n`, 0],
+    );
+  });
+
+  it('F-2704 BR-5: a thousand lines at most, then the cut that names the dropped ones', () => {
+    const {output, status} = bootstrapWith(
+      'i=0; while [ "$i" -lt 1005 ]; do echo "line$i"; i=$((i+1)); done; exec sh',
+      5,
+      'true\n',
+    );
+    const expected = [
+      ...Array.from(
+        {length: 1000},
+        (item, index) => `LAYER1-OUT ${encoded(`line${String(index)}`)}`,
+      ),
+      'LAYER1-OUTPUT-CUT 5',
+      '',
+      'LAYER1-READY',
+      '',
+    ].join('\n');
+    deepStrictEqual([output, status], [expected, 0]);
+  });
+
+  it('F-2704 BR-5: a host without base64 names the skip, and nothing else of the output', () => {
+    const fake = shellOf('echo hello; echo oops >&2; exec sh');
+    try {
+      const folder = path.join(path.dirname(fake.shell), 'bin');
+      mkdirSync(folder);
+      for (const tool of ['sh', 'mktemp', 'sleep', 'mv', 'cat', 'rm']) {
+        symlinkSync(`/bin/${tool}`, path.join(folder, tool));
+      }
+      const result = spawnSync('sh', ['-c', sessionStart(5).prelude], {
+        encoding: 'utf8',
+        input: 'echo ok\n',
+        env: {PATH: folder, SHELL: fake.shell, TMPDIR: fake.temporary},
+        timeout: 20_000,
+      });
+      deepStrictEqual(
+        [result.stdout, result.status],
+        ['LAYER1-OUTPUT-SKIPPED no-base64\n\nLAYER1-READY\nok\n', 0],
+      );
+    } finally {
+      fake.remove();
+    }
   });
 });
 

@@ -82,6 +82,35 @@ export function isSshDebugLine(line: string): boolean {
   return /^debug[123]: /.test(line);
 }
 
+/**
+ * The log line of a line the login profile printed before the session was ready: `>` for standard output and
+ * `stderr>` for standard error, the token masked.
+ */
+export function profileEntry(
+  stream: 'out' | 'err',
+  text: string,
+  token: string | undefined,
+): string {
+  const bare = text.endsWith('\r') ? text.slice(0, -1) : text;
+  return stream === 'err'
+    ? `stderr> ${masked(bare, token)}`
+    : `> ${masked(bare, token)}`;
+}
+
+/**
+ * Writes the lines the login profile printed before the session was ready to `logger`, in the order they were held,
+ * for the window that started or took over the login alone.
+ */
+export function logProfileLines(
+  logger: Pick<Logger, 'info'>,
+  lines: ReadonlyArray<{stream: 'out' | 'err'; text: string}>,
+  token: string | undefined,
+): void {
+  for (const line of lines) {
+    logger.info(profileEntry(line.stream, line.text, token));
+  }
+}
+
 /** The log line of a line a `LocalCommand` wrote to ssh's standard output: marked `[local command]`, the token masked. */
 export function localCommandEntry(
   line: string,

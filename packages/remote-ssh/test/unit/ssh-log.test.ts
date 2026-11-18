@@ -7,6 +7,8 @@ import {
   isSshDebugLine,
   localCommandEntry,
   logLocalCommandLines,
+  logProfileLines,
+  profileEntry,
   logSshLines,
   sshLogEntries,
   withoutAnswer,
@@ -158,6 +160,35 @@ describe('ssh’s lines in the log (card connect-66)', () => {
         `${padding}${prompt} 123456`,
         ':'.repeat(5000),
       ],
+    );
+  });
+});
+
+describe('the login profile’s lines in the log (card connect-69, #848)', () => {
+  it('F-2704 BR-5: an entry is > or stderr> by its stream, the carriage return is dropped and the token is masked', () => {
+    deepStrictEqual(
+      [
+        profileEntry('out', 'hello\r', undefined),
+        profileEntry('err', 'oops', undefined),
+        profileEntry('out', 'the token is secret-token here', 'secret-token'),
+      ],
+      ['> hello', 'stderr> oops', '> the token is aaaaaa-aaaaa here'],
+    );
+  });
+
+  it('F-2704 BR-5: the lines are logged at info, in the order they were held', () => {
+    const sink = new MemorySink();
+    logProfileLines(
+      createLogger(sink, {minimumLevel: (): Level => 'info'}),
+      [
+        {stream: 'out', text: 'hello'},
+        {stream: 'err', text: 'oops'},
+      ],
+      undefined,
+    );
+    deepStrictEqual(
+      sink.lines.map(line => line.message),
+      ['> hello', 'stderr> oops'],
     );
   });
 });

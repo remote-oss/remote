@@ -508,6 +508,9 @@ async function runSteps(
   if (shellLine !== undefined) {
     options.logger.info(shellLine);
   }
+  // The login profile's printed lines land here, in arrival order: after the platform line and before the lines of
+  // the server steps that follow the login.
+  lease.logProfileOutput(options.logger);
   const forwarding = await steps.planForwarding(
     input,
     lease,

@@ -33,6 +33,7 @@ import {
   type FailureHint,
   LocalCommandLog,
   bootstrapEventOf,
+  profileLineOf,
 } from 'lib-ssh';
 import {sshStartedLine} from '../diagnostics/log-content.ts';
 import {goesOnAfterLoginTimeout} from './connection-request.ts';
@@ -277,6 +278,7 @@ export function openTerminalConnectionStep(
             waits: undefined,
             socksPort: socksPort ?? 0,
             startedLogin: true,
+            logProfileOutput: () => undefined,
             storedRecord: undefined,
             storeSharedRecord: () => Promise.resolve(false),
             onNotice: listener => {
@@ -329,6 +331,7 @@ export function openTerminalConnectionStep(
           if (bootstrapEventOf(line) !== undefined && front === undefined) {
             commandPhase = 'closed';
           } else if (
+            profileLineOf(own) === undefined &&
             !isSshDebugLine(own) &&
             !isForwardingLine(own) &&
             !typedLines.has(own.trim())

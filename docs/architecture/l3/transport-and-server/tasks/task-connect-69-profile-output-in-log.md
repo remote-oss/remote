@@ -22,7 +22,9 @@ unchanged. This card reads the startup output file **before** the bootstrap remo
      lease that started the session, as `{type: 'profileOutput'; lines: {stream: 'out' | 'err'; text: string}[]}`.
    - Joiners get nothing.
 3. **remote-ssh, shared mode only.** Through connect-67's `remoteLog` path, each line is logged as `> <text>` for
-   `out` and `stderr> <text>` for `err`, scrubbed, before the `Host platform:` line.
+   `out` and `stderr> <text>` for `err`, scrubbed, in arrival order, after the `Host platform:` line and before the
+   lines that follow the login (the server step's): the clause's former position was written before connect-71's
+   BR-5 order existed, and was corrected to the arrival order (daedalus's ruling on #848, 2026-11-18).
 4. **Terminal mode (AC-18).** The window doesn't log these lines at all: the terminal step drops the `LAYER1-*` output
    lines, so nothing of the profile reaches the log.
 
@@ -32,8 +34,8 @@ unchanged. This card reads the startup output file **before** the bootstrap remo
 |---|---|---|---|
 | lib-ssh `session-bootstrap` real-shell row | `F-2704 BR-5: the profile's output is printed encoded` | a `.profile` printing `hello` and, on stderr, `oops` | `LAYER1-OUT aGVsbG8=` and `LAYER1-ERR b29wcw==`, before `LAYER1-READY` |
 | same | `ADR-0010: a profile line that looks like ours stays data` | a `.profile` printing `LAYER1-READY` | the reader sees it only inside a `LAYER1-OUT` line |
-| lib-ssh `handler.test.ts` | `F-2704 6.1: the starter gets the profile output` | those lines | one `profileOutput` event to the starter, none to a joiner |
-| `connection-step.test.ts` | `F-2704 BR-5: the lines are logged with > and stderr>` | the event | `> hello`, `stderr> oops`, before `Host platform:` |
+| lib-ssh `connection-handler.test.ts` | `F-2704 6.1: the starter gets the profile output` | those lines | one broadcast `profileOutput` event with the decoded lines, taken out of the stream; the starter's connection logs them and a waiting and a joined connection don't, a takeover does (client level, daedalus's option 2 on #848) |
+| `connection-step.test.ts` | `F-2704 BR-5: the lines are logged with > and stderr>` | the event | `> hello`, `stderr> oops`, after the `Host platform:` line; the position is asserted in order, not adjacency |
 | `terminal-connection-step.test.ts` | `F-2704 AC-18: terminal mode keeps it out` | the same lines in terminal mode | no `> ` line logged |
 
 **Acceptance:** a host account whose `.profile` prints one line. In local-server mode, the log has `> <line>`. In

@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  connectionLog,
   inWindow,
   terminalBuffer,
   waitFor,
@@ -185,6 +186,23 @@ describe('login shells and their startup files: which files the connect reads (F
         notices: [],
         dialogs: [],
       });
+    } finally {
+      await removeHomeFiles('harness-bash', '.profile');
+    }
+  });
+
+  it('F-2704 AC-7 (profile-logged): in the local-server mode a .profile that prints a line is in the log with >, after the platform line', async () => {
+    await freshServer('harness-bash');
+    await writeHomeFile('harness-bash', '.profile', 'echo F2704-PRINTED\n');
+    try {
+      const mark = connectionLog().length;
+      await withWindow('harness-bash', 'sf-profile', () => Promise.resolve());
+      const lines = connectionLog().slice(mark);
+      const platform = lines.findIndex(line =>
+        line.startsWith('Host platform:'),
+      );
+      const printed = lines.indexOf('> F2704-PRINTED');
+      deepStrictEqual([platform >= 0, printed > platform], [true, true]);
     } finally {
       await removeHomeFiles('harness-bash', '.profile');
     }

@@ -52,6 +52,7 @@ import {
   type BootstrapEvent,
   bootstrapEventOf,
   bootstrapLogLine,
+  profileLineOf,
   type SessionOpening,
 } from './session-bootstrap.ts';
 import {ShellRuns} from './shell-runs.ts';
@@ -375,6 +376,9 @@ export class ConnectionHandler implements MessageHandler {
     let early: Exclude<BootstrapEvent, {kind: 'ready'}> | undefined;
     const commandLog = new LocalCommandLog();
     let bootstrapped = false;
+    // The login profile's startup output, decoded from the bootstrap's encoded lines; broadcast when the session
+    // is ready, and nothing at all when it never was.
+    const profileLines: Array<{stream: 'out' | 'err'; text: string}> = [];
     const output = new LineSplitter(line => {
       if (opened.hear(line)) {
         return;
@@ -384,6 +388,13 @@ export class ConnectionHandler implements MessageHandler {
         bootstrapped = true;
       }
       if (event === undefined) {
+        const profile = ready ? undefined : profileLineOf(line);
+        if (profile !== undefined) {
+          if (profile.kind === 'out' || profile.kind === 'err') {
+            profileLines.push({stream: profile.kind, text: profile.text});
+          }
+          return;
+        }
         const logged = bootstrapped ? undefined : commandLog.hear(line);
         if (logged !== undefined) {
           this.tell({type: 'localCommandLines', lines: [logged]});
@@ -391,6 +402,9 @@ export class ConnectionHandler implements MessageHandler {
         this.runs?.hear(line);
       } else if (event.kind === 'ready') {
         ready = true;
+        if (profileLines.length > 0) {
+          this.tell({type: 'profileOutput', lines: profileLines});
+        }
         if (this.state === 'connecting') {
           wait.stop();
           this.askpass.closeAll();

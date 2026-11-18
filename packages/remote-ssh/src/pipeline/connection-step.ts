@@ -19,7 +19,7 @@ import type {PhaseEvent} from './connect.ts';
 import {ofAcquire, ofConnection} from './failure.ts';
 import {sshTargetOf} from './host-settings.ts';
 import {platformOfRecord} from './platform.ts';
-import {logLocalCommandLines, logSshLines} from './ssh-log.ts';
+import {logLocalCommandLines, logProfileLines, logSshLines} from './ssh-log.ts';
 import type {
   ConnectInput,
   ConnectionTerms,
@@ -107,12 +107,18 @@ export function openConnectionStep(
     }
     const {connection} = acquired;
     let token: string | undefined;
+    // The lines the login profile printed before the session was ready, held until this connect's own start of the
+    // login is known and then logged by the pipeline after the platform line; a connect that joined or waited on
+    // another window's login logs none.
+    const profileLines: Array<{stream: 'out' | 'err'; text: string}> = [];
     // The window logs ssh's lines as the helper sends them, from the acquire until the connection is given back.
     const stopSshLog = connection.onNotice(notice => {
       if (notice.type === 'sshLines') {
         logSshLines(dependencies.logger, notice.lines, token);
       } else if (notice.type === 'localCommandLines') {
         logLocalCommandLines(dependencies.logger, notice.lines, token);
+      } else if (notice.type === 'profileOutput') {
+        profileLines.push(...notice.lines);
       }
     });
     function end(): void {
@@ -182,6 +188,11 @@ export function openConnectionStep(
         waits: dependencies.waits(),
         socksPort: outcome.socksPort,
         startedLogin,
+        logProfileOutput: (logger: Logger): void => {
+          if (startedLogin) {
+            logProfileLines(logger, profileLines, token);
+          }
+        },
         storedRecord: outcome.sharedRecord ?? undefined,
         storeSharedRecord: record => {
           token = record.connectionToken;

@@ -355,9 +355,14 @@ Rulings of 2026-10-08 for S9 and S10 (the process side):
   `setSharedRecord`, `answer {promptId, text}`, `kill`, `checkSession` (a window that lost its transport, at its first reconnection attempt: one probe of the shared session with a 3 s deadline (a SOCKS connect through the helper's dynamic forward to the host's loopback port 22: within the deadline, any data after the connect request, or ssh closing the socket after it, means alive, since ssh gives its SOCKS reply only once the host has answered the channel open and closes the socket when the host refuses it, which a runner showed for OpenSSH 9.6 with the host paused; silence means not alive; any port works, since a refused connect is the host sshd's channel-open failure, which only a live session carries back; on the host the probe is one short connection from its own sshd to 127.0.0.1:22 per reconnection, closed as soon as the host answers, which the host's sshd log shows as a pre-authentication connection when sshd listens there); `alive` when it answers, otherwise the helper ends the session, which ends ssh by S3's group rule, sends `transportLost` to every lease and replies `ended`; with no live session `ended` at once; concurrent checks share one probe; F-2505 AC-25, ruling-2751-session-check); events `prompt {promptId, surface, text}`, `promptClosed`,
   `ownerChanged`, `connected {socksPort}`, `loginFailed {kind, reason?, hints, exitStatus?, detail?}` (`exitStatus`: ssh's exit status, `null` when it ended on a signal, absent from an earlier helper; connect-64; `detail`: the helper's own log line for a login shell that timed out or ended early, which the window logs with the failure (F-2704 AC-25); absent from an earlier helper and from any other failure; it is one of two fixed sentences with a number in them, so nothing of the host's output or of the user's secrets is in it),
   `spawnFailed {cause, detail}` (the `ssh` program could not be started: `clientVanished` or `spawnFailed`),
-  `transportLost`, `waitingForOtherWindow`, and `sshLines {lines}` (ssh's error-stream lines, in order: batches of at most
+  `transportLost`, `waitingForOtherWindow`, `sshLines {lines}` (ssh's error-stream lines, in order: batches of at most
   200 lines, sent at most every 100 ms, from ssh's start until the helper ends, and flushed before `connected` and
-  `loginFailed` so they come first; absent from an earlier helper, which a window accepts; connect-66). The reply to `connect` only acknowledges it; a login that fails ends in the `loginFailed`
+  `loginFailed` so they come first; absent from an earlier helper, which a window accepts; connect-66), and
+  `profileOutput {lines}` (the login profile's printed lines, decoded from the bootstrap's `LAYER1-OUT` and
+  `LAYER1-ERR` lines: standard output's lines in order, then standard error's, at most 1000 in all, in one event sent
+  before `connected` and only when there is a line; absent from an earlier helper, which a window accepts; broadcast
+  like `sshLines`, and only the window that started or took over the login logs it, the others ignore it; F-2704 BR-5,
+  card connect-69, #848). The reply to `connect` only acknowledges it; a login that fails ends in the `loginFailed`
   event (S5's kind, reason and hints) and the oldest waiting window takes over the login. S6 classifies prompts inside
   the helper; no answer is stored or logged.
 - The SOCKS port: prefer `-D 0` with the allocated port read from `ssh -v` ("Allocated port N for ...") when the
@@ -392,7 +397,7 @@ wait for the run of F-2102 Q1 (D-60).
 | `answer` / `refuse` | lease, prompt id, the text (answer only) | whether the question was still open; a refusal closes it unanswered (the program exits 1, `ssh` cancels the prompt) and the helper refuses the run's later questions itself (card ssh-10, 2026-10-09) | none |
 | `release` | lease | none | none |
 | `kill` | host string | done, silently, also when nothing runs (F-2102 BR-7) | none |
-| `events` | lease | `waitingForOtherWindow`, `ownerChanged`, `loginFailed`, `transportLost`, `sshLines` | none |
+| `events` | lease | `waitingForOtherWindow`, `ownerChanged`, `loginFailed`, `transportLost`, `sshLines`, `profileOutput` | none |
 
 Rules:
 - One helper per **connection identity** (amended 2026-10-14, connect-77): the decoded target's (host, user, port),

@@ -25,6 +25,7 @@ import type {DetectedPlatform} from './platform-probe.ts';
 import {
   type ConnectionEvent,
   type ConnectionReply,
+  type ProfileOutputLine,
   readConnectionEvent,
   readConnectionReply,
   type Refusal,
@@ -113,6 +114,8 @@ export type ConnectionNotice =
   | {type: 'sshLines'; lines: string[]}
   /** Lines a `LocalCommand` wrote to ssh's standard output, for the window's log alone. */
   | {type: 'localCommandLines'; lines: string[]}
+  /** The login profile's lines, decoded and in arrival order, for the window's log. */
+  | {type: 'profileOutput'; lines: ProfileOutputLine[]}
   | {type: 'helperGone'};
 
 /** Why the connection is not there. */
@@ -621,6 +624,7 @@ export class SharedConnection {
       case 'transportLost':
       case 'sshLines':
       case 'localCommandLines':
+      case 'profileOutput':
         this.notify(event);
         break;
       default:

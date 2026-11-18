@@ -356,6 +356,45 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual(commandLogged(made), []);
   });
 
+  it('F-2704 AC-18: terminal mode keeps it out', async () => {
+    const made = fixture({level: 'trace'});
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    terminal.write("printf 'LAYER1-READY\\n'\nexec sh\n");
+    terminal.write(
+      'LAYER1-OUT aGVsbG8=\nLAYER1-ERR b29wcw==\nLAYER1-OUTPUT-CUT 5\nLAYER1-OUTPUT-SKIPPED no-base64\nLAYER1-READY\n',
+    );
+    await result;
+    deepStrictEqual(
+      made
+        .logged()
+        .filter(
+          line =>
+            line.includes('LAYER1-OUT') ||
+            line.includes('LAYER1-ERR') ||
+            line.includes('LAYER1-OUTPUT') ||
+            line.startsWith('>') ||
+            line.startsWith('stderr>'),
+        ),
+      [],
+    );
+  });
+
+  it('F-2704 6.4 step 3, F-2003 AC-29: login-profile text isn’t logged in terminal mode', async () => {
+    const made = fixture({level: 'trace'});
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    terminal.write(
+      `LAYER1-OUT ${Buffer.from('PROFILE-SENTINEL', 'utf8').toString('base64')}\n`,
+    );
+    terminal.write('LAYER1-READY\n');
+    await result;
+    deepStrictEqual(
+      made.logged().some(line => line.includes('PROFILE-SENTINEL')),
+      false,
+    );
+  });
+
   it('F-2003 BR-8: at debug terminal mode keeps the lines without debug1, and the failing login’s refusal is among them', async () => {
     const made = fixture({level: 'info'});
     const {result, terminal} = await started(made);

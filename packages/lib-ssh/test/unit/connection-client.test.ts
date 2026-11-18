@@ -374,6 +374,28 @@ describe('the window side of the shared connection (S9)', () => {
     );
   });
 
+  it('F-2704 BR-5: a profileOutput event the helper broadcasts reaches the window that holds the connection as a notice of its own', async () => {
+    const {connection, outcome} = await connectFirst();
+    const heard = notices(connection);
+    sshRuns.started[0]?.error(AUTHENTICATED);
+    sshRuns.started[0]?.output('LAYER1-OUT aGVsbG8=\n');
+    sshRuns.started[0]?.output('LAYER1-ERR b29wcw==\n');
+    sshRuns.started[0]?.output('LAYER1-READY\n');
+    await outcome;
+    deepStrictEqual(
+      heard.filter(notice => notice.type === 'profileOutput'),
+      [
+        {
+          type: 'profileOutput',
+          lines: [
+            {stream: 'out', text: 'hello'},
+            {stream: 'err', text: 'oops'},
+          ],
+        },
+      ],
+    );
+  });
+
   /** The program of ssh asks `text` at the askpass endpoint, as it does when ssh needs an answer. */
   async function askAtEndpoint(text: string): Promise<void> {
     const askpass = await endpoints.connect(
