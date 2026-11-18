@@ -7,6 +7,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   dockerWith,
+  ownEngineDocker,
   lists,
   showsNoEngine,
   sshClientEnvironment,
@@ -91,7 +92,7 @@ describe('F-0205, the Dev Containers view on an engine reached over SSH (card to
   it('F-0205 AC-20 (c205-back): with the host paused the view shows the welcome content of an unreachable engine, and once it answers again Refresh lists its container', async () => {
     await dockerWith({}, 'context', 'use', context);
     const listedFirst = await lists(engine.marker);
-    await dockerWith({}, '--context', 'default', 'pause', engine.container);
+    await ownEngineDocker('pause', engine.container);
     const unreachable = await waitFor(
       'the welcome content of an unreachable engine',
       showsNoEngine,
@@ -100,7 +101,7 @@ describe('F-0205, the Dev Containers view on an engine reached over SSH (card to
       () => true,
       () => false,
     );
-    await dockerWith({}, '--context', 'default', 'unpause', engine.container);
+    await ownEngineDocker('unpause', engine.container);
     let listedAgain = false;
     await waitFor(
       'the engine’s container after Refresh',
