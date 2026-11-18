@@ -3735,6 +3735,49 @@ const FOLDER_DIALOG_READING = `(() => {
   };
 })()`;
 
+/** What a wait for a folder dialog to show a typed path has seen so far: since when it has held the path without listing the folder, and whether the path was typed again with a closing slash. */
+export interface FolderDialogWait {
+  waitingSince?: number | undefined;
+  slashed: boolean;
+}
+
+/** How long the dialog holds the typed path without listing the folder before the path is typed again with a closing slash. */
+const SLASH_AFTER_MILLISECONDS = 2000;
+
+/**
+ * What the wait for a folder dialog to show `typed` does with `reading` taken at `now`: `'shown'` when the input holds the
+ * path (a closing slash aside) and the list is the folder's own, the text `typed` again when the input does not hold it (the dialog
+ * fills it with its own folder once its first listing is in, which can come after the typing), the path with a closing slash
+ * once, after {@link SLASH_AFTER_MILLISECONDS}, when the input holds it and the list stays the parent's, as it does for a
+ * name that is not a folder (about one dialog in a hundred, measured on a folder that exists: the same text typed again
+ * changes nothing for the dialog, a closing slash makes it list the folder), and nothing otherwise. The input is then
+ * `typed/`, which the dialog takes for the same folder.
+ */
+export function retypingOf(
+  typed: string,
+  reading: FolderDialogReading,
+  wait: FolderDialogWait,
+  now: number,
+): 'shown' | {text: string} | undefined {
+  if (reading.value.replace(/\/$/, '') !== typed.replace(/\/$/, '')) {
+    wait.waitingSince = undefined;
+    return {text: typed};
+  }
+  if (reading.rows[0] === '..') {
+    return 'shown';
+  }
+  wait.waitingSince ??= now;
+  if (
+    !wait.slashed &&
+    !typed.endsWith('/') &&
+    now - wait.waitingSince > SLASH_AFTER_MILLISECONDS
+  ) {
+    wait.slashed = true;
+    return {text: `${typed}/`};
+  }
+  return undefined;
+}
+
 /** Reads until the dialog is closed, for at most {@link REPRESS_MILLISECONDS}, and gives the last reading. */
 async function closedWithin(
   read: () => Promise<FolderDialogReading>,
@@ -3797,16 +3840,16 @@ async function keyInFolderDialog(
     () => `the folder dialog of window ${name}`,
     async () => ((await folderDialogOpen(name)) ? true : undefined),
   );
-  /** Focuses the dialog's input and, when `typed` is given, sets its value as a user's typing would. */
-  function typeInto(): Promise<null> {
+  /** Focuses the dialog's input and, when `text` is given, sets its value as a user's typing would. */
+  function typeInto(text: string | undefined = typed): Promise<null> {
     return evaluate<null>(
       name,
       `(() => {
       const input = ${FOLDER_DIALOG_INPUT};
       input.focus();
-      if (${JSON.stringify(typed ?? null)} !== null) {
+      if (${JSON.stringify(text ?? null)} !== null) {
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        setter.call(input, ${JSON.stringify(typed ?? '')});
+        setter.call(input, ${JSON.stringify(text ?? '')});
         input.dispatchEvent(new Event('input', {bubbles: true}));
       }
       return null;
@@ -3829,20 +3872,20 @@ async function keyInFolderDialog(
   }
   if (waiting !== undefined && typed !== undefined) {
     let lastReading: FolderDialogReading | undefined;
+    const wait: FolderDialogWait = {slashed: false};
     await settled(
       () =>
-        `the folder dialog of window ${name} to show ${typed}; it last read ${JSON.stringify(lastReading)}`,
+        `the folder dialog of window ${name} to show ${typed}${wait.slashed ? ' (typed again with a closing slash)' : ''}; it last read ${JSON.stringify(lastReading)}`,
       async () => {
         lastReading = await read();
-        const shown =
-          lastReading.value.replace(/\/$/, '') === typed.replace(/\/$/, '');
-        if (!shown) {
-          // The dialog fills its input with its own folder once its first listing is in, which can come after the typing:
-          // what was typed is typed again.
-          await typeInto();
-          return undefined;
+        const next = retypingOf(typed, lastReading, wait, Date.now());
+        if (next === 'shown') {
+          return true;
         }
-        return lastReading.rows[0] === '..' ? true : undefined;
+        if (next !== undefined) {
+          await typeInto(next.text);
+        }
+        return undefined;
       },
     );
   }

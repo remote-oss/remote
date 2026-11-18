@@ -10,7 +10,9 @@ import {
   pagesForState,
   pagesOfRemoteness,
   pressUntilClosed,
+  retypingOf,
   type FolderDialogReading,
+  type FolderDialogWait,
 } from './renderer.ts';
 
 describe('pageTitleByName', () => {
@@ -516,5 +518,70 @@ describe('walkToPosition', () => {
       position: 2,
       size: 2000,
     });
+  });
+});
+
+describe('retypingOf (card #2756)', () => {
+  const PATH = '/home/harness/folder';
+
+  /** A reading of the dialog with `value` in its input and `rows` listed. */
+  function reading(value: string, rows: string[]): FolderDialogReading {
+    return {open: true, value, rows};
+  }
+
+  it('card #2756: an input that does not hold the typed path gets it typed again, and the wait for a list starts over', () => {
+    const wait: FolderDialogWait = {waitingSince: 100, slashed: false};
+    deepStrictEqual(
+      [retypingOf(PATH, reading('/home/harness/', ['..']), wait, 500), wait],
+      [{text: PATH}, {waitingSince: undefined, slashed: false}],
+    );
+  });
+
+  it('card #2756: the typed path with the folder’s own list is shown, with or without a closing slash in the input', () => {
+    deepStrictEqual(
+      [
+        retypingOf(PATH, reading(PATH, ['..', 'a']), {slashed: false}, 0),
+        retypingOf(PATH, reading(`${PATH}/`, ['..']), {slashed: true}, 0),
+      ],
+      ['shown', 'shown'],
+    );
+  });
+
+  it('card #2756: the typed path held for less than two seconds with the parent’s list is waited on, not typed again', () => {
+    const wait: FolderDialogWait = {slashed: false};
+    deepStrictEqual(
+      [
+        retypingOf(PATH, reading(PATH, ['a', 'b']), wait, 1000),
+        retypingOf(PATH, reading(PATH, ['a', 'b']), wait, 2999),
+        wait.waitingSince,
+      ],
+      [undefined, undefined, 1000],
+    );
+  });
+
+  it('card #2756: after two seconds it is typed again once, with a closing slash, and the input is then that path and no other', () => {
+    const wait: FolderDialogWait = {slashed: false};
+    const stalled = reading(PATH, ['a', 'b']);
+    deepStrictEqual(
+      [
+        retypingOf(PATH, stalled, wait, 1000),
+        retypingOf(PATH, stalled, wait, 3001),
+        retypingOf(PATH, stalled, wait, 9000),
+        wait.slashed,
+        retypingOf(PATH, reading(`${PATH}/`, ['..']), wait, 9100),
+      ],
+      [undefined, {text: `${PATH}/`}, undefined, true, 'shown'],
+    );
+  });
+
+  it('card #2756: a path typed with a closing slash already is never typed again with another', () => {
+    const wait: FolderDialogWait = {slashed: false};
+    deepStrictEqual(
+      [
+        retypingOf(`${PATH}/`, reading(`${PATH}/`, ['a']), wait, 0),
+        retypingOf(`${PATH}/`, reading(`${PATH}/`, ['a']), wait, 60_000),
+      ],
+      [undefined, undefined],
+    );
   });
 });
