@@ -57,3 +57,11 @@ export function holdingText(
     section('its last events', () => JSON.stringify(last())),
   ].join('; ');
 }
+
+/**
+ * The folder of the window whose agent logs in `logFolder`: the editor keeps each window's logs, its renderer log
+ * among them, in a `window<number>` folder, and the agent's own folder is below it. Undefined when the path has none.
+ */
+export function windowFolderOf(logFolder: string): string | undefined {
+  return /^(.*[\\/]window\d+)(?:[\\/]|$)/u.exec(logFolder)?.[1];
+}
