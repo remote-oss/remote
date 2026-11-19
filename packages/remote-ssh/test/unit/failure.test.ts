@@ -399,6 +399,17 @@ describe('the reading of each library failure (no library text is shown)', () =>
     });
   }
 
+  it('F-2402 AC-1: a host with no downloader gives the reason S042, and the log keeps the cause', () => {
+    deepStrictEqual(
+      ofTransfer({kind: 'serverDownload', cause: 'noDownloader'}),
+      {
+        kind: 'serverDownload',
+        reason: {id: 'S042'},
+        logDetail: 'noDownloader',
+      },
+    );
+  });
+
   it('F-3902 rule 5: a 404 without a context (the CLI path) stays the download failure', () => {
     deepStrictEqual(
       ofTransfer({

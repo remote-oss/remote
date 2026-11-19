@@ -418,6 +418,33 @@ describe('the POSIX bootstrap script', () => {
       );
     });
 
+    it('F-2402 AC-26: a host with neither downloader is left with an empty data folder: no install folder and no lock', () => {
+      useHost([]);
+      runScript(host, single('install'), parametersFor());
+      const dataFolder = path.dirname(path.dirname(installFolder(host)));
+      deepStrictEqual(
+        [
+          existsSync(dataFolder),
+          existsSync(dataFolder) ? readdirSync(dataFolder) : undefined,
+        ],
+        [true, []],
+      );
+    });
+
+    it('F-2402: a host with neither downloader still reuses an installed server', () => {
+      runScript(host, single('install'), parametersFor());
+      rmSync(path.join(host.tools, 'wget'));
+      deepStrictEqual(statusOf(host, single('install'), parametersFor()), 'Ok');
+    });
+
+    it('F-2402: a host with neither downloader unpacks an archive the client copied', () => {
+      useHost([]);
+      deepStrictEqual(
+        statusOf(host, single('install'), copiedParameters(false)),
+        'Ok',
+      );
+    });
+
     const DOWNLOAD_ERRORS: Array<[string, Stub, string, string | undefined]> = [
       ['GNU wget', 'wget', '  HTTP/1.0 404 File not found', '404'],
       [
