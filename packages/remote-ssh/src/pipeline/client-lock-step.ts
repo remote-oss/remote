@@ -36,6 +36,15 @@ export class HeldClientLocks {
     this.paths.delete(path);
   }
 
+  /**
+   * Ends the hold of the file at `path` and removes the file at once: a window that ends right after its connect gave
+   * the lock back, before any wait could remove it, leaves no file for the next window to wait on.
+   */
+  release(path: string): void {
+    this.paths.delete(path);
+    this.removeNow(path);
+  }
+
   /** Removes the file of every lock still held: the extension's clean end. */
   releaseAll(): void {
     for (const path of this.paths) {
@@ -84,7 +93,7 @@ export function holdClientLockStep(
             kind: 'done',
             value: {
               release: () => {
-                dependencies.held.forget(path);
+                dependencies.held.release(path);
                 hold.end?.();
               },
             },

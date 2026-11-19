@@ -64,6 +64,22 @@ function stepOver(port: LockFilePort, clock: Clock = steppingClock()) {
   return {step, held, removedNow, sink};
 }
 
+/** What `step` gives for `input` with no wait to tell, its hold given back at once when it holds one. */
+async function takenAndReleased(
+  step: ReturnType<typeof holdClientLockStep>,
+  input: ConnectInput,
+) {
+  const result = await step(
+    input,
+    () => undefined,
+    new AbortController().signal,
+  );
+  if (result.kind === 'done') {
+    result.value.release();
+  }
+  return result;
+}
+
 /** A step whose lock of the alias `dev` another window already holds, with that window's hold. */
 async function heldByAnother() {
   const clock = steppingClock();
@@ -205,14 +221,7 @@ describe('the client install lock of a connect (card #2844, F-2408 BR-6 to BR-8,
     };
     const {step, held, removedNow, sink} = stepOver(port);
     const input = inputFor('dev');
-    const result = await step(
-      input,
-      () => undefined,
-      new AbortController().signal,
-    );
-    if (result.kind === 'done') {
-      result.value.release();
-    }
+    const result = await takenAndReleased(step, input);
     held.releaseAll();
     deepStrictEqual(
       {
@@ -228,7 +237,7 @@ describe('the client install lock of a connect (card #2844, F-2408 BR-6 to BR-8,
     );
   });
 
-  it("BR-8: the extension's end removes the files of the locks still held, and not those released", async () => {
+  it("BR-8: the extension's end removes the files of the locks still held, once, and a released lock's file only at its release", async () => {
     const clock = steppingClock();
     const port = new MemoryLockPort(clock);
     const {step, held, removedNow} = stepOver(port, clock);
@@ -241,6 +250,16 @@ describe('the client install lock of a connect (card #2844, F-2408 BR-6 to BR-8,
     }
     held.releaseAll();
     held.releaseAll();
-    deepStrictEqual(removedNow, [pathOf(kept)]);
+    deepStrictEqual(removedNow, [pathOf(inputFor('released')), pathOf(kept)]);
+  });
+
+  it('BR-6, BR-8 (gate 44548262473): a release removes the file at once, before any wait, so a window that ends right after it leaves no file', async () => {
+    const clock = steppingClock();
+    const port = new MemoryLockPort(clock);
+    const {step, removedNow} = stepOver(port, clock);
+    const input = inputFor('dev');
+    await takenAndReleased(step, input);
+    const removedAtTheRelease = [...removedNow];
+    deepStrictEqual(removedAtTheRelease, [pathOf(input)]);
   });
 });
