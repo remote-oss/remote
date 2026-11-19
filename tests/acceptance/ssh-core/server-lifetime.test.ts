@@ -527,27 +527,29 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
     );
   });
 
-  it('F-2413 AC-10 (c2651-cut-reload): after the dialog that it cannot reconnect and with the host reachable, Reload Window connects to the server that still runs, which no new install follows', async () => {
-    const name = 'c2651-cut-reload';
-    await connectFresh(name, {[GRACE]: 60, [CUSTOM_DIALOGS]: 'custom'});
-    const server = await serverMain();
-    await cutObserved(name, seen => seen.dialog === GAVE_UP, 200_000);
-    const mark = connectionLog().length;
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    await answerDialog(name, 'Reload Window');
-    await connectedWithin(name, 120_000);
-    const reloaded = await serverMain();
-    deepStrictEqual(
-      [
-        reloaded,
-        connectionLog()
-          .slice(mark)
-          .filter(line => /install|download/i.test(line)),
-      ],
-      [server, []],
-      `${JSON.stringify(connectionLog().slice(mark))}\nthe host's server before the reload: ${server}\n${reloaded === server ? '' : await serverFacts()}`,
-    );
-  });
+  for (let round = 1; round <= 6; round += 1) {
+    it(`F-2413 AC-10 (c2651-cut-reload round ${String(round)}): after the dialog that it cannot reconnect and with the host reachable, Reload Window connects to the server that still runs, which no new install follows`, async () => {
+      const name = 'c2651-cut-reload';
+      await connectFresh(name, {[GRACE]: 60, [CUSTOM_DIALOGS]: 'custom'});
+      const server = await serverMain();
+      await cutObserved(name, seen => seen.dialog === GAVE_UP, 200_000);
+      const mark = connectionLog().length;
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      await answerDialog(name, 'Reload Window');
+      await connectedWithin(name, 120_000);
+      const reloaded = await serverMain();
+      deepStrictEqual(
+        [
+          reloaded,
+          connectionLog()
+            .slice(mark)
+            .filter(line => /install|download/i.test(line)),
+        ],
+        [server, []],
+        `${JSON.stringify(connectionLog().slice(mark))}\nthe host's server before the reload: ${server}\n${reloaded === server ? '' : await serverFacts()}`,
+      );
+    });
+  }
 
   it('F-2413 AC-9 (c2651-cut-default): with the default grace time a network lost for 90 s and back reconnects the window to the same server without a reload', async () => {
     const name = 'c2651-cut-default';
