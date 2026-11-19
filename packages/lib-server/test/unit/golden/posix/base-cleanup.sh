@@ -200,4 +200,26 @@ ls -t "$DATA_DIR/bin" 2>/dev/null | while IFS= read -r NAME; do
       ;;
   esac
 done
+if [ -d "$DATA_DIR/cli-bin" ]; then
+  ls -t "$DATA_DIR/cli-bin" 2>/dev/null | while IFS= read -r NAME; do
+    case $NAME in
+      *.*.*) ;;
+      *) continue ;;
+    esac
+    REST=${NAME#*.}
+    REST=${REST#*.}
+    RUN_PID=${REST%%.*}
+    case $REST in
+      *.*) SUFFIX=${REST#*.} ;;
+      *) SUFFIX= ;;
+    esac
+    case $SUFFIX in
+      ""|stage.*|archive.*) ;;
+      *) continue ;;
+    esac
+    kill -0 "$RUN_PID" 2>/dev/null && continue
+    rm -rf "$DATA_DIR/cli-bin/$NAME"
+  done
+  rmdir "$DATA_DIR/cli-bin" 2>/dev/null
+fi
 finish Ok

@@ -14,6 +14,7 @@ import {
   utimesSync,
   writeFileSync,
 } from 'node:fs';
+import {spawnSync} from 'node:child_process';
 import path from 'node:path';
 import {scriptFor, type ScriptParameters} from '../../src/index.ts';
 import {type FakeHost, parametersFor, runScript, single} from './fake-host.ts';
@@ -424,6 +425,98 @@ describe('the POSIX bootstrap script', () => {
 
     it('F-2413: cleanup with no bin/ is Ok', () => {
       deepStrictEqual(statusOf(host, single('cleanup'), parametersFor()), 'Ok');
+    });
+
+    describe('the cli-bin stages of killed runs (card #2886)', () => {
+      const COMMIT = 'abc1230000000000000000000000000000000000';
+      const STAGE = `${COMMIT}.1700000000000`;
+
+      /** The host's cli-bin, with bin/ present so the cleanup reaches it. */
+      function cliBin(): string {
+        const data = path.join(host.home, '.server-data');
+        mkdirSync(path.join(data, 'bin'), {recursive: true});
+        return path.join(data, 'cli-bin');
+      }
+
+      it('removes a stage of a dead pid with its .stage. and .archive. entries, and keeps the stage of a live pid', () => {
+        const cliBinFolder = cliBin();
+        const ended = spawnSync('true');
+        const deadStage = `${STAGE}.${String(ended.pid)}`;
+        mkdirSync(path.join(cliBinFolder, deadStage), {recursive: true});
+        mkdirSync(
+          path.join(cliBinFolder, `${deadStage}.stage.${String(ended.pid)}`),
+          {recursive: true},
+        );
+        writeFileSync(
+          path.join(cliBinFolder, `${deadStage}.archive.${String(ended.pid)}`),
+          '',
+        );
+        const liveStage = `${STAGE}.${String(process.pid)}`;
+        mkdirSync(path.join(cliBinFolder, liveStage), {recursive: true});
+        deepStrictEqual(
+          [
+            statusOf(host, single('cleanup'), parametersFor()),
+            readdirSync(cliBinFolder).sort(),
+          ],
+          ['Ok', [liveStage]],
+        );
+      });
+
+      it('keeps the .stage. and .archive. entries of a live pid', () => {
+        const cliBinFolder = cliBin();
+        const liveStage = `${STAGE}.${String(process.pid)}`;
+        mkdirSync(path.join(cliBinFolder, liveStage), {recursive: true});
+        mkdirSync(
+          path.join(cliBinFolder, `${liveStage}.stage.${String(process.pid)}`),
+          {recursive: true},
+        );
+        writeFileSync(
+          path.join(
+            cliBinFolder,
+            `${liveStage}.archive.${String(process.pid)}`,
+          ),
+          '',
+        );
+        deepStrictEqual(
+          [
+            statusOf(host, single('cleanup'), parametersFor()),
+            readdirSync(cliBinFolder).sort(),
+          ],
+          [
+            'Ok',
+            [
+              liveStage,
+              `${liveStage}.archive.${String(process.pid)}`,
+              `${liveStage}.stage.${String(process.pid)}`,
+            ].sort(),
+          ],
+        );
+      });
+
+      it('removes an empty cli-bin', () => {
+        const cliBinFolder = cliBin();
+        mkdirSync(cliBinFolder, {recursive: true});
+        deepStrictEqual(
+          [
+            statusOf(host, single('cleanup'), parametersFor()),
+            existsSync(cliBinFolder),
+          ],
+          ['Ok', false],
+        );
+      });
+
+      it('leaves a name that is not the per-run form', () => {
+        const cliBinFolder = cliBin();
+        mkdirSync(path.join(cliBinFolder, 'notes'), {recursive: true});
+        mkdirSync(path.join(cliBinFolder, 'two.fields'), {recursive: true});
+        deepStrictEqual(
+          [
+            statusOf(host, single('cleanup'), parametersFor()),
+            readdirSync(cliBinFolder).sort(),
+          ],
+          ['Ok', ['notes', 'two.fields']],
+        );
+      });
     });
   });
 

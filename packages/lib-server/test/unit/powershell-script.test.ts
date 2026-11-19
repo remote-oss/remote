@@ -1580,6 +1580,98 @@ describe('the PowerShell cleanup, run under pwsh', function () {
       holder.kill();
     }
   });
+
+  describe('the cli-bin stages of killed runs (card #2886)', () => {
+    /** The host's cli-bin, with bin/ present so the cleanup reaches it. */
+    function cliBin(
+      host: PowershellHost,
+      parameters: ScriptParameters,
+    ): string {
+      const data = path.join(host.home, parameters.dataFolderName);
+      mkdirSync(path.join(data, 'bin'), {recursive: true});
+      return path.join(data, 'cli-bin');
+    }
+
+    it('removes a stage of a dead pid with its .stage. and .archive. entries, and keeps the stage of a live pid', () => {
+      const host = powershellHost();
+      const parameters = {
+        ...parametersFor(),
+        cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
+      };
+      const cliBinFolder = cliBin(host, parameters);
+      const ended = spawnSync('true');
+      const deadStage = `${parameters.commit}.1700000000000.${String(ended.pid)}`;
+      mkdirSync(path.join(cliBinFolder, deadStage), {recursive: true});
+      mkdirSync(
+        path.join(cliBinFolder, `${deadStage}.stage.${String(ended.pid)}`),
+        {recursive: true},
+      );
+      writeFileSync(
+        path.join(cliBinFolder, `${deadStage}.archive.${String(ended.pid)}`),
+        '',
+      );
+      const liveStage = `${parameters.commit}.1700000000000.${String(process.pid)}`;
+      mkdirSync(path.join(cliBinFolder, liveStage), {recursive: true});
+      runOn(host, single('cleanup'), parameters);
+      deepStrictEqual(readdirSync(cliBinFolder).sort(), [liveStage]);
+    });
+
+    it('keeps the .stage. and .archive. entries of a live pid', () => {
+      const host = powershellHost();
+      const parameters = {
+        ...parametersFor(),
+        cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
+      };
+      const cliBinFolder = cliBin(host, parameters);
+      const liveStage = `${parameters.commit}.1700000000000.${String(process.pid)}`;
+      mkdirSync(path.join(cliBinFolder, liveStage), {recursive: true});
+      mkdirSync(
+        path.join(cliBinFolder, `${liveStage}.stage.${String(process.pid)}`),
+        {recursive: true},
+      );
+      writeFileSync(
+        path.join(cliBinFolder, `${liveStage}.archive.${String(process.pid)}`),
+        '',
+      );
+      runOn(host, single('cleanup'), parameters);
+      deepStrictEqual(
+        readdirSync(cliBinFolder).sort(),
+        [
+          liveStage,
+          `${liveStage}.archive.${String(process.pid)}`,
+          `${liveStage}.stage.${String(process.pid)}`,
+        ].sort(),
+      );
+    });
+
+    it('removes an empty cli-bin', () => {
+      const host = powershellHost();
+      const parameters = {
+        ...parametersFor(),
+        cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
+      };
+      const cliBinFolder = cliBin(host, parameters);
+      mkdirSync(cliBinFolder, {recursive: true});
+      runOn(host, single('cleanup'), parameters);
+      deepStrictEqual(existsSync(cliBinFolder), false);
+    });
+
+    it('leaves a name that is not the per-run form', () => {
+      const host = powershellHost();
+      const parameters = {
+        ...parametersFor(),
+        cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
+      };
+      const cliBinFolder = cliBin(host, parameters);
+      mkdirSync(path.join(cliBinFolder, 'notes'), {recursive: true});
+      mkdirSync(path.join(cliBinFolder, 'two.fields'), {recursive: true});
+      runOn(host, single('cleanup'), parameters);
+      deepStrictEqual(readdirSync(cliBinFolder).sort(), [
+        'notes',
+        'two.fields',
+      ]);
+    });
+  });
 });
 
 /** The key of the CLI's place in the parameters. */

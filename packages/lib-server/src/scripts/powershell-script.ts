@@ -381,6 +381,20 @@ const CLEANUP_BODY: readonly string[] = [
   '    }',
   '  }',
   '}',
+  // A killed CLI run leaves its per-run stage: <commit>.<stamp>.<pid>, and its .stage. and .archive. entries beside it.
+  // The pid the name carries decides: a running pid keeps its stage, a dead one's is removed, and an empty cli-bin goes with it.
+  "$CliBin = [System.IO.Path]::Combine($DATA_DIR, 'cli-bin')",
+  'if (Test-Path -LiteralPath $CliBin -PathType Container) {',
+  '  foreach ($Entry in @(Get-ChildItem -LiteralPath $CliBin -Force)) {',
+  "    $Fields = $Entry.Name.Split('.')",
+  '    if ($Fields.Count -lt 3) { continue }',
+  "    if ($Fields.Count -eq 3) { $Tail = '' } else { $Tail = $Fields[3..($Fields.Count - 1)] -join '.' }",
+  "    if (($Tail -ne '') -and ($Tail -notlike 'stage.*') -and ($Tail -notlike 'archive.*')) { continue }",
+  '    if (Get-Process -Id $Fields[2] -ErrorAction SilentlyContinue) { continue }',
+  '    Remove-Item -LiteralPath ([System.IO.Path]::Combine($CliBin, $Entry.Name)) -Recurse -Force -ErrorAction SilentlyContinue',
+  '  }',
+  '  Remove-Item -LiteralPath $CliBin -Force -ErrorAction SilentlyContinue',
+  '}',
   "Complete-Step 'Ok'",
 ];
 
