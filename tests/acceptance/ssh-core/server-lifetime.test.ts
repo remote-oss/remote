@@ -156,7 +156,7 @@ async function serverFacts(): Promise<string> {
   return onHost(
     'sh',
     '-c',
-    `for pid in $(pgrep -f '${DATA_FOLDER}/bin/'); do echo "$pid parent $(awk '{print $4}' /proc/$pid/stat 2>/dev/null) start $(stat -c %y /proc/$pid 2>/dev/null) $(tr '\\0' ' ' </proc/$pid/cmdline 2>/dev/null)"; done; ls -lA --full-time ${DATA_FOLDER} ${DATA_FOLDER}/bin/* 2>&1; for pidfile in ${DATA_FOLDER}/.*.pid; do echo "$pidfile: $(cat "$pidfile" 2>&1)"; done; tail -n 20 ${DATA_FOLDER}/.*.log 2>&1; true`,
+    `for pid in $(pgrep -f '${DATA_FOLDER}/bin/'); do [ "$pid" != "$$" ] || continue; echo "$pid parent $(awk '{print $4}' /proc/$pid/stat 2>/dev/null) start $(stat -c %y /proc/$pid 2>/dev/null) $(tr '\\0' ' ' </proc/$pid/cmdline 2>/dev/null)"; done; ls -lA --full-time ${DATA_FOLDER} ${DATA_FOLDER}/bin/* 2>&1; for pidfile in ${DATA_FOLDER}/.*.pid; do echo "$pidfile: $(cat "$pidfile" 2>&1)"; done; tail -n 20 ${DATA_FOLDER}/.*.log 2>&1; true`,
   ).catch(
     (caught: unknown) => `the facts could not be read: ${String(caught)}`,
   );
