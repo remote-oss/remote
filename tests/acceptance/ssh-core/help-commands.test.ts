@@ -190,7 +190,7 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
     );
     try {
       await runFromPalette(empty, 'Remote-SSH: Help');
-      await waitFor('the window to settle', () => true, 3_000);
+      await settle(3_000);
       deepStrictEqual(
         [
           (await notifications(empty)).length,
@@ -211,11 +211,11 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
     mkdirSync(runDir, {recursive: true});
     const folder = await openFolderWindow(runDir);
     try {
-      await waitFor('the window to settle', () => true, 2_000);
+      await settle(2_000);
       await inWindow(folder, 'acceptance.agent.state');
       const before = await windowState(folder);
       await runFromPalette(folder, 'Remote-SSH: Get Started with SSH');
-      await waitFor('the window to settle', () => true, 3_000);
+      await settle(3_000);
       await inWindow(folder, 'acceptance.agent.state');
       const after = await windowState(folder);
       deepStrictEqual(
@@ -343,7 +343,7 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
       const state = await windowState(folder);
       // The manifest holds no keybinding, so the command is invoked directly, as the keybinding would invoke it.
       await startInWindow(folder, HELP_COMMANDS.feedback);
-      await waitFor('the window to settle', () => true, 3_000);
+      await settle(3_000);
       deepStrictEqual(
         [
           userSettingsText() === settingsBefore,
@@ -450,7 +450,7 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
         } else {
           await startInWindow(window, command);
         }
-        await waitFor('the window to settle', () => true, 3_000);
+        await settle(3_000);
       } finally {
         await closeContained(window, pressEscape, 30_000);
       }
@@ -500,7 +500,7 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
       await runFromPalette(folder, 'Remote-SSH: Get Started with SSH');
       // The command the palette hides: invoked as the window's own command, whose open never settles in the run's editor.
       await startInWindow(folder, HELP_COMMANDS.feedback);
-      await waitFor('the window to settle', () => true, 3_000);
+      await settle(3_000);
       deepStrictEqual(
         [!companion, (await notifications(folder)).length === 0],
         [true, true],
