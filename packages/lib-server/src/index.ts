@@ -137,7 +137,6 @@ export {
 export {
   type CliInstallOutcome,
   type CliPlacement,
-  type CliStartDependencies,
   type CliStopOutcome,
   installCli,
   startCli,

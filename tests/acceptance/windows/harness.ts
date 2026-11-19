@@ -43,7 +43,11 @@ import {
   type AppendedEntry,
 } from '../../../tools/script-file.ts';
 import {commandEventLines} from './agent-events.ts';
-import {holdingText, unfinishedCommands} from './agent-standing.ts';
+import {
+  holdingText,
+  unfinishedCommands,
+  windowFolderOf,
+} from './agent-standing.ts';
 import {explainedFailure, section} from './connect-failure.ts';
 import {editorFolderOf} from './editor-folder.ts';
 import {listedPageCount, waitUntilPageLeft} from './page-list.ts';
@@ -2533,6 +2537,28 @@ function newestSshLog(folder: string): string[] {
     : readFileSync(newest, 'utf8')
         .split('\n')
         .filter(line => line !== '');
+}
+
+/** When window `name`'s agent activated and deactivated: an extension host that started again shows as a second activation. */
+export function agentLife(name: string): Array<{event: string; time: number}> {
+  return windowEvents(name)
+    .filter(each => each.event === 'activated' || each.event === 'deactivated')
+    .map(each => ({event: each.event, time: each.time}));
+}
+
+/** The lines of window `name`'s own renderer log, in the window's folder of the editor's logs, which its agent's log folder names. */
+export function rendererLines(name: string): string[] {
+  const logFolder = windowEvents(name)
+    .filter(each => each.event === 'activated')
+    .at(-1)?.logFolder;
+  const folder =
+    logFolder === undefined ? undefined : windowFolderOf(logFolder);
+  if (folder === undefined) {
+    throw new Error(
+      `the agent of ${name} gave no window folder of the editor's logs: ${String(logFolder)}`,
+    );
+  }
+  return readFileSync(path.join(folder, 'renderer.log'), 'utf8').split('\n');
 }
 
 /**
