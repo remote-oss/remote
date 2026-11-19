@@ -5,6 +5,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
+import {readFileSync} from 'node:fs';
 import {
   appendScript,
   closeWindow,
@@ -17,6 +18,7 @@ import {
   reloadWindow,
   restoreUserSettings,
   signal,
+  variable,
   userSettings,
   waitFor,
 } from '../windows/harness.ts';
@@ -318,5 +320,183 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
       'remote.SSH.localServerDownload': 'always',
     });
     deepStrictEqual(shown.dialogs, [], JSON.stringify(shown));
+  });
+
+  /** The number of requests the download host has logged so far. */
+  function requestsLogged(): number {
+    return readFileSync(variable('HARNESS_DOWNLOADS_LOG'), 'utf8')
+      .split('\n')
+      .filter(line => line !== '').length;
+  }
+
+  /**
+   * Connects window `name` in legacy mode with `mode` as the local download (the server is copied from the client, as the
+   * host has no downloader), reloads it with `reloadMode`, and tells what the reload showed and whether it downloaded.
+   */
+  async function reloaded(
+    name: string,
+    mode: string,
+    reloadMode: string,
+  ): Promise<{dialogs: string[]; requests: number}> {
+    let shown = {dialogs: [] as string[], requests: -1};
+    await withSettings(
+      {
+        'remote.SSH.localServerDownload': mode,
+        'remote.SSH.useExecServer': false,
+      },
+      async () => {
+        appendScript(dismissals(name));
+        await openWindow(ALIAS, name, ACCOUNT);
+        try {
+          await connectedWithin(name, INSTALL_MILLISECONDS, ACCOUNT);
+          await userSettings({'remote.SSH.localServerDownload': reloadMode});
+          const before = requestsLogged();
+          await reloadWindow(name);
+          await connectedWithin(name, INSTALL_MILLISECONDS, ACCOUNT);
+          shown = {
+            dialogs: recordLines('failureDialog', name).map(
+              line => line.question,
+            ),
+            requests: requestsLogged() - before,
+          };
+        } finally {
+          await closeWindow(name).catch(() => undefined);
+        }
+      },
+    );
+    return shown;
+  }
+
+  it('F-2402 AC-10 (c2854-legacy-off): a legacy server installed and running on a host with no downloader, "off" and a reload: the window connects to it, with no dialog and nothing downloaded', async () => {
+    deepStrictEqual(await reloaded('c2854-legacy-off', 'auto', 'off'), {
+      dialogs: [],
+      requests: 0,
+    });
+  });
+
+  it('F-2402 AC-17 (c2854-legacy-reload): the same with "auto": the reload connects, with no dialog and no download', async () => {
+    deepStrictEqual(await reloaded('c2854-legacy-reload', 'auto', 'auto'), {
+      dialogs: [],
+      requests: 0,
+    });
+  });
+
+  it('F-2402 AC-18 (c2854-legacy-always): the same with "always": the reload connects, with no dialog and no download', async () => {
+    deepStrictEqual(await reloaded('c2854-legacy-always', 'always', 'always'), {
+      dialogs: [],
+      requests: 0,
+    });
+  });
+
+  it('F-2402 AC-19 (c2854-legacy-stopped): a legacy server installed but not running, "off" and no downloader: the window connects, with no dialog', async () => {
+    await withSettings(
+      {
+        'remote.SSH.localServerDownload': 'auto',
+        'remote.SSH.useExecServer': false,
+      },
+      async () => {
+        const name = 'c2854-legacy-stopped';
+        appendScript(dismissals(name));
+        await openWindow(ALIAS, name, ACCOUNT);
+        await connectedWithin(name, INSTALL_MILLISECONDS, ACCOUNT);
+        await closeWindow(name);
+        await onHostAs(
+          ACCOUNT,
+          'pkill',
+          '-f',
+          `${DATA_FOLDER.replace('/harness/', `/${ACCOUNT}/`).replace('/.', '/[.]')}/bin/`,
+        ).catch(() => undefined);
+        await userSettings({'remote.SSH.localServerDownload': 'off'});
+        const again = 'c2854-legacy-stopped-again';
+        appendScript(dismissals(again));
+        await openWindow(ALIAS, again, ACCOUNT);
+        try {
+          await connectedWithin(again, INSTALL_MILLISECONDS, ACCOUNT);
+          deepStrictEqual(
+            recordLines('failureDialog', again).map(line => line.question),
+            [],
+          );
+        } finally {
+          await closeWindow(again).catch(() => undefined);
+        }
+      },
+    );
+  });
+
+  it('F-2402 AC-8 (c2854-curl-only): a host with only curl, with the default settings: the window connects without any text of this feature, the host having downloaded the server itself', async () => {
+    await withSettings(
+      {'remote.SSH.localServerDownload': undefined},
+      async () => {
+        const name = 'c2854-curl-only';
+        appendScript(dismissals(name));
+        await onHostAs(
+          ACCOUNT,
+          'ln',
+          '-s',
+          '/opt/fetch-off/curl',
+          '/opt/nofetch/bin/curl',
+        );
+        try {
+          await openWindow(ALIAS, name, ACCOUNT);
+          await connectedWithin(name, INSTALL_MILLISECONDS, ACCOUNT);
+          const stages = recordLines('progress', name).map(line =>
+            String(line.details ?? ''),
+          );
+          deepStrictEqual(
+            [
+              recordLines('failureDialog', name).length,
+              stages.some(stage => stage.includes('Copying VS Code Server')),
+              stages.some(stage =>
+                stage.includes('Downloading VS Code Server locally'),
+              ),
+            ],
+            [0, false, false],
+            JSON.stringify(stages),
+          );
+        } finally {
+          await onHostAs(ACCOUNT, 'rm', '-f', '/opt/nofetch/bin/curl');
+          await closeWindow(name).catch(() => undefined);
+        }
+      },
+    );
+  });
+
+  it('F-2402 AC-13 (c2854-more-actions): More Actions... opens the pick of actions with its placeholder and no item about curl or wget', async () => {
+    await withSettings({}, async () => {
+      const name = 'c2854-more-actions';
+      appendScript([
+        {
+          surface: 'failureDialog',
+          match: 'Could not establish connection',
+          answer: {button: 'More Actions...'},
+          window: name,
+        },
+        {
+          surface: 'mitigationPick',
+          match: 'Pick an action',
+          answer: 'dismiss',
+          window: name,
+        },
+      ]);
+      await openWindow(ALIAS, name);
+      try {
+        await waitFor(
+          'the pick of actions',
+          () => recordLines('mitigationPick', name).length > 0,
+          120_000,
+        );
+        const pick = recordLines('mitigationPick', name)[0];
+        deepStrictEqual(
+          [
+            pick?.question,
+            (pick?.items ?? []).filter(item => /curl|wget/iu.test(item)),
+          ],
+          ['Pick an action to help resolve the problem.', []],
+          JSON.stringify(pick),
+        );
+      } finally {
+        await closeWindow(name).catch(() => undefined);
+      }
+    });
   });
 });
