@@ -1,6 +1,5 @@
 import {deepStrictEqual, ok} from 'node:assert';
 import {existsSync, readFileSync, rmSync} from 'node:fs';
-import path from 'node:path';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
   agentClear,
@@ -47,6 +46,7 @@ import {
   settingsText,
   typeHost,
 } from './maintenance.ts';
+import {userFilesText} from './key-bindings.ts';
 
 /** The message of the handler's error when an uninstall could not run. */
 const UNINSTALL_FAILED = 'Failed to run command';
@@ -113,20 +113,6 @@ async function removedWithin(file: string): Promise<void> {
       {cause: caught},
     );
   }
-}
-
-/** The bytes of the launch's keybindings file, or nothing when it doesn't exist. */
-function keybindingsText(): string | undefined {
-  const file = path.join(
-    variable('HARNESS_USER_DATA'),
-    'User/keybindings.json',
-  );
-  return existsSync(file) ? readFileSync(file, 'utf8') : undefined;
-}
-
-/** The user files a row must leave unchanged, as text. */
-function userFiles(): [string, string | undefined] {
-  return [settingsText(), keybindingsText()];
 }
 
 /** The `HostName` the run's `password` block names. */
@@ -265,9 +251,9 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
     const state = await windowState('local');
     const marker = `${DATA_FOLDER}/uninstall-marker`;
     await onHostAs('harness', 'touch', marker);
-    const before = userFiles();
+    const before = userFilesText();
     const mark = await uninstallWith('local', [pickHost('harness')]);
-    filesAround.push(['AC-4', before, userFiles()]);
+    filesAround.push(['AC-4', before, userFilesText()]);
     const removed = !(await existsOnHost(marker));
     await serversGoneWithin(servers, 10_000);
     deepStrictEqual(
@@ -347,9 +333,9 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
   });
 
   it('F-2412 AC-12: a refused host fails within 2 s with the handler’s error and no notice of ours', async () => {
-    const before = userFiles();
+    const before = userFilesText();
     const failed = await failedUninstall('local', [pickHost('refused')]);
-    filesAround.push(['AC-12', before, userFiles()]);
+    filesAround.push(['AC-12', before, userFilesText()]);
     deepStrictEqual(
       [
         failed.message.includes(UNINSTALL_FAILED),
@@ -678,12 +664,12 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
 
     it('F-2412 AC-31, F-2206 AC-33: Escape at the platform pick ends the uninstall with nothing changed', async () => {
       await makeDataFolder();
-      const before = userFiles();
+      const before = userFilesText();
       const mark = await uninstallWith('local', [
         pickHost('harness'),
         platformAnswer('dismiss'),
       ]);
-      filesAround.push(['AC-31', before, userFiles()]);
+      filesAround.push(['AC-31', before, userFilesText()]);
       deepStrictEqual(
         [surfacesSince(mark, 'local'), await existsOnHost(DATA_FOLDER)],
         [['hostPick', 'platformPick'], true],
@@ -754,7 +740,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
     it('F-2412 AC-25 (c43-unknown-key): with no local server, a host whose key is unknown is not uninstalled by the pick, writes no setting, and leaves the window usable', async () => {
       rmSync(passwordAskHosts(), {force: true});
       await onHostAs('harness-pw', 'mkdir', '-p', PASSWORD_DATA_FOLDER);
-      const before = userFiles();
+      const before = userFilesText();
       const mark = recordLines().length;
       await uninstallWith('local', [
         pickHost('password-ask'),
@@ -766,7 +752,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
         [
           surfacesSince(mark, 'local'),
           await existsOnHost(PASSWORD_DATA_FOLDER),
-          userFiles(),
+          userFilesText(),
           existsSync(passwordAskHosts()),
         ],
         [['hostPick', 'platformPick', 'pick'], true, before, false],

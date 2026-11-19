@@ -28,7 +28,8 @@ if ! docker buildx version >/dev/null 2>&1; then
   trap 'rm -rf "$work"' EXIT
   url="https://github.com/docker/buildx/releases/download/v$BUILDX_VERSION/buildx-v$BUILDX_VERSION.linux-$arch"
   # A refused or failed request (a 403 or 5xx from the release host) is tried again, five times in all.
-  curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 -o "$work/docker-buildx" "$url" || {
+  # seven tries, curl doubling its pause from 1 s (63 s in all), so a burst of the release network's 504s passes
+  curl -fsSL --retry 6 --retry-all-errors -o "$work/docker-buildx" "$url" || {
     echo "install-buildx: $url could not be downloaded" >&2
     exit 1
   }
