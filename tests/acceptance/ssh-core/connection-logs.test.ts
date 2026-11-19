@@ -465,10 +465,10 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
 
   it("F-2003 AC-11 (c121-full-order): a fresh connect's record holds the BR-6 kinds in order: the log level, the resolve start, the settings listing, the versions, the client search, ssh started, the remote output, the listening port, the resolved authority, the rule and the analysis", async () => {
     await freshHost();
-    const mark = connectionLog().length;
+    const mark = connectionLog({withSettings: true}).length;
     await openConnected('c121-order', INSTALL_MILLISECONDS);
     try {
-      const lines = connectionLog().slice(mark);
+      const lines = connectionLog({withSettings: true}).slice(mark);
       const versions = lines.findIndex(each => each.includes('Editor version'));
       const resolving = lines.findIndex(each =>
         each.startsWith('Resolving ssh-remote+harness, attempt 1'),

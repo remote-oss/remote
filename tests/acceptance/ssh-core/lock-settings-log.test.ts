@@ -5,6 +5,7 @@
 
 import {deepStrictEqual} from 'node:assert';
 import {connectWith} from '../windows/config-keywords-support.ts';
+import {connectionLog} from '../windows/harness.ts';
 
 describe('the lock settings in the Remote - SSH log (card #2819, F-2408 AC-3)', function () {
   this.timeout(300_000);
@@ -18,10 +19,14 @@ describe('the lock settings in the Remote - SSH log (card #2819, F-2408 AC-3)', 
       alias,
       [],
       'connects',
-      outcome => {
-        const shown = outcome.connectLog.filter(line =>
-          line.startsWith('remote.SSH.'),
+      () => {
+        const lines = connectionLog({withSettings: true});
+        const resolved = lines.findLastIndex(line =>
+          line.startsWith('Resolving ssh-remote+'),
         );
+        const shown = lines
+          .slice(resolved)
+          .filter(line => line.startsWith('remote.SSH.'));
         return {
           locks: shown
             .filter(line =>

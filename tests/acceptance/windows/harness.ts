@@ -310,11 +310,14 @@ function stampedLogLinesOf(variableName: string): string[] {
     .filter(line => line !== '');
 }
 
+/** `line` without its time stamp. */
+function withoutStamp(line: string): string {
+  return line.slice(line.indexOf('] ') + 2);
+}
+
 /** The lines of the log file named by `variableName`, without their time stamps; none before the first is written. */
 function logLinesOf(variableName: string): string[] {
-  return stampedLogLinesOf(variableName).map(line =>
-    line.slice(line.indexOf('] ') + 2),
-  );
+  return stampedLogLinesOf(variableName).map(withoutStamp);
 }
 
 /** The folder the launch's editor keeps its state in, its logs included: one session folder per start of the editor, with `main.log` below it. */
@@ -322,16 +325,22 @@ export function editorLogsFolder(): string {
   return variable('HARNESS_EDITOR_LOGS');
 }
 
+/** A line of the log's settings listing, `remote.SSH.<name> = <value>`: its words are the settings', which no row about anything else may match. */
+const SETTING_LINE = /^remote\.SSH\.[\w.]+ = /u;
+
 /**
  * The lines of the log the launch's extensions write, without their time stamps, or with them when `withTimes` is set,
- * for a failure to show the order and the gaps of a race; none before the first is written.
+ * for a failure to show the order and the gaps of a race; none before the first is written. The settings listing of each
+ * resolve is left out unless `withSettings` is set, so that a row's filter cannot match a setting's name or value.
  */
 export function connectionLog({
   withTimes = false,
-}: {withTimes?: boolean} = {}): string[] {
-  return withTimes
-    ? stampedLogLinesOf('REMOTE_OSS_ACCEPTANCE_LOG')
-    : logLinesOf('REMOTE_OSS_ACCEPTANCE_LOG');
+  withSettings = false,
+}: {withTimes?: boolean; withSettings?: boolean} = {}): string[] {
+  const kept = stampedLogLinesOf('REMOTE_OSS_ACCEPTANCE_LOG').filter(
+    line => withSettings || !SETTING_LINE.test(withoutStamp(line)),
+  );
+  return withTimes ? kept : kept.map(withoutStamp);
 }
 
 /** One push that Remote Explorer's inbox received from Remote - SSH, as the explorer records it. */

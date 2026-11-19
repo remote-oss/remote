@@ -43,12 +43,16 @@ export async function onHost(...command: string[]): Promise<string> {
   return stdout;
 }
 
-/** The lines of the log the harness reads, `REMOTE_OSS_ACCEPTANCE_LOG`, without their time stamps. */
+/** A line of the log's settings listing, which no row about anything else may match. */
+const SETTING_LINE = /^remote\.SSH\.[\w.]+ = /u;
+
+/** The lines of the log the harness reads, `REMOTE_OSS_ACCEPTANCE_LOG`, without their time stamps and without the settings listing. */
 export function connectionLog(): string[] {
   return readFileSync(harnessVariable('REMOTE_OSS_ACCEPTANCE_LOG'), 'utf8')
     .split('\n')
     .filter(line => line !== '')
-    .map(line => line.slice(line.indexOf('] ') + 2));
+    .map(line => line.slice(line.indexOf('] ') + 2))
+    .filter(line => !SETTING_LINE.test(line));
 }
 
 /** The lines of the record this window's adapters wrote, optionally of one surface. */

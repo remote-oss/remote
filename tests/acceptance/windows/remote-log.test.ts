@@ -81,10 +81,10 @@ describe('the remote install and start output in the log (card connect-67)', fun
     });
     try {
       await freshHost();
-      const mark = connectionLog().length;
+      const mark = connectionLog({withSettings: true}).length;
       await openConnected('rl2', INSTALL_MILLISECONDS);
       try {
-        const lines = connectionLog().slice(mark);
+        const lines = connectionLog({withSettings: true}).slice(mark);
         deepStrictEqual(
           {
             ...remoteSideOf(lines),
