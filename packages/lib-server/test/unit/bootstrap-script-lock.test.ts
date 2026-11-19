@@ -12,9 +12,11 @@ import {
   symlinkSync,
   unlinkSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   writeFileSync,
 } from 'node:fs';
+import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {scriptFor, type ScriptParameters} from '../../src/index.ts';
 import {
@@ -796,5 +798,37 @@ describe('the POSIX bootstrap script', () => {
         undefined,
       );
     });
+  });
+});
+
+describe('what a lock-holding script leaves running (F-2408 BR-4, card #2855)', () => {
+  it('F-2408 BR-4: every server and CLI launch of the POSIX scripts closes descriptor 9, so a server never holds the session lock', () => {
+    const launches = (['start', 'startCli'] as const).flatMap(kind =>
+      scriptFor(single(kind), 'posixShell', parametersFor())
+        .split('\n')
+        .filter(line => line.includes('nohup ')),
+    );
+    deepStrictEqual(
+      [launches.length > 0, launches.every(line => line.endsWith(' 9>&- &'))],
+      [true, true],
+    );
+  });
+
+  it('F-2408 BR-4: in a real sh, a child left running by a script that holds descriptor 9 leaves the lock free once the shell exits when it closed the descriptor, and held when it did not', function () {
+    if (spawnSync('flock', ['--version']).status !== 0) {
+      this.skip();
+    }
+    const folder = mkdtempSync(path.join(tmpdir(), 'lock-'));
+    function outcome(closing: string): string {
+      const file = path.join(folder, `held${closing === '' ? 'open' : 'shut'}`);
+      const script = `exec 9>>'${file}'; flock -n 9; sleep 3 ${closing} </dev/null >/dev/null 2>&1 &`;
+      spawnSync('/bin/sh', ['-c', script]);
+      const probe = spawnSync('sh', [
+        '-c',
+        `exec 7>>'${file}'; flock -n 7 && echo free || echo busy`,
+      ]);
+      return probe.stdout.toString().trim();
+    }
+    deepStrictEqual([outcome('9>&-'), outcome('')], ['free', 'busy']);
   });
 });
