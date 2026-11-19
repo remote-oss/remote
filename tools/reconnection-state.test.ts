@@ -171,4 +171,38 @@ describe('the state a window showed when its wait for core’s dialog timed out 
       ],
     );
   });
+
+  it('#2753: a page that never answers is told after the limit as no answer, and the other sections are still read', async () => {
+    const text = await reconnectionGlance(
+      reads({pageFacts: () => new Promise<string[]>(() => undefined)}),
+      0,
+      20,
+    );
+    deepStrictEqual(
+      [
+        text.includes(
+          'the pages now (focus, visibility, quick input):\n(no answer in 0.02 s)\n',
+        ),
+        text.includes('[+0.2 s] activated'),
+      ],
+      [true, true],
+    );
+  });
+
+  it('#2753: a page that fails after the limit is no failure of the glance', async () => {
+    const text = await reconnectionGlance(
+      reads({
+        pageFacts: () =>
+          new Promise<string[]>((resolve, reject) => {
+            setTimeout(() => {
+              reject(new Error('page gone'));
+            }, 40);
+          }),
+      }),
+      0,
+      10,
+    );
+    await new Promise(resolve => setTimeout(resolve, 60));
+    deepStrictEqual(text.includes('(no answer in 0.01 s)'), true);
+  });
 });

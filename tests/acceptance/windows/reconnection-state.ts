@@ -44,6 +44,31 @@ const RENDERER_PATTERN =
 /** The longest renderer log line the explanation keeps whole. */
 const LINE_LENGTH = 240;
 
+/**
+ * How long the glance waits for the pages' facts, which each page of the launch answers through the editor's debugging
+ * protocol: a page that does not answer must not hold a passing row until its test's own timeout.
+ */
+const PAGE_FACTS_MILLISECONDS = 10_000;
+
+/** What `read` gives, or a line saying it gave nothing within `milliseconds`; a late failure of it is dropped. */
+async function withinMilliseconds(
+  read: Promise<string>,
+  milliseconds: number,
+): Promise<string> {
+  let timer: NodeJS.Timeout | undefined;
+  const silent = new Promise<string>(resolve => {
+    timer = setTimeout(() => {
+      resolve(`(no answer in ${String(milliseconds / 1000)} s)`);
+    }, milliseconds);
+  });
+  read.catch(() => undefined);
+  try {
+    return await Promise.race([read, silent]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** `milliseconds` as seconds with a sign, to one decimal. */
 function signedSeconds(milliseconds: number): string {
   return `${milliseconds < 0 ? '-' : '+'}${(Math.abs(milliseconds) / 1000).toFixed(1)} s`;
@@ -52,19 +77,23 @@ function signedSeconds(milliseconds: number): string {
 /**
  * What a window's page and extension host did, in a few lines that a run prints green or red alike so that the two
  * compare: the read of the page before the outage, what each page says of its focus and visibility, when the agent
- * activated or deactivated relative to the end, and the lines of the renderer log about the reconnection.
+ * activated or deactivated relative to the end, and the lines of the renderer log about the reconnection. Reading the
+ * pages is bounded by `pageMilliseconds`, so that the glance cannot hold a row that passed.
  */
 export async function reconnectionGlance(
   reads: StateReads,
   endedAt: number,
+  pageMilliseconds = PAGE_FACTS_MILLISECONDS,
 ): Promise<string> {
   return [
     section('the read of the window’s page before the outage', () =>
       reads.pageRead(),
     ),
-    await settledSection(
-      'the pages now (focus, visibility, quick input)',
-      async () => (await reads.pageFacts()).join('\n'),
+    await settledSection('the pages now (focus, visibility, quick input)', () =>
+      withinMilliseconds(
+        reads.pageFacts().then(facts => facts.join('\n')),
+        pageMilliseconds,
+      ),
     ),
     section(
       'the window’s agent, activated or deactivated (time from the end)',
