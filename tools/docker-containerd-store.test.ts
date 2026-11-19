@@ -16,7 +16,30 @@ const FORMATS = [
   ).matchAll(/docker info --format '([^']+)'/g),
 ].map(match => String(match[1]));
 
+/**
+ * Whether `output`, what the store format printed, is the line the script reads: the driver, a space, then the driver
+ * type, empty for a driver that has none (`overlay2`). Only the newline is taken off: the space before an empty type is
+ * part of the line.
+ */
+function isStoreLine(output: string): boolean {
+  return /^\S+ \S*$/.test(output.replace(/\n$/, ''));
+}
+
 describe('docker-containerd-store (card tooling-173)', () => {
+  it('#2288: a store line is the driver, a space and the driver type, which a driver without one leaves empty; a line that lost its space is not one', () => {
+    deepStrictEqual(
+      [
+        'overlayfs io.containerd.snapshotter.v1\n',
+        'overlay2 \n',
+        'overlay2 ',
+        'overlay2\n',
+        'overlay2',
+        '',
+      ].map(isStoreLine),
+      [true, true, true, false, false, false],
+    );
+  });
+
   it("tooling-173: the daemon formats the script's store line and its mirrors, the mirrors as a JSON list", function () {
     // A real daemon's first calls can take seconds on a busy hosted runner, past mocha's 10 s.
     this.timeout(60_000);
@@ -27,13 +50,11 @@ describe('docker-containerd-store (card tooling-173)', () => {
       runCommand('docker', ['info', '--format', format]),
     );
     const listed = JSON.parse(mirrors?.stdout ?? '') as unknown;
-    // The line keeps its space when the driver has no type, as `overlay2` has: only the newline is taken off.
-    const storeLine = (store?.stdout ?? '').replace(/\n$/, '');
     deepStrictEqual(
       [
         FORMATS.length,
         store?.status,
-        /^\S+ \S*$/.test(storeLine),
+        isStoreLine(store?.stdout ?? ''),
         mirrors?.status,
         listed === null || Array.isArray(listed),
       ],
