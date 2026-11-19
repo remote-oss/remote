@@ -100,7 +100,7 @@ if ($INSTALL_ROOT -ne '') {
 }
 $DATA_DIR = [System.IO.Path]::Combine($DATA_ROOT, $DATA_FOLDER)
 $INSTALL_DIR = [System.IO.Path]::Combine($DATA_DIR, 'bin', $COMMIT)
-$CLI_STAGING = [System.IO.Path]::Combine($DATA_DIR, 'cli-bin', $COMMIT)
+$CLI_STAGING = [System.IO.Path]::Combine($DATA_DIR, 'cli-bin', $COMMIT + '.' + $STAGING_SUFFIX + '.' + $PID)
 $CLI_FILE = [System.IO.Path]::Combine($DATA_DIR, $CLI_NAME)
 $BOOT_PREFIX = [System.IO.Path]::Combine($DATA_DIR, '.' + $COMMIT)
 if ($INSTALL_TREE -ne '') {
@@ -250,7 +250,6 @@ try {
 } catch {
   Write-Failed $INSTALL_DIR (Get-FailureMessage $_)
 }
-Enter-LockOrComplete $COMMIT
 if (Test-Path -LiteralPath $CLI_FILE -PathType Leaf) {
   Add-Fact 'cli.path' $CLI_FILE
   Exit-Step 'Ok'
@@ -258,9 +257,7 @@ if (Test-Path -LiteralPath $CLI_FILE -PathType Leaf) {
 try {
   New-Folder $CLI_STAGING
 } catch {
-  $Message = Get-FailureMessage $_
-  Exit-Lock
-  Write-Failed $CLI_STAGING $Message
+  Write-Failed $CLI_STAGING (Get-FailureMessage $_)
 }
 Initialize-Environment
 if ($ARCHIVE_PATH -ne '') {
@@ -282,6 +279,11 @@ $Staged = [System.IO.Path]::Combine($CLI_STAGING, $LAUNCHER)
 if (-not $Unpacked -or -not (Test-Path -LiteralPath $Staged -PathType Leaf)) {
   Clear-Staging
   Exit-Step 'UnpackFailed'
+}
+if (Test-Path -LiteralPath $CLI_FILE -PathType Leaf) {
+  Clear-Staging
+  Add-Fact 'cli.path' $CLI_FILE
+  Exit-Step 'Ok'
 }
 try {
   Move-Item -LiteralPath $Staged -Destination $CLI_FILE -Force -ErrorAction Stop

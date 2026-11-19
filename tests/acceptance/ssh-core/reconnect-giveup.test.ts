@@ -6,6 +6,7 @@
 
 import {deepStrictEqual} from 'node:assert';
 import {
+  agentLife,
   appendScript,
   closeWindow,
   connectedWithin,
@@ -16,12 +17,17 @@ import {
   openWindow,
   readUserSettings,
   recordLines,
+  rendererLines,
   restoreUserSettings,
   userSettings,
 } from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {explainedFailure} from '../windows/connect-failure.ts';
-import {reconnectionState} from '../windows/reconnection-state.ts';
+import {
+  reconnectionGlance,
+  reconnectionState,
+  type StateReads,
+} from '../windows/reconnection-state.ts';
 import {
   dialogOf,
   notifications,
@@ -91,27 +97,27 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     const readEnded = Date.now();
     await inWindow(name, 'opensshremotes.cleanLocalServer');
     const outageDone = Date.now();
+    const reads: StateReads = {
+      recorded: () => recordLines(undefined, name),
+      indicator: () => statusBarText(name, 'status.host'),
+      dialog: () => dialogOf(name),
+      notifications: () => notifications(name),
+      logLines: () => connectionLog(),
+      pageFacts: () => pageFocusFacts(),
+      pageRead: () =>
+        `the read began ${String(readStarted - endedAt)} ms after the end was noted, took ${String(readEnded - readStarted)} ms, and the outage command took ${String(outageDone - readEnded)} ms`,
+      agentLife: () => agentLife(name),
+      rendererLines: () => rendererLines(name),
+    };
     const dialog = await waitForDialog(name, 180_000).catch(
       async (caught: unknown) => {
         throw await explainedFailure(caught, () =>
-          reconnectionState(
-            {
-              recorded: () => recordLines(undefined, name),
-              indicator: () => statusBarText(name, 'status.host'),
-              dialog: () => dialogOf(name),
-              notifications: () => notifications(name),
-              logLines: () => connectionLog(),
-              pageFacts: () => pageFocusFacts(),
-              pageRead: () =>
-                `the read began ${String(readStarted - endedAt)} ms after the end was noted, took ${String(readEnded - readStarted)} ms, and the outage command took ${String(outageDone - readEnded)} ms`,
-            },
-            name,
-            mark,
-            endedAt,
-          ),
+          reconnectionState(reads, name, mark, endedAt),
         );
       },
     );
+    // What a window shows when the dialog does come, to set beside the lines of a red.
+    console.log(`${name}:\n${await reconnectionGlance(reads, endedAt)}`);
     // Time for an attempt the extension should not make.
     await new Promise(resolve => setTimeout(resolve, 20_000));
     return {
