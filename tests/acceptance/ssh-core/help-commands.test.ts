@@ -313,12 +313,13 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
         30_000,
       );
       const text = await pageText(folder);
-      // A setting's key is not in the search box, so it can only be in the results.
+      // The results render the setting's label (its key's last segment, spaced) rather than its key, so the row reads
+      // the label once the editor is in front; the label is not in the search box, so it can only be in the results.
       deepStrictEqual(
         [
           !companion,
           text.includes(SETTINGS_FILTER),
-          text.includes('remote.SSH.connectTimeout'),
+          text.includes('Connect Timeout'),
           text.includes('Remote Explorer'),
         ],
         [true, true, true, false],
