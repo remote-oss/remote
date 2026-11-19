@@ -62,3 +62,22 @@ export async function timedStep<Value>(
     clearTimeout(timer);
   }
 }
+
+/** How long the process gets to end by itself once the run has returned. */
+export const END_GRACE_MILLISECONDS = 30_000;
+
+/**
+ * Ends the process `graceMilliseconds` after it is called, with the exit code the run set, unless it has ended by
+ * itself: a step that outlived its limit leaves its work running, a download or a command that holds the process open
+ * to the job's own limit. The timer does not hold the process open either, and the timer is given back for a test.
+ */
+export function endAfterGrace(
+  graceMilliseconds = END_GRACE_MILLISECONDS,
+  exit: () => void = () => {
+    process.exit();
+  },
+): NodeJS.Timeout {
+  const timer = setTimeout(exit, graceMilliseconds);
+  timer.unref();
+  return timer;
+}

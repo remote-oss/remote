@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
-import {timedStep} from './prepare-steps.ts';
+import {spawnSync} from 'node:child_process';
+import {endAfterGrace, timedStep} from './prepare-steps.ts';
 
 /** A clock that each reading advances by `step` milliseconds, and the lines said. */
 function environmentOf(step: number) {
@@ -69,5 +70,32 @@ describe('the timed and bounded steps of a run’s preparation (#2865)', () => {
         ['acceptance: prepare: the editor download failed after 1 s'],
       ],
     );
+  });
+
+  it('#2865: the grace timer calls exit once, after its time, and does not hold the process open', async () => {
+    const exits: number[] = [];
+    const timer = endAfterGrace(10, () => exits.push(1));
+    const unref = !timer.hasRef();
+    await new Promise(resolve => setTimeout(resolve, 60));
+    deepStrictEqual([unref, exits], [true, [1]]);
+  });
+
+  it('#2865: a process held open by a step that never finishes ends after the grace with the run’s exit code', () => {
+    const preparation = new URL('prepare-steps.ts', import.meta.url).href;
+    const child = spawnSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `import {endAfterGrace, timedStep} from '${preparation}';
+         setInterval(() => undefined, 1000);
+         await timedStep('stuck', 50, () => new Promise(() => undefined)).catch(() => {
+           process.exitCode = 3;
+         });
+         endAfterGrace(100);`,
+      ],
+      {encoding: 'utf8', timeout: 30_000},
+    );
+    deepStrictEqual([child.status, child.signal], [3, null]);
   });
 });

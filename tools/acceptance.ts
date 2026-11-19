@@ -80,7 +80,11 @@ import {
   sweepStaleRunObjects,
 } from './acceptance-run.ts';
 import {checked, type CommandRunner, runCommand} from './command-runner.ts';
-import {PREPARE_STEP_MILLISECONDS, timedStep} from './prepare-steps.ts';
+import {
+  endAfterGrace,
+  PREPARE_STEP_MILLISECONDS,
+  timedStep,
+} from './prepare-steps.ts';
 import {EDITOR_VERSION, GENUINE_VERSIONS} from './editor-floor.ts';
 import {type HostBase, HOST_BASE_VARIANTS} from './host-variants.ts';
 import {
@@ -3158,5 +3162,7 @@ if (isMainModule(import.meta.url)) {
       parsed.editor,
       parsed.launches,
     );
+    // A step that outlived its limit leaves its work running, which would hold the process to the job's own limit.
+    endAfterGrace();
   }
 }
