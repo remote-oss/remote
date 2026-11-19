@@ -43,9 +43,9 @@ const SETTLE_MILLISECONDS = 8000;
 const EMPTY_WINDOW_MILLISECONDS = 30_000;
 
 /**
- * The connect's allowance in the rows: the row's other waits (its opens, its reads, its close, and the check of each
- * that may outstay its own deadline) sum to 358 s at their bounds, so the connect's 120 s and its own 60 s check keep
- * the row's sum 62 s under its 600 s timeout.
+ * The connect's allowance in the rows: the row's other waits (its opens, its reads, its one Refresh before the history
+ * read, its close, and the check of each that may outstay its own deadline) sum to 418 s at their bounds, so the
+ * connect's 120 s and its own 60 s check keep the row's sum 2 s under its 600 s timeout.
  */
 const CONNECT_MILLISECONDS = 120_000;
 
@@ -158,7 +158,9 @@ describe('the push of the active folders (card coverage-100, F-2501 AC-36)', fun
       );
       await new Promise(resolve => setTimeout(resolve, SETTLE_MILLISECONDS));
       const pushes = pushesSince(before);
-      // The reader sees the history of a host that connected, so an empty one means something in the next row.
+      // F-5104 BR-11: the local window's view takes no cross-window update — the push lands in the explorer's
+      // record, but this window's rows show it only after its own Refresh (ruling-2684-no-cross-window).
+      await inWindow('local', 'remote-explorer.refresh');
       await waitFor(
         'the folder in the history of the connected host',
         async () =>
