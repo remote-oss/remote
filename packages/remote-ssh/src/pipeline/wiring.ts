@@ -157,6 +157,8 @@ export interface WiringPorts {
   /** The user's settings, where the legacy extensions key is moved from. */
   legacySettings: LegacyExtensionPorts;
   settings: WiringSettings;
+  /** Shows the warning that the manual bootstrap is on and the exec server is off, without waiting for it. */
+  warnManualBootstrap(): void;
   /** The editor's tunnel service, which the default forwarded ports are opened through. */
   tunnels: TunnelOpener;
   /** Resolves with what ended the wait before the default forwards are read: the window has its remote settings by then. */
@@ -479,6 +481,11 @@ export function stepsOf(
     checkInstallFolder: input => serverSteps(input).checkInstallFolder(input),
     checkProxy: input => serverSteps(input).checkProxy(input),
     migrateLegacySettings: () => migrateLegacyExtensions(ports.legacySettings),
+    warnOfDownloadMode: () => {
+      if (ports.settings.localDownloadMode() === 'manualBootstrap') {
+        ports.warnManualBootstrap();
+      }
+    },
     preconnect: preconnectStep({
       setting: ports.settings.preconnect,
       ports: ports.preconnect,

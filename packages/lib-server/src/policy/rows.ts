@@ -35,8 +35,11 @@ export const SSH_POLICY: ServerPolicyRecord = frozen({
   transferStallMilliseconds: SSH_STALL_MILLISECONDS,
 });
 
-/** Where Remote - SSH may download the server archive: `remote.SSH.localServerDownload`'s values. */
-export type LocalDownloadMode = 'auto' | 'always' | 'off';
+/**
+ * Where Remote - SSH may download the server archive: `remote.SSH.localServerDownload`'s values, `manualBootstrap`
+ * for its undeclared value `manual-bootstrap`, where nothing is downloaded and the user's own archive is copied.
+ */
+export type LocalDownloadMode = 'auto' | 'always' | 'off' | 'manualBootstrap';
 
 /** The SSH policy with the download placement of `mode`; every other field is the SSH policy's. */
 export function sshPolicyFor(mode: LocalDownloadMode): ServerPolicyRecord {

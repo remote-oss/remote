@@ -526,7 +526,7 @@ setting at run time are filled in by the extension's adapter before the call.
 
 | Field | Values | remote-ssh | remote-containers | remote-wsl |
 |---|---|---|---|---|
-| `downloadPlacement` | `hostFirst` with `auto`, `always` or `off`; `clientFirstThenHost`; `clientOnly` | `hostFirst`, from `remote.SSH.localServerDownload` (F-2405) | `clientOnly`: the client machine downloads and copies into the container (F-1402) | `clientFirstThenHost`: a silent `wget` fallback in the distro (F-6301 BR-1, BR-7) |
+| `downloadPlacement` | `hostFirst` with `auto`, `always`, `off` or `manualBootstrap`; `clientFirstThenHost`; `clientOnly` | `hostFirst`, from `remote.SSH.localServerDownload` (F-2405) | `clientOnly`: the client machine downloads and copies into the container (F-1402) | `clientFirstThenHost`: a silent `wget` fallback in the distro (F-6301 BR-1, BR-7) |
 | `cache` | `none`; `kept` | `none` (F-3902 rule 6) | `kept` (F-0503 host cache) | `kept`, shared per user across windows and editor instances (F-6301 BR-4, BR-5, BR-14) |
 | `verification` | ordered list from `headerHash`, `lengthOnly`, `none` | `none` until the room names one | `none` until the room names one (athena, containers contracts §5) | `headerHash`, then `lengthOnly` (F-6301 BR-6, Q3) |
 | `environmentSetup` | a host path to source before install and start, never on reuse; or none | none | none | the distro's server-env-setup (F-6303 BR-1 to BR-5) |
@@ -616,11 +616,12 @@ Rules:
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `transfer` | plan, H1, a download port (the editor's network stack), UI phase sink | the archive unpacked into `bin/<client commit>/`, with its commit checked and rewritten when needed | `serverDownload` (STR:S043), `localDownload` (STR:S071 with its detail), `unpack` (STR:S075), `copy` (from H1), `cancelled` |
+| `transfer` | plan, H1, a download port (the editor's network stack), UI phase sink; for a manual bootstrap, `bootstrapArchive`, the user's archive on the client | the archive unpacked into `bin/<client commit>/`, with its commit checked and rewritten when needed | `serverDownload` (STR:S043), `localDownload` (STR:S071 with its detail), `unpack` (STR:S075), `copy` (from H1), `localBootstrap` (`missing` with its path, `unreadable` with the file system's text, `windowsHost`), `cancelled` |
 
 Rules:
 - Placement follows the record. For `hostFirst`: `auto` falls back to the client, `always` uses the client, `off`
-  never does (F-2405).
+  never does (F-2405), and `manualBootstrap` downloads on neither side: the client delivers the user's own archive
+  (F-2406 BR-6).
 - The archive reaches the host by `clientPathOnHost` when it returns a path, else by `copyToHost`, or as the streamed
   input of the unpack step.
 - With `cache` `none` the client copy is a temporary file, deleted afterwards (F-3902 rule 6). With `kept` the
@@ -665,7 +666,18 @@ Rules:
   `stallMilliseconds` (no bytes for that long ends it) and `maximumBytes` (the content length when known, else the
   library's default ceiling, 1 GiB; the values are lib-server's named defaults, ruled on #253 Q7), plus cancellation; the port implements them and the library proves them with a fake port
   that stalls, overruns and never answers. A connect never hangs on a download.
-- Manual bootstrap reads the fixed file and shows STR:S088 on every attempt (F-2406).
+- Manual bootstrap (`remote.SSH.localServerDownload` `manual-bootstrap`, undeclared in the manifest; F-2406,
+  ruling-2878-manual-bootstrap): the extension shows STR:S088 at the start of every attempt of a window and plans the
+  direct install (the CLI mode's `manualBootstrap` input). When the host needs the server, the transfer's
+  `bootstrapArchive` source replaces any download: the file `<home>/vscode-remote-ssh-bootstrap/vscode-server.tar.gz`
+  (`os.homedir()`) must exist (`localBootstrap` `missing`, the dialog's STR:S069), and the client port's `stage`
+  copies it into a new `vsc_server_<uuid>/` folder of the client's temporary folder with the nine-byte marker
+  `vscode-server.tar.gz.done` (`complete` and a line end; `unreadable` when the copy fails). The staged copy reaches
+  the host as any client archive does. The install step (`archiveIntoInstall`) then puts it, under the host lock only,
+  into `bin/<commit>/vscode-server.tar.gz` with its marker, by a rename (or a copy and a rename of a file the host reads
+  in place), and unpacks it only while the marker is there. A good unpack removes both; a failed one keeps the archive
+  and drops the marker. A Windows host is refused first (`windowsHost`, STR:S161). The client-side failures record the
+  `LocalBootstrapFailed` hint (STR:S087 with the reason, the six mitigations of F-2406 7.E1).
 - The commit is rewritten by editing the unpacked `product.json` only (F-3902 rule 9, pending the room's
   confirmation).
 

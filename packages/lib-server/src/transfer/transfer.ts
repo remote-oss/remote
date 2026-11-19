@@ -90,6 +90,11 @@ export interface TransferInput {
   verification: readonly Verification[];
   /** The host's temporary folder, where a copied archive lands. */
   hostFolder: string;
+  /**
+   * The user's own server archive on the client, for a manual bootstrap: staged in `clientFolder` and copied to the
+   * host instead of any download, and put into the install folder by the install itself.
+   */
+  bootstrapArchive?: string;
   cancellation: AbortSignal;
   /** The most the deletion of a copied archive may wait, after which the leftover is logged; see the default above. */
   discardDeadlineMilliseconds: number;
@@ -126,6 +131,11 @@ export type TransferFailure =
   | {kind: 'downloadTimeout'; reason: 'deadline' | 'stalled'}
   | {kind: 'verification'; mismatch: 'checksum' | 'length'}
   | {kind: 'unpack'; missing?: string}
+  /** A manual bootstrap's archive is not at its path, or could not be staged; `detail` is the file system's text. */
+  | {kind: 'localBootstrap'; cause: 'missing'; path: string}
+  | {kind: 'localBootstrap'; cause: 'unreadable'; detail: string}
+  /** A manual bootstrap was asked for a Windows host, which it does not serve. */
+  | {kind: 'localBootstrap'; cause: 'windowsHost'}
   | {kind: 'copy'; failure: ChannelFailure}
   | {kind: 'copyToolMissing'}
   | {kind: 'copyStalled'}
@@ -154,10 +164,11 @@ export type TransferOutcome =
 /** Where the archive is downloaded. */
 type Source = 'host' | 'client';
 
-/** Where the archive is, and whether the install deletes it. */
+/** Where the archive is, whether the install deletes it, and whether it goes into the install folder first. */
 interface Delivery {
   archivePath: string;
   removeArchive: boolean;
+  archiveIntoInstall?: boolean;
 }
 
 function failed(failure: TransferFailure): TransferOutcome {
@@ -393,12 +404,14 @@ async function deliver(
   dependencies: TransferDependencies,
   localFile: string,
 ): Promise<TransferOutcome> {
+  const intoInstall = input.bootstrapArchive !== undefined;
   const direct = await hostPathOf(dependencies.channel, localFile);
   if (direct !== undefined) {
     dependencies.onPhase({kind: 'installing'});
     return install(input, dependencies, {
       archivePath: direct,
       removeArchive: false,
+      archiveIntoInstall: intoInstall,
     });
   }
   if (
@@ -426,6 +439,7 @@ async function deliver(
   const outcome = await install(input, dependencies, {
     archivePath: remotePath,
     removeArchive: true,
+    archiveIntoInstall: intoInstall,
   });
   if (leftArchive(outcome)) {
     await discardCopy(input, dependencies, remotePath);
@@ -742,6 +756,29 @@ function unpackFailed(outcome: TransferOutcome): boolean {
 }
 
 /**
+ * A manual bootstrap: the user's archive at `file` is staged in the client's temporary folder and delivered, with no
+ * download on either side; a missing file and a file that cannot be staged end the transfer before any copy.
+ */
+async function viaBootstrap(
+  input: TransferInput,
+  dependencies: TransferDependencies,
+  file: string,
+): Promise<TransferOutcome> {
+  if (!(await dependencies.files.exists(file))) {
+    return failed({kind: 'localBootstrap', cause: 'missing', path: file});
+  }
+  const staged = await dependencies.files.stage(file, input.clientFolder);
+  if (staged.kind === 'failed') {
+    return failed({
+      kind: 'localBootstrap',
+      cause: 'unreadable',
+      detail: staged.detail,
+    });
+  }
+  return deliver(input, dependencies, staged.archive);
+}
+
+/**
  * The client downloads the archive, or finds it in the cache. A download goes to a temporary file, is checked, and
  * then either becomes the cache entry by a rename or is deleted when the transfer ends. An entry that was found and
  * that the host cannot unpack is deleted and downloaded once more, so a bad entry does not fail every later connect.
@@ -750,6 +787,9 @@ async function viaClient(
   input: TransferInput,
   dependencies: TransferDependencies,
 ): Promise<TransferOutcome> {
+  if (input.bootstrapArchive !== undefined) {
+    return viaBootstrap(input, dependencies, input.bootstrapArchive);
+  }
   const {cache} = input;
   if (
     cache.kind === 'kept' &&

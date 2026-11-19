@@ -48,6 +48,7 @@ const RECOVER: ReadonlyArray<readonly [FailedKind, boolean]> = [
   ['execServerUnavailable', false],
   ['preconnectFailed', false],
   ['lockTimeout', false],
+  ['localBootstrap', false],
   ['retriesExhausted', false],
   ['cancelled', false],
 ];
@@ -267,6 +268,45 @@ const EVERY_CASE: ReadonlyArray<readonly [string, FailureDetail]> = [
     ),
   ],
 ];
+
+describe('a manual bootstrap that could not start (F-2406, ruling-2878-manual-bootstrap)', () => {
+  it("7.E1, 7.E2, 7.E7: no archive gives STR:S069 with its path, an unreadable one the file system's text, a Windows host STR:S161", () => {
+    deepStrictEqual(
+      [
+        ofTransfer({
+          kind: 'localBootstrap',
+          cause: 'missing',
+          path: '/home/me/vscode-remote-ssh-bootstrap/vscode-server.tar.gz',
+        }),
+        ofTransfer({
+          kind: 'localBootstrap',
+          cause: 'unreadable',
+          detail: 'EACCES: permission denied',
+        }),
+        ofTransfer({kind: 'localBootstrap', cause: 'windowsHost'}),
+      ],
+      [
+        {
+          kind: 'localBootstrap',
+          reason: {
+            id: 'S069',
+            values: [
+              '/home/me/vscode-remote-ssh-bootstrap/vscode-server.tar.gz',
+            ],
+          },
+          logDetail:
+            'no archive at /home/me/vscode-remote-ssh-bootstrap/vscode-server.tar.gz',
+        },
+        {
+          kind: 'localBootstrap',
+          reason: {text: 'EACCES: permission denied'},
+          logDetail: 'EACCES: permission denied',
+        },
+        {kind: 'localBootstrap', reason: {id: 'S161'}},
+      ],
+    );
+  });
+});
 
 describe('the reading of each library failure (no library text is shown)', () => {
   it('contracts R1: a closed channel gives no reason and logs what the library said', () => {
