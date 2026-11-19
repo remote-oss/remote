@@ -66,7 +66,7 @@ esac
 DATA_ROOT=${INSTALL_ROOT:-$HOME}
 DATA_DIR=$DATA_ROOT/$DATA_FOLDER
 INSTALL_DIR=$DATA_DIR/bin/$COMMIT
-CLI_STAGING=$DATA_DIR/cli-bin/$COMMIT
+CLI_STAGING=$DATA_DIR/cli-bin/$COMMIT.$STAGING_SUFFIX.$$
 CLI_FILE=$DATA_DIR/$CLI_NAME
 BOOT_PREFIX=$DATA_DIR/.$COMMIT
 [ -z "$INSTALL_TREE" ] || LOCK_IN_TEMPORARY=yes
@@ -287,7 +287,6 @@ clear_staging() {
 STARTED_AT=$(now_seconds)
 [ -n "$DATA_ROOT" ] && [ -n "$CLI_NAME" ] || finish CreateInstallDirFailed
 MKDIR_ERROR=$(mkdir -p "$INSTALL_DIR" 2>&1) || write_failed "$INSTALL_DIR" "$MKDIR_ERROR"
-take_lock_or_finish "$COMMIT"
 if [ -x "$CLI_FILE" ]; then
   fact cli.path "$CLI_FILE"
   leave Ok
@@ -297,7 +296,7 @@ prepare_environment
 if [ -n "$ARCHIVE_PATH" ]; then
   ARCHIVE=$ARCHIVE_PATH
 else
-  have wget || have curl || leave NoDownloaderAvailable
+  have wget || have curl || { clear_staging; leave NoDownloaderAvailable; }
   ARCHIVE=$CLI_STAGING.archive.$$
   fetch_archive "$ARCHIVE_URL" "$ARCHIVE" || { rm -f "$ARCHIVE"; clear_staging; leave ServerDownloadFailed; }
 fi
@@ -311,6 +310,11 @@ fi
 if [ ! -f "$CLI_STAGING/$LAUNCHER" ]; then
   clear_staging
   leave UnpackFailed
+fi
+if [ -x "$CLI_FILE" ]; then
+  clear_staging
+  fact cli.path "$CLI_FILE"
+  leave Ok
 fi
 chmod +x "$CLI_STAGING/$LAUNCHER" && mv "$CLI_STAGING/$LAUNCHER" "$CLI_FILE" || { clear_staging; leave UnpackFailed; }
 clear_staging
