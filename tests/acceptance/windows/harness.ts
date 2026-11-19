@@ -46,6 +46,7 @@ import {commandEventLines} from './agent-events.ts';
 import {holdingText, unfinishedCommands} from './agent-standing.ts';
 import {explainedFailure, section} from './connect-failure.ts';
 import {editorFolderOf} from './editor-folder.ts';
+import {listedPageCount, waitUntilPageLeft} from './page-list.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -1447,10 +1448,24 @@ export async function killWindow(
   }
 }
 
+/** How long a closed window's page may stay in the editor's list after the window deactivated. */
+const PAGE_LEFT_MILLISECONDS = 30_000;
+
+/** How many pages the editor lists now; none when the launch has no debugging port to read or it cannot be read. */
+async function pagesListedNow(): Promise<number | undefined> {
+  try {
+    return await listedPageCount(variable('HARNESS_USER_DATA'));
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Closes window `name` and resolves once it's gone: its agent reports `deactivated`, or the extension host it recorded
- * has exited. Some closes never get the event (8 of 576 in a full containers launch, 2026-11-01): the extension host
- * ends before its agent writes it. A window whose extension host still runs after the wait fails, naming it.
+ * has exited, and its page has left the editor's list, so that the next row does not find it beside its own. Some closes
+ * never get the event (8 of 576 in a full containers launch, 2026-11-01): the extension host ends before its agent
+ * writes it. A window whose extension host still runs after the wait fails, naming it; so does one whose page stays
+ * listed.
  */
 export async function closeWindow(
   name: string,
@@ -1458,6 +1473,7 @@ export async function closeWindow(
 ): Promise<void> {
   const before = countOf(name, 'deactivated');
   const extensionHost = liveProcessIdOf(name);
+  const pagesBefore = await pagesListedNow();
   const commandId = send(name, 'workbench.action.closeWindow', []);
   try {
     await waitUntil(
@@ -1475,6 +1491,15 @@ export async function closeWindow(
     );
   } finally {
     withdrawUnaccepted(name, commandId);
+  }
+  if (pagesBefore !== undefined) {
+    await waitUntilPageLeft(
+      name,
+      pagesBefore,
+      pagesListedNow,
+      PAGE_LEFT_MILLISECONDS,
+      pause => new Promise(resolve => setTimeout(resolve, pause)),
+    );
   }
 }
 
