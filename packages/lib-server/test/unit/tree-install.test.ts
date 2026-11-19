@@ -190,6 +190,19 @@ describe('the install into a shared tree (card containers-05)', () => {
     );
   });
 
+  it('F-2402 7.E3: a host without tar leaves CommandMissing and makes neither tree nor link', () => {
+    rmSync(path.join(host.tools, 'tar'));
+    const block = blockOf(host, single('install'), treeParameters(host));
+    deepStrictEqual(
+      [
+        block === 'none' ? block : [block.status, block.installFacts.missing],
+        existsSync(treeOf(host)),
+        existsSync(installFolder(host)),
+      ],
+      [['CommandMissing', 'tar'], false, false],
+    );
+  });
+
   it('F-0503 BR-6: an archive without the launcher is UnpackFailed and leaves neither a tree nor a link', () => {
     const source = path.join(host.home, 'no-launcher');
     mkdirSync(path.join(source, 'server'), {recursive: true});

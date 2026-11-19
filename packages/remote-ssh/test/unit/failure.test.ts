@@ -192,7 +192,6 @@ const EVERY_CASE: ReadonlyArray<readonly [string, FailureDetail]> = [
     'architecture',
     ofProbe({kind: 'unsupportedArch', reported: 'sparc', libc: 'glibc'}),
   ],
-  ['tools', ofProbe({kind: 'prerequisiteMissing', missing: ['tar', 'gzip']})],
   ['probe status', ofProbe({kind: 'probeFailed', status: 'NoBash'})],
   ['probe new status', ofProbe({kind: 'probeFailed', status: 'SomethingNew'})],
   ['unreadable facts', ofProbe({kind: 'unreadableFacts', field: 'os'})],
@@ -235,6 +234,7 @@ const EVERY_CASE: ReadonlyArray<readonly [string, FailureDetail]> = [
   ],
   ['verification', ofTransfer({kind: 'verification', mismatch: 'checksum'})],
   ['unpack', ofTransfer({kind: 'unpack'})],
+  ['unpack of a missing program', ofTransfer({kind: 'unpack', missing: 'tar'})],
   [
     'copy',
     ofTransfer({kind: 'copy', failure: {kind: 'copyFailed', detail: 'full'}}),
@@ -411,13 +411,6 @@ describe('the reading of each library failure (no library text is shown)', () =>
         reason: {id: 'S043'},
         logDetail: 'downloadFailed',
       },
-    );
-  });
-
-  it('contracts R1: missing tools give no reason and log the list', () => {
-    deepStrictEqual(
-      ofProbe({kind: 'prerequisiteMissing', missing: ['tar', 'gzip']}),
-      {kind: 'prerequisiteMissing', logDetail: 'missing: tar, gzip'},
     );
   });
 
@@ -660,6 +653,13 @@ describe('the reading of each library failure (no library text is shown)', () =>
 
   it('F-2403 7.E2: an unpack that failed gives the install reason S075', () => {
     deepStrictEqual(ofTransfer({kind: 'unpack'}), {
+      kind: 'serverInstall',
+      reason: {id: 'S075'},
+    });
+  });
+
+  it('F-2402 7.E3: an unpack that stopped for a program the host lacks gives the install reason S075 as well, with the program left to the hint', () => {
+    deepStrictEqual(ofTransfer({kind: 'unpack', missing: 'tar'}), {
       kind: 'serverInstall',
       reason: {id: 'S075'},
     });

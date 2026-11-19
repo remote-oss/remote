@@ -156,10 +156,12 @@ const INSTALL_OUTCOMES: StepOutcomes = {
     'CreateInstallDirFailed',
     'ServerDownloadFailed',
     'UnpackFailed',
+    {key: 'CommandMissing', only: POSIX_ONLY},
     {key: 'NoDownloaderAvailable', only: POSIX_ONLY},
   ],
   facts: [
     ...LOCK_FACTS,
+    {key: 'install.missing', only: POSIX_ONLY},
     'server.downloadStatus',
     'timing.download',
     'timing.install',
@@ -218,8 +220,9 @@ export const STEP_OUTCOMES: Readonly<
     facts: ['server.stagingDir'],
   },
   unpack: {
-    statuses: ['Ok', 'UnpackFailed'],
+    statuses: ['Ok', 'UnpackFailed', {key: 'CommandMissing', only: POSIX_ONLY}],
     facts: [
+      {key: 'install.missing', only: POSIX_ONLY},
       {key: 'server.identityFrom', only: POSIX_ONLY},
       {key: 'server.identityTo', only: POSIX_ONLY},
     ],

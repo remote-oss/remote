@@ -537,7 +537,7 @@ describe('probe (V2)', () => {
     );
   });
 
-  it('F-2401.BR-1: a host without tar lacks a prerequisite', async () => {
+  it('F-2402 BR-5: a host without tar is probed, with tar absent from its tools, and the unpack reports it', async () => {
     const outcome = await probe(
       recording(
         block(
@@ -551,8 +551,8 @@ describe('probe (V2)', () => {
       NEVER_CANCELLED,
     );
     deepStrictEqual(
-      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
-      {kind: 'prerequisiteMissing', missing: ['tar']},
+      outcome.kind === 'probed' ? outcome.host.tools : outcome.kind,
+      ['wget', 'flock'],
     );
   });
 

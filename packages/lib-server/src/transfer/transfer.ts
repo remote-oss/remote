@@ -125,7 +125,7 @@ export type TransferFailure =
     }
   | {kind: 'downloadTimeout'; reason: 'deadline' | 'stalled'}
   | {kind: 'verification'; mismatch: 'checksum' | 'length'}
-  | {kind: 'unpack'}
+  | {kind: 'unpack'; missing?: string}
   | {kind: 'copy'; failure: ChannelFailure}
   | {kind: 'copyToolMissing'}
   | {kind: 'copyStalled'}
@@ -216,6 +216,14 @@ function outcomeOf(
       return failed({kind: 'serverDownload', cause: 'noDownloader'});
     case 'UnpackFailed':
       return failed({kind: 'unpack'});
+    case 'CommandMissing': {
+      // The program `tar` or `gzip` the unpack needs, which the script found missing before it unpacked.
+      const {missing} = block.installFacts;
+      return failed({
+        kind: 'unpack',
+        ...(missing === undefined ? {} : {missing}),
+      });
+    }
     default:
       return failed(scriptFailure(block));
   }

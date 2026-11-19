@@ -129,6 +129,8 @@
   "If your remote server is behind a firewall, ask your IT department to allow access to the VS Code CDN": "If your remote server is behind a firewall, ask your IT department to allow access to the VS Code CDN",
   "If your remote server is behind a proxy, provide the proxy URL with setting '{0}' or '{1}'": "If your remote server is behind a proxy, provide the proxy URL with setting '{0}' or '{1}'",
   "Install '{0}' on the remote server. Installation steps will vary per distribution.": "Install '{0}' on the remote server. Installation steps will vary per distribution.",
+  "A command required on the remote machine was not found": "A command required on the remote machine was not found",
+  "Ensure this program is installed on the remote machine and accessible via the '{0}' environment variable": "Ensure this program is installed on the remote machine and accessible via the '{0}' environment variable",
   "Update VS Code and try again later": "Update VS Code and try again later",
   "Ensure that the parent directory exists": "Ensure that the parent directory exists",
   "Ensure that the remote user has write permissions to the parent directory": "Ensure that the remote user has write permissions to the parent directory",
