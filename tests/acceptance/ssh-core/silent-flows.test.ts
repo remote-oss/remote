@@ -169,7 +169,7 @@ async function hostLogSections(
   const listed = await onHost(
     'sh',
     '-c',
-    "find /home/harness -type f -path '*logs*' -name '*.log' 2>/dev/null",
+    "find /home/harness -type f -path '*logs*' -name '*.log' 2>/dev/null; true",
   ).catch(() => '');
   const files = listed.split('\n').filter(file => file !== '');
   const sections = [section('the host’s log files', () => files.join('\n'))];
@@ -203,14 +203,12 @@ function windowLogSections(
     file => /(renderer|exthost|remoteexthost)\.log$/.test(file),
   );
   return files.map(file =>
-    section(`the window’s ${file} in the 95 s`, () =>
-      stampedBetween(
-        readFileSync(path.join(folder, file), 'utf8'),
-        fromMs,
-        toMs,
-        150,
-      ).join('\n'),
-    ),
+    section(`the window’s ${file} in the 95 s (in ${folder})`, () => {
+      const text = readFileSync(path.join(folder, file), 'utf8');
+      const lines = text.split('\n');
+      const between = stampedBetween(text, fromMs, toMs, 150);
+      return `${String(lines.length)} lines, first ${lines[0] ?? ''}, last ${lines.at(-2) ?? ''}, range ${new Date(fromMs).toISOString()} to ${new Date(toMs).toISOString()}\n${(between.length > 0 ? between : lines.slice(-15)).join('\n')}`;
+    }),
   );
 }
 
