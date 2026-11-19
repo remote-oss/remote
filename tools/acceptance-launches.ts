@@ -1304,6 +1304,13 @@ export function launchesOf(root: string): Launch[] {
       suite: 'ssh-killed',
       environment: {HARNESS_KILLED_CASE: killedCase},
     })),
+    // The minimal and non-glibc hosts (card #2877, F-2703): the default host and the account whose login PATH has no bash,
+    // one plain launch, each row a window of its own.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-minimal',
+      suite: 'ssh-minimal',
+    },
     // Dev Containers beside Remote - SSH, in a window on the SSH host: the commands that edit a configuration where it lives.
     {
       ...RENDERER_LAUNCH,

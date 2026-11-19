@@ -560,6 +560,7 @@ const LAUNCH_ORDER = [
   'ssh-killed-12',
   'ssh-killed-13',
   'ssh-killed-14',
+  'ssh-minimal',
   'ssh-containers',
   'no-proposals',
   'wsl-linux',
@@ -1338,6 +1339,15 @@ describe('acceptance', () => {
     strictEqual(
       accountBlock('mute'),
       [...sharedLines('mute', 'harness-mute'), ...KEY_ALIAS_LINES].join('\n'),
+    );
+  });
+
+  it('#2877: Host nobash logs in to harness-nobash with the run key', () => {
+    strictEqual(
+      accountBlock('nobash'),
+      [...sharedLines('nobash', 'harness-nobash'), ...KEY_ALIAS_LINES].join(
+        '\n',
+      ),
     );
   });
 

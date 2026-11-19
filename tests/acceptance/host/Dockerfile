@@ -6,7 +6,7 @@
 # host whose `uname -m` says i686), harness-fish (a login shell that is fish), harness-bash (a login shell that is
 # bash), harness-zsh (a login shell that is zsh), harness-dash (a dash login shell whose name is sh), harness-ksh (a
 # login shell that is ksh), harness-csh (a login shell that is csh), harness-tcsh (a login shell that is tcsh),
-# harness-tmpdir (a login shell that sets TMPDIR to ~/tmp, then is sh) and harness-cert, which accepts only a
+# harness-tmpdir (a login shell that sets TMPDIR to ~/tmp, then is sh), harness-nobash (a login PATH with no bash) and harness-cert, which accepts only a
 # certificate signed by the run's own authority (CA_PUBLIC_KEY, written to /etc/ssh/ca.pub by start-sshd).
 # libstdc++ is what a musl server's node needs to start on Alpine (F-6302). curl and GNU wget are installed so that
 # start-sshd can leave the host with the one download tool a run asks for (HOST_FETCH). iptables lets a test drop the
@@ -71,6 +71,18 @@ COPY i686-uname /opt/i686/bin/uname
 RUN chmod 755 /opt/i686/bin/uname \
   && printf '%s\n' 'PATH=/opt/i686/bin:$PATH' 'export PATH' > /home/harness-i686/.profile \
   && chown harness-i686:harness-i686 /home/harness-i686/.profile
+
+RUN adduser -D -s /bin/sh harness-nobash \
+  && sed -i 's/^harness-nobash:!/harness-nobash:*/' /etc/shadow \
+  && install -d -m 755 -o harness-nobash -g harness-nobash /opt/nobash/bin \
+  && for dir in /bin /usr/bin /sbin /usr/sbin; do \
+       for file in "$dir"/*; do \
+         name="${file##*/}"; \
+         case "$name" in bash) ;; *) [ -e "/opt/nobash/bin/$name" ] || ln -s "$file" "/opt/nobash/bin/$name" ;; esac; \
+       done; \
+     done \
+  && printf '%s\n' 'PATH=/opt/nobash/bin' 'export PATH' > /home/harness-nobash/.profile \
+  && chown harness-nobash:harness-nobash /home/harness-nobash/.profile
 
 COPY tmpdir-shell /usr/local/bin/tmpdir-shell
 RUN chmod 755 /usr/local/bin/tmpdir-shell \
