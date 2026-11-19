@@ -230,6 +230,9 @@ describe('the push of the active folders (card coverage-100, F-2501 AC-36)', fun
         120_000,
       );
       await new Promise(resolve => setTimeout(resolve, SETTLE_MILLISECONDS));
+      // F-5104 BR-11: the local window's view takes no cross-window update — the clause reads the history after the
+      // window's own Refresh (ruling-2684-no-cross-window).
+      await inWindow('local', 'remote-explorer.refresh');
       deepStrictEqual(
         [
           pushesSince(before).map(push => push.envelope),
