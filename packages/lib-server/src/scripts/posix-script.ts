@@ -609,12 +609,8 @@ function stepBody(
   }
 }
 
-/** The POSIX script of one request: the guard, the parameters, the role functions and the step's body. */
-export function posixScript(
-  request: BootstrapRequest,
-  parameters: ScriptParameters,
-): string {
-  const body = stepBody(request, parameters);
+/** The lines every POSIX script starts with: the guard, the parameters, and the policy's umask. */
+function preambleOf(parameters: ScriptParameters): readonly string[] {
   return [
     ...GUARD,
     ...parameterValuesOf(parameters).map(
@@ -622,8 +618,42 @@ export function posixScript(
     ),
     // The install and start scripts set the policy's umask; the token and log files keep their own.
     '[ "$INSTALL_UMASK" = inherit ] || umask "$INSTALL_UMASK"',
+  ];
+}
+
+/** The POSIX script of one request: the guard, the parameters, the role functions and the step's body. */
+export function posixScript(
+  request: BootstrapRequest,
+  parameters: ScriptParameters,
+): string {
+  const body = stepBody(request, parameters);
+  return [
+    ...preambleOf(parameters),
     ...rolesOf(request, parameters).flatMap(role => POSIX_FUNCTIONS[role]),
     ...body,
+    '',
+  ].join('\n');
+}
+
+/** The line that names the lock method the host will use, as `lockPathScript` prints it. */
+export const LOCK_METHOD_LINE = 'lock-method=';
+
+/** The line that names the lock file's path, as `lockPathScript` prints it. */
+export const LOCK_PATH_LINE = 'lock-path=';
+
+/**
+ * The script that prints the method and the path of the host lock of `parameters`, from the script's own lock
+ * functions, and makes the folder the lock file is in: the session shell opens the file itself before the step runs.
+ */
+export function lockPathScript(parameters: ScriptParameters): string {
+  return [
+    ...preambleOf(parameters),
+    ...POSIX_FUNCTIONS.common,
+    ...POSIX_FUNCTIONS.lock,
+    'LOCK_CANDIDATE=$(lock_path "$COMMIT")',
+    'mkdir -p "${LOCK_CANDIDATE%/*}" 2>/dev/null || true',
+    `printf '${LOCK_METHOD_LINE}%s\\n' "$(lock_method)"`,
+    `printf '${LOCK_PATH_LINE}%s\\n' "$LOCK_CANDIDATE"`,
     '',
   ].join('\n');
 }

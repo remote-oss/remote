@@ -141,12 +141,13 @@ const POSIX_ONLY = 'posixShell';
 const POWERSHELL_ONLY = 'powershell';
 
 /** What an install's lock reports when it is busy or cannot be written. */
-const LOCK_FACTS = [
+const LOCK_FACTS: ReadonlyArray<StepOutcome<string>> = [
   'server.lockPath',
   'server.lockInTemporary',
   'server.writeFailedPath',
   'server.writeFailedError',
-] as const;
+  {key: 'server.lockHeld', only: POSIX_ONLY},
+];
 
 /** What an install of the server or the CLI reports: its lock, its download and its times. */
 const INSTALL_OUTCOMES: StepOutcomes = {

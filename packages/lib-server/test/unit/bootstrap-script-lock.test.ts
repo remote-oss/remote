@@ -19,6 +19,7 @@ import {
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {scriptFor, type ScriptParameters} from '../../src/index.ts';
+import {lockPathScript} from '../../src/scripts/posix-script.ts';
 import {
   blockOf,
   type FakeHost,
@@ -183,6 +184,91 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(
         statusOf(host, single('start'), parametersFor()),
         'LockBusy',
+      );
+    });
+
+    /** The lock path and method the lock path script prints for `parameters`. */
+    function printedLock(parameters: ScriptParameters): string[] {
+      return spawnSync('/bin/sh', ['-s'], {
+        input: lockPathScript(parameters),
+        env: host.environment,
+        encoding: 'utf8',
+      })
+        .stdout.split('\n')
+        .filter(line => line !== '');
+    }
+
+    it('F-2408 BR-4: the lock path script prints the method and the path of the script’s own lock, in the install folder and in the temporary folder, and makes the folder', () => {
+      useHost(['wget', 'flock']);
+      const parameters = parametersFor();
+      parameters.lock.method = 'flock';
+      const inFolder = printedLock(parameters);
+      const folderExists = existsSync(installFolder(host));
+      const inTemporary = lockInTemporaryFolder(host, parametersFor());
+      const temporaryParameters = parametersFor();
+      temporaryParameters.lock.method = 'flock';
+      lockInTemporaryFolder(host, temporaryParameters);
+      deepStrictEqual(
+        [inFolder, folderExists, printedLock(temporaryParameters)],
+        [
+          [
+            'lock-method=flock',
+            `lock-path=${path.join(installFolder(host), 'boot-lock.user.abc1230000000000000000000000000000000000')}`,
+          ],
+          true,
+          ['lock-method=flock', `lock-path=${inTemporary}`],
+        ],
+      );
+    });
+
+    it('F-2408 BR-4: the lock path script names the link method when the host has no flock', () => {
+      useHost(['wget']);
+      deepStrictEqual(printedLock(parametersFor())[0], 'lock-method=link');
+    });
+
+    /** The install of `parameters` run by a shell that has descriptor 9 open on the lock file, as a session shell has. */
+    function installWithSessionFd(environment: Record<string, string> = {}): {
+      status: string;
+      held: string | undefined;
+    } {
+      const lock = path.join(
+        installFolder(host),
+        'boot-lock.user.abc1230000000000000000000000000000000000',
+      );
+      mkdirSync(installFolder(host), {recursive: true});
+      const parameters = parametersFor();
+      parameters.lock.method = 'flock';
+      const block = blockOf(host, single('install'), parameters, {
+        environment,
+        rewriteScript: text => `exec 9>>'${lock}'\n${text}`,
+      });
+      return block === 'none'
+        ? {status: 'none', held: undefined}
+        : {status: block.status, held: block.serverFacts.lockHeld};
+    }
+
+    it('F-2408 BR-4: an install run with descriptor 9 open locks that descriptor and reports the lock held', () => {
+      useHost(['wget', 'flock']);
+      deepStrictEqual(installWithSessionFd(), {
+        status: 'Ok',
+        held: 'yes',
+      });
+    });
+
+    it('F-2408 BR-4: an install run with descriptor 9 open while the lock is busy ends as LockBusy and reports no lock held', () => {
+      useHost(['wget', 'flock']);
+      deepStrictEqual(installWithSessionFd({STUB_FLOCK_BUSY: 'yes'}), {
+        status: 'LockBusy',
+        held: undefined,
+      });
+    });
+
+    it('F-2408 BR-4: an install run with no descriptor 9 opens its own and reports no lock held, as before', () => {
+      useHost(['wget', 'flock']);
+      const block = blockOf(host, single('install'), parametersFor());
+      deepStrictEqual(
+        block === 'none' ? block : [block.status, block.serverFacts.lockHeld],
+        ['Ok', undefined],
       );
     });
 
