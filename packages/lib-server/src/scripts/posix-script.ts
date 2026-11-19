@@ -200,7 +200,7 @@ const INSTALL_CLI_BODY: readonly string[] = [
   'if [ -n "$ARCHIVE_PATH" ]; then',
   '  ARCHIVE=$ARCHIVE_PATH',
   'else',
-  '  have wget || have curl || leave NoDownloaderAvailable',
+  '  have wget || have curl || { clear_staging; leave NoDownloaderAvailable; }',
   '  ARCHIVE=$CLI_STAGING.archive.$$',
   '  fetch_archive "$ARCHIVE_URL" "$ARCHIVE" || { rm -f "$ARCHIVE"; clear_staging; leave ServerDownloadFailed; }',
   'fi',

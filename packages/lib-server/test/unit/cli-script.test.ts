@@ -622,12 +622,15 @@ describe('the CLI steps of the bootstrap script (card cli-03b, contracts V7a)', 
       );
     });
 
-    it('F-2402: a host with neither downloader is NoDownloaderAvailable', () => {
+    it('F-2402, ruling-2818-cli-no-host-lock (themis on #2881): a host with neither downloader is NoDownloaderAvailable, and the run leaves no staging folder', () => {
       const bare = fakeHost([]);
       const block = blockOf(bare, single('installCli'), cliParameters(bare));
       deepStrictEqual(
-        block === 'none' ? block : block.status,
-        'NoDownloaderAvailable',
+        [
+          block === 'none' ? block : block.status,
+          existsSync(path.join(dataFolder(bare), 'cli-bin')),
+        ],
+        ['NoDownloaderAvailable', false],
       );
     });
 
