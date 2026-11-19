@@ -169,8 +169,8 @@ async function hostLogSections(
   const listed = await onHost(
     'sh',
     '-c',
-    "find /home/harness -type f -path '*logs*' -name '*.log' 2>/dev/null; true",
-  ).catch(() => '');
+    "find / -xdev -type f \\( -name 'remoteexthost.log' -o -name 'remoteagent.log' -o -name 'server.log' -o -name '*.log' -path '*vscode*' \\) 2>&1 | head -60; true",
+  ).catch((caught: unknown) => `(find failed: ${String(caught)})`);
   const files = listed.split('\n').filter(file => file !== '');
   const sections = [section('the host’s log files', () => files.join('\n'))];
   for (const file of files.filter(each =>
@@ -207,7 +207,11 @@ function windowLogSections(
       const text = readFileSync(path.join(folder, file), 'utf8');
       const lines = text.split('\n');
       const between = stampedBetween(text, fromMs, toMs, 150);
-      return `${String(lines.length)} lines, first ${lines[0] ?? ''}, last ${lines.at(-2) ?? ''}, range ${new Date(fromMs).toISOString()} to ${new Date(toMs).toISOString()}\n${(between.length > 0 ? between : lines.slice(-15)).join('\n')}`;
+      const problems = lines
+        .filter(line => /\[(error|warning)\]/.test(line))
+        .slice(0, 30)
+        .join('\n');
+      return `${String(lines.length)} lines, errors and warnings of the whole file:\n${problems}\nfirst ${lines[0] ?? ''}, last ${lines.at(-2) ?? ''}, range ${new Date(fromMs).toISOString()} to ${new Date(toMs).toISOString()}\n${(between.length > 0 ? between : lines.slice(-15)).join('\n')}`;
     }),
   );
 }
