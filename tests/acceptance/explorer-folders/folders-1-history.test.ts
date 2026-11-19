@@ -308,19 +308,72 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
     // The history of the row's folders after each visit, for the message of a settle that fails: card #2757 found c102-c2
     // missing from it at the read, and this says at which visit it left.
     const trace: string[] = [];
-    async function visited(name: string): Promise<void> {
-      await visit(HOST_B, name);
-      // Read for the message only: a read that fails is told, and never fails the row.
-      const paths = await ownPathsOf(HOST_B, scope).then(
+    let reader = '';
+    // Measure only: the history as the local window reads it, as a second window reads it, and as the editor's global
+    // storage database holds it, each told as its own paths of the row and never failing the row.
+    async function told(read: () => Promise<unknown>): Promise<string> {
+      return read().then(
         found => JSON.stringify(found),
         (caught: unknown) => `(unreadable: ${String(caught)})`,
       );
-      trace.push(`${name}: ${paths}`);
+    }
+    async function readerPaths(): Promise<string[]> {
+      const answer = await callCommand(
+        reader,
+        'remote-internal.getSshFoldersHistory',
+        ENVELOPE,
+      );
+      const hosts =
+        (
+          answer.value as {
+            hosts?: Array<{hostKey: string; entries: Array<{path: string}>}>;
+          } | null
+        )?.hosts ?? [];
+      return (hosts.find(host => host.hostKey === HOST_B)?.entries ?? [])
+        .map(entry => entry.path)
+        .filter(each => each.startsWith(scope));
+    }
+    async function storedPaths(): Promise<string[]> {
+      const {DatabaseSync} = await import('node:sqlite');
+      const database = new DatabaseSync(
+        path.join(
+          variable('HARNESS_USER_DATA'),
+          'User/globalStorage/state.vscdb',
+        ),
+        {readOnly: true},
+      );
+      try {
+        const row = database
+          .prepare('select value from ItemTable where key = ?')
+          .get('remote-oss.remote-ssh') as {value?: unknown} | undefined;
+        return (
+          String(row?.value ?? '').match(/\/home\/harness\/c102-c[^"]*/gu) ?? []
+        );
+      } finally {
+        database.close();
+      }
+    }
+    async function visited(name: string): Promise<void> {
+      await visit(HOST_B, name);
+      const readings: string[] = [];
+      for (const [label, wait] of [
+        ['at once', 0],
+        ['3 s on', 3000],
+        ['10 s on', 7000],
+      ] as const) {
+        await new Promise(resolve => setTimeout(resolve, wait));
+        readings.push(
+          `${label}: local ${await told(() => ownPathsOf(HOST_B, scope))}, second window ${await told(readerPaths)}, stored ${await told(storedPaths)}`,
+        );
+      }
+      trace.push(`${name}: ${readings.join(' | ')}`);
     }
     try {
+      reader = await viewWindow('c102-reader');
       await visited('c102-c1');
       await visited('c102-c2');
       await visited('c102-cgone');
+      console.log(`measure 2757:\n${trace.join('\n')}`);
       await onHost('rm', '-rf', gone);
       from = await viewWindow('c102-from');
       await foldersSettled(
