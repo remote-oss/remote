@@ -25,6 +25,7 @@ import {reconnectionState} from '../windows/reconnection-state.ts';
 import {
   dialogOf,
   notifications,
+  pageFocusFacts,
   statusBarText,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -85,8 +86,11 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     const endedAt = Date.now();
     // The window's page is read once before the outage: core's dialog did not show in a window whose page the harness
     // had not read before the shared connection ended (21 of 24 rows of the third wrong password), and shows in one it had.
+    const readStarted = Date.now();
     await statusBarText(name, 'status.host');
+    const readEnded = Date.now();
     await inWindow(name, 'opensshremotes.cleanLocalServer');
+    const outageDone = Date.now();
     const dialog = await waitForDialog(name, 180_000).catch(
       async (caught: unknown) => {
         throw await explainedFailure(caught, () =>
@@ -97,6 +101,9 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
               dialog: () => dialogOf(name),
               notifications: () => notifications(name),
               logLines: () => connectionLog(),
+              pageFacts: () => pageFocusFacts(),
+              pageRead: () =>
+                `the read began ${String(readStarted - endedAt)} ms after the end was noted, took ${String(readEnded - readStarted)} ms, and the outage command took ${String(outageDone - readEnded)} ms`,
             },
             name,
             mark,
