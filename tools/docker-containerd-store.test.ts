@@ -27,11 +27,13 @@ describe('docker-containerd-store (card tooling-173)', () => {
       runCommand('docker', ['info', '--format', format]),
     );
     const listed = JSON.parse(mirrors?.stdout ?? '') as unknown;
+    // The line keeps its space when the driver has no type, as `overlay2` has: only the newline is taken off.
+    const storeLine = (store?.stdout ?? '').replace(/\n$/, '');
     deepStrictEqual(
       [
         FORMATS.length,
         store?.status,
-        /^\S+ \S*$/.test(store?.stdout.trim() ?? ''),
+        /^\S+ \S*$/.test(storeLine),
         mirrors?.status,
         listed === null || Array.isArray(listed),
       ],
