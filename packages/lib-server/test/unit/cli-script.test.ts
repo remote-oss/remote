@@ -4,7 +4,9 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   symlinkSync,
   unlinkSync,
@@ -629,7 +631,7 @@ describe('the CLI steps of the bootstrap script (card cli-03b, contracts V7a)', 
       );
     });
 
-    it('V5: a busy host lock is LockBusy', () => {
+    it('F-2408 BR-9 (ruling-2818-cli-no-host-lock): a held host lock does not stop the CLI install, and its files stay as they were', () => {
       const parameters = {
         ...cliParameters(host),
         archivePath: cliArchive(host),
@@ -655,7 +657,68 @@ describe('the CLI steps of the bootstrap script (card cli-03b, contracts V7a)', 
         '',
       );
       const block = installBlock(parameters);
-      deepStrictEqual(block === 'none' ? block : block.status, 'LockBusy');
+      deepStrictEqual(
+        [
+          block === 'none' ? block : block.status,
+          readdirSync(binFolder).sort(),
+          existsSync(path.join(dataFolder(host), CLI_NAME)),
+        ],
+        [
+          'Ok',
+          [
+            'boot-lock.user.abc1230000000000000000000000000000000000',
+            'boot-lock.user.abc1230000000000000000000000000000000000.target',
+          ],
+          true,
+        ],
+      );
+    });
+
+    it("ruling-2818-cli-no-host-lock: a CLI another run put in place during this run's unpack is used, and this run's stage is gone", () => {
+      const parameters = {
+        ...cliParameters(host),
+        archivePath: cliArchive(host),
+      };
+      const cliFile = path.join(dataFolder(host), CLI_NAME);
+      const realTar = spawnSync('sh', ['-c', 'command -v tar'], {
+        encoding: 'utf8',
+      }).stdout.trim();
+      rmSync(path.join(host.tools, 'tar'));
+      writeFileSync(
+        path.join(host.tools, 'tar'),
+        `#!/bin/sh\n${realTar} "$@" || exit $?\nprintf 'other run\\n' >'${cliFile}'\nchmod +x '${cliFile}'\n`,
+      );
+      chmodSync(path.join(host.tools, 'tar'), 0o755);
+      const block = installBlock(parameters);
+      deepStrictEqual(
+        [
+          block === 'none' ? block : block.status,
+          readFileSync(cliFile, 'utf8'),
+          existsSync(path.join(dataFolder(host), 'cli-bin')),
+        ],
+        ['Ok', 'other run\n', false],
+      );
+    });
+
+    it('ruling-2818-cli-no-host-lock: each run stages in its own folder and clears only that one', () => {
+      const parameters = {
+        ...cliParameters(host),
+        archivePath: cliArchive(host),
+      };
+      const otherStage = path.join(
+        dataFolder(host),
+        'cli-bin',
+        'abc1230000000000000000000000000000000000.1.1',
+      );
+      mkdirSync(otherStage, {recursive: true});
+      const block = installBlock(parameters);
+      deepStrictEqual(
+        [
+          block === 'none' ? block : block.status,
+          readdirSync(path.join(dataFolder(host), 'cli-bin')),
+        ],
+        ['Ok', ['abc1230000000000000000000000000000000000.1.1']],
+      );
     });
 
     it('F-2403: an install with no CLI parameters is CreateInstallDirFailed', () => {
