@@ -43,6 +43,8 @@ export const OWN_TEMPLATES = {
   S080: 'If your remote server is behind a firewall, ask your IT department to allow access to the VS Code CDN',
   S081: "If your remote server is behind a proxy, provide the proxy URL with setting '{0}' or '{1}'",
   S083: "Install '{0}' on the remote server. Installation steps will vary per distribution.",
+  S004: 'A command required on the remote machine was not found',
+  S062: "Ensure this program is installed on the remote machine and accessible via the '{0}' environment variable",
   S154: 'Update VS Code and try again later',
   S109: 'Proxy URL in settings is invalid',
   S113: 'Remove this value from settings or correct the URL',

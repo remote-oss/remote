@@ -484,6 +484,7 @@ describe('the fallback from the host to the client (F-2405.BR-2, BR-4)', () => {
     ['ServerDownloadFailed', 'ServerDownloadFailed'],
     ['NoDownloaderAvailable', 'NoDownloaderAvailable'],
     ['UnpackFailed', 'UnpackFailed'],
+    ['CommandMissing', 'CommandMissing'],
   ] as const;
   for (const [name, status] of FAILING_HOST_RUNS) {
     it(`F-2405.BR-2: a host that answers ${name} is followed by a client download`, async () => {
@@ -494,6 +495,37 @@ describe('the fallback from the host to the client (F-2405.BR-2, BR-4)', () => {
       deepStrictEqual(outcome.kind, 'transferred');
     });
   }
+
+  it('F-2402 7.E3: a host without tar fails as an unpack that names the program, with no client download under no fallback', async () => {
+    const {outcome, downloads} = await runTransfer({
+      installs: [block('CommandMissing', 'install.missing=tar')],
+    });
+    deepStrictEqual(
+      [failureOf(outcome), downloads],
+      [{kind: 'unpack', missing: 'tar'}, []],
+    );
+  });
+
+  it('F-2402 7.E3: a host without tar under the fallback is followed by a client download, whose copy meets the same check and ends with the program named', async () => {
+    const {outcome, downloads} = await runTransfer({
+      plan: FALLBACK,
+      installs: [
+        block('CommandMissing', 'install.missing=tar'),
+        block('CommandMissing', 'install.missing=tar'),
+      ],
+    });
+    deepStrictEqual(
+      [failureOf(outcome), downloads.length],
+      [{kind: 'unpack', missing: 'tar'}, 1],
+    );
+  });
+
+  it('F-2402 7.E3: a CommandMissing block that names no program is an unpack failure that names none', async () => {
+    const {outcome} = await runTransfer({
+      installs: [block('CommandMissing')],
+    });
+    deepStrictEqual(failureOf(outcome), {kind: 'unpack'});
+  });
 
   it('F-2405.AC-1: the phases of a fallback are downloading, downloading locally, copying, installing', async () => {
     const {phases} = await runTransfer({

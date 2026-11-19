@@ -554,7 +554,12 @@ BR-5 (empty path → "/", host lower-cased, `$` encoded) is built by lib-server'
 
 Statuses: `LockBusy`, `NoDownloaderAvailable`, `UnpackFailed`, `ServerDownloadFailed`, `CreateInstallDirFailed`,
 `UnsupportedArch`, `UnsupportedPlatform`, `LinuxPrereqs`, `NoBash` (only while a spec still requires bash),
-`ServerFailedToStart`.
+`ServerFailedToStart`, `CommandMissing` (POSIX only: the host has no `tar` or no `gzip` on the login `PATH`, found right
+before a `tar` archive is unpacked; the script writes the fact `install.missing <program>`, `tar` checked first, and
+removes the downloaded archive as every other ending does; F-2402 7.E3, #2856). The transfer maps it to the `unpack`
+failure with `missing: <program>`, so `"auto"` still falls back to the client's copy, and remote-ssh keeps the dialog
+reason of the unpack (STR:S075) and stores a hint with the status `CommandMissing`. Every other missing utility stays
+as the reference has it (7.E5), and a zip archive is not checked.
 
 Rules inside the scripts:
 - `wget` is preferred, then `curl`, and their configuration files are skipped unless

@@ -523,6 +523,36 @@ describe('the POSIX bootstrap script', () => {
       );
     });
 
+    for (const [missing, absent] of [
+      ['tar', ['tar']],
+      ['gzip', ['gzip']],
+      ['tar', ['tar', 'gzip']],
+    ] as const) {
+      it(`F-2402 7.E3: an install on a host without ${absent.join(' and ')} leaves CommandMissing and names ${missing}`, () => {
+        for (const tool of absent) {
+          unlinkSync(path.join(host.tools, tool));
+        }
+        const block = blockOf(host, single('install'), parametersFor());
+        deepStrictEqual(
+          block === 'none' ? block : [block.status, block.installFacts.missing],
+          ['CommandMissing', missing],
+        );
+      });
+    }
+
+    it('F-2402 7.E3: a zip archive is not checked for tar or gzip', () => {
+      unlinkSync(path.join(host.tools, 'tar'));
+      unlinkSync(path.join(host.tools, 'gzip'));
+      const block = blockOf(host, single('install'), {
+        ...parametersFor(),
+        archiveFormat: 'zip',
+      });
+      deepStrictEqual(
+        block === 'none' ? block : [block.status, block.installFacts.missing],
+        ['UnpackFailed', undefined],
+      );
+    });
+
     it('F-2403.BR-8: GNU wget skips its configuration files by default', () => {
       runScript(host, single('install'), parametersFor());
       deepStrictEqual(callsOf(host)[0]?.startsWith('wget --no-config'), true);
@@ -791,6 +821,19 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(existsSync(parameters.archivePath), false);
     });
 
+    it('F-2402 7.E3: a copied archive is removed when the host has no tar, and the block names the program', () => {
+      unlinkSync(path.join(host.tools, 'tar'));
+      const parameters = copiedParameters(true);
+      const block = blockOf(host, single('install'), parameters);
+      deepStrictEqual(
+        [
+          existsSync(parameters.archivePath),
+          block === 'none' ? block : block.installFacts.missing,
+        ],
+        [false, 'tar'],
+      );
+    });
+
     it('V4: a copied archive is removed when the install folder cannot be created', () => {
       const parameters = copiedParameters(true);
       writeFileSync(path.join(host.home, '.server-data'), '');
@@ -958,6 +1001,18 @@ describe('the POSIX bootstrap script', () => {
           input: Buffer.from('not an archive'),
         }),
         'UnpackFailed',
+      );
+    });
+
+    it('F-2402 7.E3: the unpack step on a host without gzip leaves CommandMissing and names gzip', () => {
+      runScript(host, stepwise('prepare'), parametersFor());
+      unlinkSync(path.join(host.tools, 'gzip'));
+      const block = blockOf(host, stepwise('unpack'), parametersFor(), {
+        input: Buffer.from('an archive'),
+      });
+      deepStrictEqual(
+        block === 'none' ? block : [block.status, block.installFacts.missing],
+        ['CommandMissing', 'gzip'],
       );
     });
 

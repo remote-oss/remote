@@ -103,6 +103,8 @@ export interface ServerStepDependencies {
   onInstallFolderInvalid: (value: string) => void;
   /** Keeps the hint of an install folder the host could not create, for the troubleshooting view. */
   onInstallFolderRefused: () => void;
+  /** Keeps the hint of an install that stopped for a program the host does not have, `program` being `tar` or `gzip`. */
+  onCommandMissing: (program: string) => void;
   /** Keeps the hint of a download the client could not make, `value` being the reason the dialog gives. */
   onLocalDownloadFailed: (value: string) => void;
   /** Whether the program the client's archive is copied to the host with can be started. */
@@ -242,8 +244,8 @@ export function createServerSteps(
   }
 
   /**
-   * Keeps the hint of a failure that has one: an install folder the host could not create, or a download the client
-   * could not make.
+   * Keeps the hint of a failure that has one: an install folder the host could not create, a program the host lacks
+   * for the unpack, or a download the client could not make.
    */
   function recordFailureHint(failure: TransferFailure | StartFailure): void {
     if (
@@ -251,6 +253,8 @@ export function createServerSteps(
       failure.status === 'CreateInstallDirFailed'
     ) {
       dependencies.onInstallFolderRefused();
+    } else if (failure.kind === 'unpack' && failure.missing !== undefined) {
+      dependencies.onCommandMissing(failure.missing);
     } else if (failure.kind === 'localDownload') {
       dependencies.onLocalDownloadFailed(localDownloadValue(failure));
     }

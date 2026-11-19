@@ -227,13 +227,31 @@ extract_zip() {
   unzip -q "$1" -d "$2" </dev/null || return 1
   progress unpack 100
 }
+unpack_commands_present() {
+  have tar || { UNPACK_MISSING=tar; return 1; }
+  have gzip || { UNPACK_MISSING=gzip; return 1; }
+}
+leave_unpack_failed() {
+  if [ -n "${UNPACK_MISSING:-}" ]; then
+    fact install.missing "$UNPACK_MISSING"
+    leave CommandMissing
+  fi
+  leave UnpackFailed
+}
+finish_unpack_failed() {
+  if [ -n "${UNPACK_MISSING:-}" ]; then
+    fact install.missing "$UNPACK_MISSING"
+    finish CommandMissing
+  fi
+  finish UnpackFailed
+}
 unpack_into() {
   UNPACK_STAGE=$2.stage.$$
   rm -rf "$UNPACK_STAGE"
   mkdir -p "$UNPACK_STAGE" "$2" || return 1
   case $ARCHIVE_FORMAT in
     zip) extract_zip "$1" "$UNPACK_STAGE" || return 1 ;;
-    *) extract_tar "$1" "$UNPACK_STAGE" || return 1 ;;
+    *) unpack_commands_present && extract_tar "$1" "$UNPACK_STAGE" || return 1 ;;
   esac
   unpack_move_top "$UNPACK_STAGE" "$2"
 }
@@ -342,7 +360,7 @@ else
   DOWNLOADED_AT=$(now_seconds)
   install_tree "$ARCHIVE" || UNPACK_FAILED=yes
   [ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"
-  [ -z "${UNPACK_FAILED:-}" ] || leave UnpackFailed
+  [ -z "${UNPACK_FAILED:-}" ] || leave_unpack_failed
   rewrite_identity "$INSTALL_TREE" || leave UnpackFailed
   fact server.treeInstalled yes
   fact timing.download "$(( ( DOWNLOADED_AT - STARTED_AT ) * 1000 ))"
