@@ -1409,10 +1409,10 @@ async function prepare(
     const stateBefore = process.env.XDG_STATE_HOME;
     process.env.XDG_STATE_HOME = stateFolderOf(runFolder, 'install');
     try {
-      for (const {folder, files, client} of installs) {
-        await step(
-          `installing ${String(files.length)} extension file(s) into ${path.basename(folder)}`,
-          () =>
+      await step(
+        `installing the extensions into ${String(installs.length)} folders`,
+        () => {
+          for (const {folder, files, client} of installs) {
             checked(
               command,
               editorCommands[client],
@@ -1423,9 +1423,10 @@ async function prepare(
                 ...files.flatMap(file => ['--install-extension', file]),
               ],
               PREPARE_STEP_MILLISECONDS,
-            ),
-        );
-      }
+            );
+          }
+        },
+      );
     } finally {
       if (stateBefore === undefined) {
         delete process.env.XDG_STATE_HOME;
