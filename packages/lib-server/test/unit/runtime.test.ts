@@ -472,6 +472,7 @@ describe('startOrReuse (V7), answers mapped', () => {
             hostFacts: {},
             serverFacts: {lockPath: '/h/.s/bin/abc/lock'},
             cliFacts: {},
+            installFacts: {},
             timings: {},
           },
         },

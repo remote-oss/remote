@@ -16,6 +16,7 @@ export type ScriptStatus =
   | 'LockBusy'
   | 'NoDownloaderAvailable'
   | 'UnpackFailed'
+  | 'CommandMissing'
   | 'ServerDownloadFailed'
   | 'CreateInstallDirFailed'
   | 'UnsupportedArch'
@@ -33,6 +34,8 @@ export interface ResultBlock {
   serverFacts: Record<string, string>;
   /** The `cli.*` keys of the block, without their prefix. */
   cliFacts: Record<string, string>;
+  /** The `install.*` keys of the block, without their prefix: what the install found missing. */
+  installFacts: Record<string, string>;
   /** The `timing.*` keys of the block, without their prefix, in integer milliseconds. */
   timings: Record<string, number>;
   /** Set when the printed status word was not a ScriptStatus; status is then ServerFailedToStart. */
@@ -44,6 +47,7 @@ const STATUS_WORDS: readonly ScriptStatus[] = [
   'LockBusy',
   'NoDownloaderAvailable',
   'UnpackFailed',
+  'CommandMissing',
   'ServerDownloadFailed',
   'CreateInstallDirFailed',
   'UnsupportedArch',
@@ -57,6 +61,7 @@ const STATUS_SET = new Set<string>(STATUS_WORDS);
 const HOST_PREFIX = 'host.';
 const SERVER_PREFIX = 'server.';
 const CLI_PREFIX = 'cli.';
+const INSTALL_PREFIX = 'install.';
 const TIMING_PREFIX = 'timing.';
 const TIMING_VALUE = /^\d+$/;
 
@@ -66,6 +71,7 @@ interface RawBlock {
   hostFacts: Record<string, string>;
   serverFacts: Record<string, string>;
   cliFacts: Record<string, string>;
+  installFacts: Record<string, string>;
   timings: Record<string, number>;
 }
 
@@ -75,6 +81,7 @@ function emptyBlock(): RawBlock {
     hostFacts: {},
     serverFacts: {},
     cliFacts: {},
+    installFacts: {},
     timings: {},
   };
 }
@@ -116,6 +123,8 @@ function recordLine(block: RawBlock, line: string): void {
     block.serverFacts[field.slice(SERVER_PREFIX.length)] = value;
   } else if (field.startsWith(CLI_PREFIX)) {
     block.cliFacts[field.slice(CLI_PREFIX.length)] = value;
+  } else if (field.startsWith(INSTALL_PREFIX)) {
+    block.installFacts[field.slice(INSTALL_PREFIX.length)] = value;
   } else if (field.startsWith(TIMING_PREFIX)) {
     if (TIMING_VALUE.test(value)) {
       block.timings[field.slice(TIMING_PREFIX.length)] = Number(value);
@@ -158,6 +167,7 @@ export function parseResult(
     hostFacts: latest.hostFacts,
     serverFacts: latest.serverFacts,
     cliFacts: latest.cliFacts,
+    installFacts: latest.installFacts,
     timings: latest.timings,
   };
   if (isScriptStatus(latest.statusWord)) {

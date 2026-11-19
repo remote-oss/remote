@@ -73,6 +73,7 @@ import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
 import type {HintRecorder} from './diagnostics/hint-recorder.ts';
 import {downloadRefusalHint} from './diagnostics/download-refusal.ts';
+import {commandMissingHint} from './diagnostics/command-missing-hint.ts';
 import {installFolderHint} from './diagnostics/install-folder-hint.ts';
 import {installPathHint} from './diagnostics/install-path-hint.ts';
 import {localDownloadHint} from './diagnostics/local-download-hint.ts';
@@ -467,6 +468,9 @@ export function wiringPortsOf(
       },
       onInstallFolderRefused: () => {
         surfaces.hints.record(installFolderHint());
+      },
+      onCommandMissing: program => {
+        surfaces.hints.record(commandMissingHint(program));
       },
       onLocalDownloadFailed: value => {
         surfaces.hints.record(localDownloadHint(value, surfaces.translate));

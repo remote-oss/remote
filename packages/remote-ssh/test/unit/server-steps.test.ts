@@ -1193,6 +1193,7 @@ describe('the server steps: the default extensions', () => {
 async function transferWith(
   changes: Partial<ServerStepDependencies>,
   status: string,
+  ...facts: string[]
 ): Promise<void> {
   const steps = createServerSteps(dependencies(changes));
   const result = steps.plan(INPUT, HOST);
@@ -1201,7 +1202,7 @@ async function transferWith(
   }
   await steps.transfer(
     INPUT,
-    leaseOn(channelAnswering(lines(status))),
+    leaseOn(channelAnswering(lines(status, ...facts))),
     HOST,
     result.plan,
     () => undefined,
@@ -1355,6 +1356,38 @@ describe('the hints of an install folder the host cannot create and a download t
       'Ok',
     );
     deepStrictEqual(told, ['Failed to fetch']);
+  });
+});
+
+describe('the hint of an install that stopped for a program the host lacks (card #2856)', () => {
+  /** What `onCommandMissing` heard when the host answered `status` with `facts` to the transfer. */
+  async function heard(status: string, ...facts: string[]): Promise<string[]> {
+    const programs: string[] = [];
+    await transferWith(
+      {
+        policy: sshPolicyFor('off'),
+        onCommandMissing: program => {
+          programs.push(program);
+        },
+      },
+      status,
+      ...facts,
+    );
+    return programs;
+  }
+
+  it('F-2402 7.E3: a transfer that ends in CommandMissing tells the program the host named, once', async () => {
+    deepStrictEqual(
+      [
+        await heard('CommandMissing', 'install.missing=tar'),
+        await heard('CommandMissing', 'install.missing=gzip'),
+      ],
+      [['tar'], ['gzip']],
+    );
+  });
+
+  it('F-2402 7.E3: an unpack that failed for another reason tells no program', async () => {
+    deepStrictEqual(await heard('UnpackFailed'), []);
   });
 });
 

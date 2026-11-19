@@ -165,6 +165,7 @@ describe('the server result and the progress in the log (card connect-67)', () =
       hostFacts: {},
       serverFacts: {},
       cliFacts: {},
+      installFacts: {},
       timings: {},
       ...facts,
     };

@@ -21,7 +21,15 @@ import {
   secondEngine,
   showsNoEngine,
 } from '../windows/engine-fixture.ts';
+import {pickedUp} from '../windows/late-pickup.ts';
+import {engineSuffix} from '../windows/platform-forms.ts';
 import {answerDialog, waitForDialog, windowTitle} from '../windows/renderer.ts';
+
+/**
+ * The variable the Docker CLI reads its configuration folder's home from: `HOME` on Linux, and `USERPROFILE` on Windows,
+ * where `HOME` is not read, so the HOME case of the hijack row and its control would show nothing there.
+ */
+const HOME_VARIABLE = process.platform === 'win32' ? 'USERPROFILE' : 'HOME';
 
 /** Writes the folder's `.vscode/settings.json`. */
 function folderSettings(folder: string, settings: unknown): void {
@@ -61,16 +69,26 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       'containers.environment': {DOCKER_HOST: plain.address},
     });
     const window = await openFolderWindow(folder);
+    const notes: string[] = [];
     try {
       const trusted = await isTrusted(window);
       const first = await lists(plain.marker, window);
       folderSettings(folder, {'docker.host': DEAD});
-      const second = await showsNoEngine(window);
+      const second = await pickedUp(
+        'the view after a dead docker.host',
+        () => showsNoEngine(window),
+        notes,
+      );
       folderSettings(folder, {'docker.host': plain.address});
-      const third = await lists(plain.marker, window);
+      const third = await pickedUp(
+        'the view after docker.host names the second engine',
+        () => lists(plain.marker, window),
+        notes,
+      );
       deepStrictEqual(
         [trusted, first, second, third],
         [false, true, true, true],
+        notes.length > 0 ? notes.join('; ') : undefined,
       );
     } finally {
       await closeWindow(window).catch(() => undefined);
@@ -103,7 +121,7 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       path.join(config, 'config.json'),
       JSON.stringify({currentContext: dead}),
     );
-    // The control: with that HOME the CLI finds the dead current context, so the HOME case could fail.
+    // The control: with that home the CLI finds the dead current context, so the HOME case could fail.
     let controlFails = false;
     try {
       execFileSync('docker', ['ps', '-q'], {
@@ -116,7 +134,7 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
                 ),
             ),
           ),
-          HOME: home,
+          [HOME_VARIABLE]: home,
         },
         stdio: 'ignore',
       });
@@ -138,39 +156,76 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       '3600',
     );
     const seen: boolean[] = [];
+    const notes: string[] = [];
     const window = await openFolderWindow(folder);
     try {
       for (const environment of [
-        {PATH: `${programs}:${process.env.PATH ?? ''}`},
-        {HOME: home},
+        {PATH: `${programs}${path.delimiter}${process.env.PATH ?? ''}`},
+        {[HOME_VARIABLE]: home},
         {DOCKER_CONFIG: config},
       ]) {
         folderSettings(folder, {'containers.environment': environment});
-        seen.push(await lists(own, window));
+        seen.push(
+          await pickedUp(
+            `the view after ${JSON.stringify(Object.keys(environment))} in containers.environment`,
+            () => lists(own, window),
+            notes,
+          ),
+        );
       }
       folderSettings(folder, {
         'containers.environment': {
-          PATH: `${programs}:${process.env.PATH ?? ''}`,
+          PATH: `${programs}${path.delimiter}${process.env.PATH ?? ''}`,
           DOCKER_HOST: 'ssh://127.0.0.1:9',
         },
       });
-      seen.push(await showsNoEngine(window));
+      seen.push(
+        await pickedUp(
+          'the no-engine view after a DOCKER_HOST beside the PATH',
+          () => showsNoEngine(window),
+          notes,
+        ),
+      );
       folderSettings(folder, {
         'containers.environment': {
-          PATH: `${programs}:${process.env.PATH ?? ''}`,
+          PATH: `${programs}${path.delimiter}${process.env.PATH ?? ''}`,
         },
       });
       // The reopen reads the folder's settings when it starts, so it starts only once the view has taken the change of
       // the file: with the dead host still in force the connect waits on it.
-      seen.push(await lists(own, window));
+      seen.push(
+        await pickedUp(
+          'the view after the dead host is taken out',
+          () => lists(own, window),
+          notes,
+        ),
+      );
       void startInWindow(window, 'remote-containers.reopenInContainer');
       await waitForDialog(window, 60_000);
       await answerDialog(window, 'Trust Folder & Continue');
       await connectedToContainer(window);
       const title = await windowTitle(window);
+      // The container window is named after the run's engine on a run whose engine is a named endpoint (the Windows job's
+      // stand-in), and not on one that uses the default. A DOCKER_HOST in the editor's environment, which that job has,
+      // wins over the current context of the Docker configuration, so there the home (USERPROFILE) and DOCKER_CONFIG cases
+      // cannot show a hijack: the control strips DOCKER_HOST and the editor does not. They show only that the folder's
+      // values change nothing the editor uses. The programs written above are not run from a Windows PATH either (the CLI
+      // is found by its `.exe`), so the PATH case shows there only that the extension runs nothing of the folder's. The
+      // message says which of the two applies in the run.
       deepStrictEqual(
-        [controlFails, seen, title.includes(' @ '), existsSync(marker)],
-        [true, [true, true, true, true, true], false, false],
+        [
+          controlFails,
+          seen,
+          title.includes(`[Dev Container: Hijack${engineSuffix()}]`),
+          existsSync(marker),
+        ],
+        [true, [true, true, true, true, true], true, false],
+        [
+          ...notes,
+          process.env.DOCKER_HOST === undefined
+            ? 'the editor has no DOCKER_HOST: the home and DOCKER_CONFIG cases decide the engine through the current context, as on Linux'
+            : `the editor has DOCKER_HOST ${process.env.DOCKER_HOST}, which wins over the current context: the home and DOCKER_CONFIG cases cannot show a hijack in this run`,
+        ].join('; '),
       );
     } finally {
       await closeWindow(window).catch(() => undefined);
