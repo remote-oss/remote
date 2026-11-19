@@ -85,9 +85,15 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       const second = await showsNoEngine(window);
       folderSettings(folder, {'docker.host': plain.address});
       const third = await lists(plain.marker, window);
+      let late = '';
+      if (!third) {
+        await new Promise(resolve => setTimeout(resolve, 40_000));
+        late = `PROBE later (40 s on, refreshed again) it lists: ${String(await lists(plain.marker, window))}; `;
+      }
       const reading = third
         ? ''
-        : await Promise.all([
+        : late +
+          (await Promise.all([
             dockerWith(
               {},
               '-H',
@@ -106,7 +112,7 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
           ]).then(
             ([listed, welcome, rows]) =>
               `PROBE docker -H ${plain.address} ps: ${JSON.stringify(listed)}; the view's welcome: ${JSON.stringify(welcome)}; its rows: ${JSON.stringify(rows)}; the folder's settings file: ${readFileSync(path.join(folder, '.vscode', 'settings.json'), 'utf8')}; the process's DOCKER_*: ${JSON.stringify(Object.entries(process.env).filter(([key]) => key.startsWith('DOCKER_')))}; the Dev Containers log: ${JSON.stringify(containersLog().slice(-25))}`,
-          );
+          ));
       deepStrictEqual(
         [trusted, first, second, third],
         [false, true, true, true],
@@ -178,6 +184,7 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       '3600',
     );
     const seen: boolean[] = [];
+    let lateNoEngine = '';
     const window = await openFolderWindow(folder);
     try {
       for (const environment of [
@@ -194,7 +201,12 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
           DOCKER_HOST: 'ssh://127.0.0.1:9',
         },
       });
-      seen.push(await showsNoEngine(window));
+      const noEngine = await showsNoEngine(window);
+      if (!noEngine) {
+        await new Promise(resolve => setTimeout(resolve, 40_000));
+        lateNoEngine = `PROBE the no-engine view, 40 s later and refreshed again: ${String(await showsNoEngine(window))}; the folder's settings file: ${readFileSync(path.join(folder, '.vscode', 'settings.json'), 'utf8')}; the Dev Containers log: ${JSON.stringify(containersLog().slice(-12))}`;
+      }
+      seen.push(noEngine);
       folderSettings(folder, {
         'containers.environment': {
           PATH: `${programs}${path.delimiter}${process.env.PATH ?? ''}`,
@@ -223,9 +235,10 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
           existsSync(marker),
         ],
         [true, [true, true, true, true, true], true, false],
-        process.env.DOCKER_HOST === undefined
-          ? 'the editor has no DOCKER_HOST: the home and DOCKER_CONFIG cases decide the engine through the current context, as on Linux'
-          : `the editor has DOCKER_HOST ${process.env.DOCKER_HOST}, which wins over the current context: the home and DOCKER_CONFIG cases cannot show a hijack in this run`,
+        lateNoEngine +
+          (process.env.DOCKER_HOST === undefined
+            ? 'the editor has no DOCKER_HOST: the home and DOCKER_CONFIG cases decide the engine through the current context, as on Linux'
+            : `the editor has DOCKER_HOST ${process.env.DOCKER_HOST}, which wins over the current context: the home and DOCKER_CONFIG cases cannot show a hijack in this run`),
       );
     } finally {
       await closeWindow(window).catch(() => undefined);
