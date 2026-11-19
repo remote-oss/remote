@@ -236,6 +236,37 @@ async function goodStart(startedAt: number): Promise<string> {
   return `${file}: ${lines.join(' | ')}`;
 }
 
+/** What a second debug start does in a window whose first one is held (probe of card #2646). */
+async function secondStartFacts(folder: string): Promise<string> {
+  const startedAt = Date.now();
+  await startInWindow(folder, 'workbench.action.debug.start');
+  await new Promise(resolve => setTimeout(resolve, 20_000));
+  const shown = await pageText(folder).catch(() => '(unreadable)');
+  return [
+    `events: ${commandEventsSince(folder, startedAt).join(' | ')}`,
+    `the program's line is there: ${String(shown.includes('c125-ran-on'))}`,
+    `a pick or the session's toolbar is there: ${String(shown.includes('Select a configuration') || shown.includes('Run app'))}`,
+    `the host's lines: ${await goodStart(startedAt).catch(String)}`,
+  ].join('\n');
+}
+
+/** Whether the window opens the folder's launch.json, read through the remote file service (probe of card #2646). */
+async function openLaunchFacts(folder: string): Promise<string> {
+  const startedAt = Date.now();
+  await inWindow(
+    folder,
+    'acceptance.agent.openUri',
+    `vscode-remote://ssh-remote+harness/home/harness/${folder}/.vscode/launch.json`,
+  );
+  await new Promise(resolve => setTimeout(resolve, 3000));
+  const shown = await pageText(folder).catch(() => '(unreadable)');
+  return [
+    `events: ${commandEventsSince(folder, startedAt).join(' | ')}`,
+    `a tab named launch.json: ${String(shown.includes('launch.json'))}`,
+    `its text, "Run app": ${String(shown.includes('Run app'))}`,
+  ].join('\n');
+}
+
 describe('the extension in the core flows of an SSH window (card connect-125)', function () {
   this.timeout(600_000);
 
@@ -317,9 +348,19 @@ describe('the extension in the core flows of an SSH window (card connect-125)', 
               );
               const from = debugStartAt - 5000;
               const until = Date.now();
+              const secondStart = await settledSection(
+                'a second debug start, 20 s',
+                () => secondStartFacts(folder),
+              );
+              const launchFile = await settledSection(
+                'the folder’s launch.json opened in the window',
+                () => openLaunchFacts(folder),
+              );
               const hostSections = await hostLogSections(from, until);
               const windowSections = windowLogSections(folder, from, until);
               return [
+                secondStart,
+                launchFile,
                 ...hostSections,
                 ...windowSections,
                 section(
