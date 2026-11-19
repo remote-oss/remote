@@ -214,11 +214,6 @@ export function ofProbe(failure: ProbeFailure): FailureDetail {
       return logged('unsupportedPlatform', `reported: ${failure.reported}`, {
         id: 'S146',
       });
-    case 'prerequisiteMissing':
-      return logged(
-        'prerequisiteMissing',
-        `missing: ${failure.missing.join(', ')}`,
-      );
     case 'probeFailed':
       return ofStatus(failure.status);
     case 'unreadableFacts':

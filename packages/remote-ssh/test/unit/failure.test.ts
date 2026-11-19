@@ -192,7 +192,6 @@ const EVERY_CASE: ReadonlyArray<readonly [string, FailureDetail]> = [
     'architecture',
     ofProbe({kind: 'unsupportedArch', reported: 'sparc', libc: 'glibc'}),
   ],
-  ['tools', ofProbe({kind: 'prerequisiteMissing', missing: ['tar', 'gzip']})],
   ['probe status', ofProbe({kind: 'probeFailed', status: 'NoBash'})],
   ['probe new status', ofProbe({kind: 'probeFailed', status: 'SomethingNew'})],
   ['unreadable facts', ofProbe({kind: 'unreadableFacts', field: 'os'})],
@@ -411,13 +410,6 @@ describe('the reading of each library failure (no library text is shown)', () =>
         reason: {id: 'S043'},
         logDetail: 'downloadFailed',
       },
-    );
-  });
-
-  it('contracts R1: missing tools give no reason and log the list', () => {
-    deepStrictEqual(
-      ofProbe({kind: 'prerequisiteMissing', missing: ['tar', 'gzip']}),
-      {kind: 'prerequisiteMissing', logDetail: 'missing: tar, gzip'},
     );
   });
 

@@ -587,7 +587,7 @@ Rules inside the scripts:
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `probe` | H1, platform hint, requirements-check policy | host facts: OS, architecture token, libc family, release id, temp folder, login shell, tools, `SSH_AUTH_SOCK`, `DISPLAY` | `unsupportedPlatform`, `unsupportedArch`, `prerequisiteMissing` (F-2401, F-2402, F-2703), channel failures |
+| `probe` | H1, platform hint | host facts: OS, architecture token, libc family, release id, temp folder, login shell, tools, `SSH_AUTH_SOCK`, `DISPLAY` | `unsupportedPlatform`, `unsupportedArch`, `probeFailed`, `unreadableFacts`, `noResultBlock`, channel failures (F-2401, F-2703); a host without `tar` is probed, with `tar` absent from its tools, and the unpack fails with `UnpackFailed` (F-2402 BR-5, `ruling-2854-required-commands`) |
 
 Rule (from server-08's acceptance run, 2026-10-08): the probe script never depends on a command that fails when a
 glob has no match (`ls a b` under BusyBox); libc detection must report `musl` on Alpine, and the acceptance suite
