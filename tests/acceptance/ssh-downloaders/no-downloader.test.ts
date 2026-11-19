@@ -22,6 +22,7 @@ import {
 } from '../windows/harness.ts';
 import {
   closeAllButLocal,
+  DATA_FOLDER,
   dismissals,
   freshHost,
   INSTALL_MILLISECONDS,
@@ -57,6 +58,9 @@ const MITIGATIONS = [
 function compact(text: string): string {
   return text.replaceAll(/[\s•]/gu, '');
 }
+
+/** The data folder of the server of the account `harness-nofetch`. */
+const DATA = DATA_FOLDER.replace('/harness/', `/${ACCOUNT}/`);
 
 /** Pauses for `milliseconds`. */
 function pause(milliseconds: number): Promise<void> {
@@ -119,6 +123,45 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
             mitigations: compact(MITIGATIONS.join('')),
             curlOutsidePath: '/opt/fetch-off/curl\n',
           },
+        );
+      } finally {
+        await closeWindow(name).catch(() => undefined);
+      }
+    });
+  });
+
+  it('F-2402 AC-1, AC-28 (c2854-dialog): the dialog of that failure gives the reason of STR:S042, ending in exactly one period, with the three buttons', async () => {
+    await withSettings({}, async () => {
+      const name = 'c2854-dialog';
+      appendScript(dismissals(name));
+      await failedOn(ALIAS, name);
+      try {
+        const dialog = recordLines('failureDialog', name)[0];
+        deepStrictEqual(
+          {question: dialog?.question, buttons: dialog?.buttons},
+          {
+            question: `Could not establish connection to "${ALIAS}": ${NO_DOWNLOADER}`,
+            // The order the harness records a failure dialog's buttons in, as every row of this suite has it.
+            buttons: ['Close Remote', 'Retry', 'More Actions...'],
+          },
+        );
+      } finally {
+        await closeWindow(name).catch(() => undefined);
+      }
+    });
+  });
+
+  it('F-2402 AC-26 (c2854-nothing-installed): after that failure the host has an empty server folder and nothing else was installed', async () => {
+    await withSettings({}, async () => {
+      const name = 'c2854-nothing-installed';
+      appendScript(dismissals(name));
+      await failedOn(ALIAS, name);
+      try {
+        deepStrictEqual(
+          (await onHostAs(ACCOUNT, 'find', DATA, '-mindepth', '1'))
+            .split('\n')
+            .filter(line => line !== ''),
+          [],
         );
       } finally {
         await closeWindow(name).catch(() => undefined);
