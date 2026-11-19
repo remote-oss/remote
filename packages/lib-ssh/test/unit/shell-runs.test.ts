@@ -302,7 +302,7 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
       }
       const folder = mkdtempSync(path.join(tmpdir(), 'lock-'));
       const file = path.join(folder, 'host.lock');
-      const run: ShellRun = {
+      const locked: ShellRun = {
         ...SCRIPT,
         script: `flock -n 9 && echo ${SESSION_LOCK_TAKEN}`,
         sessionLock: {path: file, action: 'open'},
@@ -310,7 +310,7 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
       const arming = `REMOTE_OSS_LOCK_HELD=1; trap 'rm -f '\\''${file}'\\''' EXIT HUP\n`;
       const another = `( exec 7>>'${file}'; flock -n 7 ) && echo free || echo busy\n`;
       const result = spawnSync('/bin/sh', [], {
-        input: `${commandsFor('m1', run)}${arming}${another}`,
+        input: `${commandsFor('m1', locked)}${arming}${another}`,
       });
       deepStrictEqual(
         [result.stdout.toString().trim().split('\n'), existsSync(file)],
