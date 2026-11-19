@@ -21,7 +21,14 @@ import {
   secondEngine,
   showsNoEngine,
 } from '../windows/engine-fixture.ts';
+import {engineSuffix} from '../windows/platform-forms.ts';
 import {answerDialog, waitForDialog, windowTitle} from '../windows/renderer.ts';
+
+/**
+ * The variable the Docker CLI reads its configuration folder's home from: `HOME` on Linux, and `USERPROFILE` on Windows,
+ * where `HOME` is not read, so the HOME case of the hijack row and its control would show nothing there.
+ */
+const HOME_VARIABLE = process.platform === 'win32' ? 'USERPROFILE' : 'HOME';
 
 /** Writes the folder's `.vscode/settings.json`. */
 function folderSettings(folder: string, settings: unknown): void {
@@ -103,7 +110,7 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       path.join(config, 'config.json'),
       JSON.stringify({currentContext: dead}),
     );
-    // The control: with that HOME the CLI finds the dead current context, so the HOME case could fail.
+    // The control: with that home the CLI finds the dead current context, so the HOME case could fail.
     let controlFails = false;
     try {
       execFileSync('docker', ['ps', '-q'], {
@@ -116,7 +123,7 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
                 ),
             ),
           ),
-          HOME: home,
+          [HOME_VARIABLE]: home,
         },
         stdio: 'ignore',
       });
@@ -142,7 +149,7 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
     try {
       for (const environment of [
         {PATH: `${programs}:${process.env.PATH ?? ''}`},
-        {HOME: home},
+        {[HOME_VARIABLE]: home},
         {DOCKER_CONFIG: config},
       ]) {
         folderSettings(folder, {'containers.environment': environment});
@@ -168,9 +175,18 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       await answerDialog(window, 'Trust Folder & Continue');
       await connectedToContainer(window);
       const title = await windowTitle(window);
+      // The container window is named after the run's engine on a run whose engine is a named endpoint (the Windows job's
+      // stand-in), and not on one that uses the default. On Windows the programs written above are not run from the PATH
+      // (the CLI is found by its `.exe`), so the PATH case shows there only that the extension runs nothing of the folder's;
+      // the home (USERPROFILE) and DOCKER_CONFIG cases are the ones the Windows run can show.
       deepStrictEqual(
-        [controlFails, seen, title.includes(' @ '), existsSync(marker)],
-        [true, [true, true, true, true, true], false, false],
+        [
+          controlFails,
+          seen,
+          title.includes(`[Dev Container: Hijack${engineSuffix()}]`),
+          existsSync(marker),
+        ],
+        [true, [true, true, true, true, true], true, false],
       );
     } finally {
       await closeWindow(window).catch(() => undefined);
