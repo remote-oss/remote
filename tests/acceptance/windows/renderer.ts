@@ -420,7 +420,31 @@ export async function rememberPage(name: string): Promise<void> {
 }
 
 /** Evaluates `expression` in the page at protocol address `address` and returns its value; `owner` names the page in a failure. */
+const EVALUATE_TIMES: number[] = [];
+
 async function evaluateAt<Value>(
+  address: string,
+  owner: string,
+  expression: string,
+): Promise<Value> {
+  const started = Date.now();
+  try {
+    return await evaluateAtTimed<Value>(address, owner, expression);
+  } finally {
+    const took = Date.now() - started;
+    EVALUATE_TIMES.push(took);
+    if (took > 2000) {
+      console.log(`EVALUATE-SLOW ${String(took)} ms: ${expression.replace(/\s+/g, ' ').slice(0, 90)}`);
+    }
+    if (EVALUATE_TIMES.length % 200 === 0) {
+      const sorted = [...EVALUATE_TIMES].sort((left, right) => left - right);
+      const at = (fraction: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * fraction))];
+      console.log(`EVALUATE-DIST n=${String(sorted.length)} p50=${String(at(0.5))} p90=${String(at(0.9))} p99=${String(at(0.99))} p999=${String(at(0.999))} max=${String(sorted.at(-1))}`);
+    }
+  }
+}
+
+async function evaluateAtTimed<Value>(
   address: string,
   owner: string,
   expression: string,
