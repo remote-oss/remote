@@ -9,6 +9,7 @@ import {
   appendScript,
   callCommand,
   closeWindow,
+  commandEventsSince,
   companionCalls,
   connectedWithin,
   hostAliases,
@@ -19,7 +20,6 @@ import {
   recordLines,
   waitFor,
 } from '../windows/harness.ts';
-import {INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
 import {
   rememberPage,
   titleAction,
@@ -27,6 +27,7 @@ import {
   viewRows,
 } from '../windows/renderer.ts';
 import {rowsOf, rowsSettled, VIEW} from '../windows/explorer-rows.ts';
+import {explainedFailure, section} from '../windows/connect-failure.ts';
 
 /** The command of the push. */
 const PUSH = 'remote-internal.setActiveFolders';
@@ -39,6 +40,40 @@ const SETTLE_MILLISECONDS = 8000;
 
 /** How long a window with no folder is watched for a push, as the criterion says. */
 const EMPTY_WINDOW_MILLISECONDS = 30_000;
+
+/**
+ * The connect's allowance in the rows: the row's other waits (its opens, its reads, its close, and the check of each
+ * that may outstay its own deadline) sum to 358 s at their bounds, so the connect's 120 s and its own 60 s check keep
+ * the row's sum 62 s under its 600 s timeout.
+ */
+const CONNECT_MILLISECONDS = 120_000;
+
+/**
+ * How long a row gives the push after its window's first resolve ended: the push is the resolve's own end, so by the
+ * time the window stands connected a push that is still missing is not a slow one.
+ */
+const PUSH_MILLISECONDS = 20_000;
+
+/**
+ * A row's failure with what its windows' agents reported about the commands sent to them since the row began, so a
+ * cut row says which of its waits ate the time: the wait's own message first, then each window's events, and a read
+ * that fails is told in its place.
+ */
+function rowReadout(
+  caught: unknown,
+  windows: readonly string[],
+  since: number,
+): Promise<Error> {
+  const report = windows
+    .map(name =>
+      section(`the events ${name}'s agent reported since the row began`, () => {
+        const lines = commandEventsSince(name, since);
+        return lines.length === 0 ? 'none' : lines.join('\n');
+      }),
+    )
+    .join('\n');
+  return explainedFailure(caught, () => Promise.resolve(report));
+}
 
 /** The pushes recorded after the first `count` of them. */
 function pushesSince(count: number): ReturnType<typeof companionCalls> {
@@ -79,11 +114,16 @@ describe('the push of the active folders (card coverage-100, F-2501 AC-36)', fun
   it('F-2501 AC-36 (c100-connected): a window with a folder on a reachable alias makes one push when its first resolve ends, and the history of the connected host shows the folder', async () => {
     await onHost('mkdir', '-p', '/home/harness/af36a');
     const before = companionCalls(PUSH).length;
+    const rowStart = Date.now();
     await inWindow('local', SHOW_REMOTE_EXPLORER);
     await openWindow('harness', 'af36a');
     try {
-      await connectedWithin('af36a', INSTALL_MILLISECONDS);
-      await waitFor('the push', () => pushesSince(before).length > 0, 30_000);
+      await connectedWithin('af36a', CONNECT_MILLISECONDS);
+      await waitFor(
+        'the push',
+        () => pushesSince(before).length > 0,
+        PUSH_MILLISECONDS,
+      );
       await new Promise(resolve => setTimeout(resolve, SETTLE_MILLISECONDS));
       const pushes = pushesSince(before);
       // The reader sees the history of a host that connected, so an empty one means something in the next row.
@@ -103,6 +143,8 @@ describe('the push of the active folders (card coverage-100, F-2501 AC-36)', fun
           },
         ],
       );
+    } catch (caught) {
+      throw await rowReadout(caught, ['local', 'af36a'], rowStart);
     } finally {
       await closeWindow('af36a').catch(() => undefined);
     }
@@ -144,6 +186,7 @@ describe('the push of the active folders (card coverage-100, F-2501 AC-36)', fun
       },
     ]);
     const before = companionCalls(PUSH).length;
+    const rowStart = Date.now();
     await inWindow('local', SHOW_REMOTE_EXPLORER);
     await openWindow('refused', 'af36b');
     try {
@@ -169,6 +212,8 @@ describe('the push of the active folders (card coverage-100, F-2501 AC-36)', fun
           [],
         ],
       );
+    } catch (caught) {
+      throw await rowReadout(caught, ['local', 'af36b'], rowStart);
     } finally {
       await closeWindow('af36b').catch(() => undefined);
     }
