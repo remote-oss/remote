@@ -148,7 +148,7 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
     const window = await openFolderWindow(folder);
     try {
       for (const environment of [
-        {PATH: `${programs}:${process.env.PATH ?? ''}`},
+        {PATH: `${programs}${path.delimiter}${process.env.PATH ?? ''}`},
         {[HOME_VARIABLE]: home},
         {DOCKER_CONFIG: config},
       ]) {
@@ -157,14 +157,14 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       }
       folderSettings(folder, {
         'containers.environment': {
-          PATH: `${programs}:${process.env.PATH ?? ''}`,
+          PATH: `${programs}${path.delimiter}${process.env.PATH ?? ''}`,
           DOCKER_HOST: 'ssh://127.0.0.1:9',
         },
       });
       seen.push(await showsNoEngine(window));
       folderSettings(folder, {
         'containers.environment': {
-          PATH: `${programs}:${process.env.PATH ?? ''}`,
+          PATH: `${programs}${path.delimiter}${process.env.PATH ?? ''}`,
         },
       });
       // The reopen reads the folder's settings when it starts, so it starts only once the view has taken the change of
@@ -176,9 +176,12 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       await connectedToContainer(window);
       const title = await windowTitle(window);
       // The container window is named after the run's engine on a run whose engine is a named endpoint (the Windows job's
-      // stand-in), and not on one that uses the default. On Windows the programs written above are not run from the PATH
-      // (the CLI is found by its `.exe`), so the PATH case shows there only that the extension runs nothing of the folder's;
-      // the home (USERPROFILE) and DOCKER_CONFIG cases are the ones the Windows run can show.
+      // stand-in), and not on one that uses the default. A DOCKER_HOST in the editor's environment, which that job has,
+      // wins over the current context of the Docker configuration, so there the home (USERPROFILE) and DOCKER_CONFIG cases
+      // cannot show a hijack: the control strips DOCKER_HOST and the editor does not. They show only that the folder's
+      // values change nothing the editor uses. The programs written above are not run from a Windows PATH either (the CLI
+      // is found by its `.exe`), so the PATH case shows there only that the extension runs nothing of the folder's. The
+      // message says which of the two applies in the run.
       deepStrictEqual(
         [
           controlFails,
@@ -187,6 +190,9 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
           existsSync(marker),
         ],
         [true, [true, true, true, true, true], true, false],
+        process.env.DOCKER_HOST === undefined
+          ? 'the editor has no DOCKER_HOST: the home and DOCKER_CONFIG cases decide the engine through the current context, as on Linux'
+          : `the editor has DOCKER_HOST ${process.env.DOCKER_HOST}, which wins over the current context: the home and DOCKER_CONFIG cases cannot show a hijack in this run`,
       );
     } finally {
       await closeWindow(window).catch(() => undefined);
