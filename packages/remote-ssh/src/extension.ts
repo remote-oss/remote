@@ -303,6 +303,9 @@ export async function activate(
       result.dispose();
     },
   });
+  if (vscode.env.remoteName !== 'ssh-remote') {
+    result.writeWindowStart();
+  }
   const connect = await registerConnectOf(
     context,
     manifest,
@@ -312,6 +315,9 @@ export async function activate(
         result.revealLog(preserveFocus);
       },
       logMark: () => result.logMark(),
+      writeWindowStart: () => {
+        result.writeWindowStart();
+      },
       logText: from => result.logText(from),
       logger: result.logger,
       help: helpHandlers(help, helpLinksOf(manifest), extension),
@@ -430,6 +436,8 @@ interface ServedActivation {
   revealLog(preserveFocus?: boolean): void;
   /** How many lines the log holds now. */
   logMark(): number;
+  /** Writes the editor version, the extension and the platform to the log, once. */
+  writeWindowStart(): void;
   /** The log's text from its `from`-th line on. */
   logText(from: number): string;
   logger: Logger;
@@ -520,6 +528,9 @@ async function registerConnectOf(
           }),
         ),
       logMark: () => served.logMark(),
+      writeWindowStart: () => {
+        served.writeWindowStart();
+      },
       logText: from => served.logText(from),
       logger: served.logger,
       applyTerminalEnvironment: terminalEnvironmentOf(

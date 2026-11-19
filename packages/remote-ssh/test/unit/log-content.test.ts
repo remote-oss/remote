@@ -17,6 +17,7 @@ import {
   resolverLine,
   searchedLines,
   serverResultLine,
+  settingLines,
   usingLine,
 } from '../../src/diagnostics/log-content.ts';
 
@@ -188,6 +189,120 @@ describe('the server result and the progress in the log (card connect-67)', () =
     deepStrictEqual(
       serverResultLine(parsedBlock({hostFacts: {sshAuthSock: '/tmp/a'}})),
       'Server result: Ok',
+    );
+  });
+});
+
+describe('the settings listing (F-2003 BR-6 item 2, card connect-71)', () => {
+  it('has a line for each setting, its name, an equal sign and its value as JSON, sorted by name', () => {
+    deepStrictEqual(
+      settingLines([
+        ['remote.SSH.useFlock', true],
+        ['remote.SSH.preferredLocalPortRange', {first: 1, second: 2}],
+        ['remote.SSH.bindHost', 'localhost'],
+        ['remote.SSH.defaultExtensions', ['a.b']],
+        ['remote.SSH.httpProxy', undefined],
+        ['remote.SSH.connectTimeout', null],
+      ]),
+      [
+        'remote.SSH.bindHost = "localhost"',
+        'remote.SSH.connectTimeout = null',
+        'remote.SSH.defaultExtensions = ["a.b"]',
+        'remote.SSH.httpProxy = undefined',
+        'remote.SSH.preferredLocalPortRange = {"first":1,"second":2}',
+        'remote.SSH.useFlock = true',
+      ],
+    );
+  });
+
+  it('R-26: masks the userinfo of a URL value and keeps its scheme, host, port and path', () => {
+    deepStrictEqual(
+      settingLines([
+        ['remote.SSH.httpProxy', 'http://alex:s3cret@proxy.example:3128/pac'],
+      ]),
+      ['remote.SSH.httpProxy = "http://aaaa:a1aaaa@proxy.example:3128/pac"'],
+    );
+  });
+
+  it('R-26: masks the query values of a URL value and keeps the keys, the path and the fragment', () => {
+    deepStrictEqual(
+      settingLines([
+        [
+          'remote.SSH.serverDownloadUrlTemplate',
+          'https://mirror.example/dl/x.tgz?token=ab12&flag&mode=on#part',
+        ],
+      ]),
+      [
+        'remote.SSH.serverDownloadUrlTemplate = "https://mirror.example/dl/x.tgz?token=aa11&aaaa&mode=aa#part"',
+      ],
+    );
+  });
+
+  it('R-26: masks the URLs in the map form of a proxy, in a nested map and in a list', () => {
+    deepStrictEqual(
+      settingLines([
+        [
+          'remote.SSH.httpProxy',
+          {'*': 'http://alex:s3cret@proxy.example:3128/pac'},
+        ],
+        [
+          'remote.SSH.httpsProxy',
+          {outer: {inner: 'https://host.example/x?token=ab12'}},
+        ],
+        [
+          'remote.SSH.defaultExtensions',
+          ['a.b', 'https://alex:s3cret@mirror.example/x.vsix'],
+        ],
+      ]),
+      [
+        'remote.SSH.defaultExtensions = ["a.b","https://aaaa:a1aaaa@mirror.example/x.vsix"]',
+        'remote.SSH.httpProxy = {"*":"http://aaaa:a1aaaa@proxy.example:3128/pac"}',
+        'remote.SSH.httpsProxy = {"outer":{"inner":"https://host.example/x?token=aa11"}}',
+      ],
+    );
+  });
+
+  it('R-26: masks the userinfo of a proxy written without a scheme, and the key of a map that holds a URL', () => {
+    deepStrictEqual(
+      settingLines([
+        ['remote.SSH.httpProxy', 'alex:s3cret@proxy.example:3128'],
+        ['remote.SSH.httpsProxy', {'http://alex:s3cret@key.example': 'x'}],
+      ]),
+      [
+        'remote.SSH.httpProxy = "aaaa:a1aaaa@proxy.example:3128"',
+        'remote.SSH.httpsProxy = {"http://aaaa:a1aaaa@key.example":"x"}',
+      ],
+    );
+  });
+
+  it('R-26: keeps a plain path, a number and null in a map as they are', () => {
+    deepStrictEqual(
+      settingLines([
+        [
+          'remote.SSH.serverInstallPath',
+          {harness: '~/.server', port: 22, none: null},
+        ],
+      ]),
+      [
+        'remote.SSH.serverInstallPath = {"harness":"~/.server","port":22,"none":null}',
+      ],
+    );
+  });
+
+  it('R-26: shows a value that is no URL with a scheme, a string, a switch or a number, as it is', () => {
+    deepStrictEqual(
+      settingLines([
+        ['remote.SSH.bindHost', 'localhost:8080'],
+        ['remote.SSH.useFlock', false],
+        ['remote.SSH.connectTimeout', 15],
+        ['remote.SSH.remoteServerListenOnSocket', true],
+      ]),
+      [
+        'remote.SSH.bindHost = "localhost:8080"',
+        'remote.SSH.connectTimeout = 15',
+        'remote.SSH.remoteServerListenOnSocket = true',
+        'remote.SSH.useFlock = false',
+      ],
     );
   });
 });

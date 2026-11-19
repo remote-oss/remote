@@ -26,6 +26,21 @@ export function valueOf(
   return readSetting(host, settings[entry]);
 }
 
+/** The settings the client search lists in its own form, which the settings listing leaves to it. */
+const LISTED_BY_THE_SEARCH: ReadonlyArray<keyof typeof settings> = [
+  'path',
+  'permitPtyAllocation',
+];
+
+/** The settings of the log's listing: every setting of the table but those the client search lists, each with its id and its effective value. */
+export function listedSettings(
+  host: SettingHost,
+): Array<readonly [string, unknown]> {
+  return (Object.keys(settings) as Array<keyof typeof settings>)
+    .filter(entry => !LISTED_BY_THE_SEARCH.includes(entry))
+    .map(entry => [settings[entry].id, valueOf(host, entry)] as const);
+}
+
 /** A switch's value: true only for the boolean true. */
 export function switchOf(
   host: SettingHost,

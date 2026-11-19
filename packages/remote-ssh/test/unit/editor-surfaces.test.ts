@@ -116,6 +116,7 @@ function surfacesWith(
     },
     environmentHints: () => [],
     logMark: () => 0,
+    writeWindowStart: () => undefined,
     logText: () => '',
     parseUri: () => undefined,
     help: {
