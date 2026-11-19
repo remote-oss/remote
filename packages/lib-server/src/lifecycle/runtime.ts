@@ -13,6 +13,7 @@ import {
   type ResultBlock,
   type ScriptStatus,
 } from '../scripts/result-block.ts';
+import {releaseSessionLock, sessionLockPath} from '../locks/session-lock.ts';
 import {keptExtensions} from './extensions.ts';
 import {runStep, type StepRun} from './run-step.ts';
 
@@ -197,6 +198,11 @@ export type HostLockLoop = (
 export interface RuntimeDependencies {
   lockLoop: HostLockLoop;
   logger: Logger;
+  /**
+   * Whether the channel's shell lives as long as the connection's session, so that a `flock` lock lasts the session:
+   * the start then has the shell hold the host lock.
+   */
+  sessionLock?: boolean;
 }
 
 /**
@@ -392,17 +398,31 @@ export async function startOrReuse(
       options.onLaunching?.();
     }
   }
+  const lockPath =
+    dependencies.sessionLock === true
+      ? await sessionLockPath(channel, parameters, cancellation)
+      : undefined;
   const stepRun = await dependencies.lockLoop(
     () =>
       runStep(
         channel,
         {installMode: 'singleScript', step: 'start'},
         parameters,
-        {cancellation, onLine: noteLaunching},
+        {
+          cancellation,
+          onLine: noteLaunching,
+          ...(lockPath === undefined
+            ? {}
+            : {sessionLock: {path: lockPath, action: 'open'}}),
+        },
       ),
     cancellation,
   );
-  return outcomeOf(stepRun, notices);
+  const outcome = outcomeOf(stepRun, notices);
+  if (lockPath !== undefined && outcome.kind !== 'started') {
+    await releaseSessionLock(channel, lockPath);
+  }
+  return outcome;
 }
 
 /**
