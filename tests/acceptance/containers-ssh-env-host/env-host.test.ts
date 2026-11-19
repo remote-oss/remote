@@ -6,7 +6,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {SSH_ENGINE_HOST_ADDRESS} from '../../../tools/acceptance-launches.ts';
 import {
-  dockerWith,
+  ownEngineDocker,
   sshEngine,
   type SshEngine,
   viewLabels,
@@ -27,18 +27,8 @@ describe('F-0205, an engine over SSH given as the editor’s DOCKER_HOST (card t
       hostPort: Number(new URL(SSH_ENGINE_HOST_ADDRESS).port),
     });
     const image = variable('HARNESS_DEVCONTAINER_IMAGE');
-    await dockerWith(
-      {},
-      '--context',
-      'default',
-      'tag',
-      image,
-      `${localMarker}:only`,
-    );
-    await dockerWith(
-      {},
-      '--context',
-      'default',
+    await ownEngineDocker('tag', image, `${localMarker}:only`);
+    await ownEngineDocker(
       'run',
       '-d',
       '--name',
@@ -52,16 +42,8 @@ describe('F-0205, an engine over SSH given as the editor’s DOCKER_HOST (card t
 
   after(async () => {
     await engine.stop();
-    await dockerWith({}, '--context', 'default', 'rm', '-f', localMarker).catch(
-      () => undefined,
-    );
-    await dockerWith(
-      {},
-      '--context',
-      'default',
-      'rmi',
-      `${localMarker}:only`,
-    ).catch(() => undefined);
+    await ownEngineDocker('rm', '-f', localMarker).catch(() => undefined);
+    await ownEngineDocker('rmi', `${localMarker}:only`).catch(() => undefined);
   });
 
   it('F-0205 AC-14 (c205-env-host): with the SSH host’s address as the editor’s DOCKER_HOST and no context switch, the view lists the container only that host holds and not the local daemon’s', async () => {

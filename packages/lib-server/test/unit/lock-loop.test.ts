@@ -14,7 +14,14 @@ function resultWith(
 ): StepRun {
   return {
     kind: 'result',
-    block: {status, hostFacts: {}, serverFacts, cliFacts: {}, timings: {}},
+    block: {
+      status,
+      hostFacts: {},
+      serverFacts,
+      cliFacts: {},
+      installFacts: {},
+      timings: {},
+    },
     exitStatus: 0,
   };
 }

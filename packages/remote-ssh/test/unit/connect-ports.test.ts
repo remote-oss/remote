@@ -481,6 +481,7 @@ describe("the assembled ports' settings", () => {
     ports.server.onProxyRejected({value: 'p', error: 'e'});
     ports.server.onInstallFolderInvalid('~x');
     ports.server.onInstallFolderRefused();
+    ports.server.onCommandMissing('tar');
     ports.server.onLocalDownloadFailed('Failed to fetch');
     deepStrictEqual(kept, [
       'ServerDownloadFailed',
@@ -488,6 +489,7 @@ describe("the assembled ports' settings", () => {
       'InvalidProxyUrl',
       'InvalidCustomServerPath',
       'CreateInstallDirFailed',
+      'CommandMissing',
       'LocalDownloadFailed',
     ]);
   });

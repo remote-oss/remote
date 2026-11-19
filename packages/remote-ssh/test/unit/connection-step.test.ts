@@ -593,6 +593,7 @@ describe('the connection step', () => {
     it('says at trace that the stored data has a record of the host and its operating system, and never its token', async () => {
       const {logged} = await loggedIn(RECORD, undefined, 'trace');
       deepStrictEqual(logged(), [
+        'Started ssh',
         'the stored data has a record of host harness: linux',
       ]);
     });
@@ -600,6 +601,7 @@ describe('the connection step', () => {
     it('says at trace that the stored data has no record when the helper holds none', async () => {
       const {logged} = await loggedIn(undefined, undefined, 'trace');
       deepStrictEqual(logged(), [
+        'Started ssh',
         'the stored data has no record of host harness',
       ]);
     });
@@ -607,7 +609,10 @@ describe('the connection step', () => {
     it('writes nothing about it at debug, with or without a record', async () => {
       const withRecord = await loggedIn(RECORD, undefined, 'debug');
       const without = await loggedIn(undefined, undefined, 'debug');
-      deepStrictEqual([withRecord.logged(), without.logged()], [[], []]);
+      deepStrictEqual(
+        [withRecord.logged(), without.logged()],
+        [['Started ssh'], ['Started ssh']],
+      );
     });
   });
 
@@ -735,6 +740,33 @@ describe('the connection step', () => {
         text: "alex@harness's password: ",
       },
     ]);
+  });
+
+  it('F-2003 BR-6 item 5: a window that started the login writes Started ssh once', async () => {
+    const {logged} = await loggedIn();
+    deepStrictEqual(logged(), ['Started ssh']);
+  });
+
+  it('F-2003 BR-6 item 5: a login that falls to the window after its own start still writes the line once', async () => {
+    const ready = fixture();
+    const pending = ready.connecting();
+    await settled();
+    ready.lease.emit({type: 'loginOwned'});
+    ready.lease.emit({type: 'connected', socksPort: 41000});
+    await pending;
+    deepStrictEqual(ready.logged(), ['Started ssh']);
+  });
+
+  it('F-2003 BR-6 item 5: a window that joined a login already done writes none', async () => {
+    const ready = fixture();
+    ready.lease.connectReplies = [
+      {type: 'refused', reason: 'alreadyConnected'},
+    ];
+    const pending = ready.connecting();
+    await settled();
+    ready.lease.emit({type: 'connected', socksPort: 41000});
+    await pending;
+    deepStrictEqual(ready.logged(), []);
   });
 
   it('connect-14: takes the questions down once the login is done, before the lease is given back', async () => {

@@ -122,6 +122,8 @@ export interface SurfaceContext {
   environmentHints: () => readonly EnvironmentHint[];
   /** How many lines the window's log holds now: where a resolve's own text begins. */
   logMark: () => number;
+  /** Writes the editor version, the extension and the platform to the log, once per window. */
+  writeWindowStart: () => void;
   /** The text of the window's log from its `from`-th line on, which a record keeps when its resolve step ends. */
   logText: (from: number) => string;
   /** The window's log, where a notice that could not be shown is noted. */
@@ -244,6 +246,7 @@ export function editorSurfacesOf(
     revealLog: () => {
       operations.revealLog();
     },
+    writeWindowStart: context.writeWindowStart,
     rejectBindHost: (alias, configured) => {
       adapters.notice
         .showError(

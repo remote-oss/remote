@@ -84,6 +84,10 @@ export interface ConnectOptions {
   serve: {commit: string; quality: string};
   /** The value of `remote.SSH.useExecServer`, read when the connect starts. */
   useExecServer: boolean;
+  /** The lines of the settings listing, as the settings are when the connect starts. */
+  settingLines: readonly string[];
+  /** Writes the editor version, the extension and the platform to the log when the window has not yet. */
+  writeWindowStart: () => void;
 }
 
 /** How a bounded step ended when it did not give its value. */
@@ -283,6 +287,10 @@ async function runConnect(
   options.logger.info(
     resolverLine(input.rawHostString, input.attempt, input.isReconnection),
   );
+  for (const line of options.settingLines) {
+    options.logger.info(line);
+  }
+  options.writeWindowStart();
   try {
     const result = await runSteps(
       input,

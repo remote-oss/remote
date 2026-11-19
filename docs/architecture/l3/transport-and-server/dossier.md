@@ -98,7 +98,7 @@ Needed by A:
   update service only through the user's setting behind R-68. The dev tunnels service through its MIT client library;
   the GitHub and Microsoft account providers through the editor.
 - **Remote files (names only).** `<install root>/<serverDataFolderName>/bin/<client commit>/` with
-  `remote-lock.<user>.<commit>`, `.<commit>.log`, `.<commit>.pid`, `.<commit>.token`, `data/`, `extensions/`;
+  `vscode-remote-lock.<user>.<commit>`, `.<commit>.log`, `.<commit>.pid`, `.<commit>.token`, `data/`, `extensions/`;
   the reused CLI layout `cli/servers/Stable-<commit>/server/` (F-3902 rule 10); `/tmp/vscode-ssh-auth-sock-<n>`.
 - **Client files (names only).** A per-host record in global storage, an install lock in the editor's temp folder,
   askpass sockets in the user runtime folder (named pipes on Windows), a temporary download folder.

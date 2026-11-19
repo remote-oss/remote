@@ -14,6 +14,7 @@ import type {
   SharedConnection,
 } from 'lib-ssh';
 import {payloadOf} from '../connect/connect-commands.ts';
+import {sshStartedLine} from '../diagnostics/log-content.ts';
 import type {PhaseEvent} from './connect.ts';
 import {ofAcquire, ofConnection} from './failure.ts';
 import {sshTargetOf} from './host-settings.ts';
@@ -128,6 +129,9 @@ export function openConnectionStep(
     let startedLogin = false;
     const stopStages = connection.onNotice(notice => {
       if (notice.type === 'loginOwned' || notice.type === 'loginStarted') {
+        if (!startedLogin) {
+          dependencies.logger.info(sshStartedLine());
+        }
         startedLogin = true;
       }
       if (notice.type === 'waitingForOtherWindow') {

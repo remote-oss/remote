@@ -34,6 +34,7 @@ import {
   LocalCommandLog,
   bootstrapEventOf,
 } from 'lib-ssh';
+import {sshStartedLine} from '../diagnostics/log-content.ts';
 import {goesOnAfterLoginTimeout} from './connection-request.ts';
 import {
   clientRefusal,
@@ -129,6 +130,7 @@ export function openTerminalConnectionStep(
       dependencies.terminalName(),
       revealed,
     );
+    dependencies.logger.info(sshStartedLine());
     return new Promise<StepResult<ConnectionLease>>(settle => {
       const lines: string[] = [];
       const waitSettings = dependencies.connectWait();

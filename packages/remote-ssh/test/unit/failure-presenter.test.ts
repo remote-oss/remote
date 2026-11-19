@@ -120,6 +120,13 @@ describe('the failure presenter', () => {
     );
   });
 
+  it('F-2402 AC-1, AC-28: the reason of a host with no downloader is STR:S042 with exactly one final period', async () => {
+    deepStrictEqual(
+      await textFor({reason: {id: 'S042'}}),
+      'Could not establish connection to "box": Downloading VS Code Server failed - please install either curl or wget on the remote.',
+    );
+  });
+
   it('F-2601 S031: a reason that is an id is translated through the table', async () => {
     deepStrictEqual(
       await textFor({reason: {id: 'S027'}}),

@@ -418,6 +418,33 @@ describe('the POSIX bootstrap script', () => {
       );
     });
 
+    it('F-2402 AC-26: a host with neither downloader is left with an empty data folder: no install folder and no lock', () => {
+      useHost([]);
+      runScript(host, single('install'), parametersFor());
+      const dataFolder = path.dirname(path.dirname(installFolder(host)));
+      deepStrictEqual(
+        [
+          existsSync(dataFolder),
+          existsSync(dataFolder) ? readdirSync(dataFolder) : undefined,
+        ],
+        [true, []],
+      );
+    });
+
+    it('F-2402: a host with neither downloader still reuses an installed server', () => {
+      runScript(host, single('install'), parametersFor());
+      rmSync(path.join(host.tools, 'wget'));
+      deepStrictEqual(statusOf(host, single('install'), parametersFor()), 'Ok');
+    });
+
+    it('F-2402: a host with neither downloader unpacks an archive the client copied', () => {
+      useHost([]);
+      deepStrictEqual(
+        statusOf(host, single('install'), copiedParameters(false)),
+        'Ok',
+      );
+    });
+
     const DOWNLOAD_ERRORS: Array<[string, Stub, string, string | undefined]> = [
       ['GNU wget', 'wget', '  HTTP/1.0 404 File not found', '404'],
       [
@@ -520,6 +547,36 @@ describe('the POSIX bootstrap script', () => {
           },
         }),
         'UnpackFailed',
+      );
+    });
+
+    for (const [missing, absent] of [
+      ['tar', ['tar']],
+      ['gzip', ['gzip']],
+      ['tar', ['tar', 'gzip']],
+    ] as const) {
+      it(`F-2402 7.E3: an install on a host without ${absent.join(' and ')} leaves CommandMissing and names ${missing}`, () => {
+        for (const tool of absent) {
+          unlinkSync(path.join(host.tools, tool));
+        }
+        const block = blockOf(host, single('install'), parametersFor());
+        deepStrictEqual(
+          block === 'none' ? block : [block.status, block.installFacts.missing],
+          ['CommandMissing', missing],
+        );
+      });
+    }
+
+    it('F-2402 7.E3: a zip archive is not checked for tar or gzip', () => {
+      unlinkSync(path.join(host.tools, 'tar'));
+      unlinkSync(path.join(host.tools, 'gzip'));
+      const block = blockOf(host, single('install'), {
+        ...parametersFor(),
+        archiveFormat: 'zip',
+      });
+      deepStrictEqual(
+        block === 'none' ? block : [block.status, block.installFacts.missing],
+        ['UnpackFailed', undefined],
       );
     });
 
@@ -791,6 +848,19 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(existsSync(parameters.archivePath), false);
     });
 
+    it('F-2402 7.E3: a copied archive is removed when the host has no tar, and the block names the program', () => {
+      unlinkSync(path.join(host.tools, 'tar'));
+      const parameters = copiedParameters(true);
+      const block = blockOf(host, single('install'), parameters);
+      deepStrictEqual(
+        [
+          existsSync(parameters.archivePath),
+          block === 'none' ? block : block.installFacts.missing,
+        ],
+        [false, 'tar'],
+      );
+    });
+
     it('V4: a copied archive is removed when the install folder cannot be created', () => {
       const parameters = copiedParameters(true);
       writeFileSync(path.join(host.home, '.server-data'), '');
@@ -958,6 +1028,18 @@ describe('the POSIX bootstrap script', () => {
           input: Buffer.from('not an archive'),
         }),
         'UnpackFailed',
+      );
+    });
+
+    it('F-2402 7.E3: the unpack step on a host without gzip leaves CommandMissing and names gzip', () => {
+      runScript(host, stepwise('prepare'), parametersFor());
+      unlinkSync(path.join(host.tools, 'gzip'));
+      const block = blockOf(host, stepwise('unpack'), parametersFor(), {
+        input: Buffer.from('an archive'),
+      });
+      deepStrictEqual(
+        block === 'none' ? block : [block.status, block.installFacts.missing],
+        ['CommandMissing', 'gzip'],
       );
     });
 

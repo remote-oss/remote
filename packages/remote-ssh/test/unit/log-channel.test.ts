@@ -74,7 +74,7 @@ describe('the log channel', () => {
     deepStrictEqual(names, ['Remote - SSH']);
   });
 
-  it('starts with the level, the editor version, the extension and the client, in that order', () => {
+  it('F-2003 BR-5: starts with the level alone', () => {
     const {port, channel} = recordingPort();
     openLogChannel(
       port,
@@ -82,8 +82,23 @@ describe('the log channel', () => {
       () => 'trace',
       () => localTime(9, 5, 7, 42),
     );
+    deepStrictEqual(channel.lines, ['[09:05:07.042] Log level: trace']);
+  });
+
+  it('F-2003 BR-5: the versions follow the settings in a resolving window, once', () => {
+    const {port, channel} = recordingPort();
+    const logChannel = openLogChannel(
+      port,
+      ENVIRONMENT,
+      () => 'trace',
+      () => localTime(9, 5, 7, 42),
+    );
+    logChannel.logger.info('remote.SSH.useFlock = true');
+    logChannel.writeWindowStart();
+    logChannel.writeWindowStart();
     deepStrictEqual(channel.lines, [
       '[09:05:07.042] Log level: trace',
+      '[09:05:07.042] remote.SSH.useFlock = true',
       '[09:05:07.042] Editor version: 1.139.1',
       '[09:05:07.042] Remote - SSH 0.1.0',
       '[09:05:07.042] Client: linux arm64',
@@ -103,7 +118,7 @@ describe('the log channel', () => {
     level = 'trace';
     logChannel.logger.trace('after');
     deepStrictEqual(
-      channel.lines.slice(4).map(line => line.slice(15)),
+      channel.lines.slice(1).map(line => line.slice(15)),
       ['after'],
     );
   });
@@ -143,8 +158,8 @@ describe('the log channel', () => {
     );
     logChannel.logger.info('later');
     deepStrictEqual(
-      [logChannel.text(), logChannel.mark(), logChannel.text(4)],
-      [channel.lines.join('\n'), 5, channel.lines[4]],
+      [logChannel.text(), logChannel.mark(), logChannel.text(1)],
+      [channel.lines.join('\n'), 2, channel.lines[1]],
     );
   });
 

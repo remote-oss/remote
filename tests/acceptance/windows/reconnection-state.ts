@@ -20,6 +20,10 @@ export interface StateReads {
   dialog(): Promise<{message: string; details: string} | undefined>;
   notifications(): Promise<string[]>;
   logLines(): string[];
+  /** What each page of the editor says of its focus and visibility, and its quick input. */
+  pageFacts(): Promise<string[]>;
+  /** What the row read of the window's page before the outage: when, and how long it took. */
+  pageRead(): string;
 }
 
 /** How many of the connection log's last lines the explanation keeps. */
@@ -55,6 +59,13 @@ export async function reconnectionState(
     }),
     await settledSection('the notifications now', async () =>
       JSON.stringify(await reads.notifications()),
+    ),
+    section('the read of the window’s page before the outage', () =>
+      reads.pageRead(),
+    ),
+    await settledSection(
+      'the pages now (focus, visibility, quick input)',
+      async () => (await reads.pageFacts()).join('\n'),
     ),
     section('the last lines of the connection log since then', () =>
       reads

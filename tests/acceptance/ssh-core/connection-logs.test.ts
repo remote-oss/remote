@@ -463,17 +463,20 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
     }
   });
 
-  it("F-2003 AC-11 (c121-full-order): a fresh connect's record holds the BR-6 kinds in order: the log level, the resolve start, the settings, the client search, the remote output, the listening port, the resolved authority, the rule and the analysis", async () => {
+  it("F-2003 AC-11 (c121-full-order): a fresh connect's record holds the BR-6 kinds in order: the log level, the resolve start, the settings listing, the versions, the client search, ssh started, the remote output, the listening port, the resolved authority, the rule and the analysis", async () => {
     await freshHost();
-    const mark = connectionLog().length;
+    const mark = connectionLog({withSettings: true}).length;
     await openConnected('c121-order', INSTALL_MILLISECONDS);
     try {
-      const lines = connectionLog().slice(mark);
+      const lines = connectionLog({withSettings: true}).slice(mark);
       const versions = lines.findIndex(each => each.includes('Editor version'));
       const resolving = lines.findIndex(each =>
         each.startsWith('Resolving ssh-remote+harness, attempt 1'),
       );
-      const setting = lines.findIndex(each => each.startsWith('remote.SSH.'));
+      const setting = lines.findIndex(each =>
+        each.startsWith('remote.SSH.useFlock = '),
+      );
+      const started = lines.findIndex(each => each === 'Started ssh');
       const searched = lines.findIndex(each =>
         each.startsWith('Searched for ssh in:'),
       );
@@ -492,18 +495,32 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
       deepStrictEqual(
         [
           (lines[0] ?? '').includes('Log level'),
-          versions >= 0,
-          resolving >= 0,
+          resolving > 0,
           setting > resolving,
-          searched > setting,
+          versions > setting,
+          searched > versions,
           using > searched,
-          remote > using,
+          started > using,
+          remote > started,
           listening > remote,
           resolved > listening,
           separator > resolved,
           analysis > separator,
         ],
-        [true, true, true, true, true, true, true, true, true, true, true],
+        [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+        ],
       );
     } finally {
       await closeWindow('c121-order').catch(() => undefined);

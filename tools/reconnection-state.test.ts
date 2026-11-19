@@ -20,6 +20,8 @@ function reads(replaced: Partial<StateReads> = {}): StateReads {
     dialog: () => Promise.resolve(undefined),
     notifications: () => Promise.resolve(['Setting up SSH Host']),
     logLines: () => ['skipped', 'Searched for ssh in: /usr/bin', 'kept'],
+    pageFacts: () => Promise.resolve(['[win]: {"visibility":"visible"}']),
+    pageRead: () => 'the read began 10 ms after the end was noted, took 5 ms',
     ...replaced,
   };
 }
@@ -37,6 +39,10 @@ describe('the state a window showed when its wait for core’s dialog timed out 
         'none',
         'the notifications now:',
         '["Setting up SSH Host"]',
+        'the read of the window’s page before the outage:',
+        'the read began 10 ms after the end was noted, took 5 ms',
+        'the pages now (focus, visibility, quick input):',
+        '[win]: {"visibility":"visible"}',
         'the last lines of the connection log since then:',
         'kept',
       ].join('\n'),
@@ -71,6 +77,10 @@ describe('the state a window showed when its wait for core’s dialog timed out 
         logLines: () => {
           throw new Error('no log file');
         },
+        pageFacts: () => Promise.reject(new Error('page gone')),
+        pageRead: () => {
+          throw new Error('no read');
+        },
       }),
       'win',
       0,
@@ -85,6 +95,10 @@ describe('the state a window showed when its wait for core’s dialog timed out 
       '(unreadable: Error: window closed)',
       'the notifications now:',
       '(unreadable: Error: window closed)',
+      'the read of the window’s page before the outage:',
+      '(unreadable: Error: no read)',
+      'the pages now (focus, visibility, quick input):',
+      '(unreadable: Error: page gone)',
       'the last lines of the connection log since then:',
       '(unreadable: Error: no log file)',
     ]);

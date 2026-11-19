@@ -541,8 +541,9 @@ setting at run time are filled in by the extension's adapter before the call.
 
 Rulings of 2026-10-08 for the script parameters: a profile without `serverDataFolderName` gets the derived
 `.<applicationName>-server` from lib-product's `serverDataFolderNameOrDefault(profile)` (product-scoped, never
-`~/.vscode-server`; an adaptation); the host lock file is `remote-lock.<user>.<commit>` in the lock folder, `<user>`
-from the effective ssh config (interop with the reference's name is not a goal); the proxy variable text of F-2404
+`~/.vscode-server`; an adaptation); the host lock file is `vscode-remote-lock.<user>.<commit>` (with the `.target` second name under `ln`) in the lock
+folder, `<user>` from the effective ssh config, so that windows of the reference and of ours exclude each other
+(F-2408 BR-1, ruling-2818-host-lock-name); the proxy variable text of F-2404
 BR-5 (empty path → "/", host lower-cased, `$` encoded) is built by lib-server's pure `proxyVariableText`.
 
 ### V1 bootstrap-scripts
@@ -554,7 +555,12 @@ BR-5 (empty path → "/", host lower-cased, `$` encoded) is built by lib-server'
 
 Statuses: `LockBusy`, `NoDownloaderAvailable`, `UnpackFailed`, `ServerDownloadFailed`, `CreateInstallDirFailed`,
 `UnsupportedArch`, `UnsupportedPlatform`, `LinuxPrereqs`, `NoBash` (only while a spec still requires bash),
-`ServerFailedToStart`.
+`ServerFailedToStart`, `CommandMissing` (POSIX only: the host has no `tar` or no `gzip` on the login `PATH`, found right
+before a `tar` archive is unpacked; the script writes the fact `install.missing <program>`, `tar` checked first, and
+removes the downloaded archive as every other ending does; F-2402 7.E3, #2856). The transfer maps it to the `unpack`
+failure with `missing: <program>`, so `"auto"` still falls back to the client's copy, and remote-ssh keeps the dialog
+reason of the unpack (STR:S075) and stores a hint with the status `CommandMissing`. Every other missing utility stays
+as the reference has it (7.E5), and a zip archive is not checked.
 
 Rules inside the scripts:
 - `wget` is preferred, then `curl`, and their configuration files are skipped unless
@@ -587,7 +593,7 @@ Rules inside the scripts:
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `probe` | H1, platform hint, requirements-check policy | host facts: OS, architecture token, libc family, release id, temp folder, login shell, tools, `SSH_AUTH_SOCK`, `DISPLAY` | `unsupportedPlatform`, `unsupportedArch`, `prerequisiteMissing` (F-2401, F-2402, F-2703), channel failures |
+| `probe` | H1, platform hint | host facts: OS, architecture token, libc family, release id, temp folder, login shell, tools, `SSH_AUTH_SOCK`, `DISPLAY` | `unsupportedPlatform`, `unsupportedArch`, `probeFailed`, `unreadableFacts`, `noResultBlock`, channel failures (F-2401, F-2703); a host without `tar` is probed, with `tar` absent from its tools, and the unpack fails with `UnpackFailed` (F-2402 BR-5, `ruling-2854-required-commands`) |
 
 Rule (from server-08's acceptance run, 2026-10-08): the probe script never depends on a command that fails when a
 glob has no match (`ls a b` under BusyBox); libc detection must report `musl` on Alpine, and the acceptance suite

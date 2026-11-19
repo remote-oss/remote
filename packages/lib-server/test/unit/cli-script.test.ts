@@ -7,6 +7,7 @@ import {
   readFileSync,
   statSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -560,6 +561,18 @@ describe('the CLI steps of the bootstrap script (card cli-03b, contracts V7a)', 
       };
       const block = installBlock(parameters);
       deepStrictEqual(block === 'none' ? block : block.status, 'UnpackFailed');
+    });
+
+    it('F-2402 7.E3: a host without gzip leaves CommandMissing naming gzip, and no staging folder', () => {
+      unlinkSync(path.join(host.tools, 'gzip'));
+      const block = installBlock(cliParameters(host));
+      deepStrictEqual(
+        [
+          block === 'none' ? block : [block.status, block.installFacts.missing],
+          existsSync(path.join(dataFolder(host), 'cli-bin')),
+        ],
+        [['CommandMissing', 'gzip'], false],
+      );
     });
 
     it('F-2403: an archive that is not an archive is UnpackFailed and leaves no staging folder', () => {

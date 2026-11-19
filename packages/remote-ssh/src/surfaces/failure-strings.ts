@@ -21,6 +21,7 @@ export type FailureStringId =
   | 'S032'
   | 'S041'
   | 'S118'
+  | 'S042'
   | 'S043'
   | 'S044'
   | 'S045'
@@ -94,6 +95,7 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S031: 'Could not establish connection to "{0}": {1}',
   S032: 'Could not resolve hostname',
   S041: 'Downloading VS Code Server',
+  S042: 'Downloading VS Code Server failed - please install either curl or wget on the remote.',
   S043: 'Downloading VS Code Server failed. Please try again later.',
   S044: 'Downloading VS Code Server locally',
   S045: 'Downloading VS Code Server...',

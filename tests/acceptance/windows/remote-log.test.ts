@@ -98,7 +98,7 @@ describe('the remote install and start output in the log (card connect-67)', fun
     }
   });
 
-  it('F-2003 AC-29 (terminal-install): a fresh terminal-mode install at trace logs the remote output, and no local connection server (BR-16)', async () => {
+  it('F-2003 AC-29 (terminal-install): a fresh terminal-mode install at trace logs the settings listing with useLocalServer false, the remote output, and no local connection server (BR-16)', async () => {
     const saved = readUserSettings();
     await userSettings({
       'remote.SSH.useLocalServer': false,
@@ -107,15 +107,18 @@ describe('the remote install and start output in the log (card connect-67)', fun
     });
     try {
       await freshHost();
-      const mark = connectionLog().length;
+      const mark = connectionLog({withSettings: true}).length;
       await openConnected('rl2', INSTALL_MILLISECONDS);
       try {
-        const lines = connectionLog().slice(mark);
+        const lines = connectionLog({withSettings: true}).slice(mark);
         deepStrictEqual(
           {
             ...remoteSideOf(lines),
             localServer: lines.some(line =>
               /local connection server/i.test(line),
+            ),
+            settingsListing: lines.includes(
+              'remote.SSH.useLocalServer = false',
             ),
           },
           {
@@ -123,6 +126,7 @@ describe('the remote install and start output in the log (card connect-67)', fun
             installing: true,
             unpackProgress: true,
             localServer: false,
+            settingsListing: true,
           },
         );
       } finally {
