@@ -326,7 +326,8 @@ export function editorLogsFolder(): string {
 }
 
 /** A line of the log's settings listing, `remote.SSH.<name> = <value>`: its words are the settings', which no row about anything else may match. */
-const SETTING_LINE = /^remote\.SSH\.[\w.]+ = /u;
+const SETTING_LINE =
+  /^remote\.SSH\.(?!path = |permitPtyAllocation = )[\w.]+ = /u;
 
 /**
  * The lines of the log the launch's extensions write, without their time stamps, or with them when `withTimes` is set,

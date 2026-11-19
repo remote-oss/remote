@@ -44,7 +44,8 @@ export async function onHost(...command: string[]): Promise<string> {
 }
 
 /** A line of the log's settings listing, which no row about anything else may match. */
-const SETTING_LINE = /^remote\.SSH\.[\w.]+ = /u;
+const SETTING_LINE =
+  /^remote\.SSH\.(?!path = |permitPtyAllocation = )[\w.]+ = /u;
 
 /** The lines of the log the harness reads, `REMOTE_OSS_ACCEPTANCE_LOG`, without their time stamps and without the settings listing. */
 export function connectionLog(): string[] {
