@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  reconnectionGlance,
   reconnectionState,
   type StateReads,
 } from '../tests/acceptance/windows/reconnection-state.ts';
@@ -22,6 +23,14 @@ function reads(replaced: Partial<StateReads> = {}): StateReads {
     logLines: () => ['skipped', 'Searched for ssh in: /usr/bin', 'kept'],
     pageFacts: () => Promise.resolve(['[win]: {"visibility":"visible"}']),
     pageRead: () => 'the read began 10 ms after the end was noted, took 5 ms',
+    agentLife: () => [
+      {event: 'activated', time: 200},
+      {event: 'activated', time: 4000},
+    ],
+    rendererLines: () => [
+      '2026-11-19 07:00:00.000 [info] a line about nothing',
+      '2026-11-19 07:00:01.000 [info] Error handled: Not showing a notification for the error.',
+    ],
     ...replaced,
   };
 }
@@ -43,6 +52,11 @@ describe('the state a window showed when its wait for core’s dialog timed out 
         'the read began 10 ms after the end was noted, took 5 ms',
         'the pages now (focus, visibility, quick input):',
         '[win]: {"visibility":"visible"}',
+        'the window’s agent, activated or deactivated (time from the end):',
+        '[-0.8 s] activated',
+        '[+3.0 s] activated',
+        'the lines of the window’s renderer log about the reconnection:',
+        '2026-11-19 07:00:01.000 [info] Error handled: Not showing a notification for the error.',
         'the last lines of the connection log since then:',
         'kept',
       ].join('\n'),
@@ -81,6 +95,12 @@ describe('the state a window showed when its wait for core’s dialog timed out 
         pageRead: () => {
           throw new Error('no read');
         },
+        agentLife: () => {
+          throw new Error('no events');
+        },
+        rendererLines: () => {
+          throw new Error('no renderer log');
+        },
       }),
       'win',
       0,
@@ -99,8 +119,56 @@ describe('the state a window showed when its wait for core’s dialog timed out 
       '(unreadable: Error: no read)',
       'the pages now (focus, visibility, quick input):',
       '(unreadable: Error: page gone)',
+      'the window’s agent, activated or deactivated (time from the end):',
+      '(unreadable: Error: no events)',
+      'the lines of the window’s renderer log about the reconnection:',
+      '(unreadable: Error: no renderer log)',
       'the last lines of the connection log since then:',
       '(unreadable: Error: no log file)',
     ]);
+  });
+
+  it('#2753: the glance keeps the last six activations and the last ten matching renderer lines, each cut at 240 characters', async () => {
+    const text = await reconnectionGlance(
+      reads({
+        agentLife: () =>
+          Array.from({length: 8}, (value, index) => ({
+            event: index % 2 === 0 ? 'activated' : 'deactivated',
+            time: index * 1000,
+          })),
+        rendererLines: () => [
+          ...Array.from(
+            {length: 12},
+            (value, index) => `reconnect ${String(index)}`,
+          ),
+          `reconnect ${'x'.repeat(300)}`,
+        ],
+      }),
+      0,
+    );
+    const lines = text.split('\n');
+    deepStrictEqual(
+      [
+        lines.slice(5, 11),
+        lines.slice(12).length,
+        lines.at(-1)?.length,
+        lines.includes('reconnect 2'),
+        lines.includes('reconnect 3'),
+      ],
+      [
+        [
+          '[+2.0 s] activated',
+          '[+3.0 s] deactivated',
+          '[+4.0 s] activated',
+          '[+5.0 s] deactivated',
+          '[+6.0 s] activated',
+          '[+7.0 s] deactivated',
+        ],
+        10,
+        240,
+        false,
+        true,
+      ],
+    );
   });
 });

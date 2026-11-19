@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {
   holdingText,
   unfinishedCommands,
+  windowFolderOf,
 } from '../tests/acceptance/windows/agent-standing.ts';
 
 const COMMANDS = [
@@ -65,6 +66,23 @@ describe('the commands a window’s agent has not finished (card #2829)', () => 
       [
         'the commands its agent took and has not finished:\n["remote-containers.openFolder accepted 60 s ago"]; its last events:\n[{"event":"accepted"}]',
         'the commands its agent took and has not finished:\n(unreadable: Error: commands file is being written); its last events:\n[]',
+      ],
+    );
+  });
+});
+
+describe('the folder of a window in the editor’s logs (card #2753)', () => {
+  it('#2753: the window folder of an agent’s log folder, with either path separator, and none where the path has no window folder', () => {
+    deepStrictEqual(
+      [
+        windowFolderOf('/run/logs/20261119T070000/window3/exthost/agent'),
+        windowFolderOf('C:\\run\\logs\\20261119T070000\\window12'),
+        windowFolderOf('/run/logs/20261119T070000/exthost/agent'),
+      ],
+      [
+        '/run/logs/20261119T070000/window3',
+        'C:\\run\\logs\\20261119T070000\\window12',
+        undefined,
       ],
     );
   });

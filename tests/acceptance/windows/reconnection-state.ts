@@ -24,10 +24,69 @@ export interface StateReads {
   pageFacts(): Promise<string[]>;
   /** What the row read of the window's page before the outage: when, and how long it took. */
   pageRead(): string;
+  /** When the window's agent activated and deactivated, which an extension host that started again shows. */
+  agentLife(): Array<{event: string; time: number}>;
+  /** The lines of the window's own renderer log, where core says what it did with the end of the reconnection. */
+  rendererLines(): string[];
 }
 
 /** How many of the connection log's last lines the explanation keeps. */
 const LOG_LINES = 60;
+
+/** How many of the agent's last activations and of the renderer log's last matching lines the explanation keeps. */
+const LIFE_LINES = 6;
+const RENDERER_LINES = 10;
+
+/** The lines of the renderer log that tell what core did with a reconnection and its end. */
+const RENDERER_PATTERN =
+  /reconnect|Error handled|PermanentFailure|connection (?:lost|gain)/iu;
+
+/** The longest renderer log line the explanation keeps whole. */
+const LINE_LENGTH = 240;
+
+/** `milliseconds` as seconds with a sign, to one decimal. */
+function signedSeconds(milliseconds: number): string {
+  return `${milliseconds < 0 ? '-' : '+'}${(Math.abs(milliseconds) / 1000).toFixed(1)} s`;
+}
+
+/**
+ * What a window's page and extension host did, in a few lines that a run prints green or red alike so that the two
+ * compare: the read of the page before the outage, what each page says of its focus and visibility, when the agent
+ * activated or deactivated relative to the end, and the lines of the renderer log about the reconnection.
+ */
+export async function reconnectionGlance(
+  reads: StateReads,
+  endedAt: number,
+): Promise<string> {
+  return [
+    section('the read of the window’s page before the outage', () =>
+      reads.pageRead(),
+    ),
+    await settledSection(
+      'the pages now (focus, visibility, quick input)',
+      async () => (await reads.pageFacts()).join('\n'),
+    ),
+    section(
+      'the window’s agent, activated or deactivated (time from the end)',
+      () =>
+        reads
+          .agentLife()
+          .slice(-LIFE_LINES)
+          .map(each => `[${signedSeconds(each.time - endedAt)}] ${each.event}`)
+          .join('\n'),
+    ),
+    section(
+      'the lines of the window’s renderer log about the reconnection',
+      () =>
+        reads
+          .rendererLines()
+          .filter(line => RENDERER_PATTERN.test(line))
+          .slice(-RENDERER_LINES)
+          .map(line => line.slice(0, LINE_LENGTH))
+          .join('\n'),
+    ),
+  ].join('\n');
+}
 
 /**
  * What window `name` recorded since its shared connection ended at `endedAt` (a time in milliseconds), with the
@@ -60,13 +119,7 @@ export async function reconnectionState(
     await settledSection('the notifications now', async () =>
       JSON.stringify(await reads.notifications()),
     ),
-    section('the read of the window’s page before the outage', () =>
-      reads.pageRead(),
-    ),
-    await settledSection(
-      'the pages now (focus, visibility, quick input)',
-      async () => (await reads.pageFacts()).join('\n'),
-    ),
+    await reconnectionGlance(reads, endedAt),
     section('the last lines of the connection log since then', () =>
       reads
         .logLines()
