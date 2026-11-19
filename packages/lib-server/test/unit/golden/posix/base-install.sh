@@ -279,6 +279,10 @@ leave() {
 }
 STARTED_AT=$(now_seconds)
 [ -n "$DATA_ROOT" ] || finish CreateInstallDirFailed
+MKDIR_ERROR=$(mkdir -p "$DATA_DIR" 2>&1) || write_failed "$DATA_DIR" "$MKDIR_ERROR"
+if [ ! -x "$INSTALL_DIR/$LAUNCHER" ] && [ -z "$ARCHIVE_PATH" ]; then
+  have wget || have curl || finish NoDownloaderAvailable
+fi
 MKDIR_ERROR=$(mkdir -p "$INSTALL_DIR" 2>&1) || write_failed "$INSTALL_DIR" "$MKDIR_ERROR"
 take_lock_or_finish "$COMMIT"
 if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then

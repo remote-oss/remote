@@ -108,6 +108,9 @@ const INSTALL_FOLDER_FAILED: FailureReason = {id: 'S070'};
 /** The reason of a server download that failed: the extension's own text. */
 const DOWNLOAD_FAILED: FailureReason = {id: 'S043'};
 
+/** The reason of a host that has neither curl nor wget: the extension's own text, which names them. */
+const NO_DOWNLOADER: FailureReason = {id: 'S042'};
+
 /**
  * What a failed client download's reason names: `Failed to fetch` for the network, `Server returned <status>` for an
  * HTTP error status, the port's own text for a source that asks for credentials, and the file system's own text for the client's file.
@@ -352,7 +355,11 @@ export function ofTransfer(
           {id: 'S146'},
         );
       }
-      return logged('serverDownload', failure.cause, DOWNLOAD_FAILED);
+      return logged(
+        'serverDownload',
+        failure.cause,
+        failure.cause === 'noDownloader' ? NO_DOWNLOADER : DOWNLOAD_FAILED,
+      );
     case 'localDownload':
       return logged('serverDownload', failure.detail, {
         id: 'S071',
