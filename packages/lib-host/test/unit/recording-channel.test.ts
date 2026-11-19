@@ -1,5 +1,9 @@
 import {deepStrictEqual, rejects} from 'node:assert';
-import type {CopyRequest, ScriptRequest} from '../../src/index.ts';
+import {
+  type CopyRequest,
+  linesOfScript,
+  type ScriptRequest,
+} from '../../src/index.ts';
 import {
   RecordingChannel,
   type ScriptAnswer,
@@ -373,5 +377,55 @@ describe('recording channel (lib-host fake)', () => {
       kind: 'copied',
     });
     await new Promise(resolve => setTimeout(resolve, 10));
+  });
+});
+
+describe('linesOfScript', () => {
+  function channelEnding(ending: ScriptAnswer['ending']): RecordingChannel {
+    return new RecordingChannel({
+      identity: 'h',
+      platformHint: 'linux',
+      scripts: [
+        {
+          interpreter: 'posixShell',
+          matches: () => true,
+          lines: ['one', 'two'],
+          ending,
+        },
+      ],
+    });
+  }
+
+  it('gives the lines of a script that ended with status 0', async () => {
+    deepStrictEqual(
+      await linesOfScript(
+        channelEnding({kind: 'exit', status: 0}),
+        scriptRequest('x'),
+      ),
+      ['one', 'two'],
+    );
+  });
+
+  it('gives nothing for a script that ended with another status', async () => {
+    deepStrictEqual(
+      await linesOfScript(
+        channelEnding({kind: 'exit', status: 3}),
+        scriptRequest('x'),
+      ),
+      undefined,
+    );
+  });
+
+  it('gives nothing for a script the channel failed to run', async () => {
+    deepStrictEqual(
+      await linesOfScript(
+        channelEnding({
+          kind: 'fail',
+          failure: {kind: 'channelClosed', detail: 'gone'},
+        }),
+        scriptRequest('x'),
+      ),
+      undefined,
+    );
   });
 });

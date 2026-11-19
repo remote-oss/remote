@@ -4,7 +4,7 @@
  * will lock, and a start that does not end in a running server gives the shell's hold up.
  */
 
-import type {HostChannel} from 'lib-host';
+import {type HostChannel, linesOfScript} from 'lib-host';
 import {
   LOCK_METHOD_LINE,
   LOCK_PATH_LINE,
@@ -27,20 +27,14 @@ export async function sessionLockPath(
   if (channel.platformHint() === 'windows') {
     return undefined;
   }
-  const lines: string[] = [];
-  const outcome = await channel.runScript(
-    {
-      script: lockPathScript(parameters),
-      interpreter: 'posixShell',
-      environment: {},
-      input: {kind: 'text', text: ''},
-      cancellation,
-    },
-    line => {
-      lines.push(line);
-    },
-  );
-  if (outcome.kind === 'failed' || outcome.status !== 0) {
+  const lines = await linesOfScript(channel, {
+    script: lockPathScript(parameters),
+    interpreter: 'posixShell',
+    environment: {},
+    input: {kind: 'text', text: ''},
+    cancellation,
+  });
+  if (lines === undefined) {
     return undefined;
   }
   const method = lines.find(line => line.startsWith(LOCK_METHOD_LINE));

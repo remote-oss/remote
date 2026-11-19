@@ -297,7 +297,7 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
     });
 
     it('F-2408 BR-4: in a real sh, an orderly end after a taken run removes the file, a held lock stays while the shell lives, and a second descriptor on the file finds it busy', function () {
-      if (spawnSync('flock', ['--version']).status !== 0) {
+      if (spawnSync('sh', ['-c', 'command -v flock']).status !== 0) {
         this.skip();
       }
       const folder = mkdtempSync(path.join(tmpdir(), 'lock-'));

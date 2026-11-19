@@ -160,3 +160,15 @@ export async function hostPathOf(
     return undefined;
   }
 }
+
+/** The output lines of `request` run on `channel`, when it ran and ended with status 0; undefined when it did not. */
+export async function linesOfScript(
+  channel: Pick<HostChannel, 'runScript'>,
+  request: ScriptRequest,
+): Promise<string[] | undefined> {
+  const lines: string[] = [];
+  const outcome = await channel.runScript(request, line => {
+    lines.push(line);
+  });
+  return outcome.kind === 'failed' || outcome.status !== 0 ? undefined : lines;
+}

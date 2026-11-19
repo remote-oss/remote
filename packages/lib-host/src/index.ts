@@ -22,6 +22,7 @@ export {
   type PlatformHint,
   type ScriptInput,
   type ScriptOutcome,
+  linesOfScript,
   type ScriptRequest,
   type SessionLock,
 } from './host-channel.ts';

@@ -901,7 +901,7 @@ describe('what a lock-holding script leaves running (F-2408 BR-4, card #2855)', 
   });
 
   it('F-2408 BR-4: in a real sh, a child left running by a script that holds descriptor 9 leaves the lock free once the shell exits when it closed the descriptor, and held when it did not', function () {
-    if (spawnSync('flock', ['--version']).status !== 0) {
+    if (spawnSync('sh', ['-c', 'command -v flock']).status !== 0) {
       this.skip();
     }
     const folder = mkdtempSync(path.join(tmpdir(), 'lock-'));
