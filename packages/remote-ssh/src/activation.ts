@@ -118,6 +118,8 @@ export type ActivationResult =
       revealLog(preserveFocus?: boolean): void;
       /** How many lines the log channel holds now. */
       logMark(): number;
+      /** Writes the editor version, the extension and the platform to the log, once. */
+      writeWindowStart(): void;
       /** The log channel's text from its `from`-th line on. */
       logText(from: number): string;
       proposals: ProposalGrants;
@@ -201,6 +203,9 @@ export async function activateRemoteSsh(
       logChannel.reveal(preserveFocus);
     },
     logMark: () => logChannel.mark(),
+    writeWindowStart: () => {
+      logChannel.writeWindowStart();
+    },
     logText: from => logChannel.text(from),
     proposals: probed.proposals,
     setup: probed.setupRun.interaction,

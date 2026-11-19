@@ -44,6 +44,80 @@ export function configFileLine(file: string): string {
   return `SSH configuration file in use: ${file}`;
 }
 
+/** A text with a scheme and `://`, its userinfo, its query values and its fragment, which the groups take apart. */
+const URL_PARTS =
+  /^([a-z][a-z0-9+.-]*:\/\/)(?:([^/?#@]*)@)?([^?#]*)(?:\?([^#]*))?(#.*)?$/iu;
+
+/** `query` with each value masked and each key kept. */
+function queryMasked(query: string): string {
+  return query
+    .split('&')
+    .map(pair => {
+      const equals = pair.indexOf('=');
+      return equals < 0
+        ? maskOf(pair)
+        : `${pair.slice(0, equals + 1)}${maskOf(pair.slice(equals + 1))}`;
+    })
+    .join('&');
+}
+
+/** A text that starts with userinfo and `@` and has no scheme, as a proxy may be written: `user:secret@host:port`. */
+const BARE_USERINFO = /^([^/?#@\s]+)@/u;
+
+/** The text with the userinfo and the query values of a URL masked, its scheme, host, port and path kept. */
+function textMasked(text: string): string {
+  const parts = URL_PARTS.exec(text);
+  if (parts === null) {
+    const bare = BARE_USERINFO.exec(text);
+    return bare?.[1] === undefined
+      ? text
+      : `${maskOf(bare[1])}${text.slice(bare[1].length)}`;
+  }
+  const [, scheme = '', userinfo, rest = '', query, fragment = ''] = parts;
+  const credentials = userinfo === undefined ? '' : `${maskOf(userinfo)}@`;
+  const search = query === undefined ? '' : `?${queryMasked(query)}`;
+  return `${scheme}${credentials}${rest}${search}${fragment}`;
+}
+
+/**
+ * `value` with the userinfo and the query values of every URL in it masked, in a text, in the members of a list and in
+ * the keys and values of a map, however deep; what is no text is as it is.
+ */
+function urlMasked(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return textMasked(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(urlMasked);
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, member]) => [
+        textMasked(key),
+        urlMasked(member),
+      ]),
+    );
+  }
+  return value;
+}
+
+/**
+ * The lines of the settings listing, one for each setting: `remote.SSH.<name> = <JSON value>`, sorted by name. The userinfo
+ * and the query values of a URL are masked. A value that has no JSON form, a setting nothing sets, shows as `undefined`.
+ */
+export function settingLines(
+  entries: ReadonlyArray<readonly [string, unknown]>,
+): string[] {
+  return entries
+    .toSorted(
+      ([first], [second]) => Number(first > second) - Number(first < second),
+    )
+    .map(
+      ([name, value]) =>
+        `${name} = ${(JSON.stringify(urlMasked(value)) as string | undefined) ?? 'undefined'}`,
+    );
+}
+
 /** The value of `remote.SSH.path` as the log shows it: JSON text, `""` when it is unset. */
 export function pathSettingLine(value: string): string {
   return `remote.SSH.path = ${JSON.stringify(value)}`;
@@ -82,6 +156,11 @@ export function rejectedLine(program: string, reason: string): string {
 /** The setting named a program that was rejected. */
 export function notValidLine(value: string): string {
   return `remote.SSH.path "${value}" is not a valid SSH binary`;
+}
+
+/** The line that tells this connect started an ssh. */
+export function sshStartedLine(): string {
+  return 'Started ssh';
 }
 
 /** The folders of the search path, one line each, in order. */

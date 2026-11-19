@@ -238,6 +238,53 @@ describe('the connect pipeline, when it works', () => {
     );
   });
 
+  it('F-2003 BR-6 item 2: the settings listing follows the resolver line at every resolve, a reconnection included', async () => {
+    const first = setup();
+    first.options.settingLines = [
+      'remote.SSH.lockfilesInTmp = false',
+      'remote.SSH.useFlock = true',
+    ];
+    await connect(INPUT, steps(first.recording), first.options);
+    const again = setup();
+    again.options.settingLines = ['remote.SSH.useFlock = true'];
+    await connect(
+      {...INPUT, attempt: 2, isReconnection: true},
+      steps(again.recording),
+      again.options,
+    );
+    function lines(sink: typeof first.logSink): string[] {
+      return sink.lines.map(line => line.message).slice(0, 3);
+    }
+    deepStrictEqual(
+      [lines(first.logSink), lines(again.logSink)],
+      [
+        [
+          'Resolving ssh-remote+dev, attempt 1',
+          'remote.SSH.lockfilesInTmp = false',
+          'remote.SSH.useFlock = true',
+        ],
+        [
+          'Resolving ssh-remote+dev, attempt 2, reconnection',
+          'remote.SSH.useFlock = true',
+          'Host platform: linux x64',
+        ],
+      ],
+    );
+  });
+
+  it('F-2003 BR-5: the window start follows the settings listing at the resolve', async () => {
+    const {recording, options, logSink} = setup();
+    options.settingLines = ['remote.SSH.useFlock = true'];
+    options.writeWindowStart = () => {
+      options.logger.info('window start');
+    };
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(logSink.lines.map(line => line.message).slice(1, 3), [
+      'remote.SSH.useFlock = true',
+      'window start',
+    ]);
+  });
+
   it('F-2506 BR-10: moves the legacy settings first at every resolve of a window, a reconnection included', async () => {
     const {recording, options} = setup();
     const moves: string[] = [];
