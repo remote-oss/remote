@@ -7,12 +7,17 @@
  */
 
 import type {FailureHint, FailureReason, FilledString} from 'lib-authority';
-import {type EnvironmentHint, statusNumberOf} from 'lib-ssh';
+import {
+  type EnvironmentHint,
+  LINUX_PREREQUISITES_TOPIC,
+  statusNumberOf,
+} from 'lib-ssh';
 import {isFailureStringId, textOfId} from '../surfaces/failure-strings.ts';
 import {ownTextWithLinks} from '../surfaces/own-strings.ts';
 import type {TextRange, Translate} from '../surfaces/strings.ts';
 import type {ConfirmedUpdateEnvironment} from '../state/confirmed-update.ts';
 import {hintStoreKeyOf} from './hint-store-key.ts';
+import {LINUX_PREREQUISITES_PAGE} from './prerequisites-hint.ts';
 import {
   addHint,
   emptyHintStore,
@@ -201,7 +206,11 @@ export function hintRecorderOf(
           ? {}
           : {details: reasonText(hint.details, environment.translate)}),
         mitigations: mitigations.map(each => each.text),
-        resources: hint.resources.map(() => environment.documentation()),
+        resources: hint.resources.map(topic =>
+          topic === LINUX_PREREQUISITES_TOPIC
+            ? LINUX_PREREQUISITES_PAGE
+            : environment.documentation(),
+        ),
         ...(linked
           ? {
               links: {
