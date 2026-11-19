@@ -82,12 +82,15 @@ describe('the remote install and start output in the log (card connect-67)', fun
     });
     try {
       await freshHost();
+      const mark = connectionLog().length;
       await openConnected('rl3', INSTALL_MILLISECONDS);
       try {
         await reloadWindow('rl3');
         await connectedWithin('rl3', 120_000);
         deepStrictEqual(
-          connectionLog().filter(line => /local connection server/i.test(line)),
+          connectionLog()
+            .slice(mark)
+            .filter(line => /local connection server/i.test(line)),
           [],
         );
       } finally {

@@ -353,6 +353,20 @@ describe('the connection step', () => {
     );
   });
 
+  it('F-2102 §9: the starter logs no line when the helper holds no local connection server, even with an ssh pid', async () => {
+    const claim = fixture('acquired', undefined, 'info', false, true);
+    const claimPending = claim.connecting();
+    await settled();
+    claim.lease.emit({type: 'connected', socksPort: 41000, sshProcessId: 7331});
+    await claimPending;
+    deepStrictEqual(
+      claim
+        .logged()
+        .filter(line => line.startsWith('Local connection server')),
+      [],
+    );
+  });
+
   it('#2598 (F-2109 AC-12): the window logs a LocalCommand’s lines as the helper sends them, apart from ssh’s own, and not after the connection is given back', async () => {
     const ready = fixture('acquired', undefined, 'info');
     const pending = ready.connecting();
