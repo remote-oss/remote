@@ -47,12 +47,16 @@ function drained(): Promise<void> {
   return new Promise(resolve => setImmediate(resolve));
 }
 
-/** A step over `port`, with what it removed at the extension's end and what it logged. */
+/**
+ * A step over `port`, with what it removed at the extension's end and what it logged; that removal deletes the file
+ * from `port` at once, as the Node port's does.
+ */
 function stepOver(port: LockFilePort, clock: Clock = steppingClock()) {
   const sink = new MemorySink();
   const removedNow: string[] = [];
   const held = new HeldClientLocks(path => {
     removedNow.push(path);
+    void port.remove(path);
   });
   const step = holdClientLockStep({
     port,
@@ -237,29 +241,50 @@ describe('the client install lock of a connect (card #2844, F-2408 BR-6 to BR-8,
     );
   });
 
-  it("BR-8: the extension's end removes the files of the locks still held, once, and a released lock's file only at its release", async () => {
+  it("BR-8: the extension's end removes the files of the locks still held, once, and not a released one whose own removal has run", async () => {
     const clock = steppingClock();
     const port = new MemoryLockPort(clock);
     const {step, held, removedNow} = stepOver(port, clock);
     const signal = new AbortController().signal;
     const kept = inputFor('kept');
-    const released = await step(inputFor('released'), () => undefined, signal);
+    await takenAndReleased(step, inputFor('released'));
     await step(kept, () => undefined, signal);
-    if (released.kind === 'done') {
-      released.value.release();
-    }
+    await drained();
     held.releaseAll();
     held.releaseAll();
-    deepStrictEqual(removedNow, [pathOf(inputFor('released')), pathOf(kept)]);
+    deepStrictEqual(removedNow, [pathOf(kept)]);
   });
 
-  it('BR-6, BR-8 (gate 44548262473): a release removes the file at once, before any wait, so a window that ends right after it leaves no file', async () => {
+  it('BR-6, BR-8 (gate 44548262473): a window that ends between its release and the removal of its file still leaves no file: the lock stays held until then', async () => {
     const clock = steppingClock();
     const port = new MemoryLockPort(clock);
-    const {step, removedNow} = stepOver(port, clock);
+    const {step, held, removedNow} = stepOver(port, clock);
     const input = inputFor('dev');
     await takenAndReleased(step, input);
-    const removedAtTheRelease = [...removedNow];
-    deepStrictEqual(removedAtTheRelease, [pathOf(input)]);
+    held.releaseAll();
+    deepStrictEqual(removedNow, [pathOf(input)]);
+  });
+
+  it("BR-6 (triton on #2867): a window that takes the lock right after another's release keeps its file: the file is removed once, by the release, never after", async () => {
+    const clock = steppingClock();
+    const port = new MemoryLockPort(clock);
+    const {step} = stepOver(port, clock);
+    const input = inputFor('dev');
+    await takenAndReleased(step, input);
+    const successor = await step(
+      input,
+      () => undefined,
+      new AbortController().signal,
+    );
+    await drained();
+    deepStrictEqual(
+      {
+        kind: successor.kind,
+        files: port.files(),
+        removes: port.calls.filter(call => call === `remove ${pathOf(input)}`)
+          .length,
+      },
+      {kind: 'done', files: [pathOf(input)], removes: 1},
+    );
   });
 });

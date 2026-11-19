@@ -31,18 +31,9 @@ export class HeldClientLocks {
     this.paths.add(path);
   }
 
-  /** Notes the file at `path` as no longer held. */
+  /** Notes the file at `path` as no longer held, once the lock's own removal of it has run. */
   forget(path: string): void {
     this.paths.delete(path);
-  }
-
-  /**
-   * Ends the hold of the file at `path` and removes the file at once: a window that ends right after its connect gave
-   * the lock back, before any wait could remove it, leaves no file for the next window to wait on.
-   */
-  release(path: string): void {
-    this.paths.delete(path);
-    this.removeNow(path);
   }
 
   /** Removes the file of every lock still held: the extension's clean end. */
@@ -93,7 +84,6 @@ export function holdClientLockStep(
             kind: 'done',
             value: {
               release: () => {
-                dependencies.held.release(path);
                 hold.end?.();
               },
             },
@@ -104,9 +94,13 @@ export function holdClientLockStep(
         {cancellation},
       ).then(
         outcome => {
-          if (outcome.kind === 'lockTimeout') {
+          // A released lock stays held until its file is removed, here, and only here: an extension that ends in between
+          // still removes it, and a window that took the lock after that removal keeps its file.
+          if (outcome.kind === 'done') {
+            dependencies.held.forget(path);
+          } else if (outcome.kind === 'lockTimeout') {
             resolve({kind: 'failed', failure: LOCAL_LOCK_TIMEOUT});
-          } else if (outcome.kind === 'cancelled') {
+          } else {
             resolve({kind: 'failed', failure: {kind: 'cancelled'}});
           }
         },
