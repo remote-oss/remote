@@ -151,9 +151,16 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
     });
   });
 
-  it('F-2402 AC-26 (c2854-nothing-installed): after that failure the host has an empty server folder and nothing else was installed', async () => {
+  it('F-2402 AC-26 (c2854-nothing-installed): on a server folder emptied beforehand, that failure leaves it empty: no install folder, no lock and no file in it', async () => {
     await withSettings({}, async () => {
       const name = 'c2854-nothing-installed';
+      // freshHost clears only bin and cli, so the rest of the folder is cleared here: the row does not depend on its neighbours.
+      await onHostAs(
+        ACCOUNT,
+        'sh',
+        '-c',
+        `rm -rf '${DATA}'/* '${DATA}'/.[!.]*`,
+      );
       appendScript(dismissals(name));
       await failedOn(ALIAS, name);
       try {
