@@ -62,11 +62,6 @@ function compact(text: string): string {
 /** The data folder of the server of the account `harness-nofetch`. */
 const DATA = DATA_FOLDER.replace('/harness/', `/${ACCOUNT}/`);
 
-/** Pauses for `milliseconds`. */
-function pause(milliseconds: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, milliseconds));
-}
-
 describe('a host with no downloader on its login PATH (card #2854, F-2402)', function () {
   this.timeout(600_000);
   let saved: string | undefined;
@@ -130,7 +125,7 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
     });
   });
 
-  it('F-2402 AC-1, AC-28 (c2854-dialog): the dialog of that failure gives the reason of STR:S042, ending in exactly one period, with the three buttons', async () => {
+  it('F-2402 AC-1, AC-7, AC-28 (c2854-dialog): with neither curl nor wget on the login PATH, and a copy of curl outside it, the dialog gives the reason of STR:S042, ending in exactly one period, with the three buttons', async () => {
     await withSettings({}, async () => {
       const name = 'c2854-dialog';
       appendScript(dismissals(name));
@@ -138,8 +133,13 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
       try {
         const dialog = recordLines('failureDialog', name)[0];
         deepStrictEqual(
-          {question: dialog?.question, buttons: dialog?.buttons},
           {
+            question: dialog?.question,
+            buttons: dialog?.buttons,
+            curlOutsidePath: await onHost('ls', '/opt/fetch-off/curl'),
+          },
+          {
+            curlOutsidePath: '/opt/fetch-off/curl\n',
             question: `Could not establish connection to "${ALIAS}": ${NO_DOWNLOADER}`,
             // The order the harness records a failure dialog's buttons in, as every row of this suite has it.
             buttons: ['Close Remote', 'Retry', 'More Actions...'],
@@ -223,8 +223,12 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
       ]);
       await openWindow(ALIAS, name, ACCOUNT);
       try {
-        // The first attempt fails within seconds; its dialog is held until the signal, so curl is in place before Retry.
-        await pause(20_000);
+        // The first attempt's dialog is held until the signal, so curl is in place before Retry.
+        await waitFor(
+          'the first dialog',
+          () => recordLines('failureDialog', name).length > 0,
+          120_000,
+        );
         await onHostAs(
           ACCOUNT,
           'ln',
