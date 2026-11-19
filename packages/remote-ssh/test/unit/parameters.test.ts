@@ -161,7 +161,7 @@ describe('the script parameters', () => {
         lock: {
           method: 'flock',
           inTemporaryFolder: false,
-          filePrefix: 'remote-lock.alex',
+          filePrefix: 'vscode-remote-lock.alex',
         },
       },
     );
