@@ -1,9 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {LINUX_PREREQUISITES_TOPIC} from 'lib-ssh';
-import {
-  OLD_LINUX_PAGE,
-  prerequisitesHint,
-} from '../../src/diagnostics/prerequisites-hint.ts';
+import {prerequisitesHint} from '../../src/diagnostics/prerequisites-hint.ts';
 import {ownText} from '../../src/surfaces/own-strings.ts';
 
 describe('the hint of a host that does not meet the server’s prerequisites (card #2879)', () => {
@@ -30,9 +27,16 @@ describe('the hint of a host that does not meet the server’s prerequisites (ca
     deepStrictEqual(
       [
         hint.mitigations.map(each => ownText(each, template => template)),
-        OLD_LINUX_PAGE.includes('aka.ms'),
+        hint.mitigations.some(each =>
+          ownText(each, template => template).includes('aka.ms'),
+        ),
       ],
-      [[OLD_LINUX_PAGE], false],
+      [
+        [
+          'https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/old-linux-hosts.md',
+        ],
+        false,
+      ],
     );
   });
 
