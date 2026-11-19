@@ -19,6 +19,7 @@ import {
   openWindow,
   recordLines,
   waitFor,
+  windowEvents,
 } from '../windows/harness.ts';
 import {
   rememberPage,
@@ -55,23 +56,54 @@ const CONNECT_MILLISECONDS = 120_000;
 const PUSH_MILLISECONDS = 20_000;
 
 /**
- * A row's failure with what its windows' agents reported about the commands sent to them since the row began, so a
- * cut row says which of its waits ate the time: the wait's own message first, then each window's events, and a read
- * that fails is told in its place.
+ * A row's failure with what the push reached and what its windows said: the wait's own message first, then the pushes
+ * the explorer's inbox recorded since the row began (the push has no log line of its own: one that cannot be delivered
+ * is dropped without one, so the inbox record is the evidence of it, a line past the row's push wait is a late one, and
+ * none is a lost or unsent one), then each window's last reported state and its agent's events, and a read that fails
+ * is told in its place.
  */
 function rowReadout(
   caught: unknown,
   windows: readonly string[],
   since: number,
 ): Promise<Error> {
-  const report = windows
-    .map(name =>
+  const inbox = section(
+    `the pushes the explorer's inbox recorded since the row began`,
+    () => {
+      const pushes = companionCalls(PUSH).filter(call => call.time >= since);
+      if (pushes.length === 0) {
+        return 'none';
+      }
+      return pushes
+        .map(
+          call =>
+            `[+${((call.time - since) / 1000).toFixed(1)} s] ${JSON.stringify(
+              call.envelope,
+            )}`,
+        )
+        .join('\n');
+    },
+  );
+  const windowsReport = windows
+    .flatMap(name => [
+      section(`the state ${name} last reported`, () => {
+        const states = windowEvents(name).filter(
+          each => each.event === 'state' && each.time >= since,
+        );
+        const last = states.at(-1);
+        if (last === undefined) {
+          return 'the window reported no state';
+        }
+        const count = `its agent reported its state ${String(states.length)} times since the row began`;
+        return `remoteName ${last.remoteName ?? 'none'}, remoteAuthority ${last.remoteAuthority ?? 'none'}, remoteSshActive ${String(last.remoteSshActive === true)}, ${count}`;
+      }),
       section(`the events ${name}'s agent reported since the row began`, () => {
         const lines = commandEventsSince(name, since);
         return lines.length === 0 ? 'none' : lines.join('\n');
       }),
-    )
+    ])
     .join('\n');
+  const report = `${inbox}\n${windowsReport}`;
   return explainedFailure(caught, () => Promise.resolve(report));
 }
 
