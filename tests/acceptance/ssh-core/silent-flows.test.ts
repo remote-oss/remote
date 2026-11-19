@@ -216,6 +216,26 @@ function windowLogSections(
   );
 }
 
+/** What the newest remote extension host log of the host says of the debug start, a green's side of the card's red. */
+async function goodStart(startedAt: number): Promise<string> {
+  const listed = await onHost(
+    'sh',
+    '-c',
+    'ls -t /home/harness/.local/state/*/*/exthost*/remoteexthost.log 2>/dev/null | head -1; true',
+  ).catch(() => '');
+  const file = listed.split('\n')[0] ?? '';
+  if (file === '') {
+    return 'no remote extension host log';
+  }
+  const lines = stampedBetween(
+    await onHost('cat', file),
+    startedAt - 1000,
+    startedAt + 20_000,
+    20,
+  );
+  return `${file}: ${lines.join(' | ')}`;
+}
+
 describe('the extension in the core flows of an SSH window (card connect-125)', function () {
   this.timeout(600_000);
 
@@ -272,56 +292,64 @@ describe('the extension in the core flows of an SSH window (card connect-125)', 
           'the program to print in the Debug Console',
           async () => (await pageText(folder)).includes(`c125-ran-on-${host}`),
           90_000,
-        ).catch(async (caught: unknown) => {
-          // What the window shows when the wait ends tells a program that did not start (a pick, a dialog) from one whose
-          // output did not reach the console; the standing names the session's state and the seconds since the start. Each
-          // fact is its own section, so a read that fails is told in its place and the wait's own failure stays first.
-          throw await explainedFailure(caught, async () => {
-            const seconds = Math.round((Date.now() - debugStartAt) / 1000);
-            const shown = await pageText(folder).catch(() => '(unreadable)');
-            // Then the Debug Console is asked for, so that a program that ran while another panel was shown reads
-            // differently from a session that never started.
-            await startInWindow(
-              folder,
-              'workbench.debug.action.toggleRepl',
-            ).catch(() => undefined);
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            const revealed = await pageText(folder).catch(() => '(unreadable)');
-            const from = debugStartAt - 5000;
-            const until = Date.now();
-            const hostSections = await hostLogSections(from, until);
-            const windowSections = windowLogSections(folder, from, until);
-            return [
-              ...hostSections,
-              ...windowSections,
-              section(
-                'the launch’s connection log, last 120 lines (Remote - SSH)',
-                () => connectionLog({withTimes: true}).slice(-120).join('\n'),
-              ),
-              section('the debug session', () => {
-                const standing = debugSessionStanding(shown, revealed);
-                return `${String(seconds)} s after the debug start it stood at ${standing.state} (${standing.evidence})`;
-              }),
-              section('the window (its last 1500 characters)', () =>
-                JSON.stringify(shown.slice(-1500)),
-              ),
-              section(
-                'the window after the Debug Console was asked for (its last 600 characters)',
-                () =>
-                  `the program's line is ${revealed.includes(`c125-ran-on-${host}`) ? 'there' : 'not there'}: ${JSON.stringify(revealed.slice(-600))}`,
-              ),
-              // A start the agent only accepted is still running, one that failed says why, and one that is done with no
-              // session standing is the editor's.
-              section(
-                'the window agent’s events about the commands since the debug start',
-                () => {
-                  const lines = commandEventsSince(folder, debugStartAt);
-                  return lines.length === 0 ? 'none' : lines.join('\n');
-                },
-              ),
-            ].join('\n');
+        )
+          .then(async () => {
+            console.log(
+              `PROBE the start of ${folder} that printed, after ${String(Date.now() - debugStartAt)} ms: ${await goodStart(debugStartAt).catch(String)}`,
+            );
+          })
+          .catch(async (caught: unknown) => {
+            // What the window shows when the wait ends tells a program that did not start (a pick, a dialog) from one whose
+            // output did not reach the console; the standing names the session's state and the seconds since the start. Each
+            // fact is its own section, so a read that fails is told in its place and the wait's own failure stays first.
+            throw await explainedFailure(caught, async () => {
+              const seconds = Math.round((Date.now() - debugStartAt) / 1000);
+              const shown = await pageText(folder).catch(() => '(unreadable)');
+              // Then the Debug Console is asked for, so that a program that ran while another panel was shown reads
+              // differently from a session that never started.
+              await startInWindow(
+                folder,
+                'workbench.debug.action.toggleRepl',
+              ).catch(() => undefined);
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              const revealed = await pageText(folder).catch(
+                () => '(unreadable)',
+              );
+              const from = debugStartAt - 5000;
+              const until = Date.now();
+              const hostSections = await hostLogSections(from, until);
+              const windowSections = windowLogSections(folder, from, until);
+              return [
+                ...hostSections,
+                ...windowSections,
+                section(
+                  'the launch’s connection log, last 120 lines (Remote - SSH)',
+                  () => connectionLog({withTimes: true}).slice(-120).join('\n'),
+                ),
+                section('the debug session', () => {
+                  const standing = debugSessionStanding(shown, revealed);
+                  return `${String(seconds)} s after the debug start it stood at ${standing.state} (${standing.evidence})`;
+                }),
+                section('the window (its last 1500 characters)', () =>
+                  JSON.stringify(shown.slice(-1500)),
+                ),
+                section(
+                  'the window after the Debug Console was asked for (its last 600 characters)',
+                  () =>
+                    `the program's line is ${revealed.includes(`c125-ran-on-${host}`) ? 'there' : 'not there'}: ${JSON.stringify(revealed.slice(-600))}`,
+                ),
+                // A start the agent only accepted is still running, one that failed says why, and one that is done with no
+                // session standing is the editor's.
+                section(
+                  'the window agent’s events about the commands since the debug start',
+                  () => {
+                    const lines = commandEventsSince(folder, debugStartAt);
+                    return lines.length === 0 ? 'none' : lines.join('\n');
+                  },
+                ),
+              ].join('\n');
+            });
           });
-        });
         await new Promise(resolve => setTimeout(resolve, 5000));
         await inWindow(folder, 'workbench.action.debug.stop').catch(
           () => undefined,
