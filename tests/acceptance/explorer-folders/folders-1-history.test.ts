@@ -334,9 +334,13 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
           .prepare('select value from ItemTable where key = ?')
           .get(STORED_EXTENSION_KEY);
         const text = found?.value;
-        return typeof text === 'string'
-          ? storedPathsOf(text, HOST_B, scope)
-          : [];
+        if (typeof text !== 'string') {
+          // A missing row is no empty history: the read says it found none, so that it is not read as a lost entry.
+          throw new Error(
+            `the state database has no ${STORED_EXTENSION_KEY} row`,
+          );
+        }
+        return storedPathsOf(text, HOST_B, scope);
       } finally {
         database.close();
       }
