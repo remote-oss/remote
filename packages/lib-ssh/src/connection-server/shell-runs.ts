@@ -6,7 +6,7 @@
  */
 
 import type {Scheduler} from 'lib-helper';
-import {type Interpreter, posixQuote} from 'lib-host';
+import {type Interpreter, posixQuote, type SessionLock} from 'lib-host';
 import {base64Lines, environmentPrefix} from '../process/remote-program.ts';
 import {powershellCommandsFor} from './powershell-session.ts';
 
@@ -15,16 +15,6 @@ const SESSION_ENDED: RunEnd = {
   reason: 'channelClosed',
   detail: 'the session ended',
 };
-
-/**
- * The host lock a run takes for the whole session: `open` has the session shell open descriptor 9 on `path` before the
- * run, so the script locks that descriptor and the lock lives as long as the shell does; `release` is a run of its own
- * that gives the descriptor up, and the file with it when the session held it.
- */
-export interface SessionLock {
-  path: string;
-  action: 'open' | 'release';
-}
 
 /** The fact a script prints when it has locked the session shell's descriptor. */
 export const SESSION_LOCK_TAKEN = 'server.lockHeld=yes';

@@ -34,6 +34,17 @@ export interface ChannelFailure {
 export type ScriptInput =
   {kind: 'text'; text: string} | {kind: 'file'; localFile: string};
 
+/**
+ * The host lock a run takes for the whole session of the shell it runs on: `open` has the session shell open the lock
+ * file on descriptor 9 before the script, so the script locks it and the lock lasts as long as the shell; `release`
+ * is a run of its own that gives the descriptor up, and the file with it when the session held the lock. A channel
+ * with no long-lived shell ignores it.
+ */
+export interface SessionLock {
+  path: string;
+  action: 'open' | 'release';
+}
+
 /** A script to run on the remote side. */
 export interface ScriptRequest {
   script: string;
@@ -47,6 +58,8 @@ export interface ScriptRequest {
   secretVariables?: readonly string[];
   /** A local file that does not exist fails the run with `spawnFailed`, naming the file, before anything runs. */
   input: ScriptInput;
+  /** The session-wide host lock of this run; absent for a run that takes none. */
+  sessionLock?: SessionLock;
   cancellation: AbortSignal;
 }
 
