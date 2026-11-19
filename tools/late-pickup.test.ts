@@ -3,9 +3,9 @@ import {pickedUp} from '../tests/acceptance/windows/late-pickup.ts';
 
 /**
  * Runs `pickedUp` with a clock that each read advances by 20 s and a read that finds the change at read number
- * `foundAt` (never when it is 0), and returns what it gave back, how many reads it made, the notes and the lines said.
+ * `foundAt` (never when it is 0) within `limitMilliseconds`, and returns what it gave back, how many reads it made, the notes and the lines said.
  */
-async function waited(foundAt: number) {
+async function waited(foundAt: number, limitMilliseconds = 90_000) {
   let now = 0;
   let reads = 0;
   const said: string[] = [];
@@ -18,7 +18,7 @@ async function waited(foundAt: number) {
       return Promise.resolve(reads === foundAt);
     },
     notes,
-    {now: () => now, report: line => said.push(line)},
+    {now: () => now, report: line => said.push(line), limitMilliseconds},
   );
   return {found, reads, notes, said};
 }
@@ -48,6 +48,15 @@ describe('a read that waits for the editor to pick a change up (card #2861)', ()
       reads: 5,
       notes: ['the view: never picked up in 100 s'],
       said: ['the view: never picked up in 100 s'],
+    });
+  });
+
+  it('#2861: with no time beyond the first read (a platform where the editor is on time) a change found at the second read is never picked up', async () => {
+    deepStrictEqual(await waited(2, 0), {
+      found: false,
+      reads: 1,
+      notes: ['the view: never picked up in 20 s'],
+      said: ['the view: never picked up in 20 s'],
     });
   });
 });
