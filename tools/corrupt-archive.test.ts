@@ -28,6 +28,18 @@ describe('the corrupt archive of a Feature download (card #2675)', () => {
     );
   });
 
+  it('#2675: a verdict that SDKMAN recovered from, followed by another failure, gives nothing', () => {
+    deepStrictEqual(
+      corruptArchiveLines([
+        '#14 64.43 Downloading: maven 3.10.1',
+        '#14 64.59 Stop! The archive was corrupt and has been removed! Please try installing again.',
+        '#14 70.10 Downloading: maven 3.10.1',
+        '#14 80.00 ERROR: Feature "Java (via SDKMAN!)" failed to install!',
+      ]),
+      [],
+    );
+  });
+
   it('#2675: an empty log gives nothing', () => {
     deepStrictEqual(corruptArchiveLines([]), []);
   });

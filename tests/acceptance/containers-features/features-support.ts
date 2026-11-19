@@ -131,13 +131,13 @@ export function featureBuilds(): {
         }
         // Behind the window of the failed build there is a build that has ended and an agent that takes no command, so
         // a close would only time out: the window is left to the end of the run, and its containers are removed now.
-        opened.pop();
+        const abandonedWindow = opened.pop();
         const abandoned = folders.pop();
         if (abandoned !== undefined) {
           await removeContainers(abandoned);
         }
         console.log(
-          `${name}: the first build's download came back corrupt, so it is built once more: ${reasons.join(' | ')}`,
+          `${name}: the first build's download came back corrupt, so it is built once more (its window ${String(abandonedWindow)} stays open to the end of the run): ${reasons.join(' | ')}`,
         );
         const secondMark = containersLog().length;
         try {
