@@ -23,7 +23,8 @@
     "../tests/acceptance/windows/image-pull.ts",
     "../tests/acceptance/windows/late-pickup.ts",
     "../tests/acceptance/windows/quick-pick-reads.ts",
-    "../tests/acceptance/windows/reconnection-state.ts"
+    "../tests/acceptance/windows/reconnection-state.ts",
+    "../tests/acceptance/windows/stored-history.ts"
   ],
   "exclude": ["**/fixtures"]
 }

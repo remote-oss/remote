@@ -48,6 +48,10 @@ import {
   viewWindow,
   visit,
 } from '../windows/explorer-folders.ts';
+import {
+  STORED_EXTENSION_KEY,
+  storedPathsOf,
+} from '../windows/stored-history.ts';
 import {HOST_A, HOST_B, CURRENT, IN_NEW, refreshed} from './folders-support.ts';
 
 describe('the recent folders under a host (card coverage-102, part 1)', function () {
@@ -305,17 +309,43 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
         30_000,
       );
     }
-    // The history of the row's folders after each visit, for the message of a settle that fails: card #2757 found c102-c2
-    // missing from it at the read, and this says at which visit it left.
+    // The history of the row's folders after each visit, as the window answers it and as the editor's global storage
+    // database holds it, for the message of a settle that fails: card #2757 found an entry missing from the window's
+    // reading, and the two together say at which visit it left and whether the stored value lost it too.
     const trace: string[] = [];
-    async function visited(name: string): Promise<void> {
-      await visit(HOST_B, name);
+    async function told(read: () => Promise<string[]>): Promise<string> {
       // Read for the message only: a read that fails is told, and never fails the row.
-      const paths = await ownPathsOf(HOST_B, scope).then(
+      return read().then(
         found => JSON.stringify(found),
         (caught: unknown) => `(unreadable: ${String(caught)})`,
       );
-      trace.push(`${name}: ${paths}`);
+    }
+    async function storedPaths(): Promise<string[]> {
+      const {DatabaseSync} = await import('node:sqlite');
+      const database = new DatabaseSync(
+        path.join(
+          variable('HARNESS_USER_DATA'),
+          'User/globalStorage/state.vscdb',
+        ),
+        {readOnly: true},
+      );
+      try {
+        const found = database
+          .prepare('select value from ItemTable where key = ?')
+          .get(STORED_EXTENSION_KEY);
+        const text = found?.value;
+        return typeof text === 'string'
+          ? storedPathsOf(text, HOST_B, scope)
+          : [];
+      } finally {
+        database.close();
+      }
+    }
+    async function visited(name: string): Promise<void> {
+      await visit(HOST_B, name);
+      trace.push(
+        `${name}: window ${await told(() => ownPathsOf(HOST_B, scope))}, stored ${await told(storedPaths)}`,
+      );
     }
     try {
       await visited('c102-c1');
