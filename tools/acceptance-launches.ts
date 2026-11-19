@@ -1200,7 +1200,17 @@ export function launchesOf(root: string): Launch[] {
       },
     },
     // The core features of the editor in a window on the SSH host, read through the renderer.
-    {...RENDERER_LAUNCH, label: 'ssh-core', suite: 'ssh-core'},
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-core',
+      suite: 'ssh-core',
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        // A new window opens no Welcome page of its own, as in the containers launches: a row reads the window's editors
+        // and the page it draws, and the page's focus is not what a row means to test.
+        'workbench.startupEditor': 'none',
+      },
+    },
     // The same with the pinned OpenSSH client as the user's `remote.SSH.path`, for the criteria about keywords newer than
     // the runners' client; the rows run plain `ssh` through the same path.
     {
