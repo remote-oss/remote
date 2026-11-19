@@ -1304,6 +1304,13 @@ export function launchesOf(root: string): Launch[] {
       suite: 'ssh-killed',
       environment: {HARNESS_KILLED_CASE: killedCase},
     })),
+    // A host whose login PATH has neither curl nor wget, the account `nofetch`: one plain launch, each row a window of its
+    // own on that account.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-downloaders',
+      suite: 'ssh-downloaders',
+    },
     // Dev Containers beside Remote - SSH, in a window on the SSH host: the commands that edit a configuration where it lives.
     {
       ...RENDERER_LAUNCH,
