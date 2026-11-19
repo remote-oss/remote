@@ -1,4 +1,4 @@
-import {deepStrictEqual} from 'node:assert';
+import {deepStrictEqual, throws} from 'node:assert';
 import {
   closeWindow,
   connectedWithin,
@@ -33,6 +33,20 @@ function remoteSideOf(lines: readonly string[]): {
       line.includes('remote-oss-server-progress unpack'),
     ),
   };
+}
+
+/**
+ * The log of one window's connect since its mark: it must hold the window's own lines, or the absence checks on it
+ * pass vacuously.
+ */
+function ownLogSlice(mark: number): string[] {
+  const lines = connectionLog().slice(mark);
+  deepStrictEqual(
+    lines.length > 0,
+    true,
+    'the slice holds no line of the connect or its reload, so the absence check would pass vacuously',
+  );
+  return lines;
 }
 
 describe('the remote install and start output in the log (card connect-67)', function () {
@@ -74,6 +88,11 @@ describe('the remote install and start output in the log (card connect-67)', fun
     }
   });
 
+  it('F-2003 AC-29 (empty-slice): the read of a connect\u2019s log fails named when the slice holds none of its lines, so the absence check cannot pass vacuously', () => {
+    const mark = connectionLog().length;
+    throws(() => ownLogSlice(mark), /pass vacuously/);
+  });
+
   it('F-2003 AC-29 (terminal-reload): a terminal-mode connect and its reload log no local-server line, started, reused or stale (BR-16)', async () => {
     const saved = readUserSettings();
     await userSettings({
@@ -88,9 +107,9 @@ describe('the remote install and start output in the log (card connect-67)', fun
         await reloadWindow('rl3');
         await connectedWithin('rl3', 120_000);
         deepStrictEqual(
-          connectionLog()
-            .slice(mark)
-            .filter(line => /local connection server/i.test(line)),
+          ownLogSlice(mark).filter(line =>
+            /local connection server/i.test(line),
+          ),
           [],
         );
       } finally {
