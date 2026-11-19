@@ -5005,7 +5005,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('tooling-51, tooling-111: the executable of a launch is VS Code’s for a launch of that client, the CLI-source copy’s for cli-path and VSCodium’s for any other', () => {
+    it('tooling-51, tooling-111: the executable of a launch is VS Code’s for a launch of that client, the CLI-source copy’s for cli-path and ssh-exec-server and VSCodium’s for any other', () => {
       const variables: Partial<HarnessVariables> = {
         HARNESS_VSCODE_EXECUTABLE: '/vscode/code',
         HARNESS_VSCODIUM_EXECUTABLE: '/vscodium/codium',
@@ -5013,14 +5013,16 @@ describe('acceptance', () => {
       };
       const launches = launchesOf(REPOSITORY_ROOT);
       deepStrictEqual(
-        ['genuine', 'cli-path', 'windows', 'local'].map(label =>
-          editorExecutableOf(
-            variables as HarnessVariables,
-            launchLabelled(launches, label),
-          ),
+        ['genuine', 'cli-path', 'ssh-exec-server', 'windows', 'local'].map(
+          label =>
+            editorExecutableOf(
+              variables as HarnessVariables,
+              launchLabelled(launches, label),
+            ),
         ),
         [
           '/vscode/code',
+          '/run/cli-editor/codium',
           '/run/cli-editor/codium',
           '/vscodium/codium',
           '/vscodium/codium',

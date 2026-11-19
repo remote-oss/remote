@@ -304,7 +304,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, x11-noxauth, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, passphrase-late, login-shells, preconnect, default-ports, no-proposals, cli-path, the two wsl-linux launches, wsl, wsl-linux-standdown, the nine explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, x11-noxauth, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, passphrase-late, login-shells, preconnect, default-ports, no-proposals, cli-path, ssh-exec-server, the two wsl-linux launches, wsl, wsl-linux-standdown, the nine explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -349,6 +349,7 @@ describe('the launches of the VSCodium run', () => {
         'ssh-containers',
         'no-proposals',
         'cli-path',
+        'ssh-exec-server',
         ...labelsFromExplorer(),
       ],
     );
@@ -454,6 +455,7 @@ describe('the launches of the VSCodium run', () => {
         ['ssh-killed-13', undefined, true, undefined],
         ['ssh-killed-14', undefined, true, undefined],
         ['ssh-containers', ['remote-oss.remote-containers'], true, undefined],
+        ['ssh-exec-server', undefined, true, undefined],
         ['wsl-linux', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl-linux-web', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl', ['remote-oss.remote-wsl'], true, undefined],
@@ -1088,7 +1090,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-51, connect-84, containers-101, tooling-168, #2355: socket-prime (a part of socket), the containers-podman launch, cli-path, wsl, the ports and install primers and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
+  it('tooling-51, connect-84, containers-101, tooling-168, #2355: socket-prime (a part of socket), the containers-podman launch, cli-path, ssh-exec-server, wsl, the ports and install primers and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
     deepStrictEqual(
       launches
         .filter(
@@ -1100,6 +1102,7 @@ describe('the launches of the VSCodium run', () => {
       [
         'socket-prime',
         'cli-path',
+        'ssh-exec-server',
         'wsl',
         'windows-host',
         'containers-podman',
@@ -1404,6 +1407,7 @@ describe('the launches of the VSCodium run', () => {
         'ssh-killed-13',
         'ssh-killed-14',
         'ssh-containers',
+        'ssh-exec-server',
         ...labelsFromExplorer(),
       ],
     );

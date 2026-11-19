@@ -1329,6 +1329,15 @@ export function launchesOf(root: string): Launch[] {
       cliSource: true,
       namedOnly: true,
     },
+    // A window on the SSH host connected through the CLI path, whose exec server the window agent spawns through
+    // (connect-146): the renderer helpers on the CLI-source copy, named only for the same reason as cli-path.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-exec-server',
+      suite: 'ssh-exec-server',
+      cliSource: true as const,
+      namedOnly: true,
+    },
     // WSL on Linux: its commands stay out of the way where WSL cannot run, in a desktop window, in the browser build
     // the editor stands in for with `remote.extensionKind`, and beside the other WSL extension, where it stands down.
     {

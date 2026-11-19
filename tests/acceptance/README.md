@@ -134,6 +134,11 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `no-proposals`: the same without the proposed API.
 
+- `ssh-exec-server`: a plain launch with the renderer helpers on the run's CLI-source copy of VSCodium (`cliSource`, as
+  `cli-path` has), so a window on the SSH host connects through the CLI path and its authority has an exec server;
+  `ssh-exec-server/*.test.ts` spawns through it with the window agent's `acceptance.agent.execSpawn`. It is named only, as
+  `cli-path` is, because the CLI archives need `REMOTE_OSS_CLI_ARCHIVES_TOKEN`.
+
 - `terminal-pick`: a plain launch with `remote.SSH.useLocalServer` off and no stored `remote.SSH.remotePlatform`; the test answers the platform pick with Linux and a window on `harness` connects and stores the platform.
 
 - `add-host`: an explorer launch (Remote Explorer installed, a debugging port) whose editor has `HOME=<run>/add-host-home`, so the user file that "Remote-SSH: Add New SSH Host..." writes is the run's own; `add-host/add-host.test.ts` answers the input, the file pick and the notice from the script, sets `remote.SSH.configFile` to `''`, and reads the written file, the window's tabs and the explorer's hosts view (F-2204's rows).
@@ -392,7 +397,7 @@ client asked once for the CLI of the host's platform and of the copy's commit (`
 archive's file was run from the server folder under its commit-keyed name: the stand-in writes the path it was run as to
 `/tmp/stand-in-cli-ran`, since the install removes the file of a CLI that fails; the file in the archive is named by the product's `applicationName`, which the install unpacks the CLI by, and a run whose editor names another is refused. The stand-in is no CLI, so
 the case's outcome is `any`. Where a run also
-names the `cli-path` launch, whose pins give real CLI archives for the host's downloader, the copy's template names the host's own base (`downloads`) and the host serves those archives for the platforms they cover.
+names the `cli-path` or `ssh-exec-server` launch, whose pins give real CLI archives for the host's downloader, the copy's template names the host's own base (`downloads`) and the host serves those archives for the platforms they cover.
 
 A case that keeps what an earlier connect left (`keepServer`, `keepFiles`) names a primer in `needs`: the case listed right
 before it with `primer: true`, whose connect makes that state. The primer's launch is `named only` and a part of the

@@ -85,6 +85,7 @@
         "genuine-accept-b/*.test.ts",
         "ssh-no-proposals/*.test.ts",
         "cli-path/*.test.ts",
+        "ssh-exec-server/*.test.ts",
         "containers/*.test.ts",
         "containers-standdown/*.test.ts",
         "containers-no-proposals/*.test.ts",

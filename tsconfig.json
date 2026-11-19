@@ -248,6 +248,9 @@
       "path": "tests/acceptance/cli-path"
     },
     {
+      "path": "tests/acceptance/ssh-exec-server"
+    },
+    {
       "path": "tests/acceptance/containers"
     },
     {
