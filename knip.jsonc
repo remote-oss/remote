@@ -60,6 +60,7 @@
         "ssh-askpass-env/*.test.ts",
         "ssh-askpass-space/*.test.ts",
         "ssh-killed/*.test.ts",
+        "ssh-locks/*.test.ts",
         "ssh-downloaders/*.test.ts",
         "ssh-containers/*.test.ts",
         "terminal-pick/*.test.ts",
