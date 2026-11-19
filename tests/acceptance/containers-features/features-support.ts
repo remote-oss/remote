@@ -15,9 +15,12 @@ import {
   devContainerFolder,
   devContainersOf,
   reopenInContainer,
+  containersLog,
+  containersLogSince,
   reopenStarted,
   variable,
 } from '../windows/harness.ts';
+import {corruptArchiveLines} from '../windows/corrupt-archive.ts';
 import {runTemplatesReady} from '../windows/run-templates.ts';
 
 const execFileAsync = promisify(execFile);
@@ -80,6 +83,10 @@ export function featureBuilds(): {
     prepare?: (folder: string) => void,
     reloaded?: () => void,
   ) => Promise<Built>;
+  buildAgainOnCorruptArchive: (
+    name: string,
+    configuration: Readonly<Record<string, unknown>>,
+  ) => Promise<Built & {mark: number}>;
   closeNow: (window: string) => Promise<void>;
   reopen: (built: Built, removeContainer: boolean) => Promise<Built>;
 } {
@@ -93,19 +100,59 @@ export function featureBuilds(): {
       await removeContainers(folder);
     }
   });
+  async function build(
+    name: string,
+    configuration: Readonly<Record<string, unknown>>,
+    prepare?: (folder: string) => void,
+    reloaded?: () => void,
+  ): Promise<Built> {
+    await runTemplatesReady();
+    const folder = devContainerFolder(name, configuration);
+    folders.push(folder);
+    prepare?.(folder);
+    const window = await openFolderWindow(folder);
+    opened.push(window);
+    await reopenStarted(window);
+    reloaded?.();
+    await connectedToContainer(window, BUILD_MILLISECONDS);
+    const [containerId = ''] = await devContainersOf(folder);
+    return {window, folder, containerId};
+  }
   return {
-    build: async (name, configuration, prepare, reloaded) => {
-      await runTemplatesReady();
-      const folder = devContainerFolder(name, configuration);
-      folders.push(folder);
-      prepare?.(folder);
-      const window = await openFolderWindow(folder);
-      opened.push(window);
-      await reopenStarted(window);
-      reloaded?.();
-      await connectedToContainer(window, BUILD_MILLISECONDS);
-      const [containerId = ''] = await devContainersOf(folder);
-      return {window, folder, containerId};
+    build,
+    buildAgainOnCorruptArchive: async (name, configuration) => {
+      const firstMark = containersLog().length;
+      try {
+        return {...(await build(name, configuration)), mark: firstMark};
+      } catch (first) {
+        const reasons = corruptArchiveLines(containersLogSince(firstMark));
+        if (reasons.length === 0) {
+          throw first;
+        }
+        // Behind the window of the failed build there is a build that has ended and an agent that takes no command, so
+        // a close would only time out: the window is left to the end of the run, and its containers are removed now.
+        opened.pop();
+        const abandoned = folders.pop();
+        if (abandoned !== undefined) {
+          await removeContainers(abandoned);
+        }
+        console.log(
+          `${name}: the first build's download came back corrupt, so it is built once more: ${reasons.join(' | ')}`,
+        );
+        const secondMark = containersLog().length;
+        try {
+          return {
+            ...(await build(`${name}-again`, configuration)),
+            mark: secondMark,
+          };
+        } catch (second) {
+          const again = corruptArchiveLines(containersLogSince(secondMark));
+          throw new Error(
+            `both builds of ${name} failed. First: ${reasons.join(' | ')}. Second: ${again.length === 0 ? 'no corrupt-archive verdict, so it failed for another reason' : again.join(' | ')}. ${second instanceof Error ? second.message : String(second)}`,
+            {cause: second},
+          );
+        }
+      }
     },
     closeNow: async window => {
       opened.splice(opened.indexOf(window), 1);

@@ -32,17 +32,17 @@ function idsOf(entries: ReadonlyArray<Record<string, unknown>>): unknown[] {
 // at row time. The Features install with apt, so the image is the run's glibc one.
 describe('the legacy words and the Features of ghcr.io (card containers-93)', function () {
   this.timeout(2_400_000);
-  const {build} = featureBuilds();
+  const {build, buildAgainOnCorruptArchive} = featureBuilds();
 
   /** Builds a folder whose only Feature is the legacy `word`, and gives what the log, the metadata and the lockfile say. */
   async function legacyJava(word: string): Promise<unknown[]> {
-    const mark = containersLog().length;
-    const built = await build(`c93-ac35-${word}`, {
+    // The warning is read from the log of the build that connected, and not from an earlier one that came back corrupt.
+    const built = await buildAgainOnCorruptArchive(`c93-ac35-${word}`, {
       image: GLIBC_IMAGE,
       features: {[word]: {}},
     });
     return [
-      containersLogSince(mark).some(line => /deprecated/i.test(line)),
+      containersLogSince(built.mark).some(line => /deprecated/i.test(line)),
       idsOf(await metadataOf(built.containerId)),
       Object.keys(lockfileOf(built.folder)?.features ?? {}),
     ];
