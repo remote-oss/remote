@@ -9,12 +9,12 @@ import {
   appendScript,
   closeWindow,
   connectedWithin,
-  inWindow,
   onHost,
   onHostAs,
   openWindow,
   readUserSettings,
   recordLines,
+  reloadWindow,
   restoreUserSettings,
   signal,
   userSettings,
@@ -100,34 +100,67 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
     });
   }
 
-  it('F-2402 AC-1, AC-2, AC-3, AC-7, AC-26, AC-28 (c2854-none): with neither curl nor wget on the login PATH, and a copy of curl outside it, the dialog gives the reason of STR:S042, the troubleshooting row the message and the five mitigations, and the host has only an empty server folder', async () => {
+  it('F-2402 AC-2, AC-3, AC-7 (c2854-hint): with neither curl nor wget on the login PATH, and a copy of curl outside it, the troubleshooting row has the status NoDownloaderAvailable, the message of STR:S159 and the five mitigations in order', async () => {
     await withSettings({}, async () => {
-      const name = 'c2854-none';
+      const name = 'c2854-hint';
       appendScript(dismissals(name));
       await failedOn(ALIAS, name);
       try {
-        const dialog = recordLines('failureDialog', name)[0];
-        const table = await wholeTableOf(name);
-        const [status, message, mitigations] = firstRowOf(table);
+        const [status, message, mitigations] = firstRowOf(
+          await wholeTableOf(name),
+        );
         deepStrictEqual(
           {
-            question: dialog?.question,
-            buttons: dialog?.buttons,
             status,
             message: compact(message ?? ''),
             mitigations: compact(mitigations ?? ''),
             curlOutsidePath: await onHost('ls', '/opt/fetch-off/curl'),
-            serverFolder: (await onHostAs(ACCOUNT, 'ls', '-A', DATA)).trim(),
           },
           {
-            question: `Could not establish connection to "${ALIAS}": ${NO_DOWNLOADER}`,
-            buttons: ['Retry', 'More Actions...', 'Close Remote'],
             status: 'NoDownloaderAvailable',
             message: compact(`${MESSAGE} (${NO_DOWNLOADER})`),
             mitigations: compact(MITIGATIONS.join('')),
             curlOutsidePath: '/opt/fetch-off/curl\n',
-            serverFolder: '',
           },
+        );
+      } finally {
+        await closeWindow(name).catch(() => undefined);
+      }
+    });
+  });
+
+  it('F-2402 AC-1, AC-28 (c2854-dialog): the dialog of that failure gives the reason of STR:S042, ending in exactly one period, with the three buttons', async () => {
+    await withSettings({}, async () => {
+      const name = 'c2854-dialog';
+      appendScript(dismissals(name));
+      await failedOn(ALIAS, name);
+      try {
+        const dialog = recordLines('failureDialog', name)[0];
+        deepStrictEqual(
+          {question: dialog?.question, buttons: dialog?.buttons},
+          {
+            question: `Could not establish connection to "${ALIAS}": ${NO_DOWNLOADER}`,
+            // The order the harness records a failure dialog's buttons in, as every row of this suite has it.
+            buttons: ['Close Remote', 'Retry', 'More Actions...'],
+          },
+        );
+      } finally {
+        await closeWindow(name).catch(() => undefined);
+      }
+    });
+  });
+
+  it('F-2402 AC-26 (c2854-nothing-installed): after that failure the host has an empty server folder and nothing else was installed', async () => {
+    await withSettings({}, async () => {
+      const name = 'c2854-nothing-installed';
+      appendScript(dismissals(name));
+      await failedOn(ALIAS, name);
+      try {
+        deepStrictEqual(
+          (await onHostAs(ACCOUNT, 'find', DATA, '-mindepth', '1'))
+            .split('\n')
+            .filter(line => line !== ''),
+          [],
         );
       } finally {
         await closeWindow(name).catch(() => undefined);
@@ -154,7 +187,7 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
           () => recordLines('failureDialog', name).length >= 2,
           120_000,
         );
-        await inWindow(name, 'workbench.action.reloadWindow');
+        await reloadWindow(name);
         await waitFor(
           'the dialog after Reload Window',
           () => recordLines('failureDialog', name).length >= 3,
@@ -187,7 +220,7 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
         },
         ...dismissals(name),
       ]);
-      await openWindow(ALIAS, name);
+      await openWindow(ALIAS, name, ACCOUNT);
       try {
         // The first attempt fails within seconds; its dialog is held until the signal, so curl is in place before Retry.
         await pause(20_000);
