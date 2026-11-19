@@ -21,6 +21,7 @@ import {
   secondEngine,
   showsNoEngine,
 } from '../windows/engine-fixture.ts';
+import {pickedUp} from '../windows/late-pickup.ts';
 import {engineSuffix} from '../windows/platform-forms.ts';
 import {answerDialog, waitForDialog, windowTitle} from '../windows/renderer.ts';
 
@@ -68,16 +69,26 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       'containers.environment': {DOCKER_HOST: plain.address},
     });
     const window = await openFolderWindow(folder);
+    const notes: string[] = [];
     try {
       const trusted = await isTrusted(window);
       const first = await lists(plain.marker, window);
       folderSettings(folder, {'docker.host': DEAD});
-      const second = await showsNoEngine(window);
+      const second = await pickedUp(
+        'the view after a dead docker.host',
+        () => showsNoEngine(window),
+        notes,
+      );
       folderSettings(folder, {'docker.host': plain.address});
-      const third = await lists(plain.marker, window);
+      const third = await pickedUp(
+        'the view after docker.host names the second engine',
+        () => lists(plain.marker, window),
+        notes,
+      );
       deepStrictEqual(
         [trusted, first, second, third],
         [false, true, true, true],
+        notes.length > 0 ? notes.join('; ') : undefined,
       );
     } finally {
       await closeWindow(window).catch(() => undefined);
@@ -145,6 +156,7 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       '3600',
     );
     const seen: boolean[] = [];
+    const notes: string[] = [];
     const window = await openFolderWindow(folder);
     try {
       for (const environment of [
@@ -153,7 +165,13 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
         {DOCKER_CONFIG: config},
       ]) {
         folderSettings(folder, {'containers.environment': environment});
-        seen.push(await lists(own, window));
+        seen.push(
+          await pickedUp(
+            `the view after ${JSON.stringify(Object.keys(environment))} in containers.environment`,
+            () => lists(own, window),
+            notes,
+          ),
+        );
       }
       folderSettings(folder, {
         'containers.environment': {
@@ -161,7 +179,13 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
           DOCKER_HOST: 'ssh://127.0.0.1:9',
         },
       });
-      seen.push(await showsNoEngine(window));
+      seen.push(
+        await pickedUp(
+          'the no-engine view after a DOCKER_HOST beside the PATH',
+          () => showsNoEngine(window),
+          notes,
+        ),
+      );
       folderSettings(folder, {
         'containers.environment': {
           PATH: `${programs}${path.delimiter}${process.env.PATH ?? ''}`,
@@ -169,7 +193,13 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       });
       // The reopen reads the folder's settings when it starts, so it starts only once the view has taken the change of
       // the file: with the dead host still in force the connect waits on it.
-      seen.push(await lists(own, window));
+      seen.push(
+        await pickedUp(
+          'the view after the dead host is taken out',
+          () => lists(own, window),
+          notes,
+        ),
+      );
       void startInWindow(window, 'remote-containers.reopenInContainer');
       await waitForDialog(window, 60_000);
       await answerDialog(window, 'Trust Folder & Continue');
@@ -190,9 +220,12 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
           existsSync(marker),
         ],
         [true, [true, true, true, true, true], true, false],
-        process.env.DOCKER_HOST === undefined
-          ? 'the editor has no DOCKER_HOST: the home and DOCKER_CONFIG cases decide the engine through the current context, as on Linux'
-          : `the editor has DOCKER_HOST ${process.env.DOCKER_HOST}, which wins over the current context: the home and DOCKER_CONFIG cases cannot show a hijack in this run`,
+        [
+          ...notes,
+          process.env.DOCKER_HOST === undefined
+            ? 'the editor has no DOCKER_HOST: the home and DOCKER_CONFIG cases decide the engine through the current context, as on Linux'
+            : `the editor has DOCKER_HOST ${process.env.DOCKER_HOST}, which wins over the current context: the home and DOCKER_CONFIG cases cannot show a hijack in this run`,
+        ].join('; '),
       );
     } finally {
       await closeWindow(window).catch(() => undefined);
