@@ -351,6 +351,8 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
       await visited('c102-c1');
       await visited('c102-c2');
       await visited('c102-cgone');
+      // Printed green or red alike, so that a red's trace has a green to be set beside.
+      console.log(`c102 history after each visit:\n${trace.join('\n')}`);
       await onHost('rm', '-rf', gone);
       from = await viewWindow('c102-from');
       await foldersSettled(
