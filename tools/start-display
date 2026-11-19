@@ -22,11 +22,31 @@ if [ ! -S "$SOCKET" ]; then
 fi
 # The key driver is wanted on a machine whose display already runs as well.
 command -v xdotool >/dev/null || missing+=(xdotool)
+# Installs the packages named, updating the lists first. A fresh hosted runner's unattended-upgrades holds the dpkg lock
+# at boot, so each call waits for it, up to five minutes. Each download is tried three times, and an update or install
+# that still fails is tried once more from a fresh update 15 s later: an archive that answers 503 for a moment, or a
+# mirror caught mid-sync whose lists name no package, fails no job (#2832). When both fail, the packages' candidates and
+# the sources are printed, so the failure names which it was.
+apt_install() {
+  local options=(-o DPkg::Lock::Timeout=300 -o Acquire::Retries=3)
+  local attempt
+  for attempt in 1 2; do
+    if sudo apt-get "${options[@]}" update -qq &&
+      sudo DEBIAN_FRONTEND=noninteractive apt-get "${options[@]}" install -y -qq "$@" >/dev/null; then
+      return 0
+    fi
+    echo "start-display: installing $* failed (attempt $attempt of 2)" >&2
+    [ "$attempt" = 2 ] || sleep 15
+  done
+  echo "start-display: could not install $*; their candidates and the sources:" >&2
+  apt-cache policy "$@" >&2 || true
+  grep -hE '^(deb|Types|URIs|Suites|Components)' /etc/apt/sources.list /etc/apt/sources.list.d/* >&2 2>/dev/null || true
+  return 1
+}
+
 if [ "${#missing[@]}" -gt 0 ]; then
   echo "start-display: installing ${missing[*]}"
-  # a fresh hosted runner's unattended-upgrades holds the dpkg lock at boot: wait for it, up to five minutes
-  sudo apt-get -o DPkg::Lock::Timeout=300 update -qq
-  sudo DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y -qq "${missing[@]}" >/dev/null
+  apt_install "${missing[@]}"
 fi
 
 if [ ! -S "$SOCKET" ]; then
