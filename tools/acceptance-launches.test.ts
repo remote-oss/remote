@@ -1293,7 +1293,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('#2600: only ssh-newclient asks for the pinned OpenSSH client, its remote.SSH.path is the path the run passes, and ssh-core keeps the machine’s ssh', () => {
+  it('#2600: only ssh-newclient asks for the pinned OpenSSH client, its remote.SSH.path is the path the run passes, and ssh-core keeps the machine’s ssh and opens no Welcome page', () => {
     const client = '/cache/remote-oss/openssh-10.6p2-9ae44872090c/bin/ssh';
     deepStrictEqual(
       [
@@ -1308,7 +1308,7 @@ describe('the launches of the VSCodium run', () => {
       [
         ['ssh-newclient', 'ssh-newclient-pickers'],
         {'window.title': '[${rootName}]', 'remote.SSH.path': client},
-        {'window.title': '[${rootName}]'},
+        {'window.title': '[${rootName}]', 'workbench.startupEditor': 'none'},
       ],
     );
   });

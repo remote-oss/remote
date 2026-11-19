@@ -545,7 +545,7 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
       },
       {
         empty: [true, true],
-        tabs: ['Welcome', 'c2623nodotb', 'c2623nodotc'],
+        tabs: ['c2623nodotb', 'c2623nodotc'],
         windows: [window],
       },
     );
