@@ -25,6 +25,7 @@ import {
   DATA_FOLDER,
   dismissals,
   freshHost,
+  INSTALL_MILLISECONDS,
 } from '../windows/maintenance.ts';
 import {keepingSettings} from '../windows/tunnel-support.ts';
 import {
@@ -193,13 +194,13 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
           () => recordLines('failureDialog', name).length >= 3,
           120_000,
         );
+        const questions = recordLines('failureDialog', name).map(
+          line => line.question,
+        );
         deepStrictEqual(
-          [
-            ...new Set(
-              recordLines('failureDialog', name).map(line => line.question),
-            ),
-          ],
-          [`Could not establish connection to "${ALIAS}": ${NO_DOWNLOADER}`],
+          [questions.length, new Set(questions).size],
+          [3, 1],
+          `the dialogs of ${name}: ${JSON.stringify(questions)}`,
         );
       } finally {
         await closeWindow(name).catch(() => undefined);
@@ -233,11 +234,84 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
         );
         signal('c2854-curl');
         await connectedWithin(name, 300_000, ACCOUNT);
-        deepStrictEqual(recordLines('failureDialog', name).length, 1);
+        deepStrictEqual(
+          recordLines('failureDialog', name).map(line => line.question),
+          [`Could not establish connection to "${ALIAS}": ${NO_DOWNLOADER}`],
+        );
       } finally {
         await onHostAs(ACCOUNT, 'rm', '-f', '/opt/nofetch/bin/curl');
         await closeWindow(name).catch(() => undefined);
       }
     });
+  });
+
+  /** Connects window `name` on the host with `extra` settings and tells what it showed: no dialog, and its progress. */
+  async function connectedWith(
+    name: string,
+    extra: Readonly<Record<string, unknown>>,
+  ): Promise<{dialogs: string[]; progress: string[]}> {
+    let shown = {dialogs: [] as string[], progress: [] as string[]};
+    await withSettings(extra, async () => {
+      appendScript(dismissals(name));
+      await openWindow(ALIAS, name, ACCOUNT);
+      try {
+        await connectedWithin(name, INSTALL_MILLISECONDS, ACCOUNT);
+        shown = {
+          dialogs: recordLines('failureDialog', name).map(
+            line => line.question,
+          ),
+          progress: [
+            ...new Set(
+              recordLines('progress', name).map(
+                line => `${line.question} / ${String(line.details ?? '')}`,
+              ),
+            ),
+          ],
+        };
+      } finally {
+        await closeWindow(name).catch(() => undefined);
+      }
+    });
+    return shown;
+  }
+
+  it('F-2402 AC-6 (c2854-auto): with the default "auto" the server is copied from the client with scp, the window connects and no text of this feature appears', async () => {
+    const shown = await connectedWith('c2854-auto', {
+      'remote.SSH.localServerDownload': 'auto',
+    });
+    deepStrictEqual(
+      [
+        shown.dialogs,
+        shown.progress.some(line =>
+          line.includes('Copying VS Code Server to host with scp'),
+        ),
+      ],
+      [[], true],
+      JSON.stringify(shown),
+    );
+  });
+
+  it('F-2402 AC-16 (c2854-legacy-auto): in legacy mode with "auto" the progress shows the local download, and the window connects with no text of this feature', async () => {
+    const shown = await connectedWith('c2854-legacy-auto', {
+      'remote.SSH.localServerDownload': 'auto',
+      'remote.SSH.useExecServer': false,
+    });
+    deepStrictEqual(
+      [
+        shown.dialogs,
+        shown.progress.some(line =>
+          line.includes('Downloading VS Code Server locally'),
+        ),
+      ],
+      [[], true],
+      JSON.stringify(shown),
+    );
+  });
+
+  it('F-2402 AC-20 (c2854-always): with "always" and no downloader on the host the window connects with no text of this feature', async () => {
+    const shown = await connectedWith('c2854-always', {
+      'remote.SSH.localServerDownload': 'always',
+    });
+    deepStrictEqual(shown.dialogs, [], JSON.stringify(shown));
   });
 });
