@@ -37,7 +37,8 @@ if [ ! -x "$prefix/shellcheck" ]; then
   trap 'rm -rf "$work"' EXIT
   url="https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION/shellcheck-v$SHELLCHECK_VERSION.linux.$arch.tar.gz"
   # A refused or failed request (a 403 or 5xx from the release host) is tried again, five times in all.
-  curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 -o "$work/shellcheck.tar.gz" "$url" || {
+  # seven tries, curl doubling its pause from 1 s (63 s in all), so a burst of the release network's 504s passes
+  curl -fsSL --retry 6 --retry-all-errors -o "$work/shellcheck.tar.gz" "$url" || {
     echo "install-shellcheck: $url could not be downloaded" >&2
     exit 1
   }
