@@ -17,6 +17,9 @@ export interface DebugTarget {
   webSocketDebuggerUrl?: string;
 }
 
+/** The id of the page each window's name was last found by, while the window lives. */
+export const REMEMBERED_PAGES = new Map<string, string>();
+
 /**
  * The page of window `name` among `candidates`, the pages whose titles fit its state. A page the window remembered is
  * the one when it is there. Otherwise the one candidate; or, of several, the one that no other open window
@@ -89,10 +92,10 @@ export function portIn(file: string): number | undefined {
   return Number.isInteger(port) ? port : undefined;
 }
 
-/** How many pages the editor lists now; none when the port or its list cannot be read. */
-export async function listedPageCount(
+/** The ids of the pages the editor lists now; none when the port or its list cannot be read. */
+export async function listedPageIds(
   userDataFolder: string,
-): Promise<number | undefined> {
+): Promise<string[] | undefined> {
   const port = portIn(path.join(userDataFolder, 'DevToolsActivePort'));
   if (port === undefined) {
     return undefined;
@@ -100,33 +103,36 @@ export async function listedPageCount(
   try {
     const answer = await fetch(`http://127.0.0.1:${String(port)}/json/list`);
     const targets = (await answer.json()) as DebugTarget[];
-    return targets.filter(target => target.type === 'page').length;
+    return targets
+      .filter(target => target.type === 'page')
+      .map(each => each.id);
   } catch {
     return undefined;
   }
 }
 
 /**
- * Waits until the editor lists fewer pages than `before`, the count taken when the close of window `window` began, so that
- * a row that goes on after a close does not find the closed window's page still beside its own. A list that cannot be
- * read ends the wait, since nothing can be told; a page that stays past `milliseconds` fails naming the window and the count.
+ * Waits until the page `pageId` of window `window`, the one it remembered, has left the editor's list, so that a row that
+ * goes on after a close does not find the closed window's page beside its own. It waits on that page and no other, so a
+ * window that opens or closes meanwhile neither ends the wait early nor holds it. A list that cannot be read ends the wait,
+ * since nothing can be told; a page that stays past `milliseconds` fails naming the window and the page.
  */
 export async function waitUntilPageLeft(
   window: string,
-  before: number,
-  read: () => Promise<number | undefined>,
+  pageId: string,
+  read: () => Promise<readonly string[] | undefined>,
   milliseconds: number,
   pause: (milliseconds: number) => Promise<void>,
 ): Promise<void> {
   const deadline = Date.now() + milliseconds;
   for (;;) {
-    const now = await read();
-    if (now === undefined || now < before) {
+    const listed = await read();
+    if (!listed?.includes(pageId)) {
       return;
     }
     if (Date.now() > deadline) {
       throw new Error(
-        `the page of window ${window} was still listed ${String(milliseconds / 1000)} s after the window deactivated: the editor lists ${String(now)} pages, as it did before the close`,
+        `the page of window ${window} (#${pageId.slice(0, 8)}) was still listed ${String(milliseconds / 1000)} s after the window deactivated: the editor lists ${String(listed.length)} pages`,
       );
     }
     await pause(250);

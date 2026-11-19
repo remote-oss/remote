@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
   type DebugTarget,
-  listedPageCount,
+  listedPageIds,
   localPageAmong,
   pagesDescription,
   portIn,
@@ -133,9 +133,9 @@ describe('the port of the editor’s debugging list (card #2890)', () => {
     deepStrictEqual(found, [41233, undefined, undefined]);
   });
 
-  it('#2890: a launch whose port cannot be read has no page count, which ends the wait for a page to leave', async () => {
+  it('#2890: a launch whose port cannot be read has no page list, which ends the wait for a page to leave', async () => {
     deepStrictEqual(
-      await withPortFile(undefined, folder => listedPageCount(folder)),
+      await withPortFile(undefined, folder => listedPageIds(folder)),
       undefined,
     );
   });
@@ -147,42 +147,68 @@ describe('the wait for a closed window’s page to leave the list (card #2890)',
     return new Promise<void>(resolve => setTimeout(resolve, 1));
   }
 
-  /** A reading that gives `counts` in turn and then the last again, and how often it was read. */
-  function reading(counts: Array<number | undefined>) {
+  /** A reading that gives the lists of `pages` in turn and then the last again, and how often it was read. */
+  function reading(pages: Array<string[] | undefined>) {
     const state = {reads: 0};
     return {
       state,
       read: () => {
-        const index = Math.min(state.reads, counts.length - 1);
+        const index = Math.min(state.reads, pages.length - 1);
         state.reads += 1;
-        return Promise.resolve(counts[index]);
+        return Promise.resolve(pages[index]);
       },
     };
   }
 
-  it('#2890: a page that is still listed on the first reading and gone on the third ends the wait after three readings', async () => {
-    const {read, state} = reading([3, 3, 2]);
-    await waitUntilPageLeft('fresh', 3, read, 5_000, pause);
+  it('#2890: the window’s own page, still listed on the first two readings and gone on the third, ends the wait after three readings', async () => {
+    const {read, state} = reading([
+      ['own', 'other'],
+      ['own', 'other'],
+      ['other'],
+    ]);
+    await waitUntilPageLeft('fresh', 'own', read, 5_000, pause);
     deepStrictEqual(state.reads, 3);
   });
 
-  it('#2890: a count already below the one before the close ends the wait on the first reading', async () => {
-    const {read, state} = reading([2]);
-    await waitUntilPageLeft('fresh', 3, read, 5_000, pause);
+  it('#2890: a window that opens meanwhile, with the count above what it was, does not end the wait while the window’s own page is listed', async () => {
+    const {read, state} = reading([
+      ['own', 'other'],
+      ['own', 'other', 'opened'],
+      ['own', 'other', 'opened'],
+      ['other', 'opened'],
+    ]);
+    await waitUntilPageLeft('fresh', 'own', read, 5_000, pause);
+    deepStrictEqual(state.reads, 4);
+  });
+
+  it('#2890: a window that closes meanwhile, with the count below what it was, does not end the wait early while the window’s own page is listed', async () => {
+    const {read, state} = reading([
+      ['own', 'other', 'closing'],
+      ['own', 'other'],
+      ['own'],
+      [],
+    ]);
+    await waitUntilPageLeft('fresh', 'own', read, 5_000, pause);
+    deepStrictEqual(state.reads, 4);
+  });
+
+  it('#2890: a page that is not listed on the first reading ends the wait on it', async () => {
+    const {read, state} = reading([['other']]);
+    await waitUntilPageLeft('fresh', 'own', read, 5_000, pause);
     deepStrictEqual(state.reads, 1);
   });
 
   it('#2890: a list that cannot be read ends the wait, since nothing can be told', async () => {
     const {read, state} = reading([undefined]);
-    await waitUntilPageLeft('fresh', 3, read, 5_000, pause);
+    await waitUntilPageLeft('fresh', 'own', read, 5_000, pause);
     deepStrictEqual(state.reads, 1);
   });
 
-  it('#2890, negative: a page that stays listed fails the wait naming the window and the count, and does not pass', async () => {
-    const {read} = reading([3]);
+  it('#2890, negative: a page that stays listed, whatever else comes and goes, fails the wait naming the window and the page, and does not pass', async () => {
+    const {read} = reading([['own-page-0001', 'other'], ['own-page-0001']]);
     await rejects(
-      waitUntilPageLeft('fresh', 3, read, 20, pause),
-      /the page of window fresh was still listed 0\.02 s after the window deactivated: the editor lists 3 pages, as it did before the close/u,
+      waitUntilPageLeft('fresh', 'own-page-0001', read, 20, pause),
+      /the page of window fresh \(#own-page\) was still listed 0\.02 s after the window deactivated: the editor lists 1 pages/u,
     );
   });
 });

@@ -16,6 +16,7 @@ import {
   pageAmong,
   pagesDescription,
   portIn,
+  REMEMBERED_PAGES,
 } from './page-list.ts';
 
 /** How long a wait for the renderer lasts, in milliseconds. */
@@ -196,9 +197,6 @@ export function pagesForState(
     ? found.filter(page => page.title === '[]')
     : fitting;
 }
-
-/** The id of the page each window's name was last found by, while the window lives. */
-const REMEMBERED_PAGES = new Map<string, string>();
 
 /** The pages of the renderer, from the debugging port's list. */
 async function pages(): Promise<DebugTarget[]> {

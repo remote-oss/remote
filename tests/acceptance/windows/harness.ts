@@ -50,7 +50,11 @@ import {
 } from './agent-standing.ts';
 import {explainedFailure, section} from './connect-failure.ts';
 import {editorFolderOf} from './editor-folder.ts';
-import {listedPageCount, waitUntilPageLeft} from './page-list.ts';
+import {
+  listedPageIds,
+  REMEMBERED_PAGES,
+  waitUntilPageLeft,
+} from './page-list.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -1455,10 +1459,10 @@ export async function killWindow(
 /** How long a closed window's page may stay in the editor's list after the window deactivated. */
 const PAGE_LEFT_MILLISECONDS = 30_000;
 
-/** How many pages the editor lists now; none when the launch has no debugging port to read or it cannot be read. */
-async function pagesListedNow(): Promise<number | undefined> {
+/** The ids of the pages the editor lists now; none when the launch has no debugging port to read or it cannot be read. */
+async function pagesListedNow(): Promise<string[] | undefined> {
   try {
-    return await listedPageCount(variable('HARNESS_USER_DATA'));
+    return await listedPageIds(variable('HARNESS_USER_DATA'));
   } catch {
     return undefined;
   }
@@ -1466,7 +1470,8 @@ async function pagesListedNow(): Promise<number | undefined> {
 
 /**
  * Closes window `name` and resolves once it's gone: its agent reports `deactivated`, or the extension host it recorded
- * has exited, and its page has left the editor's list, so that the next row does not find it beside its own. Some closes
+ * has exited, and the page it was last found by has left the editor's list, so that the next row does not find it beside
+ * its own. Some closes
  * never get the event (8 of 576 in a full containers launch, 2026-11-01): the extension host ends before its agent
  * writes it. A window whose extension host still runs after the wait fails, naming it; so does one whose page stays
  * listed.
@@ -1477,7 +1482,10 @@ export async function closeWindow(
 ): Promise<void> {
   const before = countOf(name, 'deactivated');
   const extensionHost = liveProcessIdOf(name);
-  const pagesBefore = await pagesListedNow();
+  // The page the window was last found by: it must leave the list, whatever other windows do meanwhile.
+  const ownPage = REMEMBERED_PAGES.get(name);
+  const listedBefore =
+    ownPage === undefined ? undefined : await pagesListedNow();
   const commandId = send(name, 'workbench.action.closeWindow', []);
   try {
     await waitUntil(
@@ -1496,10 +1504,10 @@ export async function closeWindow(
   } finally {
     withdrawUnaccepted(name, commandId);
   }
-  if (pagesBefore !== undefined) {
+  if (ownPage !== undefined && listedBefore?.includes(ownPage) === true) {
     await waitUntilPageLeft(
       name,
-      pagesBefore,
+      ownPage,
       pagesListedNow,
       PAGE_LEFT_MILLISECONDS,
       pause => new Promise(resolve => setTimeout(resolve, pause)),
