@@ -679,6 +679,13 @@ export function harnessSshConfig(
     ...accountAlias('mute', 'harness-mute', port, folder, keyLines(folder)),
     ...accountAlias('i686', 'harness-i686', port, folder, keyLines(folder)),
     ...accountAlias(
+      'nofetch',
+      'harness-nofetch',
+      port,
+      folder,
+      keyLines(folder),
+    ),
+    ...accountAlias(
       'harness-fish',
       'harness-fish',
       port,
