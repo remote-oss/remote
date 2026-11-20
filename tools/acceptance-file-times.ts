@@ -4,7 +4,9 @@
  *
  *     acceptance: file <suite folder>/<file> <seconds>
  *
- * The plain launches run with it, so a run's log holds the minutes the parts table is made from. When
+ * Each failed row or hook also prints `acceptance: failed <suite folder>/<file>: <title>: <message>` as it fails, so the
+ * reason survives a part cut at its time limit before the summary. The plain launches run with it, so a run's log holds
+ * the minutes the parts table is made from. When
  * REMOTE_OSS_ACCEPTANCE_OUTCOME names a file, it also writes the run's outcome there at its end: each failed row or hook
  * with its message, each passed row, and that the run ended (tools/known-reds.ts reads it).
  */
@@ -37,15 +39,27 @@ export function outcomeRowOf(runnable: Mocha.Runnable): OutcomeRow {
   };
 }
 
+/** What failed a runnable, whole: an error's message, a string as it is, anything else as JSON. */
+function textOf(failure: unknown): string {
+  return failure instanceof Error
+    ? failure.message
+    : typeof failure === 'string'
+      ? failure
+      : JSON.stringify(failure);
+}
+
 /** The first line of what failed `runnable`. */
 function firstLineOf(failure: unknown): string {
-  const text =
-    failure instanceof Error
-      ? failure.message
-      : typeof failure === 'string'
-        ? failure
-        : JSON.stringify(failure);
-  return text.split('\n')[0] ?? '';
+  return textOf(failure).split('\n')[0] ?? '';
+}
+
+/**
+ * The line a failed row or hook prints at once, before the run goes on: its file, its title and its whole message, so a
+ * part cut at its time limit before mocha's summary still says why each of its rows failed (#2901).
+ */
+export function failedLine(runnable: Mocha.Runnable, failure: unknown): string {
+  const {file, title} = outcomeRowOf(runnable);
+  return `acceptance: failed ${file}: ${title}: ${textOf(failure)}`;
 }
 
 /** The line of one file: its suite folder and name, and its seconds to one decimal. */
@@ -84,6 +98,7 @@ class FileTimes extends Mocha.reporters.Spec {
       outcome.passes.push(outcomeRowOf(test));
     });
     runner.on(EVENT_TEST_FAIL, (runnable: Mocha.Runnable, failure: unknown) => {
+      console.log(failedLine(runnable, failure));
       outcome.failures.push({
         ...outcomeRowOf(runnable),
         kind:
