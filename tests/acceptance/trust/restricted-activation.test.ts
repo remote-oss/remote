@@ -124,7 +124,7 @@ describe('Remote - SSH in Restricted Mode (card coverage-95)', function () {
     );
   });
 
-  it('F-2001 AC-10 (c95-restricted-palette): in Restricted Mode the palette lists the same 13 Remote-SSH entries and the indicator menu the same Remote-SSH group as in a trusted window, and the extension stays inactive', async () => {
+  it('F-2001 AC-10, F-2006 AC-2 (c95-restricted-palette): in Restricted Mode the palette lists the same 13 Remote-SSH entries and the indicator menu the same Remote-SSH group as in a trusted window, and the extension stays inactive', async () => {
     const entries = await remoteSshEntries(name);
     const rows = await indicatorGroups(name);
     deepStrictEqual(
