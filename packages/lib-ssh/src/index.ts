@@ -59,6 +59,7 @@ export type {
 export {
   CONNECTION_CLOSED_TEXT,
   FAILING_CONNECTIONS_TOPIC,
+  LINUX_PREREQUISITES_TOPIC,
 } from './diagnostics/rules.ts';
 export type {
   Classification,

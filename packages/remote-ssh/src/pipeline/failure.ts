@@ -102,6 +102,9 @@ function logged(
 /** The reason of a server install that failed: the extension's own text. */
 const INSTALL_FAILED: FailureReason = {id: 'S075'};
 
+/** The reason of a host the server's requirements check refused: the extension's own text. */
+const PREREQUISITES_MISSING: FailureReason = {id: 'S144'};
+
 /** The reason of a host that could not create the install folder. */
 const INSTALL_FOLDER_FAILED: FailureReason = {id: 'S070'};
 
@@ -477,7 +480,11 @@ export function ofStart(
     case 'unreadableServerFacts':
       return {kind: 'serverStart'};
     case 'prerequisitesMissing':
-      return logged('prerequisiteMissing', failure.detail);
+      return logged(
+        'prerequisiteMissing',
+        failure.detail,
+        PREREQUISITES_MISSING,
+      );
     case 'retriesExhausted':
       return ofExhausted(failure);
     case 'scriptFailed':

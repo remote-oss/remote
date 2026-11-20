@@ -127,6 +127,13 @@ describe('the failure presenter', () => {
     );
   });
 
+  it('F-2401 AC-3: the reason of a host that does not meet the prerequisites is STR:S144 with exactly one final period', async () => {
+    deepStrictEqual(
+      await textFor({reason: {id: 'S144'}}),
+      'Could not establish connection to "box": The remote host does not meet the prerequisites for running VS Code Server.',
+    );
+  });
+
   it('F-2601 S031: a reason that is an id is translated through the table', async () => {
     deepStrictEqual(
       await textFor({reason: {id: 'S027'}}),

@@ -120,6 +120,7 @@ export function dependencies(
     onHostDownloadRefused: () => undefined,
     onInstallFolderInvalid: () => undefined,
     onInstallFolderRefused: () => undefined,
+    onPrerequisitesMissing: () => undefined,
     onCommandMissing: () => undefined,
     onLocalDownloadFailed: () => undefined,
     copyAvailable: () => Promise.resolve(true),

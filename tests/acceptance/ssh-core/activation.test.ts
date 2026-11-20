@@ -150,7 +150,7 @@ describe('the activation of Remote - SSH in a local window (card coverage-95)', 
     );
   });
 
-  it('F-2001 AC-22 (c95-virtual): in a virtual workspace the extension is enabled, Get Started with SSH is hidden and the other 12 local-window commands are listed', async () => {
+  it('F-2001 AC-22, F-2006 AC-12 (c95-virtual): in a virtual workspace the extension is enabled, Get Started with SSH is hidden and the other 12 local-window commands are listed', async () => {
     const virtual = await openMemoryWindow();
     try {
       await settled();

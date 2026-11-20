@@ -561,6 +561,7 @@ const LAUNCH_ORDER = [
   'ssh-killed-13',
   'ssh-killed-14',
   'ssh-locks',
+  'ssh-downloaders',
   'ssh-containers',
   'no-proposals',
   'wsl-linux',
@@ -1339,6 +1340,15 @@ describe('acceptance', () => {
     strictEqual(
       accountBlock('mute'),
       [...sharedLines('mute', 'harness-mute'), ...KEY_ALIAS_LINES].join('\n'),
+    );
+  });
+
+  it('#2854: Host nofetch logs in to harness-nofetch with the run key', () => {
+    strictEqual(
+      accountBlock('nofetch'),
+      [...sharedLines('nofetch', 'harness-nofetch'), ...KEY_ALIAS_LINES].join(
+        '\n',
+      ),
     );
   });
 

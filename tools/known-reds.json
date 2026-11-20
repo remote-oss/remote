@@ -124,5 +124,14 @@
     "owner": "iris",
     "evidence": 42367771624,
     "added": "2026-11-14"
+  },
+  {
+    "launch": "ssh-core",
+    "file": "ssh-core/reconnect-giveup.test.ts",
+    "title": "F-2505 AC-12 (c2663-third-wrong): the third wrong password at the reconnection’s input makes core show Cannot reconnect at once, with no further attempt",
+    "card": 2753,
+    "owner": "triton",
+    "evidence": 44541680836,
+    "added": "2026-11-19"
   }
 ]
