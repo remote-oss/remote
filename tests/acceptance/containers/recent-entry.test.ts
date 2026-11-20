@@ -14,6 +14,7 @@ import {
   reopenInContainer,
   startInWindow,
 } from '../windows/harness.ts';
+import {editorFolderOf} from '../windows/editor-folder.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 
 const execFileAsync = promisify(execFile);
@@ -59,6 +60,61 @@ const SETUP_FAILED = {
   buttons: ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
 };
 
+/** One read of `containerStates`, with the seconds since the epoch it was made at. */
+interface StatesRead {
+  states: string[];
+  seconds: number;
+}
+
+async function statesRead(folder: string): Promise<StatesRead> {
+  const states = await containerStates(folder);
+  return {states, seconds: Math.floor(Date.now() / 1000)};
+}
+
+/**
+ * What to show when the two reads differ: both reads with their times, the Docker events of the host between them, and
+ * every container of any run that carries the folder's label, so a change of state, a new container and another row's
+ * container that matches the label can be told apart.
+ */
+async function statesDifference(
+  folder: string,
+  first: StatesRead,
+  second: StatesRead,
+): Promise<string> {
+  const events = await execFileAsync('docker', [
+    'events',
+    '--since',
+    String(first.seconds),
+    '--until',
+    String(second.seconds + 1),
+    '--filter',
+    'type=container',
+    '--format',
+    '{{.Time}} {{.Action}} {{.Actor.ID}} {{.Actor.Attributes.name}}',
+  ]).then(
+    ({stdout}) => stdout.trim(),
+    (caught: unknown) => `the events could not be read: ${String(caught)}`,
+  );
+  const labelled = await execFileAsync('docker', [
+    'ps',
+    '--all',
+    '--no-trunc',
+    '--filter',
+    `label=devcontainer.local_folder=${editorFolderOf(folder)}`,
+    '--format',
+    '{{.ID}} {{.Names}} {{.Status}} run={{.Label "remote-oss.acceptance.run"}}',
+  ]).then(
+    ({stdout}) => stdout.trim(),
+    (caught: unknown) => `the list could not be read: ${String(caught)}`,
+  );
+  return [
+    `the states read at ${String(first.seconds)}: ${JSON.stringify(first.states)}`,
+    `the states read at ${String(second.seconds)}: ${JSON.stringify(second.states)}`,
+    `the container events between them:\n${events}`,
+    `every container with the folder's label, of any run:\n${labelled}`,
+  ].join('\n');
+}
+
 describe('The Open Recent entry and the label of a connected window (cards containers-43 and coverage-74)', function () {
   this.timeout(600_000);
 
@@ -79,7 +135,7 @@ describe('The Open Recent entry and the label of a connected window (cards conta
       );
       rmSync(folder, {recursive: true, force: true});
       const mark = containersLog().length;
-      const kept = await containerStates(folder);
+      const kept = await statesRead(folder);
       void inWindow(starter, 'acceptance.agent.openWindow', entry?.uri ?? '');
       const dialog = await waitForDialog(window, 180_000);
       const shown = {
@@ -105,6 +161,9 @@ describe('The Open Recent entry and the label of a connected window (cards conta
         'Disconnected from Dev Container: C43 Recent',
         120_000,
       );
+      const after = await statesRead(folder);
+      const containersKept =
+        JSON.stringify(after.states) === JSON.stringify(kept.states);
       deepStrictEqual(
         {
           shown,
@@ -113,9 +172,7 @@ describe('The Open Recent entry and the label of a connected window (cards conta
             SETUP_DETAILS.includes(text),
           ),
           dismissed,
-          containersKept:
-            JSON.stringify(await containerStates(folder)) ===
-            JSON.stringify(kept),
+          containersKept,
           logged:
             containersLog()
               .slice(mark)
@@ -139,6 +196,9 @@ describe('The Open Recent entry and the label of a connected window (cards conta
           containersKept: true,
           logged: true,
         },
+        containersKept
+          ? undefined
+          : `the folder's containers changed across the attempts:\n${await statesDifference(folder, kept, after)}`,
       );
     } finally {
       await closeWindow(window).catch(() => undefined);
