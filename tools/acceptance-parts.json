@@ -477,6 +477,9 @@
     "ssh-locks": {
       "host-locks.test.ts": 12
     },
+    "ssh-downloaders": {
+      "no-downloader.test.ts": 6
+    },
     "ssh-newclient": {
       "jump-hosts-new-wording.test.ts": 0.7,
       "newer-keywords.test.ts": 1.6
