@@ -287,4 +287,31 @@ describe('the client install lock of a connect (card #2844, F-2408 BR-6 to BR-8,
       {kind: 'done', files: [pathOf(input)], removes: 1},
     );
   });
+
+  it('BR-6, BR-8 (gate 44641609918): a lock taken while the extension ends (its file created after the end began) is removed at once, removed only once, and the connect ends cancelled', async () => {
+    const clock = steppingClock();
+    const port = new MemoryLockPort(clock);
+    const {step, held} = stepOver(port, clock);
+    const input = inputFor('dev');
+    held.releaseAll();
+    const result = await step(
+      input,
+      () => undefined,
+      new AbortController().signal,
+    );
+    await drained();
+    deepStrictEqual(
+      {
+        result,
+        files: port.files(),
+        removes: port.calls.filter(call => call === `remove ${pathOf(input)}`)
+          .length,
+      },
+      {
+        result: {kind: 'failed', failure: {kind: 'cancelled'}},
+        files: [],
+        removes: 1,
+      },
+    );
+  });
 });

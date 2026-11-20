@@ -20,15 +20,24 @@ import type {ConnectSteps} from './steps.ts';
 export class HeldClientLocks {
   private readonly paths = new Set<string>();
   private readonly removeNow: (path: string) => void;
+  private ended = false;
 
   /** `removeNow` removes a file without waiting, as an ending extension must. */
   constructor(removeNow: (path: string) => void) {
     this.removeNow = removeNow;
   }
 
-  /** Notes the file at `path` as held. */
-  hold(path: string): void {
+  /**
+   * Notes the file at `path` as held, and whether it may be: a lock taken after the extension's end (its file created
+   * while the end ran) is removed at once and is not held.
+   */
+  hold(path: string): boolean {
+    if (this.ended) {
+      this.removeNow(path);
+      return false;
+    }
     this.paths.add(path);
+    return true;
   }
 
   /** Notes the file at `path` as no longer held, once the lock's own removal of it has run. */
@@ -36,8 +45,9 @@ export class HeldClientLocks {
     this.paths.delete(path);
   }
 
-  /** Removes the file of every lock still held: the extension's clean end. */
+  /** Removes the file of every lock still held, and of every lock taken from now on: the extension's end. */
   releaseAll(): void {
+    this.ended = true;
     for (const path of this.paths) {
       this.removeNow(path);
     }
@@ -79,7 +89,12 @@ export function holdClientLockStep(
         key,
         dependencies.clock,
         () => {
-          dependencies.held.hold(path);
+          if (!dependencies.held.hold(path)) {
+            resolve({kind: 'failed', failure: {kind: 'cancelled'}});
+            // The extension is ending and the file is gone already: the lock's own removal must not follow, since
+            // another window may have taken the lock by then.
+            return new Promise<void>(() => undefined);
+          }
           resolve({
             kind: 'done',
             value: {
