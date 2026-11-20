@@ -84,6 +84,17 @@ async function takenAndReleased(
   return result;
 }
 
+/** A step that holds the lock of the alias `dev`, with the controller of its connect's cancellation. */
+async function heldWithCancellation() {
+  const clock = steppingClock();
+  const port = new MemoryLockPort(clock);
+  const {step} = stepOver(port, clock);
+  const input = inputFor('dev');
+  const cancellation = new AbortController();
+  const result = await step(input, () => undefined, cancellation.signal);
+  return {port, input, cancellation, result};
+}
+
 /** A step whose lock of the alias `dev` another window already holds, with that window's hold. */
 async function heldByAnother() {
   const clock = steppingClock();
@@ -312,6 +323,34 @@ describe('the client install lock of a connect (card #2844, F-2408 BR-6 to BR-8,
         files: [],
         removes: 1,
       },
+    );
+  });
+
+  it('BR-6 (card #2915): a connect given up while it holds the lock gives it back, with no release of its own', async () => {
+    const {port, input, cancellation, result} = await heldWithCancellation();
+    const whileHeld = port.files();
+    cancellation.abort();
+    await drained();
+    deepStrictEqual(
+      {kind: result.kind, whileHeld, afterTheCancel: port.files()},
+      {kind: 'done', whileHeld: [pathOf(input)], afterTheCancel: []},
+    );
+  });
+
+  it('BR-6 (card #2915): a cancel that comes after the release removes nothing more: the file is removed once', async () => {
+    const {port, input, cancellation, result} = await heldWithCancellation();
+    if (result.kind === 'done') {
+      result.value.release();
+    }
+    cancellation.abort();
+    await drained();
+    deepStrictEqual(
+      {
+        files: port.files(),
+        removes: port.calls.filter(call => call === `remove ${pathOf(input)}`)
+          .length,
+      },
+      {files: [], removes: 1},
     );
   });
 });

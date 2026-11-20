@@ -95,6 +95,14 @@ export function holdClientLockStep(
             // another window may have taken the lock by then.
             return new Promise<void>(() => undefined);
           }
+          // A connect that is given up while it holds the lock gives it back, whatever its later steps do.
+          cancellation.addEventListener(
+            'abort',
+            () => {
+              hold.end?.();
+            },
+            {once: true},
+          );
           resolve({
             kind: 'done',
             value: {
