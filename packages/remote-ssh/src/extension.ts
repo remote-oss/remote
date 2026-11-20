@@ -572,6 +572,16 @@ async function registerConnectOf(
       workingDirectory: process.cwd(),
     },
   );
+  context.subscriptions.push({
+    dispose: () => {
+      machine.clientLocks.releaseAll();
+    },
+  });
+  // The extension host can end without the extension's deactivation (a closed window, a signal); the process's end
+  // still removes the client locks it holds, as the deactivation would.
+  process.once('exit', () => {
+    machine.clientLocks.releaseAll();
+  });
   const registration = await registerConnect(
     {
       resolverEditor: acceptanceResolverEditorOf(

@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {lockIdFor, withClientLock} from '../../src/index.ts';
+import {clientLockPath, lockIdFor, withClientLock} from '../../src/index.ts';
 import {FakeClock} from '../../src/testing/fake-clock.ts';
 import {MemoryLockPort} from '../../src/testing/memory-lock-port.ts';
 import {drain, settle} from './clock-driver.fixture.ts';
@@ -7,7 +7,7 @@ import {drain, settle} from './clock-driver.fixture.ts';
 // The folder and identity every row of this file uses.
 const FOLDER = '/srv/locks';
 const IDENTITY = 'u@h:22';
-const PATH = `${FOLDER}/${lockIdFor(IDENTITY)}.lock`;
+const PATH = `${FOLDER}/vscode-remote-ssh-${lockIdFor(IDENTITY)}-install.lock`;
 
 // Every polling row of this file holds the lock while the same work runs; onWaiting reports
 // through `onWaiting`.
@@ -15,7 +15,9 @@ function startLocked(
   port: MemoryLockPort,
   clock: FakeClock,
   onWaiting: () => void,
-): Promise<{kind: 'done'; value: string} | {kind: 'lockTimeout'}> {
+): Promise<
+  {kind: 'done'; value: string} | {kind: 'lockTimeout'} | {kind: 'cancelled'}
+> {
   return withClientLock(
     port,
     FOLDER,
@@ -51,6 +53,63 @@ describe('client lock (card server-05 table)', () => {
     );
   });
 
+  it('clientLockPath: vscode-remote-ssh-<id>-install.lock in the folder, the id of the identity', () => {
+    deepStrictEqual(
+      clientLockPath(FOLDER, IDENTITY),
+      `/srv/locks/vscode-remote-ssh-${lockIdFor(IDENTITY)}-install.lock`,
+    );
+  });
+
+  it('cancelled before the first try: cancelled, no file created', async () => {
+    const clock = new FakeClock();
+    const port = new MemoryLockPort(clock);
+    const cancellation = new AbortController();
+    cancellation.abort();
+    const result = await withClientLock(
+      port,
+      FOLDER,
+      IDENTITY,
+      clock,
+      () => Promise.resolve('value'),
+      () => undefined,
+      {cancellation: cancellation.signal},
+    );
+    deepStrictEqual(
+      {result, calls: port.calls},
+      {result: {kind: 'cancelled'}, calls: []},
+    );
+  });
+
+  it("cancelled while waiting on a held file: cancelled after the poll, the holder's file stays, onWaiting once", async () => {
+    const clock = new FakeClock();
+    const port = new MemoryLockPort(clock);
+    await port.createExclusive(PATH);
+    const cancellation = new AbortController();
+    let waited = 0;
+    const promise = withClientLock(
+      port,
+      FOLDER,
+      IDENTITY,
+      clock,
+      () => Promise.resolve('value'),
+      () => {
+        waited += 1;
+        cancellation.abort();
+      },
+      {cancellation: cancellation.signal},
+    );
+    const result = await settle(promise, clock, 500, 500);
+    deepStrictEqual(
+      {
+        result,
+        waited,
+        left: port.files(),
+        removes: port.calls.filter(call => call === `remove ${PATH}`).length,
+      },
+      {result: {kind: 'cancelled'}, waited: 1, left: [PATH], removes: 0},
+    );
+  });
+
   it('no file: withClientLock -> done with the work value; the file is created before work runs and removed after', async () => {
     const clock = new FakeClock();
     const port = new MemoryLockPort(clock);
@@ -80,7 +139,7 @@ describe('client lock (card server-05 table)', () => {
         result: {kind: 'done', value: 'value'},
         seenDuringWork: true,
         left: [],
-        first: `createExclusive ${PATH} ${IDENTITY}`,
+        first: `createExclusive ${PATH}`,
         removes: 1,
       },
     );
@@ -114,7 +173,7 @@ describe('client lock (card server-05 table)', () => {
   it('file exists, age 1000; the holder removes it on the 3rd ageMilliseconds call: onWaiting once, done, the clock advanced 1500 ms in 500 steps', async () => {
     const clock = new FakeClock();
     const port = new MemoryLockPort(clock);
-    await port.createExclusive(PATH, IDENTITY);
+    await port.createExclusive(PATH);
     port.setAge(PATH, 1000);
     let ageReads = 0;
     const originalAge = port.ageMilliseconds.bind(port);
@@ -154,7 +213,7 @@ describe('client lock (card server-05 table)', () => {
   it('file exists forever, age 1000: after 120000 ms of polling -> lockTimeout; onWaiting once; no remove call', async () => {
     const clock = new FakeClock();
     const port = new MemoryLockPort(clock);
-    await port.createExclusive(PATH, IDENTITY);
+    await port.createExclusive(PATH);
     port.setAge(PATH, 1000);
     let waited = 0;
     const promise = startLocked(port, clock, () => {
@@ -180,7 +239,7 @@ describe('client lock (card server-05 table)', () => {
   it('file exists, age 240000: removed, created, done (takeover); onWaiting not called', async () => {
     const clock = new FakeClock();
     const port = new MemoryLockPort(clock);
-    await port.createExclusive(PATH, IDENTITY);
+    await port.createExclusive(PATH);
     port.setAge(PATH, 240000);
     let waited = 0;
     const promise = startLocked(port, clock, () => {
@@ -196,7 +255,7 @@ describe('client lock (card server-05 table)', () => {
   it('file exists, age 239999: polls (no takeover); the age grows per poll -> takeover when it reaches 240000 -> done', async () => {
     const clock = new FakeClock();
     const port = new MemoryLockPort(clock);
-    await port.createExclusive(PATH, IDENTITY);
+    await port.createExclusive(PATH);
     port.setAge(PATH, 239999);
     const promise = startLocked(port, clock, () => undefined);
     const result = await settle(promise, clock, 500, 2000);
@@ -209,17 +268,17 @@ describe('client lock (card server-05 table)', () => {
   it('takeover race: after the remove, createExclusive returns exists (another waiter won); keep polling; when the file is later removed -> done; the takeover remove happens once (row counts the takeover remove only)', async () => {
     const clock = new FakeClock();
     const port = new MemoryLockPort(clock);
-    await port.createExclusive(PATH, IDENTITY);
+    await port.createExclusive(PATH);
     port.setAge(PATH, 240000);
     let createCalls = 0;
     const originalCreate = port.createExclusive.bind(port);
-    port.createExclusive = (path: string, text: string) => {
+    port.createExclusive = (path: string) => {
       createCalls += 1;
       if (createCalls === 2) {
         // The takeover re-create: the rival won it, so report an existing file.
         return Promise.resolve('exists');
       }
-      return originalCreate(path, text);
+      return originalCreate(path);
     };
     let waited = 0;
     const promise = startLocked(port, clock, () => {
@@ -228,9 +287,7 @@ describe('client lock (card server-05 table)', () => {
     const result = await settle(promise, clock, 500, 5000);
     // The row's "exactly one remove call" counts the takeover remove only: no remove while losing the
     // race and none before the file disappears; the finally-remove after the work is a second.
-    const lastCreate = port.calls.lastIndexOf(
-      `createExclusive ${PATH} ${IDENTITY}`,
-    );
+    const lastCreate = port.calls.lastIndexOf(`createExclusive ${PATH}`);
     deepStrictEqual(
       {
         result,
@@ -257,7 +314,7 @@ describe('client lock (card server-05 table)', () => {
   it('custom options {poll 100, giveUp 300, takeover 1000} with a file aged 10: three polls then lockTimeout at 300 ms', async () => {
     const clock = new FakeClock();
     const port = new MemoryLockPort(clock);
-    await port.createExclusive(PATH, IDENTITY);
+    await port.createExclusive(PATH);
     port.setAge(PATH, 10);
     let waited = 0;
     const promise = withClientLock(
@@ -296,7 +353,7 @@ describe('client lock (card server-05 table)', () => {
     const clock = new FakeClock();
     const port = new MemoryLockPort(clock);
     const absent = await port.ageMilliseconds('/absent.lock');
-    await port.createExclusive('/fresh.lock', IDENTITY);
+    await port.createExclusive('/fresh.lock');
     const fresh = await port.ageMilliseconds('/fresh.lock');
     deepStrictEqual([absent, fresh], [undefined, 0]);
   });
