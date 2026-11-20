@@ -72,7 +72,7 @@ export interface ServerStepDependencies {
   profile: ProductProfile;
   policy: ServerPolicyRecord;
   settings: HostServerSettings;
-  /** `remote.SSH.useExecServer`: the plan notes it and never applies it. */
+  /** `remote.SSH.useExecServer`: off, the plan takes the direct install; on, it takes the CLI path where the editor names a CLI source. */
   useExecServer: boolean;
   /** The user's download override and where it came from, when one is set. */
   override: OverrideValue | undefined;
@@ -566,7 +566,6 @@ export function createServerSteps(
           download: dependencies.download,
           credentials: dependencies.credentials,
           files: dependencies.files,
-          lockLoop: dependencies.lockLoop,
           logger: dependencies.logger,
           onPhase,
         },
@@ -577,7 +576,6 @@ export function createServerSteps(
         lease.channel,
         cliParametersFor(cliPlan, host),
         controlToken,
-        {lockLoop: dependencies.lockLoop},
         cancellation,
       ),
     stopCli: async (input, lease, host, cliPlan, processId, cancellation) => {

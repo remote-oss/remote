@@ -77,8 +77,9 @@ resolve).
   (ADR-0006 decision 4: keyed by product and commit). Its phases are today's: S041 while the host downloads the CLI
   (S044 and S029 on the client fallback), then S084 while it is unpacked, then S130 (F-2103 5.0 steps 3–4).
 - **V7 `start` gains `startCli`**: it starts the CLI under `/bin/sh` (F-2103 §6.7: bash isn't needed), with
-  `--cli-data-dir`, the server template variables, and the connection token file, inside the host lock loop (V5) as
-  `startOrReuse` is. It returns the same `StartedServer` shape: `endpoint` is the CLI's own listening port on
+  `--cli-data-dir`, the server template variables, and the connection token file. The CLI path's `installCli` and
+  `startCli` run outside the host lock loop (F-2408 BR-9, AC-9); the CLI's own locks and the client lock serialise
+  them. The direct install, and the CLI path's fallback to it, run inside the loop (V5). It returns the same `StartedServer` shape: `endpoint` is the CLI's own listening port on
   127.0.0.1, which the extension's control client reaches through W2's dialer (§4a; the window itself goes through the local bridge), `connectionToken` the CLI's token,
   `processId` the CLI's, `reused` false. The command line, ready line and protocol are contracts V7a (cli-01).
 - **After the window resolves,** the CLI downloads, verifies and starts the server itself (F-2103 5.0 steps 5–8). That

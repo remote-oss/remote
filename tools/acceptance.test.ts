@@ -560,6 +560,7 @@ const LAUNCH_ORDER = [
   'ssh-killed-12',
   'ssh-killed-13',
   'ssh-killed-14',
+  'ssh-locks',
   'ssh-downloaders',
   'ssh-containers',
   'no-proposals',

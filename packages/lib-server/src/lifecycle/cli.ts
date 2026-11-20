@@ -15,13 +15,7 @@ import {
   type TransferInput,
 } from '../transfer/transfer.ts';
 import {runStep, type StepRun} from './run-step.ts';
-import {
-  blockOfStart,
-  type HostLockLoop,
-  type RetriesExhausted,
-  scriptFailure,
-  type StartOutcome,
-} from './runtime.ts';
+import {blockOfStart, scriptFailure, type StartOutcome} from './runtime.ts';
 
 /** The variable the CLI reads its connection token from. */
 const TOKEN_VARIABLE = 'VSCODE_CLI_REQUIRE_TOKEN';
@@ -54,9 +48,9 @@ export interface CliPlacement {
   >;
 }
 
-/** What the start of the CLI needs from its surroundings. */
-export interface CliStartDependencies {
-  lockLoop: HostLockLoop;
+/** The install step run once: the CLI's install takes no host lock, so it never finds one busy. */
+function oneAttempt(step: () => Promise<StepRun>): Promise<StepRun> {
+  return step();
 }
 
 /** The outcome of an install of the CLI. */
@@ -64,14 +58,13 @@ export type CliInstallOutcome =
   {kind: 'placed'; path: string} | {kind: 'failed'; failure: TransferFailure};
 
 /**
- * Places the CLI on the host in the host lock loop: from the archive when the plan says to download, else by the
- * install step alone, which reports the file that is already there. `base.launcher` is the CLI's name in the
- * archive and `base.cli` its place.
+ * Places the CLI on the host, outside the host lock loop: the CLI's own locks and the client lock serialise it. It comes from the archive when the plan says to download, else from the install step alone, which reports the
+ * file that is already there. `base.launcher` is the CLI's name in the archive and `base.cli` its place.
  */
 export async function installCli(
   base: ScriptParameters,
   placement: CliPlacement,
-  dependencies: TransferDependencies,
+  dependencies: Omit<TransferDependencies, 'lockLoop'>,
   cancellation: AbortSignal,
 ): Promise<CliInstallOutcome> {
   const {plan} = placement;
@@ -94,9 +87,13 @@ export async function installCli(
     parameters: base,
     cancellation,
   };
+  const unlocked: TransferDependencies = {
+    ...dependencies,
+    lockLoop: oneAttempt,
+  };
   const outcome = await (plan.download
-    ? transfer(input, dependencies)
-    : installPlaced(input, dependencies));
+    ? transfer(input, unlocked)
+    : installPlaced(input, unlocked));
   return outcome.kind === 'transferred'
     ? {kind: 'placed', path: plan.cliPath}
     : outcome;
@@ -123,7 +120,7 @@ function startFailureOf(
 }
 
 /** The start outcome of a finished `startCli` run, with the host's connection token the script reported. */
-function outcomeOf(stepRun: StepRun | RetriesExhausted): StartOutcome {
+function outcomeOf(stepRun: StepRun): StartOutcome {
   const read = blockOfStart(stepRun);
   if ('unfinished' in read) {
     return read.unfinished;
@@ -165,19 +162,20 @@ export async function startCli(
   channel: HostChannel,
   base: ScriptParameters,
   token: string,
-  dependencies: CliStartDependencies,
   cancellation: AbortSignal,
 ): Promise<StartOutcome> {
-  const stepRun = await dependencies.lockLoop(
-    () =>
-      runStep(channel, {installMode: 'singleScript', step: 'startCli'}, base, {
+  return outcomeOf(
+    await runStep(
+      channel,
+      {installMode: 'singleScript', step: 'startCli'},
+      base,
+      {
         cancellation,
         environment: {[TOKEN_VARIABLE]: token},
         secretVariables: [TOKEN_VARIABLE],
-      }),
-    cancellation,
+      },
+    ),
   );
-  return outcomeOf(stepRun);
 }
 
 /** The outcome of a stop of the CLI: it was ended, it no longer ran as that CLI, or the step could not finish. */

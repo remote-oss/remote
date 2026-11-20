@@ -16,7 +16,7 @@ import {
   type TransferDependencies,
 } from '../../src/index.ts';
 import {parametersFor} from './fake-host.ts';
-import {answering, block, runOnce} from './scripted-steps.fixture.ts';
+import {answering, block} from './scripted-steps.fixture.ts';
 
 const ADDRESS = 'https://download.example.invalid/cli.tar.gz';
 
@@ -74,21 +74,10 @@ function started(
   token = TOKEN,
 ): Promise<{outcome: StartOutcome; channel: RecordingChannel}> {
   const channel = startingChannel(output);
-  return startCli(
-    channel,
-    baseParameters(),
-    token,
-    {lockLoop: runOnce},
-    NEVER_CANCELLED,
-  ).then(outcome => ({outcome, channel}));
+  return startCli(channel, baseParameters(), token, NEVER_CANCELLED).then(
+    outcome => ({outcome, channel}),
+  );
 }
-
-/** A lock loop's answer after three attempts that all met a held lock. */
-const EXHAUSTED = {
-  kind: 'retriesExhausted' as const,
-  last: {kind: 'noResultBlock' as const, exitStatus: 0},
-  attempts: 3,
-};
 
 describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
   describe('startCli', () => {
@@ -234,20 +223,6 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
       });
     });
 
-    it('V5: a lock loop that gives up is retriesExhausted', async () => {
-      const outcome = await startCli(
-        startingChannel(STARTED),
-        baseParameters(),
-        TOKEN,
-        {lockLoop: () => Promise.resolve(EXHAUSTED)},
-        NEVER_CANCELLED,
-      );
-      deepStrictEqual(outcome, {
-        kind: 'failed',
-        failure: {kind: 'retriesExhausted', attempts: 3},
-      });
-    });
-
     it('a channel that fails is channelFailed', async () => {
       const failure = {kind: 'channelClosed', detail: 'closed'} as const;
       const outcome = await startCli(
@@ -265,7 +240,6 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
         }),
         baseParameters(),
         TOKEN,
-        {lockLoop: runOnce},
         NEVER_CANCELLED,
       );
       deepStrictEqual(outcome, {
@@ -334,7 +308,7 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
       const redirects: RedirectRule[] = [];
       const phases: string[] = [];
       const results = [...downloadResults];
-      const dependencies: TransferDependencies = {
+      const dependencies: Omit<TransferDependencies, 'lockLoop'> = {
         channel,
         credentials: {readNetrc: () => Promise.resolve(undefined)},
         download: {
@@ -351,7 +325,6 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
           sha256: () => Promise.resolve(''),
           rename: () => Promise.resolve({kind: 'renamed'}),
         },
-        lockLoop: runOnce,
         logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
         onPhase: phase => {
           phases.push(phase.kind);
@@ -421,6 +394,17 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
           installed.phases.includes('copying'),
         ],
         [{kind: 'placed', path: CLI_PATH}, 1, true],
+      );
+    });
+
+    it('F-2408 BR-9 (ruling-2818-cli-no-host-lock): the install runs its step once, outside the host lock loop, so a busy answer is not tried again', async () => {
+      const installed = await install({download: false}, [
+        block('LockBusy'),
+        PLACED,
+      ]);
+      deepStrictEqual(
+        [scriptRequests(installed.channel).length, installed.outcome.kind],
+        [1, 'failed'],
       );
     });
 
