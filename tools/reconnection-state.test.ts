@@ -252,3 +252,50 @@ describe('the renderer log of the 30 s after the end, unfiltered (card #2753)', 
     );
   });
 });
+
+describe('what a pass prints and what only a failure explains (card #2753)', () => {
+  const TIMELINE_TITLE = 'the dialog and notifications of the window';
+  const UNFILTERED_TITLE =
+    'the window’s renderer log from the end to 30 s after it';
+
+  it('#2753: the glance that a passing row prints has neither the timeline nor the unfiltered renderer log, and the failure’s explanation has both', async () => {
+    const sample = reads();
+    const glance = await reconnectionGlance(sample, 1000);
+    const explanation = await reconnectionState(sample, 'win', 0, 1000);
+    deepStrictEqual(
+      [
+        glance.includes(TIMELINE_TITLE),
+        glance.includes(UNFILTERED_TITLE),
+        explanation.includes(TIMELINE_TITLE),
+        explanation.includes(UNFILTERED_TITLE),
+      ],
+      [false, false, true, true],
+    );
+  });
+
+  it('#2753: the unfiltered renderer log of the explanation is bounded to 80 lines of 240 characters, whatever the log holds', async () => {
+    const text = await reconnectionState(
+      reads({
+        rendererLines: () =>
+          Array.from(
+            {length: 120},
+            (value, index) =>
+              `2026-11-19 07:00:${String(1 + (index % 25)).padStart(2, '0')}.000 [info] ${'x'.repeat(400)}`,
+          ),
+      }),
+      'win',
+      0,
+      Date.parse('2026-11-19T07:00:00Z'),
+    );
+    const section = text
+      .split(
+        'the window’s renderer log from the end to 30 s after it, every line:\n',
+      )[1]
+      ?.split('\nthe last lines of the connection log')[0]
+      ?.split('\n');
+    deepStrictEqual(
+      [section?.length, section?.every(line => line.length <= 240)],
+      [80, true],
+    );
+  });
+});
