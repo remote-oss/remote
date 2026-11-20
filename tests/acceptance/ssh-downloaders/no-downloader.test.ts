@@ -478,42 +478,47 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
     );
   });
 
-  it('F-2402 AC-13 (c2854-more-actions): More Actions... opens the pick of actions with its placeholder and no item about curl or wget', async () => {
+  it('F-2402 AC-13 (c2854-more-actions): More Actions... and Escape each open the pick of actions with its placeholder and no item about curl or wget', async () => {
     await withSettings({}, async () => {
-      const name = 'c2854-more-actions';
-      appendScript([
-        {
-          surface: 'failureDialog',
-          match: 'Could not establish connection',
-          answer: {button: 'More Actions...'},
-          window: name,
-        },
-        {
-          surface: 'mitigationPick',
-          match: 'Pick an action',
-          answer: 'dismiss',
-          window: name,
-        },
-      ]);
-      await openWindow(ALIAS, name);
-      try {
-        await waitFor(
-          'the pick of actions',
-          () => recordLines('mitigationPick', name).length > 0,
-          120_000,
-        );
-        const pick = recordLines('mitigationPick', name)[0];
-        deepStrictEqual(
-          [
+      const picks: Array<[string | undefined, string[]]> = [];
+      for (const [name, answer] of [
+        ['c2854-more-actions', {button: 'More Actions...'}],
+        ['c2854-escape', 'dismiss'],
+      ] as const) {
+        appendScript([
+          {
+            surface: 'failureDialog',
+            match: 'Could not establish connection',
+            answer,
+            window: name,
+          },
+          {
+            surface: 'mitigationPick',
+            match: 'Pick an action',
+            answer: 'dismiss',
+            window: name,
+          },
+        ]);
+        await openWindow(ALIAS, name);
+        try {
+          await waitFor(
+            `the pick of actions after ${name}`,
+            () => recordLines('mitigationPick', name).length > 0,
+            120_000,
+          );
+          const pick = recordLines('mitigationPick', name)[0];
+          picks.push([
             pick?.question,
             (pick?.items ?? []).filter(item => /curl|wget/iu.test(item)),
-          ],
-          ['Pick an action to help resolve the problem.', []],
-          JSON.stringify(pick),
-        );
-      } finally {
-        await closeWindow(name).catch(() => undefined);
+          ]);
+        } finally {
+          await closeWindow(name).catch(() => undefined);
+        }
       }
+      deepStrictEqual(picks, [
+        ['Pick an action to help resolve the problem.', []],
+        ['Pick an action to help resolve the problem.', []],
+      ]);
     });
   });
 });
