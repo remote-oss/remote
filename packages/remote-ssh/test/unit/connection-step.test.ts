@@ -360,9 +360,7 @@ describe('the connection step', () => {
     claim.lease.emit({type: 'connected', socksPort: 41000, sshProcessId: 7331});
     await claimPending;
     deepStrictEqual(
-      claim
-        .logged()
-        .filter(line => line.startsWith('Local connection server')),
+      claim.logged().filter(line => line.startsWith('Local connection server')),
       [],
     );
   });

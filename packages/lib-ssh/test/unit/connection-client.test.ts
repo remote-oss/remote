@@ -254,6 +254,18 @@ describe('the window side of the shared connection (S9)', () => {
       ],
     );
   });
+  it('F-2102 §9: the starter starts the connection for itself, and the window that joins does not', async () => {
+    const {connection, outcome} = await connectFirst();
+    authenticate(sshRuns.started[0]);
+    await outcome;
+    await connection.storeSharedRecord(RECORD);
+    const second = await acquired();
+    await second.connect(new AbortController().signal);
+    deepStrictEqual(
+      [connection.startedByMe, second.startedByMe],
+      [true, false],
+    );
+  });
 
   it('starts ssh once, for the first window only', async () => {
     const {outcome} = await connectFirst();
