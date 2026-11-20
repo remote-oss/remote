@@ -1,5 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
-import {clientLockPath, lockIdFor, withClientLock} from '../../src/index.ts';
+import {
+  clientLockPath,
+  type LockFilePort,
+  lockIdFor,
+  withClientLock,
+} from '../../src/index.ts';
 import {FakeClock} from '../../src/testing/fake-clock.ts';
 import {MemoryLockPort} from '../../src/testing/memory-lock-port.ts';
 import {drain, settle} from './clock-driver.fixture.ts';
@@ -8,6 +13,7 @@ import {drain, settle} from './clock-driver.fixture.ts';
 const FOLDER = '/srv/locks';
 const IDENTITY = 'u@h:22';
 const PATH = `${FOLDER}/vscode-remote-ssh-${lockIdFor(IDENTITY)}-install.lock`;
+const TICKET = `${PATH}.takeover`;
 
 // Every polling row of this file holds the lock while the same work runs; onWaiting reports
 // through `onWaiting`.
@@ -37,6 +43,126 @@ async function outcomeOf(promise: Promise<unknown>): Promise<unknown> {
     return await promise;
   } catch (error) {
     return {rejected: error instanceof Error ? error.message : String(error)};
+  }
+}
+
+/** How many removals of the lock file `port` was asked for, of either kind. */
+function removalsOf(port: MemoryLockPort): number {
+  return port.calls.filter(
+    call => call === `remove ${PATH}` || call === `removeIfModified ${PATH}`,
+  ).length;
+}
+
+/** A promise a row opens when it chooses. */
+class Gate {
+  readonly opened: Promise<void>;
+  private openWith: () => void = () => undefined;
+
+  /** A gate not yet open. */
+  constructor() {
+    this.opened = new Promise(resolve => {
+      this.openWith = resolve;
+    });
+  }
+
+  /** Opens the gate. */
+  open(): void {
+    this.openWith();
+  }
+}
+
+/** A waiter's view of `shared` that stops before its next call once it has made `call`, until `go`. */
+function pausedAfter(shared: MemoryLockPort, call: string) {
+  const calls: string[] = [];
+  let paused = false;
+  const resumed = new Gate();
+  const reached = new Gate();
+  async function through<T>(
+    made: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    if (paused) {
+      await resumed.opened;
+    }
+    calls.push(made);
+    const result = await operation();
+    if (!paused && made === call) {
+      paused = true;
+      reached.open();
+    }
+    return result;
+  }
+  const port: LockFilePort = {
+    createExclusive: path =>
+      through(`createExclusive ${path}`, () => shared.createExclusive(path)),
+    ageMilliseconds: path =>
+      through(`ageMilliseconds ${path}`, () => shared.ageMilliseconds(path)),
+    modifiedMilliseconds: path =>
+      through(`modifiedMilliseconds ${path}`, () =>
+        shared.modifiedMilliseconds(path),
+      ),
+    remove: path => through(`remove ${path}`, () => shared.remove(path)),
+    removeIfModified: (path, modified) =>
+      through(`removeIfModified ${path}`, () =>
+        shared.removeIfModified(path, modified),
+      ),
+  };
+  return {
+    port,
+    calls,
+    reachedPause: reached.opened,
+    resume: () => {
+      resumed.open();
+    },
+  };
+}
+
+/** A window that waits for the lock over `port` and, once it holds it, notes `name` in `holders` and keeps it. */
+function waiter(
+  port: LockFilePort,
+  clock: FakeClock,
+  name: string,
+  holders: string[],
+): void {
+  void withClientLock(
+    port,
+    FOLDER,
+    IDENTITY,
+    clock,
+    () => {
+      holders.push(name);
+      return new Promise<string>(() => undefined);
+    },
+    () => undefined,
+  );
+}
+
+/** A lock port whose file is four minutes old, on a clock of its own. */
+async function staleLock() {
+  const clock = new FakeClock();
+  const shared = new MemoryLockPort(clock);
+  await shared.createExclusive(PATH);
+  shared.setAge(PATH, 240000);
+  return {clock, shared};
+}
+
+/** A stale lock with a waiter, `late`, stopped right after it read the file as four minutes old. */
+async function lateWaiter() {
+  const {clock, shared} = await staleLock();
+  const holders: string[] = [];
+  const late = pausedAfter(shared, `ageMilliseconds ${PATH}`);
+  waiter(late.port, clock, 'late', holders);
+  await late.reachedPause;
+  return {clock, shared, holders, late};
+}
+
+/** A port whose takeover ticket cannot be made. */
+class NoTicketPort extends MemoryLockPort {
+  /** Rejects a create of the ticket; any other create is the memory port's. */
+  override createExclusive(path: string): Promise<'created' | 'exists'> {
+    return path === TICKET
+      ? Promise.reject(new Error('no ticket'))
+      : super.createExclusive(path);
   }
 }
 
@@ -104,7 +230,7 @@ describe('client lock (card server-05 table)', () => {
         result,
         waited,
         left: port.files(),
-        removes: port.calls.filter(call => call === `remove ${PATH}`).length,
+        removes: removalsOf(port),
       },
       {result: {kind: 'cancelled'}, waited: 1, left: [PATH], removes: 0},
     );
@@ -162,7 +288,7 @@ describe('client lock (card server-05 table)', () => {
         seenDuringWork: fileSeenDuringWork,
         left: port.files(),
         first: port.calls.at(0),
-        removes: port.calls.filter(call => call === `remove ${PATH}`).length,
+        removes: removalsOf(port),
       },
       {
         result: {kind: 'done', value: 'value'},
@@ -193,7 +319,7 @@ describe('client lock (card server-05 table)', () => {
       {
         result: await outcomeOf(promise),
         left: port.files(),
-        removes: port.calls.filter(call => call === `remove ${PATH}`).length,
+        removes: removalsOf(port),
       },
       {result: {rejected: 'the work failed'}, left: [], removes: 1},
     );
@@ -253,7 +379,7 @@ describe('client lock (card server-05 table)', () => {
       {
         result,
         waited,
-        removes: port.calls.filter(call => call === `remove ${PATH}`).length,
+        removes: removalsOf(port),
         clock: clock.now(),
       },
       {
@@ -302,6 +428,9 @@ describe('client lock (card server-05 table)', () => {
     let createCalls = 0;
     const originalCreate = port.createExclusive.bind(port);
     port.createExclusive = (path: string) => {
+      if (path !== PATH) {
+        return originalCreate(path);
+      }
       createCalls += 1;
       if (createCalls === 2) {
         // The takeover re-create: the rival won it, so report an existing file.
@@ -325,8 +454,7 @@ describe('client lock (card server-05 table)', () => {
         takeoverRemovesBeforeLastCreate: port.calls
           .slice(0, lastCreate)
           .filter(call => call === `remove ${PATH}`).length,
-        totalRemoves: port.calls.filter(call => call === `remove ${PATH}`)
-          .length,
+        totalRemoves: removalsOf(port),
         left: port.files(),
       },
       {
@@ -367,7 +495,7 @@ describe('client lock (card server-05 table)', () => {
         result,
         clock: clock.now(),
         waited,
-        removes: port.calls.filter(call => call === `remove ${PATH}`).length,
+        removes: removalsOf(port),
       },
       {
         result: {kind: 'lockTimeout'},
@@ -385,5 +513,143 @@ describe('client lock (card server-05 table)', () => {
     await port.createExclusive('/fresh.lock');
     const fresh = await port.ageMilliseconds('/fresh.lock');
     deepStrictEqual([absent, fresh], [undefined, 0]);
+  });
+});
+
+describe('the takeover of a stale client lock (card #2918, ruling-2918-takeover-ticket, F-2408 BR-6, BR-8)', () => {
+  it('two waiters that both read the file as four minutes old: the faster takes it over, and the later one, under the ticket, finds it fresh and waits', async () => {
+    const {clock, shared, holders, late} = await lateWaiter();
+    waiter(shared, clock, 'fast', holders);
+    await drain();
+    late.resume();
+    await drain();
+    deepStrictEqual(
+      {holders, files: shared.files()},
+      {holders: ['fast'], files: [PATH]},
+    );
+  });
+
+  it('while a takeover holds the ticket and the lock is absent, a waiter that read it stale touches nothing, a new window creates it, and the taker waits', async () => {
+    const {clock, shared} = await staleLock();
+    const holders: string[] = [];
+    const other = pausedAfter(shared, `ageMilliseconds ${PATH}`);
+    const taker = pausedAfter(shared, `remove ${PATH}`);
+    waiter(other.port, clock, 'other', holders);
+    await other.reachedPause;
+    waiter(taker.port, clock, 'taker', holders);
+    await taker.reachedPause;
+    const atThePause = shared.files();
+    other.resume();
+    await drain();
+    waiter(shared, clock, 'new', holders);
+    await drain();
+    taker.resume();
+    await drain();
+    deepStrictEqual(
+      {
+        atThePause,
+        holders,
+        files: shared.files(),
+        otherRemoved: other.calls.filter(call => call.startsWith('remove')),
+      },
+      {atThePause: [TICKET], holders: ['new'], files: [PATH], otherRemoved: []},
+    );
+  });
+
+  it('a lock released while a waiter takes the ticket is not removed under it, and the next round creates it', async () => {
+    const {shared, holders, late} = await lateWaiter();
+    await shared.remove(PATH);
+    late.resume();
+    await drain();
+    deepStrictEqual(
+      {
+        holders,
+        files: shared.files(),
+        lockRemoves: late.calls.filter(call => call === `remove ${PATH}`),
+      },
+      {holders: ['late'], files: [PATH], lockRemoves: []},
+    );
+  });
+
+  it('a ticket ten seconds old is broken and the waiter takes over at its next poll; one 9999 ms old is left', async () => {
+    const ticketKept: boolean[] = [];
+    const holdersAfterPoll: string[][] = [];
+    for (const ticketAge of [9999, 10000]) {
+      const {clock, shared} = await staleLock();
+      await shared.createExclusive(TICKET);
+      shared.setAge(TICKET, ticketAge);
+      const holders: string[] = [];
+      waiter(shared, clock, 'waiter', holders);
+      await drain();
+      ticketKept.push(shared.files().includes(TICKET));
+      clock.advance(500);
+      await drain();
+      holdersAfterPoll.push(holders);
+    }
+    deepStrictEqual(
+      {ticketKept, holdersAfterPoll},
+      {ticketKept: [true, false], holdersAfterPoll: [[], ['waiter']]},
+    );
+  });
+
+  it('a ticket that cannot be made rejects with the error and leaves the lock', async () => {
+    const clock = new FakeClock();
+    const port = new NoTicketPort(clock);
+    await port.createExclusive(PATH);
+    port.setAge(PATH, 240000);
+    deepStrictEqual(
+      {
+        outcome: await outcomeOf(startLocked(port, clock, () => undefined)),
+        files: port.files(),
+      },
+      {outcome: {rejected: 'no ticket'}, files: [PATH]},
+    );
+  });
+
+  it("a holder whose lock was taken over leaves the taker's file at its late release", async () => {
+    const clock = new FakeClock();
+    const shared = new MemoryLockPort(clock);
+    const firstEnd = new Gate();
+    const first = withClientLock(
+      shared,
+      FOLDER,
+      IDENTITY,
+      clock,
+      () => firstEnd.opened.then(() => 'first'),
+      () => undefined,
+    );
+    await drain();
+    clock.advance(240000);
+    const holders: string[] = [];
+    waiter(shared, clock, 'second', holders);
+    await drain();
+    firstEnd.open();
+    const firstOutcome = await first;
+    deepStrictEqual(
+      {firstOutcome, holders, files: shared.files()},
+      {
+        firstOutcome: {kind: 'done', value: 'first'},
+        holders: ['second'],
+        files: [PATH],
+      },
+    );
+  });
+
+  it('a release of its own unchanged file removes it, by the modification time read at its create', async () => {
+    const clock = new FakeClock();
+    const shared = new MemoryLockPort(clock);
+    const outcome = await startLocked(shared, clock, () => undefined);
+    deepStrictEqual(
+      {outcome, files: shared.files(), calls: shared.calls},
+      {
+        outcome: {kind: 'done', value: 'value'},
+        files: [],
+        calls: [
+          `createExclusive ${PATH}`,
+          `modifiedMilliseconds ${PATH}`,
+          `removeIfModified ${PATH}`,
+        ],
+      },
+    );
   });
 });
