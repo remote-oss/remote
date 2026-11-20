@@ -411,12 +411,13 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
         await openWindow(ALIAS, name, ACCOUNT);
         await connectedWithin(name, INSTALL_MILLISECONDS, ACCOUNT);
         await closeWindow(name);
-        await onHostAs(
-          ACCOUNT,
-          'pkill',
-          '-f',
-          `${DATA_FOLDER.replace('/harness/', `/${ACCOUNT}/`).replace('/.', '/[.]')}/bin/`,
-        ).catch(() => undefined);
+        const servers = `${DATA.replace('/.', '/[.]')}/bin/`;
+        await onHostAs(ACCOUNT, 'pkill', '-f', servers).catch(() => undefined);
+        // The row is about a server that is installed and not running: a pkill that missed would leave it running.
+        const stopped = await onHostAs(ACCOUNT, 'pgrep', '-f', servers).then(
+          () => 'running',
+          () => 'stopped',
+        );
         await userSettings({'remote.SSH.localServerDownload': 'off'});
         const again = 'c2854-legacy-stopped-again';
         appendScript(dismissals(again));
@@ -424,8 +425,13 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
         try {
           await connectedWithin(again, INSTALL_MILLISECONDS, ACCOUNT);
           deepStrictEqual(
-            recordLines('failureDialog', again).map(line => line.question),
-            [],
+            {
+              stopped,
+              dialogs: recordLines('failureDialog', again).map(
+                line => line.question,
+              ),
+            },
+            {stopped: 'stopped', dialogs: []},
           );
         } finally {
           await closeWindow(again).catch(() => undefined);
