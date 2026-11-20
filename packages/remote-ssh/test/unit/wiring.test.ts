@@ -2,6 +2,7 @@ import type {TunnelOptions} from '../../src/forwarding/default-forwards.ts';
 import type {ReadSignal} from '../../src/forwarding/default-forwards-timing.ts';
 import {deepStrictEqual, rejects, throws} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
+import {MemoryLockPort} from 'lib-server/testing/memory-lock-port';
 import {parseDefaultForwards} from 'lib-forwarding';
 import {FakeDialer, FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import type {HostChannel} from 'lib-host';
@@ -34,7 +35,12 @@ import {
   connectWaitsFor,
 } from '../../src/pipeline/bounds.ts';
 import {serverDownloadProgress} from '../../src/cli/server-download-progress.ts';
-import type {LoginLease} from '../../src/pipeline/connection-step.ts';
+import {
+  connectionKeyOf,
+  type LoginLease,
+} from '../../src/pipeline/connection-step.ts';
+import {HeldClientLocks} from '../../src/pipeline/client-lock-step.ts';
+import {clientLockPath, lockIdFor} from 'lib-server';
 import type {RawServerSettings} from '../../src/pipeline/host-settings.ts';
 import {CONNECT_WAIT_TIMEOUT} from '../../src/pipeline/failure.ts';
 import type {ConnectSteps} from '../../src/pipeline/steps.ts';
@@ -107,6 +113,8 @@ interface WiringSeen {
   terminals: RecordingTerminals;
   /** The clock the terminal step's waits run on. */
   clock: FakeClock;
+  /** The client lock files of the connects. */
+  lockFiles: MemoryLockPort;
   /** The loopback the CLI path connects and listens on. */
   cliLocal: FakeLocalPort;
   /** The kinds of the failures shown after the window resolved. */
@@ -157,6 +165,10 @@ function portsOf(
     sink: new MemorySink(),
     terminals: new RecordingTerminals(),
     clock: new FakeClock(),
+    lockFiles: new MemoryLockPort({
+      now: () => 0,
+      wait: () => Promise.resolve(),
+    }),
     cliLocal: changes.cliLocal ?? new FakeLocalPort(),
     presented: [],
     progress: [],
@@ -337,6 +349,12 @@ function portsOf(
       chooseLocalPort: () => Promise.resolve({port: 50000}),
       logger,
     },
+    clientLock: {
+      port: seen.lockFiles,
+      folder: '/tmp',
+      clock: {now: () => seen.clock.now(), wait: () => Promise.resolve()},
+      held: new HeldClientLocks(() => undefined),
+    },
     cliPath: {
       local: seen.cliLocal,
       scheduler: seen.clock.scheduler(),
@@ -431,6 +449,35 @@ describe("the composition of a connect's steps", () => {
       ['remote.defaultExtensionsIfInstalledLocally', ['a.b']],
       ['remote.SSH.defaultExtensionsIfInstalledLocally', undefined],
     ]);
+  });
+
+  it("F-2408 BR-6: the client lock step holds the alias's file in the editor's temporary folder and logs its path", async () => {
+    const {ports, seen} = portsOf();
+    const input = inputFor('dev');
+    const path = clientLockPath('/tmp', connectionKeyOf(input));
+    const held = await stepsOf(ports).holdClientLock(
+      input,
+      () => undefined,
+      new AbortController().signal,
+    );
+    const whileHeld = seen.lockFiles.files();
+    if (held.kind === 'done') {
+      held.value.release();
+    }
+    await new Promise(resolve => setImmediate(resolve));
+    deepStrictEqual(
+      {
+        kind: held.kind,
+        whileHeld,
+        afterRelease: seen.lockFiles.files(),
+        logged: seen.sink.lines.some(
+          line =>
+            line.message ===
+            `Acquiring local install lock ${lockIdFor(connectionKeyOf(input))} in /tmp`,
+        ),
+      },
+      {kind: 'done', whileHeld: [path], afterRelease: [], logged: true},
+    );
   });
 
   it("connect-14: checkInstallFolder reads the server settings of this connect's host alias", () => {

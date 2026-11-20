@@ -4,7 +4,7 @@ import type {Clock, LockFilePort} from '../locks/client-lock.ts';
  * A lock file held in memory for tests: `createExclusive` is atomic per call (the first caller
  * wins), `remove` deletes it, and `ageMilliseconds` reports the age a test set on the file plus
  * the clock's advance since the test set it; a file a create left with no age set reports
- * zero. Every call is recorded in `calls`, the create's text among them.
+ * zero. Every call is recorded in `calls`.
  */
 export class MemoryLockPort implements LockFilePort {
   /** The current lock files, by path. */
@@ -30,12 +30,9 @@ export class MemoryLockPort implements LockFilePort {
     return [...this.present];
   }
 
-  /**
-   * Create the file if absent: `created` for the first caller, `exists` for a later one. The
-   * text a create writes is recorded in `calls` and not kept on the file.
-   */
-  createExclusive(path: string, text: string): Promise<'created' | 'exists'> {
-    this.calls.push(`createExclusive ${path} ${text}`);
+  /** Create the file if absent: `created` for the first caller, `exists` for a later one. */
+  createExclusive(path: string): Promise<'created' | 'exists'> {
+    this.calls.push(`createExclusive ${path}`);
     if (this.present.has(path)) {
       return Promise.resolve('exists');
     }

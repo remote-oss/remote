@@ -11,6 +11,7 @@ import {FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeEndpointPort} from 'lib-helper/testing/fake-endpoint';
 import {MemoryFilePort} from 'lib-helper/testing/memory-file-port';
+import {MemoryLockPort} from 'lib-server/testing/memory-lock-port';
 import {clientEnvironment} from 'lib-helper/testing/client-environment';
 import type {SettingHost, SettingInspection} from 'lib-identifiers';
 import {createLogger, type Level} from 'lib-log';
@@ -50,6 +51,7 @@ import {
   SSH_PROGRAM,
   spawnerOf,
 } from './locate.fixture.ts';
+import {HeldClientLocks} from '../../src/pipeline/client-lock-step.ts';
 import {INPUT, SILENT_PROMPTS, TERMS} from './pipeline.fixture.ts';
 import {PROFILE, surfacesOf} from './server-steps.fixture.ts';
 
@@ -153,6 +155,11 @@ function assemblyInputs(
     download: {} as unknown as ConnectMachine['download'],
     scheduler: clock.scheduler(),
     clock: {now: () => clock.now(), wait: () => Promise.resolve()},
+    lockFiles: new MemoryLockPort({
+      now: () => clock.now(),
+      wait: () => Promise.resolve(),
+    }),
+    clientLocks: new HeldClientLocks(() => undefined),
     local: new FakeLocalPort(),
     prober: changes.prober ?? new FakeProber({}),
     newTemporaryToken: () => 'token',
@@ -214,7 +221,7 @@ describe('the Kill Local Connection Server of the assembled connect (card connec
   /** The assembly over a helper client on a file port the test can read afterwards. */
   function killing(): {
     files: MemoryFilePort;
-    kill: (hostString: string) => Promise<void>;
+    kill: (hostString: string) => Promise<'found' | 'none'>;
   } {
     const files = new MemoryFilePort();
     const assembly = assemblyOverFiles(files);

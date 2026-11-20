@@ -137,6 +137,8 @@ export interface Recording {
   secrets: number;
   /** The agent link plans the connect started a link for, in order. */
   links: AgentLinkPlan[];
+  /** The client lock's hold and release, each with the step called last before it. */
+  clientLock: string[];
 }
 
 /** The plans of a connect whose session forwards an agent and a display. */
@@ -312,6 +314,19 @@ export function steps(
     holdLookupFailure: failure => Promise.resolve(failure),
     decideTerms: () =>
       Promise.resolve(note('decideTerms', {kind: 'done', value: TERMS})),
+    holdClientLock: () => {
+      recording.clientLock.push(`held after ${String(recording.calls.at(-1))}`);
+      return Promise.resolve({
+        kind: 'done',
+        value: {
+          release: () => {
+            recording.clientLock.push(
+              `released after ${String(recording.calls.at(-1))}`,
+            );
+          },
+        },
+      });
+    },
     openConnection: () =>
       Promise.resolve(note('openConnection', {kind: 'done', value: lease})),
     probe: () => Promise.resolve(note('probe', {kind: 'probed', host: HOST})),
@@ -413,6 +428,7 @@ export function emptyRecording(): Recording {
     presented: [],
     secrets: 0,
     links: [],
+    clientLock: [],
   };
 }
 

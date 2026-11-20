@@ -5,6 +5,8 @@
 
 /** A started client process. */
 export interface ProcessHandle {
+  /** The process id the system gave the process at its start; absent from a spawner that reports none. */
+  processId?: number;
   /** Calls `listener` with each piece of standard output, in order. */
   onOutput(listener: (chunk: string) => void): void;
   /** Calls `listener` with each piece of standard error, in order. */

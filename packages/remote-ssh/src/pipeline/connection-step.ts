@@ -82,17 +82,27 @@ export interface LoginLease {
   refuse(promptId: number): Promise<boolean>;
 }
 
+/** The key of the connection a connect acquires: the input's own, else the target's connection identity. */
+export function connectionKeyOf(input: ConnectInput): string {
+  return input.connectionKey ?? payloadOf(sshTargetOf(input.target));
+}
+
 /** The step that opens the connection of a connect. */
 export function openConnectionStep(
   dependencies: ConnectionStepDependencies,
 ): ConnectSteps['openConnection'] {
   return async (input, terms, cancellation) => {
-    const hostString =
-      input.connectionKey ?? payloadOf(sshTargetOf(input.target));
+    const hostString = connectionKeyOf(input);
     const acquired = await dependencies.acquire({
       ...dependencies.requestFor(input, terms),
       hostString,
       cancellation,
+      // The stale line is written as the replacement is claimed, before the new helper starts and any of its lines.
+      onStaleReplaced: () => {
+        dependencies.logger.info(
+          'Local connection server record was stale and replaced',
+        );
+      },
     });
     if (acquired.kind === 'refused') {
       return {kind: 'failed', failure: acquired.refusal};
@@ -147,6 +157,16 @@ export function openConnectionStep(
     if (outcome.kind === 'failed') {
       end();
       return {kind: 'failed', failure: ofConnection(outcome.failure)};
+    }
+    // The pids are known only once the connection is set up, and the line goes with the mode: a starter logs its start,
+    // a joiner its reuse. A helper of an earlier build gave neither pid, and its connect logs none of the lines.
+    const helperProcessId = connection.helperProcessId;
+    if (helperProcessId !== undefined && outcome.sshProcessId !== undefined) {
+      dependencies.logger.info(
+        connection.startedByMe
+          ? `Local connection server started: pid ${String(helperProcessId)}, ssh pid ${String(outcome.sshProcessId)}`
+          : `Local connection server reused: pid ${String(helperProcessId)}, ssh pid ${String(outcome.sshProcessId)}`,
+      );
     }
     dependencies.adoptRunFacts(outcome.runFacts);
     token = outcome.sharedRecord?.connectionToken;
