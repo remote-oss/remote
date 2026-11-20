@@ -82,13 +82,17 @@ export interface LoginLease {
   refuse(promptId: number): Promise<boolean>;
 }
 
+/** The key of the connection a connect acquires: the input's own, else the target's connection identity. */
+export function connectionKeyOf(input: ConnectInput): string {
+  return input.connectionKey ?? payloadOf(sshTargetOf(input.target));
+}
+
 /** The step that opens the connection of a connect. */
 export function openConnectionStep(
   dependencies: ConnectionStepDependencies,
 ): ConnectSteps['openConnection'] {
   return async (input, terms, cancellation) => {
-    const hostString =
-      input.connectionKey ?? payloadOf(sshTargetOf(input.target));
+    const hostString = connectionKeyOf(input);
     const acquired = await dependencies.acquire({
       ...dependencies.requestFor(input, terms),
       hostString,
