@@ -1391,6 +1391,35 @@ describe('the hint of an install that stopped for a program the host lacks (card
   });
 });
 
+describe('the hint of a host the server’s requirements check refused (card #2879)', () => {
+  /** How many times `onPrerequisitesMissing` was told when the host answered `status` to the start. */
+  async function told(status: string): Promise<number> {
+    let count = 0;
+    const steps = createServerSteps(
+      dependencies({
+        onPrerequisitesMissing: () => {
+          count += 1;
+        },
+      }),
+    );
+    await steps.start(
+      INPUT,
+      leaseOn(channelAnswering(lines(status))),
+      HOST,
+      false,
+      NEVER_CANCELLED,
+    );
+    return count;
+  }
+
+  it('F-2401 7.E1: a start that ends in LinuxPrereqs tells the prerequisites, once, and another failure of the start tells nothing', async () => {
+    deepStrictEqual(
+      [await told('LinuxPrereqs'), await told('ServerFailedToStart')],
+      [1, 0],
+    );
+  });
+});
+
 describe('the stall bounds of the transfer (card connect-122)', () => {
   /** The stall bound the client download is asked with under `policy`. */
   async function downloadStallUnder(

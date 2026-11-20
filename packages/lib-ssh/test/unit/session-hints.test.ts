@@ -103,6 +103,7 @@ describe('the numbers of the error statuses (card connect-135)', () => {
       ['PreconnectScriptFailure', 12],
       ['InvalidCustomServerPath', 13],
       ['CommandMissing', 14],
+      ['LinuxPrereqs', 15],
     ]);
   });
 
