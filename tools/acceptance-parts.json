@@ -475,7 +475,8 @@
       "killed.test.ts": 5.5
     },
     "ssh-locks": {
-      "host-locks.test.ts": 12
+      "host-locks.test.ts": 12,
+      "session-locks.test.ts": 7
     },
     "ssh-downloaders": {
       "no-downloader.test.ts": 6
