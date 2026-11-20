@@ -68,10 +68,19 @@ const WAITS = {probeMilliseconds: 7000, tunnelMilliseconds: 8000};
 /** A lease that answers requests from a script and lets a test send the helper's events. */
 class FakeLease {
   readonly leaseId = 1;
-  readonly payload = {
+  readonly payload: {
+    socksPort: number;
+    runFacts: string;
+    /** The helper's pid, once a row gives one; none otherwise. */
+    helperProcessId?: number;
+  } = {
     socksPort: 41000,
     runFacts: JSON.stringify(RUN_FACTS),
   };
+  /** Whether this window's claim started the helper; the join's rows turn it off. */
+  readonly startedByMe: boolean;
+  /** The ssh pid the connected event and the record's answer carry; none when unset. */
+  sshProcessId: number | undefined = undefined;
   released = 0;
   readonly asked: PlainData[] = [];
   /** What the helper answers to the first requests to connect, in order; it accepts after these. */
@@ -81,6 +90,11 @@ class FakeLease {
   /** What the helper's opening found when the platform was unknown; null when it found nothing. */
   detectedPlatform: string | null = null;
   private readonly listeners: Array<(event: unknown) => void> = [];
+
+  /** A lease, whose window started the helper when `startedByMe` holds. */
+  constructor(startedByMe = true) {
+    this.startedByMe = startedByMe;
+  }
 
   onEvent(listener: (event: unknown) => void): void {
     this.listeners.push(listener);
@@ -93,11 +107,16 @@ class FakeLease {
       type === 'connect'
         ? (this.connectReplies.shift() ?? {type: 'accepted'})
         : type === 'sharedRecord' &&
-            (this.storedRecord !== undefined || this.detectedPlatform !== null)
+            (this.storedRecord !== undefined ||
+              this.detectedPlatform !== null ||
+              this.sshProcessId !== undefined)
           ? {
               type: 'sharedRecord',
               record: this.storedRecord ?? null,
               detectedPlatform: this.detectedPlatform,
+              ...(this.sshProcessId === undefined
+                ? {}
+                : {sshProcessId: this.sshProcessId}),
             }
           : {type: 'accepted'};
     return Promise.resolve({kind: 'reply', body: reply});
@@ -148,8 +167,10 @@ function fixture(
     | 'cancelled' = 'acquired',
   channelFailureMessage?: string,
   level: Level = 'info',
+  staleReplaced = false,
+  startedByMe = true,
 ): Fixture {
-  const lease = new FakeLease();
+  const lease = new FakeLease(startedByMe);
   const requests: Array<ConnectionAcquireRequest<StepFailure>> = [];
   const adopted: RunFacts[] = [];
   const notices: ConnectionNotice[] = [];
@@ -165,6 +186,9 @@ function fixture(
     },
     acquire: request => {
       requests.push(request);
+      if (staleReplaced) {
+        request.onStaleReplaced?.();
+      }
       return Promise.resolve(
         acquired === 'acquired'
           ? {
@@ -292,6 +316,54 @@ describe('the connection step', () => {
   function sshLogged(ready: ReturnType<typeof fixture>): string[] {
     return ready.logged().filter(line => line.startsWith('[ssh] '));
   }
+
+  it('F-2102 §9: started, reused and stale are logged', async () => {
+    const claim = fixture('acquired', undefined, 'info', true);
+    claim.lease.payload.helperProcessId = 4242;
+    claim.lease.sshProcessId = 7331;
+    const claimPending = claim.connecting();
+    await settled();
+    claim.lease.emit({
+      type: 'connected',
+      socksPort: 41000,
+      sshProcessId: 7331,
+    });
+    await claimPending;
+
+    const join = fixture('acquired', undefined, 'info', false, false);
+    join.lease.payload.helperProcessId = 4242;
+    join.lease.sshProcessId = 7331;
+    join.lease.connectReplies = [{type: 'refused', reason: 'alreadyConnected'}];
+    await join.connecting();
+
+    function linesOf(ready: ReturnType<typeof fixture>): string[] {
+      return ready
+        .logged()
+        .filter(line => line.startsWith('Local connection server'));
+    }
+    deepStrictEqual(
+      [linesOf(claim), linesOf(join)],
+      [
+        [
+          'Local connection server record was stale and replaced',
+          'Local connection server started: pid 4242, ssh pid 7331',
+        ],
+        ['Local connection server reused: pid 4242, ssh pid 7331'],
+      ],
+    );
+  });
+
+  it('F-2102 §9: the starter logs no line when the helper holds no local connection server, even with an ssh pid', async () => {
+    const claim = fixture('acquired', undefined, 'info', false, true);
+    const claimPending = claim.connecting();
+    await settled();
+    claim.lease.emit({type: 'connected', socksPort: 41000, sshProcessId: 7331});
+    await claimPending;
+    deepStrictEqual(
+      claim.logged().filter(line => line.startsWith('Local connection server')),
+      [],
+    );
+  });
 
   it('#2598 (F-2109 AC-12): the window logs a LocalCommand’s lines as the helper sends them, apart from ssh’s own, and not after the connection is given back', async () => {
     const ready = fixture('acquired', undefined, 'info');

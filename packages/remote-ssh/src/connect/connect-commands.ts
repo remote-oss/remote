@@ -5,6 +5,7 @@
  */
 
 import {sshRemoteCodec} from 'lib-authority';
+import type {Logger} from 'lib-log';
 import type {HostListResult, SshTarget} from 'lib-ssh';
 import {commands} from '../identifiers.generated.ts';
 import type {ConnectTarget} from '../pipeline/steps.ts';
@@ -50,8 +51,8 @@ export interface ConnectCommandEditor {
 
 /** What the connect commands take from the window's connection. */
 export interface ConnectCommandConnection {
-  /** Ends the local connection server of the host string; silent, also when none runs. */
-  killLocalServer(hostString: string): PromiseLike<void>;
+  /** Ends the local connection server of the host string, reporting the record it looked up; also when none runs. */
+  killLocalServer(hostString: string): PromiseLike<'found' | 'none'>;
   /** The window's connection: its target and its state; nothing before the first resolve. */
   current(): {target: SshTarget; state: string} | undefined;
 }
@@ -147,10 +148,11 @@ function openHandler(editor: ConnectCommandEditor, source: ConnectSource) {
   };
 }
 
-/** The four handlers over the editor and the window's connection. */
+/** The four handlers over the editor, the window's connection and the connection's log. */
 export function connectCommandHandlers(
   editor: ConnectCommandEditor,
   connection: ConnectCommandConnection,
+  logger: Pick<Logger, 'info'>,
 ): ConnectCommandHandlers {
   return {
     openEmptyWindow: openHandler(editor, commands.openEmptyWindow.id),
@@ -177,7 +179,9 @@ export function connectCommandHandlers(
       execute: async () => {
         const target = await pickedTarget(editor);
         if (target !== undefined) {
-          await connection.killLocalServer(payloadOf(target));
+          const hostString = payloadOf(target);
+          const record = await connection.killLocalServer(hostString);
+          logger.info(`Kill: host ${hostString}, record ${record}`);
         }
       },
     },

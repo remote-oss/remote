@@ -144,7 +144,8 @@ export async function runConnectionHelper(
         nonce: parameters.nonce,
         recordFile: options.recordFile,
         files: environment.files,
-        payload: parameters.payload,
+        // The helper's own pid goes to every window that joins it, with the payload its starter made.
+        payload: {...parameters.payload, helperProcessId: process.pid},
         policy: parameters.policy,
         handler,
         port: environment.port,

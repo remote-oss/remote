@@ -78,6 +78,7 @@ function spawnClient(
       });
       child.once('close', settle);
       resolve({
+        ...(child.pid === undefined ? {} : {processId: child.pid}),
         onOutput: listener => child.stdout.on('data', listener),
         onError: listener => child.stderr.on('data', listener),
         onExit: listener => {
