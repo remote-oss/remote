@@ -72,7 +72,8 @@ async function statesRead(folder: string): Promise<StatesRead> {
 }
 
 /**
- * What to show when the two reads differ: both reads with their times, the Docker events of the host between them, and
+ * What to show when the two reads differ: both reads with their times, the Docker events of the host between them, the
+ * containers log since the row's mark, and
  * every container of any run that carries the folder's label, so a change of state, a new container and another row's
  * container that matches the label can be told apart.
  */
@@ -80,6 +81,7 @@ async function statesDifference(
   folder: string,
   first: StatesRead,
   second: StatesRead,
+  logLines: readonly string[],
 ): Promise<string> {
   const events = await execFileAsync('docker', [
     'events',
@@ -112,6 +114,7 @@ async function statesDifference(
     `the states read at ${String(second.seconds)}: ${JSON.stringify(second.states)}`,
     `the container events between them:\n${events}`,
     `every container with the folder's label, of any run:\n${labelled}`,
+    `the containers log since the row's mark:\n${logLines.join('\n')}`,
   ].join('\n');
 }
 
@@ -198,7 +201,7 @@ describe('The Open Recent entry and the label of a connected window (cards conta
         },
         containersKept
           ? undefined
-          : `the folder's containers changed across the attempts:\n${await statesDifference(folder, kept, after)}`,
+          : `the folder's containers changed across the attempts:\n${await statesDifference(folder, kept, after, containersLog().slice(mark))}`,
       );
     } finally {
       await closeWindow(window).catch(() => undefined);
