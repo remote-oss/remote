@@ -441,41 +441,43 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
   });
 
   it('F-2402 AC-8 (c2854-curl-only): a host with only curl, with the default settings: the window connects without any text of this feature, the host having downloaded the server itself', async () => {
-    await withSettings(
-      {'remote.SSH.localServerDownload': undefined},
-      async () => {
-        const name = 'c2854-curl-only';
-        appendScript(dismissals(name));
-        await onHostAs(
-          ACCOUNT,
-          'ln',
-          '-s',
-          '/opt/fetch-off/curl',
-          '/opt/nofetch/bin/curl',
-        );
-        try {
-          await openWindow(ALIAS, name, ACCOUNT);
-          await connectedWithin(name, INSTALL_MILLISECONDS, ACCOUNT);
-          const stages = recordLines('progress', name).map(line =>
-            String(line.details ?? ''),
-          );
-          deepStrictEqual(
-            [
-              recordLines('failureDialog', name).length,
-              stages.some(stage => stage.includes('Copying VS Code Server')),
-              stages.some(stage =>
-                stage.includes('Downloading VS Code Server locally'),
-              ),
-            ],
-            [0, false, false],
-            JSON.stringify(stages),
-          );
-        } finally {
-          await onHostAs(ACCOUNT, 'rm', '-f', '/opt/nofetch/bin/curl');
-          await closeWindow(name).catch(() => undefined);
-        }
-      },
+    await onHostAs(
+      ACCOUNT,
+      'ln',
+      '-s',
+      '/opt/fetch-off/curl',
+      '/opt/nofetch/bin/curl',
     );
+    try {
+      const before = requestsLogged();
+      const shown = await connectedWith('c2854-curl-only', {
+        'remote.SSH.localServerDownload': undefined,
+      });
+      deepStrictEqual(
+        {
+          dialogs: shown.dialogs,
+          // The positive control: the stages the window did show, and a request the download host logged for the host's curl.
+          stagesShown: shown.progress.length > 0,
+          requestsLogged: requestsLogged() > before,
+          copied: shown.progress.some(stage =>
+            stage.includes('Copying VS Code Server to host with scp'),
+          ),
+          downloadedLocally: shown.progress.some(stage =>
+            stage.includes('Downloading VS Code Server locally'),
+          ),
+        },
+        {
+          dialogs: [],
+          stagesShown: true,
+          requestsLogged: true,
+          copied: false,
+          downloadedLocally: false,
+        },
+        JSON.stringify(shown),
+      );
+    } finally {
+      await onHostAs(ACCOUNT, 'rm', '-f', '/opt/nofetch/bin/curl');
+    }
   });
 
   it('F-2402 AC-13 (c2854-more-actions): More Actions... and Escape each open the pick of actions with its placeholder and no item about curl or wget', async () => {
