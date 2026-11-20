@@ -680,7 +680,9 @@ Rules (F-2408 as revised):
 - A client lock whose owner died is not free. A waiter takes it over only when the file is at least 4 minutes old,
   polling about every 0.5 s and giving up after 2 minutes. The holder never refreshes the file. It removes the file
   on a clean end and relies on the age rule otherwise.
-- The lock id is any stable 8-hex value per host identity; interop with the reference is not a goal (BR-6).
+- The client lock is `vscode-remote-ssh-<id>-install.lock` in the editor's temp folder, `<id>` 8 hex digits of the SHA-256
+  of the alias's connection key: stable per alias, different for two aliases of one host (BR-6). It is taken in both
+  install modes (BR-9) and shows S157 while a window waits (BR-11).
 - Settings are read once per attempt sequence (AC-36).
 - The host lock wait is bounded at 30 attempts, so it needs no R-79 rule.
 
