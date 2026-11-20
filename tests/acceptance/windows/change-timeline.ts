@@ -16,9 +16,15 @@ const REAL_ENVIRONMENT: TimelineEnvironment = {
     new Promise(resolve => setTimeout(resolve, milliseconds)),
 };
 
+/** How long `stop` waits for the read in progress: a read that never answers must not hold the row's own failure. */
+const STOP_MILLISECONDS = 2000;
+
 /** A timeline that is being taken. */
 export interface ChangeTimeline {
-  /** Ends the sampling after the read in progress, and resolves once it has ended. */
+  /**
+   * Ends the sampling for new reads and resolves once the read in progress has ended, or after `STOP_MILLISECONDS`,
+   * whatever that read does; what the timeline kept stays.
+   */
   stop(): Promise<void>;
   /** Resolves when the sampling has ended, by `stop` or by its time. */
   finished: Promise<void>;
@@ -60,9 +66,9 @@ export function changeTimeline(
   const running = sample();
   return {
     finished: running,
-    stop: () => {
+    stop: async () => {
       stopped = true;
-      return running;
+      await Promise.race([running, environment.pause(STOP_MILLISECONDS)]);
     },
     lines: () => [...kept],
   };

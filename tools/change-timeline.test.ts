@@ -61,4 +61,23 @@ describe('the changes of a read taken over time (card #2753)', () => {
     await timeline.stop();
     deepStrictEqual(reads <= 1, true);
   });
+
+  it('#2753: stop returns after its own bound when the read in progress never answers, and the timeline keeps what it had', async () => {
+    let reads = 0;
+    const timeline = changeTimeline(
+      () => {
+        reads += 1;
+        return reads === 1
+          ? Promise.resolve('first')
+          : new Promise<string>(() => undefined);
+      },
+      1000,
+      250,
+      60_000,
+      environmentOf(),
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    await timeline.stop();
+    deepStrictEqual([reads, timeline.lines()], [2, ['[+0.00 s] first']]);
+  });
 });
