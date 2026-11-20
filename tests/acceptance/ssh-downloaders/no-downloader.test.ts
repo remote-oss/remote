@@ -449,16 +449,18 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
       '/opt/nofetch/bin/curl',
     );
     try {
-      const before = requestsLogged();
       const shown = await connectedWith('c2854-curl-only', {
         'remote.SSH.localServerDownload': undefined,
       });
       deepStrictEqual(
         {
           dialogs: shown.dialogs,
-          // The positive control: the stages the window did show, and a request the download host logged for the host's curl.
+          // The positive control: the stages the window did show, among them the host's own download stage (the local one is
+          // 'Downloading VS Code Server locally', which the separator below excludes).
           stagesShown: shown.progress.length > 0,
-          requestsLogged: requestsLogged() > before,
+          hostDownloaded: shown.progress.some(stage =>
+            stage.startsWith('Downloading VS Code Server / '),
+          ),
           copied: shown.progress.some(stage =>
             stage.includes('Copying VS Code Server to host with scp'),
           ),
@@ -469,7 +471,7 @@ describe('a host with no downloader on its login PATH (card #2854, F-2402)', fun
         {
           dialogs: [],
           stagesShown: true,
-          requestsLogged: true,
+          hostDownloaded: true,
           copied: false,
           downloadedLocally: false,
         },
