@@ -718,7 +718,7 @@ describe('the reading of each library failure (no library text is shown)', () =>
         {kind: 'invalidSetting'},
         {kind: 'serverStart'},
         {kind: 'serverStart'},
-        {kind: 'prerequisiteMissing'},
+        {kind: 'prerequisiteMissing', reason: {id: 'S144'}},
         {kind: 'retriesExhausted'},
         {kind: 'channelClosed'},
         {kind: 'cancelled'},
@@ -726,13 +726,17 @@ describe('the reading of each library failure (no library text is shown)', () =>
     );
   });
 
-  it('F-2401 (ruling-253-helper): a prerequisites failure keeps the helper’s lines for the log and shows no reason', () => {
+  it('F-2401 7.E1: a prerequisites failure keeps the helper’s lines for the log and gives the reason S144', () => {
     deepStrictEqual(
       ofStart(
         {kind: 'prerequisitesMissing', detail: 'Warning: Missing GLIBC'},
         EXEC_SERVER,
       ),
-      {kind: 'prerequisiteMissing', logDetail: 'Warning: Missing GLIBC'},
+      {
+        kind: 'prerequisiteMissing',
+        reason: {id: 'S144'},
+        logDetail: 'Warning: Missing GLIBC',
+      },
     );
   });
 

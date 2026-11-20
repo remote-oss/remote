@@ -24,7 +24,8 @@ run next to the code run on the host. Start with [Getting started](getting-start
 **On the host**
 
 - Linux with glibc 2.28 or newer on a 64-bit Intel/AMD, 64-bit ARM or 32-bit ARM processor, or Alpine Linux on a
-  64-bit Intel/AMD or 64-bit ARM processor.
+  64-bit Intel/AMD or 64-bit ARM processor. [What a Linux host needs](linux-prerequisites.md) lists the versions and
+  packages.
 - `sh` and `tar`, and `wget` or `curl` to download the server. If the host cannot reach the internet, the extension
   downloads the server on your machine and copies it over (see `remote.SSH.localServerDownload`).
 - Enough disk space in your home folder for the server and the extensions you install there, unless you move it with
@@ -141,7 +142,7 @@ is invalid, the dialog offers **Open Setting**, which opens the Settings editor 
 | Permission denied | The host refused your key or password. | Run `ssh <host>` in a terminal and fix the login there; check `IdentityFile` and your agent. The log lists key problems `ssh` reports. |
 | The connection timed out | The host is unreachable or slow. | Check the address, your network or VPN, and raise `remote.SSH.connectTimeout`. |
 | The host key has changed | The host's key differs from the one on record. | Confirm with the host's administrator, then remove the old line from your known-hosts file. |
-| The host does not meet the prerequisites | The host's C library is too old. | Use a host with glibc 2.28 or newer, or Alpine on 64-bit Intel/AMD or ARM. |
+| The host does not meet the prerequisites | The host's C library is too old. | Use a host with glibc 2.28 or newer, or Alpine on 64-bit Intel/AMD or ARM. See [Hosts older than the server supports](old-linux-hosts.md). |
 | The host's architecture is not supported | No server build exists for the processor. | Use a supported host. |
 | No download source for the server | Your editor names no server source. | Choose **Open Setting** and set `remote.SSH.serverDownloadUrlTemplate`. |
 | The server template is invalid | An unknown placeholder or not an `http:`/`https:` address. | Choose **Open Setting** and correct the setting the message names. |
