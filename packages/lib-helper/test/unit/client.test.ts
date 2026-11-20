@@ -409,6 +409,60 @@ describe('helper client', () => {
       deepStrictEqual([spawned.length, lease.startedByMe], [1, true]);
     });
 
+    it('#847: the stale path calls its hook, the record replaced, before the start', async () => {
+      files.files.set(RECORD_PATH, recordAt('/run/gone.sock'));
+      const seen: Array<[number, boolean]> = [];
+      const lease = leaseOf(
+        await drive(
+          acquire(
+            environment,
+            request({
+              onStaleReplaced: () => {
+                const record = parseRecord(files.files.get(RECORD_PATH) ?? '');
+                seen.push([
+                  spawned.length,
+                  record?.endpoint === '/run/gone.sock',
+                ]);
+              },
+            }),
+          ),
+        ),
+      );
+      deepStrictEqual(
+        [seen, spawned.length, lease.startedByMe],
+        [[[0, false]], 1, true],
+      );
+    });
+
+    it('#847: a join and a fresh claim call no hook', async () => {
+      let calls = 0;
+      const hook = {
+        onStaleReplaced: () => {
+          calls += 1;
+        },
+      };
+      await drive(acquire(environment, request(hook)));
+      await drive(acquire(environment, request(hook)));
+      deepStrictEqual([calls, spawned.length], [0, 1]);
+    });
+
+    it('#847: stop reports the record it looked up', async () => {
+      const withoutRecord = await stop(
+        environment,
+        '/registry',
+        'ssh.connection',
+        'user@host:22',
+      );
+      leaseOf(await drive(acquire(environment, request())));
+      const withRecord = await stop(
+        environment,
+        '/registry',
+        'ssh.connection',
+        'user@host:22',
+      );
+      deepStrictEqual([withoutRecord, withRecord], ['none', 'found']);
+    });
+
     /** An endpoint of a helper that answers every hello with `ending`, and closes when `closeAfter` milliseconds passed, if it is a number. */
     async function endingAt(
       endpoint: string,

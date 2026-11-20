@@ -149,8 +149,8 @@ export class WindowSide {
     );
   }
 
-  /** Ends the helper of the host and its `ssh`, as "Kill Local Connection Server" does. */
-  kill(hostString: string): Promise<void> {
+  /** Ends the helper of the host and its `ssh`, as "Kill Local Connection Server" does, reporting its record. */
+  kill(hostString: string): Promise<'found' | 'none'> {
     return killConnection(
       this.environment,
       path.join(this.folder, 'registry'),

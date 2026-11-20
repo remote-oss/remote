@@ -25,6 +25,11 @@ export class SshSession {
     });
   }
 
+  /** The process id the system gave the process at its start; absent from a spawner that reports none. */
+  get processId(): number | undefined {
+    return this.handle.processId;
+  }
+
   /** Calls `listener` with each piece of the client's standard output. */
   onOutput(listener: (chunk: string) => void): void {
     this.handle.onOutput(listener);
