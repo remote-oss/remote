@@ -166,9 +166,9 @@ export async function registerConnect(
     },
     {
       ...(resolversGranted
-        ? connectCommandHandlers(host.connectEditor, connection)
+        ? connectCommandHandlers(host.connectEditor, connection, host.logger)
         : windowlessHandlers(
-            connectCommandHandlers(host.connectEditor, connection),
+            connectCommandHandlers(host.connectEditor, connection, host.logger),
             host.logger,
           )),
       addNewSshHost: addNewSshHostHandler({

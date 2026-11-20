@@ -97,7 +97,7 @@ function setup(
       seen.ended.push(hostString);
       return options.killFails === true
         ? Promise.reject(new Error('no server'))
-        : Promise.resolve();
+        : Promise.resolve('none');
     },
     leaveWindow: () => {
       seen.order.push('leave');

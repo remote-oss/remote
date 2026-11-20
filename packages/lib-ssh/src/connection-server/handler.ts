@@ -182,6 +182,9 @@ export class ConnectionHandler implements MessageHandler {
           type: 'sharedRecord',
           record: this.sharedRecord && {...this.sharedRecord},
           detectedPlatform: this.detected,
+          ...(this.session?.processId === undefined
+            ? {}
+            : {sshProcessId: this.session.processId}),
         };
       case 'setSharedRecord':
         if (this.state !== 'connected') {
@@ -397,7 +400,13 @@ export class ConnectionHandler implements MessageHandler {
           feed.flush();
           this.state = 'connected';
           this.ownership.finish();
-          this.tell({type: 'connected', socksPort: this.options.socksPort});
+          this.tell({
+            type: 'connected',
+            socksPort: this.options.socksPort,
+            ...(session.processId === undefined
+              ? {}
+              : {sshProcessId: session.processId}),
+          });
         }
       } else {
         early = event;

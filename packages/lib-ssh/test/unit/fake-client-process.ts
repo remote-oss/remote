@@ -17,6 +17,8 @@ export type ClientScript = (process: FakeClientProcess) => void;
 export class FakeClientProcess implements ProcessHandle {
   /** What the process was started with. */
   readonly specification: ProcessSpecification;
+  /** The process id a row gives the process; none when the row gives none. */
+  processId?: number;
   /** The pieces written to its input. */
   readonly input: Uint8Array[] = [];
   /** Whether the input was closed. */
