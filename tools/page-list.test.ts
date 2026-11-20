@@ -5,7 +5,7 @@ import path from 'node:path';
 import {
   type DebugTarget,
   lingeringPageNote,
-  listedPageIds,
+  listedPages,
   localPageAmong,
   pagesDescription,
   portIn,
@@ -136,7 +136,7 @@ describe('the port of the editor’s debugging list (card #2890)', () => {
 
   it('#2890: a launch whose port cannot be read has no page list, which ends the wait for a page to leave', async () => {
     deepStrictEqual(
-      await withPortFile(undefined, folder => listedPageIds(folder)),
+      await withPortFile(undefined, folder => listedPages(folder)),
       undefined,
     );
   });
@@ -148,7 +148,7 @@ describe('the wait for a closed window’s page to leave the list (card #2890)',
     return new Promise<void>(resolve => setTimeout(resolve, 1));
   }
 
-  /** A reading that gives the lists of `pages` in turn and then the last again, and how often it was read. */
+  /** A reading that gives the lists of page ids in `pages` in turn and then the last again, and how often it was read. */
   function reading(pages: Array<string[] | undefined>) {
     const state = {reads: 0};
     return {
@@ -156,7 +156,7 @@ describe('the wait for a closed window’s page to leave the list (card #2890)',
       read: () => {
         const index = Math.min(state.reads, pages.length - 1);
         state.reads += 1;
-        return Promise.resolve(pages[index]);
+        return Promise.resolve(pages[index]?.map(pageId => page(pageId, '[]')));
       },
     };
   }
@@ -212,6 +212,7 @@ describe('the wait for a closed window’s page to leave the list (card #2890)',
       {
         state: 'stayed',
         note: 'the page of window fresh (#own-page) was still listed 0.02 s after the window deactivated: the editor lists 1 pages',
+        listed: [page('own-page-0001', '[]')],
       },
     );
   });

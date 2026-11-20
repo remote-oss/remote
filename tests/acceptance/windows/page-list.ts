@@ -92,10 +92,10 @@ export function portIn(file: string): number | undefined {
   return Number.isInteger(port) ? port : undefined;
 }
 
-/** The ids of the pages the editor lists now; none when the port or its list cannot be read. */
-export async function listedPageIds(
+/** The pages the editor lists now; none when the port or its list cannot be read. */
+export async function listedPages(
   userDataFolder: string,
-): Promise<string[] | undefined> {
+): Promise<DebugTarget[] | undefined> {
   const port = portIn(path.join(userDataFolder, 'DevToolsActivePort'));
   if (port === undefined) {
     return undefined;
@@ -103,9 +103,7 @@ export async function listedPageIds(
   try {
     const answer = await fetch(`http://127.0.0.1:${String(port)}/json/list`);
     const targets = (await answer.json()) as DebugTarget[];
-    return targets
-      .filter(target => target.type === 'page')
-      .map(each => each.id);
+    return targets.filter(target => target.type === 'page');
   } catch {
     return undefined;
   }
@@ -126,26 +124,30 @@ export function lingeringPageNote(
  * goes on after a close does not find the closed window's page beside its own. It waits on that page and no other, so a
  * window that opens or closes meanwhile neither ends the wait early nor holds it. It gives `left` when the page is gone, or
  * when the list cannot be read, since nothing can be told; and, after `milliseconds`, `stayed` with the text that names the
- * window, the page and the list's size: the caller tells it, and the close goes on, since a page that lingers is not
- * something a close can end.
+ * window, the page and the list's size, and the list itself: the caller tells them, and the close goes on, since a page
+ * that lingers is not something a close can end.
  */
 export async function waitUntilPageLeft(
   window: string,
   pageId: string,
-  read: () => Promise<readonly string[] | undefined>,
+  read: () => Promise<readonly DebugTarget[] | undefined>,
   milliseconds: number,
   pause: (milliseconds: number) => Promise<void>,
-): Promise<{state: 'left'} | {state: 'stayed'; note: string}> {
+): Promise<
+  | {state: 'left'}
+  | {state: 'stayed'; note: string; listed: readonly DebugTarget[]}
+> {
   const deadline = Date.now() + milliseconds;
   for (;;) {
     const listed = await read();
-    if (!listed?.includes(pageId)) {
+    if (listed?.some(page => page.id === pageId) !== true) {
       return {state: 'left'};
     }
     if (Date.now() > deadline) {
       return {
         state: 'stayed',
         note: lingeringPageNote(window, pageId, listed.length, milliseconds),
+        listed,
       };
     }
     await pause(250);

@@ -51,7 +51,9 @@ import {
 import {explainedFailure, section} from './connect-failure.ts';
 import {editorFolderOf} from './editor-folder.ts';
 import {
-  listedPageIds,
+  type DebugTarget,
+  listedPages,
+  pagesDescription,
   REMEMBERED_PAGES,
   waitUntilPageLeft,
 } from './page-list.ts';
@@ -1459,10 +1461,10 @@ export async function killWindow(
 /** How long a closed window's page may stay in the editor's list after the window deactivated. */
 const PAGE_LEFT_MILLISECONDS = 30_000;
 
-/** The ids of the pages the editor lists now; none when the launch has no debugging port to read or it cannot be read. */
-async function pagesListedNow(): Promise<string[] | undefined> {
+/** The pages the editor lists now; none when the launch has no debugging port to read or it cannot be read. */
+async function pagesListedNow(): Promise<DebugTarget[] | undefined> {
   try {
-    return await listedPageIds(variable('HARNESS_USER_DATA'));
+    return await listedPages(variable('HARNESS_USER_DATA'));
   } catch {
     return undefined;
   }
@@ -1503,7 +1505,10 @@ export async function closeWindow(
   } finally {
     withdrawUnaccepted(name, commandId);
   }
-  if (ownPage !== undefined && listedBefore?.includes(ownPage) === true) {
+  if (
+    ownPage !== undefined &&
+    listedBefore?.some(page => page.id === ownPage) === true
+  ) {
     const waited = await waitUntilPageLeft(
       name,
       ownPage,
@@ -1511,10 +1516,13 @@ export async function closeWindow(
       PAGE_LEFT_MILLISECONDS,
       pause => new Promise(resolve => setTimeout(resolve, pause)),
     );
-    // A page that lingers is told by name and the close goes on: it is not something a close, or the hook that runs it,
-    // can end, and a launch must not fail for it.
+    // A page that lingers is told by name, with the pages the editor listed at the close and after the wait and who
+    // remembers each, and the close goes on: it is not something a close, or the hook that runs it, can end, and a launch
+    // must not fail for it. The lists say whether the window's page stayed or the id was another window's (card #2909).
     if (waited.state === 'stayed') {
-      process.stderr.write(`closing window ${name}: ${waited.note}\n`);
+      process.stderr.write(
+        `closing window ${name}: ${waited.note}; the pages at the close: ${pagesDescription(listedBefore, REMEMBERED_PAGES, isOpen)}; after the wait: ${pagesDescription(waited.listed, REMEMBERED_PAGES, isOpen)}\n`,
+      );
     }
   }
 }
