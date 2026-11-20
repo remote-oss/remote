@@ -22,17 +22,40 @@ if [ ! -S "$SOCKET" ]; then
 fi
 # The key driver is wanted on a machine whose display already runs as well.
 command -v xdotool >/dev/null || missing+=(xdotool)
+# How long one apt-get call may run: the five minutes it may wait for the dpkg lock, and two more for its work.
+APT_CALL_SECONDS=420
+APT_LOG=$LOGS/apt.log
+
+# Runs one apt-get call as root, its output kept in $APT_LOG (pipefail gives the pipe the call's own status). A call that hasn't returned after APT_CALL_SECONDS is
+# ended: a fetch that never returns would otherwise hold the job to its limit (#2832). A call that fails or is ended
+# prints how long it ran and the log's last lines, which name the package or mirror it stopped at.
+apt_call() {
+  local started=$SECONDS status
+  if sudo DEBIAN_FRONTEND=noninteractive timeout --kill-after=15 "$APT_CALL_SECONDS" \
+    apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 "$@" 2>&1 | tee -a "$APT_LOG" >/dev/null; then
+    return 0
+  else
+    status=$?
+  fi
+  if [ "$status" = 124 ] || [ "$status" = 137 ]; then
+    echo "start-display: apt-get $1 was ended after $((SECONDS - started)) s; its last lines:" >&2
+  else
+    echo "start-display: apt-get $1 failed (exit $status) after $((SECONDS - started)) s; its last lines:" >&2
+  fi
+  tail -n 15 "$APT_LOG" >&2
+  return 1
+}
+
 # Installs the packages named, updating the lists first. A fresh hosted runner's unattended-upgrades holds the dpkg lock
 # at boot, so each call waits for it, up to five minutes. Each download is tried three times, and an update or install
-# that still fails is tried once more from a fresh update 15 s later: an archive that answers 503 for a moment, or a
-# mirror caught mid-sync whose lists name no package, fails no job (#2832). When both fail, the packages' candidates and
-# the sources are printed, so the failure names which it was.
+# that still fails, or is ended, is tried once more from a fresh update 15 s later: an archive that answers 503 for a
+# moment, or a mirror caught mid-sync whose lists name no package, fails no job (#2832). When both fail, the packages'
+# candidates and the sources are printed, so the failure names which it was.
 apt_install() {
-  local options=(-o DPkg::Lock::Timeout=300 -o Acquire::Retries=3)
-  local attempt
+  local attempt started=$SECONDS
   for attempt in 1 2; do
-    if sudo apt-get "${options[@]}" update -qq &&
-      sudo DEBIAN_FRONTEND=noninteractive apt-get "${options[@]}" install -y -qq "$@" >/dev/null; then
+    if apt_call update && apt_call install -y "$@"; then
+      echo "start-display: installed $* in $((SECONDS - started)) s"
       return 0
     fi
     echo "start-display: installing $* failed (attempt $attempt of 2)" >&2
