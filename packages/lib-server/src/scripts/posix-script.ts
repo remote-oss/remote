@@ -541,7 +541,9 @@ const CLEANUP_BODY: readonly string[] = [
   '  esac',
   'done',
   // A killed CLI run leaves its per-run stage: <commit>.<stamp>.<pid>, and its .stage. and .archive. entries beside it.
-  // The pid the name carries decides: a running pid keeps its stage, a dead one's is removed, and an empty cli-bin goes with it.
+  // The pid the name carries decides: a running pid keeps its stage, an invisible one (another user's) does too, so does
+  // a name that carries no pid, and a dead one's goes only past a sweep floor of ten minutes by its own mtime. An empty
+  // cli-bin goes with its contents.
   'if [ -d "$DATA_DIR/cli-bin" ]; then',
   '  ls -t "$DATA_DIR/cli-bin" 2>/dev/null | while IFS= read -r NAME; do',
   '    case $NAME in',
@@ -559,7 +561,12 @@ const CLEANUP_BODY: readonly string[] = [
   '      ""|stage.*|archive.*) ;;',
   '      *) continue ;;',
   '    esac',
+  '    case $RUN_PID in',
+  '      ""|*[!0-9]*) continue ;;',
+  '    esac',
   '    kill -0 "$RUN_PID" 2>/dev/null && continue',
+  '    [ -n "$(ps -o pid= -p "$RUN_PID" 2>/dev/null)" ] && continue',
+  '    [ -n "$(find "$DATA_DIR/cli-bin/$NAME" -maxdepth 0 -mmin +10 -print -quit)" ] || continue',
   '    rm -rf "$DATA_DIR/cli-bin/$NAME"',
   '  done',
   '  rmdir "$DATA_DIR/cli-bin" 2>/dev/null',

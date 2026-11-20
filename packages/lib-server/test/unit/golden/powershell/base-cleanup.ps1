@@ -224,7 +224,10 @@ if (Test-Path -LiteralPath $CliBin -PathType Container) {
     if ($Fields.Count -lt 3) { continue }
     if ($Fields.Count -eq 3) { $Tail = '' } else { $Tail = $Fields[3..($Fields.Count - 1)] -join '.' }
     if (($Tail -ne '') -and ($Tail -notlike 'stage.*') -and ($Tail -notlike 'archive.*')) { continue }
-    if (Get-Process -Id $Fields[2] -ErrorAction SilentlyContinue) { continue }
+    $RunPid = 0
+    if (-not [int]::TryParse($Fields[2], [ref]$RunPid)) { continue }
+    if (Get-Process -Id $RunPid -ErrorAction SilentlyContinue) { continue }
+    if ($Entry.LastWriteTime -gt (Get-Date).AddMinutes(-10)) { continue }
     Remove-Item -LiteralPath ([System.IO.Path]::Combine($CliBin, $Entry.Name)) -Recurse -Force -ErrorAction SilentlyContinue
   }
   Remove-Item -LiteralPath $CliBin -Force -ErrorAction SilentlyContinue

@@ -1610,6 +1610,15 @@ describe('the PowerShell cleanup, run under pwsh', function () {
         path.join(cliBinFolder, `${deadStage}.archive.${String(ended.pid)}`),
         '',
       );
+      // Past the sweep floor: an entry the row created seconds ago is younger than ten minutes.
+      const aged = new Date(Date.now() - 11 * 60_000);
+      for (const name of [
+        deadStage,
+        `${deadStage}.stage.${String(ended.pid)}`,
+        `${deadStage}.archive.${String(ended.pid)}`,
+      ]) {
+        utimesSync(path.join(cliBinFolder, name), aged, aged);
+      }
       const liveStage = `${parameters.commit}.1700000000000.${String(process.pid)}`;
       mkdirSync(path.join(cliBinFolder, liveStage), {recursive: true});
       runOn(host, single('cleanup'), parameters);
@@ -1670,6 +1679,33 @@ describe('the PowerShell cleanup, run under pwsh', function () {
         'notes',
         'two.fields',
       ]);
+    });
+
+    it('keeps a per-run name whose third field is not a pid', () => {
+      const host = powershellHost();
+      const parameters = {
+        ...parametersFor(),
+        cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
+      };
+      const cliBinFolder = cliBin(host, parameters);
+      mkdirSync(path.join(cliBinFolder, 'a.b.c'), {recursive: true});
+      mkdirSync(path.join(cliBinFolder, 'x.y.'), {recursive: true});
+      runOn(host, single('cleanup'), parameters);
+      deepStrictEqual(readdirSync(cliBinFolder).sort(), ['a.b.c', 'x.y.']);
+    });
+
+    it('keeps a dead stage younger than the sweep floor of ten minutes', () => {
+      const host = powershellHost();
+      const parameters = {
+        ...parametersFor(),
+        cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
+      };
+      const cliBinFolder = cliBin(host, parameters);
+      const ended = spawnSync('true');
+      const deadStage = `${parameters.commit}.1700000000.${String(ended.pid)}`;
+      mkdirSync(path.join(cliBinFolder, deadStage), {recursive: true});
+      runOn(host, single('cleanup'), parameters);
+      deepStrictEqual(readdirSync(cliBinFolder).sort(), [deadStage]);
     });
   });
 });

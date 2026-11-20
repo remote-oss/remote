@@ -451,6 +451,15 @@ describe('the POSIX bootstrap script', () => {
           path.join(cliBinFolder, `${deadStage}.archive.${String(ended.pid)}`),
           '',
         );
+        // Past the sweep floor: an entry the row created seconds ago is younger than ten minutes.
+        const aged = new Date(Date.now() - 11 * 60_000);
+        for (const name of [
+          deadStage,
+          `${deadStage}.stage.${String(ended.pid)}`,
+          `${deadStage}.archive.${String(ended.pid)}`,
+        ]) {
+          utimesSync(path.join(cliBinFolder, name), aged, aged);
+        }
         const liveStage = `${STAGE}.${String(process.pid)}`;
         mkdirSync(path.join(cliBinFolder, liveStage), {recursive: true});
         deepStrictEqual(
@@ -515,6 +524,33 @@ describe('the POSIX bootstrap script', () => {
             readdirSync(cliBinFolder).sort(),
           ],
           ['Ok', ['notes', 'two.fields']],
+        );
+      });
+
+      it('keeps a per-run name whose third field is not a pid', () => {
+        const cliBinFolder = cliBin();
+        mkdirSync(path.join(cliBinFolder, 'a.b.c'), {recursive: true});
+        mkdirSync(path.join(cliBinFolder, 'x.y.'), {recursive: true});
+        deepStrictEqual(
+          [
+            statusOf(host, single('cleanup'), parametersFor()),
+            readdirSync(cliBinFolder).sort(),
+          ],
+          ['Ok', ['a.b.c', 'x.y.']],
+        );
+      });
+
+      it('keeps a dead stage younger than the sweep floor of ten minutes', () => {
+        const cliBinFolder = cliBin();
+        const ended = spawnSync('true');
+        const deadStage = `${STAGE}.${String(ended.pid)}`;
+        mkdirSync(path.join(cliBinFolder, deadStage), {recursive: true});
+        deepStrictEqual(
+          [
+            statusOf(host, single('cleanup'), parametersFor()),
+            readdirSync(cliBinFolder).sort(),
+          ],
+          ['Ok', [deadStage]],
         );
       });
     });

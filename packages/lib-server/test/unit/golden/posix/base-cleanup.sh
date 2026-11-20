@@ -217,7 +217,12 @@ if [ -d "$DATA_DIR/cli-bin" ]; then
       ""|stage.*|archive.*) ;;
       *) continue ;;
     esac
+    case $RUN_PID in
+      ""|*[!0-9]*) continue ;;
+    esac
     kill -0 "$RUN_PID" 2>/dev/null && continue
+    [ -n "$(ps -o pid= -p "$RUN_PID" 2>/dev/null)" ] && continue
+    [ -n "$(find "$DATA_DIR/cli-bin/$NAME" -maxdepth 0 -mmin +10 -print -quit)" ] || continue
     rm -rf "$DATA_DIR/cli-bin/$NAME"
   done
   rmdir "$DATA_DIR/cli-bin" 2>/dev/null
