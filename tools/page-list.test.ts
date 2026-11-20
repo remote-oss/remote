@@ -108,6 +108,42 @@ describe('the pages a failure names (card #2890)', () => {
   });
 });
 
+describe('the bound of what a failure names of the pages (card #2890)', () => {
+  const MANY = Array.from({length: 20}, (unused, index) =>
+    page(`page-id-${String(index).padStart(4, '0')}`, `[${'t'.repeat(200)}]`),
+  );
+
+  it('#2890: twenty pages with long titles read as twelve, each title cut at 80 characters, with an `and 8 more` tail, and the line stays under its bound', () => {
+    const description = pagesDescription(MANY, new Map(), allOpen);
+    deepStrictEqual(
+      [
+        description.split('; ').length,
+        description.endsWith('; and 8 more'),
+        description.length < 12 * 140 + 20,
+      ],
+      [13, true, true],
+    );
+  });
+
+  it('#2890: a page that many windows remember is told with four of them, their names cut at 40 characters, and the count of the rest', () => {
+    const owners = new Map(
+      Array.from({length: 7}, (unused, index): [string, string] => [
+        `window-${String(index)}-${'n'.repeat(60)}`,
+        'page-id-0000',
+      ]),
+    );
+    const description = pagesDescription(
+      [MANY[0] ?? page('x', '[]')],
+      owners,
+      allOpen,
+    );
+    deepStrictEqual(
+      [description.includes(' and 3 more'), description.length < 12 * 140 + 20],
+      [true, true],
+    );
+  });
+});
+
 describe('the port of the editor’s debugging list (card #2890)', () => {
   /** A folder that holds `contents` as the editor's port file, or none. */
   function withPortFile(

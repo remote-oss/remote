@@ -65,23 +65,45 @@ export function localPageAmong(
   );
 }
 
+/** How many pages, how long a title, how many remembering windows and how long a window's name a description keeps. */
+const DESCRIBED_PAGES = 12;
+const DESCRIBED_TITLE = 80;
+const DESCRIBED_OWNERS = 4;
+const DESCRIBED_NAME = 40;
+
+/** `text` cut to `width` characters, with an ellipsis where it was cut. */
+function cutTo(text: string, width: number): string {
+  return text.length <= width ? text : `${text.slice(0, width)}…`;
+}
+
 /**
  * The pages of `found` as a failure names them: each title with the start of its id and the windows that remember it,
- * a closed one marked, so that a wait that ends on two pages with one title says which is whose.
+ * a closed one marked, so that a wait that ends on two pages with one title says which is whose. It is bounded by
+ * construction: the first twelve pages, a title cut at 80 characters, four remembering windows with their names cut at
+ * 40, and an `and N more` tail for what is left out.
  */
 export function pagesDescription(
   found: readonly DebugTarget[],
   remembered: ReadonlyMap<string, string>,
   open: (window: string) => boolean,
 ): string {
-  return found
-    .map(page => {
-      const owners = [...remembered]
-        .filter(([, pageId]) => pageId === page.id)
-        .map(([window]) => `${window}${open(window) ? '' : ' (closed)'}`);
-      return `${page.title} #${page.id.slice(0, 8)} ${owners.length === 0 ? 'remembered by none' : `remembered by ${owners.join(', ')}`}`;
-    })
-    .join('; ');
+  const described = found.slice(0, DESCRIBED_PAGES).map(page => {
+    const owners = [...remembered]
+      .filter(([, pageId]) => pageId === page.id)
+      .map(
+        ([window]) =>
+          `${cutTo(window, DESCRIBED_NAME)}${open(window) ? '' : ' (closed)'}`,
+      );
+    const names =
+      owners.length > DESCRIBED_OWNERS
+        ? `${owners.slice(0, DESCRIBED_OWNERS).join(', ')} and ${String(owners.length - DESCRIBED_OWNERS)} more`
+        : owners.join(', ');
+    return `${cutTo(page.title, DESCRIBED_TITLE)} #${page.id.slice(0, 8)} ${owners.length === 0 ? 'remembered by none' : `remembered by ${names}`}`;
+  });
+  const left = found.length - described.length;
+  return left > 0
+    ? `${described.join('; ')}; and ${String(left)} more`
+    : described.join('; ');
 }
 
 /** The port the editor chose, read from the file it writes in the launch's user-data folder; none while there is no port. */
