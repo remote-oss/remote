@@ -462,6 +462,8 @@ describe('the POSIX bootstrap script', () => {
         }
         const liveStage = `${STAGE}.${String(process.pid)}`;
         mkdirSync(path.join(cliBinFolder, liveStage), {recursive: true});
+        // Backdated past the floor, so only the pid check can keep it.
+        utimesSync(path.join(cliBinFolder, liveStage), aged, aged);
         deepStrictEqual(
           [
             statusOf(host, single('cleanup'), parametersFor()),
@@ -486,6 +488,15 @@ describe('the POSIX bootstrap script', () => {
           ),
           '',
         );
+        // Backdated past the floor, so only the pid check can keep them.
+        const aged = new Date(Date.now() - 11 * 60_000);
+        for (const name of [
+          liveStage,
+          `${liveStage}.stage.${String(process.pid)}`,
+          `${liveStage}.archive.${String(process.pid)}`,
+        ]) {
+          utimesSync(path.join(cliBinFolder, name), aged, aged);
+        }
         deepStrictEqual(
           [
             statusOf(host, single('cleanup'), parametersFor()),
@@ -545,6 +556,22 @@ describe('the POSIX bootstrap script', () => {
         const ended = spawnSync('true');
         const deadStage = `${STAGE}.${String(ended.pid)}`;
         mkdirSync(path.join(cliBinFolder, deadStage), {recursive: true});
+        deepStrictEqual(
+          [
+            statusOf(host, single('cleanup'), parametersFor()),
+            readdirSync(cliBinFolder).sort(),
+          ],
+          ['Ok', [deadStage]],
+        );
+      });
+
+      it('keeps a dead stage whose mtime is in the future', () => {
+        const cliBinFolder = cliBin();
+        const ended = spawnSync('true');
+        const deadStage = `${STAGE}.${String(ended.pid)}`;
+        mkdirSync(path.join(cliBinFolder, deadStage), {recursive: true});
+        const future = new Date(Date.now() + 2 * 60_000);
+        utimesSync(path.join(cliBinFolder, deadStage), future, future);
         deepStrictEqual(
           [
             statusOf(host, single('cleanup'), parametersFor()),

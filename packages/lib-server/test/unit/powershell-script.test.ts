@@ -1621,6 +1621,8 @@ describe('the PowerShell cleanup, run under pwsh', function () {
       }
       const liveStage = `${parameters.commit}.1700000000000.${String(process.pid)}`;
       mkdirSync(path.join(cliBinFolder, liveStage), {recursive: true});
+      // Backdated past the floor, so only the pid check can keep it.
+      utimesSync(path.join(cliBinFolder, liveStage), aged, aged);
       runOn(host, single('cleanup'), parameters);
       deepStrictEqual(readdirSync(cliBinFolder).sort(), [liveStage]);
     });
@@ -1642,6 +1644,15 @@ describe('the PowerShell cleanup, run under pwsh', function () {
         path.join(cliBinFolder, `${liveStage}.archive.${String(process.pid)}`),
         '',
       );
+      // Backdated past the floor, so only the pid check can keep them.
+      const aged = new Date(Date.now() - 11 * 60_000);
+      for (const name of [
+        liveStage,
+        `${liveStage}.stage.${String(process.pid)}`,
+        `${liveStage}.archive.${String(process.pid)}`,
+      ]) {
+        utimesSync(path.join(cliBinFolder, name), aged, aged);
+      }
       runOn(host, single('cleanup'), parameters);
       deepStrictEqual(
         readdirSync(cliBinFolder).sort(),
@@ -1704,6 +1715,22 @@ describe('the PowerShell cleanup, run under pwsh', function () {
       const ended = spawnSync('true');
       const deadStage = `${parameters.commit}.1700000000.${String(ended.pid)}`;
       mkdirSync(path.join(cliBinFolder, deadStage), {recursive: true});
+      runOn(host, single('cleanup'), parameters);
+      deepStrictEqual(readdirSync(cliBinFolder).sort(), [deadStage]);
+    });
+
+    it('keeps a dead stage whose mtime is in the future', () => {
+      const host = powershellHost();
+      const parameters = {
+        ...parametersFor(),
+        cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
+      };
+      const cliBinFolder = cliBin(host, parameters);
+      const ended = spawnSync('true');
+      const deadStage = `${parameters.commit}.1700000000.${String(ended.pid)}`;
+      mkdirSync(path.join(cliBinFolder, deadStage), {recursive: true});
+      const future = new Date(Date.now() + 2 * 60_000);
+      utimesSync(path.join(cliBinFolder, deadStage), future, future);
       runOn(host, single('cleanup'), parameters);
       deepStrictEqual(readdirSync(cliBinFolder).sort(), [deadStage]);
     });
