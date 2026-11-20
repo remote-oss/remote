@@ -16,6 +16,7 @@
     "../tests/acceptance/window-agent/src/terminal-selection.ts",
     "../tests/acceptance/windows/agent-events.ts",
     "../tests/acceptance/windows/agent-standing.ts",
+    "../tests/acceptance/windows/change-timeline.ts",
     "../tests/acceptance/windows/connect-failure.ts",
     "../tests/acceptance/windows/corrupt-archive.ts",
     "../tests/acceptance/windows/editor-folder.ts",

@@ -22,6 +22,7 @@ import {
   userSettings,
 } from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
+import {changeTimeline} from '../windows/change-timeline.ts';
 import {explainedFailure} from '../windows/connect-failure.ts';
 import {
   reconnectionGlance,
@@ -97,6 +98,18 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     const readEnded = Date.now();
     await inWindow(name, 'opensshremotes.cleanLocalServer');
     const outageDone = Date.now();
+    // What the window shows of dialogs and notifications over the next seconds, a read every 250 ms, for a red to tell a
+    // dialog that was drawn and closed again from one that never was.
+    const timeline = changeTimeline(
+      async () => {
+        const shown = await dialogOf(name).catch(() => undefined);
+        const toasts = await notifications(name).catch(() => []);
+        return `dialog ${shown === undefined ? 'none' : JSON.stringify(shown.details)}; notifications ${JSON.stringify(toasts)}`;
+      },
+      endedAt,
+      250,
+      60_000,
+    );
     const reads: StateReads = {
       recorded: () => recordLines(undefined, name),
       indicator: () => statusBarText(name, 'status.host'),
@@ -108,14 +121,17 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
         `the read began ${String(readStarted - endedAt)} ms after the end was noted, took ${String(readEnded - readStarted)} ms, and the outage command took ${String(outageDone - readEnded)} ms`,
       agentLife: () => agentLife(name),
       rendererLines: () => rendererLines(name),
+      timeline: () => timeline.lines(),
     };
     const dialog = await waitForDialog(name, 180_000).catch(
       async (caught: unknown) => {
+        await timeline.stop();
         throw await explainedFailure(caught, () =>
           reconnectionState(reads, name, mark, endedAt),
         );
       },
     );
+    await timeline.stop();
     // What a window shows when the dialog does come, to set beside the lines of a red.
     console.log(`${name}:\n${await reconnectionGlance(reads, endedAt)}`);
     // Time for an attempt the extension should not make.
