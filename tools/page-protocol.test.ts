@@ -1,5 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {createHash} from 'node:crypto';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
 import {createServer, type Server} from 'node:http';
 import type {AddressInfo, Socket} from 'node:net';
 import {
@@ -8,6 +10,7 @@ import {
   NoAnswerError,
   unavailableWhenNoAnswer,
 } from '../tests/acceptance/windows/page-protocol.ts';
+import {REPOSITORY_ROOT} from './repository.ts';
 
 /** A text frame of a server to its client: unmasked, with the length forms of a short and a medium payload. */
 function textFrame(text: string): Buffer {
@@ -168,5 +171,36 @@ describe('the protocol connection of the page reads (card #2858)', () => {
       ],
       ['unavailable', {rows: 1}, 'Error: closed'],
     );
+  });
+});
+
+describe('the long bound of the reads that walk a list in the page (card #2858)', () => {
+  it('#2858: every function of the renderer helpers whose in-page code loops with while and awaits passes the long bound, and the three that do are the walkers', () => {
+    const source = readFileSync(
+      path.join(
+        REPOSITORY_ROOT,
+        'tests',
+        'acceptance',
+        'windows',
+        'renderer.ts',
+      ),
+      'utf8',
+    );
+    const walkers = source
+      .split(/\n(?=(?:export )?(?:async )?function )/u)
+      .flatMap(block => {
+        const name = /^(?:export )?(?:async )?function (\w+)/u.exec(block)?.[1];
+        const page = (block.match(/`[^`]*`/gu) ?? []).join('\n');
+        return name !== undefined &&
+          page.includes('while (') &&
+          page.includes('await ')
+          ? [[name, block.includes('LONG_READ_MILLISECONDS')] as const]
+          : [];
+      });
+    deepStrictEqual(walkers, [
+      ['viewRows', true],
+      ['portsRows', true],
+      ['allQuickPickRows', true],
+    ]);
   });
 });

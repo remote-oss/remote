@@ -26,7 +26,11 @@ interface EvaluateAnswer {
  */
 const EVALUATE_MILLISECONDS = 30_000;
 
-/** How long the reads that wait inside the page to walk a whole list may take: the longest legitimate ones. */
+/**
+ * How long the reads that wait inside the page to walk a whole list may take: the longest legitimate ones. Every read
+ * whose in-page code loops with `while` and awaits (`viewRows`, `portsRows`, `allQuickPickRows`) passes it; a row in
+ * `tools/page-protocol.test.ts` fails when a function of the renderer's helpers has such a loop and does not.
+ */
 export const LONG_READ_MILLISECONDS = 300_000;
 
 /** The read's own failure for a page that gave no answer in time: a read that a row may want to take as "unavailable". */

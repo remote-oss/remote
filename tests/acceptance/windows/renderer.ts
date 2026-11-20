@@ -3359,6 +3359,7 @@ export async function allQuickPickRows(
       reads.push(read());
       return reads;
     })()}`,
+    LONG_READ_MILLISECONDS,
   );
   return reads === null ? [] : combineQuickPickReads(reads);
 }
