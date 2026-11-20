@@ -80,6 +80,11 @@ import {
   sweepStaleRunObjects,
 } from './acceptance-run.ts';
 import {checked, type CommandRunner, runCommand} from './command-runner.ts';
+import {
+  endAfterGrace,
+  PREPARE_STEP_MILLISECONDS,
+  timedStep,
+} from './prepare-steps.ts';
 import {EDITOR_VERSION, GENUINE_VERSIONS} from './editor-floor.ts';
 import {type HostBase, HOST_BASE_VARIANTS} from './host-variants.ts';
 import {
@@ -1241,6 +1246,12 @@ async function prepare(
   genuineVersion: string,
 ): Promise<HarnessVariables> {
   const {command} = dependencies;
+  function step<Value>(
+    name: string,
+    work: () => Promise<Value> | Value,
+  ): Promise<Value> {
+    return timedStep(name, PREPARE_STEP_MILLISECONDS, work);
+  }
   const runId = acceptanceRunId(process.env, process.pid);
   const podman = chosen.some(launch => launch.engine === 'podman');
   if (podman) {
@@ -1248,12 +1259,14 @@ async function prepare(
   }
   const downloads =
     editor === 'vscodium'
-      ? await dependencies.startDownloads(
-          root,
-          runFolder,
-          chosen.some(launch => launch.earlierServerArchive === true),
-          chosen.some(startsPinnedCliEditor),
-          chosen.some(startsStandInCliEditor),
+      ? await step('the download servers', () =>
+          dependencies.startDownloads(
+            root,
+            runFolder,
+            chosen.some(launch => launch.earlierServerArchive === true),
+            chosen.some(startsPinnedCliEditor),
+            chosen.some(startsStandInCliEditor),
+          ),
         )
       : undefined;
   if (downloads !== undefined) {
@@ -1290,7 +1303,7 @@ async function prepare(
     appendFileSync(configFile, await dependencies.windowsHostBlock(runFolder));
   }
   writeUserSettings(runFolder, configFile);
-  await waitForHost(dependencies, configFile);
+  await step('the host answering', () => waitForHost(dependencies, configFile));
   // A launch whose window connects to a host of another base gets that host beside the run's, one per base, with the
   // same key and password, the same download names and its own ssh_config.
   const baseHosts: Partial<Record<HostBase, string>> = {};
@@ -1323,11 +1336,17 @@ async function prepare(
         controlFolderOf(runFolder),
       ),
     );
-    await waitForHost(dependencies, baseConfig);
+    await step(`the ${base} host answering`, () =>
+      waitForHost(dependencies, baseConfig),
+    );
   }
-  await dependencies.bundleSuite(root);
+  await step('the suite bundle', () => dependencies.bundleSuite(root));
   const vscodium =
-    editor === 'vscodium' ? await dependencies.vscodiumExecutable() : undefined;
+    editor === 'vscodium'
+      ? await step('the VSCodium executable', () =>
+          dependencies.vscodiumExecutable(),
+        )
+      : undefined;
   const cliEditor =
     vscodium === undefined ||
     downloads === undefined ||
@@ -1352,7 +1371,11 @@ async function prepare(
     editor === 'vscodium' &&
     launchesOf(root).some(launch => launch.kind === 'plain')
   ) {
-    vsixFiles.push(await dependencies.windowAgentVsix(root, runFolder));
+    vsixFiles.push(
+      await step('the window agent package', () =>
+        dependencies.windowAgentVsix(root, runFolder),
+      ),
+    );
   }
   // Every launch of the table gets its installs, chosen or not, so every language pack file has to exist.
   for (const launch of editor === 'vscodium' ? launchesOf(root) : []) {
@@ -1363,7 +1386,9 @@ async function prepare(
   const vscode = chosen.some(
     launch => launch.kind === 'plain' && launch.client === 'vscode',
   )
-    ? await dependencies.vscodeExecutable(genuineVersion)
+    ? await step('the VS Code executable', () =>
+        dependencies.vscodeExecutable(genuineVersion),
+      )
     : undefined;
   const installs = installsOf(
     root,
@@ -1382,7 +1407,9 @@ async function prepare(
     const editorCommands = {
       vscodium:
         vscodium === undefined
-          ? await dependencies.editorCli()
+          ? await step('the editor command line', () =>
+              dependencies.editorCli(),
+            )
           : vscodiumCliOf(vscodium),
       vscode:
         vscode === undefined
@@ -1393,14 +1420,24 @@ async function prepare(
     const stateBefore = process.env.XDG_STATE_HOME;
     process.env.XDG_STATE_HOME = stateFolderOf(runFolder, 'install');
     try {
-      for (const {folder, files, client} of installs) {
-        checked(command, editorCommands[client], [
-          `--extensions-dir=${folder}`,
-          `--user-data-dir=${userDataFolderOf(runFolder)}`,
-          `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
-          ...files.flatMap(file => ['--install-extension', file]),
-        ]);
-      }
+      await step(
+        `installing the extensions into ${String(installs.length)} folders`,
+        () => {
+          for (const {folder, files, client} of installs) {
+            checked(
+              command,
+              editorCommands[client],
+              [
+                `--extensions-dir=${folder}`,
+                `--user-data-dir=${userDataFolderOf(runFolder)}`,
+                `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
+                ...files.flatMap(file => ['--install-extension', file]),
+              ],
+              PREPARE_STEP_MILLISECONDS,
+            );
+          }
+        },
+      );
     } finally {
       if (stateBefore === undefined) {
         delete process.env.XDG_STATE_HOME;
@@ -1427,13 +1464,15 @@ async function prepare(
   const registry = chosen.some(
     launch => launch.registry === true || launch.templates === true,
   )
-    ? await dependencies.startRegistry(runId)
+    ? await step('the registry', () => dependencies.startRegistry(runId))
     : undefined;
   if (registry !== undefined) {
     stops.push(() => registry.stop());
   }
   const wslDistros = chosen.some(launch => launch.wslDistros === true)
-    ? await dependencies.prepareWslDistros(runId, runFolder)
+    ? await step('the WSL distributions', () =>
+        dependencies.prepareWslDistros(runId, runFolder),
+      )
     : undefined;
   if (wslDistros !== undefined) {
     stops.push(() => wslDistros.unregister());
@@ -1443,11 +1482,13 @@ async function prepare(
     : undefined;
   const templateRegistry =
     registry !== undefined && chosen.some(launch => launch.templates === true)
-      ? await dependencies.prepareTemplates(
-          root,
-          runFolder,
-          registry.address,
-          devContainerImage,
+      ? await step('the templates', () =>
+          dependencies.prepareTemplates(
+            root,
+            runFolder,
+            registry.address,
+            devContainerImage,
+          ),
         )
       : undefined;
   const templateIndex = downloads?.variables.HARNESS_DOWNLOADS_LOCAL;
@@ -3128,5 +3169,7 @@ if (isMainModule(import.meta.url)) {
       parsed.editor,
       parsed.launches,
     );
+    // A step that outlived its limit leaves its work running, which would hold the process to the job's own limit.
+    endAfterGrace();
   }
 }

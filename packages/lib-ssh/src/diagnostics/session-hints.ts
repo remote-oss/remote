@@ -85,6 +85,7 @@ export const STATUS_NUMBERS: Readonly<Record<string, number>> = {
   PreconnectScriptFailure: 12,
   InvalidCustomServerPath: 13,
   CommandMissing: 14,
+  LinuxPrereqs: 15,
 };
 
 /** The number of `status`, or none for a status the table does not hold. */

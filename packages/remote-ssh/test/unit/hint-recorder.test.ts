@@ -5,6 +5,10 @@ import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {FailureHint} from 'lib-ssh';
 import {hintRecorderOf} from '../../src/diagnostics/hint-recorder.ts';
 import {installPathHint} from '../../src/diagnostics/install-path-hint.ts';
+import {
+  LINUX_PREREQUISITES_PAGE,
+  prerequisitesHint,
+} from '../../src/diagnostics/prerequisites-hint.ts';
 import type {HintStore} from '../../src/diagnostics/hint-store.ts';
 
 const ENVIRONMENT = [
@@ -189,6 +193,27 @@ describe('the hint recorder (card connect-119)', () => {
       message: [],
       mitigations: [[], [{start: 13, length: 28}], [], []],
     });
+  });
+
+  it('F-2401 AC-17: the prerequisites hint is stored with the message, its details, the old-Linux page as the one mitigation and the prerequisites page as the one resource', async () => {
+    const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    attempt(recorder, [prerequisitesHint()]);
+    await settled();
+    deepStrictEqual(errorsOf(stored.value?.records[0]), [
+      {
+        kind: 'error',
+        status: 'LinuxPrereqs',
+        statusNumber: 15,
+        message:
+          "The remote host may not meet VS Code Server's prerequisites for glibc and libstdc++",
+        details:
+          'The remote host does not meet the prerequisites for running VS Code Server',
+        mitigations: [
+          'https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/old-linux-hosts.md',
+        ],
+        resources: [LINUX_PREREQUISITES_PAGE],
+      },
+    ]);
   });
 
   it('F-2604 AC-22: the hints are written under the key the clear command deletes', async () => {

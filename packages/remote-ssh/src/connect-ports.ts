@@ -75,6 +75,7 @@ import type {HintRecorder} from './diagnostics/hint-recorder.ts';
 import {downloadRefusalHint} from './diagnostics/download-refusal.ts';
 import {commandMissingHint} from './diagnostics/command-missing-hint.ts';
 import {installFolderHint} from './diagnostics/install-folder-hint.ts';
+import {prerequisitesHint} from './diagnostics/prerequisites-hint.ts';
 import {installPathHint} from './diagnostics/install-path-hint.ts';
 import {localDownloadHint} from './diagnostics/local-download-hint.ts';
 import {invalidProxyHint} from './diagnostics/invalid-proxy.ts';
@@ -475,6 +476,9 @@ export function wiringPortsOf(
       },
       onCommandMissing: program => {
         surfaces.hints.record(commandMissingHint(program));
+      },
+      onPrerequisitesMissing: () => {
+        surfaces.hints.record(prerequisitesHint());
       },
       onLocalDownloadFailed: value => {
         surfaces.hints.record(localDownloadHint(value, surfaces.translate));
