@@ -110,6 +110,35 @@ describe('client lock (card server-05 table)', () => {
     );
   });
 
+  it('cancelled while the file is created (card #2915): cancelled, the file removed, and the work never runs', async () => {
+    const clock = new FakeClock();
+    const port = new MemoryLockPort(clock);
+    const cancellation = new AbortController();
+    const create = port.createExclusive.bind(port);
+    port.createExclusive = async (path: string) => {
+      const created = await create(path);
+      cancellation.abort();
+      return created;
+    };
+    let worked = false;
+    const result = await withClientLock(
+      port,
+      FOLDER,
+      IDENTITY,
+      clock,
+      () => {
+        worked = true;
+        return Promise.resolve('value');
+      },
+      () => undefined,
+      {cancellation: cancellation.signal},
+    );
+    deepStrictEqual(
+      {result, worked, files: port.files()},
+      {result: {kind: 'cancelled'}, worked: false, files: []},
+    );
+  });
+
   it('no file: withClientLock -> done with the work value; the file is created before work runs and removed after', async () => {
     const clock = new FakeClock();
     const port = new MemoryLockPort(clock);
