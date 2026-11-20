@@ -73,6 +73,8 @@ export type ConnectionReply =
       record: SharedRecord | null;
       /** What the session's opening found when the host's platform was unknown; null when it was known. */
       detectedPlatform: DetectedPlatform | null;
+      /** The pid of the ssh the helper runs, known once the connection is set up; absent from an earlier build. */
+      sshProcessId?: number;
     }
   | {type: 'answered'; accepted: boolean}
   | {type: 'scriptEnded'; status: number}
@@ -94,7 +96,12 @@ export type ConnectionEvent =
   | {type: 'promptClosed'; promptId: number}
   | {type: 'ownerChanged'; owner: number}
   | {type: 'waitingForOtherWindow'}
-  | {type: 'connected'; socksPort: number}
+  | {
+      type: 'connected';
+      socksPort: number;
+      /** The pid of the ssh the helper runs, which the helper knows once the connection is set up; absent from an earlier build. */
+      sshProcessId?: number;
+    }
   | {
       type: 'loginFailed';
       kind: FailureKind;
@@ -292,12 +299,15 @@ export function readConnectionReply(
       }
       const record =
         body.record === null ? null : readSharedRecord(body.record);
+      const sshProcessId =
+        typeof body.sshProcessId === 'number' ? body.sshProcessId : undefined;
       return record === undefined
         ? undefined
         : {
             type: 'sharedRecord',
             record,
             detectedPlatform: detectedPlatform ?? null,
+            ...(sshProcessId === undefined ? {} : {sshProcessId}),
           };
     }
     case 'answered':
@@ -355,10 +365,18 @@ export function readConnectionEvent(
       return typeof body.owner === 'number'
         ? {type: 'ownerChanged', owner: body.owner}
         : undefined;
-    case 'connected':
-      return typeof body.socksPort === 'number'
-        ? {type: 'connected', socksPort: body.socksPort}
-        : undefined;
+    case 'connected': {
+      if (typeof body.socksPort !== 'number') {
+        return undefined;
+      }
+      const sshProcessId =
+        typeof body.sshProcessId === 'number' ? body.sshProcessId : undefined;
+      return {
+        type: 'connected',
+        socksPort: body.socksPort,
+        ...(sshProcessId === undefined ? {} : {sshProcessId}),
+      };
+    }
     case 'loginFailed':
       return readLoginFailed(body);
     case 'spawnFailed':
