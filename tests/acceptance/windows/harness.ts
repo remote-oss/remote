@@ -1471,10 +1471,9 @@ async function pagesListedNow(): Promise<string[] | undefined> {
 /**
  * Closes window `name` and resolves once it's gone: its agent reports `deactivated`, or the extension host it recorded
  * has exited, and the page it was last found by has left the editor's list, so that the next row does not find it beside
- * its own. Some closes
+ * its own; a page that is still listed after 30 s is told on stderr and the close ends. Some closes
  * never get the event (8 of 576 in a full containers launch, 2026-11-01): the extension host ends before its agent
- * writes it. A window whose extension host still runs after the wait fails, naming it; so does one whose page stays
- * listed.
+ * writes it. A window whose extension host still runs after the wait fails, naming it.
  */
 export async function closeWindow(
   name: string,
@@ -1505,13 +1504,18 @@ export async function closeWindow(
     withdrawUnaccepted(name, commandId);
   }
   if (ownPage !== undefined && listedBefore?.includes(ownPage) === true) {
-    await waitUntilPageLeft(
+    const waited = await waitUntilPageLeft(
       name,
       ownPage,
       pagesListedNow,
       PAGE_LEFT_MILLISECONDS,
       pause => new Promise(resolve => setTimeout(resolve, pause)),
     );
+    // A page that lingers is told by name and the close goes on: it is not something a close, or the hook that runs it,
+    // can end, and a launch must not fail for it.
+    if (waited.state === 'stayed') {
+      process.stderr.write(`closing window ${name}: ${waited.note}\n`);
+    }
   }
 }
 

@@ -1,9 +1,10 @@
-import {deepStrictEqual, rejects} from 'node:assert';
+import {deepStrictEqual} from 'node:assert';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
   type DebugTarget,
+  lingeringPageNote,
   listedPageIds,
   localPageAmong,
   pagesDescription,
@@ -166,8 +167,8 @@ describe('the wait for a closed window’s page to leave the list (card #2890)',
       ['own', 'other'],
       ['other'],
     ]);
-    await waitUntilPageLeft('fresh', 'own', read, 5_000, pause);
-    deepStrictEqual(state.reads, 3);
+    const waited = await waitUntilPageLeft('fresh', 'own', read, 5_000, pause);
+    deepStrictEqual([waited, state.reads], [{state: 'left'}, 3]);
   });
 
   it('#2890: a window that opens meanwhile, with the count above what it was, does not end the wait while the window’s own page is listed', async () => {
@@ -177,8 +178,8 @@ describe('the wait for a closed window’s page to leave the list (card #2890)',
       ['own', 'other', 'opened'],
       ['other', 'opened'],
     ]);
-    await waitUntilPageLeft('fresh', 'own', read, 5_000, pause);
-    deepStrictEqual(state.reads, 4);
+    const waited = await waitUntilPageLeft('fresh', 'own', read, 5_000, pause);
+    deepStrictEqual([waited, state.reads], [{state: 'left'}, 4]);
   });
 
   it('#2890: a window that closes meanwhile, with the count below what it was, does not end the wait early while the window’s own page is listed', async () => {
@@ -188,27 +189,37 @@ describe('the wait for a closed window’s page to leave the list (card #2890)',
       ['own'],
       [],
     ]);
-    await waitUntilPageLeft('fresh', 'own', read, 5_000, pause);
-    deepStrictEqual(state.reads, 4);
+    const waited = await waitUntilPageLeft('fresh', 'own', read, 5_000, pause);
+    deepStrictEqual([waited, state.reads], [{state: 'left'}, 4]);
   });
 
   it('#2890: a page that is not listed on the first reading ends the wait on it', async () => {
     const {read, state} = reading([['other']]);
-    await waitUntilPageLeft('fresh', 'own', read, 5_000, pause);
-    deepStrictEqual(state.reads, 1);
+    const waited = await waitUntilPageLeft('fresh', 'own', read, 5_000, pause);
+    deepStrictEqual([waited, state.reads], [{state: 'left'}, 1]);
   });
 
   it('#2890: a list that cannot be read ends the wait, since nothing can be told', async () => {
     const {read, state} = reading([undefined]);
-    await waitUntilPageLeft('fresh', 'own', read, 5_000, pause);
-    deepStrictEqual(state.reads, 1);
+    const waited = await waitUntilPageLeft('fresh', 'own', read, 5_000, pause);
+    deepStrictEqual([waited, state.reads], [{state: 'left'}, 1]);
   });
 
-  it('#2890, negative: a page that stays listed, whatever else comes and goes, fails the wait naming the window and the page, and does not pass', async () => {
+  it('#2890: a page that stays listed, whatever else comes and goes, ends the wait with a note naming the window, the page and the list, and does not throw', async () => {
     const {read} = reading([['own-page-0001', 'other'], ['own-page-0001']]);
-    await rejects(
-      waitUntilPageLeft('fresh', 'own-page-0001', read, 20, pause),
-      /the page of window fresh \(#own-page\) was still listed 0\.02 s after the window deactivated: the editor lists 1 pages/u,
+    deepStrictEqual(
+      await waitUntilPageLeft('fresh', 'own-page-0001', read, 20, pause),
+      {
+        state: 'stayed',
+        note: 'the page of window fresh (#own-page) was still listed 0.02 s after the window deactivated: the editor lists 1 pages',
+      },
+    );
+  });
+
+  it('#2890: the note of a lingering page names the window, the start of the page id, the seconds and how many pages the editor lists', () => {
+    deepStrictEqual(
+      lingeringPageNote('c50-generic', '15D82FFDAB', 2, 30_000),
+      'the page of window c50-generic (#15D82FFD) was still listed 30 s after the window deactivated: the editor lists 2 pages',
     );
   });
 });

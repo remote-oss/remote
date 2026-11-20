@@ -111,11 +111,23 @@ export async function listedPageIds(
   }
 }
 
+/** What a close says when the window's page is still listed after its bound: the window, the page and the list's size. */
+export function lingeringPageNote(
+  window: string,
+  pageId: string,
+  listedCount: number,
+  milliseconds: number,
+): string {
+  return `the page of window ${window} (#${pageId.slice(0, 8)}) was still listed ${String(milliseconds / 1000)} s after the window deactivated: the editor lists ${String(listedCount)} pages`;
+}
+
 /**
  * Waits until the page `pageId` of window `window`, the one it remembered, has left the editor's list, so that a row that
  * goes on after a close does not find the closed window's page beside its own. It waits on that page and no other, so a
- * window that opens or closes meanwhile neither ends the wait early nor holds it. A list that cannot be read ends the wait,
- * since nothing can be told; a page that stays past `milliseconds` fails naming the window and the page.
+ * window that opens or closes meanwhile neither ends the wait early nor holds it. It gives `left` when the page is gone, or
+ * when the list cannot be read, since nothing can be told; and, after `milliseconds`, `stayed` with the text that names the
+ * window, the page and the list's size: the caller tells it, and the close goes on, since a page that lingers is not
+ * something a close can end.
  */
 export async function waitUntilPageLeft(
   window: string,
@@ -123,17 +135,18 @@ export async function waitUntilPageLeft(
   read: () => Promise<readonly string[] | undefined>,
   milliseconds: number,
   pause: (milliseconds: number) => Promise<void>,
-): Promise<void> {
+): Promise<{state: 'left'} | {state: 'stayed'; note: string}> {
   const deadline = Date.now() + milliseconds;
   for (;;) {
     const listed = await read();
     if (!listed?.includes(pageId)) {
-      return;
+      return {state: 'left'};
     }
     if (Date.now() > deadline) {
-      throw new Error(
-        `the page of window ${window} (#${pageId.slice(0, 8)}) was still listed ${String(milliseconds / 1000)} s after the window deactivated: the editor lists ${String(listed.length)} pages`,
-      );
+      return {
+        state: 'stayed',
+        note: lingeringPageNote(window, pageId, listed.length, milliseconds),
+      };
     }
     await pause(250);
   }
