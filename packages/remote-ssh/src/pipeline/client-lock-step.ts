@@ -40,9 +40,15 @@ export class HeldClientLocks {
     return true;
   }
 
-  /** Notes the file at `path` as no longer held, once the lock's own removal of it has run. */
-  forget(path: string): void {
-    this.paths.delete(path);
+  /**
+   * Removes the file this extension created at `path`, and stops holding it when `wasHeld`, in one call, so that no
+   * end can come between the two. A held file the end has removed already is left alone, since another window may
+   * hold it by now.
+   */
+  release(path: string, wasHeld: boolean): void {
+    if (!wasHeld || this.paths.delete(path)) {
+      this.removeNow(path);
+    }
   }
 
   /** Removes the file of every lock still held, and of every lock taken from now on: the extension's end. */
@@ -53,6 +59,34 @@ export class HeldClientLocks {
     }
     this.paths.clear();
   }
+}
+
+/**
+ * `port` with its removal of a file this caller created made by `held`, at once, `holding` telling whether the lock
+ * was held by then: the takeover of another window's left file still goes to `port`.
+ */
+function releasingThrough(
+  port: LockFilePort,
+  held: HeldClientLocks,
+  holding: () => boolean,
+): LockFilePort {
+  let created = false;
+  return {
+    createExclusive: async path => {
+      const outcome = await port.createExclusive(path);
+      created = outcome === 'created';
+      return outcome;
+    },
+    ageMilliseconds: path => port.ageMilliseconds(path),
+    remove: path => {
+      if (!created) {
+        return port.remove(path);
+      }
+      created = false;
+      held.release(path, holding());
+      return Promise.resolve();
+    },
+  };
 }
 
 /** What the client lock step is made from. */
@@ -80,11 +114,12 @@ export function holdClientLockStep(
     dependencies.logger.info(`Acquiring local install lock ${named}`);
     return new Promise(resolve => {
       const hold: {end?: () => void} = {};
+      let holdsLock = false;
       const holding = new Promise<void>(end => {
         hold.end = end;
       });
       withClientLock(
-        dependencies.port,
+        releasingThrough(dependencies.port, dependencies.held, () => holdsLock),
         dependencies.folder,
         key,
         dependencies.clock,
@@ -95,6 +130,7 @@ export function holdClientLockStep(
             // another window may have taken the lock by then.
             return new Promise<void>(() => undefined);
           }
+          holdsLock = true;
           // A connect that is given up while it holds the lock gives it back, whatever its later steps do.
           cancellation.addEventListener(
             'abort',
@@ -117,18 +153,13 @@ export function holdClientLockStep(
         {cancellation},
       ).then(
         outcome => {
-          // A released lock stays held until its file is removed, here, and only here: an extension that ends in between
-          // still removes it, and a window that took the lock after that removal keeps its file.
-          if (outcome.kind === 'done') {
-            dependencies.held.forget(path);
-          } else if (outcome.kind === 'lockTimeout') {
+          if (outcome.kind === 'lockTimeout') {
             resolve({kind: 'failed', failure: LOCAL_LOCK_TIMEOUT});
-          } else {
+          } else if (outcome.kind === 'cancelled') {
             resolve({kind: 'failed', failure: {kind: 'cancelled'}});
           }
         },
         (caught: unknown) => {
-          dependencies.held.forget(path);
           dependencies.logger.warn(
             `the local install lock ${named} could not be used: ${String(caught)}`,
           );
