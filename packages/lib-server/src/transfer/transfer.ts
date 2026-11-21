@@ -351,7 +351,11 @@ async function install(
   );
   logIdentityRewrite(stepRun, parameters, dependencies.logger);
   const outcome = outcomeOf(stepRun, input.plan);
-  if (lockPath !== undefined && outcome.kind !== 'transferred') {
+  // The session keeps the lock only when the script took it: an install that failed, was cancelled or found the
+  // server installed takes none, and what the shell made for it goes.
+  const held =
+    stepRun.kind === 'result' && stepRun.block.serverFacts.lockHeld === 'yes';
+  if (lockPath !== undefined && !(outcome.kind === 'transferred' && held)) {
     await releaseSessionLock(dependencies.channel, lockPath);
   }
   return outcome;

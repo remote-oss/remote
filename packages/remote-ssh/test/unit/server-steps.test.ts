@@ -780,15 +780,6 @@ describe('the server steps: transfer and start', () => {
     });
   });
 
-  /** The session lock each run of `channel` carried, in order. */
-  function sessionLocksOf(channel: RecordingChannel): unknown[] {
-    return channel.calls.flatMap(call =>
-      call.operation === 'runScript' && call.request.sessionLock !== undefined
-        ? [call.request.sessionLock]
-        : [],
-    );
-  }
-
   async function transferOver(
     channel: RecordingChannel,
   ): Promise<ReturnType<ReturnType<typeof createServerSteps>['transfer']>> {
@@ -807,7 +798,21 @@ describe('the server steps: transfer and start', () => {
     );
   }
 
-  it('F-2408 BR-4: the install of a host with flock has the session shell hold the host lock, so its run carries the lock path the host named', async () => {
+  it('F-2408 BR-4: the install of a host with flock has the session shell hold the host lock, so its run carries the lock path the host named, and the session keeps it when the script took the lock', async () => {
+    const channel = channelAnswering(
+      lines(
+        'Ok',
+        'server.installDir=/home/alex/.fixture-server/bin/abc123',
+        'timing.install=5',
+        'server.lockHeld=yes',
+      ),
+      'flock',
+    );
+    await transferOver(channel);
+    deepStrictEqual(channel.sessionLocks(), [{path: '/lock', action: 'open'}]);
+  });
+
+  it('F-2402 AC-26: an install that found the server installed took no lock, so the session gives up what the shell made', async () => {
     const channel = channelAnswering(
       lines(
         'Ok',
@@ -817,13 +822,16 @@ describe('the server steps: transfer and start', () => {
       'flock',
     );
     await transferOver(channel);
-    deepStrictEqual(sessionLocksOf(channel), [{path: '/lock', action: 'open'}]);
+    deepStrictEqual(channel.sessionLocks(), [
+      {path: '/lock', action: 'open'},
+      {path: '/lock', action: 'release'},
+    ]);
   });
 
   it('F-2408 BR-4: an install that fails gives the session lock up', async () => {
     const channel = channelAnswering(lines('CreateInstallDirFailed'), 'flock');
     await transferOver(channel);
-    deepStrictEqual(sessionLocksOf(channel), [
+    deepStrictEqual(channel.sessionLocks(), [
       {path: '/lock', action: 'open'},
       {path: '/lock', action: 'release'},
     ]);
@@ -839,7 +847,7 @@ describe('the server steps: transfer and start', () => {
       false,
       new AbortController().signal,
     );
-    deepStrictEqual(sessionLocksOf(channel), []);
+    deepStrictEqual(channel.sessionLocks(), []);
   });
 
   it('F-3902 AC-13: starts the server with the licence flag only when the gate cleared it', async () => {
