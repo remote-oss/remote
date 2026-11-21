@@ -522,6 +522,30 @@ describe('connection handler (contracts §4 S9)', () => {
       );
     });
 
+    it('F-2408 BR-4: a run with a session lock reaches the session shell as the guarded open of descriptor 9, written before the run, and a release run as the release commands', async () => {
+      await authenticated();
+      spawner.started[0]?.output(
+        'REMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-HOME-m1-/home/h\nREMOTE-OSS-PROBE-m1-DONE\n',
+      );
+      await settled();
+      spawner.started[0]?.output('REMOTE-OSS-PROBE-m1-EXEC\n');
+      await settled();
+      const handed = written() ?? '';
+      spawner.started[0]?.output('LAYER1-READY\n');
+      void send(1, {
+        ...RUN_REQUEST,
+        sessionLock: {path: '/tmp/lock', action: 'open'},
+      });
+      await settled();
+      deepStrictEqual(
+        (written() ?? '').slice(handed.length).split('\n').slice(0, 2),
+        [
+          "[ -n \"${REMOTE_OSS_LOCK_HELD:-}\" ] || { ( exec 9>>'/tmp/lock' ) 2>/dev/null && exec 9>>'/tmp/lock'; }",
+          "printf '%s%s\\n' 'm2:st' 'art'",
+        ],
+      );
+    });
+
     it("#1835: a hand-over line before the answers end writes no prelude, and the probe's lines are no LocalCommand's output", async () => {
       await authenticated();
       spawner.started[0]?.output(
@@ -1235,7 +1259,7 @@ describe('connection handler (contracts §4 S9)', () => {
       await settled();
       deepStrictEqual(
         spawner.started[0]?.inputText(),
-        "P\nprintf '%s%s\\n' 'm1:st' 'art'\nsh -c 'echo hello' </dev/null\nprintf '%s%s %s\\n' 'm1:e' 'nd' \"$?\"\n",
+        "P\nprintf '%s%s\\n' 'm1:st' 'art'\nsh -c 'echo hello' 9>&- </dev/null\nprintf '%s%s %s\\n' 'm1:e' 'nd' \"$?\"\n",
       );
     });
 

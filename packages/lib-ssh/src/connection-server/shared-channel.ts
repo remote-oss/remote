@@ -120,6 +120,9 @@ export class SharedSessionChannel implements HostChannel {
           environment: request.environment,
           inputBase64: input.base64,
           deadlineMilliseconds: this.options.runDeadlineMilliseconds,
+          ...(request.sessionLock === undefined
+            ? {}
+            : {sessionLock: request.sessionLock}),
         },
         line => {
           if (delivering) {

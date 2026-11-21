@@ -16,7 +16,7 @@ import {
   type TunnelSettings,
   type WaitLimits,
 } from 'lib-forwarding';
-import type {HostChannel} from 'lib-host';
+import {type HostChannel, linesOfScript} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {StartedServer} from 'lib-server';
 import {
@@ -465,20 +465,14 @@ async function serverListens(
   port: number,
   cancellation: AbortSignal,
 ): Promise<boolean | undefined> {
-  const lines: string[] = [];
-  const outcome = await channel.runScript(
-    {
-      script: LISTEN_SCRIPT,
-      interpreter: 'posixShell',
-      environment: {SERVER_PORT: String(port)},
-      input: {kind: 'text', text: ''},
-      cancellation,
-    },
-    line => {
-      lines.push(line);
-    },
-  );
-  if (outcome.kind === 'failed' || outcome.status !== 0) {
+  const lines = await linesOfScript(channel, {
+    script: LISTEN_SCRIPT,
+    interpreter: 'posixShell',
+    environment: {SERVER_PORT: String(port)},
+    input: {kind: 'text', text: ''},
+    cancellation,
+  });
+  if (lines === undefined) {
     return undefined;
   }
   const answer = lines.find(line => line.startsWith('remote-oss-listening='));

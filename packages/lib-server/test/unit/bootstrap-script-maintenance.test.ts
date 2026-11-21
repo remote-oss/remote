@@ -16,7 +16,13 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import {scriptFor, type ScriptParameters} from '../../src/index.ts';
-import {type FakeHost, parametersFor, runScript, single} from './fake-host.ts';
+import {
+  callsOf,
+  type FakeHost,
+  parametersFor,
+  runScript,
+  single,
+} from './fake-host.ts';
 import {installHostHooks, statusOf} from './bootstrap-script.fixture.ts';
 
 /** Whether the process is still running after up to 5 s: a signal returns before the process has exited. */
@@ -311,6 +317,29 @@ describe('the POSIX bootstrap script', () => {
           OLD2,
         ),
         ['abc1230000000000000000000000000000000000', NEW1, OLD2].sort(),
+      );
+    });
+
+    it('ruling-2913-lock-one-meaning: the uninstall and Kill VS Code Server take no host lock, even where it is busy', () => {
+      runScript(host, single('install'), parametersFor());
+      const before = callsOf(host).filter(call =>
+        call.startsWith('flock '),
+      ).length;
+      const busy = {STUB_FLOCK_BUSY: 'yes'};
+      const kill = statusOf(host, single('kill'), parametersFor(), {
+        environment: busy,
+      });
+      const uninstall = statusOf(host, single('uninstall'), parametersFor(), {
+        environment: busy,
+      });
+      deepStrictEqual(
+        [
+          kill,
+          uninstall,
+          callsOf(host).filter(call => call.startsWith('flock ')).length -
+            before,
+        ],
+        ['Ok', 'Ok', 0],
       );
     });
 
