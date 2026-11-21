@@ -1,5 +1,11 @@
 import {deepStrictEqual, match} from 'node:assert';
-import {existsSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import {createServer} from 'node:net';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -142,7 +148,7 @@ describe('the machine a connect runs on', () => {
       const lockFile = path.join(folder, 'held.lock');
       writeFileSync(lockFile, '');
       const {clientLocks} = nodeMachineOf(PLACES, FACTS);
-      clientLocks.hold(lockFile);
+      clientLocks.hold(lockFile, statSync(lockFile).mtimeMs);
       clientLocks.releaseAll();
       deepStrictEqual(existsSync(lockFile), false);
     } finally {

@@ -5,7 +5,10 @@ import type {
   SessionRun,
   SessionRunEnd,
 } from '../../src/index.ts';
-import {commandsFor} from '../../src/connection-server/shell-runs.ts';
+import {
+  commandsFor,
+  SESSION_LOCK_TAKEN,
+} from '../../src/connection-server/shell-runs.ts';
 import {RecordingTerminals} from '../../src/testing/recording-terminal.ts';
 import {TerminalSessionRunner} from '../../src/terminal/terminal-runs.ts';
 
@@ -68,6 +71,14 @@ async function settled(): Promise<void> {
     await Promise.resolve();
   }
 }
+
+const LOCKED: SessionRun = {
+  ...SCRIPT,
+  sessionLock: {path: '/tmp/lock', action: 'open'},
+};
+
+const ARMING =
+  "REMOTE_OSS_LOCK_HELD=1; trap '[ '\\''/tmp/lock'\\'' -ef /dev/fd/9 ] && rm -f '\\''/tmp/lock'\\''' EXIT HUP\n";
 
 describe('script runs over the login terminal (card ssh-21 table)', () => {
   it('#443: the prelude is sent once, before the first run, and the commands follow it', () => {
@@ -261,5 +272,78 @@ describe('the bootstrap lines over the login terminal (card ssh-38, #443)', () =
     const {terminal, bootstrap} = fixture();
     terminal.write("printf 'LAYER1-READY\\n'\r\n");
     deepStrictEqual(bootstrap, []);
+  });
+
+  describe('the host lock of the terminal session (card #2855)', () => {
+    it('F-2408 BR-4: a run with a session lock reaches the terminal as the guarded open of descriptor 9, then its commands', () => {
+      const {terminal, start} = fixture();
+      start(LOCKED);
+      deepStrictEqual(terminal.sent.slice(1), [commandsFor('m1', LOCKED)]);
+    });
+
+    it('F-2408 BR-4: once the script reports the lock held, the terminal gets the arming line before the next run', async () => {
+      const {terminal, start} = fixture();
+      start(LOCKED);
+      start(OTHER);
+      terminal.write(`m1:start\n${SESSION_LOCK_TAKEN}\nm1:end 0\n`);
+      await settled();
+      deepStrictEqual(terminal.sent.slice(1), [
+        commandsFor('m1', LOCKED),
+        ARMING,
+        commandsFor('m2', OTHER),
+      ]);
+    });
+
+    it('F-2408 BR-4: a run that reported no lock arms nothing, so a session that only waited removes no file', async () => {
+      const {terminal, start} = fixture();
+      start(LOCKED);
+      start(OTHER);
+      terminal.write('m1:start\nm1:end 0\n');
+      await settled();
+      deepStrictEqual(terminal.sent.slice(1), [
+        commandsFor('m1', LOCKED),
+        commandsFor('m2', OTHER),
+      ]);
+    });
+
+    it('F-2408 BR-4: a release run is written to the terminal as the release commands', () => {
+      const {terminal, start} = fixture();
+      start({
+        ...SCRIPT,
+        script: ':',
+        sessionLock: {path: '/tmp/lock', action: 'release'},
+      });
+      deepStrictEqual(
+        terminal.sent[1]?.includes(
+          "rm -f '/tmp/lock'; }; fi 2>/dev/null; exec 9>&-",
+        ),
+        true,
+      );
+    });
+
+    it('F-2408 BR-4: after the terminal ends, with the lock held, a run asked for answers at once and writes nothing: the lock goes with the terminal’s own shell', async () => {
+      const {terminal, start} = fixture();
+      const holding = start(LOCKED);
+      terminal.write(`m1:start\n${SESSION_LOCK_TAKEN}\nm1:end 0\n`);
+      await holding.ended;
+      const written = terminal.sent.length;
+      terminal.end(0);
+      const release = start({
+        ...SCRIPT,
+        script: ':',
+        sessionLock: {path: '/tmp/lock', action: 'release'},
+      });
+      deepStrictEqual(
+        [await release.ended, terminal.sent.length],
+        [
+          {
+            kind: 'failed',
+            reason: 'channelClosed',
+            detail: 'the session ended',
+          },
+          written,
+        ],
+      );
+    });
   });
 });

@@ -63,15 +63,22 @@ export function textOf(
   return typeof value === 'string' ? value : '';
 }
 
+/** The undeclared value of `remote.SSH.localServerDownload` that turns the manual bootstrap on. */
+const MANUAL_BOOTSTRAP_VALUE = 'manual-bootstrap';
+
 /**
  * Where a connect may download the server archive: `off` when `remote.SSH.allowLocalServerDownload` is
- * false, else `remote.SSH.localServerDownload` when it is `always` or `off`, else `auto`.
+ * false, else `remote.SSH.localServerDownload` when it is `always` or `off`, `manualBootstrap` for its undeclared value
+ * `manual-bootstrap`, else `auto`.
  */
 export function localDownloadModeOf(host: SettingHost): LocalDownloadMode {
   if (valueOf(host, 'allowLocalServerDownload') === false) {
     return 'off';
   }
   const mode = valueOf(host, 'localServerDownload');
+  if (mode === MANUAL_BOOTSTRAP_VALUE) {
+    return 'manualBootstrap';
+  }
   return mode === 'always' || mode === 'off' ? mode : 'auto';
 }
 

@@ -99,6 +99,17 @@ export interface ClientFilePort {
     source: string,
     destination: string,
   ): Promise<{kind: 'renamed'} | {kind: 'failed'; detail: string}>;
+  /**
+   * Copies `source` into a new folder of its own in `folder`, under the manual bootstrap's fixed archive name with its
+   * `.done` marker file beside it, and gives the copy's path; the folder is left in place. A copy that fails
+   * carries the file system's text.
+   */
+  stage(
+    source: string,
+    folder: string,
+  ): Promise<
+    {kind: 'staged'; archive: string} | {kind: 'failed'; detail: string}
+  >;
 }
 
 /** The client's netrc, read by the extension; the library reads no file of its own. */

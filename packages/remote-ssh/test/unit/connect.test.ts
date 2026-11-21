@@ -584,6 +584,25 @@ describe('the connect pipeline, with the client install lock (card #2844, F-2408
   });
 });
 
+describe('the warning of the download mode (F-2406 BR-3, ruling-2878-manual-bootstrap)', () => {
+  it('BR-3: a window asks for the warning once at the start of every attempt', async () => {
+    const {recording, options} = setup();
+    let warnings = 0;
+    const counted = steps(recording, {
+      warnOfDownloadMode: () => {
+        warnings += 1;
+      },
+    });
+    await connect(INPUT, counted, options);
+    await connect(
+      {...INPUT, attempt: 2, isReconnection: true},
+      counted,
+      options,
+    );
+    deepStrictEqual(warnings, 2);
+  });
+});
+
 describe('the connect pipeline, what the log says of a resolve (card connect-65)', () => {
   /** The messages of a connect's log that belong to the resolve's own lines. */
   function resolveLines(logSink: MemorySink): string[] {

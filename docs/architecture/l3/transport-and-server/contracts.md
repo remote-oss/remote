@@ -31,7 +31,7 @@ lib-host, lib-product, and the pure parts of lib-ssh (S2, S5, S6, S4's parser an
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `runScript` | script text, interpreter (`posixShell`, `powershell`), environment additions, input (`ScriptInput`: `text` with its text sent as UTF-8, or `file` with a local file streamed byte for byte to standard input), cancellation | output lines as a stream, then the exit status | `channelClosed`, `spawnFailed`, `timeout`, `cancelled` |
+| `runScript` | script text, interpreter (`posixShell`, `powershell`), environment additions, input (`ScriptInput`: `text` with its text sent as UTF-8, or `file` with a local file streamed byte for byte to standard input), cancellation, optionally `sessionLock {path, action: 'open' | 'release'}`: `open` has a channel whose shell lives as long as the session open `path` on descriptor 9 before the script, so a `flock` the script takes lasts the session; `release` gives the descriptor up, and removes the file when the shell held the lock; a channel with no long-lived shell ignores it (ruling-2820-flock-session) | output lines as a stream, then the exit status | `channelClosed`, `spawnFailed`, `timeout`, `cancelled` |
 | `copyToHost` | local file, remote path, cancellation | done | `copyToolMissing`, `copyFailed` (with the tool's message), `channelClosed`, `cancelled` |
 | `identity` | none | the key that names the host in locks and records (SSH: the host string as written; containers: the container id; WSL: the distro name) | none |
 | `platformHint` | none | `linux`, `macOS`, `windows` or `unknown` | none |
@@ -472,7 +472,7 @@ denied (publickey,password,keyboard-interactive).`) instead of hanging. That int
 must not ship. No ControlMaster or ControlPath is ever added (the S2 rule
 stands, POSIX and Windows alike). The lease exposes the session through the helper's request channel (a
 `runScript` request whose reply streams lines and ends with the result block) beside the SOCKS port and the shared
-record; after `start` the session stays as the forward's carrier and later runs (kill, cleanup) use it when idle.
+record; after `start` the session stays as the forward's carrier and later runs (kill, cleanup) use it when idle. The request carries H1's `sessionLock` unchanged. The helper's session shell applies it, holds the descriptor only for the run that opens it, and, once a script reports `server.lockHeld=yes`, removes the file on its orderly end (`EXIT`, `HUP`); a killed session leaves it (F-2408 BR-4).
 Rulings from the build (2026-10-08, #183): a run's script goes to the session's stdin as `sh -c '<quoted>'` between
 two marker lines carrying an unguessable per-run nonce, its input as a base64 here-document (bounded by the policy's
 `maximumInputBytes`; a larger input fails as `spawnFailed`, and a caller with such an input uses `copyToHost`
@@ -526,7 +526,7 @@ setting at run time are filled in by the extension's adapter before the call.
 
 | Field | Values | remote-ssh | remote-containers | remote-wsl |
 |---|---|---|---|---|
-| `downloadPlacement` | `hostFirst` with `auto`, `always` or `off`; `clientFirstThenHost`; `clientOnly` | `hostFirst`, from `remote.SSH.localServerDownload` (F-2405) | `clientOnly`: the client machine downloads and copies into the container (F-1402) | `clientFirstThenHost`: a silent `wget` fallback in the distro (F-6301 BR-1, BR-7) |
+| `downloadPlacement` | `hostFirst` with `auto`, `always`, `off` or `manualBootstrap`; `clientFirstThenHost`; `clientOnly` | `hostFirst`, from `remote.SSH.localServerDownload` (F-2405) | `clientOnly`: the client machine downloads and copies into the container (F-1402) | `clientFirstThenHost`: a silent `wget` fallback in the distro (F-6301 BR-1, BR-7) |
 | `cache` | `none`; `kept` | `none` (F-3902 rule 6) | `kept` (F-0503 host cache) | `kept`, shared per user across windows and editor instances (F-6301 BR-4, BR-5, BR-14) |
 | `verification` | ordered list from `headerHash`, `lengthOnly`, `none` | `none` until the room names one | `none` until the room names one (athena, containers contracts §5) | `headerHash`, then `lengthOnly` (F-6301 BR-6, Q3) |
 | `environmentSetup` | a host path to source before install and start, never on reuse; or none | none | none | the distro's server-env-setup (F-6303 BR-1 to BR-5) |
@@ -616,11 +616,12 @@ Rules:
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `transfer` | plan, H1, a download port (the editor's network stack), UI phase sink | the archive unpacked into `bin/<client commit>/`, with its commit checked and rewritten when needed | `serverDownload` (STR:S043), `localDownload` (STR:S071 with its detail), `unpack` (STR:S075), `copy` (from H1), `cancelled` |
+| `transfer` | plan, H1, a download port (the editor's network stack), UI phase sink; for a manual bootstrap, `bootstrapArchive`, the user's archive on the client | the archive unpacked into `bin/<client commit>/`, with its commit checked and rewritten when needed | `serverDownload` (STR:S043), `localDownload` (STR:S071 with its detail), `unpack` (STR:S075), `copy` (from H1), `localBootstrap` (`missing` with its path, `unreadable` with the file system's text, `windowsHost`), `cancelled` |
 
 Rules:
 - Placement follows the record. For `hostFirst`: `auto` falls back to the client, `always` uses the client, `off`
-  never does (F-2405).
+  never does (F-2405), and `manualBootstrap` downloads on neither side: the client delivers the user's own archive
+  (F-2406 BR-6).
 - The archive reaches the host by `clientPathOnHost` when it returns a path, else by `copyToHost`, or as the streamed
   input of the unpack step.
 - With `cache` `none` the client copy is a temporary file, deleted afterwards (F-3902 rule 6). With `kept` the
@@ -665,7 +666,18 @@ Rules:
   `stallMilliseconds` (no bytes for that long ends it) and `maximumBytes` (the content length when known, else the
   library's default ceiling, 1 GiB; the values are lib-server's named defaults, ruled on #253 Q7), plus cancellation; the port implements them and the library proves them with a fake port
   that stalls, overruns and never answers. A connect never hangs on a download.
-- Manual bootstrap reads the fixed file and shows STR:S088 on every attempt (F-2406).
+- Manual bootstrap (`remote.SSH.localServerDownload` `manual-bootstrap`, undeclared in the manifest; F-2406,
+  ruling-2878-manual-bootstrap): the extension shows STR:S088 at the start of every attempt of a window and plans the
+  direct install (the CLI mode's `manualBootstrap` input). When the host needs the server, the transfer's
+  `bootstrapArchive` source replaces any download: the file `<home>/vscode-remote-ssh-bootstrap/vscode-server.tar.gz`
+  (`os.homedir()`) must exist (`localBootstrap` `missing`, the dialog's STR:S069), and the client port's `stage`
+  copies it into a new `vsc_server_<uuid>/` folder of the client's temporary folder with the nine-byte marker
+  `vscode-server.tar.gz.done` (`complete` and a line end; `unreadable` when the copy fails). The staged copy reaches
+  the host as any client archive does. The install step (`archiveIntoInstall`) then puts it, under the host lock only,
+  into `bin/<commit>/vscode-server.tar.gz` with its marker, by a rename (or a copy and a rename of a file the host reads
+  in place), and unpacks it only while the marker is there. A good unpack removes both; a failed one keeps the archive
+  and drops the marker. A Windows host is refused first (`windowsHost`, STR:S161). The client-side failures record the
+  `LocalBootstrapFailed` hint (STR:S087 with the reason, the six mitigations of F-2406 7.E1).
 - The commit is rewritten by editing the unpacked `product.json` only (F-3902 rule 9, pending the room's
   confirmation).
 
@@ -678,8 +690,11 @@ Rules:
 
 Rules (F-2408 as revised):
 - A client lock whose owner died is not free. A waiter takes it over only when the file is at least 4 minutes old,
-  polling about every 0.5 s and giving up after 2 minutes. The holder never refreshes the file. It removes the file
-  on a clean end and relies on the age rule otherwise.
+  polling about every 0.5 s and giving up after 2 minutes. The holder never refreshes the file. A takeover runs under
+  a ticket, `<lock>.takeover`, created exclusively: one takeover at a time, the lock's age read again under it, and a
+  ticket older than 10 s broken. A holder's release removes the lock file only while it is still its own: the file's
+  modification time is the one the holder read when it created it. It removes the file on a clean end and relies on
+  the age rule otherwise.
 - The client lock is `vscode-remote-ssh-<id>-install.lock` in the editor's temp folder, `<id>` 8 hex digits of the SHA-256
   of the alias's connection key: stable per alias, different for two aliases of one host (BR-6). It is taken in both
   install modes (BR-9) and shows S157 while a window waits (BR-11).
@@ -708,7 +723,7 @@ Never: accept for the user.
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `startOrReuse` | H1, installed server, options (bind host, port range, socket mode, grace time, default extensions, licence accepted, extra start options from the record's allow-list, environment setup) | port or socket, connection token, process id, remote environment additions | `serverStart` (STR:S135 at the end of the start wait), `invalidPortRange` (before any ssh), `cancelled` |
+| `startOrReuse` | H1, installed server, options (bind host, port range, socket mode, grace time, default extensions, licence accepted, extra start options from the record's allow-list, environment setup, `sessionLock` (true only where the channel's shell lives as long as the session: remote-ssh over S9 and in terminal mode; Dev Containers passes none): the start asks the host for the lock's place with the script's own lock functions, runs with `sessionLock open`, and releases it when the start ends without a running server; `ln` and Windows hosts take no session lock); in `flock` mode the host lock held by a session means that this commit's install is in use and only its holder installs it: an install that finds the server installed takes no lock, and an install repeats its check under the lock; a launch takes its own step-scoped lock, `<data folder>/.<commit>.start.lock`, and repeats its running-server check under it; Kill VS Code Server on Host and the uninstall take no host lock; the clean-up keeps an install whose lock is held, asking each install's own lock file; the session's lock is checked to be the file at the path, and its exit removes the path only while it still is (ruling-2913-lock-one-meaning) | port or socket, connection token, process id, remote environment additions | `serverStart` (STR:S135 at the end of the start wait), `invalidPortRange` (before any ssh), `cancelled` |
 | `serverPort` | the connection | the TCP port the running server listens on at the host's loopback, or `none` in socket mode or when no server runs; it never contacts the host (F-2509 option (a), ruled by the lead 2026-10-06, for B's Open Web UI) | none |
 | `installExtensions` | H1, server, ids filtered by F-2506 BR-2, a deadline (the library's named default of 120 s unless the caller passes one) | done with one result per id, or `notRun` with its reason (`cancelled` is the caller's, `deadline` the step's); failures are logged per id (F-2506 Q1 (b)); no host lock, so a second window never waits on it (ruled 2026-10-08, #151) | none raised |
 

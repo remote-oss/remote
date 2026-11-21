@@ -327,7 +327,7 @@
     {
       "label": "manual-bootstrap",
       "alias": "harness",
-      "cite": "F-2602 AC-4",
+      "cite": "F-2602 AC-4, F-2406 AC-4",
       "settings": {
         "remote.SSH.localServerDownload": "manual-bootstrap",
         "remote.SSH.serverDownloadUrlTemplate": "http://downloads.invalid/ok/${os}-${arch}/${commit}",
@@ -336,6 +336,11 @@
         }
       },
       "script": [
+        {
+          "surface": "notice",
+          "match": "Local download mode is configured as 'manual-bootstrap'. Exec server mode will be disabled.'",
+          "answer": "dismiss"
+        },
         {
           "surface": "failureDialog",
           "match": "\"harness\"",
@@ -347,7 +352,7 @@
           "answer": "dismiss"
         }
       ],
-      "dialog": "Could not establish connection to \"harness\": Failed to download VS Code Server (Failed to fetch)."
+      "dialog": "Could not establish connection to \"harness\": Expected tarball at local path ${home}/vscode-remote-ssh-bootstrap/vscode-server.tar.gz."
     },
     {
       "label": "download-offline",
