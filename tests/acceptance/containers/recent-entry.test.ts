@@ -14,6 +14,7 @@ import {
   reopenInContainer,
   startInWindow,
 } from '../windows/harness.ts';
+import {lastLines, outputOrReason} from '../windows/command-text.ts';
 import {editorFolderOf} from '../windows/editor-folder.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 
@@ -71,11 +72,16 @@ async function statesRead(folder: string): Promise<StatesRead> {
   return {states, seconds: Math.floor(Date.now() / 1000)};
 }
 
+/** The most lines of the events and of the labelled containers that a difference shows. */
+const LISTED_LINES = 60;
+
+/** The most lines of the containers log that a difference shows. */
+const LOGGED_LINES = 100;
+
 /**
- * What to show when the two reads differ: both reads with their times, the Docker events of the host between them, the
- * containers log since the row's mark, and
- * every container of any run that carries the folder's label, so a change of state, a new container and another row's
- * container that matches the label can be told apart.
+ * What to show when the two reads differ: both reads with their times, the Docker events of the host between them, every
+ * container of any run that carries the folder's label, and the containers log since the row's mark, so a change of
+ * state, a new container and another row's container that matches the label can be told apart. Each list is bounded.
  */
 async function statesDifference(
   folder: string,
@@ -83,7 +89,7 @@ async function statesDifference(
   second: StatesRead,
   logLines: readonly string[],
 ): Promise<string> {
-  const events = await execFileAsync('docker', [
+  const events = await outputOrReason('docker', [
     'events',
     '--since',
     String(first.seconds),
@@ -93,11 +99,8 @@ async function statesDifference(
     'type=container',
     '--format',
     '{{.Time}} {{.Action}} {{.Actor.ID}} {{.Actor.Attributes.name}}',
-  ]).then(
-    ({stdout}) => stdout.trim(),
-    (caught: unknown) => `the events could not be read: ${String(caught)}`,
-  );
-  const labelled = await execFileAsync('docker', [
+  ]);
+  const labelled = await outputOrReason('docker', [
     'ps',
     '--all',
     '--no-trunc',
@@ -105,16 +108,13 @@ async function statesDifference(
     `label=devcontainer.local_folder=${editorFolderOf(folder)}`,
     '--format',
     '{{.ID}} {{.Names}} {{.Status}} run={{.Label "remote-oss.acceptance.run"}}',
-  ]).then(
-    ({stdout}) => stdout.trim(),
-    (caught: unknown) => `the list could not be read: ${String(caught)}`,
-  );
+  ]);
   return [
     `the states read at ${String(first.seconds)}: ${JSON.stringify(first.states)}`,
     `the states read at ${String(second.seconds)}: ${JSON.stringify(second.states)}`,
-    `the container events between them:\n${events}`,
-    `every container with the folder's label, of any run:\n${labelled}`,
-    `the containers log since the row's mark:\n${logLines.join('\n')}`,
+    `the container events between them:\n${lastLines(events.split('\n'), LISTED_LINES)}`,
+    `every container with the folder's label, of any run:\n${lastLines(labelled.split('\n'), LISTED_LINES)}`,
+    `the containers log since the row's mark:\n${lastLines(logLines, LOGGED_LINES)}`,
   ].join('\n');
 }
 
