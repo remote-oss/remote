@@ -154,16 +154,20 @@ export function networkReason(caught: unknown): string {
   return `${caught.message} (${detail})`;
 }
 
-/** `fetcher`'s answer to `url`; a request that gets no answer fails naming `url` and the network's reason. */
-async function answerOf(
+/**
+ * `fetcher`'s answer to `url`; a request that gets no answer fails naming `named` (`url` unless a signed address must
+ * not be printed) and the network's reason.
+ */
+export async function answerOf(
   fetcher: typeof fetch,
   url: string,
   init?: RequestInit,
+  named: string = url,
 ): Promise<Response> {
   try {
     return await fetcher(url, init);
   } catch (caught) {
-    throw new Error(`${url}: ${networkReason(caught)}`, {cause: caught});
+    throw new Error(`${named}: ${networkReason(caught)}`, {cause: caught});
   }
 }
 

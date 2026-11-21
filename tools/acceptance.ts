@@ -32,6 +32,7 @@ import {
 import {pinnedSshClient} from './acceptance-ssh-client.ts';
 import {staleRefusal} from './acceptance-stale.ts';
 import {
+  answerOf,
   ghcrLayer,
   type LayerFetch,
   prepareRunTemplates,
@@ -2990,7 +2991,7 @@ export async function downloadWithRetry(
 ): Promise<Uint8Array> {
   return withRetries(
     async () => {
-      const response = await fetcher(url);
+      const response = await answerOf(fetcher, url);
       if (!response.ok) {
         throw new Error(`${url}: ${String(response.status)}`);
       }
@@ -3022,7 +3023,7 @@ export async function privateAssetDownload(
   }
   return withRetries(
     async () => {
-      const answer = await fetcher(address, {
+      const answer = await answerOf(fetcher, address, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/octet-stream',
@@ -3030,9 +3031,15 @@ export async function privateAssetDownload(
         redirect: 'manual',
       });
       const signed = answer.headers.get('location');
+      // The signed address carries its own credential in its query, so a failure names the asset's address.
       const response =
         REDIRECTS.includes(answer.status) && signed !== null
-          ? await fetcher(signed)
+          ? await answerOf(
+              fetcher,
+              signed,
+              undefined,
+              `${address} (its signed address)`,
+            )
           : answer;
       if (!response.ok) {
         throw new Error(`${address}: ${String(response.status)}`);

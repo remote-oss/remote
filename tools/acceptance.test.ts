@@ -4836,6 +4836,48 @@ describe('acceptance', () => {
       );
     }
 
+    /** A rejection as undici's `fetch` gives it for a request with no answer. */
+    function droppedRequest(): Promise<Response> {
+      return Promise.reject(
+        new TypeError('fetch failed', {cause: new Error('read ECONNRESET')}),
+      );
+    }
+
+    it('#2927: a download whose requests get no answer fails after its four tries, each naming the address and the reason', async () => {
+      const failure =
+        'https://example.invalid/a: fetch failed (read ECONNRESET)';
+      await rejects(
+        downloadWithRetry('https://example.invalid/a', droppedRequest, () =>
+          Promise.resolve(),
+        ),
+        {
+          message: `try 1: ${failure}; try 2: ${failure}; try 3: ${failure}; try 4: ${failure}`,
+        },
+      );
+    });
+
+    it("#2927: a private asset whose signed address gets no answer names the asset's address, never the signed one", async () => {
+      const failure = await assetFailureOf('secret', (address, init) =>
+        init === undefined
+          ? droppedRequest()
+          : Promise.resolve(
+              new Response(null, {
+                status: 302,
+                headers: {location: 'https://signed.example.invalid/x?sig=1'},
+              }),
+            ),
+      );
+      const each =
+        'https://api.example.invalid/assets/41 (its signed address): fetch failed (read ECONNRESET)';
+      deepStrictEqual(
+        [failure, failure.includes('signed.example.invalid')],
+        [
+          `try 1: ${each}; try 2: ${each}; try 3: ${each}; try 4: ${each}`,
+          false,
+        ],
+      );
+    });
+
     it('tooling-111: a private asset is asked for with the token, and its signed address is fetched without it', async () => {
       const asked: unknown[] = [];
       const bytes = await privateAssetDownload(
