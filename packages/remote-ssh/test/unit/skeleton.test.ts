@@ -185,6 +185,12 @@ function inventory(): InventoryFixture {
   return fixture;
 }
 
+/** The English text of a manifest string: the table's text of a `%key%` reference, or the string itself. */
+function englishText(value: unknown): unknown {
+  const key = nlsKey(value);
+  return key === null ? value : englishTable()[key];
+}
+
 /** The fields of a setting schema the fidelity row compares, with a single-element type array unwrapped. */
 function settingFields(
   value: Record<string, unknown>,
@@ -207,8 +213,8 @@ function settingFields(
     tags: value.tags,
     items: value.items,
     additionalProperties: value.additionalProperties,
-    deprecationMessage: value.deprecationMessage,
-    markdownDeprecationMessage: value.markdownDeprecationMessage,
+    deprecationMessage: englishText(value.deprecationMessage),
+    markdownDeprecationMessage: englishText(value.markdownDeprecationMessage),
   };
 }
 
@@ -912,7 +918,7 @@ describe('the manifest rows of slices 1 and 2', () => {
         resolved(platform?.markdownDescription),
         (platform?.additionalProperties as {enum?: string[]} | undefined)?.enum,
         resolved(windows?.markdownDescription),
-        windows?.deprecationMessage,
+        resolved(windows?.deprecationMessage),
       ],
       [
         "A map of the remote hostname to the platform for that remote. The hostname may include a star '*' to wildcard match. Valid values: `linux`, `macOS`, `windows`. Note - this setting will soon be required when `#remote.SSH.useLocalServer#` is disabled, so it is currently being autopopulated for successful connections, but is not currently used.",
@@ -1372,8 +1378,10 @@ describe('the manifest rows of slices 1 and 2', () => {
         // The value texts are literal in the manifest, not keys of the string table.
         values.map((value, index) => [value, texts[index]]),
         [...values].sort(),
-        properties['remote.SSH.allowLocalServerDownload']
-          ?.markdownDeprecationMessage,
+        resolved(
+          properties['remote.SSH.allowLocalServerDownload']
+            ?.markdownDeprecationMessage,
+        ),
       ],
       [
         'string',
