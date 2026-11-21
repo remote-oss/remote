@@ -537,6 +537,7 @@ export function createServerSteps(
           lockLoop: dependencies.lockLoop,
           logger: dependencies.logger,
           onPhase,
+          sessionLock: true,
         },
       );
       const placement = dependencies.policy.downloadPlacement;
@@ -576,7 +577,11 @@ export function createServerSteps(
           dependencies.socketMode(),
         ),
         dependencies.policy,
-        {lockLoop: dependencies.lockLoop, logger: dependencies.logger},
+        {
+          lockLoop: dependencies.lockLoop,
+          logger: dependencies.logger,
+          sessionLock: true,
+        },
         cancellation,
       );
       if (outcome.kind === 'failed') {
