@@ -1,5 +1,5 @@
 import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
-import type {RecordingChannel} from 'lib-host/testing/recording-channel';
+import {RecordingChannel} from 'lib-host/testing/recording-channel';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import {
@@ -8,8 +8,13 @@ import {
   type ServerStepDependencies,
 } from '../../src/pipeline/server-steps.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
-import {type ServerPolicyRecord, sshPolicyFor} from 'lib-server';
 import {
+  type ProbedHost,
+  type ServerPolicyRecord,
+  sshPolicyFor,
+} from 'lib-server';
+import {
+  BOOTSTRAP_ARCHIVE,
   channelAnswering,
   dependencies,
   HOST,
@@ -1527,6 +1532,189 @@ describe('the stall bounds of the transfer (card connect-122)', () => {
         }),
       ],
       [12_345, 30_000],
+    );
+  });
+});
+
+describe('the manual bootstrap (F-2406, ruling-2878-manual-bootstrap)', () => {
+  /** A client whose bootstrap archive exists when `present`, and stages as `staged` says. */
+  function filesWith(
+    present: boolean,
+    staged:
+      {kind: 'staged'; archive: string} | {kind: 'failed'; detail: string},
+  ): ServerStepDependencies['files'] {
+    return {
+      remove: () => Promise.resolve(),
+      exists: file => Promise.resolve(present && file === BOOTSTRAP_ARCHIVE),
+      size: () => Promise.resolve(0),
+      sha256: () => Promise.resolve(''),
+      rename: () => Promise.resolve({kind: 'renamed'}),
+      stage: () => Promise.resolve(staged),
+    };
+  }
+
+  /** A transfer in the manual bootstrap on `host`, with what the steps told and logged and what the host ran. */
+  async function bootstrapRun(
+    host: ProbedHost,
+    files: ServerStepDependencies['files'],
+  ) {
+    const told: unknown[] = [];
+    const sink = new MemorySink();
+    const channel = new RecordingChannel({
+      identity: 'devbox',
+      platformHint: 'linux',
+      scripts: [
+        {
+          // The host names the lock's place to the install; it has no `flock`, so no session lock follows.
+          interpreter: 'posixShell',
+          matches: script => script.includes('lock-path='),
+          lines: ['lock-method=link', 'lock-path=/lock'],
+          ending: {kind: 'exit', status: 0},
+        },
+        {
+          interpreter: 'posixShell',
+          matches: script => !script.includes('lock-path='),
+          lines: lines('Ok', 'timing.install=5'),
+          ending: {kind: 'exit', status: 0},
+        },
+      ],
+      copies: [{matches: () => true, ending: {kind: 'copied'}}],
+    });
+    const steps = createServerSteps(
+      dependencies({
+        policy: sshPolicyFor('manualBootstrap'),
+        files,
+        logger: createLogger(sink, {minimumLevel: () => 'info'}),
+        onLocalBootstrapFailed: failure => {
+          told.push(failure);
+        },
+      }),
+    );
+    const result = steps.plan(INPUT, host);
+    if (!('plan' in result) || result.plan.kind !== 'download') {
+      throw new Error('the plan should download');
+    }
+    const outcome = await steps.transfer(
+      INPUT,
+      leaseOn(channel),
+      host,
+      result.plan,
+      () => undefined,
+      new AbortController().signal,
+    );
+    return {
+      outcome,
+      told,
+      warnings: sink.lines
+        .filter(line => line.level === 'warn')
+        .map(line => line.message),
+      channel,
+      plan: result.plan,
+    };
+  }
+
+  it('BR-2: the mode forces the direct install even where the editor names a CLI source, and nothing is downloaded on either side', () => {
+    const steps = createServerSteps(
+      dependencies({
+        policy: sshPolicyFor('manualBootstrap'),
+        profile: {
+          ...PROFILE,
+          cliDownloadUrlTemplate:
+            'https://example.invalid/cli-${os}-${arch}-${version}.tar.gz',
+        },
+      }),
+    );
+    const result = steps.plan(INPUT, HOST);
+    deepStrictEqual(
+      'plan' in result
+        ? [
+            result.plan.kind,
+            result.plan.kind === 'download' ? result.plan.where : '',
+            result.plan.kind === 'download' ? result.plan.clientFallback : '',
+          ]
+        : result,
+      ['download', 'client', false],
+    );
+  });
+
+  it('7.E1: no archive at its path tells the hint its path, and the log says where to put which download', async () => {
+    const bootstrapped = await bootstrapRun(
+      HOST,
+      filesWith(false, {kind: 'failed', detail: 'unused'}),
+    );
+    deepStrictEqual(
+      {
+        told: bootstrapped.told,
+        warnings: bootstrapped.warnings.filter(line =>
+          /^(To stage the server, download |and save it as )/.test(line),
+        ),
+      },
+      {
+        told: [
+          {kind: 'localBootstrap', cause: 'missing', path: BOOTSTRAP_ARCHIVE},
+        ],
+        warnings: [
+          `To stage the server, download ${bootstrapped.plan.address}`,
+          `and save it as ${BOOTSTRAP_ARCHIVE}`,
+        ],
+      },
+    );
+  });
+
+  it("7.E2: an archive that cannot be staged tells the hint the file system's text", async () => {
+    const bootstrapped = await bootstrapRun(
+      HOST,
+      filesWith(true, {kind: 'failed', detail: 'EACCES: permission denied'}),
+    );
+    deepStrictEqual(bootstrapped.told, [
+      {
+        kind: 'localBootstrap',
+        cause: 'unreadable',
+        detail: 'EACCES: permission denied',
+      },
+    ]);
+  });
+
+  it('5.0 steps 4–6: a staged archive is installed into the install folder', async () => {
+    const bootstrapped = await bootstrapRun(
+      HOST,
+      filesWith(true, {
+        kind: 'staged',
+        archive: '/tmp/vsc_server_1/vscode-server.tar.gz',
+      }),
+    );
+    deepStrictEqual(
+      [
+        bootstrapped.outcome.kind,
+        bootstrapped.channel.calls.some(
+          call =>
+            call.operation === 'runScript' &&
+            call.request.script.includes("ARCHIVE_INTO_INSTALL='yes'"),
+        ),
+      ],
+      ['transferred', true],
+    );
+  });
+
+  it('7.E7: a Windows host is refused with no transfer at all', async () => {
+    const bootstrapped = await bootstrapRun(
+      {...HOST, operatingSystem: 'win32'},
+      filesWith(true, {kind: 'failed', detail: 'unused'}),
+    );
+    deepStrictEqual(
+      {
+        outcome: bootstrapped.outcome,
+        told: bootstrapped.told,
+        calls: bootstrapped.channel.calls.length,
+      },
+      {
+        outcome: {
+          kind: 'failed',
+          failure: {kind: 'localBootstrap', cause: 'windowsHost'},
+        },
+        told: [],
+        calls: 0,
+      },
     );
   });
 });

@@ -3,10 +3,12 @@
  * library over `fs`. It makes no request.
  */
 
-import {createHash} from 'node:crypto';
+import {createHash, randomUUID} from 'node:crypto';
 import {createReadStream} from 'node:fs';
-import {rename, rm, stat} from 'node:fs/promises';
+import {copyFile, mkdir, rename, rm, stat, writeFile} from 'node:fs/promises';
+import path from 'node:path';
 import {pipeline} from 'node:stream/promises';
+import {MANUAL_BOOTSTRAP_ARCHIVE} from 'lib-product';
 import type {ClientFilePort} from './ports.ts';
 
 /** The SHA-256 of a file, as lower-case hex. */
@@ -15,6 +17,9 @@ export async function sha256Of(file: string): Promise<string> {
   await pipeline(createReadStream(file), hash);
   return hash.digest('hex');
 }
+
+/** What the marker beside a staged archive holds: nine bytes that say the copy is whole. */
+const STAGED_MARKER = 'complete\n';
 
 /** The client's files on this machine. */
 export const nodeClientFiles: ClientFilePort = {
@@ -32,6 +37,21 @@ export const nodeClientFiles: ClientFilePort = {
     try {
       await rename(source, destination);
       return {kind: 'renamed'};
+    } catch (caught) {
+      // The file system rejects with an Error whose message names the path and the cause.
+      return {kind: 'failed', detail: (caught as Error).message};
+    }
+  },
+  // The staging folder is kept after the install: one per attempt that finds the user's archive, and none once the
+  // host has the server, so the folders are those of the attempts up to the first install.
+  stage: async (source, folder) => {
+    try {
+      const stagingFolder = path.join(folder, `vsc_server_${randomUUID()}`);
+      await mkdir(stagingFolder, {recursive: true});
+      const archive = path.join(stagingFolder, MANUAL_BOOTSTRAP_ARCHIVE);
+      await copyFile(source, archive);
+      await writeFile(`${archive}.done`, STAGED_MARKER);
+      return {kind: 'staged', archive};
     } catch (caught) {
       // The file system rejects with an Error whose message names the path and the cause.
       return {kind: 'failed', detail: (caught as Error).message};

@@ -23,7 +23,12 @@ const KNOWN_PLACEMENT_KINDS = new Set<string>([
   'clientOnly',
 ]);
 
-const KNOWN_PLACEMENT_MODES = new Set<string>(['auto', 'always', 'off']);
+const KNOWN_PLACEMENT_MODES = new Set<string>([
+  'auto',
+  'always',
+  'off',
+  'manualBootstrap',
+]);
 
 const KNOWN_EXTRA_START_OPTIONS = new Set<string>([
   'fileWatcherPolling',
