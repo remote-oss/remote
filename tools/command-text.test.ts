@@ -1,6 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   differenceText,
+  eventsWords,
+  labelledWords,
   lastLines,
   outputOrReason,
 } from '../tests/acceptance/windows/command-text.ts';
@@ -94,5 +96,56 @@ describe('the text of a command that explains a failure (card #2900)', () => {
       "the containers log since the row's mark:",
       'none',
     ]);
+  });
+
+  describe('the docker commands that explain a difference, against a real daemon', () => {
+    before(async function () {
+      if (
+        (await outputOrReason('docker', ['info'], 20_000)).startsWith(
+          'could not be read',
+        )
+      ) {
+        this.skip();
+      }
+    });
+
+    it('#2900 (#1288): the events command and its format are accepted by the daemon, and what it prints goes through the failure text', async () => {
+      const now = Math.floor(Date.now() / 1000);
+      const events = await outputOrReason('docker', eventsWords(now - 2, now));
+      deepStrictEqual(
+        [
+          events.startsWith('could not be read'),
+          differenceText(
+            {states: [], seconds: now - 2},
+            {states: [], seconds: now},
+            events,
+            '',
+            [],
+          ).includes('the container events between them:'),
+        ],
+        [false, true],
+      );
+    });
+
+    it('#2900 (#1288): the labelled-containers command and its format are accepted by the daemon, and no container carries a label no one set', async () => {
+      const labelled = await outputOrReason(
+        'docker',
+        labelledWords('remote-oss.states-difference=never-set'),
+      );
+      deepStrictEqual(labelled, '');
+    });
+
+    it('#2900 (#1288): a format the daemon rejects is a failure of the row, not an empty list', async () => {
+      const words = labelledWords('remote-oss.states-difference=never-set');
+      const broken = words.map(word =>
+        word.replace('{{.Names}}', '{{.NoSuchField}}'),
+      );
+      deepStrictEqual(
+        (await outputOrReason('docker', broken)).startsWith(
+          'could not be read',
+        ),
+        true,
+      );
+    });
   });
 });

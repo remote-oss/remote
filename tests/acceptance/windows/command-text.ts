@@ -88,3 +88,31 @@ export function differenceText(
     `the containers log since the row's mark:\n${lastLines(logLines, LOGGED_LINES) || 'none'}`,
   ].join('\n');
 }
+
+/** The words of the `docker events` that lists the container events from second `since` to second `until`. */
+export function eventsWords(since: number, until: number): string[] {
+  return [
+    'events',
+    '--since',
+    String(since),
+    '--until',
+    String(until),
+    '--filter',
+    'type=container',
+    '--format',
+    '{{.Time}} {{.Action}} {{.Actor.ID}} {{.Actor.Attributes.name}}',
+  ];
+}
+
+/** The words of the `docker ps` that lists every container, of any run, that carries the label `label` (`name=value`). */
+export function labelledWords(label: string): string[] {
+  return [
+    'ps',
+    '--all',
+    '--no-trunc',
+    '--filter',
+    `label=${label}`,
+    '--format',
+    '{{.ID}} {{.Names}} {{.Status}} run={{.Label "remote-oss.acceptance.run"}}',
+  ];
+}

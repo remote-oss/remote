@@ -16,6 +16,8 @@ import {
 } from '../windows/harness.ts';
 import {
   differenceText,
+  eventsWords,
+  labelledWords,
   outputOrReason,
   type StatesRead,
 } from '../windows/command-text.ts';
@@ -81,26 +83,14 @@ async function statesDifference(
   second: StatesRead,
   logLines: readonly string[],
 ): Promise<string> {
-  const events = await outputOrReason('docker', [
-    'events',
-    '--since',
-    String(first.seconds),
-    '--until',
-    String(second.seconds + 1),
-    '--filter',
-    'type=container',
-    '--format',
-    '{{.Time}} {{.Action}} {{.Actor.ID}} {{.Actor.Attributes.name}}',
-  ]);
-  const labelled = await outputOrReason('docker', [
-    'ps',
-    '--all',
-    '--no-trunc',
-    '--filter',
-    `label=devcontainer.local_folder=${editorFolderOf(folder)}`,
-    '--format',
-    '{{.ID}} {{.Names}} {{.Status}} run={{.Label "remote-oss.acceptance.run"}}',
-  ]);
+  const events = await outputOrReason(
+    'docker',
+    eventsWords(first.seconds, second.seconds + 1),
+  );
+  const labelled = await outputOrReason(
+    'docker',
+    labelledWords(`devcontainer.local_folder=${editorFolderOf(folder)}`),
+  );
   return differenceText(first, second, events, labelled, logLines);
 }
 
