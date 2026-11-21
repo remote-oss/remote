@@ -1,5 +1,13 @@
 import {deepStrictEqual} from 'node:assert';
-import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {nodeClientFiles, sha256Of} from '../../src/index.ts';
@@ -134,6 +142,42 @@ describe('the client files on Node.js (V4)', () => {
       deepStrictEqual(
         staged.kind === 'failed' && staged.detail.includes('ENOENT'),
         true,
+      );
+    });
+  });
+
+  it('F-2406 BR-4 (card #2949): anything at a path is an entry, a file, a folder or a link to a file, and a missing path is none', async () => {
+    await inFolder(async folder => {
+      const file = path.join(folder, 'archive');
+      const link = path.join(folder, 'link');
+      writeFileSync(file, 'x');
+      symlinkSync(file, link);
+      deepStrictEqual(
+        [
+          await nodeClientFiles.entryExists(file),
+          await nodeClientFiles.entryExists(folder),
+          await nodeClientFiles.entryExists(link),
+          await nodeClientFiles.entryExists(path.join(folder, 'missing')),
+        ],
+        [true, true, true, false],
+      );
+    });
+  });
+
+  it('F-2406 BR-4, 7.E3 (card #2949): stage of a folder gives an empty archive with its nine-byte marker', async () => {
+    await inFolder(async folder => {
+      const source = path.join(folder, 'vscode-server.tar.gz');
+      mkdirSync(source);
+      const staged = await nodeClientFiles.stage(source, folder);
+      if (staged.kind !== 'staged') {
+        throw new Error(`not staged: ${staged.detail}`);
+      }
+      deepStrictEqual(
+        {
+          size: statSync(staged.archive).size,
+          marker: statSync(`${staged.archive}.done`).size,
+        },
+        {size: 0, marker: 9},
       );
     });
   });

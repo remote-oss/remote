@@ -31,6 +31,14 @@ export const nodeClientFiles: ClientFilePort = {
       return false;
     }
   },
+  entryExists: async file => {
+    try {
+      await stat(file);
+      return true;
+    } catch {
+      return false;
+    }
+  },
   size: async file => (await stat(file)).size,
   sha256: sha256Of,
   rename: async (source, destination) => {
@@ -49,7 +57,11 @@ export const nodeClientFiles: ClientFilePort = {
       const stagingFolder = path.join(folder, `vsc_server_${randomUUID()}`);
       await mkdir(stagingFolder, {recursive: true});
       const archive = path.join(stagingFolder, MANUAL_BOOTSTRAP_ARCHIVE);
-      await copyFile(source, archive);
+      if ((await stat(source)).isDirectory()) {
+        await writeFile(archive, '');
+      } else {
+        await copyFile(source, archive);
+      }
       await writeFile(`${archive}.done`, STAGED_MARKER);
       return {kind: 'staged', archive};
     } catch (caught) {
