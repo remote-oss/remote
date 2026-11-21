@@ -95,4 +95,46 @@ describe('the client files on Node.js (V4)', () => {
       );
     });
   });
+
+  it('F-2406 BR-7: stage copies the archive into a vsc_server_ folder of its own with a nine-byte marker, and leaves the source', async () => {
+    await inFolder(async folder => {
+      const source = path.join(folder, 'mine.tar.gz');
+      writeFileSync(source, 'archive bytes');
+      const staged = await nodeClientFiles.stage(source, folder);
+      if (staged.kind !== 'staged') {
+        throw new Error(`not staged: ${staged.detail}`);
+      }
+      deepStrictEqual(
+        {
+          folder: /^vsc_server_[0-9a-f-]{36}$/.test(
+            path.basename(path.dirname(staged.archive)),
+          ),
+          name: path.basename(staged.archive),
+          copy: readFileSync(staged.archive, 'utf8'),
+          marker: readFileSync(`${staged.archive}.done`, 'utf8'),
+          source: readFileSync(source, 'utf8'),
+        },
+        {
+          folder: true,
+          name: 'vscode-server.tar.gz',
+          copy: 'archive bytes',
+          marker: 'complete\n',
+          source: 'archive bytes',
+        },
+      );
+    });
+  });
+
+  it("F-2406 7.E2: stage of a file it cannot read fails with the file system's text", async () => {
+    await inFolder(async folder => {
+      const staged = await nodeClientFiles.stage(
+        path.join(folder, 'absent.tar.gz'),
+        folder,
+      );
+      deepStrictEqual(
+        staged.kind === 'failed' && staged.detail.includes('ENOENT'),
+        true,
+      );
+    });
+  });
 });

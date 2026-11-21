@@ -89,6 +89,13 @@ describe('policy record (card server-01 table)', () => {
     );
   });
 
+  it('F-2406: downloadPlacement {kind: hostFirst, mode: manualBootstrap} is a valid placement', () => {
+    const record = recordWith({
+      downloadPlacement: {kind: 'hostFirst', mode: 'manualBootstrap'},
+    });
+    deepStrictEqual('record' in validatePolicyRecord(record), true);
+  });
+
   it('downloadPlacement {kind: elsewhere} -> problem path downloadPlacement.kind', () => {
     deepStrictEqual(
       validatePolicyRecord(
