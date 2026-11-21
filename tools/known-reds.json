@@ -142,5 +142,14 @@
     "owner": "proteus",
     "evidence": 44807795511,
     "added": "2026-11-20"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/reconnect-give-up.test.ts",
+    "title": "F-0502 AC-5 (c43-five-minutes): after 5 minutes with the container running and the server down, the countdown still counts and the indicator still reads Reconnecting; Reload Window connects a new server on a new port within 8 s",
+    "card": 2523,
+    "owner": "dike",
+    "evidence": 44859397697,
+    "added": "2026-11-21"
   }
 ]

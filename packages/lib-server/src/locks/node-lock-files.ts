@@ -1,16 +1,18 @@
 /**
- * @fileoverview The client lock's files on Node.js: the lock port of the library over `fs`, whose create is made
- * before it returns, and the removal the extension's end makes without waiting.
+ * @fileoverview The client lock's files on Node.js: the lock port of the library over `fs`, each of whose calls has
+ * done its work before it returns, and the removal the extension's end makes without waiting.
  */
 
-import {closeSync, openSync, rmSync} from 'node:fs';
-import {rm, stat} from 'node:fs/promises';
+import {closeSync, openSync, rmSync, statSync} from 'node:fs';
 import type {LockFilePort} from './client-lock.ts';
 
 /** The lock port, with the removal that does not wait, for an extension that is ending. */
 export interface NodeLockFiles extends LockFilePort {
-  /** Removes the file at once; a failure is ignored, since the age rule handles a file left behind. */
-  removeNow(path: string): void;
+  /**
+   * Removes the file at once while its modification time is `modified`; a failure is ignored, since the age rule
+   * handles a file left behind.
+   */
+  removeNow(path: string, modified: number | undefined): void;
 }
 
 /** The code of a file system error. */
@@ -31,26 +33,52 @@ function createdNow(path: string): 'created' | 'exists' {
   }
 }
 
+/** The modification time of the file at `path`; `undefined` when it is absent. */
+function modifiedNow(path: string): number | undefined {
+  try {
+    return statSync(path).mtimeMs;
+  } catch (caught) {
+    if (codeOf(caught) === 'ENOENT') {
+      return undefined;
+    }
+    throw caught;
+  }
+}
+
+/** Removes the file at `path` while its modification time is `modified`. */
+function removedIfModified(path: string, modified: number | undefined): void {
+  if (modified !== undefined && modifiedNow(path) === modified) {
+    rmSync(path, {force: true});
+  }
+}
+
+/** What `work` gives, as a promise settled with its value or its error once it has run. */
+function settled<T>(work: () => T): Promise<T> {
+  return new Promise(resolve => {
+    resolve(work());
+  });
+}
+
 /** The client lock's files on this machine. */
 export const nodeLockFiles: NodeLockFiles = {
-  createExclusive: path =>
-    new Promise(resolve => {
-      resolve(createdNow(path));
+  createExclusive: path => settled(() => createdNow(path)),
+  ageMilliseconds: path =>
+    settled(() => {
+      const modified = modifiedNow(path);
+      return modified === undefined ? undefined : Date.now() - modified;
     }),
-  ageMilliseconds: async path => {
-    try {
-      return Date.now() - (await stat(path)).mtimeMs;
-    } catch (caught) {
-      if (codeOf(caught) === 'ENOENT') {
-        return undefined;
-      }
-      throw caught;
-    }
-  },
-  remove: path => rm(path, {force: true}),
-  removeNow: path => {
-    try {
+  modifiedMilliseconds: path => settled(() => modifiedNow(path)),
+  remove: path =>
+    settled(() => {
       rmSync(path, {force: true});
+    }),
+  removeIfModified: (path, modified) =>
+    settled(() => {
+      removedIfModified(path, modified);
+    }),
+  removeNow: (path, modified) => {
+    try {
+      removedIfModified(path, modified);
     } catch {
       // Left for the age rule.
     }
