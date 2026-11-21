@@ -3,7 +3,11 @@ import {createHash} from 'node:crypto';
 import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {createServer, type Server} from 'node:http';
-import type {AddressInfo, Socket} from 'node:net';
+import {
+  createServer as createNetServer,
+  type AddressInfo,
+  type Socket,
+} from 'node:net';
 import {
   dispatchAt,
   evaluateAt,
@@ -427,6 +431,60 @@ describe('the protocol connection of the page inputs (card #2908)', () => {
       outcome.failure,
       'Error: window w1: the protocol connection closed before the answer to Input.dispatchKeyEvent {"type":"keyDown","key":"a"}',
     );
+  });
+
+  /** A port that accepts the connection and never completes the upgrade, as a browser process that stopped answering does. */
+  async function silentPort(): Promise<{
+    address: string;
+    stop(): Promise<void>;
+  }> {
+    const sockets = new Set<Socket>();
+    const server = createNetServer(socket => {
+      sockets.add(socket);
+      socket.on('error', () => undefined);
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const {port} = server.address() as AddressInfo;
+    return {
+      address: `ws://127.0.0.1:${String(port)}`,
+      stop: () =>
+        new Promise<void>(resolve => {
+          for (const socket of sockets) {
+            socket.destroy();
+          }
+          server.close(() => {
+            resolve();
+          });
+        }),
+    };
+  }
+
+  it('#2908: a port that accepts and never completes the upgrade fails the read and the press within the bound, naming the page', async () => {
+    const port = await silentPort();
+    try {
+      const failures = await Promise.all([
+        evaluateAt(port.address, 'window w1', 'document.title', 150).then(
+          () => 'answered',
+          (caught: unknown) => [
+            String(caught),
+            caught instanceof NoAnswerError,
+          ],
+        ),
+        dispatchAt(port.address, 'window w1', PRESS, 150).then(
+          () => 'answered',
+          (caught: unknown) => [
+            String(caught),
+            caught instanceof NoAnswerError,
+          ],
+        ),
+      ]);
+      deepStrictEqual(failures, [
+        ['Error: window w1: no protocol connection within 0.2 s', true],
+        ['Error: window w1: no protocol connection within 0.2 s', true],
+      ]);
+    } finally {
+      await port.stop();
+    }
   });
 
   it('#2908: no window of the harness opens a protocol socket or reads the debugging port’s list outside its two modules', () => {
