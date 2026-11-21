@@ -103,8 +103,9 @@ export interface ClientFilePort {
   ): Promise<{kind: 'renamed'} | {kind: 'failed'; detail: string}>;
   /**
    * Copies `source` into a new folder of its own in `folder`, under the manual bootstrap's fixed archive name with its
-   * `.done` marker file beside it, and gives the copy's path; the folder is left in place. A folder at `source` is
-   * copied as an empty file, since the client never checks what it copies. A copy that fails carries the file
+   * `.done` marker file beside it, and gives the copy's path; the folder is left in place. Anything at `source` that is
+   * not a regular file, a folder or a named pipe, is copied as an empty file, since the client never checks what it
+   * copies and a pipe would never end. A copy that fails carries the file
    * system's text.
    */
   stage(
