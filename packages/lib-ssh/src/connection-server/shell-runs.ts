@@ -63,14 +63,20 @@ function openLockLine(path: string): string {
   return `[ -n "\${REMOTE_OSS_LOCK_HELD:-}" ] || { ( exec 9>>${quoted} ) 2>/dev/null && exec 9>>${quoted}; }`;
 }
 
+/** The command that removes `path` only while it is still the file that descriptor 9 holds, so a path another file took stays. */
+function removeIfHeldCommand(path: string): string {
+  const quoted = posixQuote(path);
+  return `[ ${quoted} -ef /dev/fd/9 ] && rm -f ${quoted}`;
+}
+
 /** The line that records that the shell holds the lock and removes the file when the shell ends in order. */
 function armLockLine(path: string): string {
-  return `REMOTE_OSS_LOCK_HELD=1; trap ${posixQuote(`rm -f ${posixQuote(path)}`)} EXIT HUP`;
+  return `REMOTE_OSS_LOCK_HELD=1; trap ${posixQuote(removeIfHeldCommand(path))} EXIT HUP`;
 }
 
 /** The commands that give the descriptor up, and the file only when the shell held the lock. */
 function releaseLockCommands(path: string): string {
-  return `exec 9>&-; [ -z "\${REMOTE_OSS_LOCK_HELD:-}" ] || rm -f ${posixQuote(path)}; unset REMOTE_OSS_LOCK_HELD; trap - EXIT HUP`;
+  return `[ -z "\${REMOTE_OSS_LOCK_HELD:-}" ] || { ${removeIfHeldCommand(path)}; }; exec 9>&-; unset REMOTE_OSS_LOCK_HELD; trap - EXIT HUP`;
 }
 
 /** The commands of one run: the start marker, the script with its input, and the end marker with the status. */

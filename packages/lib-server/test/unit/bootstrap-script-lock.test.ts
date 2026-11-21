@@ -13,12 +13,15 @@ import {
   unlinkSync,
   mkdirSync,
   mkdtempSync,
+  utimesSync,
+  readdirSync,
   readFileSync,
   writeFileSync,
 } from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {scriptFor, type ScriptParameters} from '../../src/index.ts';
+import {POSIX_FUNCTIONS} from '../../src/scripts/posix-functions.ts';
 import {lockPathScript} from '../../src/scripts/posix-script.ts';
 import {
   blockOf,
@@ -359,13 +362,98 @@ describe('the POSIX bootstrap script', () => {
       );
     });
 
-    it('ruling-2913-lock-only-to-write: a start that has to launch still takes the lock, and a busy lock ends it as LockBusy', () => {
+    it('ruling-2913-lock-one-meaning: a launch beside a session-held install lock takes only its own start lock, never descriptor 9', () => {
+      useHost(['wget', 'flock']);
+      runScript(host, single('install'), flockParameters());
+      const before = callsOf(host).length;
+      const lock = path.join(
+        installFolder(host),
+        'boot-lock.user.abc1230000000000000000000000000000000000',
+      );
+      const block = blockOf(host, single('start'), flockParameters(), {
+        rewriteScript: text => `exec 9>>'${lock}'\n${text}`,
+      });
+      deepStrictEqual(
+        [
+          startFacts(block),
+          callsOf(host)
+            .slice(before)
+            .filter(call => call.startsWith('flock ')),
+          existsSync(
+            path.join(
+              dataFolder(),
+              '.abc1230000000000000000000000000000000000.start.lock',
+            ),
+          ),
+        ],
+        [['Ok', 'no', undefined], ['flock -n 8'], true],
+      );
+    });
+
+    it('ruling-2913-lock-one-meaning: in a real sh, a clean-up run with the session lock on descriptor 9 keeps an old install whose own lock another process holds, and removes one nobody holds', function () {
+      const flockFound = spawnSync('sh', ['-c', 'command -v flock'], {
+        encoding: 'utf8',
+      }).stdout.trim();
+      if (flockFound === '') {
+        this.skip();
+      }
+      useHost(['wget']);
+      const withFlock = {
+        PATH: `${path.dirname(flockFound)}:${host.environment.PATH ?? ''}`,
+      };
+      const parameters = flockParameters();
+      parameters.cleanup = {kind: 'keepNewest', count: 1};
+      const binFolder = path.join(dataFolder(), 'bin');
+      const current = 'abc1230000000000000000000000000000000000';
+      const held = 'd'.repeat(40);
+      const free = 'e'.repeat(40);
+      for (const name of [current, held, free]) {
+        mkdirSync(path.join(binFolder, name), {recursive: true});
+      }
+      utimesSync(path.join(binFolder, held), 1_600_000_100, 1_600_000_100);
+      utimesSync(path.join(binFolder, free), 1_600_000_000, 1_600_000_000);
+      function lockOf(name: string): string {
+        return path.join(binFolder, name, `boot-lock.user.${name}`);
+      }
+      background(
+        '/bin/sh',
+        [
+          '-c',
+          `exec 8>>'${lockOf(held)}'; flock -n 8 && : >'${lockOf(held)}.up'; sleep 20`,
+        ],
+        withFlock,
+      );
+      untilUp(lockOf(held));
+      runScript(host, single('cleanup'), parameters, {
+        environment: withFlock,
+        rewriteScript: text =>
+          `exec 9>>'${lockOf(current)}'; flock -n 9\n${text}`,
+      });
+      deepStrictEqual(readdirSync(binFolder).sort(), [current, held].sort());
+    });
+
+    it('ruling-2913-lock-one-meaning: the start lock is in the data folder under an internal name, not a vscode-remote-lock file', () => {
+      useHost(['wget', 'flock']);
+      runScript(host, single('install'), flockParameters());
+      runScript(host, single('start'), flockParameters());
+      deepStrictEqual(
+        readdirSync(dataFolder()).filter(name => name.endsWith('.start.lock')),
+        ['.abc1230000000000000000000000000000000000.start.lock'],
+      );
+    });
+
+    it('ruling-2913-lock-one-meaning: a start that has to launch still takes a lock, and a busy start lock ends it as LockBusy naming the start lock', () => {
       useHost(['wget', 'flock']);
       runScript(host, single('install'), flockParameters());
       const block = blockOf(host, single('start'), flockParameters(), {
         environment: {STUB_FLOCK_BUSY: 'yes'},
       });
-      deepStrictEqual(block === 'none' ? block : block.status, 'LockBusy');
+      deepStrictEqual(
+        block === 'none'
+          ? block
+          : [block.status, block.serverFacts.lockPath?.endsWith('.start.lock')],
+        ['LockBusy', true],
+      );
     });
 
     it('ruling-2913-lock-only-to-write: a start that waited for the lock and finds that another window launched the server meanwhile reuses it and launches nothing', () => {
@@ -380,8 +468,8 @@ describe('the POSIX bootstrap script', () => {
               '\nmv "$PID_FILE" "$PID_FILE.away"\nRUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)\n',
             )
             .replace(
-              '  take_lock_or_finish "$COMMIT"\n',
-              '  take_lock_or_finish "$COMMIT"\n  mv "$PID_FILE.away" "$PID_FILE"\n',
+              '  take_start_lock_or_finish\n',
+              '  take_start_lock_or_finish\n  mv "$PID_FILE.away" "$PID_FILE"\n',
             ),
       });
       deepStrictEqual(
@@ -1006,6 +1094,46 @@ describe('the POSIX bootstrap script', () => {
         undefined,
       );
     });
+  });
+});
+
+describe('the descriptor lock, run for real (card #2855)', () => {
+  /** The `lock_descriptor` function of the script, run by `sh` on `body` with descriptor 9 open on a lock file. */
+  function lockDescriptorOutput(body: string): string {
+    const folder = mkdtempSync(path.join(tmpdir(), 'lock-'));
+    const file = path.join(folder, 'host.lock');
+    const text = [
+      ...POSIX_FUNCTIONS.lock,
+      `LOCK_CANDIDATE='${file}'`,
+      `exec 9>>"$LOCK_CANDIDATE"`,
+      body,
+      'lock_descriptor',
+      'echo "status=$?"',
+      '[ "$LOCK_CANDIDATE" -ef /dev/fd/9 ] && echo same || echo different',
+    ].join('\n');
+    return spawnSync('/bin/sh', ['-c', text], {encoding: 'utf8'}).stdout.trim();
+  }
+
+  it('ruling-2913-lock-one-meaning: the descriptor lock of a path that is still its file succeeds on that file', function () {
+    if (spawnSync('sh', ['-c', 'command -v flock']).status !== 0) {
+      this.skip();
+    }
+    deepStrictEqual(lockDescriptorOutput(':').split('\n'), [
+      'status=0',
+      'same',
+    ]);
+  });
+
+  it('ruling-2913-lock-one-meaning: a lock path that another file took after the descriptor was opened is reopened, and the lock ends on the file at the path', function () {
+    if (spawnSync('sh', ['-c', 'command -v flock']).status !== 0) {
+      this.skip();
+    }
+    deepStrictEqual(
+      lockDescriptorOutput(
+        'rm -f "$LOCK_CANDIDATE"; : >"$LOCK_CANDIDATE"',
+      ).split('\n'),
+      ['status=0', 'same'],
+    );
   });
 });
 

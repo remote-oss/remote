@@ -507,6 +507,7 @@ export function createServerSteps(
           lockLoop: dependencies.lockLoop,
           logger: dependencies.logger,
           onPhase,
+          sessionLock: true,
         },
       );
       const placement = dependencies.policy.downloadPlacement;

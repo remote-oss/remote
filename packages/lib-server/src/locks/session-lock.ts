@@ -46,6 +46,21 @@ export async function sessionLockPath(
     : undefined;
 }
 
+/** Gives up the session shell's hold on the install lock of `parameters`, when the host takes a session lock at all. */
+export async function releaseSessionLockOf(
+  channel: HostChannel,
+  parameters: ScriptParameters,
+): Promise<void> {
+  const path = await sessionLockPath(
+    channel,
+    parameters,
+    AbortSignal.timeout(RELEASE_MILLISECONDS),
+  );
+  if (path !== undefined) {
+    await releaseSessionLock(channel, path);
+  }
+}
+
 /** Gives the session shell's hold on the lock file `path` up: the descriptor, and the file when the shell held the lock. */
 export async function releaseSessionLock(
   channel: HostChannel,
