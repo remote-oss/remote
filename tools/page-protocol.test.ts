@@ -60,19 +60,33 @@ async function protocolServer(
   };
 }
 
-/** What `evaluateAt` does against a server that behaves as `onRequest` says: its value, or the text of its failure. */
+/**
+ * What `evaluateAt` does against a server that behaves as the handlers say, one per request in order (the last one
+ * repeated): its value, or the text of its failure.
+ */
 async function readAgainst(
-  onRequest: (socket: Socket) => void,
+  onRequests: Array<(socket: Socket) => void> | ((socket: Socket) => void),
   milliseconds?: number,
   expression = 'document.title',
+  diagnosticsExpression?: string,
 ): Promise<unknown> {
-  const server = await protocolServer(onRequest);
+  const handlers = Array.isArray(onRequests) ? onRequests : [onRequests];
+  let request = 0;
+  const server = await protocolServer(socket => {
+    const handler = handlers[Math.min(request, handlers.length - 1)];
+    request += 1;
+    if (handler === undefined) {
+      throw new Error('readAgainst: no handler for the request');
+    }
+    handler(socket);
+  });
   try {
     return await evaluateAt(
       server.address,
       'window w1',
       expression,
       milliseconds,
+      diagnosticsExpression,
     ).catch((caught: unknown) => ({
       failure: String(caught),
       noAnswer: caught instanceof NoAnswerError,
@@ -109,6 +123,80 @@ describe('the protocol connection of the page reads (card #2858)', () => {
       failure: 'Error: window w1: no answer within 0.2 s to "document.title"',
       noAnswer: true,
     });
+  });
+
+  it('#2858: a read that gives no answer asks the page once more, briefly, for its diagnostics, and a left trace joins the failure', async () => {
+    deepStrictEqual(
+      await readAgainst(
+        [
+          () => undefined,
+          socket => socket.write(textFrame(answerOf('the trace'))),
+        ],
+        150,
+        'document.title',
+        'window.__trace',
+      ),
+      {
+        failure:
+          'Error: window w1: no answer within 0.2 s to "document.title"\nwindow w1 left: the trace',
+        noAnswer: true,
+      },
+    );
+  });
+
+  it('#2858: a diagnostics read that does not answer either keeps the failure as it was', async () => {
+    deepStrictEqual(
+      await readAgainst(
+        [() => undefined, () => undefined],
+        150,
+        'document.title',
+        'window.__trace',
+      ),
+      {
+        failure: 'Error: window w1: no answer within 0.2 s to "document.title"',
+        noAnswer: true,
+      },
+    );
+  });
+
+  it('#2858: an answer within the bound makes no diagnostics read, and a page that leaves no trace leaves none in the failure', async () => {
+    const requests = [];
+    deepStrictEqual(
+      [
+        await (async () => {
+          const server = await protocolServer(socket => {
+            requests.push('main');
+            socket.write(textFrame(answerOf(7)));
+          });
+          try {
+            const value = await evaluateAt(
+              server.address,
+              'window w1',
+              'document.title',
+              undefined,
+              'window.__trace',
+            );
+            return [value, requests.length];
+          } finally {
+            await server.stop();
+          }
+        })(),
+        await readAgainst(
+          [() => undefined, socket => socket.write(textFrame(answerOf(null)))],
+          150,
+          'document.title',
+          'window.__trace',
+        ),
+      ],
+      [
+        [7, 1],
+        {
+          failure:
+            'Error: window w1: no answer within 0.2 s to "document.title"',
+          noAnswer: true,
+        },
+      ],
+    );
   });
 
   it('#2858: a socket that closes before the answer fails the read and names the page and the read', async () => {
