@@ -48,6 +48,7 @@ export const OWN_TEMPLATES = {
   S036: 'Disable {0}',
   S040: 'Download the correct VS Code that corresponds both to your local installation and the remote architecture',
   S051: "Ensure '{0}' operates between local and remote machines",
+  // Spelled "acccess" on purpose: the message is kept word for word.
   S087: 'Local bootstrap of the VS Code Server failed. This is an advanced feature for use in environments with limited internet acccess.',
   S088: "Local download mode is configured as 'manual-bootstrap'. Exec server mode will be disabled.'",
   S106: 'Place the VS Code Server in the bootstrap location specified in settings',

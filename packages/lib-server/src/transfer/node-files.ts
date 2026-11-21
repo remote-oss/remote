@@ -42,6 +42,8 @@ export const nodeClientFiles: ClientFilePort = {
       return {kind: 'failed', detail: (caught as Error).message};
     }
   },
+  // The staging folder is kept after the install: one per attempt that finds the user's archive, and none once the
+  // host has the server, so the folders are those of the attempts up to the first install.
   stage: async (source, folder) => {
     try {
       const stagingFolder = path.join(folder, `vsc_server_${randomUUID()}`);

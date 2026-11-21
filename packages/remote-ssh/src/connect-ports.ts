@@ -580,10 +580,10 @@ export function wiringPortsOf(
   };
 }
 
-/** The name of the terminal a Kill or an Uninstall logs in with. */
 /** The folder in the client's home where a manual bootstrap reads the user's server archive. */
 const BOOTSTRAP_FOLDER = 'vscode-remote-ssh-bootstrap';
 
+/** The name of the terminal a Kill or an Uninstall logs in with. */
 const MAINTENANCE_TERMINAL = 'Uninstall VS Code Server';
 
 /** The ports of a Kill or an Uninstall: those of a connect, with the login in a terminal of its own name. */
