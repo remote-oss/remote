@@ -44,6 +44,8 @@ export type FailedKind =
   | 'retriesExhausted'
   /** The host cannot serve an exec server: the setting is off, there is no command-line program for it, or it could not be set up. */
   | 'execServerUnavailable'
+  /** A manual bootstrap could not start: no archive at its path, an archive the client cannot read, or a Windows host. */
+  | 'localBootstrap'
   | 'cancelled';
 
 /** The kind of a failure and the reason it gives, before the connect adds what it knows around it. */
@@ -393,8 +395,27 @@ export function ofTransfer(
       return ofStatus(failure.status, failure.writeFailure);
     case 'noResultBlock':
       return {kind: 'channelClosed'};
+    case 'localBootstrap':
+      return ofLocalBootstrap(failure);
     default:
       return ofChannel(failure.failure);
+  }
+}
+
+/** A manual bootstrap that could not start: the archive's path, the file system's own text, or the Windows refusal. */
+function ofLocalBootstrap(
+  failure: Extract<TransferFailure, {kind: 'localBootstrap'}>,
+): FailureDetail {
+  switch (failure.cause) {
+    case 'missing':
+      return logged('localBootstrap', `no archive at ${failure.path}`, {
+        id: 'S069',
+        values: [failure.path],
+      });
+    case 'unreadable':
+      return logged('localBootstrap', failure.detail, {text: failure.detail});
+    default:
+      return {kind: 'localBootstrap', reason: {id: 'S161'}};
   }
 }
 
@@ -533,6 +554,7 @@ export const KIND_MAY_RECOVER: Readonly<Record<FailedKind, boolean>> = {
   lockTimeout: false,
   retriesExhausted: false,
   execServerUnavailable: false,
+  localBootstrap: false,
   cancelled: false,
 };
 

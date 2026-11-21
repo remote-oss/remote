@@ -135,8 +135,8 @@ export function nodeMachineOf(
         }),
     },
     lockFiles: nodeLockFiles,
-    clientLocks: new HeldClientLocks(path => {
-      nodeLockFiles.removeNow(path);
+    clientLocks: new HeldClientLocks((path, modified) => {
+      nodeLockFiles.removeNow(path, modified);
     }),
     local: nodeLocalPort(),
     prober: nodePortProber(),

@@ -397,6 +397,7 @@ async function evaluate<Value>(
   name: string,
   expression: string,
   milliseconds?: number,
+  diagnosticsExpression?: string,
 ): Promise<Value> {
   const deadline = Date.now() + WAIT_MILLISECONDS;
   for (;;) {
@@ -406,6 +407,7 @@ async function evaluate<Value>(
         `window ${name}`,
         expression,
         milliseconds,
+        diagnosticsExpression,
       );
     } catch (caught) {
       if (
@@ -589,6 +591,23 @@ export async function viewRows(
         }
       };
       const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      // The trace of this walk, for a read that no one answers: the page's visibility at the start and at each
+      // change, and each move's wall time against the 600 ms it set. It stands on the page, so a read that dies on
+      // its bound can still ask the page for it (the protocol's diagnostics read); a finished walk clears it.
+      const walkStart = Date.now();
+      const walkTrace = ['visibilityState ' + document.visibilityState];
+      let walkVisibility = document.visibilityState;
+      let walkStep = 0;
+      const markWalk = part => {
+        if (document.visibilityState !== walkVisibility) {
+          walkTrace.push(
+            'visibilityState ' + walkVisibility + ' -> ' + document.visibilityState,
+          );
+          walkVisibility = document.visibilityState;
+        }
+        walkTrace.push(part);
+      };
+      window.remoteOssViewRowsTrace = walkTrace.join(' ');
       // The first and the last rendered rows: a list that overflows by less than a row moves its last row in while the
       // first stays, so the first alone does not tell that the list moved.
       const first = () => {
@@ -607,7 +626,19 @@ export async function viewRows(
             deltaMode: 0,
           })
         );
+        const waitStartedAt = Date.now();
         await wait(600);
+        walkStep += 1;
+        markWalk(
+          'move ' +
+            walkStep +
+            ' +' +
+            (waitStartedAt - walkStart) +
+            'ms took ' +
+            (Date.now() - waitStartedAt) +
+            'ms',
+        );
+        window.remoteOssViewRowsTrace = walkTrace.join(' ');
         return first() !== before;
       };
       const topFirst = first();
@@ -637,9 +668,11 @@ export async function viewRows(
       }
       await wait(200);
       collect();
+      window.remoteOssViewRowsTrace = undefined;
       return order.map(key => seen.get(key));
     })()`,
     LONG_READ_MILLISECONDS,
+    'String(window.remoteOssViewRowsTrace ?? null)',
   );
   // The protocol returns values as JSON, where `expanded: undefined` would drop: read it back as it is.
   return (

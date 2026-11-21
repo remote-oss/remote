@@ -34,6 +34,13 @@ const EVALUATE_MILLISECONDS = 30_000;
  */
 export const LONG_READ_MILLISECONDS = 300_000;
 
+/**
+ * How long the follow-up read of the diagnostics may take, once the read's own bound already fired: a page whose
+ * timers are throttled still answers an evaluate, so a short bound is ample, and a page that is stuck costs this
+ * much on top of the bound that already ended the read.
+ */
+const DIAGNOSTICS_MILLISECONDS = 5_000;
+
 /** The read's own failure for a page that gave no answer in time: a read that a row may want to take as "unavailable". */
 export class NoAnswerError extends Error {}
 
@@ -131,27 +138,53 @@ function answerTo(
 /**
  * Evaluates `expression` in the page at protocol address `address` and returns its value; `owner` names the page in a
  * failure. A page that does not answer within `milliseconds` fails the read with a {@link NoAnswerError} that names
- * the page and the first characters of the expression, and so does a socket that closes before the answer.
+ * the page and the first characters of the expression, and so does a socket that closes before the answer. When the
+ * bound fired and a `diagnosticsExpression` was given, the page is asked once more, briefly, for that expression,
+ * and an answer joins the failure: a page whose timers are throttled still answers an evaluate, so the trace it
+ * left on itself survives the bound.
  */
 export async function evaluateAt<Value>(
   address: string,
   owner: string,
   expression: string,
   milliseconds: number = EVALUATE_MILLISECONDS,
+  diagnosticsExpression?: string,
 ): Promise<Value> {
   const socket = await openSocket(address, owner);
   try {
-    const answer = await answerTo(
-      socket,
-      owner,
-      1,
-      {
-        method: 'Runtime.evaluate',
-        params: {expression, returnByValue: true, awaitPromise: true},
-      },
-      excerptOf(expression),
-      milliseconds,
-    );
+    let answer: ProtocolAnswer;
+    try {
+      answer = await answerTo(
+        socket,
+        owner,
+        1,
+        {
+          method: 'Runtime.evaluate',
+          params: {expression, returnByValue: true, awaitPromise: true},
+        },
+        excerptOf(expression),
+        milliseconds,
+      );
+    } catch (caught) {
+      if (
+        caught instanceof NoAnswerError &&
+        diagnosticsExpression !== undefined
+      ) {
+        // The bound fired, not the page: it may still answer an evaluate. Ask it once, briefly, for its trace.
+        const left = await evaluateAt<string | null>(
+          address,
+          owner,
+          diagnosticsExpression,
+          DIAGNOSTICS_MILLISECONDS,
+        )
+          .then(value => String(value))
+          .catch(() => undefined);
+        if (left !== undefined && left !== 'null') {
+          caught.message += `\n${owner} left: ${left}`;
+        }
+      }
+      throw caught;
+    }
     const failure =
       answer.error?.message ??
       answer.result?.exceptionDetails?.exception?.description ??

@@ -323,6 +323,8 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
           exists: () => Promise.resolve(false),
           size: () => Promise.resolve(0),
           sha256: () => Promise.resolve(''),
+          stage: () =>
+            Promise.resolve({kind: 'failed', detail: 'nothing is staged here'}),
           rename: () => Promise.resolve({kind: 'renamed'}),
         },
         logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
