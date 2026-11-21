@@ -116,6 +116,10 @@ async function pressAgainst(
 ): Promise<unknown> {
   const requests: Array<[number, string]> = [];
   const server = await protocolServer((socket, frame) => {
+    if (((frame[0] ?? 0) & 15) !== 1) {
+      // The client's close frame, in answer to the server's, is no request.
+      return;
+    }
     const request = requestOf(frame);
     requests.push([request.id, request.method]);
     onRequest(socket, request);
@@ -324,6 +328,16 @@ describe('the protocol connection of the page inputs (card #2908)', () => {
         outcome.noAnswer,
       ],
       [true, false],
+    );
+  });
+
+  it('#2908: a socket that the page closes with a close frame fails the press as closed, naming the page and the command', async () => {
+    const outcome = (await pressAgainst(socket => {
+      socket.end(Buffer.from([0x88, 0x00]));
+    })) as {failure: string};
+    deepStrictEqual(
+      outcome.failure,
+      'Error: window w1: the protocol connection closed before the answer to Input.dispatchKeyEvent {"type":"keyDown","key":"a"}',
     );
   });
 
