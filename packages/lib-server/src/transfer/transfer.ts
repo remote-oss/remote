@@ -17,6 +17,7 @@ import type {Logger} from 'lib-log';
 import {redirectAllows} from 'lib-product';
 import type {Plan} from '../install/plan.ts';
 import {runStep, type StepRun} from '../lifecycle/run-step.ts';
+import {releaseSessionLock, sessionLockPath} from '../locks/session-lock.ts';
 import {
   exhaustedFailure,
   type HostLockLoop,
@@ -106,6 +107,11 @@ export interface TransferDependencies {
   onPhase: (phase: TransferPhase) => void;
   /** Whether the program an archive is copied to the host with can be started; none means it always can. */
   copyAvailable?: () => Promise<boolean>;
+  /**
+   * Whether the channel's shell lives as long as the connection's session, so that a `flock` install lock lasts the
+   * session: an install that has to install then has the shell hold the host lock.
+   */
+  sessionLock?: boolean;
 }
 
 /** Why the server is not installed. */
@@ -314,6 +320,14 @@ async function install(
     archiveUrl: input.plan.address,
     ...delivery,
   };
+  const lockPath =
+    dependencies.sessionLock === true
+      ? await sessionLockPath(
+          dependencies.channel,
+          parameters,
+          input.cancellation,
+        )
+      : undefined;
   const stepRun = await dependencies.lockLoop(
     () =>
       runStep(
@@ -328,12 +342,19 @@ async function install(
               dependencies.onPhase({kind: 'progress', ...progress});
             }
           },
+          ...(lockPath === undefined
+            ? {}
+            : {sessionLock: {path: lockPath, action: 'open'}}),
         },
       ),
     input.cancellation,
   );
   logIdentityRewrite(stepRun, parameters, dependencies.logger);
-  return outcomeOf(stepRun, input.plan);
+  const outcome = outcomeOf(stepRun, input.plan);
+  if (lockPath !== undefined && outcome.kind !== 'transferred') {
+    await releaseSessionLock(dependencies.channel, lockPath);
+  }
+  return outcome;
 }
 
 /** Runs the install step without an archive of its own: for an install the host already has, the step answers at once. */

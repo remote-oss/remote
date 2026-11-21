@@ -1,10 +1,14 @@
 import {deepStrictEqual} from 'node:assert';
 import {spawnSync} from 'node:child_process';
+import {existsSync, mkdtempSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {NOISE_LINES} from 'lib-host/testing/noise';
 import {
   commandsFor,
   type RunEnd,
+  SESSION_LOCK_TAKEN,
   type ShellRun,
   ShellRuns,
 } from '../../src/connection-server/shell-runs.ts';
@@ -16,6 +20,28 @@ const SCRIPT: ShellRun = {
   inputBase64: null,
   deadlineMilliseconds: 1000,
 };
+
+/**
+ * Runs, in a real `sh`, a run that takes the session lock on a fresh file, the line that arms its removal, and the
+ * commands `after` the file's name gives; gives the lines the shell printed and the file.
+ */
+function lockedSession(after: (file: string) => string): {
+  lines: string[];
+  file: string;
+} {
+  const folder = mkdtempSync(path.join(tmpdir(), 'lock-'));
+  const file = path.join(folder, 'host.lock');
+  const locked: ShellRun = {
+    ...SCRIPT,
+    script: `flock -n 9 && echo ${SESSION_LOCK_TAKEN}`,
+    sessionLock: {path: file, action: 'open'},
+  };
+  const arming = `REMOTE_OSS_LOCK_HELD=1; trap '[ '\\''${file}'\\'' -ef /dev/fd/9 ] && rm -f '\\''${file}'\\''' EXIT HUP\n`;
+  const result = spawnSync('/bin/sh', [], {
+    input: `${commandsFor('m1', locked)}${arming}${after(file)}`,
+  });
+  return {lines: result.stdout.toString().trim().split('\n'), file};
+}
 
 describe('the scripts on the shared session (contracts §4 S10)', () => {
   let clock: FakeClock;
@@ -80,7 +106,7 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
         commandsFor('m1', SCRIPT),
         [
           "printf '%s%s\\n' 'm1:st' 'art'",
-          "sh -c 'echo hello' </dev/null",
+          "sh -c 'echo hello' 9>&- </dev/null",
           "printf '%s%s %s\\n' 'm1:e' 'nd' \"$?\"",
           '',
         ].join('\n'),
@@ -90,7 +116,7 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
     it('quote a script with quotes in it as one word', () => {
       deepStrictEqual(
         commandsFor('m1', {...SCRIPT, script: "echo 'x'"}).split('\n')[1],
-        "sh -c 'echo '\\''x'\\''' </dev/null",
+        "sh -c 'echo '\\''x'\\''' 9>&- </dev/null",
       );
     });
 
@@ -100,7 +126,7 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
           ...SCRIPT,
           environment: {FIRST: 'x y', SECOND: "it's"},
         }).split('\n')[1],
-        "FIRST='x y' SECOND='it'\\''s' sh -c 'echo hello' </dev/null",
+        "FIRST='x y' SECOND='it'\\''s' sh -c 'echo hello' 9>&- </dev/null",
       );
     });
 
@@ -111,14 +137,48 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
           environment: {FIRST: 'x y'},
           inputBase64: 'AQID',
         }).split('\n')[1],
-        "base64 -d <<'m1_input' | FIRST='x y' sh -c 'echo hello'",
+        "base64 -d <<'m1_input' | FIRST='x y' sh -c 'echo hello' 9>&-",
       );
     });
 
     it('§S10: an empty environment leaves the command as it was', () => {
       deepStrictEqual(
         commandsFor('m1', SCRIPT).split('\n')[1],
-        "sh -c 'echo hello' </dev/null",
+        "sh -c 'echo hello' 9>&- </dev/null",
+      );
+    });
+
+    it('F-2408 BR-4: a run without a session lock closes descriptor 9 for its script, so no process it leaves behind holds the lock', () => {
+      deepStrictEqual(
+        commandsFor('m1', SCRIPT).split('\n')[1]?.includes(' 9>&- '),
+        true,
+      );
+    });
+
+    it('F-2408 BR-4: a run that takes the session lock has the shell open descriptor 9 on the path first, unless the shell holds it, and keeps it for the script', () => {
+      deepStrictEqual(
+        commandsFor('m1', {
+          ...SCRIPT,
+          sessionLock: {path: '/tmp/lock one', action: 'open'},
+        }).split('\n'),
+        [
+          "[ -n \"${REMOTE_OSS_LOCK_HELD:-}\" ] || { ( exec 9>>'/tmp/lock one' ) 2>/dev/null && exec 9>>'/tmp/lock one'; }",
+          "printf '%s%s\\n' 'm1:st' 'art'",
+          "sh -c 'echo hello' </dev/null",
+          "printf '%s%s %s\\n' 'm1:e' 'nd' \"$?\"",
+          '',
+        ],
+      );
+    });
+
+    it('F-2408 BR-4: a release run gives descriptor 9 up and removes the file only when the shell held the lock', () => {
+      deepStrictEqual(
+        commandsFor('m1', {
+          ...SCRIPT,
+          script: '',
+          sessionLock: {path: '/tmp/lock', action: 'release'},
+        }).split('\n')[1],
+        "[ -z \"${REMOTE_OSS_LOCK_HELD:-}\" ] || { [ '/tmp/lock' -ef /dev/fd/9 ] && rm -f '/tmp/lock'; }; exec 9>&-; unset REMOTE_OSS_LOCK_HELD; trap - EXIT HUP",
       );
     });
 
@@ -129,7 +189,7 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
         ),
         [
           "printf '%s%s\\n' 'm1:st' 'art'",
-          "base64 -d <<'m1_input' | sh -c 'echo hello'",
+          "base64 -d <<'m1_input' | sh -c 'echo hello' 9>&-",
           'A'.repeat(76),
           'A'.repeat(24),
           'm1_input',
@@ -144,7 +204,7 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
         commandsFor('m1', {...SCRIPT, inputBase64: ''})
           .split('\n')
           .slice(1, 3),
-        ["base64 -d <<'m1_input' | sh -c 'echo hello'", 'm1_input'],
+        ["base64 -d <<'m1_input' | sh -c 'echo hello' 9>&-", 'm1_input'],
       );
     });
 
@@ -220,6 +280,64 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
       await ended;
       deepStrictEqual(lines, ['payload']);
     });
+  });
+
+  describe('the host lock of a session', () => {
+    const LOCKED: ShellRun = {
+      ...SCRIPT,
+      sessionLock: {path: '/tmp/lock', action: 'open'},
+    };
+    const ARMING =
+      "REMOTE_OSS_LOCK_HELD=1; trap '[ '\\''/tmp/lock'\\'' -ef /dev/fd/9 ] && rm -f '\\''/tmp/lock'\\''' EXIT HUP\n";
+
+    it('F-2408 BR-4: a run whose script reported the lock taken arms the removal at the shell, before the next run is written', async () => {
+      const {ended} = start(LOCKED);
+      runs.execute(SCRIPT, () => undefined).catch(() => undefined);
+      runs.hear('m1:start');
+      runs.hear(SESSION_LOCK_TAKEN);
+      runs.hear('m1:end 0');
+      await ended;
+      deepStrictEqual(written.slice(1, 2), [ARMING]);
+    });
+
+    it('F-2408 BR-4: a run that was busy arms nothing, so a session that only waited never removes the file', async () => {
+      const {ended} = start(LOCKED);
+      runs.hear('m1:start');
+      runs.hear('server.lockPath=/tmp/lock');
+      runs.hear('m1:end 0');
+      await ended;
+      deepStrictEqual(written, [commandsFor('m1', LOCKED)]);
+    });
+
+    it('F-2408 BR-4: a run without a session lock arms nothing even when its output says the lock was taken', async () => {
+      const {ended} = start();
+      runs.hear('m1:start');
+      runs.hear(SESSION_LOCK_TAKEN);
+      runs.hear('m1:end 0');
+      await ended;
+      deepStrictEqual(written, [commandsFor('m1', SCRIPT)]);
+    });
+
+    it('F-2408 BR-4: in a real sh, an orderly end after a taken run removes the file, a held lock stays while the shell lives, and a second descriptor on the file finds it busy', function () {
+      if (spawnSync('sh', ['-c', 'command -v flock']).status !== 0) {
+        this.skip();
+      }
+      const {lines, file} = lockedSession(
+        name => `( exec 7>>'${name}'; flock -n 7 ) && echo free || echo busy\n`,
+      );
+      deepStrictEqual(
+        [lines, existsSync(file)],
+        [['m1:start', SESSION_LOCK_TAKEN, 'm1:end 0', 'busy'], false],
+      );
+    });
+  });
+
+  it('F-2408 BR-4: in a real sh, an exit trap leaves a lock path that another file took after the lock was taken', function () {
+    if (spawnSync('sh', ['-c', 'command -v flock']).status !== 0) {
+      this.skip();
+    }
+    const {file} = lockedSession(name => `rm -f '${name}'; : >'${name}'\n`);
+    deepStrictEqual(existsSync(file), true);
   });
 
   describe('a run', () => {

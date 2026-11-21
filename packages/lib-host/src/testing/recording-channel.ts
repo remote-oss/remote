@@ -15,6 +15,7 @@ import {
   type ScriptInput,
   type ScriptOutcome,
   type ScriptRequest,
+  type SessionLock,
 } from '../host-channel.ts';
 
 /** An answer that ends in a failure of any kind. */
@@ -109,6 +110,16 @@ function takeAnswer<T>(
 export class RecordingChannel implements HostChannel {
   /** Every call received, in order, cancelled and failed ones included. */
   readonly calls: RecordedCall[] = [];
+
+  /** The session lock each script run carried, in order; the runs that carried none are left out. */
+  sessionLocks(): SessionLock[] {
+    return this.calls.flatMap(call =>
+      call.operation === 'runScript' && call.request.sessionLock !== undefined
+        ? [call.request.sessionLock]
+        : [],
+    );
+  }
+
   private readonly scriptAnswers: ScriptAnswer[];
   private readonly copyAnswers: CopyAnswer[];
   private readonly localFiles: ReadonlyMap<string, Uint8Array>;

@@ -780,6 +780,59 @@ describe('the server steps: transfer and start', () => {
     });
   });
 
+  async function transferOver(
+    channel: RecordingChannel,
+  ): Promise<ReturnType<ReturnType<typeof createServerSteps>['transfer']>> {
+    const steps = createServerSteps(dependencies());
+    const result = steps.plan(INPUT, HOST);
+    if (!('plan' in result) || result.plan.kind !== 'download') {
+      throw new Error('the plan should download');
+    }
+    return steps.transfer(
+      INPUT,
+      leaseOn(channel),
+      HOST,
+      result.plan,
+      () => undefined,
+      new AbortController().signal,
+    );
+  }
+
+  it('F-2408 BR-4: the install of a host with flock has the session shell hold the host lock, so its run carries the lock path the host named', async () => {
+    const channel = channelAnswering(
+      lines(
+        'Ok',
+        'server.installDir=/home/alex/.fixture-server/bin/abc123',
+        'timing.install=5',
+      ),
+      'flock',
+    );
+    await transferOver(channel);
+    deepStrictEqual(channel.sessionLocks(), [{path: '/lock', action: 'open'}]);
+  });
+
+  it('F-2408 BR-4: an install that fails gives the session lock up', async () => {
+    const channel = channelAnswering(lines('CreateInstallDirFailed'), 'flock');
+    await transferOver(channel);
+    deepStrictEqual(channel.sessionLocks(), [
+      {path: '/lock', action: 'open'},
+      {path: '/lock', action: 'release'},
+    ]);
+  });
+
+  it('F-2408 BR-4: the start carries no session lock of its own: the install holds it', async () => {
+    const steps = createServerSteps(dependencies());
+    const channel = channelAnswering(STARTED, 'flock');
+    await steps.start(
+      INPUT,
+      leaseOn(channel),
+      HOST,
+      false,
+      new AbortController().signal,
+    );
+    deepStrictEqual(channel.sessionLocks(), []);
+  });
+
   it('F-3902 AC-13: starts the server with the licence flag only when the gate cleared it', async () => {
     const steps = createServerSteps(dependencies());
     const withFlag = channelAnswering(STARTED);

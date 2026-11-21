@@ -127,11 +127,16 @@ const INSTALL_BODY: readonly string[] = [
   '  have wget || have curl || finish NoDownloaderAvailable',
   'fi',
   'MKDIR_ERROR=$(mkdir -p "$INSTALL_DIR" 2>&1) || write_failed "$INSTALL_DIR" "$MKDIR_ERROR"',
+  'leave_if_installed() {',
+  '  if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
+  '    fact server.installDir "$INSTALL_DIR"',
+  '    leave Ok',
+  '  fi',
+  '}',
+  // The lock is for writing: an installed server needs none, and an install repeats the check under the lock.
+  'leave_if_installed',
   'take_lock_or_finish "$COMMIT"',
-  'if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
-  '  fact server.installDir "$INSTALL_DIR"',
-  '  leave Ok',
-  'fi',
+  'leave_if_installed',
   'prepare_environment',
   'if [ -n "$ARCHIVE_PATH" ]; then',
   '  ARCHIVE=$ARCHIVE_PATH',
@@ -404,8 +409,12 @@ function startBody(start: StartParameters, installTree: string): string[] {
     '}',
     ...(installTree === '' ? [] : ['ensure_install_link']),
     '[ -x "$INSTALL_DIR/$LAUNCHER" ] || finish ServerFailedToStart',
-    'take_lock_or_finish "$COMMIT"',
     'RUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)',
+    // The lock is for launching: a live server is reused without it, and a launch repeats the check under the lock.
+    'if ! is_server_process "$RUNNING_PID" "$INSTALL_DIR"; then',
+    '  take_start_lock_or_finish',
+    '  RUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)',
+    'fi',
     'if is_server_process "$RUNNING_PID" "$INSTALL_DIR"; then',
     '  SERVER_PID=$RUNNING_PID',
     '  LAUNCHED=no',
@@ -443,7 +452,7 @@ function startBody(start: StartParameters, installTree: string): string[] {
     '  WRITE_ERROR=$( (umask 077; printf \'\' >"$LOG_FILE") 2>&1 ) || write_failed_leave "$LOG_FILE" "$WRITE_ERROR"',
     `  printf '%s\\n' ${shellQuote(LAUNCHING_LINE)}`,
     '  fact server.launching yes',
-    '  nohup "$INSTALL_DIR/$LAUNCHER" "$@" </dev/null >"$LOG_FILE" 2>&1 9>&- &',
+    '  nohup "$INSTALL_DIR/$LAUNCHER" "$@" </dev/null >"$LOG_FILE" 2>&1 8>&- 9>&- &',
     '  SERVER_PID=$!',
     '  WRITE_ERROR=$( { echo "$SERVER_PID" >"$PID_FILE"; } 2>&1 ) || { kill "$SERVER_PID" 2>/dev/null; write_failed_leave "$PID_FILE" "$WRITE_ERROR"; }',
     '  LAUNCHED=yes',
@@ -609,12 +618,8 @@ function stepBody(
   }
 }
 
-/** The POSIX script of one request: the guard, the parameters, the role functions and the step's body. */
-export function posixScript(
-  request: BootstrapRequest,
-  parameters: ScriptParameters,
-): string {
-  const body = stepBody(request, parameters);
+/** The lines every POSIX script starts with: the guard, the parameters, and the policy's umask. */
+function preambleOf(parameters: ScriptParameters): readonly string[] {
   return [
     ...GUARD,
     ...parameterValuesOf(parameters).map(
@@ -622,8 +627,42 @@ export function posixScript(
     ),
     // The install and start scripts set the policy's umask; the token and log files keep their own.
     '[ "$INSTALL_UMASK" = inherit ] || umask "$INSTALL_UMASK"',
+  ];
+}
+
+/** The POSIX script of one request: the guard, the parameters, the role functions and the step's body. */
+export function posixScript(
+  request: BootstrapRequest,
+  parameters: ScriptParameters,
+): string {
+  const body = stepBody(request, parameters);
+  return [
+    ...preambleOf(parameters),
     ...rolesOf(request, parameters).flatMap(role => POSIX_FUNCTIONS[role]),
     ...body,
+    '',
+  ].join('\n');
+}
+
+/** The line that names the lock method the host will use, as `lockPathScript` prints it. */
+export const LOCK_METHOD_LINE = 'lock-method=';
+
+/** The line that names the lock file's path, as `lockPathScript` prints it. */
+export const LOCK_PATH_LINE = 'lock-path=';
+
+/**
+ * The script that prints the method and the path of the host lock of `parameters`, from the script's own lock
+ * functions, and makes the folder the lock file is in: the session shell opens the file itself before the step runs.
+ */
+export function lockPathScript(parameters: ScriptParameters): string {
+  return [
+    ...preambleOf(parameters),
+    ...POSIX_FUNCTIONS.common,
+    ...POSIX_FUNCTIONS.lock,
+    'LOCK_CANDIDATE=$(lock_path "$COMMIT")',
+    'mkdir -p "${LOCK_CANDIDATE%/*}" 2>/dev/null || true',
+    `printf '${LOCK_METHOD_LINE}%s\\n' "$(lock_method)"`,
+    `printf '${LOCK_PATH_LINE}%s\\n' "$LOCK_CANDIDATE"`,
     '',
   ].join('\n');
 }
