@@ -8,13 +8,13 @@
  */
 
 /** The clock and the pause of the wait, which a test replaces. */
-export interface PollingEnvironment {
+interface PollingEnvironment {
   now(): number;
   pause(milliseconds: number): Promise<void>;
 }
 
 /** What one run of the command gave. */
-export interface ContributionRun {
+interface ContributionRun {
   /** Seconds from the start of the wait to the run. */
   seconds: number;
   /** What the run and the reads after it showed, in words. */
