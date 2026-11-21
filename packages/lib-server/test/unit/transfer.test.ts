@@ -355,44 +355,79 @@ describe('a download on the host (F-2403, F-2405.BR-2)', () => {
     ending: {kind: 'exit', status: 0},
   };
 
-  it('F-2408 BR-4: an install over a caller whose shell lives as long as the session asks the host where the lock is and runs with that session lock open, and releases nothing when it installed', async () => {
+  /** The install's block when the script took the lock, as it reports it. */
+  const INSTALLED_HOLDING = block(
+    'Ok',
+    `server.installDir=${INSTALL_FOLDER}`,
+    'timing.install=5',
+    'server.lockHeld=yes',
+  );
+
+  /** The scripted answers of an install over a session: the lock place, then the install's output, then the release. */
+  function overSession(
+    install: ScriptAnswer['ending'] | readonly string[],
+  ): ScriptAnswer[] {
+    return [
+      FLOCK_PLACE,
+      {
+        interpreter: 'posixShell',
+        matches: script => script.includes('lock_take'),
+        lines: Array.isArray(install) ? install : [],
+        ending: Array.isArray(install)
+          ? {kind: 'exit', status: 0}
+          : (install as ScriptAnswer['ending']),
+      },
+      {...answering([]), matches: script => script === ':'},
+    ];
+  }
+
+  const LOCK_OPEN = {path: '/tmp/vscode-lock.user.abc123', action: 'open'};
+  const LOCK_RELEASE = {
+    path: '/tmp/vscode-lock.user.abc123',
+    action: 'release',
+  };
+
+  it('F-2408 BR-4: an install over a caller whose shell lives as long as the session asks the host where the lock is, runs with that session lock open, and keeps it when the script took the lock', async () => {
     const {channel, outcome} = await runTransfer({
       sessionLock: true,
-      answers: [
-        FLOCK_PLACE,
-        {
-          ...answering(INSTALLED),
-          matches: script => !script.includes('lock-path='),
-        },
-      ],
+      answers: overSession(INSTALLED_HOLDING),
     });
     deepStrictEqual(
       [outcome.kind, channel.sessionLocks()],
-      ['transferred', [{path: '/tmp/vscode-lock.user.abc123', action: 'open'}]],
+      ['transferred', [LOCK_OPEN]],
     );
   });
 
-  it('F-2408 BR-4: an install that ends in a failure gives the session lock up', async () => {
+  it('F-2402 AC-26, F-2408 BR-4: an install that found the server installed took no lock, so the session gives up what the shell made', async () => {
     const {channel, outcome} = await runTransfer({
       sessionLock: true,
-      answers: [
-        FLOCK_PLACE,
-        {
-          ...answering(block('CreateInstallDirFailed')),
-          matches: script => script.includes('lock_take'),
-        },
-        {...answering([]), matches: script => script === ':'},
-      ],
+      answers: overSession(INSTALLED),
     });
     deepStrictEqual(
       [outcome.kind, channel.sessionLocks()],
-      [
-        'failed',
-        [
-          {path: '/tmp/vscode-lock.user.abc123', action: 'open'},
-          {path: '/tmp/vscode-lock.user.abc123', action: 'release'},
-        ],
-      ],
+      ['transferred', [LOCK_OPEN, LOCK_RELEASE]],
+    );
+  });
+
+  it('F-2402 AC-26, F-2408 BR-4: an install that ends in a failure gives the session lock up', async () => {
+    const {channel, outcome} = await runTransfer({
+      sessionLock: true,
+      answers: overSession(block('CreateInstallDirFailed')),
+    });
+    deepStrictEqual(
+      [outcome.kind, channel.sessionLocks()],
+      ['failed', [LOCK_OPEN, LOCK_RELEASE]],
+    );
+  });
+
+  it('F-2402 AC-26, F-2408 BR-4: an install whose run the channel lost, as a cancelled one is, gives the session lock up', async () => {
+    const {channel, outcome} = await runTransfer({
+      sessionLock: true,
+      answers: overSession({kind: 'fail', failure: CHANNEL_CLOSED}),
+    });
+    deepStrictEqual(
+      [outcome.kind, channel.sessionLocks()],
+      ['failed', [LOCK_OPEN, LOCK_RELEASE]],
     );
   });
 

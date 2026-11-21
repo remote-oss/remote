@@ -315,7 +315,7 @@ describe('the bootstrap lines over the login terminal (card ssh-38, #443)', () =
       });
       deepStrictEqual(
         terminal.sent[1]?.includes(
-          "[ -z \"${REMOTE_OSS_LOCK_HELD:-}\" ] || { [ '/tmp/lock' -ef /dev/fd/9 ] && rm -f '/tmp/lock'; }; exec 9>&-",
+          "rm -f '/tmp/lock'; }; fi 2>/dev/null; exec 9>&-",
         ),
         true,
       );

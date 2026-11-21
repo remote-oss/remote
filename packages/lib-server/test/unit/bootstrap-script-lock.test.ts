@@ -432,6 +432,18 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(readdirSync(binFolder).sort(), [current, held].sort());
     });
 
+    it('ruling-2913-unheld-release: an install whose folder another session removed just before its lock open makes the folder again, so the open does not fail the install', () => {
+      useHost(['wget', 'flock']);
+      const block = blockOf(host, single('install'), flockParameters(), {
+        rewriteScript: text =>
+          text.replace(
+            'leave_if_installed\ntake_lock_or_finish "$COMMIT"',
+            'rm -rf "$INSTALL_DIR"\nleave_if_installed\ntake_lock_or_finish "$COMMIT"',
+          ),
+      });
+      deepStrictEqual(block === 'none' ? block : block.status, 'Ok');
+    });
+
     it('ruling-2913-lock-one-meaning: the server a launch starts holds no descriptor of the start lock or of the install lock, so no lock outlives the step', function () {
       if (!existsSync('/proc/self/fd')) {
         this.skip();
@@ -1151,6 +1163,16 @@ describe('the descriptor lock, run for real (card #2855)', () => {
       'status=0',
       'same',
     ]);
+  });
+
+  it('ruling-2913-unheld-release: a lock folder that went away after the descriptor was opened is made again by the reopen, and the lock ends on the file at the path', function () {
+    if (spawnSync('sh', ['-c', 'command -v flock']).status !== 0) {
+      this.skip();
+    }
+    deepStrictEqual(
+      lockDescriptorOutput('rm -rf "${LOCK_CANDIDATE%/*}"').split('\n'),
+      ['status=0', 'same'],
+    );
   });
 
   it('ruling-2913-lock-one-meaning: a lock path that another file took after the descriptor was opened is reopened, and the lock ends on the file at the path', function () {

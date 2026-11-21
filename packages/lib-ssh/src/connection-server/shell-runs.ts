@@ -5,6 +5,7 @@
  * status. One run is on the session at a time; the others wait their turn in the order they came.
  */
 
+import {posix} from 'node:path';
 import type {Scheduler} from 'lib-helper';
 import {type Interpreter, posixQuote, type SessionLock} from 'lib-host';
 import {base64Lines, environmentPrefix} from '../process/remote-program.ts';
@@ -74,9 +75,22 @@ function armLockLine(path: string): string {
   return `REMOTE_OSS_LOCK_HELD=1; trap ${posixQuote(removeIfHeldCommand(path))} EXIT HUP`;
 }
 
-/** The commands that give the descriptor up, and the file only when the shell held the lock. */
+/**
+ * The commands that give the descriptor up: the file goes when the shell held the lock, or when nobody does (the
+ * descriptor is still the file at the path and a lock on it is free), and then the lock's folder and the `bin` folder
+ * above it go when they are empty, so a lock that came to nothing leaves nothing behind.
+ */
 function releaseLockCommands(path: string): string {
-  return `[ -z "\${REMOTE_OSS_LOCK_HELD:-}" ] || { ${removeIfHeldCommand(path)}; }; exec 9>&-; unset REMOTE_OSS_LOCK_HELD; trap - EXIT HUP`;
+  const quoted = posixQuote(path);
+  const folder = posixQuote(posix.dirname(path));
+  const parent = posixQuote(posix.dirname(posix.dirname(path)));
+  const removeUnheld = `{ [ ${quoted} -ef /dev/fd/9 ] && flock -n 9 && rm -f ${quoted}; }`;
+  return [
+    `if [ -n "\${REMOTE_OSS_LOCK_HELD:-}" ]; then ${removeIfHeldCommand(path)}; else ${removeUnheld}; fi 2>/dev/null`,
+    'exec 9>&-',
+    `case ${folder} in */bin/*) rmdir ${folder} 2>/dev/null && rmdir ${parent} 2>/dev/null ;; esac`,
+    'unset REMOTE_OSS_LOCK_HELD; trap - EXIT HUP',
+  ].join('; ');
 }
 
 /** The commands of one run: the start marker, the script with its input, and the end marker with the status. */

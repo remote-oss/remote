@@ -1,6 +1,12 @@
 import {deepStrictEqual} from 'node:assert';
 import {spawnSync} from 'node:child_process';
-import {existsSync, mkdtempSync} from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
@@ -41,6 +47,44 @@ function lockedSession(after: (file: string) => string): {
     input: `${commandsFor('m1', locked)}${arming}${after(file)}`,
   });
   return {lines: result.stdout.toString().trim().split('\n'), file};
+}
+
+/**
+ * Runs, in a real `sh`, the run that opens the session lock on a file in `<data>/<under>` with `script`, then `between`,
+ * then the release run; gives what is left under the data folder, as paths relative to it.
+ */
+function afterRelease(
+  script: string,
+  options: {
+    under?: string;
+    takes?: boolean;
+    setup?: (folder: string) => void;
+    between?: (file: string) => string;
+  } = {},
+): string[] {
+  const root = mkdtempSync(path.join(tmpdir(), 'lock-'));
+  const folder = path.join(root, options.under ?? 'bin/abc');
+  mkdirSync(folder, {recursive: true});
+  const file = path.join(folder, 'host.lock');
+  options.setup?.(folder);
+  const opening: ShellRun = {
+    ...SCRIPT,
+    script,
+    sessionLock: {path: file, action: 'open'},
+  };
+  const releasing: ShellRun = {
+    ...SCRIPT,
+    script: ':',
+    sessionLock: {path: file, action: 'release'},
+  };
+  const arming =
+    options.takes === true
+      ? `REMOTE_OSS_LOCK_HELD=1; trap '[ '\\''${file}'\\'' -ef /dev/fd/9 ] && rm -f '\\''${file}'\\''' EXIT HUP\n`
+      : '';
+  spawnSync('/bin/sh', [], {
+    input: `${commandsFor('m1', opening)}${arming}${options.between?.(file) ?? ''}${commandsFor('m2', releasing)}`,
+  });
+  return readdirSync(root, {recursive: true, encoding: 'utf8'}).sort();
 }
 
 describe('the scripts on the shared session (contracts §4 S10)', () => {
@@ -171,14 +215,22 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
       );
     });
 
-    it('F-2408 BR-4: a release run gives descriptor 9 up and removes the file only when the shell held the lock', () => {
-      deepStrictEqual(
+    it('F-2408 BR-4: a release run is the removal of the file the shell held or nobody holds, the close of descriptor 9, and the removal of the empty folders under bin', () => {
+      const line =
         commandsFor('m1', {
           ...SCRIPT,
           script: '',
-          sessionLock: {path: '/tmp/lock', action: 'release'},
-        }).split('\n')[1],
-        "[ -z \"${REMOTE_OSS_LOCK_HELD:-}\" ] || { [ '/tmp/lock' -ef /dev/fd/9 ] && rm -f '/tmp/lock'; }; exec 9>&-; unset REMOTE_OSS_LOCK_HELD; trap - EXIT HUP",
+          sessionLock: {path: '/home/u/.data/bin/abc/lock', action: 'release'},
+        }).split('\n')[1] ?? '';
+      deepStrictEqual(
+        [
+          line.startsWith('if [ -n "${REMOTE_OSS_LOCK_HELD:-}" ]; then'),
+          line.includes('flock -n 9'),
+          line.includes(
+            "rmdir '/home/u/.data/bin/abc' 2>/dev/null && rmdir '/home/u/.data/bin'",
+          ),
+        ],
+        [true, true, true],
       );
     });
 
@@ -338,6 +390,62 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
     }
     const {file} = lockedSession(name => `rm -f '${name}'; : >'${name}'\n`);
     deepStrictEqual(existsSync(file), true);
+  });
+
+  describe('the release of a lock that came to nothing (F-2402 AC-26, F-2408 BR-4)', () => {
+    before(function () {
+      if (spawnSync('sh', ['-c', 'command -v flock']).status !== 0) {
+        this.skip();
+      }
+    });
+
+    it('a run that took no lock leaves neither the file the shell opened nor the empty folders made for it', () => {
+      deepStrictEqual(afterRelease(':'), []);
+    });
+
+    it('a run that found the server installed takes no lock: the re-made file goes and the installed folder stays', () => {
+      deepStrictEqual(
+        afterRelease(':', {
+          setup: folder => {
+            writeFileSync(path.join(folder, 'server'), '');
+          },
+        }),
+        ['bin', 'bin/abc', 'bin/abc/server'],
+      );
+    });
+
+    it('a lock the script took is removed by the release, with the empty folders', () => {
+      deepStrictEqual(
+        afterRelease(`flock -n 9 && echo ${SESSION_LOCK_TAKEN}`, {takes: true}),
+        [],
+      );
+    });
+
+    it('a lock another holder has is left in place, with its folders', () => {
+      deepStrictEqual(
+        afterRelease(':', {
+          between: file =>
+            `( exec 7>>'${file}'; flock 7; sleep 5 ) &\nsleep 0.5\n`,
+        }),
+        ['bin', 'bin/abc', 'bin/abc/host.lock'],
+      );
+    });
+
+    it('a lock path that another file took after the descriptor was opened is left alone, with its folders', () => {
+      deepStrictEqual(
+        afterRelease(':', {
+          between: file => `rm -f '${file}'; : >'${file}'\n`,
+        }),
+        ['bin', 'bin/abc', 'bin/abc/host.lock'],
+      );
+    });
+
+    it('a lock place outside a bin folder, as the temporary folder is, loses its file and keeps its folder', () => {
+      deepStrictEqual(afterRelease(':', {under: 'plain/place'}), [
+        'plain',
+        'plain/place',
+      ]);
+    });
   });
 
   describe('a run', () => {

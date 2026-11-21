@@ -100,6 +100,7 @@ lock_descriptor() {
       LOCK_ERROR=''
       [ "$LOCK_CANDIDATE" -ef /dev/fd/9 ] && return 0
       LOCK_SESSION=
+      [ -d "${LOCK_CANDIDATE%/*}" ] || mkdir -p "${LOCK_CANDIDATE%/*}" 2>/dev/null
       LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2
       exec 9>>"$LOCK_CANDIDATE"
     else
@@ -123,6 +124,7 @@ lock_take() {
     if ( : >&9 ) 2>/dev/null && [ "$LOCK_CANDIDATE" -ef /dev/fd/9 ]; then
       LOCK_SESSION=yes
     else
+      [ -d "${LOCK_CANDIDATE%/*}" ] || mkdir -p "${LOCK_CANDIDATE%/*}" 2>/dev/null
       LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2
       exec 9>>"$LOCK_CANDIDATE"
     fi
