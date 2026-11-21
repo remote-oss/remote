@@ -16,6 +16,7 @@
     "../tests/acceptance/window-agent/src/terminal-selection.ts",
     "../tests/acceptance/windows/agent-events.ts",
     "../tests/acceptance/windows/agent-standing.ts",
+    "../tests/acceptance/windows/change-timeline.ts",
     "../tests/acceptance/windows/connect-failure.ts",
     "../tests/acceptance/windows/corrupt-archive.ts",
     "../tests/acceptance/windows/page-protocol.ts",
@@ -23,6 +24,7 @@
     "../tests/acceptance/windows/platform-forms.ts",
     "../tests/acceptance/windows/image-pull.ts",
     "../tests/acceptance/windows/late-pickup.ts",
+    "../tests/acceptance/windows/page-list.ts",
     "../tests/acceptance/windows/quick-pick-reads.ts",
     "../tests/acceptance/windows/reconnection-state.ts"
   ],
