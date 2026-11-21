@@ -780,6 +780,26 @@ describe('the server steps: transfer and start', () => {
     });
   });
 
+  it('F-2408 BR-4: the start of a host with flock has the session shell hold the host lock, so the run carries the lock path the host named', async () => {
+    const steps = createServerSteps(dependencies());
+    const channel = channelAnswering(STARTED, 'flock');
+    await steps.start(
+      INPUT,
+      leaseOn(channel),
+      HOST,
+      false,
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      channel.calls.flatMap(call =>
+        call.operation === 'runScript' && call.request.sessionLock !== undefined
+          ? [call.request.sessionLock]
+          : [],
+      ),
+      [{path: '/lock', action: 'open'}],
+    );
+  });
+
   it('F-3902 AC-13: starts the server with the licence flag only when the gate cleared it', async () => {
     const steps = createServerSteps(dependencies());
     const withFlag = channelAnswering(STARTED);
