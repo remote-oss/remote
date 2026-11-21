@@ -11,6 +11,11 @@ import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
 import path from 'node:path';
 import {inWindow, isOpen, variable, windowState} from './harness.ts';
 import {
+  evaluateAt,
+  LONG_READ_MILLISECONDS,
+  unavailableWhenNoAnswer,
+} from './page-protocol.ts';
+import {
   type DebugTarget,
   localPageAmong,
   pageAmong,
@@ -30,19 +35,6 @@ export interface ViewRow {
   description: string;
   level: number;
   expanded: boolean | undefined;
-}
-
-/** The answer of the protocol's `Runtime.evaluate`. */
-interface EvaluateAnswer {
-  id: number;
-  result?: {
-    result?: {value?: unknown};
-    exceptionDetails?: {
-      text: string;
-      exception?: {description?: string};
-    };
-  };
-  error?: {message: string};
 }
 
 /** A dialog of core's, as the window shows it: its message, its detail and its buttons' labels in order. */
@@ -397,47 +389,6 @@ export async function rememberPage(name: string): Promise<void> {
   await pageOf(name);
 }
 
-/** Evaluates `expression` in the page at protocol address `address` and returns its value; `owner` names the page in a failure. */
-async function evaluateAt<Value>(
-  address: string,
-  owner: string,
-  expression: string,
-): Promise<Value> {
-  const socket = new WebSocket(address);
-  try {
-    await new Promise<void>((resolve, reject) => {
-      socket.addEventListener('open', () => {
-        resolve();
-      });
-      socket.addEventListener('error', () => {
-        reject(new Error(`no protocol connection to ${owner}`));
-      });
-    });
-    const answer = await new Promise<EvaluateAnswer>(resolve => {
-      socket.addEventListener('message', event => {
-        resolve(JSON.parse(String(event.data)) as EvaluateAnswer);
-      });
-      socket.send(
-        JSON.stringify({
-          id: 1,
-          method: 'Runtime.evaluate',
-          params: {expression, returnByValue: true, awaitPromise: true},
-        }),
-      );
-    });
-    const failure =
-      answer.error?.message ??
-      answer.result?.exceptionDetails?.exception?.description ??
-      answer.result?.exceptionDetails?.text;
-    if (failure !== undefined) {
-      throw new Error(`${owner}: ${failure}`);
-    }
-    return answer.result?.result?.value as Value;
-  } finally {
-    socket.close();
-  }
-}
-
 /**
  * Evaluates `expression` in window `name`'s page and returns its value; a thrown error fails with its text. A read that
  * a reload of the window meets (Retry at a connection dialog reloads it) ends with the protocol's "Inspected target
@@ -446,6 +397,7 @@ async function evaluateAt<Value>(
 async function evaluate<Value>(
   name: string,
   expression: string,
+  milliseconds?: number,
 ): Promise<Value> {
   const deadline = Date.now() + WAIT_MILLISECONDS;
   for (;;) {
@@ -454,6 +406,7 @@ async function evaluate<Value>(
         await pageOf(name),
         `window ${name}`,
         expression,
+        milliseconds,
       );
     } catch (caught) {
       if (
@@ -481,26 +434,16 @@ const PAGE_FACTS_MILLISECONDS = 10_000;
 export async function terminalPageFacts(
   name: string,
 ): Promise<TerminalPageFacts | 'unavailable'> {
-  let timer: NodeJS.Timeout | undefined;
-  const expired = new Promise<'unavailable'>(resolve => {
-    timer = setTimeout(() => {
-      resolve('unavailable');
-    }, PAGE_FACTS_MILLISECONDS);
-  });
-  try {
-    return await Promise.race([
-      evaluate<TerminalPageFacts>(
-        name,
-        `({
-          rows: document.querySelectorAll('.xterm-rows').length,
-          tabs: [...document.querySelectorAll('.terminal-tabs-entry')].map(each => (each.textContent ?? '').trim()),
-        })`,
-      ),
-      expired,
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
+  return unavailableWhenNoAnswer(
+    evaluate<TerminalPageFacts>(
+      name,
+      `({
+        rows: document.querySelectorAll('.xterm-rows').length,
+        tabs: [...document.querySelectorAll('.terminal-tabs-entry')].map(each => (each.textContent ?? '').trim()),
+      })`,
+      PAGE_FACTS_MILLISECONDS,
+    ),
+  );
 }
 
 /** The page-side lookup of a view's pane by its header title; `undefined` when no pane has it. */
@@ -697,6 +640,7 @@ export async function viewRows(
       collect();
       return order.map(key => seen.get(key));
     })()`,
+    LONG_READ_MILLISECONDS,
   );
   // The protocol returns values as JSON, where `expanded: undefined` would drop: read it back as it is.
   return (
@@ -1771,6 +1715,7 @@ export async function portsRows(name: string): Promise<PortsRow[]> {
       }
       return order.map(key => seen.get(key));
     })()`,
+    LONG_READ_MILLISECONDS,
   );
   if (typeof rows === 'string') {
     throw new Error(`window ${name}: ${rows}`);
@@ -3392,6 +3337,7 @@ export async function allQuickPickRows(
       reads.push(read());
       return reads;
     })()}`,
+    LONG_READ_MILLISECONDS,
   );
   return reads === null ? [] : combineQuickPickReads(reads);
 }
