@@ -72,9 +72,12 @@ class LateRemovePort extends MemoryLockPort {
     });
   }
 
-  /** Deletes the file now and resolves at `finish`. */
-  override remove(path: string): Promise<void> {
-    void super.remove(path);
+  /** Deletes the file now, while it is the one created, and resolves at `finish`. */
+  override removeIfModified(
+    path: string,
+    modified: number | undefined,
+  ): Promise<void> {
+    void super.removeIfModified(path, modified);
     this.called();
     return this.finished;
   }
@@ -92,9 +95,9 @@ class LateRemovePort extends MemoryLockPort {
 function stepOver(port: LockFilePort, clock: Clock = steppingClock()) {
   const sink = new MemorySink();
   const removedNow: string[] = [];
-  const held = new HeldClientLocks(path => {
+  const held = new HeldClientLocks((path, modified) => {
     removedNow.push(path);
-    void port.remove(path);
+    void port.removeIfModified(path, modified);
   });
   const step = holdClientLockStep({
     port,
@@ -280,7 +283,9 @@ describe('the client install lock of a connect (card #2844, F-2408 BR-6 to BR-8,
     const port: LockFilePort = {
       createExclusive: () => Promise.reject(new Error('EACCES: denied')),
       ageMilliseconds: () => Promise.resolve(undefined),
+      modifiedMilliseconds: () => Promise.resolve(undefined),
       remove: () => Promise.resolve(),
+      removeIfModified: () => Promise.resolve(),
     };
     const {step, held, removedNow, sink} = stepOver(port);
     const input = inputFor('dev');
@@ -340,8 +345,9 @@ describe('the client install lock of a connect (card #2844, F-2408 BR-6 to BR-8,
       {
         kind: successor.kind,
         files: port.files(),
-        removes: port.calls.filter(call => call === `remove ${pathOf(input)}`)
-          .length,
+        removes: port.calls.filter(
+          call => call === `removeIfModified ${pathOf(input)}`,
+        ).length,
       },
       {kind: 'done', files: [pathOf(input)], removes: 1},
     );
@@ -363,8 +369,9 @@ describe('the client install lock of a connect (card #2844, F-2408 BR-6 to BR-8,
       {
         result,
         files: port.files(),
-        removes: port.calls.filter(call => call === `remove ${pathOf(input)}`)
-          .length,
+        removes: port.calls.filter(
+          call => call === `removeIfModified ${pathOf(input)}`,
+        ).length,
       },
       {
         result: {kind: 'failed', failure: {kind: 'cancelled'}},
@@ -395,8 +402,9 @@ describe('the client install lock of a connect (card #2844, F-2408 BR-6 to BR-8,
     deepStrictEqual(
       {
         files: port.files(),
-        removes: port.calls.filter(call => call === `remove ${pathOf(input)}`)
-          .length,
+        removes: port.calls.filter(
+          call => call === `removeIfModified ${pathOf(input)}`,
+        ).length,
       },
       {files: [], removes: 1},
     );
@@ -444,7 +452,7 @@ describe('the client install lock of a connect (card #2844, F-2408 BR-6 to BR-8,
       {
         result: {kind: 'failed', failure: {kind: 'cancelled'}},
         files: [],
-        removedNow: [pathOf(input)],
+        removedNow: [],
       },
     );
   });
@@ -459,20 +467,17 @@ describe('the client install lock of a connect (card #2844, F-2408 BR-6 to BR-8,
       new AbortController().signal,
     );
     const beforeEnd = [...removedNow];
+    const takeoverRemoves = port.calls.filter(
+      call => call === `removeIfModified ${pathOf(input)}`,
+    ).length;
     held.releaseAll();
     deepStrictEqual(
-      {
-        kind: taken.kind,
-        beforeEnd,
-        atEnd: removedNow,
-        removes: port.calls.filter(call => call === `remove ${pathOf(input)}`)
-          .length,
-      },
+      {kind: taken.kind, beforeEnd, atEnd: removedNow, takeoverRemoves},
       {
         kind: 'done',
         beforeEnd: [],
         atEnd: [pathOf(input)],
-        removes: 2,
+        takeoverRemoves: 1,
       },
     );
   });
@@ -491,8 +496,8 @@ describe('the client install lock of a connect (card #2844, F-2408 BR-6 to BR-8,
   it('BR-6 (card #2915): over the Node files, a window closed right after its connect starts has no lock file on disk when its end returns', async () => {
     const folder = mkdtempSync(path.join(tmpdir(), 'client-lock-step-'));
     try {
-      const held = new HeldClientLocks(file => {
-        nodeLockFiles.removeNow(file);
+      const held = new HeldClientLocks((file, modified) => {
+        nodeLockFiles.removeNow(file, modified);
       });
       const step = holdClientLockStep({
         port: nodeLockFiles,

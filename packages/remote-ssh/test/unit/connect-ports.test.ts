@@ -160,8 +160,8 @@ function assemblyInputs(
     scheduler: clock.scheduler(),
     clock: {now: () => clock.now(), wait: () => Promise.resolve()},
     lockFiles,
-    clientLocks: new HeldClientLocks(path => {
-      void lockFiles.remove(path);
+    clientLocks: new HeldClientLocks((path, modified) => {
+      void lockFiles.removeIfModified(path, modified);
     }),
     local: new FakeLocalPort(),
     prober: changes.prober ?? new FakeProber({}),

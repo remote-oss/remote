@@ -678,8 +678,11 @@ Rules:
 
 Rules (F-2408 as revised):
 - A client lock whose owner died is not free. A waiter takes it over only when the file is at least 4 minutes old,
-  polling about every 0.5 s and giving up after 2 minutes. The holder never refreshes the file. It removes the file
-  on a clean end and relies on the age rule otherwise.
+  polling about every 0.5 s and giving up after 2 minutes. The holder never refreshes the file. A takeover runs under
+  a ticket, `<lock>.takeover`, created exclusively: one takeover at a time, the lock's age read again under it, and a
+  ticket older than 10 s broken. A holder's release removes the lock file only while it is still its own: the file's
+  modification time is the one the holder read when it created it. It removes the file on a clean end and relies on
+  the age rule otherwise.
 - The client lock is `vscode-remote-ssh-<id>-install.lock` in the editor's temp folder, `<id>` 8 hex digits of the SHA-256
   of the alias's connection key: stable per alias, different for two aliases of one host (BR-6). It is taken in both
   install modes (BR-9) and shows S157 while a window waits (BR-11).

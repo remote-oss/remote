@@ -16,74 +16,76 @@ import {connectionKeyOf} from './connection-step.ts';
 import {LOCAL_LOCK_TIMEOUT} from './failure.ts';
 import type {ConnectSteps} from './steps.ts';
 
-/** The client lock files this extension holds, by path, so that the extension's end removes them. */
+/**
+ * The client lock files this extension holds, by path, with the modification time each had at its create, so that the
+ * extension's end removes them while they are still its own.
+ */
 export class HeldClientLocks {
-  private readonly paths = new Set<string>();
-  private readonly removeNow: (path: string) => void;
+  private readonly paths = new Map<string, number | undefined>();
+  private readonly removeNow: (
+    path: string,
+    modified: number | undefined,
+  ) => void;
   private ended = false;
 
-  /** `removeNow` removes a file without waiting, as an ending extension must. */
-  constructor(removeNow: (path: string) => void) {
+  /** `removeNow` removes a file without waiting while its modification time is the given one, as an ending extension must. */
+  constructor(removeNow: (path: string, modified: number | undefined) => void) {
     this.removeNow = removeNow;
   }
 
   /**
-   * Notes the file at `path` as held, and whether it may be: a lock taken after the extension's end (its file created
-   * while the end ran) is removed at once and is not held.
+   * Notes the file at `path`, created with the modification time `modified`, as held, and whether it may be: a lock
+   * taken after the extension's end (its file created while the end ran) is removed at once and is not held.
    */
-  hold(path: string): boolean {
+  hold(path: string, modified: number | undefined): boolean {
     if (this.ended) {
-      this.removeNow(path);
+      this.removeNow(path, modified);
       return false;
     }
-    this.paths.add(path);
+    this.paths.set(path, modified);
     return true;
   }
 
   /**
-   * Removes the file this extension created at `path`, and stops holding it when `wasHeld`, in one call, so that no
-   * end can come between the two. A held file the end has removed already is left alone, since another window may
+   * Removes the held file at `path`, while its modification time is `modified`, and stops holding it, in one call, so
+   * that no end can come between the two. A file the end has removed already is left alone, since another window may
    * hold it by now.
    */
-  release(path: string, wasHeld: boolean): void {
-    if (!wasHeld || this.paths.delete(path)) {
-      this.removeNow(path);
+  release(path: string, modified: number | undefined): void {
+    if (this.paths.delete(path)) {
+      this.removeNow(path, modified);
     }
   }
 
   /** Removes the file of every lock still held, and of every lock taken from now on: the extension's end. */
   releaseAll(): void {
     this.ended = true;
-    for (const path of this.paths) {
-      this.removeNow(path);
+    for (const [path, modified] of this.paths) {
+      this.removeNow(path, modified);
     }
     this.paths.clear();
   }
 }
 
 /**
- * `port` with its removal of a file this caller created made by `held`, at once, `holding` telling whether the lock
- * was held by then: the takeover of another window's left file still goes to `port`.
+ * `port` with the removal of the lock while `holding` it made by `held`, at once; every other removal, the takeover's
+ * and a cancel's during the create, goes to `port`.
  */
 function releasingThrough(
   port: LockFilePort,
   held: HeldClientLocks,
   holding: () => boolean,
 ): LockFilePort {
-  let created = false;
   return {
-    createExclusive: async path => {
-      const outcome = await port.createExclusive(path);
-      created = outcome === 'created';
-      return outcome;
-    },
+    createExclusive: path => port.createExclusive(path),
     ageMilliseconds: path => port.ageMilliseconds(path),
-    remove: path => {
-      if (!created) {
-        return port.remove(path);
+    modifiedMilliseconds: path => port.modifiedMilliseconds(path),
+    remove: path => port.remove(path),
+    removeIfModified: (path, modified) => {
+      if (!holding()) {
+        return port.removeIfModified(path, modified);
       }
-      created = false;
-      held.release(path, holding());
+      held.release(path, modified);
       return Promise.resolve();
     },
   };
@@ -123,8 +125,8 @@ export function holdClientLockStep(
         dependencies.folder,
         key,
         dependencies.clock,
-        () => {
-          if (!dependencies.held.hold(path)) {
+        modified => {
+          if (!dependencies.held.hold(path, modified)) {
             resolve({kind: 'failed', failure: {kind: 'cancelled'}});
             // The extension is ending and the file is gone already: the lock's own removal must not follow, since
             // another window may have taken the lock by then.
