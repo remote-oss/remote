@@ -14,7 +14,8 @@ import {
 } from 'node:fs';
 import {homedir} from 'node:os';
 import path from 'node:path';
-import {variable} from './harness.ts';
+import {onHost, variable} from './harness.ts';
+import {DATA_FOLDER} from './maintenance.ts';
 
 /** The folder the product reads the archive from: the editor of a launch runs with the test process's home. */
 export const BOOTSTRAP_FOLDER = path.join(
@@ -48,7 +49,33 @@ export const BOOTSTRAP_MITIGATIONS: readonly string[] = [
 
 /** The reason of the dialog when the archive is missing, for the host `alias`. */
 export function missingReason(alias: string): string {
-  return `Could not establish connection to "${alias}": Expected tarball at local path ${BOOTSTRAP_FILE}.`;
+  return reason(alias, `Expected tarball at local path ${BOOTSTRAP_FILE}.`);
+}
+
+/** The reason of a failure dialog for the host `alias`: `Could not establish connection to "<alias>": <text>`. */
+export function reason(alias: string, text: string): string {
+  return `Could not establish connection to "${alias}": ${text}`;
+}
+
+/** The commit of the server the host holds: the one folder of `bin`, which an install makes; it fails when there is not exactly one. */
+export async function installedCommit(): Promise<string> {
+  const found = (
+    await onHost('sh', '-c', `ls -A '${DATA_FOLDER}/bin' 2>/dev/null; true`)
+  )
+    .split('\n')
+    .filter(line => line !== '');
+  const [commit] = found;
+  if (found.length !== 1 || commit === undefined) {
+    throw new Error(
+      `the host holds ${String(found.length)} install folders, not one: ${JSON.stringify(found)}`,
+    );
+  }
+  return commit;
+}
+
+/** The install folder `bin/<commit>` of the server the host holds. */
+export async function installFolder(): Promise<string> {
+  return `${DATA_FOLDER}/bin/${await installedCommit()}`;
 }
 
 /** `text` with every space and bullet taken out, which the table's wrapping and list marks leave unlike the strings. */
