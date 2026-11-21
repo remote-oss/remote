@@ -28,6 +28,7 @@ import {
   closeAllButLocal,
   dismissals,
   freshHost,
+  describedPids,
 } from '../windows/maintenance.ts';
 import {
   attemptsSince,
@@ -424,31 +425,6 @@ describe('the reconnection loop of a window whose host stops answering (card #27
       server,
       shells: below.filter(each => !server.includes(each)),
     };
-  }
-
-  /** Each of `pids` as the host shows it now: its parent, its start and its command line, or that it is gone. */
-  async function describedPids(
-    pids: readonly number[],
-  ): Promise<Map<number, string>> {
-    if (pids.length === 0) {
-      return new Map();
-    }
-    const text = await onHost(
-      'sh',
-      '-c',
-      'for pid in "$@"; do if [ -r /proc/$pid/stat ]; then echo "$pid parent $(awk \'{print $4}\' /proc/$pid/stat 2>/dev/null) start $(stat -c %y /proc/$pid 2>/dev/null) $(tr \'\\0\' \' \' </proc/$pid/cmdline 2>/dev/null)"; else echo "$pid gone"; fi; done',
-      'sh',
-      ...pids.map(String),
-    ).catch((caught: unknown) => `0 could not be read: ${String(caught)}`);
-    return new Map(
-      text
-        .split('\n')
-        .filter(line => line !== '')
-        .map(line => [
-          Number(line.split(' ')[0]),
-          line.slice(line.indexOf(' ') + 1),
-        ]),
-    );
   }
 
   /** The process ids that `hostBefore` had and `hostAfter` lacks, each with what the host showed of it before and shows now. */

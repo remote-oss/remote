@@ -42,6 +42,7 @@ import {
   pickHost,
   runWith,
   serverMainProcesses,
+  describedPids,
   serverProcesses,
   serversGoneWithin,
   setting,
@@ -577,12 +578,20 @@ describe('Kill VS Code Server (card coverage-39)', function () {
   it('F-2411 AC-21: Kill on Host picking the window’s own host acts as Kill Current, in each mode', async () => {
     await openConnected('x1');
     const servers = await serverProcesses();
+    const describedBefore = await describedPids(servers);
     appendScript([{...pickHost('harness'), window: 'x1'}]);
     const name = await nextEmptyWindow(() => killOnHost('x1'));
-    const defaultMode = [
-      (await windowState(name)).remoteName,
-      await serverProcesses(),
-    ];
+    const remoteName = (await windowState(name)).remoteName;
+    const afterKill = await serverProcesses();
+    const defaultMode = [remoteName, afterKill];
+    const lost = servers.filter(server => !afterKill.includes(server));
+    const describedNow = await describedPids(lost);
+    const lostFacts = `the processes the default-mode kill lost (before the kill / now):\n${lost
+      .map(
+        server =>
+          `${String(server)}: ${describedBefore.get(server) ?? 'not read'} / ${describedNow.get(server) ?? 'not read'}`,
+      )
+      .join('\n')}`;
     await closeWindow(name);
     await closeAllButLocal();
     await perWindowMode(true);
@@ -598,6 +607,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
           (await windowState('x1')).remoteName,
         ],
         [[null, servers], [[killed('harness'), ['Open Logs']]], 'ssh-remote'],
+        lostFacts,
       );
     } finally {
       await closeAllButLocal();
