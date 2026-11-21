@@ -608,7 +608,7 @@ export async function viewRows(
         }
         walkTrace.push(part);
       };
-      window.__viewRowsTrace = walkTrace.join(' ');
+      window.remoteOssViewRowsTrace = walkTrace.join(' ');
       // The first and the last rendered rows: a list that overflows by less than a row moves its last row in while the
       // first stays, so the first alone does not tell that the list moved.
       const first = () => {
@@ -639,7 +639,7 @@ export async function viewRows(
             (Date.now() - waitStartedAt) +
             'ms',
         );
-        window.__viewRowsTrace = walkTrace.join(' ');
+        window.remoteOssViewRowsTrace = walkTrace.join(' ');
         return first() !== before;
       };
       const topFirst = first();
@@ -669,11 +669,11 @@ export async function viewRows(
       }
       await wait(200);
       collect();
-      window.__viewRowsTrace = undefined;
+      window.remoteOssViewRowsTrace = undefined;
       return order.map(key => seen.get(key));
     })()`,
     LONG_READ_MILLISECONDS,
-    'String(window.__viewRowsTrace ?? null)',
+    'String(window.remoteOssViewRowsTrace ?? null)',
   );
   // The protocol returns values as JSON, where `expanded: undefined` would drop: read it back as it is.
   return (

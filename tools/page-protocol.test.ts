@@ -134,7 +134,7 @@ describe('the protocol connection of the page reads (card #2858)', () => {
         ],
         150,
         'document.title',
-        'window.__trace',
+        'window.remoteOssTrace',
       ),
       {
         failure:
@@ -150,7 +150,7 @@ describe('the protocol connection of the page reads (card #2858)', () => {
         [() => undefined, () => undefined],
         150,
         'document.title',
-        'window.__trace',
+        'window.remoteOssTrace',
       ),
       {
         failure: 'Error: window w1: no answer within 0.2 s to "document.title"',
@@ -174,7 +174,7 @@ describe('the protocol connection of the page reads (card #2858)', () => {
               'window w1',
               'document.title',
               undefined,
-              'window.__trace',
+              'window.remoteOssTrace',
             );
             return [value, requests.length];
           } finally {
@@ -185,7 +185,7 @@ describe('the protocol connection of the page reads (card #2858)', () => {
           [() => undefined, socket => socket.write(textFrame(answerOf(null)))],
           150,
           'document.title',
-          'window.__trace',
+          'window.remoteOssTrace',
         ),
       ],
       [
