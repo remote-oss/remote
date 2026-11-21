@@ -111,6 +111,10 @@ function assemblyInputs(
       recorded.revealed += 1;
     },
   );
+  const lockFiles = new MemoryLockPort({
+    now: () => clock.now(),
+    wait: () => Promise.resolve(),
+  });
   const machine: ConnectMachine = {
     profile: PROFILE,
     platform: 'linux',
@@ -155,11 +159,10 @@ function assemblyInputs(
     download: {} as unknown as ConnectMachine['download'],
     scheduler: clock.scheduler(),
     clock: {now: () => clock.now(), wait: () => Promise.resolve()},
-    lockFiles: new MemoryLockPort({
-      now: () => clock.now(),
-      wait: () => Promise.resolve(),
+    lockFiles,
+    clientLocks: new HeldClientLocks(path => {
+      void lockFiles.remove(path);
     }),
-    clientLocks: new HeldClientLocks(() => undefined),
     local: new FakeLocalPort(),
     prober: changes.prober ?? new FakeProber({}),
     newTemporaryToken: () => 'token',

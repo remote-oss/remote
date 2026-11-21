@@ -28,6 +28,8 @@ export interface StateReads {
   agentLife(): Array<{event: string; time: number}>;
   /** The lines of the window's own renderer log, where core says what it did with the end of the reconnection. */
   rendererLines(): string[];
+  /** What the window's dialog and notifications showed over the time since the end, as the changes between the reads. */
+  timeline(): string[];
 }
 
 /** How many of the connection log's last lines the explanation keeps. */
@@ -67,6 +69,36 @@ async function withinMilliseconds(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** How long after the end the unfiltered renderer log is kept, and how many of its lines. */
+const WINDOW_MILLISECONDS = 30_000;
+const WINDOW_LINES = 80;
+
+/**
+ * The lines of a log whose lines begin with a stamp (`2026-11-20 00:03:15.909`, UTC) between `fromMs` and `toMs`, with the
+ * unstamped lines after a kept one, at most the last `capacity`, each cut at `width` characters.
+ */
+export function logLinesBetween(
+  lines: readonly string[],
+  fromMs: number,
+  toMs: number,
+  capacity: number,
+  width: number,
+): string[] {
+  const kept: string[] = [];
+  let keeping = false;
+  for (const line of lines) {
+    const stamp = /^(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d(?:\.\d+)?)/u.exec(line);
+    if (stamp !== null) {
+      const time = Date.parse(`${stamp[1] ?? ''}T${stamp[2] ?? ''}Z`);
+      keeping = time >= fromMs && time <= toMs;
+    }
+    if (keeping) {
+      kept.push(line.slice(0, width));
+    }
+  }
+  return kept.slice(-capacity);
 }
 
 /** `milliseconds` as seconds with a sign, to one decimal. */
@@ -149,6 +181,21 @@ export async function reconnectionState(
       JSON.stringify(await reads.notifications()),
     ),
     await reconnectionGlance(reads, endedAt),
+    section(
+      'the dialog and notifications of the window, every change between reads taken every 250 ms',
+      () => reads.timeline().join('\n'),
+    ),
+    section(
+      'the window’s renderer log from the end to 30 s after it, every line',
+      () =>
+        logLinesBetween(
+          reads.rendererLines(),
+          endedAt,
+          endedAt + WINDOW_MILLISECONDS,
+          WINDOW_LINES,
+          LINE_LENGTH,
+        ).join('\n'),
+    ),
     section('the last lines of the connection log since then', () =>
       reads
         .logLines()

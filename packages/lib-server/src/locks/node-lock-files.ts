@@ -1,10 +1,10 @@
 /**
- * @fileoverview The client lock's files on Node.js: the lock port of the library over `fs`, and the removal the
- * extension's end makes without waiting.
+ * @fileoverview The client lock's files on Node.js: the lock port of the library over `fs`, whose create is made
+ * before it returns, and the removal the extension's end makes without waiting.
  */
 
-import {rmSync} from 'node:fs';
-import {open, rm, stat} from 'node:fs/promises';
+import {closeSync, openSync, rmSync} from 'node:fs';
+import {rm, stat} from 'node:fs/promises';
 import type {LockFilePort} from './client-lock.ts';
 
 /** The lock port, with the removal that does not wait, for an extension that is ending. */
@@ -18,19 +18,25 @@ function codeOf(caught: unknown): unknown {
   return (caught as NodeJS.ErrnoException).code;
 }
 
+/** Makes the empty file at `path` before returning: `exists` when another made it first. */
+function createdNow(path: string): 'created' | 'exists' {
+  try {
+    closeSync(openSync(path, 'wx'));
+    return 'created';
+  } catch (caught) {
+    if (codeOf(caught) === 'EEXIST') {
+      return 'exists';
+    }
+    throw caught;
+  }
+}
+
 /** The client lock's files on this machine. */
 export const nodeLockFiles: NodeLockFiles = {
-  createExclusive: async path => {
-    try {
-      await (await open(path, 'wx')).close();
-      return 'created';
-    } catch (caught) {
-      if (codeOf(caught) === 'EEXIST') {
-        return 'exists';
-      }
-      throw caught;
-    }
-  },
+  createExclusive: path =>
+    new Promise(resolve => {
+      resolve(createdNow(path));
+    }),
   ageMilliseconds: async path => {
     try {
       return Date.now() - (await stat(path)).mtimeMs;
