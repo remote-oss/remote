@@ -20,6 +20,12 @@ export type FailureKind =
 
 /** The string ids of the reasons and hint texts the classifier returns. */
 export type DiagnosticStringId =
+  | 'S016'
+  | 'S036'
+  | 'S040'
+  | 'S051'
+  | 'S106'
+  | 'S124'
   | 'S005'
   | 'S014'
   | 'S032'

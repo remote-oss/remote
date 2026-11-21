@@ -94,6 +94,11 @@ export interface ScriptParameters {
    * lock is busy and the step is tried again.
    */
   removeArchive: boolean;
+  /**
+   * Whether the install first puts the archive at `archivePath` into the install folder, under the manual bootstrap's
+   * fixed archive name with its marker file, under the host lock, and unpacks it from there.
+   */
+  archiveIntoInstall?: boolean;
   archiveFormat: 'tar.gz' | 'zip';
   /** The epoch milliseconds that name the staging folder of a stepwise install. */
   epochMilliseconds: number;
@@ -379,6 +384,7 @@ export function parameterValuesOf(
     ['ARCHIVE_URL', parameters.archiveUrl],
     ['ARCHIVE_PATH', parameters.archivePath],
     ['ARCHIVE_REMOVE', yesNo(parameters.removeArchive)],
+    ['ARCHIVE_INTO_INSTALL', yesNo(parameters.archiveIntoInstall === true)],
     ['ARCHIVE_FORMAT', parameters.archiveFormat],
     ['STAGING_SUFFIX', parameters.epochMilliseconds],
     ['INSTALL_TREE', parameters.installTree],

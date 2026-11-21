@@ -184,6 +184,10 @@ interface Setup {
   copyStall?: number;
   /** Makes the host Windows, so that a look at a file's size is a PowerShell script. */
   windows?: boolean;
+  /** The user's archive of a manual bootstrap. */
+  bootstrapArchive?: string;
+  /** How staging that archive ends; it fails when absent. */
+  staged?: {kind: 'staged'; archive: string} | {kind: 'failed'; detail: string};
 }
 
 async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
@@ -221,6 +225,9 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
       cache: setup.cache ?? {kind: 'none'},
       verification: setup.verification ?? ['none'],
       hostFolder: HOST_FOLDER,
+      ...(setup.bootstrapArchive === undefined
+        ? {}
+        : {bootstrapArchive: setup.bootstrapArchive}),
       cancellation: setup.cancellation ?? NEVER_CANCELLED,
       discardDeadlineMilliseconds: TEST_DEADLINE_MILLISECONDS,
     },
@@ -263,6 +270,10 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
           ),
         size: file => Promise.resolve(setup.sizes?.[file] ?? 0),
         sha256: file => Promise.resolve(setup.digests?.[file] ?? ''),
+        stage: () =>
+          Promise.resolve(
+            setup.staged ?? {kind: 'failed', detail: 'nothing is staged here'},
+          ),
         rename: (source, destination) => {
           renames.push(`${source} -> ${destination}`);
           return Promise.resolve(setup.renameResult ?? {kind: 'renamed'});
@@ -2064,6 +2075,83 @@ describe('the copy to the host that makes no progress (card connect-122)', () =>
     deepStrictEqual(
       [failureOf(outcome), Date.now() - started >= 250 + 80],
       [{kind: 'copyStalled'}, true],
+    );
+  });
+});
+
+describe('a manual bootstrap (F-2406, ruling-2878-manual-bootstrap)', () => {
+  const ARCHIVE = '/home/me/vscode-remote-ssh-bootstrap/vscode-server.tar.gz';
+  const STAGED = `${CLIENT_FOLDER}/vsc_server_1/vscode-server.tar.gz`;
+
+  it('7.E1: an archive that is not at its path ends the transfer with its path, with no download and no copy', async () => {
+    const bootstrapped = await runTransfer({
+      plan: {where: 'client', clientFallback: false},
+      bootstrapArchive: ARCHIVE,
+    });
+    deepStrictEqual(
+      {
+        outcome: bootstrapped.outcome,
+        downloads: bootstrapped.downloads.length,
+        calls: bootstrapped.channel.calls.length,
+      },
+      {
+        outcome: {
+          kind: 'failed',
+          failure: {kind: 'localBootstrap', cause: 'missing', path: ARCHIVE},
+        },
+        downloads: 0,
+        calls: 0,
+      },
+    );
+  });
+
+  it("7.E2: an archive that cannot be staged ends the transfer with the file system's text, before any copy", async () => {
+    const bootstrapped = await runTransfer({
+      plan: {where: 'client', clientFallback: false},
+      bootstrapArchive: ARCHIVE,
+      existing: [ARCHIVE],
+      staged: {kind: 'failed', detail: 'EACCES: permission denied'},
+    });
+    deepStrictEqual(
+      {outcome: bootstrapped.outcome, calls: bootstrapped.channel.calls.length},
+      {
+        outcome: {
+          kind: 'failed',
+          failure: {
+            kind: 'localBootstrap',
+            cause: 'unreadable',
+            detail: 'EACCES: permission denied',
+          },
+        },
+        calls: 0,
+      },
+    );
+  });
+
+  it('5.0 steps 4–6, BR-6: a staged archive is copied and installed into the install folder, with no download', async () => {
+    const bootstrapped = await runTransfer({
+      plan: {where: 'client', clientFallback: false},
+      bootstrapArchive: ARCHIVE,
+      existing: [ARCHIVE],
+      staged: {kind: 'staged', archive: STAGED},
+    });
+    deepStrictEqual(
+      {
+        kind: bootstrapped.outcome.kind,
+        downloads: bootstrapped.downloads.length,
+        copied: bootstrapped.channel.calls.flatMap(call =>
+          call.operation === 'copyToHost' ? [call.request.localFile] : [],
+        ),
+        intoInstall: scriptsOf(bootstrapped.channel).some(script =>
+          script.includes("ARCHIVE_INTO_INSTALL='yes'"),
+        ),
+      },
+      {
+        kind: 'transferred',
+        downloads: 0,
+        copied: [STAGED],
+        intoInstall: true,
+      },
     );
   });
 });

@@ -3,6 +3,7 @@
  * roles name, and the step's body, which ends in the result block.
  */
 
+import {MANUAL_BOOTSTRAP_ARCHIVE} from 'lib-product';
 import {
   CVE_LINE,
   NO_FREE_PORT_PREFIX,
@@ -119,6 +120,28 @@ function probeBody(installTree: string): readonly string[] {
   ];
 }
 
+/**
+ * A manual bootstrap's archive goes into the install folder under the host lock, under its fixed name with its marker
+ * file, by a rename of the copy (or a copy and a rename of a file the host reads in place), and is unpacked from
+ * there only while the marker is present. A failed unpack leaves the archive and drops the marker; a good one removes
+ * both.
+ */
+const BOOTSTRAP_INTO_INSTALL_LINES: readonly string[] = [
+  'if [ "$ARCHIVE_INTO_INSTALL" = yes ] && [ -n "$ARCHIVE_PATH" ]; then',
+  `  BOOTSTRAP_ARCHIVE=$INSTALL_DIR/${MANUAL_BOOTSTRAP_ARCHIVE}`,
+  '  rm -f "$BOOTSTRAP_ARCHIVE.done"',
+  '  if [ "$ARCHIVE_REMOVE" = yes ]; then',
+  '    mv -f "$ARCHIVE_PATH" "$BOOTSTRAP_ARCHIVE" || leave UnpackFailed',
+  '  else',
+  '    cp "$ARCHIVE_PATH" "$BOOTSTRAP_ARCHIVE.part.$$" && mv -f "$BOOTSTRAP_ARCHIVE.part.$$" "$BOOTSTRAP_ARCHIVE" || leave UnpackFailed',
+  '  fi',
+  '  printf \'complete\\n\' >"$BOOTSTRAP_ARCHIVE.done" || leave UnpackFailed',
+  '  ARCHIVE_PATH=$BOOTSTRAP_ARCHIVE',
+  '  ARCHIVE_REMOVE=no',
+  '  [ -f "$BOOTSTRAP_ARCHIVE.done" ] || leave UnpackFailed',
+  'fi',
+];
+
 const INSTALL_BODY: readonly string[] = [
   'STARTED_AT=$(now_seconds)',
   '[ -n "$DATA_ROOT" ] || finish CreateInstallDirFailed',
@@ -132,6 +155,7 @@ const INSTALL_BODY: readonly string[] = [
   '  fact server.installDir "$INSTALL_DIR"',
   '  leave Ok',
   'fi',
+  ...BOOTSTRAP_INTO_INSTALL_LINES,
   'prepare_environment',
   'if [ -n "$ARCHIVE_PATH" ]; then',
   '  ARCHIVE=$ARCHIVE_PATH',
@@ -142,6 +166,10 @@ const INSTALL_BODY: readonly string[] = [
   'fi',
   'DOWNLOADED_AT=$(now_seconds)',
   'unpack_into "$ARCHIVE" "$INSTALL_DIR" || UNPACK_FAILED=yes',
+  'if [ -n "${BOOTSTRAP_ARCHIVE:-}" ]; then',
+  '  rm -f "$BOOTSTRAP_ARCHIVE.done"',
+  '  [ -n "${UNPACK_FAILED:-}" ] || rm -f "$BOOTSTRAP_ARCHIVE"',
+  'fi',
   '[ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"',
   '[ -z "${UNPACK_FAILED:-}" ] || leave_unpack_failed',
   '[ -x "$INSTALL_DIR/$LAUNCHER" ] || leave UnpackFailed',

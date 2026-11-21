@@ -19,6 +19,7 @@ import {
 } from 'lib-product';
 import {
   type AcceptanceStore,
+  addressForLog,
   type ArchiveCache,
   type ClientFilePort,
   classifyServerLicence,
@@ -109,6 +110,13 @@ export interface ServerStepDependencies {
   onCommandMissing: (program: string) => void;
   /** Keeps the hint of a download the client could not make, `value` being the reason the dialog gives. */
   onLocalDownloadFailed: (value: string) => void;
+  /** Where a manual bootstrap reads the user's server archive on the client. */
+  bootstrapArchive: string;
+  /** Keeps the hint of a manual bootstrap that could not start on the client: no archive at its path, or one it cannot read. */
+  onLocalBootstrapFailed: (
+    failure:
+      {cause: 'missing'; path: string} | {cause: 'unreadable'; detail: string},
+  ) => void;
   /** Whether the program the client's archive is copied to the host with can be started. */
   copyAvailable: () => Promise<boolean>;
   lockLoop: HostLockLoop;
@@ -261,7 +269,20 @@ export function createServerSteps(
       dependencies.onPrerequisitesMissing();
     } else if (failure.kind === 'localDownload') {
       dependencies.onLocalDownloadFailed(localDownloadValue(failure));
+    } else if (
+      failure.kind === 'localBootstrap' &&
+      failure.cause !== 'windowsHost'
+    ) {
+      dependencies.onLocalBootstrapFailed(failure);
     }
+  }
+
+  /** Whether this connect runs a manual bootstrap: `remote.SSH.localServerDownload` is `manual-bootstrap`. */
+  function manualBootstrap(): boolean {
+    const placement = dependencies.policy.downloadPlacement;
+    return (
+      placement.kind === 'hostFirst' && placement.mode === 'manualBootstrap'
+    );
   }
 
   /** The CLI archive's address, which a CLI plan always comes with: asking for it before such a plan is a defect. */
@@ -421,8 +442,7 @@ export function createServerSteps(
           : {
               cliMode: {
                 useExecServerSetting: dependencies.useExecServer,
-                // `localServerDownload` has no manual bootstrap value in this extension.
-                manualBootstrap: false,
+                manualBootstrap: manualBootstrap(),
                 socketMode: dependencies.socketMode(),
                 cliTemplate: profile.cliDownloadUrlTemplate,
                 sourcesFree: serverFree && cliFree,
@@ -473,6 +493,13 @@ export function createServerSteps(
       onPhase,
       cancellation,
     ) => {
+      const bootstrap = manualBootstrap();
+      if (bootstrap && host.operatingSystem === 'win32') {
+        return {
+          kind: 'failed',
+          failure: {kind: 'localBootstrap', cause: 'windowsHost'},
+        };
+      }
       const outcome = await transfer(
         {
           plan: downloadPlan,
@@ -495,6 +522,9 @@ export function createServerSteps(
           temporaryToken: dependencies.newTemporaryToken(),
           verification: dependencies.policy.verification,
           hostFolder: host.temporaryFolder,
+          ...(bootstrap
+            ? {bootstrapArchive: dependencies.bootstrapArchive}
+            : {}),
           cancellation,
           discardDeadlineMilliseconds: dependencies.discardDeadlineMilliseconds,
         },
@@ -519,6 +549,16 @@ export function createServerSteps(
         placement.mode === 'off'
       ) {
         dependencies.onHostDownloadRefused(outcome.failure.cause);
+      }
+      if (
+        outcome.kind === 'failed' &&
+        outcome.failure.kind === 'localBootstrap' &&
+        outcome.failure.cause === 'missing'
+      ) {
+        dependencies.logger.warn(
+          `To stage the server, download ${addressForLog(downloadPlan.address)}`,
+        );
+        dependencies.logger.warn(`and save it as ${outcome.failure.path}`);
       }
       if (outcome.kind === 'failed') {
         recordFailureHint(outcome.failure);

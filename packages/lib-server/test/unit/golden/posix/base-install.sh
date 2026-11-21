@@ -8,6 +8,7 @@ COMMIT='abc1230000000000000000000000000000000000'
 ARCHIVE_URL='https://example.invalid/server.tar.gz'
 ARCHIVE_PATH=''
 ARCHIVE_REMOVE='no'
+ARCHIVE_INTO_INSTALL='no'
 ARCHIVE_FORMAT='tar.gz'
 STAGING_SUFFIX='1700000000000'
 INSTALL_TREE=''
@@ -307,6 +308,19 @@ if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then
   fact server.installDir "$INSTALL_DIR"
   leave Ok
 fi
+if [ "$ARCHIVE_INTO_INSTALL" = yes ] && [ -n "$ARCHIVE_PATH" ]; then
+  BOOTSTRAP_ARCHIVE=$INSTALL_DIR/vscode-server.tar.gz
+  rm -f "$BOOTSTRAP_ARCHIVE.done"
+  if [ "$ARCHIVE_REMOVE" = yes ]; then
+    mv -f "$ARCHIVE_PATH" "$BOOTSTRAP_ARCHIVE" || leave UnpackFailed
+  else
+    cp "$ARCHIVE_PATH" "$BOOTSTRAP_ARCHIVE.part.$$" && mv -f "$BOOTSTRAP_ARCHIVE.part.$$" "$BOOTSTRAP_ARCHIVE" || leave UnpackFailed
+  fi
+  printf 'complete\n' >"$BOOTSTRAP_ARCHIVE.done" || leave UnpackFailed
+  ARCHIVE_PATH=$BOOTSTRAP_ARCHIVE
+  ARCHIVE_REMOVE=no
+  [ -f "$BOOTSTRAP_ARCHIVE.done" ] || leave UnpackFailed
+fi
 prepare_environment
 if [ -n "$ARCHIVE_PATH" ]; then
   ARCHIVE=$ARCHIVE_PATH
@@ -317,6 +331,10 @@ else
 fi
 DOWNLOADED_AT=$(now_seconds)
 unpack_into "$ARCHIVE" "$INSTALL_DIR" || UNPACK_FAILED=yes
+if [ -n "${BOOTSTRAP_ARCHIVE:-}" ]; then
+  rm -f "$BOOTSTRAP_ARCHIVE.done"
+  [ -n "${UNPACK_FAILED:-}" ] || rm -f "$BOOTSTRAP_ARCHIVE"
+fi
 [ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"
 [ -z "${UNPACK_FAILED:-}" ] || leave_unpack_failed
 [ -x "$INSTALL_DIR/$LAUNCHER" ] || leave UnpackFailed
