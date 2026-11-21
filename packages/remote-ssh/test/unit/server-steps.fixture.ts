@@ -112,6 +112,10 @@ export function settingsWith(
   );
 }
 
+/** Where the fixture's manual bootstrap reads the user's archive. */
+export const BOOTSTRAP_ARCHIVE =
+  '/home/me/vscode-remote-ssh-bootstrap/vscode-server.tar.gz';
+
 /** The server steps' dependencies for `devbox`, with `changes` applied. */
 export function dependencies(
   changes: Partial<ServerStepDependencies> = {},
@@ -123,6 +127,8 @@ export function dependencies(
     onPrerequisitesMissing: () => undefined,
     onCommandMissing: () => undefined,
     onLocalDownloadFailed: () => undefined,
+    bootstrapArchive: BOOTSTRAP_ARCHIVE,
+    onLocalBootstrapFailed: () => undefined,
     copyAvailable: () => Promise.resolve(true),
     profile: PROFILE,
     policy: SSH_POLICY,

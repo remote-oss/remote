@@ -144,6 +144,11 @@ export interface ConnectSteps {
    * settings write of a window that is still resolving can wait for the resolve. It never fails.
    */
   migrateLegacySettings(): Promise<void>;
+  /**
+   * Warns, once at the start of every attempt of a window, that the manual bootstrap is on and the exec server is off;
+   * nothing in another mode. It does not wait for the warning.
+   */
+  warnOfDownloadMode(): void;
   /** The SSH configuration files in effect, read and parsed before anything runs. */
   checkConfigFile(input: ConnectInput): StepResult<undefined>;
   /** The settings that decide how the server starts, checked before anything runs; a window's connect alone runs it. */

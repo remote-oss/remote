@@ -8,9 +8,21 @@
  */
 
 import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
-import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {inWindow, isOpen, variable, windowState} from './harness.ts';
+import {
+  evaluateAt,
+  LONG_READ_MILLISECONDS,
+  unavailableWhenNoAnswer,
+} from './page-protocol.ts';
+import {
+  type DebugTarget,
+  localPageAmong,
+  pageAmong,
+  pagesDescription,
+  portIn,
+  REMEMBERED_PAGES,
+} from './page-list.ts';
 
 /** How long a wait for the renderer lasts, in milliseconds. */
 const WAIT_MILLISECONDS = 60_000;
@@ -23,28 +35,6 @@ export interface ViewRow {
   description: string;
   level: number;
   expanded: boolean | undefined;
-}
-
-/** A target of the debugging port's list. */
-interface DebugTarget {
-  /** The target's id, which a window's page keeps for as long as the window lives, a reload in place included. */
-  id: string;
-  type: string;
-  title: string;
-  webSocketDebuggerUrl?: string;
-}
-
-/** The answer of the protocol's `Runtime.evaluate`. */
-interface EvaluateAnswer {
-  id: number;
-  result?: {
-    result?: {value?: unknown};
-    exceptionDetails?: {
-      text: string;
-      exception?: {description?: string};
-    };
-  };
-  error?: {message: string};
 }
 
 /** A dialog of core's, as the window shows it: its message, its detail and its buttons' labels in order. */
@@ -99,12 +89,7 @@ async function debuggingPort(): Promise<number> {
   const file = path.join(variable('HARNESS_USER_DATA'), 'DevToolsActivePort');
   return settled(
     () => `the editor's debugging port in ${file}`,
-    () => {
-      const port = existsSync(file)
-        ? Number.parseInt(readFileSync(file, 'utf8').split('\n')[0] ?? '', 10)
-        : Number.NaN;
-      return Promise.resolve(Number.isInteger(port) ? port : undefined);
-    },
+    () => Promise.resolve(portIn(file)),
   );
 }
 
@@ -204,34 +189,6 @@ export function pagesForState(
     ? found.filter(page => page.title === '[]')
     : fitting;
 }
-
-/**
- * The page of window `name` among `candidates`, the pages whose titles fit its state. A page the window remembered is
- * the one when it is there. Otherwise the one candidate; or, of several, the one that no other open window
- * remembered: two folder-less windows have the same title, but each keeps its own page's id. Nothing when it stays
- * ambiguous.
- */
-export function pageAmong(
-  candidates: readonly DebugTarget[],
-  name: string,
-  remembered: ReadonlyMap<string, string>,
-  open: (window: string) => boolean,
-): DebugTarget | undefined {
-  const own = candidates.find(page => page.id === remembered.get(name));
-  if (own !== undefined || candidates.length === 1) {
-    return own ?? candidates[0];
-  }
-  const taken = new Set(
-    [...remembered]
-      .filter(([other]) => other !== name && open(other))
-      .map(([, pageId]) => pageId),
-  );
-  const left = candidates.filter(page => !taken.has(page.id));
-  return left.length === 1 ? left[0] : undefined;
-}
-
-/** The id of the page each window's name was last found by, while the window lives. */
-const REMEMBERED_PAGES = new Map<string, string>();
 
 /** The pages of the renderer, from the debugging port's list. */
 async function pages(): Promise<DebugTarget[]> {
@@ -348,15 +305,18 @@ export async function pageOf(
   milliseconds = WAIT_MILLISECONDS,
 ): Promise<string> {
   let titles: string[] = [];
+  let described = '';
   const started = Date.now();
   return settled(
-    () => `one page of window ${name} among ${JSON.stringify(titles)}`,
+    () =>
+      `one page of window ${name} among ${JSON.stringify(titles)}; the pages and who remembers each: ${described}`,
     async () => {
       const found = (await pages()).map(page => ({
         ...page,
         title: withoutAdministratorMark(page.title),
       }));
       titles = found.map(page => page.title);
+      described = pagesDescription(found, REMEMBERED_PAGES, isOpen);
       const named = pageTitleByName(name, titles);
       if (named !== undefined) {
         const page = found.find(each => each.title === named);
@@ -376,6 +336,16 @@ export async function pageOf(
         titlesOfName(name, titles).length < 2
       ) {
         return remembered.webSocketDebuggerUrl;
+      }
+      // The local window is the one titled `[]`, so with several such pages it is chosen from them as its state would, without
+      // asking its agent: the agent may be running the command whose pick the caller waits for, and takes nothing else.
+      const local =
+        name === 'local'
+          ? localPageAmong(found, REMEMBERED_PAGES, isOpen)
+          : undefined;
+      if (local !== undefined) {
+        REMEMBERED_PAGES.set(name, local.id);
+        return local.webSocketDebuggerUrl;
       }
       const state = await stateForPage(
         name,
@@ -419,47 +389,6 @@ export async function rememberPage(name: string): Promise<void> {
   await pageOf(name);
 }
 
-/** Evaluates `expression` in the page at protocol address `address` and returns its value; `owner` names the page in a failure. */
-async function evaluateAt<Value>(
-  address: string,
-  owner: string,
-  expression: string,
-): Promise<Value> {
-  const socket = new WebSocket(address);
-  try {
-    await new Promise<void>((resolve, reject) => {
-      socket.addEventListener('open', () => {
-        resolve();
-      });
-      socket.addEventListener('error', () => {
-        reject(new Error(`no protocol connection to ${owner}`));
-      });
-    });
-    const answer = await new Promise<EvaluateAnswer>(resolve => {
-      socket.addEventListener('message', event => {
-        resolve(JSON.parse(String(event.data)) as EvaluateAnswer);
-      });
-      socket.send(
-        JSON.stringify({
-          id: 1,
-          method: 'Runtime.evaluate',
-          params: {expression, returnByValue: true, awaitPromise: true},
-        }),
-      );
-    });
-    const failure =
-      answer.error?.message ??
-      answer.result?.exceptionDetails?.exception?.description ??
-      answer.result?.exceptionDetails?.text;
-    if (failure !== undefined) {
-      throw new Error(`${owner}: ${failure}`);
-    }
-    return answer.result?.result?.value as Value;
-  } finally {
-    socket.close();
-  }
-}
-
 /**
  * Evaluates `expression` in window `name`'s page and returns its value; a thrown error fails with its text. A read that
  * a reload of the window meets (Retry at a connection dialog reloads it) ends with the protocol's "Inspected target
@@ -468,6 +397,7 @@ async function evaluateAt<Value>(
 async function evaluate<Value>(
   name: string,
   expression: string,
+  milliseconds?: number,
 ): Promise<Value> {
   const deadline = Date.now() + WAIT_MILLISECONDS;
   for (;;) {
@@ -476,6 +406,7 @@ async function evaluate<Value>(
         await pageOf(name),
         `window ${name}`,
         expression,
+        milliseconds,
       );
     } catch (caught) {
       if (
@@ -503,26 +434,16 @@ const PAGE_FACTS_MILLISECONDS = 10_000;
 export async function terminalPageFacts(
   name: string,
 ): Promise<TerminalPageFacts | 'unavailable'> {
-  let timer: NodeJS.Timeout | undefined;
-  const expired = new Promise<'unavailable'>(resolve => {
-    timer = setTimeout(() => {
-      resolve('unavailable');
-    }, PAGE_FACTS_MILLISECONDS);
-  });
-  try {
-    return await Promise.race([
-      evaluate<TerminalPageFacts>(
-        name,
-        `({
-          rows: document.querySelectorAll('.xterm-rows').length,
-          tabs: [...document.querySelectorAll('.terminal-tabs-entry')].map(each => (each.textContent ?? '').trim()),
-        })`,
-      ),
-      expired,
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
+  return unavailableWhenNoAnswer(
+    evaluate<TerminalPageFacts>(
+      name,
+      `({
+        rows: document.querySelectorAll('.xterm-rows').length,
+        tabs: [...document.querySelectorAll('.terminal-tabs-entry')].map(each => (each.textContent ?? '').trim()),
+      })`,
+      PAGE_FACTS_MILLISECONDS,
+    ),
+  );
 }
 
 /** The page-side lookup of a view's pane by its header title; `undefined` when no pane has it. */
@@ -719,6 +640,7 @@ export async function viewRows(
       collect();
       return order.map(key => seen.get(key));
     })()`,
+    LONG_READ_MILLISECONDS,
   );
   // The protocol returns values as JSON, where `expanded: undefined` would drop: read it back as it is.
   return (
@@ -1793,6 +1715,7 @@ export async function portsRows(name: string): Promise<PortsRow[]> {
       }
       return order.map(key => seen.get(key));
     })()`,
+    LONG_READ_MILLISECONDS,
   );
   if (typeof rows === 'string') {
     throw new Error(`window ${name}: ${rows}`);
@@ -3414,6 +3337,7 @@ export async function allQuickPickRows(
       reads.push(read());
       return reads;
     })()}`,
+    LONG_READ_MILLISECONDS,
   );
   return reads === null ? [] : combineQuickPickReads(reads);
 }

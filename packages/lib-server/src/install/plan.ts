@@ -242,7 +242,7 @@ function placementOf(
       placement.mode === 'always' && operatingSystem === 'win32'
         ? 'auto'
         : placement.mode;
-    if (mode === 'always') {
+    if (mode === 'always' || mode === 'manualBootstrap') {
       return {where: 'client', clientFallback: false};
     }
     return {where: 'host', clientFallback: mode === 'auto'};

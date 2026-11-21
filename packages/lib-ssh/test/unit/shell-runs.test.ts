@@ -414,6 +414,18 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
       );
     });
 
+    it('a failed unpack of a staged archive keeps the archive: the lock file goes, the folder and the archive stay', () => {
+      deepStrictEqual(
+        afterRelease(`flock -n 9 && echo ${SESSION_LOCK_TAKEN}`, {
+          takes: true,
+          setup: folder => {
+            writeFileSync(path.join(folder, 'vscode-server.tar.gz'), '');
+          },
+        }),
+        ['bin', 'bin/abc', 'bin/abc/vscode-server.tar.gz'],
+      );
+    });
+
     it('a lock the script took is removed by the release, with the empty folders', () => {
       deepStrictEqual(
         afterRelease(`flock -n 9 && echo ${SESSION_LOCK_TAKEN}`, {takes: true}),

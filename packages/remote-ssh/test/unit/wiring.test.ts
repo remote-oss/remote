@@ -127,6 +127,8 @@ interface WiringSeen {
   tunnels: TunnelOptions[];
   /** The listeners of the grant of trust that are still registered. */
   trustListeners: Array<() => void>;
+  /** How many times the manual bootstrap's warning was shown. */
+  modeWarnings: number;
 }
 
 /** Ports over fakes: a client that passes `-V` and looks the host up with `lookup`, and an acquire that fails. */
@@ -175,11 +177,15 @@ function portsOf(
     tunnels: [],
     linkTerminals: [],
     trustListeners: [],
+    modeWarnings: 0,
   };
   const logger = createLogger(seen.sink, {
     minimumLevel: (): Level => 'info',
   });
   const ports: WiringPorts = {
+    warnManualBootstrap: () => {
+      seen.modeWarnings += 1;
+    },
     tunnels: {
       openTunnel: options => {
         seen.tunnels.push(options);
@@ -353,7 +359,9 @@ function portsOf(
       port: seen.lockFiles,
       folder: '/tmp',
       clock: {now: () => seen.clock.now(), wait: () => Promise.resolve()},
-      held: new HeldClientLocks(() => undefined),
+      held: new HeldClientLocks((path, modified) => {
+        void seen.lockFiles.removeIfModified(path, modified);
+      }),
     },
     cliPath: {
       local: seen.cliLocal,
@@ -478,6 +486,17 @@ describe("the composition of a connect's steps", () => {
       },
       {kind: 'done', whileHeld: [path], afterRelease: [], logged: true},
     );
+  });
+
+  it('F-2406 BR-3: the attempt warns of the manual bootstrap in that mode only', () => {
+    const counts = (['manualBootstrap', 'auto', 'always', 'off'] as const).map(
+      localDownloadMode => {
+        const {ports, seen} = portsOf({localDownloadMode});
+        stepsOf(ports).warnOfDownloadMode();
+        return seen.modeWarnings;
+      },
+    );
+    deepStrictEqual(counts, [1, 0, 0, 0]);
   });
 
   it("connect-14: checkInstallFolder reads the server settings of this connect's host alias", () => {

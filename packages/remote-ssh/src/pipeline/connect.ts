@@ -385,6 +385,7 @@ async function runSteps(
     void quietly('the legacy settings move', () =>
       steps.migrateLegacySettings(),
     );
+    steps.warnOfDownloadMode();
   }
   options.onPhase({kind: 'initializing', quiet: true});
   for (const check of CHECKS) {
