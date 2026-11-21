@@ -183,7 +183,7 @@ describe('the client files on Node.js (V4)', () => {
     });
   });
 
-  it('F-2406 BR-4 (card #2949, triton): stage of a named pipe gives an empty archive at once, without reading the pipe', async () => {
+  it('F-2406 BR-4 (card #2949): stage of a named pipe gives an empty archive at once, without reading the pipe', async () => {
     await inFolder(async folder => {
       const source = path.join(folder, 'vscode-server.tar.gz');
       spawnSync('mkfifo', [source]);
