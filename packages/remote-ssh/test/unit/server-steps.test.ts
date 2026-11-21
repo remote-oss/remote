@@ -780,15 +780,6 @@ describe('the server steps: transfer and start', () => {
     });
   });
 
-  /** The session lock each run of `channel` carried, in order. */
-  function sessionLocksOf(channel: RecordingChannel): unknown[] {
-    return channel.calls.flatMap(call =>
-      call.operation === 'runScript' && call.request.sessionLock !== undefined
-        ? [call.request.sessionLock]
-        : [],
-    );
-  }
-
   async function transferOver(
     channel: RecordingChannel,
   ): Promise<ReturnType<ReturnType<typeof createServerSteps>['transfer']>> {
@@ -817,13 +808,13 @@ describe('the server steps: transfer and start', () => {
       'flock',
     );
     await transferOver(channel);
-    deepStrictEqual(sessionLocksOf(channel), [{path: '/lock', action: 'open'}]);
+    deepStrictEqual(channel.sessionLocks(), [{path: '/lock', action: 'open'}]);
   });
 
   it('F-2408 BR-4: an install that fails gives the session lock up', async () => {
     const channel = channelAnswering(lines('CreateInstallDirFailed'), 'flock');
     await transferOver(channel);
-    deepStrictEqual(sessionLocksOf(channel), [
+    deepStrictEqual(channel.sessionLocks(), [
       {path: '/lock', action: 'open'},
       {path: '/lock', action: 'release'},
     ]);
@@ -839,7 +830,7 @@ describe('the server steps: transfer and start', () => {
       false,
       new AbortController().signal,
     );
-    deepStrictEqual(sessionLocksOf(channel), []);
+    deepStrictEqual(channel.sessionLocks(), []);
   });
 
   it('F-3902 AC-13: starts the server with the licence flag only when the gate cleared it', async () => {

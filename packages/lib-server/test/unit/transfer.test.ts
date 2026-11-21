@@ -184,6 +184,8 @@ interface Setup {
   copyStall?: number;
   /** Makes the host Windows, so that a look at a file's size is a PowerShell script. */
   windows?: boolean;
+  /** Tells the transfer that the channel's shell lives as long as the session. */
+  sessionLock?: boolean;
 }
 
 async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
@@ -269,6 +271,9 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
         },
       },
       lockLoop: setup.lockLoop ?? runOnce,
+      ...(setup.sessionLock === undefined
+        ? {}
+        : {sessionLock: setup.sessionLock}),
       ...(setup.copyAvailable === undefined
         ? {}
         : {copyAvailable: () => Promise.resolve(setup.copyAvailable === true)}),
@@ -340,6 +345,55 @@ describe('a download on the host (F-2403, F-2405.BR-2)', () => {
       kind: 'transferred',
       installFolder: INSTALL_FOLDER,
     });
+  });
+
+  /** The answer of a host that takes a `flock` lock for the session, to the run that asks where the lock is. */
+  const FLOCK_PLACE: ScriptAnswer = {
+    interpreter: 'posixShell',
+    matches: script => script.includes('lock-path='),
+    lines: ['lock-method=flock', 'lock-path=/tmp/vscode-lock.user.abc123'],
+    ending: {kind: 'exit', status: 0},
+  };
+
+  it('F-2408 BR-4: an install over a caller whose shell lives as long as the session asks the host where the lock is and runs with that session lock open, and releases nothing when it installed', async () => {
+    const {channel, outcome} = await runTransfer({
+      sessionLock: true,
+      answers: [
+        FLOCK_PLACE,
+        {
+          ...answering(INSTALLED),
+          matches: script => !script.includes('lock-path='),
+        },
+      ],
+    });
+    deepStrictEqual(
+      [outcome.kind, channel.sessionLocks()],
+      ['transferred', [{path: '/tmp/vscode-lock.user.abc123', action: 'open'}]],
+    );
+  });
+
+  it('F-2408 BR-4: an install that ends in a failure gives the session lock up', async () => {
+    const {channel, outcome} = await runTransfer({
+      sessionLock: true,
+      answers: [
+        FLOCK_PLACE,
+        {
+          ...answering(block('CreateInstallDirFailed')),
+          matches: script => script.includes('lock_take'),
+        },
+        {...answering([]), matches: script => script === ':'},
+      ],
+    });
+    deepStrictEqual(
+      [outcome.kind, channel.sessionLocks()],
+      [
+        'failed',
+        [
+          {path: '/tmp/vscode-lock.user.abc123', action: 'open'},
+          {path: '/tmp/vscode-lock.user.abc123', action: 'release'},
+        ],
+      ],
+    );
   });
 
   it('F-2403: the install folder comes from the plan when the script reports none', async () => {

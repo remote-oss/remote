@@ -429,6 +429,22 @@ describe('startOrReuse (V7), answers mapped', () => {
     });
   }
 
+  it('#668 R1: a write failure whose script named the path but no error carries an empty error text', async () => {
+    const outcome = await start(
+      recording(
+        lines('CreateInstallDirFailed', 'server.writeFailedPath=/h/bin/abc'),
+      ),
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {
+        kind: 'scriptFailed',
+        status: 'CreateInstallDirFailed',
+        writeFailure: {path: '/h/bin/abc', error: ''},
+      },
+    );
+  });
+
   it('#668 R7: a write failure on another path says nothing of the lock', async () => {
     const outcome = await start(
       recording(

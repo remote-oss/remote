@@ -429,3 +429,27 @@ describe('linesOfScript', () => {
     );
   });
 });
+
+describe('the session locks a recording channel saw', () => {
+  it('lists the session lock of each script run in order and leaves out the runs that carried none', async () => {
+    const channel = new RecordingChannel({
+      identity: 'h',
+      platformHint: 'linux',
+      scripts: [probeAnswer(0), probeAnswer(0), probeAnswer(0)],
+    });
+    const lock = {path: '/tmp/lock', action: 'open'} as const;
+    await channel.runScript(scriptRequest(PROBE), () => undefined);
+    await channel.runScript(
+      {...scriptRequest(PROBE), sessionLock: lock},
+      () => undefined,
+    );
+    await channel.runScript(
+      {...scriptRequest(PROBE), sessionLock: {...lock, action: 'release'}},
+      () => undefined,
+    );
+    deepStrictEqual(channel.sessionLocks(), [
+      lock,
+      {path: '/tmp/lock', action: 'release'},
+    ]);
+  });
+});
