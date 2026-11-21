@@ -235,20 +235,23 @@ describe('the renderer log of the 30 s after the end, unfiltered (card #2753)', 
   ];
   const ENDED_AT = Date.parse('2026-11-19T07:00:01Z');
 
-  it('#2753: the lines between the end and 30 s after it, with the unstamped lines that follow a kept one', () => {
+  it('#2753: the stamped lines between the end and 30 s after it, with the unstamped lines of a stack left out', () => {
     deepStrictEqual(
       logLinesBetween(LINES, ENDED_AT, ENDED_AT + 30_000, 80, 240),
-      [
-        '2026-11-19 07:00:01.500 [info] after the end',
-        'continued: an unstamped line after a kept one',
-      ],
+      ['2026-11-19 07:00:01.500 [info] after the end'],
     );
   });
 
-  it('#2753: the last lines of the cap, each cut at the width', () => {
+  it('#2753: the first lines of the cap, each cut at the width', () => {
     deepStrictEqual(
-      logLinesBetween(LINES, ENDED_AT, ENDED_AT + 30_000, 1, 10),
-      ['continued:'],
+      logLinesBetween(
+        ['2026-11-19 07:00:01.100 [info] first', ...LINES],
+        ENDED_AT,
+        ENDED_AT + 30_000,
+        1,
+        23,
+      ),
+      ['2026-11-19 07:00:01.100'],
     );
   });
 });
