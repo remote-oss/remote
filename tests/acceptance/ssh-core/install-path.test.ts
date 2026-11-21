@@ -439,7 +439,7 @@ describe('the install location the user setting picks (card #2487)', function ()
             pickHost('harness'),
           ]);
         }
-        const name = 'c2487-charset';
+        const name = `c2487-charset-${String(index)}`;
         appendScript(dismissals(name));
         await openWindow('harness', name);
         const shown = await failedDialog(name);
@@ -486,7 +486,7 @@ describe('the install location the user setting picks (card #2487)', function ()
             pickHost('harness'),
           ]);
         }
-        const name = 'c2487-charset';
+        const name = `c2487-charset-${String(index)}`;
         appendScript(dismissals(name));
         await openWindow('harness', name);
         const shown = await failedDialog(name);
