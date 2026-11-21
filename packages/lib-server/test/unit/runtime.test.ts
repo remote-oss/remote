@@ -1227,19 +1227,13 @@ describe('startOrReuse, the host lock of the session', () => {
     );
   }
 
-  it('F-2408 BR-4: a host that takes a flock lock has the start run carry the lock path the host named, and a start that ends in a server releases nothing', async () => {
+  it('F-2408 BR-4: a start that ends in a server asks the host for nothing and carries no session lock: the install holds it', async () => {
     const channel = sessionChannel(STARTED);
     const outcome = await startFor(channel, true);
-    deepStrictEqual(
-      [outcome.kind, lockOfRuns(channel)],
-      [
-        'started',
-        ['none', {path: '/tmp/vscode-lock.user.abc123', action: 'open'}],
-      ],
-    );
+    deepStrictEqual([outcome.kind, lockOfRuns(channel)], ['started', ['none']]);
   });
 
-  it('F-2408 BR-4: a start that does not end in a server gives the session lock up', async () => {
+  it('F-2408 BR-4: a start that does not end in a server gives the session lock up, at the place the host names', async () => {
     const channel = sessionChannel(lines('ServerFailedToStart'));
     const outcome = await startFor(channel, true);
     deepStrictEqual(
@@ -1248,7 +1242,7 @@ describe('startOrReuse, the host lock of the session', () => {
         'failed',
         [
           'none',
-          {path: '/tmp/vscode-lock.user.abc123', action: 'open'},
+          'none',
           {path: '/tmp/vscode-lock.user.abc123', action: 'release'},
         ],
       ],
@@ -1275,16 +1269,16 @@ describe('startOrReuse, the host lock of the session', () => {
     );
   });
 
-  it('F-2408 BR-4: a host with no flock leaves the start run without a session lock', async () => {
+  it('F-2408 BR-4: a start that ends in no server on a host with no flock asks the host for the lock place and releases nothing', async () => {
     const channel = new RecordingChannel({
       identity: 'h',
       platformHint: 'linux',
       scripts: [
-        {...FLOCK_PLACE, lines: ['lock-method=link', 'lock-path=/lock']},
         {
-          ...answering(STARTED),
+          ...answering(lines('ServerFailedToStart')),
           matches: script => !script.includes('lock-path='),
         },
+        {...FLOCK_PLACE, lines: ['lock-method=link', 'lock-path=/lock']},
       ],
     });
     await startFor(channel, true);

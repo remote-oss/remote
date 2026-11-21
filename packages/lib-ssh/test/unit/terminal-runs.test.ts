@@ -78,7 +78,7 @@ const LOCKED: SessionRun = {
 };
 
 const ARMING =
-  "REMOTE_OSS_LOCK_HELD=1; trap 'rm -f '\\''/tmp/lock'\\''' EXIT HUP\n";
+  "REMOTE_OSS_LOCK_HELD=1; trap '[ '\\''/tmp/lock'\\'' -ef /dev/fd/9 ] && rm -f '\\''/tmp/lock'\\''' EXIT HUP\n";
 
 describe('script runs over the login terminal (card ssh-21 table)', () => {
   it('#443: the prelude is sent once, before the first run, and the commands follow it', () => {
@@ -315,7 +315,7 @@ describe('the bootstrap lines over the login terminal (card ssh-38, #443)', () =
       });
       deepStrictEqual(
         terminal.sent[1]?.includes(
-          'exec 9>&-; [ -z "${REMOTE_OSS_LOCK_HELD:-}" ] || rm -f \'/tmp/lock\'',
+          "[ -z \"${REMOTE_OSS_LOCK_HELD:-}\" ] || { [ '/tmp/lock' -ef /dev/fd/9 ] && rm -f '/tmp/lock'; }; exec 9>&-",
         ),
         true,
       );

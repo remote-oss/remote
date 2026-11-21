@@ -21,6 +21,28 @@ const SCRIPT: ShellRun = {
   deadlineMilliseconds: 1000,
 };
 
+/**
+ * Runs, in a real `sh`, a run that takes the session lock on a fresh file, the line that arms its removal, and the
+ * commands `after` the file's name gives; gives the lines the shell printed and the file.
+ */
+function lockedSession(after: (file: string) => string): {
+  lines: string[];
+  file: string;
+} {
+  const folder = mkdtempSync(path.join(tmpdir(), 'lock-'));
+  const file = path.join(folder, 'host.lock');
+  const locked: ShellRun = {
+    ...SCRIPT,
+    script: `flock -n 9 && echo ${SESSION_LOCK_TAKEN}`,
+    sessionLock: {path: file, action: 'open'},
+  };
+  const arming = `REMOTE_OSS_LOCK_HELD=1; trap '[ '\\''${file}'\\'' -ef /dev/fd/9 ] && rm -f '\\''${file}'\\''' EXIT HUP\n`;
+  const result = spawnSync('/bin/sh', [], {
+    input: `${commandsFor('m1', locked)}${arming}${after(file)}`,
+  });
+  return {lines: result.stdout.toString().trim().split('\n'), file};
+}
+
 describe('the scripts on the shared session (contracts §4 S10)', () => {
   let clock: FakeClock;
   let written: string[];
@@ -156,7 +178,7 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
           script: '',
           sessionLock: {path: '/tmp/lock', action: 'release'},
         }).split('\n')[1],
-        'exec 9>&-; [ -z "${REMOTE_OSS_LOCK_HELD:-}" ] || rm -f \'/tmp/lock\'; unset REMOTE_OSS_LOCK_HELD; trap - EXIT HUP',
+        "[ -z \"${REMOTE_OSS_LOCK_HELD:-}\" ] || { [ '/tmp/lock' -ef /dev/fd/9 ] && rm -f '/tmp/lock'; }; exec 9>&-; unset REMOTE_OSS_LOCK_HELD; trap - EXIT HUP",
       );
     });
 
@@ -266,7 +288,7 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
       sessionLock: {path: '/tmp/lock', action: 'open'},
     };
     const ARMING =
-      "REMOTE_OSS_LOCK_HELD=1; trap 'rm -f '\\''/tmp/lock'\\''' EXIT HUP\n";
+      "REMOTE_OSS_LOCK_HELD=1; trap '[ '\\''/tmp/lock'\\'' -ef /dev/fd/9 ] && rm -f '\\''/tmp/lock'\\''' EXIT HUP\n";
 
     it('F-2408 BR-4: a run whose script reported the lock taken arms the removal at the shell, before the next run is written', async () => {
       const {ended} = start(LOCKED);
@@ -300,23 +322,22 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
       if (spawnSync('sh', ['-c', 'command -v flock']).status !== 0) {
         this.skip();
       }
-      const folder = mkdtempSync(path.join(tmpdir(), 'lock-'));
-      const file = path.join(folder, 'host.lock');
-      const locked: ShellRun = {
-        ...SCRIPT,
-        script: `flock -n 9 && echo ${SESSION_LOCK_TAKEN}`,
-        sessionLock: {path: file, action: 'open'},
-      };
-      const arming = `REMOTE_OSS_LOCK_HELD=1; trap 'rm -f '\\''${file}'\\''' EXIT HUP\n`;
-      const another = `( exec 7>>'${file}'; flock -n 7 ) && echo free || echo busy\n`;
-      const result = spawnSync('/bin/sh', [], {
-        input: `${commandsFor('m1', locked)}${arming}${another}`,
-      });
+      const {lines, file} = lockedSession(
+        name => `( exec 7>>'${name}'; flock -n 7 ) && echo free || echo busy\n`,
+      );
       deepStrictEqual(
-        [result.stdout.toString().trim().split('\n'), existsSync(file)],
+        [lines, existsSync(file)],
         [['m1:start', SESSION_LOCK_TAKEN, 'm1:end 0', 'busy'], false],
       );
     });
+  });
+
+  it('F-2408 BR-4: in a real sh, an exit trap leaves a lock path that another file took after the lock was taken', function () {
+    if (spawnSync('sh', ['-c', 'command -v flock']).status !== 0) {
+      this.skip();
+    }
+    const {file} = lockedSession(name => `rm -f '${name}'; : >'${name}'\n`);
+    deepStrictEqual(existsSync(file), true);
   });
 
   describe('a run', () => {

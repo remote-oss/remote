@@ -190,8 +190,15 @@ export function channelAnswering(
       },
       {
         interpreter: 'posixShell',
-        matches: script => !script.includes('lock-path='),
+        matches: script => !script.includes('lock-path=') && script !== ':',
         lines: output,
+        ending: {kind: 'exit', status: 0},
+      },
+      {
+        // The release of the session's hold on the lock.
+        interpreter: 'posixShell',
+        matches: script => script === ':',
+        lines: [],
         ending: {kind: 'exit', status: 0},
       },
     ],

@@ -412,7 +412,7 @@ function startBody(start: StartParameters, installTree: string): string[] {
     'RUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)',
     // The lock is for launching: a live server is reused without it, and a launch repeats the check under the lock.
     'if ! is_server_process "$RUNNING_PID" "$INSTALL_DIR"; then',
-    '  take_lock_or_finish "$COMMIT"',
+    '  take_start_lock_or_finish',
     '  RUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)',
     'fi',
     'if is_server_process "$RUNNING_PID" "$INSTALL_DIR"; then',
@@ -452,7 +452,7 @@ function startBody(start: StartParameters, installTree: string): string[] {
     '  WRITE_ERROR=$( (umask 077; printf \'\' >"$LOG_FILE") 2>&1 ) || write_failed_leave "$LOG_FILE" "$WRITE_ERROR"',
     `  printf '%s\\n' ${shellQuote(LAUNCHING_LINE)}`,
     '  fact server.launching yes',
-    '  nohup "$INSTALL_DIR/$LAUNCHER" "$@" </dev/null >"$LOG_FILE" 2>&1 9>&- &',
+    '  nohup "$INSTALL_DIR/$LAUNCHER" "$@" </dev/null >"$LOG_FILE" 2>&1 8>&- 9>&- &',
     '  SERVER_PID=$!',
     '  WRITE_ERROR=$( { echo "$SERVER_PID" >"$PID_FILE"; } 2>&1 ) || { kill "$SERVER_PID" 2>/dev/null; write_failed_leave "$PID_FILE" "$WRITE_ERROR"; }',
     '  LAUNCHED=yes',

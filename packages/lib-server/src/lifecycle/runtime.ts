@@ -13,7 +13,7 @@ import {
   type ResultBlock,
   type ScriptStatus,
 } from '../scripts/result-block.ts';
-import {releaseSessionLock, sessionLockPath} from '../locks/session-lock.ts';
+import {releaseSessionLockOf} from '../locks/session-lock.ts';
 import {keptExtensions} from './extensions.ts';
 import {runStep, type StepRun} from './run-step.ts';
 
@@ -398,29 +398,19 @@ export async function startOrReuse(
       options.onLaunching?.();
     }
   }
-  const lockPath =
-    dependencies.sessionLock === true
-      ? await sessionLockPath(channel, parameters, cancellation)
-      : undefined;
   const stepRun = await dependencies.lockLoop(
     () =>
       runStep(
         channel,
         {installMode: 'singleScript', step: 'start'},
         parameters,
-        {
-          cancellation,
-          onLine: noteLaunching,
-          ...(lockPath === undefined
-            ? {}
-            : {sessionLock: {path: lockPath, action: 'open'}}),
-        },
+        {cancellation, onLine: noteLaunching},
       ),
     cancellation,
   );
   const outcome = outcomeOf(stepRun, notices);
-  if (lockPath !== undefined && outcome.kind !== 'started') {
-    await releaseSessionLock(channel, lockPath);
+  if (dependencies.sessionLock === true && outcome.kind !== 'started') {
+    await releaseSessionLockOf(channel, parameters);
   }
   return outcome;
 }
