@@ -106,6 +106,24 @@ lock_link() {
   [ ! -e "$LOCK_CANDIDATE.target" ] || return 1
   return 2
 }
+lock_descriptor() {
+  LOCK_TRIES=0
+  while [ "$LOCK_TRIES" -lt 3 ]; do
+    LOCK_TRIES=$((LOCK_TRIES + 1))
+    if LOCK_ERROR=$(flock -n 9 2>&1); then
+      LOCK_ERROR=''
+      [ "$LOCK_CANDIDATE" -ef /dev/fd/9 ] && return 0
+      LOCK_SESSION=
+      [ -d "${LOCK_CANDIDATE%/*}" ] || mkdir -p "${LOCK_CANDIDATE%/*}" 2>/dev/null
+      LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2
+      exec 9>>"$LOCK_CANDIDATE"
+    else
+      [ -z "$LOCK_ERROR" ] || return 2
+      return 1
+    fi
+  done
+  return 1
+}
 lock_take() {
   LOCK_CANDIDATE=$(lock_path "$1")
   LOCK_ERROR=''
@@ -116,14 +134,16 @@ lock_take() {
     fi
   fi
   if [ "$(lock_method)" = flock ]; then
-    LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2
-    exec 9>>"$LOCK_CANDIDATE"
-    if LOCK_ERROR=$(flock -n 9 2>&1); then
-      LOCK_ERROR=''
+    LOCK_SESSION=
+    if ( : >&9 ) 2>/dev/null && [ "$LOCK_CANDIDATE" -ef /dev/fd/9 ]; then
+      LOCK_SESSION=yes
     else
-      [ -z "$LOCK_ERROR" ] || return 2
-      return 1
+      [ -d "${LOCK_CANDIDATE%/*}" ] || mkdir -p "${LOCK_CANDIDATE%/*}" 2>/dev/null
+      LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2
+      exec 9>>"$LOCK_CANDIDATE"
     fi
+    lock_descriptor || return $?
+    [ -z "$LOCK_SESSION" ] || fact server.lockHeld yes
   else
     for LOCK_ATTEMPT in 1 2; do
       LOCK_ERROR=$( { true >>"$LOCK_CANDIDATE"; } 2>&1 ) || return 2
@@ -157,6 +177,28 @@ take_lock_or_finish() {
       write_failed "$LOCK_CANDIDATE" "$LOCK_ERROR"
       ;;
   esac
+}
+write_failed_start() {
+  fact server.lockPath "$START_LOCK"
+  fact server.lockInTemporary "$LOCK_IN_TEMPORARY"
+  write_failed "$START_LOCK" "$LOCK_ERROR"
+}
+take_start_lock_or_finish() {
+  if [ "$(lock_method)" != flock ]; then
+    take_lock_or_finish "$COMMIT"
+    return
+  fi
+  START_LOCK=$DATA_DIR/.$COMMIT.start.lock
+  LOCK_ERROR=$( ( exec 8>>"$START_LOCK" ) 2>&1 ) || write_failed_start
+  exec 8>>"$START_LOCK"
+  if LOCK_ERROR=$(flock -n 8 2>&1); then
+    LOCK_ERROR=''
+  elif [ -z "$LOCK_ERROR" ]; then
+    fact server.lockPath "$START_LOCK"
+    finish LockBusy
+  else
+    write_failed_start
+  fi
 }
 lock_release() {
   [ -n "${LOCK_HELD:-}" ] || return 0
@@ -231,8 +273,11 @@ started() {
   leave Ok
 }
 [ -x "$INSTALL_DIR/$LAUNCHER" ] || finish ServerFailedToStart
-take_lock_or_finish "$COMMIT"
 RUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)
+if ! is_server_process "$RUNNING_PID" "$INSTALL_DIR"; then
+  take_start_lock_or_finish
+  RUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)
+fi
 if is_server_process "$RUNNING_PID" "$INSTALL_DIR"; then
   SERVER_PID=$RUNNING_PID
   LAUNCHED=no
@@ -292,7 +337,7 @@ fi
   WRITE_ERROR=$( (umask 077; printf '' >"$LOG_FILE") 2>&1 ) || write_failed_leave "$LOG_FILE" "$WRITE_ERROR"
   printf '%s\n' 'server.launching=yes'
   fact server.launching yes
-  nohup "$INSTALL_DIR/$LAUNCHER" "$@" </dev/null >"$LOG_FILE" 2>&1 9>&- &
+  nohup "$INSTALL_DIR/$LAUNCHER" "$@" </dev/null >"$LOG_FILE" 2>&1 8>&- 9>&- &
   SERVER_PID=$!
   WRITE_ERROR=$( { echo "$SERVER_PID" >"$PID_FILE"; } 2>&1 ) || { kill "$SERVER_PID" 2>/dev/null; write_failed_leave "$PID_FILE" "$WRITE_ERROR"; }
   LAUNCHED=yes

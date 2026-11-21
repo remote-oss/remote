@@ -8,6 +8,7 @@ import type {
   HostChannel,
   Interpreter,
   ScriptInput,
+  SessionLock,
 } from 'lib-host';
 import {
   type BootstrapRequest,
@@ -34,6 +35,8 @@ export interface StepOptions {
   secretVariables?: readonly string[];
   /** Receives every output line as it arrives, before the outcome is known. */
   onLine?: (line: string) => void;
+  /** The host lock the step takes for the whole session of the shell it runs on, when the channel has one. */
+  sessionLock?: SessionLock;
 }
 
 /** A variable name that looks secret: it must be marked as such where it is put into the environment. */
@@ -73,6 +76,9 @@ export async function runStep(
       environment: options.environment ?? {},
       ...(secretVariables.length === 0 ? {} : {secretVariables}),
       input: options.input ?? {kind: 'text', text: ''},
+      ...(options.sessionLock === undefined
+        ? {}
+        : {sessionLock: options.sessionLock}),
       cancellation: options.cancellation,
     },
     line => {

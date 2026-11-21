@@ -84,6 +84,18 @@ describe('the host channel over the shared session', () => {
     );
   });
 
+  it('F-2408 BR-4: gives the session lock of a script to the session, and none when it has none', async () => {
+    await channel().runScript(REQUEST, () => undefined);
+    await channel().runScript(
+      {...REQUEST, sessionLock: {path: '/tmp/lock', action: 'open'}},
+      () => undefined,
+    );
+    deepStrictEqual(
+      runs.map(started => started.sessionLock),
+      [undefined, {path: '/tmp/lock', action: 'open'}],
+    );
+  });
+
   it('runs a script one byte under the limit of an exec argument', async () => {
     await channel().runScript(
       {...REQUEST, script: 'x'.repeat(EXEC_ARGUMENT_LIMIT_BYTES - 1)},
