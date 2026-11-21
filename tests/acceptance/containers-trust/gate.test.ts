@@ -307,9 +307,22 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     const asked = await waitForDialog(name);
     const askedText = await dialogText(name);
     await answerDialog(name, 'Cancel');
+    // The answered question stays on the page for a moment: the next dialog is waited for once it is another one.
+    await waitFor(
+      `the answered question of ${name} to give way`,
+      async () =>
+        (await waitForDialog(name, 1000).catch(() => undefined))?.message !==
+        asked.message,
+      30_000,
+    );
     const declined = await waitForDialog(name);
     const declinedText = await dialogText(name);
-    await answerDialog(name, 'OK');
+    await answerDialog(name, 'OK').catch((caught: unknown) => {
+      throw new Error(
+        `${String(caught)}; the dialog up said ${JSON.stringify(declined.message)} after ${JSON.stringify(asked.message)} was answered Cancel`,
+        {cause: caught},
+      );
+    });
     await reloaded;
     await waitFor(
       `window ${name} to be a local folder again`,
