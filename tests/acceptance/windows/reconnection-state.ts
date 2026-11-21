@@ -76,8 +76,10 @@ const WINDOW_MILLISECONDS = 30_000;
 const WINDOW_LINES = 80;
 
 /**
- * The lines of a log whose lines begin with a stamp (`2026-11-20 00:03:15.909`, UTC) between `fromMs` and `toMs`, with the
- * unstamped lines after a kept one, at most the last `capacity`, each cut at `width` characters.
+ * The stamped lines of a log (`2026-11-20 00:03:15.909`, UTC) between `fromMs` and `toMs`, the first `capacity` of them,
+ * each cut at `width` characters. The unstamped lines (the frames of a stack) are left out and the first lines are kept,
+ * since what the window did right after the end is what the readout is for, and a burst of stacks would otherwise fill
+ * the cap and push it out.
  */
 export function logLinesBetween(
   lines: readonly string[],
@@ -87,18 +89,17 @@ export function logLinesBetween(
   width: number,
 ): string[] {
   const kept: string[] = [];
-  let keeping = false;
   for (const line of lines) {
     const stamp = /^(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d(?:\.\d+)?)/u.exec(line);
-    if (stamp !== null) {
-      const time = Date.parse(`${stamp[1] ?? ''}T${stamp[2] ?? ''}Z`);
-      keeping = time >= fromMs && time <= toMs;
+    if (stamp === null) {
+      continue;
     }
-    if (keeping) {
+    const time = Date.parse(`${stamp[1] ?? ''}T${stamp[2] ?? ''}Z`);
+    if (time >= fromMs && time <= toMs) {
       kept.push(line.slice(0, width));
     }
   }
-  return kept.slice(-capacity);
+  return kept.slice(0, capacity);
 }
 
 /** `milliseconds` as seconds with a sign, to one decimal. */

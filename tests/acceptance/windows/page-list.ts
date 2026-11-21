@@ -203,3 +203,44 @@ export async function waitUntilPageLeft(
     await pause(250);
   }
 }
+
+/** What one close of a window ended with: its page gone, or still listed with the note and the list that say so. */
+export type CloseAttempt =
+  | {state: 'left'}
+  | {state: 'stayed'; note: string; listed: readonly DebugTarget[]};
+
+/** The end of a close that may be sent again: the last attempt, how many were made and the note of each that left the page. */
+export interface ClosedOutcome {
+  last: CloseAttempt;
+  tried: number;
+  notes: string[];
+}
+
+/**
+ * Makes `attempt` (a close of the window and the wait for its page) until the page has left the editor's list, at most
+ * `attempts` times, and sends the close again only while the window is open: a close that met the window's own reload
+ * (it deactivated and came back on the same page, as a window that reopens as the local folder does) is withdrawn with the
+ * deactivation, and the window stays listed until a close reaches the agent it came back with. A window that is not open
+ * has nothing to send a close to, so a page that stays then ends the closes.
+ */
+export async function closeUntilGone(
+  attempt: () => Promise<CloseAttempt>,
+  windowOpen: () => boolean,
+  attempts: number,
+): Promise<ClosedOutcome> {
+  const notes: string[] = [];
+  let last: CloseAttempt = {state: 'left'};
+  let tried = 0;
+  while (tried < attempts) {
+    last = await attempt();
+    tried += 1;
+    if (last.state === 'left') {
+      break;
+    }
+    notes.push(last.note);
+    if (!windowOpen()) {
+      break;
+    }
+  }
+  return {last, tried, notes};
+}

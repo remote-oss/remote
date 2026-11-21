@@ -7,6 +7,8 @@ import path from 'node:path';
 import {NoAnswerError} from '../tests/acceptance/windows/page-protocol.ts';
 import {
   type DebugTarget,
+  type CloseAttempt,
+  closeUntilGone,
   lingeringPageNote,
   listedPages,
   listedTargets,
@@ -345,6 +347,62 @@ describe('the debugging port’s list (card #2908)', () => {
         (caught: unknown) => caught instanceof NoAnswerError,
       ),
       false,
+    );
+  });
+});
+
+describe('the close that is sent again while the page stays and the window is open (card #2909)', () => {
+  const LEFT: CloseAttempt = {state: 'left'};
+
+  /** An attempt that gives `results` in turn, counting how often it ran. */
+  function attemptsGiving(results: readonly CloseAttempt[]) {
+    const counted = {runs: 0};
+    return {
+      counted,
+      attempt: () => {
+        const result = results[Math.min(counted.runs, results.length - 1)];
+        counted.runs += 1;
+        return Promise.resolve(result ?? LEFT);
+      },
+    };
+  }
+
+  function stayed(note: string): CloseAttempt {
+    return {state: 'stayed', note, listed: []};
+  }
+
+  it('#2909: a close whose page leaves is made once', async () => {
+    const {attempt, counted} = attemptsGiving([LEFT]);
+    deepStrictEqual(
+      [await closeUntilGone(attempt, () => true, 2), counted.runs],
+      [{last: LEFT, tried: 1, notes: []}, 1],
+    );
+  });
+
+  it('#2909: a page that stays while the window is open again is closed once more, and the second close that works ends it, with the first one’s note kept', async () => {
+    const {attempt, counted} = attemptsGiving([stayed('first'), LEFT]);
+    deepStrictEqual(
+      [await closeUntilGone(attempt, () => true, 2), counted.runs],
+      [{last: LEFT, tried: 2, notes: ['first']}, 2],
+    );
+  });
+
+  it('#2909: a page that stays while the window is not open has nothing to send a close to, so the close ends with its note', async () => {
+    const {attempt, counted} = attemptsGiving([stayed('first'), LEFT]);
+    deepStrictEqual(
+      [await closeUntilGone(attempt, () => false, 2), counted.runs],
+      [{last: stayed('first'), tried: 1, notes: ['first']}, 1],
+    );
+  });
+
+  it('#2909, negative: a page that stays after every close is told for each, and the closes stop at the bound instead of going on', async () => {
+    const {attempt, counted} = attemptsGiving([
+      stayed('first'),
+      stayed('second'),
+    ]);
+    deepStrictEqual(
+      [await closeUntilGone(attempt, () => true, 2), counted.runs],
+      [{last: stayed('second'), tried: 2, notes: ['first', 'second']}, 2],
     );
   });
 });
