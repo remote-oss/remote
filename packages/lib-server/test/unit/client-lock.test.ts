@@ -71,8 +71,11 @@ class Gate {
   }
 }
 
-/** A waiter's view of `shared` that stops before its next call once it has made `call`, until `go`. */
-function pausedAfter(shared: MemoryLockPort, call: string) {
+/**
+ * A waiter's view of `shared` that stops before its next call once it has made `call` for the
+ * `occurrence`-th time, until `resume`.
+ */
+function pausedAfter(shared: MemoryLockPort, call: string, occurrence = 1) {
   const calls: string[] = [];
   let paused = false;
   const resumed = new Gate();
@@ -86,7 +89,10 @@ function pausedAfter(shared: MemoryLockPort, call: string) {
     }
     calls.push(made);
     const result = await operation();
-    if (!paused && made === call) {
+    if (
+      !paused &&
+      calls.filter(earlier => earlier === call).length === occurrence
+    ) {
       paused = true;
       reached.open();
     }
@@ -453,7 +459,7 @@ describe('client lock (card server-05 table)', () => {
         createCalls,
         takeoverRemovesBeforeLastCreate: port.calls
           .slice(0, lastCreate)
-          .filter(call => call === `remove ${PATH}`).length,
+          .filter(call => call === `removeIfModified ${PATH}`).length,
         totalRemoves: removalsOf(port),
         left: port.files(),
       },
@@ -533,7 +539,7 @@ describe('the takeover of a stale client lock (card #2918, ruling-2918-takeover-
     const {clock, shared} = await staleLock();
     const holders: string[] = [];
     const other = pausedAfter(shared, `ageMilliseconds ${PATH}`);
-    const taker = pausedAfter(shared, `remove ${PATH}`);
+    const taker = pausedAfter(shared, `removeIfModified ${PATH}`);
     waiter(other.port, clock, 'other', holders);
     await other.reachedPause;
     waiter(taker.port, clock, 'taker', holders);
@@ -553,6 +559,23 @@ describe('the takeover of a stale client lock (card #2918, ruling-2918-takeover-
         otherRemoved: other.calls.filter(call => call.startsWith('remove')),
       },
       {atThePause: [TICKET], holders: ['new'], files: [PATH], otherRemoved: []},
+    );
+  });
+
+  it("a lock released and created anew after the taker's age read under the ticket is left: the taker removes only the stale file it read", async () => {
+    const {clock, shared} = await staleLock();
+    const holders: string[] = [];
+    const taker = pausedAfter(shared, `ageMilliseconds ${PATH}`, 2);
+    waiter(taker.port, clock, 'taker', holders);
+    await taker.reachedPause;
+    await shared.remove(PATH);
+    waiter(shared, clock, 'fresh', holders);
+    await drain();
+    taker.resume();
+    await drain();
+    deepStrictEqual(
+      {holders, files: shared.files()},
+      {holders: ['fresh'], files: [PATH]},
     );
   });
 

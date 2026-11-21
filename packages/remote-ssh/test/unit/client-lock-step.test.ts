@@ -452,7 +452,7 @@ describe('the client install lock of a connect (card #2844, F-2408 BR-6 to BR-8,
       {
         result: {kind: 'failed', failure: {kind: 'cancelled'}},
         files: [],
-        removedNow: [pathOf(input)],
+        removedNow: [],
       },
     );
   });
@@ -467,16 +467,12 @@ describe('the client install lock of a connect (card #2844, F-2408 BR-6 to BR-8,
       new AbortController().signal,
     );
     const beforeEnd = [...removedNow];
+    const takeoverRemoves = port.calls.filter(
+      call => call === `removeIfModified ${pathOf(input)}`,
+    ).length;
     held.releaseAll();
     deepStrictEqual(
-      {
-        kind: taken.kind,
-        beforeEnd,
-        atEnd: removedNow,
-        takeoverRemoves: port.calls.filter(
-          call => call === `remove ${pathOf(input)}`,
-        ).length,
-      },
+      {kind: taken.kind, beforeEnd, atEnd: removedNow, takeoverRemoves},
       {
         kind: 'done',
         beforeEnd: [],

@@ -47,12 +47,12 @@ export class HeldClientLocks {
   }
 
   /**
-   * Removes the file this extension created at `path`, and stops holding it when `wasHeld`, in one call, so that no
-   * end can come between the two. A held file the end has removed already is left alone, since another window may
+   * Removes the held file at `path`, while its modification time is `modified`, and stops holding it, in one call, so
+   * that no end can come between the two. A file the end has removed already is left alone, since another window may
    * hold it by now.
    */
-  release(path: string, wasHeld: boolean, modified: number | undefined): void {
-    if (!wasHeld || this.paths.delete(path)) {
+  release(path: string, modified: number | undefined): void {
+    if (this.paths.delete(path)) {
       this.removeNow(path, modified);
     }
   }
@@ -68,8 +68,8 @@ export class HeldClientLocks {
 }
 
 /**
- * `port` with its removal of a file this caller created made by `held`, at once, `holding` telling whether the lock
- * was held by then.
+ * `port` with the removal of the lock while `holding` it made by `held`, at once; every other removal, the takeover's
+ * and a cancel's during the create, goes to `port`.
  */
 function releasingThrough(
   port: LockFilePort,
@@ -82,7 +82,10 @@ function releasingThrough(
     modifiedMilliseconds: path => port.modifiedMilliseconds(path),
     remove: path => port.remove(path),
     removeIfModified: (path, modified) => {
-      held.release(path, holding(), modified);
+      if (!holding()) {
+        return port.removeIfModified(path, modified);
+      }
+      held.release(path, modified);
       return Promise.resolve();
     },
   };

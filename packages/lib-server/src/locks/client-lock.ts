@@ -64,9 +64,11 @@ function isCancelled(options: ClientLockOptions): boolean {
 }
 
 /**
- * Takes over the stale lock at `path` under its ticket, one takeover at a time: the lock's age is
- * read again under the ticket, and the lock is removed only while it is still stale. Whether the
- * ticket was this caller's; a ticket another caller holds is broken once it is old enough.
+ * Takes over the stale lock at `path` under its ticket, one takeover at a time: the lock's
+ * modification time and then its age are read again under the ticket, and the lock is removed only
+ * while it is still that stale file, since its holder's release and a new window's create need no
+ * ticket. Whether the ticket was this caller's; a ticket another caller holds is broken once it is
+ * old enough.
  */
 async function tookOverUnderTicket(
   port: LockFilePort,
@@ -85,9 +87,10 @@ async function tookOverUnderTicket(
     return false;
   }
   try {
+    const lockModified = await port.modifiedMilliseconds(path);
     const lockAge = await port.ageMilliseconds(path);
     if (lockAge !== undefined && lockAge >= options.takeoverAgeMilliseconds) {
-      await port.remove(path);
+      await port.removeIfModified(path, lockModified);
     }
   } finally {
     await port.remove(ticket);
