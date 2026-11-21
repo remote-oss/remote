@@ -8,9 +8,16 @@
  */
 
 import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
-import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {inWindow, isOpen, variable, windowState} from './harness.ts';
+import {
+  type DebugTarget,
+  localPageAmong,
+  pageAmong,
+  pagesDescription,
+  portIn,
+  REMEMBERED_PAGES,
+} from './page-list.ts';
 
 /** How long a wait for the renderer lasts, in milliseconds. */
 const WAIT_MILLISECONDS = 60_000;
@@ -23,15 +30,6 @@ export interface ViewRow {
   description: string;
   level: number;
   expanded: boolean | undefined;
-}
-
-/** A target of the debugging port's list. */
-interface DebugTarget {
-  /** The target's id, which a window's page keeps for as long as the window lives, a reload in place included. */
-  id: string;
-  type: string;
-  title: string;
-  webSocketDebuggerUrl?: string;
 }
 
 /** The answer of the protocol's `Runtime.evaluate`. */
@@ -99,12 +97,7 @@ async function debuggingPort(): Promise<number> {
   const file = path.join(variable('HARNESS_USER_DATA'), 'DevToolsActivePort');
   return settled(
     () => `the editor's debugging port in ${file}`,
-    () => {
-      const port = existsSync(file)
-        ? Number.parseInt(readFileSync(file, 'utf8').split('\n')[0] ?? '', 10)
-        : Number.NaN;
-      return Promise.resolve(Number.isInteger(port) ? port : undefined);
-    },
+    () => Promise.resolve(portIn(file)),
   );
 }
 
@@ -204,34 +197,6 @@ export function pagesForState(
     ? found.filter(page => page.title === '[]')
     : fitting;
 }
-
-/**
- * The page of window `name` among `candidates`, the pages whose titles fit its state. A page the window remembered is
- * the one when it is there. Otherwise the one candidate; or, of several, the one that no other open window
- * remembered: two folder-less windows have the same title, but each keeps its own page's id. Nothing when it stays
- * ambiguous.
- */
-export function pageAmong(
-  candidates: readonly DebugTarget[],
-  name: string,
-  remembered: ReadonlyMap<string, string>,
-  open: (window: string) => boolean,
-): DebugTarget | undefined {
-  const own = candidates.find(page => page.id === remembered.get(name));
-  if (own !== undefined || candidates.length === 1) {
-    return own ?? candidates[0];
-  }
-  const taken = new Set(
-    [...remembered]
-      .filter(([other]) => other !== name && open(other))
-      .map(([, pageId]) => pageId),
-  );
-  const left = candidates.filter(page => !taken.has(page.id));
-  return left.length === 1 ? left[0] : undefined;
-}
-
-/** The id of the page each window's name was last found by, while the window lives. */
-const REMEMBERED_PAGES = new Map<string, string>();
 
 /** The pages of the renderer, from the debugging port's list. */
 async function pages(): Promise<DebugTarget[]> {
@@ -348,15 +313,18 @@ export async function pageOf(
   milliseconds = WAIT_MILLISECONDS,
 ): Promise<string> {
   let titles: string[] = [];
+  let described = '';
   const started = Date.now();
   return settled(
-    () => `one page of window ${name} among ${JSON.stringify(titles)}`,
+    () =>
+      `one page of window ${name} among ${JSON.stringify(titles)}; the pages and who remembers each: ${described}`,
     async () => {
       const found = (await pages()).map(page => ({
         ...page,
         title: withoutAdministratorMark(page.title),
       }));
       titles = found.map(page => page.title);
+      described = pagesDescription(found, REMEMBERED_PAGES, isOpen);
       const named = pageTitleByName(name, titles);
       if (named !== undefined) {
         const page = found.find(each => each.title === named);
@@ -376,6 +344,16 @@ export async function pageOf(
         titlesOfName(name, titles).length < 2
       ) {
         return remembered.webSocketDebuggerUrl;
+      }
+      // The local window is the one titled `[]`, so with several such pages it is chosen from them as its state would, without
+      // asking its agent: the agent may be running the command whose pick the caller waits for, and takes nothing else.
+      const local =
+        name === 'local'
+          ? localPageAmong(found, REMEMBERED_PAGES, isOpen)
+          : undefined;
+      if (local !== undefined) {
+        REMEMBERED_PAGES.set(name, local.id);
+        return local.webSocketDebuggerUrl;
       }
       const state = await stateForPage(
         name,
