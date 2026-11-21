@@ -439,7 +439,13 @@ describe('the protocol connection of the page inputs (card #2908)', () => {
     stop(): Promise<void>;
   }> {
     const sockets = new Set<Socket>();
+    let stopped = false;
     const server = createNetServer(socket => {
+      // A connection that arrives after the stop, from a client still connecting, is ended at once.
+      if (stopped) {
+        socket.destroy();
+        return;
+      }
       sockets.add(socket);
       socket.on('error', () => undefined);
     });
@@ -449,12 +455,13 @@ describe('the protocol connection of the page inputs (card #2908)', () => {
       address: `ws://127.0.0.1:${String(port)}`,
       stop: () =>
         new Promise<void>(resolve => {
-          for (const socket of sockets) {
-            socket.destroy();
-          }
+          stopped = true;
           server.close(() => {
             resolve();
           });
+          for (const socket of sockets) {
+            socket.destroy();
+          }
         }),
     };
   }

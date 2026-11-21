@@ -58,11 +58,31 @@ export interface ProtocolCommand {
   params: Record<string, unknown>;
 }
 
-/** The socket of the page at protocol address `address`, once it is open; `owner` names the page in a failure. */
-async function openSocket(address: string, owner: string): Promise<WebSocket> {
+/** The longest a protocol socket may take to open, in milliseconds, whatever the read's own bound is. */
+const OPEN_MILLISECONDS = 30_000;
+
+/**
+ * The socket of the page at protocol address `address`, once it is open; `owner` names the page in a failure. A port
+ * that accepts the connection and does not complete the upgrade within `milliseconds` (or the longest an open may take)
+ * fails with a {@link NoAnswerError}, so that no exchange waits for ever before it has a bound of its own.
+ */
+async function openSocket(
+  address: string,
+  owner: string,
+  milliseconds: number,
+): Promise<WebSocket> {
+  const bound = Math.min(milliseconds, OPEN_MILLISECONDS);
   const socket = new WebSocket(address);
+  let timer: NodeJS.Timeout | undefined;
   try {
     await new Promise<void>((resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(
+          new NoAnswerError(
+            `${owner}: no protocol connection within ${String(Math.round(bound / 100) / 10)} s`,
+          ),
+        );
+      }, bound);
       socket.addEventListener('open', () => {
         resolve();
       });
@@ -73,6 +93,8 @@ async function openSocket(address: string, owner: string): Promise<WebSocket> {
   } catch (caught) {
     socket.close();
     throw caught;
+  } finally {
+    clearTimeout(timer);
   }
   return socket;
 }
@@ -150,7 +172,7 @@ export async function evaluateAt<Value>(
   milliseconds: number = EVALUATE_MILLISECONDS,
   diagnosticsExpression?: string,
 ): Promise<Value> {
-  const socket = await openSocket(address, owner);
+  const socket = await openSocket(address, owner, milliseconds);
   try {
     let answer: ProtocolAnswer;
     try {
@@ -209,7 +231,7 @@ export async function dispatchAt(
   commands: readonly ProtocolCommand[],
   milliseconds: number = INPUT_MILLISECONDS,
 ): Promise<void> {
-  const socket = await openSocket(address, owner);
+  const socket = await openSocket(address, owner, milliseconds);
   try {
     for (const [index, command] of commands.entries()) {
       await answerTo(
