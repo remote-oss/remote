@@ -1,6 +1,5 @@
 import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import {
-  pageAmong,
   pageTitleByName,
   nextListKey,
   walkToPosition,
@@ -15,6 +14,7 @@ import {
   type FolderDialogReading,
   type FolderDialogWait,
 } from './renderer.ts';
+import {pageAmong} from './page-list.ts';
 
 describe('pageTitleByName', () => {
   it('containers-19: a folder window finds its page by its name, with or without the remote part of the title', () => {

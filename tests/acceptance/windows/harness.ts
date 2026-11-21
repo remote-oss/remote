@@ -50,6 +50,13 @@ import {
 } from './agent-standing.ts';
 import {explainedFailure, section} from './connect-failure.ts';
 import {editorFolderOf} from './editor-folder.ts';
+import {
+  type DebugTarget,
+  listedPages,
+  pagesDescription,
+  REMEMBERED_PAGES,
+  waitUntilPageLeft,
+} from './page-list.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -1451,10 +1458,24 @@ export async function killWindow(
   }
 }
 
+/** How long a closed window's page may stay in the editor's list after the window deactivated. */
+const PAGE_LEFT_MILLISECONDS = 30_000;
+
+/** The pages the editor lists now; none when the launch has no debugging port to read or it cannot be read. */
+async function pagesListedNow(): Promise<DebugTarget[] | undefined> {
+  try {
+    return await listedPages(variable('HARNESS_USER_DATA'));
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Closes window `name` and resolves once it's gone: its agent reports `deactivated`, or the extension host it recorded
- * has exited. Some closes never get the event (8 of 576 in a full containers launch, 2026-11-01): the extension host
- * ends before its agent writes it. A window whose extension host still runs after the wait fails, naming it.
+ * has exited, and the page it was last found by has left the editor's list, so that the next row does not find it beside
+ * its own; a page that is still listed after 30 s is told on stderr and the close ends. Some closes
+ * never get the event (8 of 576 in a full containers launch, 2026-11-01): the extension host ends before its agent
+ * writes it. A window whose extension host still runs after the wait fails, naming it.
  */
 export async function closeWindow(
   name: string,
@@ -1462,6 +1483,10 @@ export async function closeWindow(
 ): Promise<void> {
   const before = countOf(name, 'deactivated');
   const extensionHost = liveProcessIdOf(name);
+  // The page the window was last found by: it must leave the list, whatever other windows do meanwhile.
+  const ownPage = REMEMBERED_PAGES.get(name);
+  const listedBefore =
+    ownPage === undefined ? undefined : await pagesListedNow();
   const commandId = send(name, 'workbench.action.closeWindow', []);
   try {
     await waitUntil(
@@ -1479,6 +1504,26 @@ export async function closeWindow(
     );
   } finally {
     withdrawUnaccepted(name, commandId);
+  }
+  if (
+    ownPage !== undefined &&
+    listedBefore?.some(page => page.id === ownPage) === true
+  ) {
+    const waited = await waitUntilPageLeft(
+      name,
+      ownPage,
+      pagesListedNow,
+      PAGE_LEFT_MILLISECONDS,
+      pause => new Promise(resolve => setTimeout(resolve, pause)),
+    );
+    // A page that lingers is told by name, with the pages the editor listed at the close and after the wait and who
+    // remembers each, and the close goes on: it is not something a close, or the hook that runs it, can end, and a launch
+    // must not fail for it. The lists say whether the window's page stayed or the id was another window's (card #2909).
+    if (waited.state === 'stayed') {
+      process.stderr.write(
+        `closing window ${name}: ${waited.note}; the pages at the close: ${pagesDescription(listedBefore, REMEMBERED_PAGES, isOpen)}; after the wait: ${pagesDescription(waited.listed, REMEMBERED_PAGES, isOpen)}\n`,
+      );
+    }
   }
 }
 
