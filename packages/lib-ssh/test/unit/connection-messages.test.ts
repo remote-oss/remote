@@ -210,6 +210,48 @@ describe('connection requests (contracts §4 S9)', () => {
     );
   });
 
+  it('F-2408 BR-4: reads the session lock of a script, open or release, and none when there is none', () => {
+    const complete = {
+      type: 'runScript',
+      runId: 1,
+      script: 'x',
+      environment: {},
+      inputBase64: null,
+      deadlineMilliseconds: 1000,
+    };
+    const bodies = [
+      {...complete, sessionLock: {path: '/tmp/lock', action: 'open'}},
+      {...complete, sessionLock: {path: '/tmp/lock', action: 'release'}},
+      complete,
+    ];
+    deepStrictEqual(
+      bodies.map(body => readConnectionRequest(body)),
+      bodies,
+    );
+  });
+
+  it('F-2408 BR-4: reads nothing from a script request whose session lock has no path, another action, or is not an object', () => {
+    const complete = {
+      type: 'runScript',
+      runId: 1,
+      script: 'x',
+      environment: {},
+      inputBase64: null,
+      deadlineMilliseconds: 1000,
+    };
+    deepStrictEqual(
+      [
+        {path: '', action: 'open'},
+        {path: '/tmp/lock', action: 'take'},
+        {path: 5, action: 'open'},
+        {action: 'open'},
+        'open',
+        null,
+      ].map(sessionLock => readConnectionRequest({...complete, sessionLock})),
+      [undefined, undefined, undefined, undefined, undefined, undefined],
+    );
+  });
+
   it('reads nothing from a script request that is incomplete or has no time to run', () => {
     const complete = {
       type: 'runScript',
