@@ -30,6 +30,7 @@ import {
   DOWNLOAD_PAUSES_MILLISECONDS,
   downloadWithRetry,
   privateAssetDownload,
+  retriedGhcrLayer,
   editorChoiceOf,
   chosenLaunches,
   selectionLine,
@@ -4753,6 +4754,54 @@ describe('acceptance', () => {
           () => Promise.resolve(new Response('', {status: 404})),
           () => Promise.resolve(),
         ),
+        {
+          message: `try 1: ${failure}; try 2: ${failure}; try 3: ${failure}; try 4: ${failure}`,
+        },
+      );
+    });
+
+    it('#2927: a template layer whose token request is dropped once is read on the next try, after the first pause', async () => {
+      const pauses: number[] = [];
+      let calls = 0;
+      function fakeFetch(): Promise<Response> {
+        calls += 1;
+        // The first token request is dropped; the second answers with a token and the layer request with the layer.
+        if (calls === 1) {
+          return Promise.reject(
+            new TypeError('fetch failed', {
+              cause: new Error('read ECONNRESET'),
+            }),
+          );
+        }
+        return Promise.resolve(
+          calls === 2
+            ? Response.json({token: 'pull-token'})
+            : new Response(new Uint8Array([5, 6])),
+        );
+      }
+      const layer = await retriedGhcrLayer(fakeFetch, milliseconds => {
+        pauses.push(milliseconds);
+        return Promise.resolve();
+      })({name: 'tiny', version: '1.2.3', layerDigest: 'sha256:00'});
+      deepStrictEqual(
+        [layer, pauses, calls],
+        [new Uint8Array([5, 6]), [5000], 3],
+      );
+    });
+
+    it('#2927: a template layer that ghcr.io never gives fails after its four tries, each naming the address and the reason', async () => {
+      const failure =
+        'https://ghcr.io/token?scope=repository:devcontainers/templates/tiny:pull: fetch failed (read ECONNRESET)';
+      await rejects(
+        retriedGhcrLayer(
+          () =>
+            Promise.reject(
+              new TypeError('fetch failed', {
+                cause: new Error('read ECONNRESET'),
+              }),
+            ),
+          () => Promise.resolve(),
+        )({name: 'tiny', version: '1.2.3', layerDigest: 'sha256:00'}),
         {
           message: `try 1: ${failure}; try 2: ${failure}; try 3: ${failure}; try 4: ${failure}`,
         },

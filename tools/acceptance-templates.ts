@@ -132,13 +132,49 @@ export async function templateLayerOf(
   return file;
 }
 
+/**
+ * The network's own reason for a request that failed before any answer: the error's message, and its cause's message
+ * or code when it has one (`fetch failed (read ECONNRESET)`), so a failure says more than `fetch failed` (#2927).
+ */
+export function networkReason(caught: unknown): string {
+  if (!(caught instanceof Error)) {
+    return String(caught);
+  }
+  const cause: unknown = caught.cause;
+  if (!(cause instanceof Error)) {
+    return caught.message;
+  }
+  const code = (cause as {code?: unknown}).code;
+  const detail =
+    cause.message !== ''
+      ? cause.message
+      : typeof code === 'string'
+        ? code
+        : cause.name;
+  return `${caught.message} (${detail})`;
+}
+
+/** `fetcher`'s answer to `url`; a request that gets no answer fails naming `url` and the network's reason. */
+async function answerOf(
+  fetcher: typeof fetch,
+  url: string,
+  init?: RequestInit,
+): Promise<Response> {
+  try {
+    return await fetcher(url, init);
+  } catch (caught) {
+    throw new Error(`${url}: ${networkReason(caught)}`, {cause: caught});
+  }
+}
+
 /** The layer of `template` from `ghcr.io`, read anonymously with the registry's pull token. */
 export async function ghcrLayer(
   template: MirroredTemplate,
   fetcher: typeof fetch = fetch,
 ): Promise<Uint8Array> {
   const repository = `${MIRROR_NAMESPACE}/${template.name}`;
-  const tokenResponse = await fetcher(
+  const tokenResponse = await answerOf(
+    fetcher,
     `https://ghcr.io/token?scope=repository:${repository}:pull`,
   );
   if (!tokenResponse.ok) {
@@ -147,7 +183,8 @@ export async function ghcrLayer(
     );
   }
   const {token} = (await tokenResponse.json()) as {token: string};
-  const blob = await fetcher(
+  const blob = await answerOf(
+    fetcher,
     `https://ghcr.io/v2/${repository}/blobs/${template.layerDigest}`,
     {headers: {Authorization: `Bearer ${token}`}},
   );

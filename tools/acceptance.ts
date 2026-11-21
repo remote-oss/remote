@@ -31,7 +31,11 @@ import {
 } from './acceptance-wsl.ts';
 import {pinnedSshClient} from './acceptance-ssh-client.ts';
 import {staleRefusal} from './acceptance-stale.ts';
-import {ghcrLayer, prepareRunTemplates} from './acceptance-templates.ts';
+import {
+  ghcrLayer,
+  type LayerFetch,
+  prepareRunTemplates,
+} from './acceptance-templates.ts';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {
@@ -2962,6 +2966,22 @@ export function editorChoiceOf(
     : undefined;
 }
 
+/**
+ * The layer of a mirrored template from `ghcr.io` through `fetcher`, with the downloads' retries: a request the network
+ * drops, or one ghcr.io refuses, is tried again after each of their pauses before the run's preparation fails (#2927).
+ */
+export function retriedGhcrLayer(
+  fetcher: typeof fetch = fetch,
+  pause: Sleeper = delay,
+): LayerFetch {
+  return template =>
+    withRetries(
+      () => ghcrLayer(template, fetcher),
+      pause,
+      console.log.bind(console),
+    );
+}
+
 /** Downloads `url` into memory through `fetcher`, with retries. */
 export async function downloadWithRetry(
   url: string,
@@ -3118,7 +3138,7 @@ if (isMainModule(import.meta.url)) {
             root,
             runFolder,
             address,
-            ghcrLayer,
+            retriedGhcrLayer(),
             undefined,
             devContainerImage,
           ),
