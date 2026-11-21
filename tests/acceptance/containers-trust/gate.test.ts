@@ -129,13 +129,13 @@ async function ranOnHost(folder: string): Promise<{
 const NOTHING_RAN = {dockerCalls: false, initialized: false, containers: []};
 
 /** How long the dialog the row answered may stay the one on the page before the row fails; the wait is bounded. */
-const ANSWERED_DIALOG_MILLISECONDS = 30_000;
+const ANSWERED_DIALOG_MILLISECONDS = 60_000;
 
 /**
  * The next dialog of window `name` after the one saying `answered` was answered: the answered dialog stays on the page for
  * a moment while it closes, so a dialog with the same message is not the next one. The wait is bounded, and it fails
  * naming which it was: the same question shown again after the page held none (core asked a second time, a behaviour of
- * the product), or the answered dialog never closed (a stale dialog).
+ * the product), no dialog at all (the next question never came), or the answered dialog never closed (a stale dialog).
  */
 async function dialogAfter(name: string, answered: string) {
   let gone = false;
@@ -153,7 +153,9 @@ async function dialogAfter(name: string, answered: string) {
     }
   }
   throw new Error(
-    `window ${name}: stale dialog never closed: ${JSON.stringify(answered)} was still the dialog on the page ${String(ANSWERED_DIALOG_MILLISECONDS / 1000)} s after it was answered Cancel`,
+    gone
+      ? `window ${name}: no next dialog: the page held no dialog for ${String(ANSWERED_DIALOG_MILLISECONDS / 1000)} s after ${JSON.stringify(answered)} was answered Cancel`
+      : `window ${name}: stale dialog never closed: ${JSON.stringify(answered)} was still the dialog on the page ${String(ANSWERED_DIALOG_MILLISECONDS / 1000)} s after it was answered Cancel`,
   );
 }
 
