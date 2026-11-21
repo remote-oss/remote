@@ -17,13 +17,16 @@ import {
   windowEvents,
   windowState,
 } from '../windows/harness.ts';
-import {rowAction, titleAction} from '../windows/renderer.ts';
+import {printWalkTraces, rowAction, titleAction} from '../windows/renderer.ts';
 import {
   nothingFails,
   rowsOf,
   rowsSettled,
   VIEW,
 } from '../windows/explorer-rows.ts';
+
+// The launch's reads print their walk trace (card #2960).
+printWalkTraces(true);
 
 /** The launch's first window and the windows the connects open, and the view and its actions. */
 const LOCAL = 'local';

@@ -29,6 +29,17 @@ const WAIT_MILLISECONDS = 60_000;
 
 const POLL_MILLISECONDS = 200;
 
+/**
+ * Whether a walk that finished its read prints its trace: off by default, on in the launch that probes the explorer
+ * cascade (card #2960), so a row cut by its timeout tells from the log where its walk stood.
+ */
+let walkTracePrinting = false;
+
+/** Turns the per-read print of a walk's trace on or off. */
+export function printWalkTraces(print: boolean): void {
+  walkTracePrinting = print;
+}
+
 /** A row of a view, as the window shows it. */
 export interface ViewRow {
   label: string;
@@ -576,6 +587,8 @@ export async function viewRows(
         overflow.every(other => other === el || !other.contains(el))
       );
       if (list === undefined) {
+        // A plain read walks nothing: it clears the trace the last walk left.
+        window.remoteOssViewRowsTrace = undefined;
         return read();
       }
       const seen = new Map();
@@ -592,9 +605,11 @@ export async function viewRows(
         }
       };
       const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-      // The trace of this walk, for a read that no one answers: the page's visibility at the start and at each
-      // change, and each move's wall time against the 600 ms it set. It stands on the page, so a read that dies on
-      // its bound can still ask the page for it (the protocol's diagnostics read); a finished walk clears it.
+      // The trace of this walk: the page's visibility at the start and at each change, and each move's wall time
+      // against the 600 ms it set. It stands on the page, so a read that dies on its bound can still ask the page for
+      // it (the protocol's diagnostics read), and a finished read's reader may print it; the move entries stop at
+      // their cap, so the trace stays the size a print may carry.
+      const walkTraceCap = 48;
       const walkStart = Date.now();
       const walkTrace = ['visibilityState ' + document.visibilityState];
       let walkVisibility = document.visibilityState;
@@ -606,7 +621,9 @@ export async function viewRows(
           );
           walkVisibility = document.visibilityState;
         }
-        walkTrace.push(part);
+        if (walkTrace.length < walkTraceCap) {
+          walkTrace.push(part);
+        }
       };
       window.remoteOssViewRowsTrace = walkTrace.join(' ');
       // The first and the last rendered rows: a list that overflows by less than a row moves its last row in while the
@@ -669,12 +686,27 @@ export async function viewRows(
       }
       await wait(200);
       collect();
-      window.remoteOssViewRowsTrace = undefined;
+      // The finished walk leaves its trace on the page: the reader prints it, and the next walk overwrites it.
       return order.map(key => seen.get(key));
     })()`,
     LONG_READ_MILLISECONDS,
     'String(window.remoteOssViewRowsTrace ?? null)',
   );
+  if (walkTracePrinting) {
+    try {
+      const trace = await evaluateAt<string>(
+        await pageOf(name),
+        `window ${name}`,
+        'String(window.remoteOssViewRowsTrace ?? null)',
+        5_000,
+      );
+      if (trace !== 'null') {
+        console.log(`the walk of ${viewName} in window ${name}: ${trace}`);
+      }
+    } catch {
+      // A page that holds its answers holds no trace either: the read's own bound carries it.
+    }
+  }
   // The protocol returns values as JSON, where `expanded: undefined` would drop: read it back as it is.
   return (
     rows?.map(each => ({
@@ -723,11 +755,48 @@ async function clickAction(
       return;
     }
     if (Date.now() > deadline) {
-      throw new Error(`window ${name}, view ${viewName}: ${found}`);
+      const detail = found.startsWith('0 places')
+        ? await zeroPlacesDetail(name, viewName)
+        : '';
+      throw new Error(`window ${name}, view ${viewName}: ${found}${detail}`);
     }
     await stage();
     await new Promise(resolve => setTimeout(resolve, POLL_MILLISECONDS));
   }
+}
+
+/**
+ * What a read that found no place for the action saw, appended to its failure (card #2960): the facts of every page
+ * and the view's pane with its header, as they are — so a red names a page that does not render the view, not only a
+ * missing element. A read that does not arrive names itself instead.
+ */
+async function zeroPlacesDetail(
+  name: string,
+  viewName: string,
+): Promise<string> {
+  const pages = await pageFocusFacts().catch(() => [
+    'the page facts did not arrive',
+  ]);
+  const pane = await (async () => {
+    const address = await pageOf(name);
+    return await evaluateAt<string>(
+      address,
+      `window ${name}`,
+      `(() => {
+        const pane = ${paneExpression(viewName)};
+        if (pane === undefined) {
+          return 'no pane';
+        }
+        const headers = [...pane.querySelectorAll('.pane-header')];
+        const shown = headers
+          .map(header => header.outerHTML.slice(0, 200))
+          .join(' ');
+        return headers.length + ' pane-header: ' + (shown === '' ? 'none' : shown);
+      })()`,
+      5_000,
+    );
+  })().catch(() => 'the pane read did not arrive');
+  return `; pages: ${pages.join(' | ')}; ${name}'s pane: ${pane}`;
 }
 
 /**

@@ -17,9 +17,16 @@ import {
   variable,
   windowEvents,
 } from '../windows/harness.ts';
-import {notifications, titleAction} from '../windows/renderer.ts';
+import {
+  notifications,
+  printWalkTraces,
+  titleAction,
+} from '../windows/renderer.ts';
 import {rowsOf, rowsSettled, VIEW} from '../windows/explorer-rows.ts';
 import {reloadedWindow} from './reloaded-window.ts';
+
+// The launch's reads print their walk trace (card #2960).
+printWalkTraces(true);
 
 /** The run-local configuration file the rows point `remote.SSH.configFile` at. */
 const FILE = path.join(variable('HARNESS_RUN_FOLDER'), 'hosts-35');

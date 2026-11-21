@@ -4,7 +4,16 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {inWindow, variable, windowEvents} from '../windows/harness.ts';
 import {reloadedWindow} from './reloaded-window.ts';
-import {pageOf, rowAction, titleAction, viewRows} from '../windows/renderer.ts';
+import {
+  pageOf,
+  printWalkTraces,
+  rowAction,
+  titleAction,
+  viewRows,
+} from '../windows/renderer.ts';
+
+// The launch's reads print their walk trace (card #2960).
+printWalkTraces(true);
 
 /** The folder of the smoke window, in the run's folder, with two files the file explorer lists. */
 const SMOKE = 'smoke';
