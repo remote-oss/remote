@@ -1,5 +1,9 @@
 import {deepStrictEqual, rejects} from 'node:assert';
-import type {CopyRequest, ScriptRequest} from '../../src/index.ts';
+import {
+  type CopyRequest,
+  linesOfScript,
+  type ScriptRequest,
+} from '../../src/index.ts';
 import {
   RecordingChannel,
   type ScriptAnswer,
@@ -373,5 +377,79 @@ describe('recording channel (lib-host fake)', () => {
       kind: 'copied',
     });
     await new Promise(resolve => setTimeout(resolve, 10));
+  });
+});
+
+describe('linesOfScript', () => {
+  function channelEnding(ending: ScriptAnswer['ending']): RecordingChannel {
+    return new RecordingChannel({
+      identity: 'h',
+      platformHint: 'linux',
+      scripts: [
+        {
+          interpreter: 'posixShell',
+          matches: () => true,
+          lines: ['one', 'two'],
+          ending,
+        },
+      ],
+    });
+  }
+
+  it('gives the lines of a script that ended with status 0', async () => {
+    deepStrictEqual(
+      await linesOfScript(
+        channelEnding({kind: 'exit', status: 0}),
+        scriptRequest('x'),
+      ),
+      ['one', 'two'],
+    );
+  });
+
+  it('gives nothing for a script that ended with another status', async () => {
+    deepStrictEqual(
+      await linesOfScript(
+        channelEnding({kind: 'exit', status: 3}),
+        scriptRequest('x'),
+      ),
+      undefined,
+    );
+  });
+
+  it('gives nothing for a script the channel failed to run', async () => {
+    deepStrictEqual(
+      await linesOfScript(
+        channelEnding({
+          kind: 'fail',
+          failure: {kind: 'channelClosed', detail: 'gone'},
+        }),
+        scriptRequest('x'),
+      ),
+      undefined,
+    );
+  });
+});
+
+describe('the session locks a recording channel saw', () => {
+  it('lists the session lock of each script run in order and leaves out the runs that carried none', async () => {
+    const channel = new RecordingChannel({
+      identity: 'h',
+      platformHint: 'linux',
+      scripts: [probeAnswer(0), probeAnswer(0), probeAnswer(0)],
+    });
+    const lock = {path: '/tmp/lock', action: 'open'} as const;
+    await channel.runScript(scriptRequest(PROBE), () => undefined);
+    await channel.runScript(
+      {...scriptRequest(PROBE), sessionLock: lock},
+      () => undefined,
+    );
+    await channel.runScript(
+      {...scriptRequest(PROBE), sessionLock: {...lock, action: 'release'}},
+      () => undefined,
+    );
+    deepStrictEqual(channel.sessionLocks(), [
+      lock,
+      {path: '/tmp/lock', action: 'release'},
+    ]);
   });
 });

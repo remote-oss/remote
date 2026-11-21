@@ -254,6 +254,13 @@ describe('install planner (card server-04 table)', () => {
     );
   });
 
+  it('F-2406 BR-6: hostFirst manualBootstrap -> where client, clientFallback false: nothing is downloaded on either side', () => {
+    placementRow(
+      {kind: 'hostFirst', mode: 'manualBootstrap'},
+      {where: 'client', clientFallback: false},
+    );
+  });
+
   it('F-2701 AC-26: hostFirst always on a Windows host is the default route: where host, clientFallback true', () => {
     const planned = asPlan(
       plan(

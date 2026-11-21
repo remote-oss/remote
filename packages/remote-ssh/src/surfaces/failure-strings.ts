@@ -82,6 +82,8 @@ export type FailureStringId =
   | 'preconnectValueObject'
   | 'scpInstallationNotFound'
   | 'localLockTimeout'
+  | 'S069'
+  | 'S161'
   | 'trustRefused';
 
 /** The English template of each string id, with `{0}`, `{1}` for the values. */
@@ -163,6 +165,8 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   trustRefused: 'Got bad result from install script',
   scpInstallationNotFound: 'scp installation not found',
   localLockTimeout: 'Timed out while waiting for the local startup lock',
+  S069: 'Expected tarball at local path {0}',
+  S161: 'Windows remotes do not support local bootstrap',
 };
 
 /** The two dialogs of a missing or unusable server download location, which have no string id yet. */

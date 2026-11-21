@@ -80,6 +80,18 @@ describe('the download mode of a connect (F-2405 BR-1)', () => {
     );
   });
 
+  it('F-2406 BR-1: the undeclared value manual-bootstrap turns the manual bootstrap on; the old switch false still gives off', () => {
+    deepStrictEqual(
+      [
+        localDownloadModeOf(hostWith({[MODE]: 'manual-bootstrap'})),
+        localDownloadModeOf(
+          hostWith({[MODE]: 'manual-bootstrap', [ALLOW]: false}),
+        ),
+      ],
+      ['manualBootstrap', 'off'],
+    );
+  });
+
   it('F-2405.AC-5: the old switch false gives off, whatever the mode says', () => {
     deepStrictEqual(
       ['auto', 'always', 'off'].map(mode =>

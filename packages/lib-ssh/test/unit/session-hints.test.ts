@@ -104,6 +104,7 @@ describe('the numbers of the error statuses (card connect-135)', () => {
       ['InvalidCustomServerPath', 13],
       ['CommandMissing', 14],
       ['LinuxPrereqs', 15],
+      ['LocalBootstrapFailed', 16],
     ]);
   });
 

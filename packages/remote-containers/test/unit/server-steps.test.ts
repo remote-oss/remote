@@ -271,6 +271,8 @@ function dependenciesOf(
       ),
     size: () => Promise.resolve(10),
     sha256: () => Promise.resolve('00'),
+    stage: () =>
+      Promise.resolve({kind: 'failed', detail: 'nothing is staged here'}),
     rename: (source, destination) => {
       seen.renames.push([source, destination]);
       return Promise.resolve({kind: 'renamed'});

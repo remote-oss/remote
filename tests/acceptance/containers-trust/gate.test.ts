@@ -128,6 +128,37 @@ async function ranOnHost(folder: string): Promise<{
 
 const NOTHING_RAN = {dockerCalls: false, initialized: false, containers: []};
 
+/** How long the dialog the row answered may stay the one on the page before the row fails; the wait is bounded. */
+const ANSWERED_DIALOG_MILLISECONDS = 60_000;
+
+/**
+ * The next dialog of window `name` after the one saying `answered` was answered: the answered dialog stays on the page for
+ * a moment while it closes, so a dialog with the same message is not the next one. The wait is bounded, and it fails
+ * naming which it was: the same question shown again after the page held none (core asked a second time, a behaviour of
+ * the product), no dialog at all (the next question never came), or the answered dialog never closed (a stale dialog).
+ */
+async function dialogAfter(name: string, answered: string) {
+  let gone = false;
+  const deadline = Date.now() + ANSWERED_DIALOG_MILLISECONDS;
+  while (Date.now() < deadline) {
+    const shown = await waitForDialog(name, 300).catch(() => undefined);
+    if (shown === undefined) {
+      gone = true;
+    } else if (shown.message !== answered) {
+      return shown;
+    } else if (gone) {
+      throw new Error(
+        `window ${name}: same question again: ${JSON.stringify(answered)} was on the page again after the page held no dialog, once it had been answered Cancel`,
+      );
+    }
+  }
+  throw new Error(
+    gone
+      ? `window ${name}: no next dialog: the page held no dialog for ${String(ANSWERED_DIALOG_MILLISECONDS / 1000)} s after ${JSON.stringify(answered)} was answered Cancel`
+      : `window ${name}: stale dialog never closed: ${JSON.stringify(answered)} was still the dialog on the page ${String(ANSWERED_DIALOG_MILLISECONDS / 1000)} s after it was answered Cancel`,
+  );
+}
+
 describe('Dev Containers trust gate rows (card containers-12)', function () {
   this.timeout(600_000);
 
@@ -307,9 +338,14 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     const asked = await waitForDialog(name);
     const askedText = await dialogText(name);
     await answerDialog(name, 'Cancel');
-    const declined = await waitForDialog(name);
+    const declined = await dialogAfter(name, asked.message);
     const declinedText = await dialogText(name);
-    await answerDialog(name, 'OK');
+    await answerDialog(name, 'OK').catch((caught: unknown) => {
+      throw new Error(
+        `${String(caught)}; the dialog up said ${JSON.stringify(declined.message)} after ${JSON.stringify(asked.message)} was answered Cancel`,
+        {cause: caught},
+      );
+    });
     await reloaded;
     await waitFor(
       `window ${name} to be a local folder again`,
