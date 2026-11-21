@@ -335,6 +335,28 @@ describe('the POSIX bootstrap script', () => {
       );
     });
 
+    it('ruling-2913-lock-only-to-write: an install that waited for the lock and finds the server installed meanwhile leaves Ok without installing, after taking the lock once', () => {
+      useHost(['wget', 'flock']);
+      runScript(host, single('install'), flockParameters());
+      const before = flockRuns();
+      const block = blockOf(host, single('install'), flockParameters(), {
+        // The launcher is out of sight until the lock is taken, as when another window installed while the step waited.
+        rewriteScript: text =>
+          text.replace(
+            '\nleave_if_installed\ntake_lock_or_finish "$COMMIT"\n',
+            '\nmv "$INSTALL_DIR/$LAUNCHER" "$INSTALL_DIR/$LAUNCHER.away"\nleave_if_installed\ntake_lock_or_finish "$COMMIT"\nmv "$INSTALL_DIR/$LAUNCHER.away" "$INSTALL_DIR/$LAUNCHER"\n',
+          ),
+      });
+      deepStrictEqual(
+        [
+          block === 'none' ? block : [block.status, block.serverFacts.lockHeld],
+          // The first check did not see the server, so the lock was taken once and the second check found it.
+          flockRuns() - before,
+        ],
+        [['Ok', undefined], 1],
+      );
+    });
+
     it('ruling-2913-lock-only-to-write: a start that has to launch still takes the lock, and a busy lock ends it as LockBusy', () => {
       useHost(['wget', 'flock']);
       runScript(host, single('install'), flockParameters());
