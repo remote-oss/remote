@@ -23,6 +23,7 @@
     "../tests/acceptance/windows/platform-forms.ts",
     "../tests/acceptance/windows/image-pull.ts",
     "../tests/acceptance/windows/late-pickup.ts",
+    "../tests/acceptance/windows/page-list.ts",
     "../tests/acceptance/windows/quick-pick-reads.ts",
     "../tests/acceptance/windows/reconnection-state.ts"
   ],
