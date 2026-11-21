@@ -63,4 +63,21 @@ describe('the host lock for the whole session (card #2820, F-2408)', function ()
       },
     );
   });
+
+  it('F-2408 BR-4 (c2855-lock-terminal, card #2855): with no shared connection the install terminal’s shell is the session, so the lock is there while the window is connected and is gone after the window is closed', async () => {
+    await installedWith(
+      'c2855-terminal',
+      {'remote.SSH.useLocalServer': false},
+      async install => {
+        const connected = distinctLocks([install.after]);
+        await new Promise(resolve => setTimeout(resolve, 20_000));
+        const later = distinctLocks([await lookAtHost()]);
+        await closeWindow('c2855-terminal');
+        deepStrictEqual(
+          {connected, later, closed: await locksAfterWaiting(30_000)},
+          {connected: [INSTALL_LOCK], later: [INSTALL_LOCK], closed: []},
+        );
+      },
+    );
+  });
 });
