@@ -30,6 +30,7 @@ import {
   DOWNLOAD_PAUSES_MILLISECONDS,
   downloadWithRetry,
   privateAssetDownload,
+  retriedGhcrLayer,
   editorChoiceOf,
   chosenLaunches,
   selectionLine,
@@ -4759,6 +4760,54 @@ describe('acceptance', () => {
       );
     });
 
+    it('#2927: a template layer whose token request is dropped once is read on the next try, after the first pause', async () => {
+      const pauses: number[] = [];
+      let calls = 0;
+      function fakeFetch(): Promise<Response> {
+        calls += 1;
+        // The first token request is dropped; the second answers with a token and the layer request with the layer.
+        if (calls === 1) {
+          return Promise.reject(
+            new TypeError('fetch failed', {
+              cause: new Error('read ECONNRESET'),
+            }),
+          );
+        }
+        return Promise.resolve(
+          calls === 2
+            ? Response.json({token: 'pull-token'})
+            : new Response(new Uint8Array([5, 6])),
+        );
+      }
+      const layer = await retriedGhcrLayer(fakeFetch, milliseconds => {
+        pauses.push(milliseconds);
+        return Promise.resolve();
+      })({name: 'tiny', version: '1.2.3', layerDigest: 'sha256:00'});
+      deepStrictEqual(
+        [layer, pauses, calls],
+        [new Uint8Array([5, 6]), [5000], 3],
+      );
+    });
+
+    it('#2927: a template layer that ghcr.io never gives fails after its four tries, each naming the address and the reason', async () => {
+      const failure =
+        'https://ghcr.io/token?scope=repository:devcontainers/templates/tiny:pull: fetch failed (read ECONNRESET)';
+      await rejects(
+        retriedGhcrLayer(
+          () =>
+            Promise.reject(
+              new TypeError('fetch failed', {
+                cause: new Error('read ECONNRESET'),
+              }),
+            ),
+          () => Promise.resolve(),
+        )({name: 'tiny', version: '1.2.3', layerDigest: 'sha256:00'}),
+        {
+          message: `try 1: ${failure}; try 2: ${failure}; try 3: ${failure}; try 4: ${failure}`,
+        },
+      );
+    });
+
     it('#253 Q14: a download returns the bytes the server sent', async () => {
       deepStrictEqual(
         await downloadWithRetry(
@@ -4786,6 +4835,48 @@ describe('acceptance', () => {
           caught instanceof Error ? caught.message : String(caught),
       );
     }
+
+    /** A rejection as undici's `fetch` gives it for a request with no answer. */
+    function droppedRequest(): Promise<Response> {
+      return Promise.reject(
+        new TypeError('fetch failed', {cause: new Error('read ECONNRESET')}),
+      );
+    }
+
+    it('#2927: a download whose requests get no answer fails after its four tries, each naming the address and the reason', async () => {
+      const failure =
+        'https://example.invalid/a: fetch failed (read ECONNRESET)';
+      await rejects(
+        downloadWithRetry('https://example.invalid/a', droppedRequest, () =>
+          Promise.resolve(),
+        ),
+        {
+          message: `try 1: ${failure}; try 2: ${failure}; try 3: ${failure}; try 4: ${failure}`,
+        },
+      );
+    });
+
+    it("#2927: a private asset whose signed address gets no answer names the asset's address, never the signed one", async () => {
+      const failure = await assetFailureOf('secret', (address, init) =>
+        init === undefined
+          ? droppedRequest()
+          : Promise.resolve(
+              new Response(null, {
+                status: 302,
+                headers: {location: 'https://signed.example.invalid/x?sig=1'},
+              }),
+            ),
+      );
+      const each =
+        'https://api.example.invalid/assets/41 (its signed address): fetch failed (read ECONNRESET)';
+      deepStrictEqual(
+        [failure, failure.includes('signed.example.invalid')],
+        [
+          `try 1: ${each}; try 2: ${each}; try 3: ${each}; try 4: ${each}`,
+          false,
+        ],
+      );
+    });
 
     it('tooling-111: a private asset is asked for with the token, and its signed address is fetched without it', async () => {
       const asked: unknown[] = [];
