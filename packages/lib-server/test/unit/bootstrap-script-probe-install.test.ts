@@ -841,6 +841,39 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(existsSync(parameters.archivePath), false);
     });
 
+    it('V4 (card #2941): a copied archive is removed when the install leaves because the server is installed already', () => {
+      runScript(host, single('install'), parametersFor());
+      const parameters = copiedParameters(true);
+      deepStrictEqual(
+        [
+          statusOf(host, single('install'), parameters),
+          existsSync(parameters.archivePath),
+        ],
+        ['Ok', false],
+      );
+    });
+
+    it('V4 (card #2941): a copied archive the install still needs is unpacked before it is removed', () => {
+      const parameters = copiedParameters(true);
+      deepStrictEqual(
+        [
+          statusOf(host, single('install'), parameters),
+          existsSync(
+            path.join(
+              host.home,
+              '.server-data',
+              'bin',
+              'abc1230000000000000000000000000000000000',
+              'bin',
+              'launcher',
+            ),
+          ),
+          existsSync(parameters.archivePath),
+        ],
+        ['Ok', true, false],
+      );
+    });
+
     /** The install folder of the fixture's commit, where a bootstrap archive goes. */
     function bootstrapFolder(): string {
       return path.join(

@@ -444,6 +444,21 @@ function installFrom(archive: string): ScriptParameters {
   return {...parametersFor(), archiveFormat: 'zip', archivePath: archive};
 }
 
+/** Puts a launcher holding `kept` where the install of `parameters` looks for one, and gives its path. */
+function installedLauncher(
+  host: PowershellHost,
+  parameters: ScriptParameters,
+): string {
+  const launcher = path.join(
+    installFolder(host, parameters),
+    'bin',
+    'launcher',
+  );
+  mkdirSync(path.dirname(launcher), {recursive: true});
+  writeFileSync(launcher, 'kept');
+  return launcher;
+}
+
 /** Where the install puts the server of the parameters on the host. */
 function installFolder(
   host: PowershellHost,
@@ -675,13 +690,7 @@ describe('the PowerShell install, run under pwsh', function () {
   it('F-2403: a server already installed is kept, and nothing is unpacked', () => {
     const host = powershellHost();
     const parameters = installFrom(path.join(host.root, 'absent.zip'));
-    const launcher = path.join(
-      installFolder(host, parameters),
-      'bin',
-      'launcher',
-    );
-    mkdirSync(path.dirname(launcher), {recursive: true});
-    writeFileSync(launcher, 'kept');
+    const launcher = installedLauncher(host, parameters);
     deepStrictEqual(
       [
         factsOf(runOn(host, single('install'), parameters), []),
@@ -713,6 +722,20 @@ describe('the PowerShell install, run under pwsh', function () {
         [],
       ),
       {status: 'UnpackFailed'},
+    );
+  });
+
+  it('F-2405 (card #2941): an archive the step was told to remove is removed when the server is installed already', () => {
+    const host = powershellHost();
+    const archive = serverArchive(host, 'bin/launcher');
+    const parameters = {...installFrom(archive), removeArchive: true};
+    installedLauncher(host, parameters);
+    deepStrictEqual(
+      [
+        factsOf(runOn(host, single('install'), parameters), []),
+        existsSync(archive),
+      ],
+      [{status: 'Ok'}, false],
     );
   });
 
