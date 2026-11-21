@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  differenceText,
   lastLines,
   outputOrReason,
 } from '../tests/acceptance/windows/command-text.ts';
@@ -53,5 +54,45 @@ describe('the text of a command that explains a failure (card #2900)', () => {
       100,
     );
     deepStrictEqual(text.length <= 100 * 243 + 100 + 20, true);
+  });
+
+  it('#2900: two reads that differ give the failure text with both reads, the events, the labelled containers and the log, in that order', () => {
+    const text = differenceText(
+      {states: ['abc|running|2026-11-20T05:01:20Z'], seconds: 1000},
+      {states: ['abc|exited|2026-11-20T05:01:20Z'], seconds: 1037},
+      '1030 die abc c43\n1031 stop abc c43',
+      'abc c43 Exited (137) run=77',
+      ['a log line', 'another'],
+    );
+    deepStrictEqual(text.split('\n'), [
+      'the states read at 1000: ["abc|running|2026-11-20T05:01:20Z"]',
+      'the states read at 1037: ["abc|exited|2026-11-20T05:01:20Z"]',
+      'the container events between them:',
+      '1030 die abc c43',
+      '1031 stop abc c43',
+      "every container with the folder's label, of any run:",
+      'abc c43 Exited (137) run=77',
+      "the containers log since the row's mark:",
+      'a log line',
+      'another',
+    ]);
+  });
+
+  it('#2900: no event, an unreadable list and an empty log are told as words under their headings', () => {
+    const text = differenceText(
+      {states: [], seconds: 1},
+      {states: ['abc|running|x'], seconds: 2},
+      '',
+      'could not be read: Error: timed out',
+      [],
+    );
+    deepStrictEqual(text.split('\n').slice(2), [
+      'the container events between them:',
+      'none',
+      "every container with the folder's label, of any run:",
+      'could not be read: Error: timed out',
+      "the containers log since the row's mark:",
+      'none',
+    ]);
   });
 });

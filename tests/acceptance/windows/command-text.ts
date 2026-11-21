@@ -50,3 +50,41 @@ export function lastLines(lines: readonly string[], limit: number): string {
     '\n',
   );
 }
+
+/** One read of a folder's container states, with the seconds since the epoch it was made at. */
+export interface StatesRead {
+  states: readonly string[];
+  seconds: number;
+}
+
+/** The most lines of the events and of the labelled containers that a difference shows. */
+const LISTED_LINES = 60;
+
+/** The most lines of the containers log that a difference shows. */
+const LOGGED_LINES = 100;
+
+/** `lines` as `lastLines` shows them, or the word `none` for no line at all. */
+function listed(text: string, limit: number): string {
+  return text === '' ? 'none' : lastLines(text.split('\n'), limit);
+}
+
+/**
+ * The failure text for two reads of a folder's container states that differ: both reads with their times, the Docker
+ * events between them, every container with the folder's label of any run, and the containers log since the row's
+ * mark. A list that is empty is told as `none` and one that could not be read as its reason, each under its heading.
+ */
+export function differenceText(
+  first: StatesRead,
+  second: StatesRead,
+  events: string,
+  labelled: string,
+  logLines: readonly string[],
+): string {
+  return [
+    `the states read at ${String(first.seconds)}: ${JSON.stringify(first.states)}`,
+    `the states read at ${String(second.seconds)}: ${JSON.stringify(second.states)}`,
+    `the container events between them:\n${listed(events, LISTED_LINES)}`,
+    `every container with the folder's label, of any run:\n${listed(labelled, LISTED_LINES)}`,
+    `the containers log since the row's mark:\n${lastLines(logLines, LOGGED_LINES) || 'none'}`,
+  ].join('\n');
+}
