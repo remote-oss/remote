@@ -10,6 +10,7 @@ import {
   appendScript,
   closeWindow,
   connectedWithin,
+  inWindow,
   onHost,
   openWindow,
   readUserSettings,
@@ -43,7 +44,13 @@ import {
   INSTALL_MILLISECONDS,
   platformAnswer,
 } from '../windows/maintenance.ts';
-import {notificationButtons, notificationCentre} from '../windows/renderer.ts';
+import {
+  notificationButtons,
+  notificationCentre,
+  settingControlOf,
+  settingRow,
+  statusItem,
+} from '../windows/renderer.ts';
 import {keepingSettings} from '../windows/tunnel-support.ts';
 import {
   failedOn,
@@ -52,6 +59,9 @@ import {
 } from '../windows/troubleshooting-support.ts';
 
 const ALIAS = 'harness';
+
+/** The setting whose value is the mode. */
+const SETTING = 'remote.SSH.localServerDownload';
 
 /** The reason of the failure dialog when the archive is missing. */
 const MISSING = missingReason(ALIAS);
@@ -462,5 +472,31 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
         }
       },
     );
+  });
+
+  it('F-2406 AC-18 (c2946-flagged): with the mode on, the Settings editor shows "auto" for the setting and settings.json carries one warning for the undeclared value', async () => {
+    await withSettings({}, async () => {
+      await inWindow('local', 'workbench.action.openSettings', SETTING);
+      await waitFor(
+        'the setting on the Settings editor list',
+        async () => (await settingRow('local')) !== undefined,
+        60_000,
+      );
+      const editorShows = await settingControlOf('local');
+      await inWindow('local', 'workbench.action.openSettingsJson');
+      await waitFor(
+        'a problem in settings.json',
+        async () =>
+          /\d/u.test((await statusItem('local', 'status.problems')).text),
+        60_000,
+      ).catch(() => undefined);
+      deepStrictEqual(
+        {
+          editorShows,
+          problems: (await statusItem('local', 'status.problems')).text,
+        },
+        {editorShows: 'auto', problems: '0 1'},
+      );
+    });
   });
 });
