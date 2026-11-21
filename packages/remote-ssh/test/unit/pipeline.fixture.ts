@@ -298,6 +298,7 @@ export function steps(
   }
   return {
     migrateLegacySettings: () => Promise.resolve(),
+    warnOfDownloadMode: () => undefined,
     checkConfigFile: () =>
       note('checkConfigFile', {kind: 'done', value: undefined}),
     checkStartSettings: () =>

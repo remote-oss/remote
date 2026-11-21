@@ -31,6 +31,12 @@ export const LICENCE_HOSTS: readonly string[] = [
   'vscode.download.prss.microsoft.com',
 ];
 
+/**
+ * The name of a manual bootstrap's server archive: the file the user puts in the client's bootstrap folder, and the
+ * file the install puts into the install folder on the host (F-2406 BR-4, BR-8).
+ */
+export const MANUAL_BOOTSTRAP_ARCHIVE = 'vscode-server.tar.gz';
+
 /** The page of the server licence terms, for an editor whose product.json names none. */
 export const SERVER_TERMS_URL = 'https://aka.ms/vscode-server-license';
 
