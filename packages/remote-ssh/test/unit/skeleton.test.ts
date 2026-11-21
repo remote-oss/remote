@@ -929,6 +929,61 @@ describe('the manifest rows of slices 1 and 2', () => {
     );
   });
 
+  /** The two deprecation messages: where each is in the manifest, and its English text, as the reference spells it. */
+  const DEPRECATION_MESSAGES = [
+    {
+      setting: 'remote.SSH.windowsRemotes',
+      field: 'deprecationMessage',
+      key: 'setting.windowsRemotes.deprecationMessage',
+      text: 'Deprecated: Please use `#remote.SSH.remotePlatorm#` instead',
+    },
+    {
+      setting: 'remote.SSH.allowLocalServerDownload',
+      field: 'markdownDeprecationMessage',
+      key: 'setting.allowLocalServerDownload.deprecationMessage',
+      text: 'Deprecated, please use `#remote.SSH.localServerDownload#`',
+    },
+  ] as const;
+
+  it('F-2002 AC-14 (card #2961, ruling-2880-windowsremotes-deprecation): the deprecation message of windowsRemotes is a key of the string table whose English text keeps the reference’s own misspelling remotePlatorm, letter for letter', () => {
+    const message = properties['remote.SSH.windowsRemotes']?.deprecationMessage;
+    deepStrictEqual(
+      [
+        message,
+        resolved(message),
+        strings['setting.windowsRemotes.deprecationMessage'],
+      ],
+      [
+        '%setting.windowsRemotes.deprecationMessage%',
+        'Deprecated: Please use `#remote.SSH.remotePlatorm#` instead',
+        'Deprecated: Please use `#remote.SSH.remotePlatorm#` instead',
+      ],
+    );
+  });
+
+  it('F-2002 AC-14, AC-6 (card #2961): each deprecation message is a key of the string table, and a non-English table gives no other text than the English, so the message falls back to it in every language', () => {
+    const rows = DEPRECATION_MESSAGES.map(each => {
+      const schema: Record<string, unknown> = properties[each.setting] ?? {};
+      const fallbacks = [...nlsTables()]
+        .filter(([file]) => file !== 'package.nls.json')
+        .map(([file, table]) => [
+          file,
+          (table[each.key] as string | undefined) ?? strings[each.key],
+        ]);
+      return [
+        schema[each.field],
+        strings[each.key],
+        fallbacks
+          .filter(([, text]) => text !== each.text)
+          .map(([file]) => file),
+      ];
+    });
+    deepStrictEqual(
+      rows,
+      DEPRECATION_MESSAGES.map(each => [`%${each.key}%`, each.text, []]),
+    );
+  });
+
   it('F-2410 AC-33: Kill Local Connection Server For Host... is in the palette on the useLocalServer key and the stand-down key alone, so the server on a socket does not hide it', () => {
     deepStrictEqual(
       manifest.contributes.menus.commandPalette?.find(
