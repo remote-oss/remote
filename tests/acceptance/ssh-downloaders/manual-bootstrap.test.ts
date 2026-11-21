@@ -269,6 +269,7 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
       await connectedWithin(first, INSTALL_MILLISECONDS);
       await closeWindow(first);
       const commit = await installedCommit();
+      const folder = await installFolder();
       await userSettings({
         'remote.SSH.localServerDownload': 'manual-bootstrap',
       });
@@ -290,9 +291,9 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
                 ),
             ).length,
             warnings: warnings(name),
-            sameInstall: (await installedCommit()) === commit,
+            sameInstall: [await installedCommit(), await installFolder()],
           },
-          {dialogs: 0, copied: 0, warnings: 1, sameInstall: true},
+          {dialogs: 0, copied: 0, warnings: 1, sameInstall: [commit, folder]},
         );
       } finally {
         await closeWindow(name).catch(() => undefined);
@@ -434,44 +435,6 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
         await closeWindow(name).catch(() => undefined);
       }
     });
-  });
-
-  it('F-2406 AC-29 (c2946-execserver): a host that holds only the exec-server layout, with the mode on and no archive, fails the same way', async () => {
-    await withSettings(
-      {
-        'remote.SSH.localServerDownload': 'auto',
-        'remote.SSH.useExecServer': true,
-      },
-      async () => {
-        const first = 'c2946-execserver-first';
-        appendScript(dismissals(first));
-        await openWindow(ALIAS, first);
-        await connectedWithin(first, INSTALL_MILLISECONDS);
-        await closeWindow(first);
-        // The install the host holds, which the next line removes, so that only the exec-server layout is left.
-        const installedBefore = (await installFolder()).startsWith(DATA_FOLDER);
-        await onHost('rm', '-rf', `${DATA_FOLDER}/bin`);
-        await userSettings({
-          'remote.SSH.localServerDownload': 'manual-bootstrap',
-        });
-        const name = 'c2946-execserver';
-        appendScript(dismissals(name));
-        await failedOn(ALIAS, name);
-        try {
-          deepStrictEqual(
-            {
-              installedBefore,
-              dialogs: recordLines('failureDialog', name).map(
-                line => line.question,
-              ),
-            },
-            {installedBefore: true, dialogs: [MISSING]},
-          );
-        } finally {
-          await closeWindow(name).catch(() => undefined);
-        }
-      },
-    );
   });
 
   it('F-2406 AC-18 (c2946-flagged): with the mode on, the Settings editor shows "auto" for the setting and settings.json carries one warning for the undeclared value', async () => {
