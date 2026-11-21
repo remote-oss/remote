@@ -432,7 +432,10 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(readdirSync(binFolder).sort(), [current, held].sort());
     });
 
-    it('ruling-2913-lock-one-meaning: the server a launch starts holds no descriptor of the start lock or of the install lock, so no lock outlives the step', () => {
+    it('ruling-2913-lock-one-meaning: the server a launch starts holds no descriptor of the start lock or of the install lock, so no lock outlives the step', function () {
+      if (!existsSync('/proc/self/fd')) {
+        this.skip();
+      }
       useHost(['wget', 'flock']);
       runScript(host, single('install'), flockParameters());
       const lock = path.join(
@@ -450,10 +453,11 @@ describe('the POSIX bootstrap script', () => {
         'utf8',
       ).trim();
       deepStrictEqual(
-        ['8', '9'].map(descriptor =>
+        // Descriptor 1 is the server's log: it is there while the process is alive, so the two absences are not a dead pid's.
+        ['1', '8', '9'].map(descriptor =>
           existsSync(`/proc/${serverPid}/fd/${descriptor}`),
         ),
-        [false, false],
+        [true, false, false],
       );
     });
 
