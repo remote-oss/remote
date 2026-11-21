@@ -3604,6 +3604,31 @@ export interface SettingsTab {
   selected: boolean;
 }
 
+/**
+ * Selects the Settings editor's scope tab labelled exactly `label` in window `name`, as a click on its label does. It
+ * fails naming the tabs found when there is no such tab.
+ */
+export async function settingsTab(name: string, label: string): Promise<void> {
+  const missing = await evaluate<string | null>(
+    name,
+    `(() => {
+  const root = document.querySelector('.settings-editor');
+  const tabs = [...(root?.querySelectorAll('*') ?? [])].filter(each => each.children.length === 0 && /^(User|Remote \\[.*\\]|Workspace)$/.test((each.textContent ?? '').trim()) && each.closest('.settings-header') !== null);
+  const wanted = tabs.filter(each => (each.textContent ?? '').trim() === ${JSON.stringify(label)});
+  if (wanted.length !== 1) {
+    return 'no ' + ${JSON.stringify(label)} + ' tab among ' + JSON.stringify(tabs.map(each => (each.textContent ?? '').trim()));
+  }
+  (wanted[0].closest('.action-item, [role="tab"]') ?? wanted[0]).dispatchEvent(
+    new MouseEvent('click', {bubbles: true}),
+  );
+  return null;
+})()`,
+  );
+  if (missing !== null) {
+    throw new Error(`window ${name}: ${missing}`);
+  }
+}
+
 /** The scope tabs of the Settings editor open in window `name`, in the order shown. */
 export async function settingsTabs(name: string): Promise<SettingsTab[]> {
   return evaluate<SettingsTab[]>(
