@@ -432,6 +432,31 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(readdirSync(binFolder).sort(), [current, held].sort());
     });
 
+    it('ruling-2913-lock-one-meaning: the server a launch starts holds no descriptor of the start lock or of the install lock, so no lock outlives the step', () => {
+      useHost(['wget', 'flock']);
+      runScript(host, single('install'), flockParameters());
+      const lock = path.join(
+        installFolder(host),
+        'boot-lock.user.abc1230000000000000000000000000000000000',
+      );
+      runScript(host, single('start'), flockParameters(), {
+        rewriteScript: text => `exec 9>>'${lock}'\n${text}`,
+      });
+      const serverPid = readFileSync(
+        path.join(
+          dataFolder(),
+          '.abc1230000000000000000000000000000000000.pid',
+        ),
+        'utf8',
+      ).trim();
+      deepStrictEqual(
+        ['8', '9'].map(descriptor =>
+          existsSync(`/proc/${serverPid}/fd/${descriptor}`),
+        ),
+        [false, false],
+      );
+    });
+
     it('ruling-2913-lock-one-meaning: the start lock is in the data folder under an internal name, not a vscode-remote-lock file', () => {
       useHost(['wget', 'flock']);
       runScript(host, single('install'), flockParameters());
