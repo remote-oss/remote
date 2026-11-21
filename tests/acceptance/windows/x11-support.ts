@@ -16,6 +16,10 @@ import {
   variable,
   waitFor,
 } from './harness.ts';
+import {
+  contributionsAfterRuns,
+  contributionsFailure,
+} from './contribution-polling.ts';
 import {freshHost} from './maintenance.ts';
 import {PLATFORMS} from './tunnel-support.ts';
 
@@ -122,22 +126,40 @@ export async function inDebugger(
   return writtenAt(file);
 }
 
-/** The text "Terminal: Show Environment Contributions" shows in window `name`, once it is the active editor. */
+/** How long the contributions are waited for, and how long one run's list is read before the command runs again. */
+const CONTRIBUTIONS_MILLISECONDS = 30_000;
+const CONTRIBUTIONS_RUN_MILLISECONDS = 3000;
+
+/**
+ * The text "Terminal: Show Environment Contributions" shows in window `name`, once it carries a display. The command is run
+ * again every few seconds until it does, since its list is written when it runs; a wait that ends without it fails with the
+ * last text and what each run gave.
+ */
 export async function environmentContributions(name: string): Promise<string> {
-  await inWindow(
-    name,
-    'workbench.action.terminal.showEnvironmentContributions',
-  );
-  let text = '';
-  await waitFor(
-    'the environment contributions',
-    async () => {
-      text = (await activeEditorTextOf(name)) ?? '';
-      return text.includes('DISPLAY');
+  const outcome = await contributionsAfterRuns({
+    show: () =>
+      inWindow(name, 'workbench.action.terminal.showEnvironmentContributions'),
+    read: () => activeEditorTextOf(name),
+    wanted: 'DISPLAY',
+    milliseconds: CONTRIBUTIONS_MILLISECONDS,
+    perRunMilliseconds: CONTRIBUTIONS_RUN_MILLISECONDS,
+    everyMilliseconds: 250,
+    environment: {
+      now: Date.now,
+      pause: milliseconds =>
+        new Promise(resolve => setTimeout(resolve, milliseconds)),
     },
-    30_000,
-  );
-  return text;
+  });
+  if (!outcome.found) {
+    throw new Error(
+      contributionsFailure(
+        outcome,
+        'DISPLAY',
+        CONTRIBUTIONS_MILLISECONDS / 1000,
+      ),
+    );
+  }
+  return outcome.text;
 }
 
 /** The entries of the extension's own section of the environment contributions `text` shows, or none without a section. */
