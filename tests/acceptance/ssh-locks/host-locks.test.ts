@@ -15,6 +15,7 @@ import {
   installedWith,
   LINKED_LOCKS,
   TEMPORARY_LOCK,
+  withoutStaleLocks,
 } from './install-support.ts';
 import {lookAtHost} from './lock-listing.ts';
 
@@ -27,6 +28,7 @@ describe('the host lock files (card #2820, F-2408)', function () {
 
   it('c2820-listing-sees: the listing sees a lock-named file where one is, with its size and link count, whichever find and stat the host has, so an empty list means none', async () => {
     const name = '/tmp/vscode-remote-lock.harness.c2820probe';
+    await withoutStaleLocks();
     await onHost('sh', '-c', `: > ${name}`);
     try {
       deepStrictEqual((await lookAtHost()).locks, [`${name}|0|1`]);
