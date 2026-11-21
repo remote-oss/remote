@@ -98,6 +98,72 @@ describe('the text of a command that explains a failure (card #2900)', () => {
     ]);
   });
 
+  it('#2900: the caps inside the failure text: 500 events and 500 labelled lines give the last 60 of each after a count line, and 1000 log lines the last 100', () => {
+    const events = Array.from(
+      {length: 500},
+      (each, index) => `event ${String(index)}`,
+    ).join('\n');
+    const labelled = Array.from(
+      {length: 500},
+      (each, index) => `container ${String(index)}`,
+    ).join('\n');
+    const logLines = Array.from(
+      {length: 1000},
+      (each, index) => `log ${String(index)}`,
+    );
+    const lines = differenceText(
+      {states: [], seconds: 1},
+      {states: [], seconds: 2},
+      events,
+      labelled,
+      logLines,
+    ).split('\n');
+    function heading(start: string): number {
+      return lines.findIndex(line => line.startsWith(start));
+    }
+    const eventsAt = heading('the container events');
+    const labelledAt = heading("every container with the folder's label");
+    const logAt = heading("the containers log since the row's mark");
+    deepStrictEqual(
+      [
+        lines.slice(eventsAt + 1, labelledAt),
+        lines.slice(labelledAt + 1, logAt),
+        lines.slice(logAt + 1),
+      ].map(section => [
+        section.length,
+        section[0],
+        section[1],
+        section.at(-1),
+      ]),
+      [
+        [61, 'and 440 more', 'event 440', 'event 499'],
+        [61, 'and 440 more', 'container 440', 'container 499'],
+        [101, 'and 900 more', 'log 900', 'log 999'],
+      ],
+    );
+  });
+
+  it('#2900: a line of more than 240 characters in the events, the labelled containers or the log is cut to 240 characters and marked', () => {
+    const long = 'z'.repeat(1000);
+    const lines = differenceText(
+      {states: [], seconds: 1},
+      {states: [], seconds: 2},
+      long,
+      long,
+      [long],
+    ).split('\n');
+    deepStrictEqual(
+      lines
+        .filter(line => line.startsWith('zzz'))
+        .map(line => [line.length, line.endsWith('...')]),
+      [
+        [243, true],
+        [243, true],
+        [243, true],
+      ],
+    );
+  });
+
   describe('the docker commands that explain a difference, against a real daemon', () => {
     before(async function () {
       if (
