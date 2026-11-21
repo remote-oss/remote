@@ -16,6 +16,7 @@ import {
   stop,
   type Timer,
 } from 'lib-helper';
+import type {SessionLock} from 'lib-host';
 import type {EffectiveOptions} from '../config/effective.ts';
 import type {FailureHint, FailureReason} from '../diagnostics/classify.ts';
 import type {FailureKind} from '../diagnostics/rules.ts';
@@ -344,6 +345,8 @@ export interface SessionRun {
   inputBase64: string | null;
   /** How long the script may take once it has started, in milliseconds. */
   deadlineMilliseconds: number;
+  /** The session-wide host lock of this run; absent for a run that takes none. */
+  sessionLock?: SessionLock;
 }
 
 /** How a script run on the shared session ended. */
@@ -495,7 +498,22 @@ export class SharedConnection {
     const runId = this.lastRunId;
     this.lineListeners.set(runId, onLine);
     const outcome = await this.lease.request(
-      {type: 'runScript', runId, ...script},
+      {
+        type: 'runScript',
+        runId,
+        script: script.script,
+        environment: script.environment,
+        inputBase64: script.inputBase64,
+        deadlineMilliseconds: script.deadlineMilliseconds,
+        ...(script.sessionLock === undefined
+          ? {}
+          : {
+              sessionLock: {
+                path: script.sessionLock.path,
+                action: script.sessionLock.action,
+              },
+            }),
+      },
       waitMilliseconds,
     );
     this.lineListeners.delete(runId);

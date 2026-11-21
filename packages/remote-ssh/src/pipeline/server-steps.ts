@@ -536,7 +536,11 @@ export function createServerSteps(
           dependencies.socketMode(),
         ),
         dependencies.policy,
-        {lockLoop: dependencies.lockLoop, logger: dependencies.logger},
+        {
+          lockLoop: dependencies.lockLoop,
+          logger: dependencies.logger,
+          sessionLock: true,
+        },
         cancellation,
       );
       if (outcome.kind === 'failed') {

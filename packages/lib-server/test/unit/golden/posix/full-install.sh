@@ -115,10 +115,16 @@ lock_take() {
     fi
   fi
   if [ "$(lock_method)" = flock ]; then
-    LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2
-    exec 9>>"$LOCK_CANDIDATE"
+    LOCK_SESSION=
+    if ( : >&9 ) 2>/dev/null; then
+      LOCK_SESSION=yes
+    else
+      LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2
+      exec 9>>"$LOCK_CANDIDATE"
+    fi
     if LOCK_ERROR=$(flock -n 9 2>&1); then
       LOCK_ERROR=''
+      [ -z "$LOCK_SESSION" ] || fact server.lockHeld yes
     else
       [ -z "$LOCK_ERROR" ] || return 2
       return 1

@@ -115,10 +115,16 @@ lock_take() {
     fi
   fi
   if [ "$(lock_method)" = flock ]; then
-    LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2
-    exec 9>>"$LOCK_CANDIDATE"
+    LOCK_SESSION=
+    if ( : >&9 ) 2>/dev/null; then
+      LOCK_SESSION=yes
+    else
+      LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2
+      exec 9>>"$LOCK_CANDIDATE"
+    fi
     if LOCK_ERROR=$(flock -n 9 2>&1); then
       LOCK_ERROR=''
+      [ -z "$LOCK_SESSION" ] || fact server.lockHeld yes
     else
       [ -z "$LOCK_ERROR" ] || return 2
       return 1
@@ -302,11 +308,15 @@ if [ ! -x "$INSTALL_DIR/$LAUNCHER" ] && [ -z "$ARCHIVE_PATH" ]; then
   have wget || have curl || finish NoDownloaderAvailable
 fi
 MKDIR_ERROR=$(mkdir -p "$INSTALL_DIR" 2>&1) || write_failed "$INSTALL_DIR" "$MKDIR_ERROR"
+leave_if_installed() {
+  if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then
+    fact server.installDir "$INSTALL_DIR"
+    leave Ok
+  fi
+}
+leave_if_installed
 take_lock_or_finish "$COMMIT"
-if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then
-  fact server.installDir "$INSTALL_DIR"
-  leave Ok
-fi
+leave_if_installed
 prepare_environment
 if [ -n "$ARCHIVE_PATH" ]; then
   ARCHIVE=$ARCHIVE_PATH

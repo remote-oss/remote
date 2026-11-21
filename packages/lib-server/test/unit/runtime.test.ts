@@ -1168,3 +1168,126 @@ describe('prerequisiteDetail (F-0503 7.E1)', () => {
     );
   });
 });
+
+describe('startOrReuse, the host lock of the session', () => {
+  const FLOCK_PLACE: ScriptAnswer = {
+    interpreter: 'posixShell',
+    matches: script => script.includes('lock-path='),
+    lines: ['lock-method=flock', 'lock-path=/tmp/vscode-lock.user.abc123'],
+    ending: {kind: 'exit', status: 0},
+  };
+
+  const RELEASE_ANSWER: ScriptAnswer = {
+    interpreter: 'posixShell',
+    matches: script => script === ':',
+    lines: [],
+    ending: {kind: 'exit', status: 0},
+  };
+
+  /** A start over `channel` of a caller whose shell lives as long as the session, or one whose shell does not. */
+  function startFor(
+    channel: RecordingChannel,
+    sessionLock: boolean,
+  ): Promise<StartOutcome> {
+    return startOrReuse(
+      channel,
+      parametersFor(),
+      OPTIONS,
+      {
+        allowedExtraStartOptions: [],
+        extensionEntries: 'identifiersOnly',
+        requirementsCheck: 'none',
+      },
+      {...dependencies(), sessionLock},
+      NEVER_CANCELLED,
+    );
+  }
+
+  function sessionChannel(output: readonly string[]): RecordingChannel {
+    return new RecordingChannel({
+      identity: 'h',
+      platformHint: 'linux',
+      scripts: [
+        FLOCK_PLACE,
+        {
+          ...answering(output),
+          matches: script => !script.includes('lock-path=') && script !== ':',
+        },
+        RELEASE_ANSWER,
+      ],
+    });
+  }
+
+  /** The session lock each run of the channel carried, in order, with `none` for a run without one. */
+  function lockOfRuns(channel: RecordingChannel): unknown[] {
+    return channel.calls.map(call =>
+      call.operation === 'runScript'
+        ? (call.request.sessionLock ?? 'none')
+        : 'copy',
+    );
+  }
+
+  it('F-2408 BR-4: a host that takes a flock lock has the start run carry the lock path the host named, and a start that ends in a server releases nothing', async () => {
+    const channel = sessionChannel(STARTED);
+    const outcome = await startFor(channel, true);
+    deepStrictEqual(
+      [outcome.kind, lockOfRuns(channel)],
+      [
+        'started',
+        ['none', {path: '/tmp/vscode-lock.user.abc123', action: 'open'}],
+      ],
+    );
+  });
+
+  it('F-2408 BR-4: a start that does not end in a server gives the session lock up', async () => {
+    const channel = sessionChannel(lines('ServerFailedToStart'));
+    const outcome = await startFor(channel, true);
+    deepStrictEqual(
+      [outcome.kind, lockOfRuns(channel)],
+      [
+        'failed',
+        [
+          'none',
+          {path: '/tmp/vscode-lock.user.abc123', action: 'open'},
+          {path: '/tmp/vscode-lock.user.abc123', action: 'release'},
+        ],
+      ],
+    );
+  });
+
+  it('F-2408 BR-4: a caller whose shell does not live as long as the session never asks for the lock place, and a Windows host is never asked', async () => {
+    const without = sessionChannel(STARTED);
+    await startFor(without, false);
+    const windows = new RecordingChannel({
+      identity: 'h',
+      platformHint: 'windows',
+      scripts: [
+        {
+          ...answering(STARTED),
+          interpreter: 'powershell',
+        },
+      ],
+    });
+    await startFor(windows, true);
+    deepStrictEqual(
+      [lockOfRuns(without), lockOfRuns(windows)],
+      [['none'], ['none']],
+    );
+  });
+
+  it('F-2408 BR-4: a host with no flock leaves the start run without a session lock', async () => {
+    const channel = new RecordingChannel({
+      identity: 'h',
+      platformHint: 'linux',
+      scripts: [
+        {...FLOCK_PLACE, lines: ['lock-method=link', 'lock-path=/lock']},
+        {
+          ...answering(STARTED),
+          matches: script => !script.includes('lock-path='),
+        },
+      ],
+    });
+    await startFor(channel, true);
+    deepStrictEqual(lockOfRuns(channel), ['none', 'none']);
+  });
+});
