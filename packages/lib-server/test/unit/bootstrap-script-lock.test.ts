@@ -299,20 +299,28 @@ describe('the POSIX bootstrap script', () => {
       return callsOf(host).filter(call => call.startsWith('flock ')).length;
     }
 
-    it('ruling-2913-lock-only-to-write: an install that finds the server installed takes no lock, even where the lock is busy, and reports none held', () => {
-      useHost(['wget', 'flock']);
+    /** A second install of an installed server under `options`: its status, whether it reported the lock held, and its `flock` runs. */
+    function secondInstall(options: Parameters<typeof blockOf>[3]): unknown {
       runScript(host, single('install'), flockParameters());
       const before = flockRuns();
-      const block = blockOf(host, single('install'), flockParameters(), {
-        environment: {STUB_FLOCK_BUSY: 'yes'},
-      });
-      deepStrictEqual(
-        [
-          block === 'none' ? block : [block.status, block.serverFacts.lockHeld],
-          flockRuns() - before,
-        ],
-        [['Ok', undefined], 0],
+      const block = blockOf(
+        host,
+        single('install'),
+        flockParameters(),
+        options,
       );
+      return [
+        block === 'none' ? block : [block.status, block.serverFacts.lockHeld],
+        flockRuns() - before,
+      ];
+    }
+
+    it('ruling-2913-lock-only-to-write: an install that finds the server installed takes no lock, even where the lock is busy, and reports none held', () => {
+      useHost(['wget', 'flock']);
+      deepStrictEqual(secondInstall({environment: {STUB_FLOCK_BUSY: 'yes'}}), [
+        ['Ok', undefined],
+        0,
+      ]);
     });
 
     it('ruling-2913-lock-only-to-write: an install that has to install still takes the lock, and a busy lock ends it as LockBusy', () => {
@@ -332,6 +340,22 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(
         [startFacts(block), flockRuns() - before],
         [['Ok', 'yes', undefined], 0],
+      );
+    });
+
+    it('ruling-2913-lock-only-to-write: an install that waited for the lock and finds the server installed meanwhile leaves Ok without installing, after taking the lock once', () => {
+      useHost(['wget', 'flock']);
+      deepStrictEqual(
+        secondInstall({
+          // The launcher is out of sight until the lock is taken, as when another window installed while the step waited.
+          rewriteScript: text =>
+            text.replace(
+              '\nleave_if_installed\ntake_lock_or_finish "$COMMIT"\n',
+              '\nmv "$INSTALL_DIR/$LAUNCHER" "$INSTALL_DIR/$LAUNCHER.away"\nleave_if_installed\ntake_lock_or_finish "$COMMIT"\nmv "$INSTALL_DIR/$LAUNCHER.away" "$INSTALL_DIR/$LAUNCHER"\n',
+            ),
+        }),
+        // The first check did not see the server, so the lock was taken once and the second check found it.
+        [['Ok', undefined], 1],
       );
     });
 
