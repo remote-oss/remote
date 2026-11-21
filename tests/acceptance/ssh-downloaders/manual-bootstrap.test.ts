@@ -101,6 +101,25 @@ function copiedByScp(name: string): boolean {
   );
 }
 
+/** Whether `lines` show an archive copied by scp or the missing bootstrap file asked for. */
+function asksForTheArchive(
+  lines: ReadonlyArray<{surface: string; question: string}>,
+): {
+  copied: boolean;
+  asked: boolean;
+} {
+  return {
+    copied: lines.some(
+      line => line.surface === 'progress' && line.question.includes(COPY_STAGE),
+    ),
+    asked: lines.some(
+      line =>
+        (line.surface === 'notice' || line.surface === 'failureDialog') &&
+        line.question.includes('Expected tarball'),
+    ),
+  };
+}
+
 /** The text a bootstrap file holds that is no server archive: 22 bytes. */
 const NOT_AN_ARCHIVE = 'not a server archive.\n';
 
@@ -634,9 +653,10 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
     });
   });
 
-  it('F-2406 AC-28 (c2948-arch-again): after that failure and a Retry with the bootstrap file removed, no archive is asked for or copied and the attempt fails the same way', async () => {
+  it('F-2406 AC-28 (c2948-arch-again): after that failure, a Retry and a new window with the bootstrap file removed ask for no archive and copy none, and each fails the same way', async () => {
     await withSettings({}, async () => {
       const name = 'c2948-arch-again';
+      const again = `${name}-new`;
       await placeForeignServerArchive();
       appendScript([
         {
@@ -647,6 +667,7 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
           after: `${name}-removed`,
         },
         ...dismissals(name),
+        ...dismissals(again),
       ]);
       await openWindow(ALIAS, name);
       try {
@@ -663,35 +684,35 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
           () => recordLines('failureDialog', name).length >= 2,
           INSTALL_MILLISECONDS,
         );
-        const since = recordLines(undefined, name).slice(mark);
+        const retried = {
+          dialogs: recordLines('failureDialog', name).map(
+            line => line.question,
+          ),
+          ...asksForTheArchive(recordLines(undefined, name).slice(mark)),
+        };
+        await closeWindow(name);
+        await failedOn(ALIAS, again);
+        const opened = {
+          dialogs: recordLines('failureDialog', again).map(
+            line => line.question,
+          ),
+          ...asksForTheArchive(recordLines(undefined, again)),
+        };
+        const failed = reason(ALIAS, 'The VS Code Server failed to start.');
         deepStrictEqual(
+          {retried, opened},
           {
-            dialogs: recordLines('failureDialog', name).map(
-              line => line.question,
-            ),
-            copied: since.some(
-              line =>
-                line.surface === 'progress' &&
-                line.question.includes(COPY_STAGE),
-            ),
-            asked: since.some(
-              line =>
-                (line.surface === 'notice' ||
-                  line.surface === 'failureDialog') &&
-                line.question.includes('Expected tarball'),
-            ),
-          },
-          {
-            dialogs: [
-              reason(ALIAS, 'The VS Code Server failed to start.'),
-              reason(ALIAS, 'The VS Code Server failed to start.'),
-            ],
-            copied: false,
-            asked: false,
+            retried: {
+              dialogs: [failed, failed],
+              copied: false,
+              asked: false,
+            },
+            opened: {dialogs: [failed], copied: false, asked: false},
           },
         );
       } finally {
         await closeWindow(name).catch(() => undefined);
+        await closeWindow(again).catch(() => undefined);
       }
     });
   });
