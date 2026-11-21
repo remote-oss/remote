@@ -353,7 +353,9 @@ function portsOf(
       port: seen.lockFiles,
       folder: '/tmp',
       clock: {now: () => seen.clock.now(), wait: () => Promise.resolve()},
-      held: new HeldClientLocks(() => undefined),
+      held: new HeldClientLocks(path => {
+        void seen.lockFiles.remove(path);
+      }),
     },
     cliPath: {
       local: seen.cliLocal,

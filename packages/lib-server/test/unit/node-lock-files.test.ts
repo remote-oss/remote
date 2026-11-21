@@ -49,6 +49,15 @@ describe('the client lock files on Node.js (V5, F-2408 BR-6)', () => {
     });
   });
 
+  it('BR-6: a create has made the file by the time it returns, before its promise settles', async () => {
+    await inFolder(async folder => {
+      const file = path.join(folder, 'a.lock');
+      const creating = nodeLockFiles.createExclusive(file);
+      const madeOnReturn = existsSync(file);
+      deepStrictEqual([madeOnReturn, await creating], [true, 'created']);
+    });
+  });
+
   it('BR-6: a create in a folder that does not exist rejects with the error', async () => {
     await inFolder(async folder => {
       deepStrictEqual(

@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  logLinesBetween,
   reconnectionGlance,
   reconnectionState,
   type StateReads,
@@ -31,6 +32,10 @@ function reads(replaced: Partial<StateReads> = {}): StateReads {
       '2026-11-19 07:00:00.000 [info] a line about nothing',
       '2026-11-19 07:00:01.000 [info] Error handled: Not showing a notification for the error.',
     ],
+    timeline: () => [
+      '[+0.00 s] dialog none; notifications []',
+      '[+4.25 s] dialog "Cannot reconnect"; notifications []',
+    ],
     ...replaced,
   };
 }
@@ -57,6 +62,11 @@ describe('the state a window showed when its wait for core’s dialog timed out 
         '[+3.0 s] activated',
         'the lines of the window’s renderer log about the reconnection:',
         '2026-11-19 07:00:01.000 [info] Error handled: Not showing a notification for the error.',
+        'the dialog and notifications of the window, every change between reads taken every 250 ms:',
+        '[+0.00 s] dialog none; notifications []',
+        '[+4.25 s] dialog "Cannot reconnect"; notifications []',
+        'the window’s renderer log from the end to 30 s after it, every line:',
+        '',
         'the last lines of the connection log since then:',
         'kept',
       ].join('\n'),
@@ -101,6 +111,9 @@ describe('the state a window showed when its wait for core’s dialog timed out 
         rendererLines: () => {
           throw new Error('no renderer log');
         },
+        timeline: () => {
+          throw new Error('no timeline');
+        },
       }),
       'win',
       0,
@@ -122,6 +135,10 @@ describe('the state a window showed when its wait for core’s dialog timed out 
       'the window’s agent, activated or deactivated (time from the end):',
       '(unreadable: Error: no events)',
       'the lines of the window’s renderer log about the reconnection:',
+      '(unreadable: Error: no renderer log)',
+      'the dialog and notifications of the window, every change between reads taken every 250 ms:',
+      '(unreadable: Error: no timeline)',
+      'the window’s renderer log from the end to 30 s after it, every line:',
       '(unreadable: Error: no renderer log)',
       'the last lines of the connection log since then:',
       '(unreadable: Error: no log file)',
@@ -204,5 +221,81 @@ describe('the state a window showed when its wait for core’s dialog timed out 
     );
     await new Promise(resolve => setTimeout(resolve, 60));
     deepStrictEqual(text.includes('(no answer in 0.01 s)'), true);
+  });
+});
+
+describe('the renderer log of the 30 s after the end, unfiltered (card #2753)', () => {
+  const LINES = [
+    '2026-11-19 07:00:00.000 [info] before the end',
+    '2026-11-19 07:00:01.500 [info] after the end',
+    'continued: an unstamped line after a kept one',
+    '2026-11-19 07:00:31.500 [info] past 30 s',
+    'continued: an unstamped line after a dropped one',
+    'no stamp at all, after a dropped one',
+  ];
+  const ENDED_AT = Date.parse('2026-11-19T07:00:01Z');
+
+  it('#2753: the lines between the end and 30 s after it, with the unstamped lines that follow a kept one', () => {
+    deepStrictEqual(
+      logLinesBetween(LINES, ENDED_AT, ENDED_AT + 30_000, 80, 240),
+      [
+        '2026-11-19 07:00:01.500 [info] after the end',
+        'continued: an unstamped line after a kept one',
+      ],
+    );
+  });
+
+  it('#2753: the last lines of the cap, each cut at the width', () => {
+    deepStrictEqual(
+      logLinesBetween(LINES, ENDED_AT, ENDED_AT + 30_000, 1, 10),
+      ['continued:'],
+    );
+  });
+});
+
+describe('what a pass prints and what only a failure explains (card #2753)', () => {
+  const TIMELINE_TITLE = 'the dialog and notifications of the window';
+  const UNFILTERED_TITLE =
+    'the window’s renderer log from the end to 30 s after it';
+
+  it('#2753: the glance that a passing row prints has neither the timeline nor the unfiltered renderer log, and the failure’s explanation has both', async () => {
+    const sample = reads();
+    const glance = await reconnectionGlance(sample, 1000);
+    const explanation = await reconnectionState(sample, 'win', 0, 1000);
+    deepStrictEqual(
+      [
+        glance.includes(TIMELINE_TITLE),
+        glance.includes(UNFILTERED_TITLE),
+        explanation.includes(TIMELINE_TITLE),
+        explanation.includes(UNFILTERED_TITLE),
+      ],
+      [false, false, true, true],
+    );
+  });
+
+  it('#2753: the unfiltered renderer log of the explanation is bounded to 80 lines of 240 characters, whatever the log holds', async () => {
+    const text = await reconnectionState(
+      reads({
+        rendererLines: () =>
+          Array.from(
+            {length: 120},
+            (value, index) =>
+              `2026-11-19 07:00:${String(1 + (index % 25)).padStart(2, '0')}.000 [info] ${'x'.repeat(400)}`,
+          ),
+      }),
+      'win',
+      0,
+      Date.parse('2026-11-19T07:00:00Z'),
+    );
+    const section = text
+      .split(
+        'the window’s renderer log from the end to 30 s after it, every line:\n',
+      )[1]
+      ?.split('\nthe last lines of the connection log')[0]
+      ?.split('\n');
+    deepStrictEqual(
+      [section?.length, section?.every(line => line.length <= 240)],
+      [80, true],
+    );
   });
 });

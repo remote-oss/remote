@@ -52,10 +52,16 @@ export function clientLockPath(folder: string, hostIdentity: string): string {
   return `${folder}/vscode-remote-ssh-${lockIdFor(hostIdentity)}-install.lock`;
 }
 
+/** Whether the wait's cancellation has come by now; read through a call, since it changes while a create runs. */
+function isCancelled(options: ClientLockOptions): boolean {
+  return options.cancellation?.aborted === true;
+}
+
 /**
  * Hold the client lock for `work`: try to create the lock file, and when another window holds
  * it, wait for it to be released or old enough to take over, giving up after the limit or at
- * the cancellation. The holder never refreshes the file: on a clean end it removes it, and a
+ * the cancellation, also one that comes while the file is created, which then removes it. The
+ * holder never refreshes the file: on a clean end it removes it, and a
  * dead holder is taken over only by the age rule. `onWaiting` is called once, before the first
  * poll. The error of `work` propagates and the file is still removed.
  */
@@ -75,10 +81,15 @@ export async function withClientLock<T>(
   const started = clock.now();
   let waitingNotified = false;
   for (;;) {
-    if (merged.cancellation?.aborted === true) {
+    if (isCancelled(merged)) {
       return {kind: 'cancelled'};
     }
     const created = await port.createExclusive(path);
+    if (created === 'created' && isCancelled(merged)) {
+      // Cancelled while the file was being created: the file is this caller's, and no work follows to give it back.
+      await port.remove(path);
+      return {kind: 'cancelled'};
+    }
     if (created === 'created') {
       try {
         return {kind: 'done', value: await work()};
