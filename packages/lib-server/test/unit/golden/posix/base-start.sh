@@ -236,8 +236,11 @@ started() {
   leave Ok
 }
 [ -x "$INSTALL_DIR/$LAUNCHER" ] || finish ServerFailedToStart
-take_lock_or_finish "$COMMIT"
 RUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)
+if ! is_server_process "$RUNNING_PID" "$INSTALL_DIR"; then
+  take_lock_or_finish "$COMMIT"
+  RUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)
+fi
 if is_server_process "$RUNNING_PID" "$INSTALL_DIR"; then
   SERVER_PID=$RUNNING_PID
   LAUNCHED=no

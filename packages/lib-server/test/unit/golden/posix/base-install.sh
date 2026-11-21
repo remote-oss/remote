@@ -308,11 +308,15 @@ if [ ! -x "$INSTALL_DIR/$LAUNCHER" ] && [ -z "$ARCHIVE_PATH" ]; then
   have wget || have curl || finish NoDownloaderAvailable
 fi
 MKDIR_ERROR=$(mkdir -p "$INSTALL_DIR" 2>&1) || write_failed "$INSTALL_DIR" "$MKDIR_ERROR"
+leave_if_installed() {
+  if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then
+    fact server.installDir "$INSTALL_DIR"
+    leave Ok
+  fi
+}
+leave_if_installed
 take_lock_or_finish "$COMMIT"
-if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then
-  fact server.installDir "$INSTALL_DIR"
-  leave Ok
-fi
+leave_if_installed
 prepare_environment
 if [ -n "$ARCHIVE_PATH" ]; then
   ARCHIVE=$ARCHIVE_PATH

@@ -22,6 +22,7 @@ import {scriptFor, type ScriptParameters} from '../../src/index.ts';
 import {lockPathScript} from '../../src/scripts/posix-script.ts';
 import {
   blockOf,
+  callsOf,
   type FakeHost,
   installFolder,
   parametersFor,
@@ -269,6 +270,103 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(
         block === 'none' ? block : [block.status, block.serverFacts.lockHeld],
         ['Ok', undefined],
+      );
+    });
+
+    /** The flock method on the baseline parameters of the host. */
+    function flockParameters(): ScriptParameters {
+      const parameters = parametersFor();
+      parameters.lock.method = 'flock';
+      return parameters;
+    }
+
+    /** The status, whether the server was reused and whether the lock was reported held, of a start's block. */
+    function startFacts(block: ReturnType<typeof blockOf>): unknown {
+      return block === 'none'
+        ? block
+        : [block.status, block.serverFacts.reused, block.serverFacts.lockHeld];
+    }
+
+    /** Installs and starts the server of the baseline parameters, and gives how many times `flock` was run so far. */
+    function withRunningServer(): number {
+      runScript(host, single('install'), flockParameters());
+      runScript(host, single('start'), flockParameters());
+      return flockRuns();
+    }
+
+    /** How many times the host's `flock` was run so far. */
+    function flockRuns(): number {
+      return callsOf(host).filter(call => call.startsWith('flock ')).length;
+    }
+
+    it('ruling-2913-lock-only-to-write: an install that finds the server installed takes no lock, even where the lock is busy, and reports none held', () => {
+      useHost(['wget', 'flock']);
+      runScript(host, single('install'), flockParameters());
+      const before = flockRuns();
+      const block = blockOf(host, single('install'), flockParameters(), {
+        environment: {STUB_FLOCK_BUSY: 'yes'},
+      });
+      deepStrictEqual(
+        [
+          block === 'none' ? block : [block.status, block.serverFacts.lockHeld],
+          flockRuns() - before,
+        ],
+        [['Ok', undefined], 0],
+      );
+    });
+
+    it('ruling-2913-lock-only-to-write: an install that has to install still takes the lock, and a busy lock ends it as LockBusy', () => {
+      useHost(['wget', 'flock']);
+      const block = blockOf(host, single('install'), flockParameters(), {
+        environment: {STUB_FLOCK_BUSY: 'yes'},
+      });
+      deepStrictEqual(block === 'none' ? block : block.status, 'LockBusy');
+    });
+
+    it('ruling-2913-lock-only-to-write: a start that finds a live server of its commit reuses it without the lock, even where the lock is busy', () => {
+      useHost(['wget', 'flock']);
+      const before = withRunningServer();
+      const block = blockOf(host, single('start'), flockParameters(), {
+        environment: {STUB_FLOCK_BUSY: 'yes'},
+      });
+      deepStrictEqual(
+        [startFacts(block), flockRuns() - before],
+        [['Ok', 'yes', undefined], 0],
+      );
+    });
+
+    it('ruling-2913-lock-only-to-write: a start that has to launch still takes the lock, and a busy lock ends it as LockBusy', () => {
+      useHost(['wget', 'flock']);
+      runScript(host, single('install'), flockParameters());
+      const block = blockOf(host, single('start'), flockParameters(), {
+        environment: {STUB_FLOCK_BUSY: 'yes'},
+      });
+      deepStrictEqual(block === 'none' ? block : block.status, 'LockBusy');
+    });
+
+    it('ruling-2913-lock-only-to-write: a start that waited for the lock and finds that another window launched the server meanwhile reuses it and launches nothing', () => {
+      useHost(['wget', 'flock']);
+      const before = withRunningServer();
+      const block = blockOf(host, single('start'), flockParameters(), {
+        // The pid file is out of sight until the lock is taken, as when the server was launched while the step waited.
+        rewriteScript: text =>
+          text
+            .replace(
+              '\nRUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)\n',
+              '\nmv "$PID_FILE" "$PID_FILE.away"\nRUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)\n',
+            )
+            .replace(
+              '  take_lock_or_finish "$COMMIT"\n',
+              '  take_lock_or_finish "$COMMIT"\n  mv "$PID_FILE.away" "$PID_FILE"\n',
+            ),
+      });
+      deepStrictEqual(
+        [
+          startFacts(block),
+          // The lock was taken once: the first check did not see the server, so the rewrite took effect.
+          flockRuns() - before,
+        ],
+        [['Ok', 'yes', undefined], 1],
       );
     });
 
