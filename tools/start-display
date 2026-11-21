@@ -111,9 +111,11 @@ ubuntu_sources() {
   local release codename archive
   release=$(cat "$OS_RELEASE" 2>/dev/null || true)
   [ -n "$(printf '%s\n' "$release" | sed -n 's/^ID=ubuntu$/yes/p')" ] || return 0
-  # The sources are read as one text, so a file that is not there (sources.list on a deb822 image) is no error.
-  if cat "$APT_SOURCES/sources.list" "$APT_SOURCES"/sources.list.d/* 2>/dev/null |
-    grep -qE '(archive|security|ports)\.ubuntu\.com'; then
+  # The sources are read into one text first: a file that is not there (sources.list on a deb822 image) is no error, and
+  # under pipefail a pipe into a match would fail when cat or the match ends early.
+  local sources
+  sources=$(cat "$APT_SOURCES/sources.list" "$APT_SOURCES"/sources.list.d/* 2>/dev/null || true)
+  if [[ $sources =~ (archive|security|ports)\.ubuntu\.com ]]; then
     return 0
   fi
   codename=$(printf '%s\n' "$release" | sed -n 's/^VERSION_CODENAME=//p' | tr -d '"')
@@ -122,14 +124,15 @@ ubuntu_sources() {
     amd64 | i386) archive=http://archive.ubuntu.com/ubuntu/ ;;
     *) archive=http://ports.ubuntu.com/ubuntu-ports/ ;;
   esac
-  echo "start-display: no apt source names an Ubuntu archive; writing $APT_SOURCES/sources.list.d/ubuntu.sources for $codename from $archive" >&2
+  # A file of our own name, so that an image's own ubuntu.sources is never replaced.
+  echo "start-display: no apt source names an Ubuntu archive; writing $APT_SOURCES/sources.list.d/start-display-ubuntu.sources for $codename from $archive" >&2
   printf '%s\n' \
     'Types: deb' \
     "URIs: $archive" \
     "Suites: $codename $codename-updates $codename-security" \
     'Components: main universe restricted multiverse' \
     'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' |
-    sudo tee "$APT_SOURCES/sources.list.d/ubuntu.sources" >/dev/null
+    sudo tee "$APT_SOURCES/sources.list.d/start-display-ubuntu.sources" >/dev/null
 }
 
 if [ "${#missing[@]}" -gt 0 ]; then
