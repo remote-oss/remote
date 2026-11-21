@@ -8,6 +8,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {nodeClientFiles, sha256Of} from '../../src/index.ts';
@@ -179,6 +180,18 @@ describe('the client files on Node.js (V4)', () => {
         },
         {size: 0, marker: 9},
       );
+    });
+  });
+
+  it('F-2406 BR-4 (card #2949, triton): stage of a named pipe gives an empty archive at once, without reading the pipe', async () => {
+    await inFolder(async folder => {
+      const source = path.join(folder, 'vscode-server.tar.gz');
+      spawnSync('mkfifo', [source]);
+      const staged = await nodeClientFiles.stage(source, folder);
+      if (staged.kind !== 'staged') {
+        throw new Error(`not staged: ${staged.detail}`);
+      }
+      deepStrictEqual(statSync(staged.archive).size, 0);
     });
   });
 });

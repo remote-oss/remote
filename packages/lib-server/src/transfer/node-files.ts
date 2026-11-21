@@ -57,7 +57,7 @@ export const nodeClientFiles: ClientFilePort = {
       const stagingFolder = path.join(folder, `vsc_server_${randomUUID()}`);
       await mkdir(stagingFolder, {recursive: true});
       const archive = path.join(stagingFolder, MANUAL_BOOTSTRAP_ARCHIVE);
-      if ((await stat(source)).isDirectory()) {
+      if (!(await stat(source)).isFile()) {
         await writeFile(archive, '');
       } else {
         await copyFile(source, archive);
