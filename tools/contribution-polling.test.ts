@@ -124,4 +124,37 @@ describe('the wait for the environment contributions to carry an entry (card #29
       [true, true, true, true],
     );
   });
+
+  it('#2923: sixty runs with long results and a text of 5000 characters are told as exactly 12 runs of at most 160 characters, an `and 48 more runs` line and 800 characters of the text', () => {
+    const outcome = {
+      found: false,
+      text: `${'t'.repeat(4999)}Z`,
+      runs: Array.from({length: 60}, (unused, index) => ({
+        seconds: index / 2,
+        result: `${'r'.repeat(400)}${String(index)}`,
+      })),
+    };
+    const lines = contributionsFailure(outcome, 'DISPLAY', 30).split('\n');
+    const [header = '', textLine = '', ...rest] = lines;
+    const shown = rest.slice(0, -1);
+    deepStrictEqual(
+      [
+        header.includes('the command ran 60 times in 30 s'),
+        textLine.includes('(5000 characters, the first 800 shown)'),
+        (JSON.parse(textLine.slice(textLine.indexOf(': "') + 2)) as string)
+          .length,
+        shown.length,
+        shown.map(line => line.length - line.indexOf('] ') - 2),
+        rest.at(-1),
+      ],
+      [
+        true,
+        true,
+        800,
+        12,
+        Array.from({length: 12}, () => 160),
+        'and 48 more runs',
+      ],
+    );
+  });
 });
