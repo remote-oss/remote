@@ -14,3 +14,12 @@ export function jsonOf(file: string): Record<string, unknown> {
     unknown
   >;
 }
+
+/** What the manifest declares of the setting `key`, as the JSON of its property. */
+export function propertyOf(key: string): Record<string, unknown> {
+  const properties = (
+    (jsonOf('package.json').contributes as {configuration: unknown})
+      .configuration as {properties: Record<string, Record<string, unknown>>}
+  ).properties;
+  return properties[key] ?? {};
+}
