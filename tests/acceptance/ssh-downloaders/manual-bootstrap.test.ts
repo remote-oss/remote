@@ -564,10 +564,14 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
       );
       const editorShows = await settingControlOf('local');
       await inWindow('local', 'workbench.action.openSettingsJson');
+      // Core marks the value once it has validated the file, which takes a moment after the file is open: the wait ends at
+      // the flagged count or after a minute, and the assertion below says what the item then showed.
       await waitFor(
-        'a problem in settings.json',
+        'the warning for the undeclared value in settings.json',
         async () =>
-          /\d/u.test((await statusItem('local', 'status.problems')).text),
+          (await statusItem('local', 'status.problems')).text
+            .replaceAll(/\s+/gu, ' ')
+            .trim() === '0 1',
         60_000,
       ).catch(() => undefined);
       deepStrictEqual(
