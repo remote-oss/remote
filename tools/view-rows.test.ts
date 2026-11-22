@@ -5,11 +5,11 @@
  * top stands on the direction its probe told, re-read while the list's rows are still filling (card #3000).
  */
 
-import {deepStrictEqual, notDeepStrictEqual, rejects} from 'node:assert';
+import {deepStrictEqual, notDeepStrictEqual} from 'node:assert';
 import {
   mergeReads,
   wheelDirection,
-  wheelTopSign,
+  wheelTopProbe,
   type ViewRowRead,
   type WheelProbeRead,
 } from './view-rows.ts';
@@ -113,7 +113,7 @@ describe('the direction of a wheel of a virtualized list, told by its labels (ca
   });
 });
 
-describe('the sign of the wheel that stands a virtualized list at its top (card #3000)', () => {
+describe('the probe of the wheel that stands a virtualized list at its top (card #3000)', () => {
   /** A probe that answers each wheel with the read it stands at, in order, echoing the wheel's delta. */
   function scriptedProbe(reads: readonly WheelProbeRead[]) {
     let stands = 0;
@@ -139,10 +139,14 @@ describe('the sign of the wheel that stands a virtualized list at its top (card 
         after: ['b', 'c', 'd'],
       },
     ];
-    deepStrictEqual(await wheelTopSign(scriptedProbe(reads)), 400);
+    deepStrictEqual(await wheelTopProbe(scriptedProbe(reads)), {
+      settled: true,
+      sign: 400,
+      reads: 2,
+    });
   });
 
-  it('a list that never stops filling names its reads when the direction still cannot be told', async () => {
+  it('a list that never stops filling stands unsettled after its three reads', async () => {
     const reads: readonly WheelProbeRead[] = [
       {delta: -400, moved: true, before: ['h', 'i'], after: ['h', 'i', 'j']},
       {
@@ -158,9 +162,10 @@ describe('the sign of the wheel that stands a virtualized list at its top (card 
         after: ['h', 'i', 'j', 'k', 'l'],
       },
     ];
-    await rejects(wheelTopSign(scriptedProbe(reads)), {
-      message:
-        'the wheel to the top still could not tell its direction after 3 reads, before [h, i, j, k], after [h, i, j, k, l]',
+    deepStrictEqual(await wheelTopProbe(scriptedProbe(reads)), {
+      settled: false,
+      sign: 0,
+      reads: 3,
     });
   });
 });
