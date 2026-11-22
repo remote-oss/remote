@@ -1,5 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
-import {elapsedPhraseOf} from '../../src/explorer/relative-time.ts';
+import {
+  agoPhraseOf,
+  elapsedPhraseOf,
+} from '../../src/explorer/relative-time.ts';
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
@@ -103,6 +106,44 @@ describe('the elapsed-time phrase (card containers-29)', () => {
         template === '{0} hours' ? 'il y a {0} heures' : template,
       ),
       'il y a 2 heures',
+    );
+  });
+
+  it('F-0904 BR-4: a time in the future counted, not clamped, reads as its negative number of seconds, whatever its size, and the table is the same for the past', () => {
+    const same = (milliseconds: number): string =>
+      elapsedPhraseOf(milliseconds, template => template, 'counted');
+    deepStrictEqual(
+      [
+        same(-1 * SECOND),
+        same(-7199 * SECOND),
+        same(-400),
+        same(0),
+        same(29 * SECOND),
+        same(30 * SECOND),
+        same(183 * ONE_DAY),
+        elapsedPhraseOf(-5 * SECOND, template => template, 'clamped'),
+      ],
+      [
+        '-1 seconds',
+        '-7199 seconds',
+        '0 seconds',
+        '0 seconds',
+        '29 seconds',
+        '1 minute',
+        '1 year',
+        '0 seconds',
+      ],
+    );
+  });
+
+  it('F-0904 BR-4: the phrase with ago puts "ago" after it, and takes the future reading it is given', () => {
+    deepStrictEqual(
+      [
+        agoPhraseOf(2 * HOUR, template => template),
+        agoPhraseOf(-3 * SECOND, template => template, 'counted'),
+        agoPhraseOf(-3 * SECOND, template => template),
+      ],
+      ['2 hours ago', '-3 seconds ago', '0 seconds ago'],
     );
   });
 });

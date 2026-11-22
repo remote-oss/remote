@@ -19,6 +19,7 @@ const TIME_TEMPLATES = {
   S435One: '{0} second',
   S436: '{0} years',
   S436One: '{0} year',
+  S429: '{0} ago',
 } as const;
 
 const SECOND = 1000;
@@ -52,11 +53,22 @@ const LARGER_UNITS: readonly TimeUnit[] = [
   {size: MINUTE, singular: TIME_TEMPLATES.S434One, plural: TIME_TEMPLATES.S434},
 ];
 
+/**
+ * How a time in the future reads: `clamped` as none, as a container's tooltip has it, or `counted` as a count of
+ * seconds that is negative, as a volume's tooltip has it for a clock that runs behind the engine's.
+ */
+export type FutureReading = 'clamped' | 'counted';
+
 /** The elapsed-time phrase without "ago", for example "1 minute" or "5 hours". */
 export function elapsedPhraseOf(
   milliseconds: number,
   translate: Translate,
+  future: FutureReading = 'clamped',
 ): string {
+  if (milliseconds < 0 && future === 'counted') {
+    const count = Math.round(milliseconds / SECOND);
+    return filled(translate, TIME_TEMPLATES.S435, [String(count)]);
+  }
   const elapsed = Math.max(0, milliseconds);
   const unit =
     LARGER_UNITS.find(candidate => Math.round(elapsed / candidate.size) >= 1) ??
@@ -64,5 +76,16 @@ export function elapsedPhraseOf(
   const count = Math.round(elapsed / unit.size);
   return filled(translate, count === 1 ? unit.singular : unit.plural, [
     String(count),
+  ]);
+}
+
+/** The elapsed-time phrase with "ago", for example "1 minute ago". */
+export function agoPhraseOf(
+  milliseconds: number,
+  translate: Translate,
+  future: FutureReading = 'clamped',
+): string {
+  return filled(translate, TIME_TEMPLATES.S429, [
+    elapsedPhraseOf(milliseconds, translate, future),
   ]);
 }

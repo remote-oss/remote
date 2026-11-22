@@ -13,14 +13,13 @@ import {
 import {filled} from '../surfaces/filled.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import type {ListedContainer} from './listed-containers.ts';
-import {elapsedPhraseOf} from './relative-time.ts';
+import {agoPhraseOf, elapsedPhraseOf} from './relative-time.ts';
 
 /** The English template of each text of the tree, by its string id; the first is the view's name. */
 const EXPLORER_TEMPLATES = {
   viewName: 'Dev Containers',
   S267: 'Other Containers',
   S022: 'Active Folder {0}',
-  S429: '{0} ago',
 } as const;
 
 /** The icon of a row, by its name in the icon table. */
@@ -137,7 +136,7 @@ function clauseOf(
     return elapsedPhraseOf(now - since, translate);
   }
   function agoPhrase(since: number): string {
-    return filled(translate, EXPLORER_TEMPLATES.S429, [phrase(since)]);
+    return agoPhraseOf(now - since, translate);
   }
   if (state === 'exited') {
     return finishedAt === undefined ? undefined : agoPhrase(finishedAt);
