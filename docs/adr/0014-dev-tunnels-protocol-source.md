@@ -1,8 +1,8 @@
 # ADR-0014: The tunnel service and its host speak the dev tunnels protocol, read from its MIT code
 
-- Status: proposed (D-107; admissibility ruled under the user's delegation, as R-76 was, and the user may veto it)
+- Status: accepted (the user, 2026-11-22, D-107: "I approve")
 - Date: 2026-11-22
-- Deciders: the user for the wire-compatible service (D-101, D-107); athena and proteus for the source's admissibility
+- Deciders: the user (D-101, D-107), for the wire-compatible service and the source's admissibility; design by athena with proteus
 - Scope: the tunnel relay service, the remote-server host side, the Remote - Tunnels client, and `lib-tunnels`
 - Requirements: D-101, D-107; F-8101 to F-8104, F-8201 to F-8203, F-8902; ADR-0004; ADR-0005; R-76; R-113
 
