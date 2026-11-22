@@ -90,11 +90,14 @@ async function serverAt(folder: string): Promise<boolean> {
 /** The part of the connect's failure text that every failure dialog carries, for a script entry's match. */
 const DIALOG_MATCH = 'Could not establish connection';
 
-/** The buttons the spec names for the refused and the install directory's dialogs. */
-const RETRY_BUTTONS: readonly string[] = [
+/**
+ * The refusal dialog's buttons in the order the record holds — the extension's own, primary first — not the
+ * left-to-right order a user sees (F-2601 56–58). The failure suite compares the record against this order.
+ */
+const FAILURE_BUTTONS: readonly string[] = [
+  'Close Remote',
   'Retry',
   'More Actions...',
-  'Close Remote',
 ];
 
 /** Waits for window `name`'s failure dialog to be recorded and gives the line: its text and the buttons it was shown with. */
@@ -423,10 +426,7 @@ describe('the install location the user setting picks (card #2487)', function ()
         },
         {
           details: values.map(invalidDetail),
-          buttons: [
-            ['Retry', 'More Actions...', 'Close Remote'],
-            ['Retry', 'More Actions...', 'Close Remote'],
-          ],
+          buttons: [FAILURE_BUTTONS, FAILURE_BUTTONS],
           logins: 0,
         },
       );
@@ -623,10 +623,10 @@ describe('the install location the user setting picks (card #2487)', function ()
         {
           details: [DIR_DETAIL, DIR_DETAIL, DIR_DETAIL, DIR_DETAIL],
           buttons: [
-            ['Retry', 'More Actions...', 'Close Remote'],
-            ['Retry', 'More Actions...', 'Close Remote'],
-            ['Retry', 'More Actions...', 'Close Remote'],
-            ['Retry', 'More Actions...', 'Close Remote'],
+            FAILURE_BUTTONS,
+            FAILURE_BUTTONS,
+            FAILURE_BUTTONS,
+            FAILURE_BUTTONS,
           ],
         },
       );
@@ -666,7 +666,7 @@ describe('the install location the user setting picks (card #2487)', function ()
         },
         {
           detail: DIR_DETAIL,
-          buttons: RETRY_BUTTONS,
+          buttons: FAILURE_BUTTONS,
         },
       );
     } finally {
