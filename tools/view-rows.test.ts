@@ -4,7 +4,7 @@
  */
 
 import {deepStrictEqual, notDeepStrictEqual} from 'node:assert';
-import {mergeReads, type ViewRowRead} from './view-rows.ts';
+import {mergeReads, wheelDirection, type ViewRowRead} from './view-rows.ts';
 
 /** A row of the fake list. */
 function sampleRow(label: string, level = 2): ViewRowRead {
@@ -55,5 +55,35 @@ describe('the merge of the viewport reads of a virtualized list (card #2960)', (
       sampleRow('ssh', 2),
       sampleRow('tty', 2),
     ]);
+  });
+});
+
+describe('the direction of a wheel of a virtualized list, told by its labels (card #2960)', () => {
+  it('a wheel that reveals the rows below reads down', () => {
+    deepStrictEqual(
+      wheelDirection(['a', 'b', 'c', 'd'], ['b', 'c', 'd', 'e']),
+      'down',
+    );
+  });
+
+  it('a wheel that reveals the rows above reads up', () => {
+    deepStrictEqual(
+      wheelDirection(['c', 'd', 'e', 'f'], ['b', 'c', 'd', 'e']),
+      'up',
+    );
+  });
+
+  it('labels that show no moved edge read neither', () => {
+    deepStrictEqual(
+      wheelDirection(['a', 'b', 'c'], ['a', 'b', 'c']),
+      undefined,
+    );
+  });
+
+  it('a pinned header left in the labels can hide the wheel, so the page leaves it out', () => {
+    deepStrictEqual(
+      wheelDirection(['ssh', 'a', 'b', 'c'], ['ssh', 'b', 'c', 'd']),
+      undefined,
+    );
   });
 });

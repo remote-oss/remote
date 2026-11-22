@@ -34,8 +34,8 @@ const POLL_MILLISECONDS = 200;
 
 /**
  * The page-side code the reads of a virtualized list share (card #2960), standing on the pane and on the list it
- * finds in it: the container that overflows and holds treeitems, the wheel of its viewport, and the wheel to the
- * list's top.
+ * finds in it: the container that overflows and holds treeitems, the wheel of its viewport, the labels of the rows
+ * that move, and the wheel to the list's top.
  */
 
 /** The pane's outermost element that overflows and holds treeitems, the container of its virtualized list. */
@@ -62,42 +62,60 @@ const wheel = delta => {
 };`;
 
 /**
- * The wheel to the list's top, standing on the list's `labels` and `move`: the wheel's sign that scrolls the list
- * up varies with the build, so it is probed — at a boundary only one sign moves, and a move's labels tell whether
- * it went down, its new top standing below the old, or up — and the list is wheeled up with the sign until it
- * stands at its top.
+ * The labels of the rows of the list's viewport, and `first`, the pair of its first and last label: the sticky
+ * (pinned) rows are left out — they do not move with the list, so they tell nothing about where a wheel went — and
+ * a list that overflows by less than a row moves its last row in while the first stays, so the first alone does
+ * not tell that the list moved.
  */
-const WHEEL_TO_TOP = `const movedDown = (before, after) => before.indexOf(after[0]) > 0;
-const movedUp = (before, after) => {
-  const index = before.indexOf(after.at(-1));
-  return index !== -1 && index < before.length - 1;
+const ROW_LABELS = `const labels = () =>
+  [...pane.querySelectorAll('[role="treeitem"]:not(.monaco-tree-sticky-row)')]
+    .filter(row => row.getAttribute('aria-level') !== null)
+    .map(row => row.querySelector('.label-name')?.textContent ?? '');
+const first = () => {
+  const rows = [...pane.querySelectorAll('[role="treeitem"]:not(.monaco-tree-sticky-row)')];
+  const label = row => row?.querySelector('.label-name')?.textContent ?? '';
+  return label(rows[0]) + '\u0000' + label(rows.at(-1));
+};`;
+
+/**
+ * The wheel to the list's top, standing on the list's `labels` and `move`: the wheel's sign that scrolls the list
+ * up varies with the build, so it is probed — at a boundary only one sign moves — and a move's direction, told by
+ * its labels as `wheelDirection` tells it, sets the sign; the list is wheeled up with it until it stands at its
+ * top.
+ */
+const WHEEL_TO_TOP = `const direction = (before, after) => {
+  if (before.length === 0 || after.length === 0) {
+    return null;
+  }
+  if (before.indexOf(after[0]) > 0) {
+    return 'down';
+  }
+  const last = after.at(-1);
+  if (last === undefined) {
+    return null;
+  }
+  const index = before.indexOf(last);
+  return index !== -1 && index < before.length - 1 ? 'up' : null;
 };
 const probe = async delta => {
   const before = labels();
   const moved = await move(delta);
-  return {moved, before, after: labels()};
+  return {delta, moved, before, after: labels()};
 };
 let upSign = 0;
 let topStep = await probe(-400);
 if (!topStep.moved) {
   topStep = await probe(400);
-  if (topStep.moved) {
-    if (movedDown(topStep.before, topStep.after)) {
-      // The probe went down from the top, so it wheels up again to stand at it.
-      upSign = -400;
-      await move(upSign);
-    } else if (movedUp(topStep.before, topStep.after)) {
-      upSign = 400;
-    } else {
-      throw new Error('the wheel to the top could not tell its direction');
-    }
+}
+if (topStep.moved) {
+  const way = direction(topStep.before, topStep.after);
+  if (way === 'down') {
+    upSign = -topStep.delta;
+  } else if (way === 'up') {
+    upSign = topStep.delta;
+  } else {
+    throw new Error('the wheel to the top could not tell its direction');
   }
-} else if (movedDown(topStep.before, topStep.after)) {
-  upSign = 400;
-} else if (movedUp(topStep.before, topStep.after)) {
-  upSign = -400;
-} else {
-  throw new Error('the wheel to the top could not tell its direction');
 }
 let topMoves = 0;
 while (upSign !== 0 && topMoves < 200 && (await move(upSign))) {
@@ -647,7 +665,7 @@ export async function viewRows(
       if (list === undefined) {
         return [read()];
       }
-      const labels = () => read().map(row => row.label);
+      ${ROW_LABELS}
       ${WHEEL_SETTLE}
       // The trace of this walk, for a read that no one answers: the page's clock at the expression's start, the
       // page's visibility at the start and at each change, and each move's wall time against the 600 ms it set. It
@@ -670,13 +688,6 @@ export async function viewRows(
         walkTrace.push(part);
       };
       window.remoteOssViewRowsTrace = walkTrace.join(' ');
-      // The first and the last rendered rows: a list that overflows by less than a row moves its last row in while
-      // the first stays, so the first alone does not tell that the list moved.
-      const first = () => {
-        const rows = [...pane.querySelectorAll('[role="treeitem"]')];
-        const label = row => row?.querySelector('.label-name')?.textContent ?? '';
-        return label(rows[0]) + '\u0000' + label(rows.at(-1));
-      };
       const move = async delta => {
         const before = first();
         const waitStartedAt = Date.now();
@@ -820,17 +831,7 @@ async function ensureRowDrawn(
       if (list === undefined) {
         return false;
       }
-      const labels = () =>
-        [...pane.querySelectorAll('[role="treeitem"]')]
-          .filter(row => row.getAttribute('aria-level') !== null)
-          .map(row => row.querySelector('.label-name')?.textContent ?? '');
-      // The first and the last rendered rows: a list that overflows by less than a row moves its last row in while
-      // the first stays, so the first alone does not tell that the list moved.
-      const first = () => {
-        const rows = [...pane.querySelectorAll('[role="treeitem"]')];
-        const label = row => row?.querySelector('.label-name')?.textContent ?? '';
-        return label(rows[0]) + '\u0000' + label(rows.at(-1));
-      };
+      ${ROW_LABELS}
       ${WHEEL_SETTLE}
       const move = async delta => {
         const before = first();

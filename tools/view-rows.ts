@@ -1,6 +1,7 @@
 /**
  * @fileoverview The merge of the viewport reads of a virtualized list's walk into the list's rows in order: a read at
- * the list's top first, then the reads of the downward walk; a row keeps the values of the read that first shows it.
+ * the list's top first, then the reads of the downward walk; a row keeps the values of the read that first shows it,
+ * and the direction a wheel of the list went is told by the labels the viewport showed before and after it.
  */
 
 /** A row as one viewport read of a virtualized list shows it; `expanded` is null when the read did not draw the state. */
@@ -31,4 +32,26 @@ export function mergeReads(
     }
   }
   return order;
+}
+
+/**
+ * The direction a wheel of a virtualized list went, told by the labels the viewport showed before and after it:
+ * 'down' when the new top stood below the old one in the list, 'up' when the new bottom stood above the old one,
+ * and undefined when the labels do not tell. The sticky (pinned) rows are left out of the labels by the page,
+ * since they do not move.
+ */
+export function wheelDirection(
+  before: readonly string[],
+  after: readonly string[],
+): 'down' | 'up' | undefined {
+  const first = after[0];
+  const last = after.at(-1);
+  if (first === undefined || last === undefined) {
+    return undefined;
+  }
+  if (before.indexOf(first) > 0) {
+    return 'down';
+  }
+  const index = before.indexOf(last);
+  return index !== -1 && index < before.length - 1 ? 'up' : undefined;
 }
