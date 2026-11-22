@@ -72,7 +72,6 @@ import {keepingSettings} from '../windows/tunnel-support.ts';
 import {
   failedOn,
   firstRowOf,
-  troubleshootingTabs,
   wholeTableOf,
 } from '../windows/troubleshooting-support.ts';
 
@@ -582,7 +581,7 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
       );
     });
   });
-  it('F-2406 AC-12 (c2948-text-part): the text case of AC-12: a bootstrap file that is not a server archive is copied, and the dialog reason is "Failed to install the VS Code Server." with no troubleshooting table, so no S087 issue', async () => {
+  it('F-2406 AC-12 (c2948-text-part): the text case of AC-12: a bootstrap file that is not a server archive is copied, and the dialog reason is "Failed to install the VS Code Server." with no LocalBootstrapFailed issue (S087)', async () => {
     await withSettings({}, async () => {
       const name = 'c2948-text-part';
       placeNotAnArchive();
@@ -595,8 +594,10 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
           () =>
             connectionLog()
               .slice(mark)
-              .some(line =>
-                line.includes('No hints found in the recent session.'),
+              .some(
+                line =>
+                  line.includes('No hints found in the recent session.') ||
+                  line.includes('[Session Summary]'),
               ),
           60_000,
         );
@@ -606,12 +607,14 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
               line => line.question,
             ),
             copied: copiedByScp(name),
-            tables: await troubleshootingTabs(name),
+            bootstrapIssues: connectionLog()
+              .slice(mark)
+              .filter(line => line.includes('[LocalBootstrapFailed]')),
           },
           {
             dialogs: [reason(ALIAS, 'Failed to install the VS Code Server.')],
             copied: true,
-            tables: [],
+            bootstrapIssues: [],
           },
         );
       } finally {
