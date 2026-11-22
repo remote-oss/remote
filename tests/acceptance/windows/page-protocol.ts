@@ -1,11 +1,12 @@
 /**
- * @fileoverview The protocol connection of the harness's page reads (card #2858): one `Runtime.evaluate` over a socket
- * of the editor's debugging port, bounded, so that a renderer that does not answer, or a socket that closes first, ends
- * the read with a message that names the page and the read, in place of a row that waits for mocha's timeout.
+ * @fileoverview The protocol connection of the harness's page reads and inputs (cards #2858 and #2908): one
+ * `Runtime.evaluate`, or a run of input commands, over a socket of the editor's debugging port, bounded, so that a
+ * renderer that does not answer, or a socket that closes first, ends the read with a message that names the page and the
+ * read, in place of a row that waits for mocha's timeout.
  */
 
-/** The answer of the protocol's `Runtime.evaluate`. */
-interface EvaluateAnswer {
+/** The answer of the protocol to a command: its request id and its result or its error. */
+interface ProtocolAnswer {
   id: number;
   result?: {
     result?: {value?: unknown};
@@ -48,6 +49,114 @@ export function excerptOf(expression: string): string {
   return JSON.stringify(expression.replace(/\s+/gu, ' ').trim().slice(0, 120));
 }
 
+/** How long an input command may wait for its answer, in milliseconds: the page answers it as it answers a read. */
+const INPUT_MILLISECONDS = 30_000;
+
+/** One protocol command: its method and its parameters. */
+export interface ProtocolCommand {
+  method: string;
+  params: Record<string, unknown>;
+}
+
+/** The longest a protocol socket may take to open, in milliseconds, whatever the read's own bound is. */
+const OPEN_MILLISECONDS = 30_000;
+
+/**
+ * The socket of the page at protocol address `address`, once it is open; `owner` names the page in a failure. A port
+ * that accepts the connection and does not complete the upgrade within `milliseconds` (or the longest an open may take)
+ * fails with a {@link NoAnswerError}, so that no exchange waits for ever before it has a bound of its own.
+ */
+async function openSocket(
+  address: string,
+  owner: string,
+  milliseconds: number,
+): Promise<WebSocket> {
+  const bound = Math.min(milliseconds, OPEN_MILLISECONDS);
+  const socket = new WebSocket(address);
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(
+          new NoAnswerError(
+            `${owner}: no protocol connection within ${String(Math.round(bound / 100) / 10)} s`,
+          ),
+        );
+      }, bound);
+      socket.addEventListener('open', () => {
+        resolve();
+      });
+      socket.addEventListener('error', () => {
+        reject(new Error(`no protocol connection to ${owner}`));
+      });
+    });
+  } catch (caught) {
+    socket.close();
+    throw caught;
+  } finally {
+    clearTimeout(timer);
+  }
+  return socket;
+}
+
+/**
+ * Sends `command` as request `request` on `socket` and gives the answer to that request alone: a frame of another id is
+ * not the answer. After `milliseconds` without it the failure is a {@link NoAnswerError}, and a socket that closes or
+ * fails first is an error; both name `owner` and `description`, the command as the failure tells it.
+ */
+function answerTo(
+  socket: WebSocket,
+  owner: string,
+  request: number,
+  command: ProtocolCommand,
+  description: string,
+  milliseconds: number,
+): Promise<ProtocolAnswer> {
+  const seconds = String(Math.round(milliseconds / 100) / 10);
+  const listening = new AbortController();
+  let timer: NodeJS.Timeout | undefined;
+  return new Promise<ProtocolAnswer>((resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(
+        new NoAnswerError(
+          `${owner}: no answer within ${seconds} s to ${description}`,
+        ),
+      );
+    }, milliseconds);
+    socket.addEventListener(
+      'message',
+      event => {
+        try {
+          const message = JSON.parse(String(event.data)) as ProtocolAnswer;
+          if (message.id === request) {
+            resolve(message);
+          }
+        } catch {
+          // A frame that is no answer of ours is not one to wait on.
+        }
+      },
+      {signal: listening.signal},
+    );
+    for (const ending of ['close', 'error'] as const) {
+      socket.addEventListener(
+        ending,
+        () => {
+          reject(
+            new Error(
+              `${owner}: the protocol connection ${ending === 'close' ? 'closed' : 'failed'} before the answer to ${description}`,
+            ),
+          );
+        },
+        {signal: listening.signal},
+      );
+    }
+    socket.send(JSON.stringify({id: request, ...command}));
+  }).finally(() => {
+    clearTimeout(timer);
+    listening.abort();
+  });
+}
+
 /**
  * Evaluates `expression` in the page at protocol address `address` and returns its value; `owner` names the page in a
  * failure. A page that does not answer within `milliseconds` fails the read with a {@link NoAnswerError} that names
@@ -63,55 +172,21 @@ export async function evaluateAt<Value>(
   milliseconds: number = EVALUATE_MILLISECONDS,
   diagnosticsExpression?: string,
 ): Promise<Value> {
-  const seconds = String(Math.round(milliseconds / 100) / 10);
-  const socket = new WebSocket(address);
-  let timer: NodeJS.Timeout | undefined;
+  const socket = await openSocket(address, owner, milliseconds);
   try {
-    await new Promise<void>((resolve, reject) => {
-      socket.addEventListener('open', () => {
-        resolve();
-      });
-      socket.addEventListener('error', () => {
-        reject(new Error(`no protocol connection to ${owner}`));
-      });
-    });
-    let answer: EvaluateAnswer;
+    let answer: ProtocolAnswer;
     try {
-      answer = await new Promise<EvaluateAnswer>((resolve, reject) => {
-        timer = setTimeout(() => {
-          reject(
-            new NoAnswerError(
-              `${owner}: no answer within ${seconds} s to ${excerptOf(expression)}`,
-            ),
-          );
-        }, milliseconds);
-        socket.addEventListener('message', event => {
-          try {
-            const message = JSON.parse(String(event.data)) as EvaluateAnswer;
-            if (message.id === 1) {
-              resolve(message);
-            }
-          } catch {
-            // A frame that is no answer of ours is not one to wait on.
-          }
-        });
-        for (const ending of ['close', 'error'] as const) {
-          socket.addEventListener(ending, () => {
-            reject(
-              new Error(
-                `${owner}: the protocol connection ${ending === 'close' ? 'closed' : 'failed'} before the answer to ${excerptOf(expression)}`,
-              ),
-            );
-          });
-        }
-        socket.send(
-          JSON.stringify({
-            id: 1,
-            method: 'Runtime.evaluate',
-            params: {expression, returnByValue: true, awaitPromise: true},
-          }),
-        );
-      });
+      answer = await answerTo(
+        socket,
+        owner,
+        1,
+        {
+          method: 'Runtime.evaluate',
+          params: {expression, returnByValue: true, awaitPromise: true},
+        },
+        excerptOf(expression),
+        milliseconds,
+      );
     } catch (caught) {
       if (
         caught instanceof NoAnswerError &&
@@ -141,7 +216,42 @@ export async function evaluateAt<Value>(
     }
     return answer.result?.result?.value as Value;
   } finally {
-    clearTimeout(timer);
+    socket.close();
+  }
+}
+
+/**
+ * Sends the input `commands` one after the other to the page at protocol address `address`, each awaiting its own
+ * answer. A command that gets none within `milliseconds` fails with a {@link NoAnswerError} that names the page and the
+ * command (its method and the first characters of its parameters), and so does a socket that closes before an answer.
+ * A command the page answers with an `error` fails the press with the protocol's message, naming the page and the
+ * command: a key the browser rejects is no press that worked, and it is no {@link NoAnswerError} (the page answered).
+ */
+export async function dispatchAt(
+  address: string,
+  owner: string,
+  commands: readonly ProtocolCommand[],
+  milliseconds: number = INPUT_MILLISECONDS,
+): Promise<void> {
+  const socket = await openSocket(address, owner, milliseconds);
+  try {
+    for (const [index, command] of commands.entries()) {
+      const description = `${command.method} ${JSON.stringify(command.params).slice(0, 120)}`;
+      const answer = await answerTo(
+        socket,
+        owner,
+        index + 1,
+        command,
+        description,
+        milliseconds,
+      );
+      if (answer.error !== undefined) {
+        throw new Error(
+          `${owner}: the page rejected ${description}: ${answer.error.message}`,
+        );
+      }
+    }
+  } finally {
     socket.close();
   }
 }

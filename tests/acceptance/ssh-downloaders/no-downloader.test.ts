@@ -29,6 +29,7 @@ import {
   freshHost,
   INSTALL_MILLISECONDS,
 } from '../windows/maintenance.ts';
+import {compact} from '../windows/bootstrap-support.ts';
 import {keepingSettings} from '../windows/tunnel-support.ts';
 import {
   failedOn,
@@ -55,11 +56,6 @@ const MITIGATIONS = [
   'Ensure that the remote server has internet access and that the network is not blocking the download',
   'Enable remote.SSH.localServerDownload to allow VS Code to download the required resources via your local machine and then upload them to the remote server',
 ];
-
-/** `text` with every space and bullet taken out, which the table's wrapping and list marks leave unlike the strings. */
-function compact(text: string): string {
-  return text.replaceAll(/[\s•]/gu, '');
-}
 
 /** The data folder of the server of the account `harness-nofetch`. */
 const DATA = DATA_FOLDER.replace('/harness/', `/${ACCOUNT}/`);

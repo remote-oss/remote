@@ -463,7 +463,8 @@
       "tunnel-reconnect.test.ts": 1.5,
       "tunnel-refusals.test.ts": 6.8,
       "unparsable.test.ts": 0.1,
-      "x11.test.ts": 10.2
+      "x11.test.ts": 10.2,
+      "help-commands.test.ts": 1.1
     },
     "ssh-killed-12": {
       "killed.test.ts": 6.4
@@ -475,9 +476,11 @@
       "killed.test.ts": 5.5
     },
     "ssh-locks": {
-      "host-locks.test.ts": 12
+      "host-locks.test.ts": 12,
+      "session-locks.test.ts": 7
     },
     "ssh-downloaders": {
+      "manual-bootstrap.test.ts": 3,
       "no-downloader.test.ts": 6
     },
     "ssh-newclient": {
