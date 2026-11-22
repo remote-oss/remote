@@ -11,10 +11,12 @@ import {
   appendScript,
   closeWindow,
   connectedWithin,
+  connectionLog,
   inWindow,
   onHost,
   openWindow,
   recordLines,
+  rendererLines,
   readUserSettings,
   restoreUserSettings,
   signal,
@@ -805,24 +807,27 @@ describe('the install location the user setting picks (card #2487)', function ()
       await setting(SETTING, value(prior));
       await openConnected(name, INSTALL_MILLISECONDS);
       await setting(SETTING, value(now));
+      const mark = connectionLog().length;
       await runWith('local', 'opensshremotes.cleanLocalServer', [
         pickHost('harness'),
       ]);
-      await waitFor(`the new folder on the host`, () => serverAt(now), 120_000);
-      try {
-        await connectedWithin(name, INSTALL_MILLISECONDS);
-      } catch (error) {
-        console.log(
-          `c2487-newvalue the window did not reach connected; the open dialog: ${JSON.stringify(await dialogOf(name))}`,
-        );
-        console.log(
-          `c2487-newvalue the failureDialog records of ${name}: ${JSON.stringify(recordLines('failureDialog', name))}`,
-        );
-        throw error;
-      }
+      await waitFor(
+        `the new folder's server result of ${name}`,
+        () =>
+          connectionLog()
+            .slice(mark)
+            .some(line => line.startsWith('Server result: Ok, port ')),
+        120_000,
+      );
       deepStrictEqual(
-        {prior: await serverAt(prior), now: await serverAt(now)},
-        {prior: true, now: true},
+        {
+          serverOk: connectionLog()
+            .slice(mark)
+            .some(line => line.startsWith('Server result: Ok, port ')),
+          prior: await serverAt(prior),
+          now: await serverAt(now),
+        },
+        {serverOk: true, prior: true, now: true},
       );
     } finally {
       await closeWindow(name).catch(() => undefined);
@@ -1120,60 +1125,67 @@ describe('the install location the user setting picks (card #2487)', function ()
     });
   });
 
-  it("F-2407 AC-23 (c2487-reconnectcheck): the reconnect at a value that fails the check makes no SSH connection, opens the troubleshooting terminal, and shows core's Cannot reconnect dialog instead of the refusal dialog", async () => {
+  it('F-2407 AC-23 (c2487-reconnectcheck-part): the reconnect at a value that fails the check makes no SSH connection, opens the troubleshooting terminal, shows no refusal dialog, and gives core NotAvailable, not handled', async () => {
     await freshHost();
     const good = `${HOME}/cust23`;
     const refused = 'relative/inst';
-    const name = 'c2487-reconnectcheck';
+    const name = 'c2487-reconnectcheck-part';
+    appendScript(dismissals(name));
     try {
       await setting(SETTING, value(good));
       await openConnected(name, INSTALL_MILLISECONDS);
       await setting(SETTING, value(refused));
       const since = new Date().toISOString();
+      const mark = connectionLog().length;
       await runWith('local', 'opensshremotes.cleanLocalServer', [
         pickHost('harness'),
       ]);
-      let found = false;
-      let lastDetail: string | undefined;
-      const deadline = Date.now() + 90_000;
-      while (Date.now() < deadline) {
-        const open = await dialogOf(name);
-        if ((open?.details ?? '').includes('Cannot reconnect')) {
-          found = true;
-          break;
-        }
-        if (open !== undefined && open.details !== lastDetail) {
-          lastDetail = open.details;
-          console.log(
-            `c2487-reconnectcheck an open dialog on ${name}: ${JSON.stringify(open.details)}`,
-          );
-        }
-        await new Promise(resolve => setTimeout(resolve, 5_000));
-      }
-      if (!found) {
-        console.log(
-          `c2487-reconnectcheck the final dialog of ${name}: ${JSON.stringify(await dialogOf(name))}`,
-        );
-        console.log(
-          `c2487-reconnectcheck the troubleshooting terminal: ${String((await pageText(name)).includes('Session Troubleshooting'))}`,
-        );
-        throw new Error(`window ${name}: no Cannot reconnect dialog in 90 s`);
-      }
-      const shown = await dialogOf(name);
+      await waitFor(
+        `the connect failure of ${name}`,
+        () =>
+          connectionLog()
+            .slice(mark)
+            .some(line => line === 'connect failed: invalidSetting'),
+        90_000,
+      );
+      await waitFor(
+        `the NotAvailable line of ${name}`,
+        () =>
+          rendererLines(name).some(line =>
+            line.includes(
+              'returned an error {"code":"NotAvailable","detail":false}',
+            ),
+          ),
+        90_000,
+      );
+      const lines = connectionLog().slice(mark);
+      const resolving = lines.findIndex(
+        line =>
+          line === 'Resolving ssh-remote+harness, attempt 2, reconnection',
+      );
+      const failed = lines.findIndex(
+        line => line === 'connect failed: invalidSetting',
+      );
       deepStrictEqual(
         {
-          dialog: shown?.details.includes(
-            'Cannot reconnect. Please reload the window.',
-          ),
-          buttons: shown?.buttons,
-          terminal: (await pageText(name)).includes('Session Troubleshooting'),
           logins: await acceptedKeyLogins(since),
+          terminal: (await pageText(name)).includes('Session Troubleshooting'),
+          refusal: recordLines(undefined, name).some(
+            line => line.surface === 'failureDialog',
+          ),
+          resolve: resolving !== -1 && failed > resolving,
+          rejected: rendererLines(name).some(line =>
+            line.includes(
+              'returned an error {"code":"NotAvailable","detail":false}',
+            ),
+          ),
         },
         {
-          dialog: true,
-          buttons: ['Cancel', 'Reload Window'],
-          terminal: true,
           logins: 0,
+          terminal: true,
+          refusal: false,
+          resolve: true,
+          rejected: true,
         },
       );
     } finally {
