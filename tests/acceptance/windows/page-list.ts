@@ -107,15 +107,25 @@ export function pagesDescription(
     : described.join('; ');
 }
 
-/** The pages of `found` that no open window remembers: what the editor still lists once every window of the launch is closed. */
+/**
+ * The pages of `found` that no open window remembers: what the editor still lists once every window of the launch is
+ * closed. The folder-less local window owns the one `[]` page that no other window remembers, whether or not a suite
+ * remembered it (most do not), so that page is no leftover; with two such pages it is not known which is the local
+ * window's, and both are told.
+ */
 export function pagesOfNoOpenWindow(
   found: readonly DebugTarget[],
   remembered: ReadonlyMap<string, string>,
   open: (window: string) => boolean,
 ): DebugTarget[] {
+  const local = localPageAmong(found, remembered, open);
+  const owners = new Map(remembered);
+  if (local !== undefined && open('local')) {
+    owners.set('local', local.id);
+  }
   return found.filter(
     page =>
-      ![...remembered].some(
+      ![...owners].some(
         ([window, pageId]) => pageId === page.id && open(window),
       ),
   );

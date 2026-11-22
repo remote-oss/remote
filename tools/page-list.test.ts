@@ -429,4 +429,24 @@ describe('the close that is sent again while the page stays and the window is op
       ['closed-page-0002', 'nobody-page-0004'],
     );
   });
+
+  it('#2936: the one `[]` page nobody remembers is the local window’s, as the suites that never remember it have it, and two such pages are both told', () => {
+    function open(): boolean {
+      return true;
+    }
+    const withLocal = pagesOfNoOpenWindow(
+      [page('local-page-0001', '[]'), page('window-page-0002', '[c1]')],
+      new Map([['w1', 'window-page-0002']]),
+      open,
+    ).map(each => each.id);
+    const ambiguous = pagesOfNoOpenWindow(
+      [page('first-page-0001', '[]'), page('second-page-0002', '[]')],
+      new Map(),
+      open,
+    ).map(each => each.id);
+    deepStrictEqual(
+      [withLocal, ambiguous],
+      [[], ['first-page-0001', 'second-page-0002']],
+    );
+  });
 });
