@@ -145,10 +145,12 @@ function tarOutput(...commandWords: string[]): string {
 }
 
 /**
- * Places the run's server archive and turns it into one for the other architecture: the file `node` has the machine of
- * its ELF header changed, so that the archive unpacks on the host and its server cannot start there.
+ * Places the run's server archive unpacked and packed again, the way the foreign archive is made, and when `foreign` is set
+ * turns it into one for the other architecture: the file `node` has the machine of its ELF header changed, so that the
+ * archive unpacks on the host and its server cannot start there. Without it, the repack is the control: the same archive,
+ * packed the same way, whose server starts.
  */
-async function placeForeignServerArchive(): Promise<void> {
+async function placeRepackedServerArchive(foreign: boolean): Promise<void> {
   await placeServerArchive();
   const listing = tarOutput('-tzf', BOOTSTRAP_FILE).split('\n');
   const nodeEntry = nodeEntryOf(listing).replace(/^\.\//u, '');
@@ -156,14 +158,22 @@ async function placeForeignServerArchive(): Promise<void> {
   const folder = mkdtempSync(path.join(tmpdir(), 'c2948-foreign-'));
   try {
     tarOutput('-xzpf', BOOTSTRAP_FILE, '-C', folder);
-    const descriptor = openSync(path.join(folder, nodeEntry), 'r+');
-    try {
-      const header = Buffer.alloc(ELF_MACHINE_OFFSET + 2);
-      readSync(descriptor, header, 0, header.length, 0);
-      const patched = withElfMachine(header, otherMachine(process.arch));
-      writeSync(descriptor, patched, ELF_MACHINE_OFFSET, 2, ELF_MACHINE_OFFSET);
-    } finally {
-      closeSync(descriptor);
+    if (foreign) {
+      const descriptor = openSync(path.join(folder, nodeEntry), 'r+');
+      try {
+        const header = Buffer.alloc(ELF_MACHINE_OFFSET + 2);
+        readSync(descriptor, header, 0, header.length, 0);
+        const patched = withElfMachine(header, otherMachine(process.arch));
+        writeSync(
+          descriptor,
+          patched,
+          ELF_MACHINE_OFFSET,
+          2,
+          ELF_MACHINE_OFFSET,
+        );
+      } finally {
+        closeSync(descriptor);
+      }
     }
     tarOutput('-czf', BOOTSTRAP_FILE, '-C', folder, topFolder ?? '.');
   } finally {
@@ -629,7 +639,7 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
   it('F-2406 AC-13 (c2948-arch): an archive for another architecture unpacks and the dialog reason is "The VS Code Server failed to start."', async () => {
     await withSettings({}, async () => {
       const name = 'c2948-arch';
-      await placeForeignServerArchive();
+      await placeRepackedServerArchive(true);
       appendScript(dismissals(name));
       await failedOn(ALIAS, name);
       try {
@@ -643,11 +653,29 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
     });
   });
 
+  it('F-2406 AC-13 (c2948-arch-control): the same archive, unpacked and packed again without the architecture patch, connects, so the refusal of the foreign one is the ELF\u2019s and not the repack\u2019s', async () => {
+    await withSettings({}, async () => {
+      const name = 'c2948-arch-control';
+      await placeRepackedServerArchive(false);
+      appendScript(dismissals(name));
+      await openWindow(ALIAS, name);
+      try {
+        await connectedWithin(name, INSTALL_MILLISECONDS);
+        deepStrictEqual(
+          recordLines('failureDialog', name).map(line => line.question),
+          [],
+        );
+      } finally {
+        await closeWindow(name).catch(() => undefined);
+      }
+    });
+  });
+
   it('F-2406 AC-28 (c2948-arch-again): after that failure, a Retry and a new window with the bootstrap file removed ask for no archive and copy none, and each fails the same way', async () => {
     await withSettings({}, async () => {
       const name = 'c2948-arch-again';
       const again = `${name}-new`;
-      await placeForeignServerArchive();
+      await placeRepackedServerArchive(true);
       appendScript([
         {
           surface: 'failureDialog',
@@ -752,25 +780,62 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
     });
   });
 
-  it('F-2406 AC-27 (c2948-unreadable-host): after that failure nothing was copied to the host', async () => {
+  it('F-2406 AC-27 (c2948-unreadable-host): after that failure nothing was copied to the host: its install folders hold no archive, and once the file is readable and Retry is pressed the same listing shows the install', async () => {
     await withSettings({}, async () => {
       const name = 'c2948-unreadable-host';
       await placeServerArchive();
       chmodSync(BOOTSTRAP_FILE, 0o000);
-      appendScript(dismissals(name));
-      await failedOn(ALIAS, name);
+      appendScript([
+        {
+          surface: 'failureDialog',
+          match: `"${ALIAS}"`,
+          answer: {button: 'Retry'},
+          window: name,
+          after: `${name}-readable`,
+        },
+        ...dismissals(name),
+      ]);
+      await openWindow(ALIAS, name);
       try {
-        const listed = await onHost(
-          'sh',
-          '-c',
-          `ls -A '${DATA_FOLDER}'/bin/*/ 2>/dev/null; true`,
+        await waitFor(
+          'the first failure dialog',
+          () => recordLines('failureDialog', name).length > 0,
+          INSTALL_MILLISECONDS,
         );
+        async function listing(): Promise<string[]> {
+          const output = await onHost(
+            'sh',
+            '-c',
+            `ls -A '${DATA_FOLDER}'/bin/*/ 2>/dev/null; true`,
+          );
+          return output.split('\n').filter(line => line !== '');
+        }
+        const failed = {
+          archive: (await listing()).includes('vscode-server.tar.gz'),
+          copied: copiedByScp(name),
+        };
+        // The control: the same listing, once the file is readable and a Retry installs, shows the install folder, so
+        // that an empty listing before it is an empty install folder and not a path that holds nothing.
+        chmodSync(BOOTSTRAP_FILE, 0o644);
+        signal(`${name}-readable`);
+        await connectedWithin(name, INSTALL_MILLISECONDS);
+        const installed = (await installFolder()).startsWith(
+          `${DATA_FOLDER}/bin/`,
+        );
+        const after = await listing();
         deepStrictEqual(
           {
-            archive: listed.split('\n').includes('vscode-server.tar.gz'),
-            copied: copiedByScp(name),
+            failed,
+            installed,
+            listingSeesTheInstall: after.length > 0,
+            archiveAfter: after.includes('vscode-server.tar.gz'),
           },
-          {archive: false, copied: false},
+          {
+            failed: {archive: false, copied: false},
+            installed: true,
+            listingSeesTheInstall: true,
+            archiveAfter: false,
+          },
         );
       } finally {
         await closeWindow(name).catch(() => undefined);
