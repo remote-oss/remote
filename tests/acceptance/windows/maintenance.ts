@@ -345,16 +345,25 @@ export async function openLocalWindow(
 }
 
 /**
+ * Closes every window of the launch but `local` whose agent is still active, whichever row opened it: a window that a
+ * failed row left, and a window a row opened and never closed. A window that will not close must not fail the hook, and
+ * with it every row after: `closeContained` dismisses its dialog and, failing that, ends its extension host. A window
+ * whose agent has ended is not listed here, whatever its page does.
+ */
+export async function closeLeftoverWindows(): Promise<void> {
+  for (const name of windowNames()) {
+    if (name !== 'local' && isOpen(name)) {
+      await closeContained(name, pressEscape);
+    }
+  }
+}
+
+/**
  * Closes every window of the launch but `local` that is open, waits until no connection helper runs, and from then on
  * counts no server process that runs on the host now.
  */
 export async function closeAllButLocal(): Promise<void> {
-  for (const name of windowNames()) {
-    if (name !== 'local' && isOpen(name)) {
-      // A window that will not close must not fail the hook, and with it every row after: it is closed by force.
-      await closeContained(name, pressEscape);
-    }
-  }
+  await closeLeftoverWindows();
   await noHelperWithin(60_000);
   leftBefore = await hostServerProcesses();
 }
