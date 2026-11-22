@@ -1638,6 +1638,17 @@ describe('acceptance', () => {
       workspace.write('dist/remote-containers-0.1.0.vsix', '');
       workspace.write('dist/vscode-remote-extensionpack-0.1.0.vsix', '');
       /** The install of a launch that has the containers extension and nothing else beside the run's. */
+      function wslOnly(label: string) {
+        return {
+          folder: path.join('/run', `extensions-${label}`),
+          files: [
+            '/dist/remote-ssh.vsix',
+            '/run/window-agent.vsix',
+            path.join(workspace.root, 'dist', 'remote-wsl-0.0.0.vsix'),
+          ],
+          client: 'vscodium',
+        };
+      }
       function containersOnly(label: string) {
         return {
           folder: path.join('/run', `extensions-${label}`),
@@ -1663,17 +1674,9 @@ describe('acceptance', () => {
             client: 'vscodium',
           },
           containersOnly('ssh-containers'),
-          ...['wsl-linux', 'wsl-linux-web', 'wsl', 'wsl-linux-standdown'].map(
-            label => ({
-              folder: path.join('/run', `extensions-${label}`),
-              files: [
-                '/dist/remote-ssh.vsix',
-                '/run/window-agent.vsix',
-                path.join(workspace.root, 'dist', 'remote-wsl-0.0.0.vsix'),
-              ],
-              client: 'vscodium',
-            }),
-          ),
+          ...['wsl-linux', 'wsl-linux-web', 'wsl'].map(wslOnly),
+          containersOnly('containers-wsl'),
+          wslOnly('wsl-linux-standdown'),
           ...[
             'explorer',
             'explorer-alone',

@@ -151,6 +151,7 @@ function labelsFromExplorer(): string[] {
     'wsl-linux-web',
     'wsl',
     'windows-host',
+    'containers-wsl',
     'wsl-linux-standdown',
     'explorer',
     'explorer-alone',
@@ -461,6 +462,7 @@ describe('the launches of the VSCodium run', () => {
         ['wsl-linux-web', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl', ['remote-oss.remote-wsl'], true, undefined],
         ['windows-host', undefined, true, undefined],
+        ['containers-wsl', ['remote-oss.remote-containers'], true, undefined],
         ['wsl-linux-standdown', ['remote-oss.remote-wsl'], true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
         [
@@ -679,6 +681,7 @@ describe('the launches of the VSCodium run', () => {
           launch.proposedApi,
         ]),
       [
+        ['containers-wsl', 'containers-wsl', shared, undefined, undefined],
         ...['containers-a', 'containers-b'].map(label => [
           label,
           'containers',
@@ -905,6 +908,7 @@ describe('the launches of the VSCodium run', () => {
       launches.filter(needsDevContainerImage).map(launch => launch.label),
       [
         'ssh-containers',
+        'containers-wsl',
         ...CONTAINERS_LAUNCHES,
         'extensionpack',
         'extensionpack-german',
@@ -1105,6 +1109,7 @@ describe('the launches of the VSCodium run', () => {
         'cli-path',
         'wsl',
         'windows-host',
+        'containers-wsl',
         'containers-podman',
         'ports-reuse-prime',
         'install-install-present-prime',
