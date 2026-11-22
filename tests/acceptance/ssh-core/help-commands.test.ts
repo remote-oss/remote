@@ -487,7 +487,7 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   it('F-2004 AC-25 (c2486-companion-less-part): with no companion, the help commands run with no notification', async () => {
     const runDir = path.join(
       variable('HARNESS_RUN_FOLDER'),
-      'c2486-no-companion',
+      'c2486-companion-less',
     );
     mkdirSync(runDir, {recursive: true});
     const folder = await openFolderWindow(runDir);
