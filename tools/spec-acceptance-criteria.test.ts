@@ -1,4 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
 import {
   acceptanceCriteriaOf,
   CONTAINERS_RELEASE_ONE_FEATURES,
@@ -17,6 +19,7 @@ import {
   SSH_RELEASE_TWO_FEATURES,
   SSH_RELEASE_TWO_SCOPE,
 } from './spec-acceptance-criteria.ts';
+import {REPOSITORY_ROOT} from './repository.ts';
 
 const BODY = [
   '## Acceptance criteria',
@@ -225,6 +228,28 @@ describe('the coverage files', () => {
         ].every(feature => CONTAINERS_RELEASE_ONE_FEATURES.includes(feature)),
       ],
       [40, true],
+    );
+  });
+
+  it('containers release 2: the set has F-0104, F-0105 and F-1202 among its features, and the file has lines for every feature of the set but the two decisions F-1404 and F-1405, which have no criteria, and 33, 26 and 18 for those three', () => {
+    const lines = readFileSync(
+      path.join(REPOSITORY_ROOT, CONTAINERS_RELEASE_TWO_SCOPE.file),
+      'utf8',
+    ).split('\n');
+    function countOf(feature: string): number {
+      return lines.filter(line => line.startsWith(`${feature}.AC-`)).length;
+    }
+    deepStrictEqual(
+      [
+        ['F-0104', 'F-0105', 'F-1202'].every(feature =>
+          CONTAINERS_RELEASE_TWO_FEATURES.includes(feature),
+        ),
+        CONTAINERS_RELEASE_TWO_FEATURES.filter(
+          feature => countOf(feature) === 0,
+        ),
+        ['F-0104', 'F-0105', 'F-1202'].map(countOf),
+      ],
+      [true, ['F-1404', 'F-1405'], [33, 26, 18]],
     );
   });
 });
