@@ -9,6 +9,7 @@ import {
   type DebugTarget,
   type CloseAttempt,
   closeUntilGone,
+  leftoverNote,
   lingeringPageNote,
   listedPages,
   listedTargets,
@@ -447,6 +448,39 @@ describe('the close that is sent again while the page stays and the window is op
     deepStrictEqual(
       [withLocal, ambiguous],
       [[], ['first-page-0001', 'second-page-0002']],
+    );
+  });
+
+  it('#2936: the note of the pages that stay is said once for the same pages, again when they change or come back after none, and never for none', () => {
+    function open(window: string): boolean {
+      return window !== 'closed';
+    }
+    const remembered = new Map([['closed', 'closed-page-0001']]);
+    const single = [page('closed-page-0001', '[c1]')];
+    const pair = [...single, page('other-page-0002', '[c2]')];
+    const first = leftoverNote(single, remembered, open, '');
+    const again = leftoverNote(single, remembered, open, first.told);
+    const changed = leftoverNote(pair, remembered, open, again.told);
+    const none = leftoverNote([], remembered, open, changed.told);
+    const back = leftoverNote(single, remembered, open, none.told);
+    deepStrictEqual(
+      [
+        first,
+        again,
+        changed.note?.startsWith('2 pages'),
+        none,
+        back.note === first.note,
+      ],
+      [
+        {
+          note: "1 pages of the editor's list that no open window remembers: [c1] #closed-p remembered by closed (closed)",
+          told: 'closed-page-0001',
+        },
+        {note: undefined, told: 'closed-page-0001'},
+        true,
+        {note: undefined, told: ''},
+        true,
+      ],
     );
   });
 });

@@ -131,6 +131,29 @@ export function pagesOfNoOpenWindow(
   );
 }
 
+/**
+ * What to say of the pages that stay in the editor's list once the windows are closed, and what has been said by now:
+ * the note names the pages of `pagesOfNoOpenWindow` when they differ from those `told` names, and says nothing for the
+ * same pages again or for none. `told` is the identifiers of the pages last told, empty after a list with none, so that
+ * pages that come back are told again.
+ */
+export function leftoverNote(
+  found: readonly DebugTarget[],
+  remembered: ReadonlyMap<string, string>,
+  open: (window: string) => boolean,
+  told: string,
+): {note: string | undefined; told: string} {
+  const leftover = pagesOfNoOpenWindow(found, remembered, open);
+  const identifiers = leftover.map(page => page.id).join(',');
+  if (identifiers === told || leftover.length === 0) {
+    return {note: undefined, told: identifiers};
+  }
+  return {
+    note: `${String(leftover.length)} pages of the editor's list that no open window remembers: ${pagesDescription(leftover, remembered, open)}`,
+    told: identifiers,
+  };
+}
+
 /** The port the editor chose, read from the file it writes in the launch's user-data folder; none while there is no port. */
 export function portIn(file: string): number | undefined {
   const port = existsSync(file)

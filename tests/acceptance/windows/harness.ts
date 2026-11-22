@@ -55,8 +55,8 @@ import {
   closeUntilGone,
   type DebugTarget,
   listedPages,
+  leftoverNote,
   pagesDescription,
-  pagesOfNoOpenWindow,
   REMEMBERED_PAGES,
   waitUntilPageLeft,
 } from './page-list.ts';
@@ -1487,15 +1487,14 @@ export async function leftoverPagesNote(): Promise<string | undefined> {
   if (listed === undefined) {
     return undefined;
   }
-  const leftover = pagesOfNoOpenWindow(listed, REMEMBERED_PAGES, isOpen);
-  const identifiers = leftover.map(page => page.id).join(',');
-  if (identifiers === toldLeftoverPages) {
-    return undefined;
-  }
-  toldLeftoverPages = identifiers;
-  return leftover.length === 0
-    ? undefined
-    : `${String(leftover.length)} pages of the editor's list that no open window remembers: ${pagesDescription(leftover, REMEMBERED_PAGES, isOpen)}`;
+  const next = leftoverNote(
+    listed,
+    REMEMBERED_PAGES,
+    isOpen,
+    toldLeftoverPages,
+  );
+  toldLeftoverPages = next.told;
+  return next.note;
 }
 
 /** How many times a close is sent while the window stays listed and open: the close, and one more. */
