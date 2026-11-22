@@ -3,7 +3,8 @@
  * the list's top first, then the reads of the downward walk; a row keeps the values of the read that first shows it,
  * and the direction a wheel of the list went is told by the labels the viewport showed before and after it; the
  * probe of the wheel that stands the list at its top settles the sign on the direction its reads told, and a list
- * that is still filling its rows stands unsettled, for the walk to read it where it stands.
+ * that is still filling its rows stands unsettled, for the walk to read it where it stands, and the labels
+ * of the rows it then tells on stderr stand at 20, each cut at 80 characters, the left-out ones named as more.
  */
 
 /** A row as one viewport read of a virtualized list shows it; `expanded` is null when the read did not draw the state. */
@@ -34,6 +35,30 @@ export function mergeReads(
     }
   }
   return order;
+}
+
+/** How many labels, and how long a label, a walk that stands where it stands tells on stderr. */
+const TOLD_ROWS = 20;
+const TOLD_LABEL_LENGTH = 80;
+
+/** `label` cut to `length` characters, with an ellipsis where it was cut. */
+function cutTo(label: string, length: number): string {
+  return label.length <= length ? label : `${label.slice(0, length)}…`;
+}
+
+/**
+ * The labels of the rows a walk that could not reach its list's top tells on stderr: the first 20, each cut at
+ * 80 characters, and the left-out ones named as more, so a list that keeps filling its rows ends the read with
+ * a row of labels one can read.
+ */
+export function shownLabels(labels: readonly string[]): string {
+  const told = labels
+    .slice(0, TOLD_ROWS)
+    .map(label => cutTo(label, TOLD_LABEL_LENGTH));
+  const left = labels.length - told.length;
+  return left > 0
+    ? `${told.join(', ')} and ${String(left)} more`
+    : told.join(', ');
 }
 
 /**
