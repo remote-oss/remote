@@ -26,11 +26,7 @@ describe('the merge of the viewport reads of a virtualized list (card #2960)', (
     // reads after the top, so they stand as a fresh walk: the top's read, the walk down, and the read that closes
     // it, which shows the last pair twice.
     const scrolled: ReadonlyArray<readonly ViewRowRead[]> = [
-      [sampleRow('a'), sampleRow('b')],
-      [sampleRow('b'), sampleRow('c')],
-      [sampleRow('c'), sampleRow('d')],
-      [sampleRow('d'), sampleRow('e')],
-      [sampleRow('e'), sampleRow('f')],
+      ...FRESH,
       [sampleRow('e'), sampleRow('f')],
     ];
     deepStrictEqual(mergeReads(scrolled), mergeReads(FRESH));
