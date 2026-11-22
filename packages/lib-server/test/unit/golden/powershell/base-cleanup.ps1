@@ -231,6 +231,8 @@ if (Test-Path -LiteralPath $CliBin -PathType Container) {
     if ($Entry.LastWriteTime -gt (Get-Date).AddMinutes(-10)) { continue }
     Remove-Item -LiteralPath ([System.IO.Path]::Combine($CliBin, $Entry.Name)) -Recurse -Force -ErrorAction SilentlyContinue
   }
-  Remove-Item -LiteralPath $CliBin -Force -ErrorAction SilentlyContinue
+  if (@(Get-ChildItem -LiteralPath $CliBin -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+    Remove-Item -LiteralPath $CliBin -Force -ErrorAction SilentlyContinue
+  }
 }
 Complete-Step 'Ok'

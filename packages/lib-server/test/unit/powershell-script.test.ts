@@ -39,6 +39,12 @@ import {
   powershellScript,
 } from '../../src/scripts/powershell-script.ts';
 import {parametersFor} from './fake-host.ts';
+import {
+  agePastFloor,
+  bareStage,
+  deadStage,
+  liveStage,
+} from './cli-bin-sweep.ts';
 
 /** A Windows host as pwsh on Linux plays it: a home, a folder of stand-in programs, and the Windows variables. */
 interface PowershellHost {
@@ -113,14 +119,14 @@ function blockOf(output: string): ResultBlock | 'none' {
   return 'block' in read ? read.block : 'none';
 }
 
-/** Runs the request's PowerShell script under pwsh on the host and reads its result block. */
-function runOn(
+/** Runs the request's PowerShell script under pwsh on the host and keeps both output streams. */
+function streamsOf(
   host: PowershellHost,
   request: BootstrapRequest,
   parameters: ScriptParameters,
   variables: Readonly<Record<string, string | undefined>> = WINDOWS_VARIABLES,
   stub = '',
-): ResultBlock | 'none' {
+): {stdout: string; stderr: string} {
   const {file, environment} = scriptRun(
     host,
     request,
@@ -137,7 +143,18 @@ function runOn(
       `pwsh did not run (${pwshRun.error.message}): install it with tools/install-pwsh`,
     );
   }
-  return blockOf(pwshRun.stdout);
+  return {stdout: pwshRun.stdout, stderr: pwshRun.stderr};
+}
+
+/** Runs the request's PowerShell script under pwsh on the host and reads its result block. */
+function runOn(
+  host: PowershellHost,
+  request: BootstrapRequest,
+  parameters: ScriptParameters,
+  variables: Readonly<Record<string, string | undefined>> = WINDOWS_VARIABLES,
+  stub = '',
+): ResultBlock | 'none' {
+  return blockOf(streamsOf(host, request, parameters, variables, stub).stdout);
 }
 
 /** Like `runOn`, but leaves the event loop free while pwsh runs, for a row that serves the download itself. */
@@ -1592,99 +1609,60 @@ describe('the PowerShell cleanup, run under pwsh', function () {
       return path.join(data, 'cli-bin');
     }
 
-    it('removes a stage of a dead pid with its .stage. and .archive. entries, and keeps the stage of a live pid', () => {
+    /** A host with its cli-bin present, the cleanup's parameters, and the per-run name prefix. */
+    function sweepHost(): {
+      host: PowershellHost;
+      parameters: ScriptParameters;
+      cliBinFolder: string;
+      prefix: string;
+    } {
       const host = powershellHost();
       const parameters = {
         ...parametersFor(),
         cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
       };
-      const cliBinFolder = cliBin(host, parameters);
-      const ended = spawnSync('true');
-      const deadStage = `${parameters.commit}.1700000000000.${String(ended.pid)}`;
-      mkdirSync(path.join(cliBinFolder, deadStage), {recursive: true});
-      mkdirSync(
-        path.join(cliBinFolder, `${deadStage}.stage.${String(ended.pid)}`),
-        {recursive: true},
-      );
-      writeFileSync(
-        path.join(cliBinFolder, `${deadStage}.archive.${String(ended.pid)}`),
-        '',
-      );
-      // Past the sweep floor: an entry the row created seconds ago is younger than ten minutes.
-      const aged = new Date(Date.now() - 11 * 60_000);
-      for (const name of [
-        deadStage,
-        `${deadStage}.stage.${String(ended.pid)}`,
-        `${deadStage}.archive.${String(ended.pid)}`,
-      ]) {
-        utimesSync(path.join(cliBinFolder, name), aged, aged);
-      }
-      const liveStage = `${parameters.commit}.1700000000000.${String(process.pid)}`;
-      mkdirSync(path.join(cliBinFolder, liveStage), {recursive: true});
-      // Backdated past the floor, so only the pid check can keep it.
-      utimesSync(path.join(cliBinFolder, liveStage), aged, aged);
+      return {
+        host,
+        parameters,
+        cliBinFolder: cliBin(host, parameters),
+        prefix: `${parameters.commit}.1700000000000`,
+      };
+    }
+
+    it('removes a stage of a dead pid with its .stage. and .archive. entries, and keeps the stage of a live pid', () => {
+      const {host, parameters, cliBinFolder, prefix} = sweepHost();
+      deadStage(cliBinFolder, prefix);
+      const liveStageName = liveStage(cliBinFolder, prefix, false);
       runOn(host, single('cleanup'), parameters);
-      deepStrictEqual(readdirSync(cliBinFolder).sort(), [liveStage]);
+      deepStrictEqual(readdirSync(cliBinFolder).sort(), [liveStageName]);
     });
 
     it('keeps the .stage. and .archive. entries of a live pid', () => {
-      const host = powershellHost();
-      const parameters = {
-        ...parametersFor(),
-        cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
-      };
-      const cliBinFolder = cliBin(host, parameters);
-      const liveStage = `${parameters.commit}.1700000000000.${String(process.pid)}`;
-      mkdirSync(path.join(cliBinFolder, liveStage), {recursive: true});
-      mkdirSync(
-        path.join(cliBinFolder, `${liveStage}.stage.${String(process.pid)}`),
-        {recursive: true},
-      );
-      writeFileSync(
-        path.join(cliBinFolder, `${liveStage}.archive.${String(process.pid)}`),
-        '',
-      );
-      // Backdated past the floor, so only the pid check can keep them.
-      const aged = new Date(Date.now() - 11 * 60_000);
-      for (const name of [
-        liveStage,
-        `${liveStage}.stage.${String(process.pid)}`,
-        `${liveStage}.archive.${String(process.pid)}`,
-      ]) {
-        utimesSync(path.join(cliBinFolder, name), aged, aged);
-      }
+      const {host, parameters, cliBinFolder, prefix} = sweepHost();
+      const liveStageName = liveStage(cliBinFolder, prefix, true);
       runOn(host, single('cleanup'), parameters);
       deepStrictEqual(
         readdirSync(cliBinFolder).sort(),
         [
-          liveStage,
-          `${liveStage}.archive.${String(process.pid)}`,
-          `${liveStage}.stage.${String(process.pid)}`,
+          liveStageName,
+          `${liveStageName}.archive.${String(process.pid)}`,
+          `${liveStageName}.stage.${String(process.pid)}`,
         ].sort(),
       );
     });
 
     it('removes an empty cli-bin', () => {
-      const host = powershellHost();
-      const parameters = {
-        ...parametersFor(),
-        cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
-      };
-      const cliBinFolder = cliBin(host, parameters);
+      const {host, parameters, cliBinFolder} = sweepHost();
       mkdirSync(cliBinFolder, {recursive: true});
       runOn(host, single('cleanup'), parameters);
       deepStrictEqual(existsSync(cliBinFolder), false);
     });
 
     it('leaves a name that is not the per-run form', () => {
-      const host = powershellHost();
-      const parameters = {
-        ...parametersFor(),
-        cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
-      };
-      const cliBinFolder = cliBin(host, parameters);
-      mkdirSync(path.join(cliBinFolder, 'notes'), {recursive: true});
-      mkdirSync(path.join(cliBinFolder, 'two.fields'), {recursive: true});
+      const {host, parameters, cliBinFolder} = sweepHost();
+      for (const name of ['notes', 'two.fields']) {
+        mkdirSync(path.join(cliBinFolder, name), {recursive: true});
+      }
       runOn(host, single('cleanup'), parameters);
       deepStrictEqual(readdirSync(cliBinFolder).sort(), [
         'notes',
@@ -1693,46 +1671,46 @@ describe('the PowerShell cleanup, run under pwsh', function () {
     });
 
     it('keeps a per-run name whose third field is not a pid', () => {
-      const host = powershellHost();
-      const parameters = {
-        ...parametersFor(),
-        cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
-      };
-      const cliBinFolder = cliBin(host, parameters);
-      mkdirSync(path.join(cliBinFolder, 'a.b.c'), {recursive: true});
-      mkdirSync(path.join(cliBinFolder, 'x.y.'), {recursive: true});
+      const {host, parameters, cliBinFolder} = sweepHost();
+      for (const name of ['a.b.c', 'x.y.']) {
+        mkdirSync(path.join(cliBinFolder, name), {recursive: true});
+      }
       runOn(host, single('cleanup'), parameters);
       deepStrictEqual(readdirSync(cliBinFolder).sort(), ['a.b.c', 'x.y.']);
     });
 
     it('keeps a dead stage younger than the sweep floor of ten minutes', () => {
-      const host = powershellHost();
-      const parameters = {
-        ...parametersFor(),
-        cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
-      };
-      const cliBinFolder = cliBin(host, parameters);
-      const ended = spawnSync('true');
-      const deadStage = `${parameters.commit}.1700000000.${String(ended.pid)}`;
-      mkdirSync(path.join(cliBinFolder, deadStage), {recursive: true});
+      const {host, parameters, cliBinFolder, prefix} = sweepHost();
+      const deadStageName = bareStage(cliBinFolder, prefix);
       runOn(host, single('cleanup'), parameters);
-      deepStrictEqual(readdirSync(cliBinFolder).sort(), [deadStage]);
+      deepStrictEqual(readdirSync(cliBinFolder).sort(), [deadStageName]);
     });
 
     it('keeps a dead stage whose mtime is in the future', () => {
-      const host = powershellHost();
-      const parameters = {
-        ...parametersFor(),
-        cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
-      };
-      const cliBinFolder = cliBin(host, parameters);
-      const ended = spawnSync('true');
-      const deadStage = `${parameters.commit}.1700000000.${String(ended.pid)}`;
-      mkdirSync(path.join(cliBinFolder, deadStage), {recursive: true});
+      const {host, parameters, cliBinFolder, prefix} = sweepHost();
+      const deadStageName = bareStage(cliBinFolder, prefix);
       const future = new Date(Date.now() + 2 * 60_000);
-      utimesSync(path.join(cliBinFolder, deadStage), future, future);
+      utimesSync(path.join(cliBinFolder, deadStageName), future, future);
       runOn(host, single('cleanup'), parameters);
-      deepStrictEqual(readdirSync(cliBinFolder).sort(), [deadStage]);
+      deepStrictEqual(readdirSync(cliBinFolder).sort(), [deadStageName]);
+    });
+
+    it('keeps a non-empty cli-bin without asking for confirmation', () => {
+      const {host, parameters, cliBinFolder, prefix} = sweepHost();
+      const liveStageName = liveStage(cliBinFolder, prefix, false);
+      // A file inside the stage, so cli-bin stays non-empty after the sweep.
+      writeFileSync(path.join(cliBinFolder, liveStageName, 'partial'), '');
+      // The file moves the stage's own mtime: age it again, so only the pid check can keep it.
+      agePastFloor(cliBinFolder, [liveStageName]);
+      const {stdout, stderr} = streamsOf(host, single('cleanup'), parameters);
+      deepStrictEqual(
+        [
+          factsOf(blockOf(stdout), []),
+          readdirSync(cliBinFolder).sort(),
+          stderr,
+        ],
+        [{status: 'Ok'}, [liveStageName], ''],
+      );
     });
   });
 });

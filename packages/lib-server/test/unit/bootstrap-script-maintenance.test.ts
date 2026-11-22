@@ -14,7 +14,6 @@ import {
   utimesSync,
   writeFileSync,
 } from 'node:fs';
-import {spawnSync} from 'node:child_process';
 import path from 'node:path';
 import {scriptFor, type ScriptParameters} from '../../src/index.ts';
 import {
@@ -25,6 +24,7 @@ import {
   single,
 } from './fake-host.ts';
 import {installHostHooks, statusOf} from './bootstrap-script.fixture.ts';
+import {bareStage, deadStage, liveStage} from './cli-bin-sweep.ts';
 
 /** Whether the process is still running after up to 5 s: a signal returns before the process has exited. */
 async function stillRunning(processId: number): Promise<boolean> {
@@ -467,78 +467,34 @@ describe('the POSIX bootstrap script', () => {
         return path.join(data, 'cli-bin');
       }
 
-      it('removes a stage of a dead pid with its .stage. and .archive. entries, and keeps the stage of a live pid', () => {
-        const cliBinFolder = cliBin();
-        const ended = spawnSync('true');
-        const deadStage = `${STAGE}.${String(ended.pid)}`;
-        mkdirSync(path.join(cliBinFolder, deadStage), {recursive: true});
-        mkdirSync(
-          path.join(cliBinFolder, `${deadStage}.stage.${String(ended.pid)}`),
-          {recursive: true},
-        );
-        writeFileSync(
-          path.join(cliBinFolder, `${deadStage}.archive.${String(ended.pid)}`),
-          '',
-        );
-        // Past the sweep floor: an entry the row created seconds ago is younger than ten minutes.
-        const aged = new Date(Date.now() - 11 * 60_000);
-        for (const name of [
-          deadStage,
-          `${deadStage}.stage.${String(ended.pid)}`,
-          `${deadStage}.archive.${String(ended.pid)}`,
-        ]) {
-          utimesSync(path.join(cliBinFolder, name), aged, aged);
-        }
-        const liveStage = `${STAGE}.${String(process.pid)}`;
-        mkdirSync(path.join(cliBinFolder, liveStage), {recursive: true});
-        // Backdated past the floor, so only the pid check can keep it.
-        utimesSync(path.join(cliBinFolder, liveStage), aged, aged);
+      /** The cleanup's status and the cli-bin's survivors after the run. */
+      function assertSurvivors(folder: string, expected: string[]): void {
         deepStrictEqual(
           [
             statusOf(host, single('cleanup'), parametersFor()),
-            readdirSync(cliBinFolder).sort(),
+            readdirSync(folder).sort(),
           ],
-          ['Ok', [liveStage]],
+          ['Ok', expected],
         );
+      }
+
+      it('removes a stage of a dead pid with its .stage. and .archive. entries, and keeps the stage of a live pid', () => {
+        const cliBinFolder = cliBin();
+        deadStage(cliBinFolder, STAGE);
+        const liveStageName = liveStage(cliBinFolder, STAGE, false);
+        assertSurvivors(cliBinFolder, [liveStageName]);
       });
 
       it('keeps the .stage. and .archive. entries of a live pid', () => {
         const cliBinFolder = cliBin();
-        const liveStage = `${STAGE}.${String(process.pid)}`;
-        mkdirSync(path.join(cliBinFolder, liveStage), {recursive: true});
-        mkdirSync(
-          path.join(cliBinFolder, `${liveStage}.stage.${String(process.pid)}`),
-          {recursive: true},
-        );
-        writeFileSync(
-          path.join(
-            cliBinFolder,
-            `${liveStage}.archive.${String(process.pid)}`,
-          ),
-          '',
-        );
-        // Backdated past the floor, so only the pid check can keep them.
-        const aged = new Date(Date.now() - 11 * 60_000);
-        for (const name of [
-          liveStage,
-          `${liveStage}.stage.${String(process.pid)}`,
-          `${liveStage}.archive.${String(process.pid)}`,
-        ]) {
-          utimesSync(path.join(cliBinFolder, name), aged, aged);
-        }
-        deepStrictEqual(
+        const liveStageName = liveStage(cliBinFolder, STAGE, true);
+        assertSurvivors(
+          cliBinFolder,
           [
-            statusOf(host, single('cleanup'), parametersFor()),
-            readdirSync(cliBinFolder).sort(),
-          ],
-          [
-            'Ok',
-            [
-              liveStage,
-              `${liveStage}.archive.${String(process.pid)}`,
-              `${liveStage}.stage.${String(process.pid)}`,
-            ].sort(),
-          ],
+            liveStageName,
+            `${liveStageName}.archive.${String(process.pid)}`,
+            `${liveStageName}.stage.${String(process.pid)}`,
+          ].sort(),
         );
       });
 
@@ -556,58 +512,32 @@ describe('the POSIX bootstrap script', () => {
 
       it('leaves a name that is not the per-run form', () => {
         const cliBinFolder = cliBin();
-        mkdirSync(path.join(cliBinFolder, 'notes'), {recursive: true});
-        mkdirSync(path.join(cliBinFolder, 'two.fields'), {recursive: true});
-        deepStrictEqual(
-          [
-            statusOf(host, single('cleanup'), parametersFor()),
-            readdirSync(cliBinFolder).sort(),
-          ],
-          ['Ok', ['notes', 'two.fields']],
-        );
+        for (const name of ['notes', 'two.fields']) {
+          mkdirSync(path.join(cliBinFolder, name), {recursive: true});
+        }
+        assertSurvivors(cliBinFolder, ['notes', 'two.fields']);
       });
 
       it('keeps a per-run name whose third field is not a pid', () => {
         const cliBinFolder = cliBin();
-        mkdirSync(path.join(cliBinFolder, 'a.b.c'), {recursive: true});
-        mkdirSync(path.join(cliBinFolder, 'x.y.'), {recursive: true});
-        deepStrictEqual(
-          [
-            statusOf(host, single('cleanup'), parametersFor()),
-            readdirSync(cliBinFolder).sort(),
-          ],
-          ['Ok', ['a.b.c', 'x.y.']],
-        );
+        for (const name of ['a.b.c', 'x.y.']) {
+          mkdirSync(path.join(cliBinFolder, name), {recursive: true});
+        }
+        assertSurvivors(cliBinFolder, ['a.b.c', 'x.y.']);
       });
 
       it('keeps a dead stage younger than the sweep floor of ten minutes', () => {
         const cliBinFolder = cliBin();
-        const ended = spawnSync('true');
-        const deadStage = `${STAGE}.${String(ended.pid)}`;
-        mkdirSync(path.join(cliBinFolder, deadStage), {recursive: true});
-        deepStrictEqual(
-          [
-            statusOf(host, single('cleanup'), parametersFor()),
-            readdirSync(cliBinFolder).sort(),
-          ],
-          ['Ok', [deadStage]],
-        );
+        const deadStageName = bareStage(cliBinFolder, STAGE);
+        assertSurvivors(cliBinFolder, [deadStageName]);
       });
 
       it('keeps a dead stage whose mtime is in the future', () => {
         const cliBinFolder = cliBin();
-        const ended = spawnSync('true');
-        const deadStage = `${STAGE}.${String(ended.pid)}`;
-        mkdirSync(path.join(cliBinFolder, deadStage), {recursive: true});
+        const deadStageName = bareStage(cliBinFolder, STAGE);
         const future = new Date(Date.now() + 2 * 60_000);
-        utimesSync(path.join(cliBinFolder, deadStage), future, future);
-        deepStrictEqual(
-          [
-            statusOf(host, single('cleanup'), parametersFor()),
-            readdirSync(cliBinFolder).sort(),
-          ],
-          ['Ok', [deadStage]],
-        );
+        utimesSync(path.join(cliBinFolder, deadStageName), future, future);
+        assertSurvivors(cliBinFolder, [deadStageName]);
       });
     });
   });
