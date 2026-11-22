@@ -66,6 +66,7 @@ export const POST_MERGE_JOBS = [
   'vscodium-plan',
   'acceptance-vscodium',
   'acceptance-vscodium-containers',
+  'acceptance-vscodium-cli',
 ];
 
 /** What is wrong with the post-merge run of the workflow text: a job missing, or a condition that reads a variable. */
@@ -90,6 +91,7 @@ export function postMergeProblems(text: string): string[] {
 export const DISPATCH_GROUP_JOBS = [
   'acceptance-vscodium',
   'acceptance-vscodium-containers',
+  'acceptance-vscodium-cli',
   'acceptance-genuine',
 ];
 
