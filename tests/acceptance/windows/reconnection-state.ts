@@ -114,10 +114,14 @@ export function logLinesBetween(
 const FAILURE_PATTERN =
   /permanent failure|Will give up now|Error handled|Cannot reconnect/iu;
 
+/** How many of the lines about a reconnection given up, the last ones, the explanation keeps from before the end. */
+const EARLIER_FAILURE_LINES = 12;
+
 /**
  * The lines of a renderer log (`2026-11-20 00:03:15.909`, UTC) before `endedMs` that tell a reconnection was given up,
- * each with its time from the end, or the words that there are none and what the log held: a failure of an earlier
- * connection of the window could have made core keep its dialog back for this one.
+ * each with its time from the end, the last twelve after a line that counts the others, or the words that there are none
+ * and what the log held: a failure of an earlier connection of the window could have made core keep its dialog back for
+ * this one.
  */
 export function earlierFailureLines(
   lines: readonly string[],
@@ -135,12 +139,16 @@ export function earlierFailureLines(
       before.push({time, line});
     }
   }
-  const told = before
-    .filter(each => FAILURE_PATTERN.test(each.line))
+  const matching = before.filter(each => FAILURE_PATTERN.test(each.line));
+  const omitted = Math.max(0, matching.length - EARLIER_FAILURE_LINES);
+  const kept = matching
+    .slice(omitted)
     .map(
       each =>
         `[${signedSeconds(each.time - endedMs)}] ${each.line.slice(0, width)}`,
     );
+  const told =
+    omitted > 0 ? [`and ${String(omitted)} more before them`, ...kept] : kept;
   const first = before[0];
   return told.length > 0 || first === undefined
     ? told.length > 0

@@ -194,6 +194,25 @@ describe('the state a window showed when its wait for core’s dialog timed out 
     );
   });
 
+  it('#2753: five thousand lines about a failure before the end are told as the last twelve, each cut at the width, after a line that counts the others', () => {
+    const ended = Date.parse('2026-11-19T08:00:00Z');
+    const lines = Array.from(
+      {length: 5000},
+      (unused, index) =>
+        `2026-11-19 07:${String(Math.floor(index / 100)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000 [error] permanent failure number ${String(index)} ${'x'.repeat(500)}`,
+    );
+    const told = earlierFailureLines(lines, ended, 80);
+    deepStrictEqual(
+      [
+        told.length,
+        told[0],
+        told.slice(1).every(line => line.length <= 80 + 12),
+        told.at(-1)?.includes('permanent failure number 4999') ?? false,
+      ],
+      [13, 'and 4988 more before them', true, true],
+    );
+  });
+
   it('#2753: a log with stamped lines before the end and none about a failure says how many it held and from when, and a log with none says so', () => {
     const ended = Date.parse('2026-11-19T07:00:10Z');
     deepStrictEqual(
