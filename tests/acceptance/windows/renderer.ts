@@ -8,6 +8,11 @@
  */
 
 import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
+import {
+  mergeReads,
+  wheelDirection,
+  type ViewRowRead,
+} from '../../../tools/view-rows.ts';
 import path from 'node:path';
 import {inWindow, isOpen, variable, windowState} from './harness.ts';
 import {
@@ -30,6 +35,86 @@ import {
 const WAIT_MILLISECONDS = 60_000;
 
 const POLL_MILLISECONDS = 200;
+
+/**
+ * The page-side code the reads of a virtualized list share (card #2960), standing on the pane and on the list it
+ * finds in it: the container that overflows and holds treeitems, the wheel of its viewport, the labels of the rows
+ * that move, and the wheel to the list's top.
+ */
+
+/** The pane's outermost element that overflows and holds treeitems, the container of its virtualized list. */
+const LIST_CONTAINER = `const overflowing = [...pane.querySelectorAll('*')].filter(el =>
+  el.scrollHeight > el.clientHeight + 1 &&
+  el.querySelector('[role="treeitem"]') !== null
+);
+const list = overflowing.find(el =>
+  overflowing.every(other => other === el || !other.contains(el))
+);`;
+
+/** A wheel of the list's container, then the settle of its smooth scroll. */
+const WHEEL_SETTLE = `const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+const wheel = delta => {
+  list.dispatchEvent(
+    new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      deltaY: delta,
+      deltaMode: 0,
+    })
+  );
+  return wait(600);
+};`;
+
+/**
+ * The labels of the rows of the list's viewport, and `first`, the pair of its first and last label: the sticky
+ * (pinned) rows are left out — they do not move with the list, so they tell nothing about where a wheel went — and
+ * a list that overflows by less than a row moves its last row in while the first stays, so the first alone does
+ * not tell that the list moved.
+ */
+const ROW_LABELS = `const labels = () =>
+  [...pane.querySelectorAll('[role="treeitem"]:not(.monaco-tree-sticky-row)')]
+    .filter(row => row.getAttribute('aria-level') !== null)
+    .map(row => row.querySelector('.label-name')?.textContent ?? '');
+const first = () => {
+  const rows = [...pane.querySelectorAll('[role="treeitem"]:not(.monaco-tree-sticky-row)')];
+  const label = row => row?.querySelector('.label-name')?.textContent ?? '';
+  return label(rows[0]) + '\u0000' + label(rows.at(-1));
+};`;
+
+/**
+ * The wheel to the list's top, standing on the list's `labels` and `move`: the wheel's sign that scrolls the list
+ * up varies with the build, so it is probed — at a boundary only one sign moves — and a move's direction, told by
+ * its labels with `wheelDirection`'s own text (the page runs the very function the unit rows test), sets the
+ * sign; the list is wheeled up with it until it stands at its top.
+ */
+const WHEEL_TO_TOP = `const direction = ${wheelDirection.toString()};
+const probe = async delta => {
+  const before = labels();
+  const moved = await move(delta);
+  return {delta, moved, before, after: labels()};
+};
+let upSign = 0;
+let topStep = await probe(-400);
+if (!topStep.moved) {
+  topStep = await probe(400);
+}
+if (topStep.moved) {
+  const way = direction(topStep.before, topStep.after);
+  if (way === 'down') {
+    upSign = -topStep.delta;
+  } else if (way === 'up') {
+    upSign = topStep.delta;
+  } else {
+    throw new Error('the wheel to the top could not tell its direction');
+  }
+}
+let topMoves = 0;
+while (upSign !== 0 && topMoves < 200 && (await move(upSign))) {
+  topMoves += 1;
+}
+if (upSign !== 0 && topMoves >= 200) {
+  throw new Error('the list did not reach its top in 200 moves');
+}`;
 
 /** A row of a view, as the window shows it. */
 export interface ViewRow {
@@ -539,18 +624,18 @@ export async function renderedRows(
 
 /**
  * The rows of view `viewName` in window `name`, in the order shown; `undefined` when the window has no such view. A
- * virtualized list keeps only the rows of its viewport in the DOM, so a list that overflows its container is read by
- * wheel-scrolling the container in steps and collecting every row it shows, then wheeling it back to where it was for
- * the next user action. The wheel's sign that scrolls the list down varies with the build, so it is probed, and a list
- * that overflows moves for exactly one of the two.
+ * virtualized list keeps only the rows of its viewport in the DOM, so a list that overflows its container is read
+ * from its top: the list is wheeled to its top first, since a read that stands mid-list never reaches the rows
+ * above it, and the top's read and the reads of the walk over the list are merged with the values of the read that
+ * first shows a row. The list is wheeled back to its top, so a later user action finds it there. The wheel's sign
+ * that scrolls a list varies with the build, so it is probed, and a list that overflows moves for exactly one of
+ * the two.
  */
 export async function viewRows(
   name: string,
   viewName: string,
 ): Promise<ViewRow[] | undefined> {
-  const rows = await evaluate<Array<
-    Omit<ViewRow, 'expanded'> & {expanded: boolean | null}
-  > | null>(
+  const reads = await evaluate<ViewRowRead[][] | null>(
     name,
     `(async () => {
       const pane = ${paneExpression(viewName)};
@@ -567,35 +652,21 @@ export async function viewRows(
             // null across the protocol: a row without the attribute is not expanded.
             expanded: row.hasAttribute('aria-expanded') ? row.getAttribute('aria-expanded') === 'true' : null,
           }));
-      const overflow = [...pane.querySelectorAll('*')].filter(el =>
-        el.scrollHeight > el.clientHeight + 1 &&
-        el.querySelector('[role="treeitem"]') !== null
-      );
-      const list = overflow.find(el =>
-        overflow.every(other => other === el || !other.contains(el))
-      );
+      ${LIST_CONTAINER}
       if (list === undefined) {
-        return read();
+        return [read()];
       }
-      const seen = new Map();
-      const order = [];
-      const collect = () => {
-        for (const row of read()) {
-          const key = String(row.level) + ':' + row.label;
-          // The first reading wins: the read starts at the list's top, so a header the scrolled view
-          // pins again keeps the values of its first reading.
-          if (!seen.has(key)) {
-            order.push(key);
-            seen.set(key, row);
-          }
-        }
-      };
-      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-      // The trace of this walk, for a read that no one answers: the page's visibility at the start and at each
-      // change, and each move's wall time against the 600 ms it set. It stands on the page, so a read that dies on
-      // its bound can still ask the page for it (the protocol's diagnostics read); a finished walk clears it.
+      ${ROW_LABELS}
+      ${WHEEL_SETTLE}
+      // The trace of this walk, for a read that no one answers: the page's clock at the expression's start, the
+      // page's visibility at the start and at each change, and each move's wall time against the 600 ms it set. It
+      // stands on the page, so a read that dies on its bound can still ask the page for it (the protocol's
+      // diagnostics read); a finished walk clears it.
       const walkStart = Date.now();
-      const walkTrace = ['visibilityState ' + document.visibilityState];
+      const walkTrace = [
+        'pageStart ' + walkStart,
+        'visibilityState ' + document.visibilityState,
+      ];
       let walkVisibility = document.visibilityState;
       let walkStep = 0;
       const markWalk = part => {
@@ -608,26 +679,10 @@ export async function viewRows(
         walkTrace.push(part);
       };
       window.remoteOssViewRowsTrace = walkTrace.join(' ');
-      // The first and the last rendered rows: a list that overflows by less than a row moves its last row in while the
-      // first stays, so the first alone does not tell that the list moved.
-      const first = () => {
-        const rows = [...pane.querySelectorAll('[role="treeitem"]')];
-        const label = row => row?.querySelector('.label-name')?.textContent ?? '';
-        return label(rows[0]) + '\u0000' + label(rows.at(-1));
-      };
-      // A wheel moves the list with a smooth scroll, so the next wheel waits for the move to settle.
       const move = async delta => {
         const before = first();
-        list.dispatchEvent(
-          new WheelEvent('wheel', {
-            bubbles: true,
-            cancelable: true,
-            deltaY: delta,
-            deltaMode: 0,
-          })
-        );
         const waitStartedAt = Date.now();
-        await wait(600);
+        await wheel(delta);
         walkStep += 1;
         markWalk(
           'move ' +
@@ -641,46 +696,53 @@ export async function viewRows(
         window.remoteOssViewRowsTrace = walkTrace.join(' ');
         return first() !== before;
       };
+      ${WHEEL_TO_TOP}
+      // The walk stands at the list's top now, where a fresh read would, so the reads after it read the list the
+      // way a fresh one would: the top's read, the read after the probe of the wheel that scrolls the list down,
+      // the reads of the walk over the list, and the read that closes it, once the list is wheeled back to its top
+      // for the next user action.
       const topFirst = first();
-      collect();
+      const reads = [read()];
       let down = 0;
       if (await move(-400)) {
         down = -400;
-        collect();
       } else if (await move(400)) {
         down = 400;
-        collect();
       }
-      let steps = 0;
-      while (down !== 0 && steps < 200) {
+      reads.push(read());
+      let downMoves = 0;
+      while (down !== 0 && downMoves < 200) {
         if (!(await move(down))) {
           break;
         }
-        collect();
-        steps += 1;
+        reads.push(read());
+        downMoves += 1;
       }
-      while (down !== 0 && steps < 200) {
+      let backMoves = 0;
+      while (down !== 0 && backMoves < 200) {
         await move(-down);
         if (first() === topFirst) {
           break;
         }
-        steps += 1;
+        backMoves += 1;
       }
       await wait(200);
-      collect();
+      reads.push(read());
       window.remoteOssViewRowsTrace = undefined;
-      return order.map(key => seen.get(key));
+      return reads;
     })()`,
     LONG_READ_MILLISECONDS,
     'String(window.remoteOssViewRowsTrace ?? null)',
   );
-  // The protocol returns values as JSON, where `expanded: undefined` would drop: read it back as it is.
-  return (
-    rows?.map(each => ({
-      ...each,
-      expanded: each.expanded ?? undefined,
-    })) ?? undefined
-  );
+  if (reads === null) {
+    return undefined;
+  }
+  // The protocol returns values as JSON, where `expanded: undefined` would drop: the null a read did not draw
+  // is no state.
+  return mergeReads(reads).map(each => ({
+    ...each,
+    expanded: each.expanded ?? undefined,
+  }));
 }
 
 /**
@@ -730,9 +792,68 @@ async function clickAction(
 }
 
 /**
+ * Wheels the one row labelled `rowLabel` of view `viewName` in window `name` into the viewport of its virtualized
+ * list, so the row is drawn where an action on it is looked for: the list is wheeled to its top and then down over
+ * the row, and it stands where the row was found; `false` when the row is not drawn then, so the look for the
+ * action stands and fails naming it.
+ */
+async function ensureRowDrawn(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+): Promise<boolean> {
+  return evaluate<boolean>(
+    name,
+    `(async () => {
+      const pane = ${paneExpression(viewName)};
+      if (pane === undefined) {
+        return false;
+      }
+      const drawn = () =>
+        [...pane.querySelectorAll('[role="treeitem"]')].some(
+          row =>
+            row.getAttribute('aria-level') !== null &&
+            row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)}
+        );
+      if (drawn()) {
+        return true;
+      }
+      ${LIST_CONTAINER}
+      if (list === undefined) {
+        return false;
+      }
+      ${ROW_LABELS}
+      ${WHEEL_SETTLE}
+      const move = async delta => {
+        const before = first();
+        await wheel(delta);
+        return first() !== before;
+      };
+      ${WHEEL_TO_TOP}
+      let down = 0;
+      if (await move(-400)) {
+        down = -400;
+      } else if (await move(400)) {
+        down = 400;
+      }
+      let downMoves = 0;
+      while (down !== 0 && downMoves < 200 && !drawn()) {
+        if (!(await move(down))) {
+          break;
+        }
+        downMoves += 1;
+      }
+      return drawn();
+    })()`,
+    LONG_READ_MILLISECONDS,
+  );
+}
+
+/**
  * Clicks the inline action `actionTitle` of the one row labelled `rowLabel` in view `viewName` of window `name`. The
- * row's actions stay out of sight until it is hovered, so the row is hovered again before each re-read until they are
- * drawn.
+ * action is looked for where the row is drawn, and a virtualized list keeps only the rows of its viewport in the
+ * DOM, so the row is wheeled into the list's viewport first; the row's actions stay out of sight until it is
+ * hovered, so the row is hovered again before each re-read until they are drawn.
  */
 export async function rowAction(
   name: string,
@@ -740,6 +861,7 @@ export async function rowAction(
   rowLabel: string,
   actionTitle: string,
 ): Promise<void> {
+  await ensureRowDrawn(name, viewName, rowLabel);
   await clickAction(
     name,
     viewName,
