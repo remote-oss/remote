@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   bundleFolderOf,
   clientCases,
+  CLIENT_EPHEMERAL_LOWEST,
   CONFIG_FILE_LAUNCHES,
   extensionsOf,
   failureCases,
@@ -1727,7 +1728,9 @@ describe('the ports cases', () => {
     deepStrictEqual(
       [
         named.length > 0,
-        named.filter(port => port >= 32_768 || port <= lastWindowPort),
+        named.filter(
+          port => port >= CLIENT_EPHEMERAL_LOWEST || port <= lastWindowPort,
+        ),
       ],
       [true, []],
     );
@@ -2497,7 +2500,7 @@ describe('the platform cases (card coverage-12)', () => {
     const all = launchesOf(REPOSITORY_ROOT);
     deepStrictEqual(
       [
-        (first ?? 0) > 1023 && (last ?? 65535) < 32768,
+        (first ?? 0) > 1023 && (last ?? 65535) < CLIENT_EPHEMERAL_LOWEST,
         all
           .filter(
             launch =>
