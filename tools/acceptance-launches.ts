@@ -1355,6 +1355,8 @@ export function launchesOf(root: string): Launch[] {
       suite: 'cli-path',
       cliSource: true,
       namedOnly: true,
+      // Core draws its dialogs natively on Linux unless asked otherwise, which a row's read of the page does not show.
+      settings: {'window.dialogStyle': 'custom'},
     },
     // WSL on Linux: its commands stay out of the way where WSL cannot run, in a desktop window, in the browser build
     // the editor stands in for with `remote.extensionKind`, and beside the other WSL extension, where it stands down.
