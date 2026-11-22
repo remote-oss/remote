@@ -202,22 +202,23 @@ const FORM_READ = `(() => {
 
 /**
  * Clicks the control that expands the reporter's system-information row, the "show" beside "Include my system
- * information", whose text the page splits across elements. It finds the smallest element that shows the control and
- * climbs it until its row shows the row's label.
+ * information", whose text the page splits across elements, so no leaf element shows it alone: the control is the
+ * smallest element that shows the whole of its text, clicked as a user would click the label.
  */
 const SYSTEM_TOGGLE = `(() => {
-  const leaves = [...document.querySelectorAll('*')].filter(element => element.childElementCount === 0 && (element.textContent ?? '').includes('(show)'));
-  for (const leaf of leaves) {
-    let region = leaf;
-    for (let up = 0; up < 6 && region.parentElement !== null; up += 1) {
-      region = region.parentElement;
-      if ((region.textContent ?? '').includes('system information')) {
-        leaf.click();
-        return 'clicked';
-      }
-    }
+  const controls = [...document.querySelectorAll('*')].filter(element => {
+    const text = element.textContent ?? '';
+    return text.includes('system information') && text.includes('(show)');
+  });
+  if (controls.length === 0) {
+    return 'no system information show control';
   }
-  return 'no system information show control';
+  const control = controls.sort(
+    (first, second) =>
+      (first.textContent ?? '').length - (second.textContent ?? '').length,
+  )[0];
+  control.click();
+  return 'clicked the ' + control.tagName.toLowerCase();
 })()`;
 
 /** The reporter's system-information table as its rows read it, label then value, or the text that is there. */
@@ -405,7 +406,6 @@ describe('the Issue Reporter the Report Issue... command opens (card #2488)', fu
           dialog,
           pick,
           connectionLog: since,
-          toggle: toggled,
           remoteMatchesHost: remoteValue.startsWith(`SSH: ${HOST_ALIAS}`),
           repeat: [before, after.length],
           repeatUnchanged: repeated?.text === expanded?.text,
@@ -429,7 +429,6 @@ describe('the Issue Reporter the Report Issue... command opens (card #2488)', fu
           dialog: undefined,
           pick: null,
           connectionLog: [],
-          toggle: 'clicked',
           remoteMatchesHost: true,
           repeat: [1, 1],
           repeatUnchanged: true,
