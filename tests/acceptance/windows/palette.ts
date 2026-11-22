@@ -1,6 +1,8 @@
 import {startInWindow, terminalFacts, windowEvents} from './harness.ts';
 import {
+  answerDialog,
   chooseQuickPickRow,
+  dialogOf,
   moveQuickPickFocus,
   pageFocusFacts,
   pressEscape,
@@ -77,11 +79,50 @@ async function showedPalette(name: string): Promise<void> {
   }
 }
 
-/** The labels of the items that the command palette of window `name` lists for `text`, once its list has settled. */
+/** How long the editor's command that clears the palette's history may take to end, in milliseconds. */
+const CLEAR_HISTORY_MILLISECONDS = 15_000;
+
+/**
+ * Clears the editor's history of the commands run from the palette, which the palette lists ahead of its alphabetical
+ * list: a row that reads the order of the list assumes a profile in which no earlier row ran a command from it. The
+ * command may ask to confirm; its confirming button is clicked, and a dialog with none fails naming its buttons.
+ */
+async function clearedHistory(name: string): Promise<void> {
+  const before = windowEvents(name).length;
+  await startInWindow(name, 'workbench.action.clearCommandHistory');
+  const deadline = Date.now() + CLEAR_HISTORY_MILLISECONDS;
+  while (Date.now() < deadline) {
+    const ended = windowEvents(name)
+      .slice(before)
+      .some(each => each.event === 'done' || each.event === 'failed');
+    if (ended) {
+      return;
+    }
+    const dialog = await dialogOf(name).catch(() => undefined);
+    if (dialog !== undefined) {
+      const confirming = dialog.buttons.find(label => /clear/i.test(label));
+      if (confirming === undefined) {
+        throw new Error(
+          `window ${name}: the command that clears the palette's history asked "${dialog.message}" with the buttons ${JSON.stringify(dialog.buttons)}, none of which clears`,
+        );
+      }
+      await answerDialog(name, confirming);
+    }
+    await new Promise(resolve =>
+      setTimeout(resolve, SAMPLE_INTERVAL_MILLISECONDS),
+    );
+  }
+  throw new Error(
+    `window ${name}: the command that clears the palette's history did not end within ${String(CLEAR_HISTORY_MILLISECONDS)} ms`,
+  );
+}
+
+/** The labels of the items that the command palette of window `name` lists for `text`, once its list has settled, with the palette's history of run commands cleared first. */
 export async function paletteItems(
   name: string,
   text: string,
 ): Promise<string[]> {
+  await clearedHistory(name);
   await showedPalette(name);
   await typeInQuickPick(name, `>${text}`);
   let items: string[] = [];
