@@ -14,6 +14,7 @@ import {
   listedTargets,
   localPageAmong,
   pagesDescription,
+  pagesOfNoOpenWindow,
   portIn,
   waitUntilPageLeft,
 } from '../tests/acceptance/windows/page-list.ts';
@@ -403,6 +404,29 @@ describe('the close that is sent again while the page stays and the window is op
     deepStrictEqual(
       [await closeUntilGone(attempt, () => true, 2), counted.runs],
       [{last: stayed('second'), tried: 2, notes: ['first', 'second']}, 2],
+    );
+  });
+
+  it('#2936: the pages of no open window are those that no open window remembers: a closed window’s page and a page nobody remembers are left over, a page of an open window or of local is not', () => {
+    function open(window: string): boolean {
+      return window !== 'closed';
+    }
+    deepStrictEqual(
+      pagesOfNoOpenWindow(
+        [
+          page('open-page-0001', '[c1]'),
+          page('closed-page-0002', '[c2]'),
+          page('local-page-0003', '[]'),
+          page('nobody-page-0004', '[c4]'),
+        ],
+        new Map([
+          ['w1', 'open-page-0001'],
+          ['closed', 'closed-page-0002'],
+          ['local', 'local-page-0003'],
+        ]),
+        open,
+      ).map(each => each.id),
+      ['closed-page-0002', 'nobody-page-0004'],
     );
   });
 });

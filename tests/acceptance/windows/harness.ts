@@ -56,6 +56,7 @@ import {
   type DebugTarget,
   listedPages,
   pagesDescription,
+  pagesOfNoOpenWindow,
   REMEMBERED_PAGES,
   waitUntilPageLeft,
 } from './page-list.ts';
@@ -1470,6 +1471,31 @@ async function pagesListedNow(): Promise<DebugTarget[] | undefined> {
   } catch {
     return undefined;
   }
+}
+
+/** The ids of the pages that the last `leftoverPagesNote` told, so that a page that stays is told once and not at every teardown. */
+let toldLeftoverPages = '';
+
+/**
+ * What the editor lists that no open window remembers, told when it differs from what was told last: the pages that a
+ * window left behind after its close or its row's failure stay in the list for the rest of the launch, and every later
+ * row has more pages to tell apart (#2936). Nothing when none is listed, when the list cannot be read, or when these were
+ * told already.
+ */
+export async function leftoverPagesNote(): Promise<string | undefined> {
+  const listed = await pagesListedNow();
+  if (listed === undefined) {
+    return undefined;
+  }
+  const leftover = pagesOfNoOpenWindow(listed, REMEMBERED_PAGES, isOpen);
+  const identifiers = leftover.map(page => page.id).join(',');
+  if (identifiers === toldLeftoverPages) {
+    return undefined;
+  }
+  toldLeftoverPages = identifiers;
+  return leftover.length === 0
+    ? undefined
+    : `${String(leftover.length)} pages of the editor's list that no open window remembers: ${pagesDescription(leftover, REMEMBERED_PAGES, isOpen)}`;
 }
 
 /** How many times a close is sent while the window stays listed and open: the close, and one more. */

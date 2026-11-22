@@ -23,6 +23,7 @@ import {
   hostPassword,
   inWindow,
   isOpen,
+  leftoverPagesNote,
   noHelperWithin,
   onHost,
   onHostAs,
@@ -355,6 +356,10 @@ export async function closeLeftoverWindows(): Promise<void> {
     if (name !== 'local' && isOpen(name)) {
       await closeContained(name, pressEscape);
     }
+  }
+  const left = await leftoverPagesNote();
+  if (left !== undefined) {
+    process.stderr.write(`after closing the leftover windows: ${left}\n`);
   }
 }
 

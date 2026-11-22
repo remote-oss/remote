@@ -107,6 +107,20 @@ export function pagesDescription(
     : described.join('; ');
 }
 
+/** The pages of `found` that no open window remembers: what the editor still lists once every window of the launch is closed. */
+export function pagesOfNoOpenWindow(
+  found: readonly DebugTarget[],
+  remembered: ReadonlyMap<string, string>,
+  open: (window: string) => boolean,
+): DebugTarget[] {
+  return found.filter(
+    page =>
+      ![...remembered].some(
+        ([window, pageId]) => pageId === page.id && open(window),
+      ),
+  );
+}
+
 /** The port the editor chose, read from the file it writes in the launch's user-data folder; none while there is no port. */
 export function portIn(file: string): number | undefined {
   const port = existsSync(file)
