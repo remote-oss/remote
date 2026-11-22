@@ -8,9 +8,43 @@
 
 ## Context
 
+D-107 builds a relay of our own that is wire-compatible with the dev tunnels service. Its contract is the relay brief,
+`docs/architecture/l3/tunnels/brief-relay.md`, read from `[dev-tunnels]` and `[cli]` under ADR-0014. The relay
+terminates only the host's leg: an SSH session in which the relay is the server and the key exchange, host key and
+cipher are all `none` (`[dev-tunnels] rs/src/connections/relay_tunnel_host.rs:367-383,79-82`). The client's leg is an
+SSH session end to end with the host, which the relay only pipes through a `client-ssh-session-stream` channel
+(`:958-969`).
+
+Two SSH libraries speak that `none` exchange, both MIT and both in `[dev-tunnels]`'s own dependencies:
+- `russh` 0.37.1, for the Rust SDK and `[cli]` (`rs/Cargo.toml:22-23`);
+- `@microsoft/dev-tunnels-ssh`, for the TypeScript SDK, whose V1 host opens the leg with
+  `SshSessionConfiguration(false)` (`ts/package.json:24-25`; `ts/src/connections/tunnelRelayTunnelHost.ts:224-225`),
+  and which also provides an `SshServerSession`.
+
+Every package in the repository is TypeScript, and every gate is built for it (ADR-0002, ADR-0003).
+
 ## Decision
 
+1. **The relay is written in TypeScript**, as the workspace package `tunnel-relay` (`packages/tunnel-relay`). It
+   serves the brief's management API, and it terminates the host leg with a dev-tunnels-ssh `SshServerSession` on
+   `SshSessionConfiguration(false)`. It depends on `@microsoft/dev-tunnels-ssh`, which ADR-0014 admits, and reuses
+   `[dev-tunnels]`'s TypeScript contract types where they fit.
+2. **The condition:** before the first relay card, the T.6 spike shows that this server session completes the host
+   leg with **both** `[dev-tunnels]`'s Rust host (`russh`, which is `[cli]`'s path) and its TypeScript host, and
+   pipes a `client-ssh-session-stream` channel end to end. The two libraries interoperating is inferred, since both
+   talk to Microsoft's service, and is unverified until that run.
+3. **The fallback:** if T.6 is red, the relay is Rust with `russh`, under the R section below, and this ADR is
+   revised.
+4. **ADR-0004 is unchanged:** the relay is a service, and no SSH connection that an extension opens goes through it
+   or through dev-tunnels-ssh.
+
 ## Options considered
+
+| Option | For | Against |
+|---|---|---|
+| T (chosen, on T.6): TypeScript with dev-tunnels-ssh | One toolchain: every gate applies as it is, and every coder writes TypeScript. The TypeScript SDK's own library | The interoperation of `none` with `russh` rests on T.6 |
+| R: Rust with `russh` | The same library as `[cli]`'s host, so interoperation with it is certain | A second toolchain in CI, adding 5 to 10 min to every gate that touches it. `dupes` and `dead` have no Rust counterpart |
+| A TypeScript relay with a JavaScript SSH server patched for `none` | — | It maintains a fork, when dev-tunnels-ssh already offers `none` |
 
 ## Build and CI (proteus)
 
