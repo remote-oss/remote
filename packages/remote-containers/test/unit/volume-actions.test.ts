@@ -9,7 +9,7 @@ import {
   volumeNameOf,
 } from '../../src/explorer/volume-actions.ts';
 
-const ROW = {name: 'owner-repo-1', viewItem: 'uniqueDevVolume'};
+const UNIQUE_ROW = {name: 'owner-repo-1', viewItem: 'uniqueDevVolume'};
 
 function finished(status: number): EngineRunOutcome {
   return {kind: 'ran', status, stdout: '', stderr: ''};
@@ -74,7 +74,7 @@ function sceneOf(
 describe('Remove of the Dev Volumes view (card containers-167)', () => {
   it('F-0904 AC-9: a volume no container mounts asks S041 with the raw name and no message, and Remove runs docker volume rm and reads the view again', async () => {
     const {events, remove} = sceneOf(() => finished(0));
-    await remove(ROW);
+    await remove(UNIQUE_ROW);
     deepStrictEqual(events, [
       "confirm |Are you sure you want to remove volume 'owner-repo-1'?|Remove",
       'volume rm owner-repo-1',
@@ -84,7 +84,7 @@ describe('Remove of the Dev Volumes view (card containers-167)', () => {
 
   it('F-0904 AC-9: Cancel removes nothing and reads nothing', async () => {
     const {events, remove} = sceneOf(() => finished(0), {confirmed: false});
-    await remove(ROW);
+    await remove(UNIQUE_ROW);
     deepStrictEqual(events.length, 1);
   });
 
@@ -92,9 +92,9 @@ describe('Remove of the Dev Volumes view (card containers-167)', () => {
     const used = sceneOf(() => finished(0), {
       containers: [mounting(['x']), mounting(['owner-repo-1'])],
     });
-    await used.remove(ROW);
+    await used.remove(UNIQUE_ROW);
     const named = sceneOf(() => finished(0), {containers: [mounting([])]});
-    await named.remove(ROW);
+    await named.remove(UNIQUE_ROW);
     deepStrictEqual(
       [used.events, named.events[0]?.slice(0, 8)],
       [
@@ -106,7 +106,7 @@ describe('Remove of the Dev Volumes view (card containers-167)', () => {
 
   it('F-0904 AC-14, AC-21: a removal that fails for a volume already gone is no error, and the view is read again', async () => {
     const {events, remove} = sceneOf(() => finished(1));
-    await remove(ROW);
+    await remove(UNIQUE_ROW);
     deepStrictEqual(events.slice(1), [
       'volume rm owner-repo-1',
       'volume inspect -- owner-repo-1',
@@ -118,7 +118,7 @@ describe('Remove of the Dev Volumes view (card containers-167)', () => {
     const {events, remove} = sceneOf(argv =>
       finished(argv[1] === 'rm' ? 1 : 0),
     );
-    await remove(ROW);
+    await remove(UNIQUE_ROW);
     deepStrictEqual(events.slice(1), [
       'volume rm owner-repo-1',
       'volume inspect -- owner-repo-1',

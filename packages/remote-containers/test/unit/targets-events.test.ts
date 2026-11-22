@@ -97,8 +97,26 @@ describe('the container events of the Dev Containers view (card containers-31)',
     deepStrictEqual(
       [scene.engine.processes.map(process => process.argv), EVENTS_ARGUMENTS],
       [
-        [['events', '--filter', 'type=container', '--format', '{{json .}}']],
-        ['events', '--filter', 'type=container', '--format', '{{json .}}'],
+        [
+          [
+            'events',
+            '--filter',
+            'type=container',
+            '--filter',
+            'type=volume',
+            '--format',
+            '{{json .}}',
+          ],
+        ],
+        [
+          'events',
+          '--filter',
+          'type=container',
+          '--filter',
+          'type=volume',
+          '--format',
+          '{{json .}}',
+        ],
       ],
     );
   });

@@ -28,7 +28,7 @@ const WEB_ADDRESS = /^https?:\/\//i;
 export type VolumeKind = 'devVolume' | 'uniqueDevVolume';
 
 /** The icon of a tooltip line, by its codicon name without the `$()`. */
-export type TooltipIcon =
+type TooltipIcon =
   | 'github'
   | 'source-control'
   | 'file-symlink-directory'

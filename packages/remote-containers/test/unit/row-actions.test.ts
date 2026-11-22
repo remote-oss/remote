@@ -3,11 +3,8 @@ import type {
   EngineHost,
   EngineRunOutcome,
 } from '../../src/engine/engine-host.ts';
-import {
-  type Confirmation,
-  containerRowOf,
-  rowActionsOf,
-} from '../../src/explorer/row-actions.ts';
+import type {Confirmation} from '../../src/explorer/confirmation.ts';
+import {containerRowOf, rowActionsOf} from '../../src/explorer/row-actions.ts';
 import type {ListedContainer} from '../../src/explorer/listed-containers.ts';
 import type {ListedVolume} from '../../src/explorer/listed-volumes.ts';
 import type {TargetRow} from '../../src/explorer/targets-model.ts';
@@ -439,7 +436,7 @@ describe('the row actions of the Dev Containers view (card containers-102)', () 
     name: 'repo-volume',
     labels: {'vsch.local.repository.unique': 'true'},
   };
-  const OWN = listed(
+  const OWNING = listed(
     'target',
     {'vsch.local.repository.volume': 'repo-volume'},
     ['repo-volume'],
@@ -447,7 +444,7 @@ describe('the row actions of the Dev Containers view (card containers-102)', () 
 
   it('F-0904 AC-11: a Remove whose container names a unique volume no other container mounts asks the second dialog S347/S133, and Remove deletes the container and then the volume', async () => {
     const {scene, actions} = sceneOf(quiet, {
-      containers: [OWN],
+      containers: [OWNING],
       volumes: [UNIQUE_VOLUME],
     });
     await actions.remove(EXITED);
@@ -486,7 +483,7 @@ describe('the row actions of the Dev Containers view (card containers-102)', () 
   it('F-0904 AC-11: Cancel on the second dialog deletes only the container', async () => {
     const {scene, actions} = sceneOf(quiet, {
       confirmed: [true, false],
-      containers: [OWN],
+      containers: [OWNING],
       volumes: [UNIQUE_VOLUME],
     });
     await actions.remove(EXITED);
@@ -499,19 +496,19 @@ describe('the row actions of the Dev Containers view (card containers-102)', () 
   });
 
   it('F-0904 AC-12, AC-13, AC-35, AC-36: no second dialog for a devVolume, for a container with no volume label, for a volume another container mounts in any state, or when the label names no volume; one for a volume that only another container’s label names', async () => {
-    const asked = async (
+    async function asked(
       containers: ListedContainer[],
       volumes: ListedVolume[],
-    ): Promise<number> => {
+    ): Promise<number> {
       const {scene, actions} = sceneOf(quiet, {containers, volumes});
       await actions.remove(EXITED);
       return scene.confirmations.length;
-    };
+    }
     deepStrictEqual(
       [
-        await asked([OWN], [{name: 'repo-volume', labels: {}}]),
+        await asked([OWNING], [{name: 'repo-volume', labels: {}}]),
         await asked(
-          [OWN],
+          [OWNING],
           [
             {
               name: 'repo-volume',
@@ -521,14 +518,14 @@ describe('the row actions of the Dev Containers view (card containers-102)', () 
         ),
         await asked([listed('target', {}, ['repo-volume'])], [UNIQUE_VOLUME]),
         await asked(
-          [OWN, listed('other', {}, ['repo-volume'], 2)],
+          [OWNING, listed('other', {}, ['repo-volume'], 2)],
           [UNIQUE_VOLUME],
         ),
-        await asked([OWN], []),
-        await asked([listed('else', {})], [UNIQUE_VOLUME]),
+        await asked([OWNING], []),
+        await asked([listed('else', {}, [])], [UNIQUE_VOLUME]),
         await asked(
           [
-            OWN,
+            OWNING,
             listed(
               'named',
               {'vsch.local.repository.volume': 'repo-volume'},
@@ -558,7 +555,7 @@ describe('the row actions of the Dev Containers view (card containers-102)', () 
   it('F-0904 BR-5: a volume removal that fails after the container went is the error S169 naming the command, and the view is read again', async () => {
     const {scene, actions} = sceneOf(
       argv => (argv[0] === 'volume' ? finished(1) : finished(0)),
-      {containers: [OWN], volumes: [UNIQUE_VOLUME]},
+      {containers: [OWNING], volumes: [UNIQUE_VOLUME]},
     );
     await actions.remove(EXITED);
     deepStrictEqual(scene.events.slice(-2), [

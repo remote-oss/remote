@@ -284,5 +284,10 @@
   "The configuration {0} is not a JSON object, so the extension was not added.": "The configuration {0} is not a JSON object, so the extension was not added.",
   "{0} in the configuration is not an array, so the extension was not added.": "{0} in the configuration is not an array, so the extension was not added.",
   "The extension could not be added: {0}": "The extension could not be added: {0}",
-  "it is not an extension id": "it is not an extension id"
+  "it is not an extension id": "it is not an extension id",
+  "Do you want to remove the volume and the data it contains?": "Do you want to remove the volume and the data it contains?",
+  "The container is using a volume with a cloned repository.": "The container is using a volume with a cloned repository.",
+  "Are you sure you want to remove volume '{0}'?": "Are you sure you want to remove volume '{0}'?",
+  "Error removing volume: {0}": "Error removing volume: {0}",
+  "Volume '{0}' is in use and cannot be removed.": "Volume '{0}' is in use and cannot be removed."
 }

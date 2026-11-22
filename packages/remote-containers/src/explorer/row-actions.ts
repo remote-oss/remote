@@ -16,7 +16,12 @@ import {
 import type {TargetRow} from './targets-model.ts';
 import type {ListedContainer} from './listed-containers.ts';
 import type {ListedVolume} from './listed-volumes.ts';
-import {chainedVolumeOf, VOLUME_TEMPLATES} from './volume-actions.ts';
+import type {Confirmation} from './confirmation.ts';
+import {
+  chainedVolumeOf,
+  failureTextOf,
+  VOLUME_TEMPLATES,
+} from './volume-actions.ts';
 
 /** The English template of each text of the actions, by its string id. */
 const ACTION_TEMPLATES = {
@@ -36,17 +41,6 @@ const ACTION_TEMPLATES = {
 
 /** The named volume that holds the server and is shared by every container, so it is never "the last" of anything. */
 const SHARED_VOLUME = 'vscode';
-
-/** A modal warning with one button besides Cancel. */
-export interface Confirmation {
-  /** The first line; empty for a dialog that has only a detail. */
-  message: string;
-  detail: string;
-  /** The text of the button that confirms. */
-  accept: string;
-  /** `info` for the information icon; none for the warning icon. */
-  severity?: 'info';
-}
 
 /** What the actions need of their surroundings. */
 export interface RowActionPorts {
@@ -147,7 +141,7 @@ export function rowActionsOf(ports: RowActionPorts): RowActions {
 
   /** The text a failed Docker command is reported as. */
   function failureText(argv: readonly string[]): string {
-    return `Command failed: ${[ports.program(), ...argv].join(' ')}`;
+    return failureTextOf(ports.program(), argv);
   }
 
   /** Runs `argv` on the engine; what the user is told when it did not exit with 0, else none. */

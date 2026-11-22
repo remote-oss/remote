@@ -9,7 +9,7 @@ import {filled} from '../surfaces/filled.ts';
 import type {ListedContainer} from './listed-containers.ts';
 import {recordOf} from './listed-containers.ts';
 import type {ListedVolume} from './listed-volumes.ts';
-import type {Confirmation} from './row-actions.ts';
+import type {Confirmation} from './confirmation.ts';
 import {containersMounting, type VolumeKind} from './volumes-model.ts';
 
 /** The English template of each text of the volume actions, by its string id. */
@@ -19,8 +19,6 @@ export const VOLUME_TEMPLATES = {
   S394: "Volume '{0}' is in use and cannot be removed.",
   /** The Remove button; it has no string id of its own. */
   remove: 'Remove',
-  /** The one button of the in-use dialog; it has no string id of its own. */
-  ok: 'OK',
 } as const;
 
 /** The label that names the volume a container's repository was cloned into. */
@@ -51,12 +49,12 @@ export interface VolumeActionPorts {
 
 /** The name of the volume a row of the view stands for; none for anything that is not such a row. */
 export function volumeNameOf(argument: unknown): string | undefined {
-  const row = recordOf(argument);
+  const candidate = recordOf(argument);
   const kinds: readonly VolumeKind[] = ['devVolume', 'uniqueDevVolume'];
-  return typeof row?.name === 'string' &&
-    typeof row.viewItem === 'string' &&
-    (kinds as readonly string[]).includes(row.viewItem)
-    ? row.name
+  return typeof candidate?.name === 'string' &&
+    typeof candidate.viewItem === 'string' &&
+    (kinds as readonly string[]).includes(candidate.viewItem)
+    ? candidate.name
     : undefined;
 }
 

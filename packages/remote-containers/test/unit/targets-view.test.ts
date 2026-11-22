@@ -24,6 +24,7 @@ import {
 } from '../../src/explorer/when-registered.ts';
 import type {TargetRow} from '../../src/explorer/targets-model.ts';
 import {fakeEngine, type FakeEngine} from './fake-engine.ts';
+import {fakeTreeView} from './fake-tree-view.ts';
 import {pendingOf, settled} from './pending.ts';
 
 const CLOCK = Date.parse('2026-10-14T12:00:00Z');
@@ -203,20 +204,9 @@ function portsOf(scene: Scene): TargetsViewPorts {
         const subscription = provider.onDidChangeTreeData(() => {
           scene.changes += 1;
         });
-        return {
-          onDidChangeVisibility: listener => {
-            scene.visibility.push(listener);
-            return {
-              dispose: () => {
-                scene.disposed.push('visibility');
-              },
-            };
-          },
-          dispose: () => {
-            scene.disposed.push('view');
-            subscription.dispose();
-          },
-        };
+        return fakeTreeView(scene, 'view', () => {
+          subscription.dispose();
+        });
       },
     },
     held: () => scene.held,

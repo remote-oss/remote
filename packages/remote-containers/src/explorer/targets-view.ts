@@ -4,7 +4,6 @@
  * on Refresh, replaces the whole tree in one change and never shows an empty one in between.
  */
 
-import type {Logger} from 'lib-log';
 import type {HeldConnection} from '../connect/connector.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
 import {executableOf} from '../engine/executable.ts';
@@ -15,7 +14,6 @@ import {
   localFolderOf,
 } from '../lifecycle/labels.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
-import type {ContainerEventsSource} from './targets-events.ts';
 import {
   inspectArguments,
   LIST_ARGUMENTS,
@@ -23,6 +21,11 @@ import {
   listedContainersOf,
 } from './listed-containers.ts';
 import type {TooltipLine} from './volumes-model.ts';
+import {
+  type EditorTreeView,
+  type TrackedPorts,
+  trackedOf,
+} from './tracked-view.ts';
 import {whenRegistered} from './when-registered.ts';
 import {
   type RowIcon,
@@ -87,14 +90,6 @@ export interface TargetsProvider {
   getTreeItem(node: TargetsNode): TreeItemSpec;
 }
 
-/** The tree view the editor made. */
-interface EditorTreeView {
-  onDidChangeVisibility(listener: (visible: boolean) => void): {
-    dispose(): void;
-  };
-  dispose(): void;
-}
-
 /** The parts of the editor the view uses. */
 interface TargetsEditor {
   /** The ids of the commands the editor has registered now. */
@@ -104,14 +99,12 @@ interface TargetsEditor {
 }
 
 /** Everything the view needs. */
-export interface TargetsViewPorts {
+export interface TargetsViewPorts extends TrackedPorts {
   editor: TargetsEditor;
   /** Called once, after the first time the view's data has loaded. */
   loaded(): void;
   /** Whether the Docker host in effect is an `ssh://` one whose host name starts with a dash, which no process may be started for. */
   dashHost?(): Promise<boolean>;
-  /** The connection the window holds, from the connector. */
-  held(): HeldConnection | undefined;
   /** `dev.containers.dockerPath` as the editor reports it now. */
   dockerPath(): unknown;
   /** Whether the window's workspace is trusted now. */
@@ -120,21 +113,12 @@ export interface TargetsViewPorts {
   folders(): readonly string[];
   /** The Docker CLI for a program. */
   engineFor(file: string): EngineHost;
-  /** The Docker events of the window, shared with the other views. */
-  events: ContainerEventsSource;
   /** Whether a file exists on this machine. */
   exists(file: string): Promise<boolean>;
   now(): number;
   /** Calls `callback` after `milliseconds`; the result stops the wait. */
   setTimer(milliseconds: number, callback: () => void): () => void;
-  /** Calls the listener when the effective engine changes; the watch behind it runs only while there is a listener. */
-  onEngineChange(listener: () => void): {dispose(): void};
-  /** Calls the listener when `dev.containers.dockerPath` changes. */
-  onDockerPathChange(listener: () => void): {dispose(): void};
-  /** Calls the listener when the window's workspace is granted trust. */
-  onTrustGranted(listener: () => void): {dispose(): void};
   translate: Translate;
-  logger: Logger;
 }
 
 /** The view while it is shown. */
@@ -211,11 +195,7 @@ export async function showTargets(
   if (!commands.includes(`${views.targetsContainers}.focus`)) {
     return undefined;
   }
-  const listeners = new Set<() => void>();
-  const stopping = new AbortController();
   let current: TargetsTree | undefined;
-  let reading: Promise<TargetsTree> | undefined;
-  let visible = false;
 
   /** Says in the log why the containers could not be listed. */
   function unreachable(reason: string): 'unreachable' {
@@ -233,7 +213,7 @@ export async function showTargets(
     if ((await ports.dashHost?.()) === true) {
       return unreachable('the Docker host over ssh starts with a dash');
     }
-    const options = {cancellation: stopping.signal};
+    const options = {cancellation: tracked.signal};
     const listed = await engine.run(LIST_ARGUMENTS, {kind: 'none'}, options);
     if (listed.kind !== 'ran' || listed.status !== 0) {
       return unreachable(
@@ -319,7 +299,7 @@ export async function showTargets(
       now: ports.now(),
       translate: ports.translate,
     });
-    if (stopping.signal.aborted) {
+    if (tracked.signal.aborted) {
       return next;
     }
     const replaced = current !== undefined;
@@ -333,91 +313,25 @@ export async function showTargets(
       ),
     );
     if (replaced) {
-      listeners.forEach(listener => {
-        listener();
-      });
-    }
-    if (visible) {
-      events.start();
+      tracked.fire();
     }
     return next;
   }
 
-  const events = ports.events.watch(() => rebuild());
-
-  function rebuild(): Promise<TargetsTree> {
-    reading ??= build().finally(() => {
-      reading = undefined;
-    });
-    return reading;
-  }
+  const tracked = trackedOf(ports, 'Dev Containers', build);
 
   const treeView = editor.createTreeView(views.targetsContainers, {
-    onDidChangeTreeData: listener => {
-      listeners.add(listener);
-      return {
-        dispose: () => {
-          listeners.delete(listener);
-        },
-      };
-    },
-    getChildren: async node => childrenOf(current ?? (await rebuild()), node),
+    onDidChangeTreeData: tracked.onDidChangeTreeData,
+    getChildren: async node =>
+      childrenOf(current ?? (await tracked.rebuild()), node),
     getTreeItem: specOf,
   });
-  function rebuildLogged(): void {
-    rebuild().catch((caught: unknown) => {
-      logger.error(
-        `the Dev Containers view could not be rebuilt: ${caught instanceof Error ? caught.message : String(caught)}`,
-      );
-    });
-  }
-
-  let engineChange: {dispose(): void} | undefined;
-  const visibility = treeView.onDidChangeVisibility(isVisible => {
-    visible = isVisible;
-    if (isVisible) {
-      events.start();
-      rebuildLogged();
-      // A switch of the Docker context is followed only while the view is shown.
-      engineChange ??= ports.onEngineChange(engineMayHaveChanged);
-    } else {
-      events.stop();
-      engineChange?.dispose();
-      engineChange = undefined;
-    }
-  });
-  /** The window may have another engine now: the events start again and the tree is read again, unless it holds one. */
-  function engineMayHaveChanged(): void {
-    if (ports.held() !== undefined) {
-      return;
-    }
-    events.stop();
-    const stale = reading;
-    if (stale === undefined) {
-      rebuildLogged();
-    } else {
-      stale.then(rebuildLogged, rebuildLogged);
-    }
-  }
-  const dockerPath = ports.onDockerPathChange(engineMayHaveChanged);
-  const trustGranted = ports.onTrustGranted(engineMayHaveChanged);
+  tracked.follow(treeView);
   return {
     refresh: async () => {
-      await rebuild();
+      await tracked.rebuild();
     },
-    dispose: () => {
-      if (stopping.signal.aborted) {
-        return;
-      }
-      stopping.abort();
-      events.stop();
-      engineChange?.dispose();
-      dockerPath.dispose();
-      trustGranted.dispose();
-      visibility.dispose();
-      treeView.dispose();
-      listeners.clear();
-    },
+    dispose: tracked.dispose,
   };
 }
 

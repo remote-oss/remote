@@ -262,13 +262,13 @@ import {
 import {containerLogOf} from './explorer/container-log.ts';
 import {inspectOf} from './explorer/inspect.ts';
 import {
-  type Confirmation,
   containerRowOf,
   type RowActions,
   rowActionsOf,
 } from './explorer/row-actions.ts';
 import {rowOpenOf} from './explorer/row-open.ts';
 import {sharedContainerEvents} from './explorer/targets-events.ts';
+import type {Confirmation} from './explorer/confirmation.ts';
 import {removeVolumeOf} from './explorer/volume-actions.ts';
 import type {TooltipLine} from './explorer/volumes-model.ts';
 import {showVolumesWhenRegistered} from './explorer/volumes-view.ts';
@@ -3021,6 +3021,21 @@ export async function activate(
         served.preflight.setTimer(milliseconds, callback),
       logger,
     });
+    /** What changes the engine a view lists: the Docker context, the Docker program and the workspace's trust. */
+    const windowChanges = {
+      onEngineChange: (listener: () => void) =>
+        engineWatch.onEngineChange(listener),
+      onDockerPathChange: (listener: () => void) =>
+        vscode.workspace.onDidChangeConfiguration(event => {
+          if (event.affectsConfiguration(settings.dockerPath.id)) {
+            listener();
+          }
+        }),
+      onTrustGranted: (listener: () => void) =>
+        vscode.workspace.onDidGrantWorkspaceTrust(() => {
+          listener();
+        }),
+    };
     targetsView = showTargetsWhenRegistered({
       editor: explorerEditor,
       dashHost: async () =>
@@ -3047,17 +3062,7 @@ export async function activate(
       now: Date.now,
       setTimer: (milliseconds, callback) =>
         served.preflight.setTimer(milliseconds, callback),
-      onEngineChange: listener => engineWatch.onEngineChange(listener),
-      onDockerPathChange: listener =>
-        vscode.workspace.onDidChangeConfiguration(event => {
-          if (event.affectsConfiguration(settings.dockerPath.id)) {
-            listener();
-          }
-        }),
-      onTrustGranted: listener =>
-        vscode.workspace.onDidGrantWorkspaceTrust(() => {
-          listener();
-        }),
+      ...windowChanges,
       translate,
       logger,
     });
@@ -3104,7 +3109,7 @@ export async function activate(
         vscode.window.showInformationMessage(
           '',
           {modal: true, detail},
-          {title: 'OK', isCloseAffordance: true},
+          {title: translate('OK'), isCloseAffordance: true},
         ),
       showError: text => {
         void vscode.window.showErrorMessage(text);
@@ -3123,17 +3128,7 @@ export async function activate(
       now: Date.now,
       setTimer: (milliseconds, callback) =>
         served.preflight.setTimer(milliseconds, callback),
-      onEngineChange: listener => engineWatch.onEngineChange(listener),
-      onDockerPathChange: listener =>
-        vscode.workspace.onDidChangeConfiguration(event => {
-          if (event.affectsConfiguration(settings.dockerPath.id)) {
-            listener();
-          }
-        }),
-      onTrustGranted: listener =>
-        vscode.workspace.onDidGrantWorkspaceTrust(() => {
-          listener();
-        }),
+      ...windowChanges,
       translate,
       logger,
     });
