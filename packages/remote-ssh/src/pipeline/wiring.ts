@@ -148,6 +148,9 @@ interface CliWiring {
   downloadProgress(): ServerDownloadProgress;
 }
 
+/** The status a VS Code server answers a request whose connection token is not its own with: Forbidden. */
+const TOKEN_REFUSED = 403;
+
 /** What the steps of every connect are made from. */
 export interface WiringPorts {
   /** The hosts of the configuration files in effect, the reading the host pick uses: the connect's first check. */
@@ -159,6 +162,15 @@ export interface WiringPorts {
   settings: WiringSettings;
   /** Shows the warning that the manual bootstrap is on and the exec server is off, without waiting for it. */
   warnManualBootstrap(): void;
+  /**
+   * The HTTP status the server on `address` gives a request that carries `connectionToken`, through the window's
+   * tunnel; none when nothing answers within the bound.
+   */
+  serverStatus(
+    address: {host: string; port: number},
+    connectionToken: string,
+    cancellation: AbortSignal,
+  ): Promise<number | undefined>;
   /** The editor's tunnel service, which the default forwarded ports are opened through. */
   tunnels: TunnelOpener;
   /** Resolves with what ended the wait before the default forwards are read: the window has its remote settings by then. */
@@ -383,6 +395,7 @@ export function stepsOf(
         ports.requestEnvironment,
         () => locateClient(input),
         () => serverSteps(input).checkProxy(input),
+        () => serverSteps(input).checkInstallFolder(input),
       ),
     adoptRunFacts: runFacts => {
       state.programs ??= {
@@ -651,6 +664,14 @@ export function stepsOf(
     installExtensions: (input, ...rest) =>
       serverSteps(input).installExtensions(input, ...rest),
     ...tunnelStep,
+    serverAnswers: async (address, connectionToken, cancellation) => {
+      const status = await ports.serverStatus(
+        address,
+        connectionToken,
+        cancellation,
+      );
+      return status !== undefined && status !== TOKEN_REFUSED;
+    },
     rememberPlatform: terms.rememberPlatform,
     applyDefaults: async () => {
       const signal = await ports.defaultRead();

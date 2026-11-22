@@ -80,6 +80,7 @@ async function requestWith(
     {...ENVIRONMENT, ...changes.environment},
     changes.locate ?? (() => Promise.resolve({kind: 'done', value: WAITS})),
     () => ({kind: 'done', value: undefined}),
+    () => ({kind: 'done', value: undefined}),
   );
   const prepared = await built.prepare();
   if (prepared.kind === 'refused') {
@@ -97,6 +98,32 @@ type Built = Omit<ReturnType<typeof connectionRequestOf>, 'prepare'> & {
 /** The ssh request the helper is given, read back from its JSON. */
 function sshRequestOf(built: Built): SshRequest {
   return JSON.parse(built.options.request) as SshRequest;
+}
+
+/** A request whose checks and lookup note their names in `calls`, the install folder check giving `installFolder`. */
+function recordingRequest(
+  calls: string[],
+  installFolder: StepResult<undefined>,
+): ReturnType<typeof connectionRequestOf> {
+  return connectionRequestOf(
+    INPUT,
+    TERMS,
+    STATE,
+    SETTINGS,
+    ENVIRONMENT,
+    () => {
+      calls.push('locate');
+      return Promise.resolve({kind: 'done', value: WAITS});
+    },
+    () => {
+      calls.push('checkProxy');
+      return {kind: 'done', value: undefined};
+    },
+    () => {
+      calls.push('checkInstallFolder');
+      return installFolder;
+    },
+  );
 }
 
 describe("the shared connection's acquire request", () => {
@@ -368,24 +395,13 @@ describe("the install connection's request in terminal mode (card connect-17)", 
 
   it('F-2101 BR-9: the lookup runs inside the preparation, once, and not before it', async () => {
     const calls: string[] = [];
-    const built = connectionRequestOf(
-      INPUT,
-      TERMS,
-      STATE,
-      SETTINGS,
-      ENVIRONMENT,
-      () => {
-        calls.push('locate');
-        return Promise.resolve({kind: 'done', value: WAITS});
-      },
-      () => {
-        calls.push('checkProxy');
-        return {kind: 'done', value: undefined};
-      },
-    );
+    const built = recordingRequest(calls, {kind: 'done', value: undefined});
     const before = [...calls];
     await built.prepare();
-    deepStrictEqual([before, calls], [[], ['checkProxy', 'locate']]);
+    deepStrictEqual(
+      [before, calls],
+      [[], ['checkInstallFolder', 'checkProxy', 'locate']],
+    );
   });
 
   it('F-2404 7.E1, BR-3: a rejected proxy value refuses the start before the lookup', async () => {
@@ -405,6 +421,7 @@ describe("the install connection's request in terminal mode (card connect-17)", 
         return Promise.resolve({kind: 'done', value: WAITS});
       },
       () => ({kind: 'failed', failure}),
+      () => ({kind: 'done', value: undefined}),
     );
     deepStrictEqual(
       [await built.prepare(), looked],
@@ -425,7 +442,21 @@ describe("the install connection's request in terminal mode (card connect-17)", 
       ENVIRONMENT,
       () => Promise.resolve({kind: 'failed', failure}),
       () => ({kind: 'done', value: undefined}),
+      () => ({kind: 'done', value: undefined}),
     );
     deepStrictEqual(await built.prepare(), {kind: 'refused', refusal: failure});
+  });
+
+  it('F-2407 AC-7, 6.4 step 5 (card #2995): an install folder the check refuses refuses the start before the proxy check and the lookup, so no connection server or ssh starts', async () => {
+    const calls: string[] = [];
+    const failure = {
+      kind: 'invalidSetting' as const,
+      reason: {id: 'installPathProvided', values: ['relative/inst']},
+    };
+    const built = recordingRequest(calls, {kind: 'failed', failure});
+    deepStrictEqual(
+      [await built.prepare(), calls],
+      [{kind: 'refused', refusal: failure}, ['checkInstallFolder']],
+    );
   });
 });

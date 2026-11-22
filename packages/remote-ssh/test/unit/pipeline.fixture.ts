@@ -264,6 +264,7 @@ export function leaseOf(recording: Recording): ConnectionLease {
     socksPort: 1080,
     startedLogin: true,
     storedRecord: undefined,
+    startedHelper: true,
     storeSharedRecord: record => {
       recording.records.push(record);
       return Promise.resolve(true);
@@ -396,6 +397,7 @@ export function steps(
       note('installExtensions', undefined);
       return Promise.resolve();
     },
+    serverAnswers: () => note('serverAnswers', Promise.resolve(true)),
     tunnelPath: () => 'socks',
     openTunnel: (input, lease, server, onWaiting, signal, onSettingUp) => {
       onSettingUp?.();

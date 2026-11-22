@@ -104,6 +104,11 @@ export interface ConnectionLease {
   startedLogin: boolean;
   /** What an earlier window of the connection left for reuse; none when nothing was stored. */
   storedRecord: SharedRecord | undefined;
+  /**
+   * Whether this connect started the connection server, so that its start checked the install folder; a connect that
+   * joined one another window started did not. The terminal mode's own session counts as started.
+   */
+  startedHelper: boolean;
   /** Leaves what a later window needs to reuse the server; true when the connection took it. */
   storeSharedRecord(record: SharedRecord): Promise<boolean>;
   /**
@@ -329,6 +334,15 @@ export interface ConnectSteps {
    * on the SOCKS path: a second `ssh` has its own bounds, and a login to wait for.
    */
   tunnelPath(): TunnelPath;
+  /**
+   * Whether the server at `address` answers with `connectionToken` as its own: any reply of the server but its refusal
+   * of the token, within a bound of a few seconds. A server that is gone, hangs or refuses the token does not.
+   */
+  serverAnswers(
+    address: {host: string; port: number},
+    connectionToken: string,
+    cancellation: AbortSignal,
+  ): Promise<boolean>;
   /** Opens the window's port to the server through the connection; `onWaiting` fires if the port is slow to answer. */
   openTunnel(
     input: ConnectInput,
