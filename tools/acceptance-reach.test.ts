@@ -961,7 +961,7 @@ describe("acceptance-reach: what a workflow file's change reaches (card tooling-
               !PR_LAUNCH_JOBS.has(name) && !MAIN_ONLY_LAUNCH_JOBS.has(name),
           ),
       ],
-      [[`./${PR_LAUNCH_WORKFLOW}`], [true, true, true, true], []],
+      [[`./${PR_LAUNCH_WORKFLOW}`], [true, true, true, true, true], []],
     );
   });
 
