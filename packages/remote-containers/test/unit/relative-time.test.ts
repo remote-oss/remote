@@ -110,8 +110,9 @@ describe('the elapsed-time phrase (card containers-29)', () => {
   });
 
   it('F-0904 BR-4: a time in the future counted, not clamped, reads as its negative number of seconds, whatever its size, and the table is the same for the past', () => {
-    const same = (milliseconds: number): string =>
-      elapsedPhraseOf(milliseconds, template => template, 'counted');
+    function same(milliseconds: number): string {
+      return elapsedPhraseOf(milliseconds, template => template, 'counted');
+    }
     deepStrictEqual(
       [
         same(-1 * SECOND),
