@@ -114,8 +114,11 @@ describe('the direction of a wheel of a virtualized list, told by its labels (ca
 });
 
 describe('the probe of the wheel that stands a virtualized list at its top (card #3000)', () => {
-  /** A probe that answers each wheel with the read it stands at, in order, echoing the wheel's delta. */
-  function scriptedProbe(reads: readonly WheelProbeRead[]) {
+  /**
+   * A probe that answers each wheel with the read it stands at, in order, echoing the wheel's delta, and
+   * recording the deltas it was sent.
+   */
+  function scriptedProbe(reads: readonly WheelProbeRead[], sent: number[]) {
     let stands = 0;
     return (delta: number) => {
       const read = reads[stands];
@@ -123,6 +126,7 @@ describe('the probe of the wheel that stands a virtualized list at its top (card
       if (read === undefined) {
         throw new Error('the scripted probe ran out of reads');
       }
+      sent.push(delta);
       return Promise.resolve({...read, delta});
     };
   }
@@ -139,11 +143,11 @@ describe('the probe of the wheel that stands a virtualized list at its top (card
         after: ['b', 'c', 'd'],
       },
     ];
-    deepStrictEqual(await wheelTopProbe(scriptedProbe(reads)), {
-      settled: true,
-      sign: 400,
-      reads: 2,
-    });
+    const sent: number[] = [];
+    deepStrictEqual(
+      {verdict: await wheelTopProbe(scriptedProbe(reads, sent)), sent},
+      {verdict: {settled: true, sign: 400, reads: 2}, sent: [-400, -400]},
+    );
   });
 
   it('a list that never stops filling stands unsettled after its three reads', async () => {
@@ -162,10 +166,56 @@ describe('the probe of the wheel that stands a virtualized list at its top (card
         after: ['h', 'i', 'j', 'k', 'l'],
       },
     ];
-    deepStrictEqual(await wheelTopProbe(scriptedProbe(reads)), {
-      settled: false,
-      sign: 0,
-      reads: 3,
-    });
+    const sent: number[] = [];
+    deepStrictEqual(
+      {verdict: await wheelTopProbe(scriptedProbe(reads, sent)), sent},
+      {verdict: {settled: false, sign: 0, reads: 3}, sent: [-400, -400, -400]},
+    );
+  });
+
+  it('a first probe that reads up gives the sign of the delta it wheeled at', async () => {
+    const reads: readonly WheelProbeRead[] = [
+      {
+        delta: -400,
+        moved: true,
+        before: ['c', 'd', 'e', 'f'],
+        after: ['b', 'c', 'd', 'e'],
+      },
+    ];
+    const sent: number[] = [];
+    deepStrictEqual(
+      [await wheelTopProbe(scriptedProbe(reads, sent)), sent],
+      [{settled: true, sign: -400, reads: 1}, [-400]],
+    );
+  });
+
+  it('a list that moves at neither sign stands at its top, sending the two probes in order', async () => {
+    const reads: readonly WheelProbeRead[] = [
+      {delta: -400, moved: false, before: ['m', 'n'], after: ['m', 'n']},
+      {delta: 400, moved: false, before: ['m', 'n'], after: ['m', 'n']},
+    ];
+    const sent: number[] = [];
+    deepStrictEqual(
+      [await wheelTopProbe(scriptedProbe(reads, sent)), sent],
+      [{settled: true, sign: 0, reads: 1}, [-400, 400]],
+    );
+  });
+
+  it('a re-read of a filling list goes out at the sign that moved, not the first probe’s', async () => {
+    const reads: readonly WheelProbeRead[] = [
+      {delta: -400, moved: false, before: ['u', 'v'], after: ['u', 'v']},
+      {delta: 400, moved: true, before: ['u', 'v'], after: ['u', 'v', 'w']},
+      {
+        delta: 400,
+        moved: true,
+        before: ['u', 'v', 'w'],
+        after: ['v', 'w', 'x'],
+      },
+    ];
+    const sent: number[] = [];
+    deepStrictEqual(
+      {verdict: await wheelTopProbe(scriptedProbe(reads, sent)), sent},
+      {verdict: {settled: true, sign: -400, reads: 2}, sent: [-400, 400, 400]},
+    );
   });
 });
