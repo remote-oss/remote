@@ -1,12 +1,13 @@
 /**
- * @fileoverview F-2005's rows in their first pass (card #2488): each row measures what "Remote-SSH: Report Issue..."
- * does in its window kind and prints the measurement to the job's log, so the expected values of the rows can be
- * written to what the window shows. The Issue Reporter is core's auxiliary window, which the harness reaches through
- * the editor's debugging port, the same way the extension-pack rows reach it.
+ * @fileoverview F-2005's rows (card #2488): each row runs "Remote-SSH: Report Issue..." in its window kind and compares
+ * one value of its criterion's clauses against what the window shows. The Issue Reporter is core's auxiliary window,
+ * which the harness reaches through the editor's debugging port, the same way the extension-pack rows reach it.
+ * AC-6 expands the reporter's system-information row optimistically, to the spec: if the expansion shows another
+ * shape, the row's prints say so and the row fails.
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {readFileSync, readdirSync} from 'node:fs';
+import {mkdirSync, readFileSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {
   connectionLog,
@@ -19,6 +20,8 @@ import {
 } from '../windows/harness.ts';
 import {sshActivations, windowWithLog} from '../windows/activation-support.ts';
 import {closeAllButLocal, openConnected} from '../windows/maintenance.ts';
+import {openFolderWindow} from '../windows/folder-windows.ts';
+import {changedKeys, extensionState} from '../windows/global-state.ts';
 import {evaluateAt, LONG_READ_MILLISECONDS} from '../windows/page-protocol.ts';
 import {paletteItems} from '../windows/palette.ts';
 import {
@@ -33,6 +36,66 @@ import {emptyLocalWindow} from '../windows/window-states.ts';
 
 /** The repository root, three levels up from this file's directory. */
 const REPOSITORY_ROOT = path.join(import.meta.dirname, '..', '..', '..');
+
+/** The host alias the rows connect to, as the run's ssh_config names it. */
+const HOST_ALIAS = 'harness';
+
+/**
+ * The text of the reporter's form when this command opened it: core's default, with the extension's own
+ * preselection and nothing else. The criterion's source label, "A VS Code extension" (AC-3), is core's for the
+ * reference's product; the run's product is VSCodium, and its label is "A VSCodium extension".
+ */
+const OWN_FORM_TEXT =
+  'Before you report an issue here please review the guidance we provide. Please complete the form in English.\n' +
+  'This is a \n' +
+  'Bug Report\n' +
+  'Feature Request\n' +
+  'Performance Issue (freeze, slow, crash)\n' +
+  'For * \n' +
+  'Select source\n' +
+  'VSCodium\n' +
+  'A VSCodium extension\n' +
+  "Don't know\n" +
+  'Extension * \n' +
+  'Select extension\n' +
+  'Acceptance window agent\n' +
+  'Remote - SSH\n' +
+  'Remote - SSH: Editing Configuration Files\n' +
+  'Title * \n' +
+  'Steps to Reproduce *\n' +
+  'Share the steps needed to reliably reproduce the problem. Please include actual and expected results. We support GitHub-flavored Markdown. You will be able to edit your issue and add screenshots when we preview it on GitHub.\n' +
+  ' Include my system information (show)\n' +
+  ' Include A/B experiment info (show)\n' +
+  'Preview on GitHub';
+
+/** The core reporter's own text, before this command preselected anything. */
+const CORE_FORM_TEXT =
+  'Before you report an issue here please review the guidance we provide. Please complete the form in English.\n' +
+  'This is a \n' +
+  'Bug Report\n' +
+  'Feature Request\n' +
+  'Performance Issue (freeze, slow, crash)\n' +
+  'For * \n' +
+  'Select source\n' +
+  'VSCodium\n' +
+  'A VSCodium extension\n' +
+  "Don't know\n" +
+  'Title * \n' +
+  'Steps to Reproduce *\n' +
+  'Share the steps needed to reliably reproduce the problem. Please include actual and expected results. We support GitHub-flavored Markdown. You will be able to edit your issue and add screenshots when we preview it on GitHub.\n' +
+  ' Include my system information (show)\n' +
+  ' Include my enabled extensions (show)\n' +
+  ' Include A/B experiment info (show)\n' +
+  'Preview on GitHub';
+
+/** The lines the wizard's reporter tab shows in the window, per the spec's step one. */
+const WIZARD_LINES = [
+  'Report Issue',
+  'Step 1 of 3',
+  'Attachments',
+  'Skip',
+  'Add attachments for better context',
+];
 
 /** A target of the editor's debugging port, as its list reads it. */
 interface DebugTarget {
@@ -67,6 +130,9 @@ interface ReporterForm {
   fields: ReporterField[];
   buttons: string[];
 }
+
+/** The rows of the reporter's system-information table, label then value. */
+type SystemRows = Array<[string, string]>;
 
 /** One line of the row's measurement to the job's log. */
 function print(text: string): void {
@@ -134,14 +200,49 @@ const FORM_READ = `(() => {
   };
 })()`;
 
-/** The HTML around the reporter's system-information row, where its "show" control sits. */
-const SYSTEM_READ = `(() => {
-  const leaf = [...document.querySelectorAll('*')].find(element => element.childElementCount === 0 && (element.textContent ?? '').includes('Include my system information'));
-  if (leaf === undefined) return 'no system information row';
-  let region = leaf;
-  for (let up = 0; up < 4 && region.parentElement !== null; up += 1) region = region.parentElement;
-  return region.outerHTML.slice(0, 6000);
+/**
+ * Clicks the control that expands the reporter's system-information row, the "show" beside "Include my system
+ * information", whose text the page splits across elements. It finds the smallest element that shows the control and
+ * climbs it until its row shows the row's label.
+ */
+const SYSTEM_TOGGLE = `(() => {
+  const leaves = [...document.querySelectorAll('*')].filter(element => element.childElementCount === 0 && (element.textContent ?? '').includes('(show)'));
+  for (const leaf of leaves) {
+    let region = leaf;
+    for (let up = 0; up < 6 && region.parentElement !== null; up += 1) {
+      region = region.parentElement;
+      if ((region.textContent ?? '').includes('system information')) {
+        leaf.click();
+        return 'clicked';
+      }
+    }
+  }
+  return 'no system information show control';
 })()`;
+
+/** The reporter's system-information table as its rows read it, label then value, or the text that is there. */
+const SYSTEM_TABLE = `(() => {
+  const tables = [...document.querySelectorAll('table')];
+  if (tables.length === 0) return 'no table';
+  const lines = tables.flatMap(table => [...table.querySelectorAll('tr')].map(tr => [...tr.children].map(cell => (cell.textContent ?? '').trim())));
+  if (lines.length === 0) return 'no table rows';
+  return JSON.stringify(lines.map(each => [each[0] ?? '', each.slice(1).join(' ')]));
+})()`;
+
+/** Reads the reporter's form at protocol address `address`, or undefined when there is no reporter. */
+async function reporterForm(
+  address: string | undefined,
+): Promise<ReporterForm | undefined> {
+  if (address === undefined) {
+    return undefined;
+  }
+  return evaluateAt<ReporterForm>(
+    address,
+    'the Issue Reporter window',
+    FORM_READ,
+    LONG_READ_MILLISECONDS,
+  );
+}
 
 /** Closes the reporter at protocol address `address`, where the window's own close control does. */
 async function closeReporter(address: string): Promise<void> {
@@ -161,6 +262,20 @@ async function closeReported(address: string | undefined): Promise<void> {
   }
 }
 
+/** Whether the command palette of window `name` lists the command, typing "Remote-SSH: Report". */
+async function paletteLists(name: string): Promise<boolean> {
+  const items = await paletteItems(name, 'Remote-SSH: Report');
+  print(`c2488-palette ${JSON.stringify(name)} lists ${JSON.stringify(items)}`);
+  return items.includes('Remote-SSH: Report Issue...');
+}
+
+/** The folder `name` of the launch's run, made. */
+function folderOf(name: string): string {
+  const folder = path.join(variable('HARNESS_RUN_FOLDER'), name);
+  mkdirSync(folder, {recursive: true});
+  return folder;
+}
+
 describe('the Issue Reporter the Report Issue... command opens (card #2488)', function () {
   this.timeout(300_000);
 
@@ -168,20 +283,22 @@ describe('the Issue Reporter the Report Issue... command opens (card #2488)', fu
     await closeAllButLocal();
   });
 
-  it('F-2005 AC-1 (c2488-palette): "Remote-SSH: Report" lists the command in the palette of a fresh empty window and of a connected SSH window', async () => {
+  it('F-2005 AC-1 (c2488-palette): "Remote-SSH: Report" lists the command in the palette of a fresh empty window, a local folder window and a connected SSH window', async () => {
     const empty = await emptyLocalWindow();
-    print(
-      `c2488-palette the empty window lists ${JSON.stringify(await paletteItems(empty, 'Remote-SSH: Report'))}`,
-    );
+    const folder = await openFolderWindow(folderOf('c2488-palette-folder'));
     await openConnected('c2488-palette');
-    print(
-      `c2488-palette the SSH window lists ${JSON.stringify(await paletteItems('c2488-palette', 'Remote-SSH: Report'))}`,
+    deepStrictEqual(
+      {
+        empty: await paletteLists(empty),
+        folder: await paletteLists(folder),
+        connected: await paletteLists('c2488-palette'),
+      },
+      {empty: true, folder: true, connected: true},
     );
   });
 
-  it("F-2005 AC-2, AC-3, AC-4, AC-5, AC-6, AC-8 (c2488-classic): the classic reporter a connected SSH window opens, its form, its system-information row and a repeat of the command, measured on the reporter's own page", async () => {
+  it('F-2005 AC-2, AC-3, AC-4, AC-5, AC-6, AC-8 (c2488-classic): the classic reporter a connected SSH window opens, its form, its system-information table and a repeat of the command', async () => {
     await openConnected('c2488-classic');
-    const titlesBefore = (await listedTargets()).map(target => target.title);
     const main = await pageOf('c2488-classic');
     const titleBefore = await evaluateAt<string>(
       main,
@@ -194,70 +311,136 @@ describe('the Issue Reporter the Report Issue... command opens (card #2488)', fu
     try {
       const sent = Date.now();
       await startInWindow('c2488-classic', 'opensshremotes.reportIssue');
-      const reporter = await reporterAppears(20_000);
-      print(
-        `c2488-classic the reporter within 20 s: ${String(reporter !== undefined)}`,
-      );
-      print(`c2488-classic the opening took ${String(Date.now() - sent)} ms`);
+      const reporter = await reporterAppears(10_000);
+      const opening = Date.now() - sent;
       print(`c2488-classic windowNames ${JSON.stringify(windowNames())}`);
-      print(`c2488-classic the targets before ${JSON.stringify(titlesBefore)}`);
-      print(
-        `c2488-classic the targets after ${JSON.stringify((await listedTargets()).map(target => target.title))}`,
+      print(`c2488-classic the opening took ${String(opening)} ms`);
+      address = reporter?.webSocketDebuggerUrl;
+      const titleAfter = await evaluateAt<string>(
+        main,
+        'c2488-classic',
+        'document.title',
       );
-      print(
-        `c2488-classic the main title before and after ${JSON.stringify([titleBefore, await evaluateAt<string>(main, 'c2488-classic', 'document.title')])}`,
+      const marker = await evaluateAt<number | undefined>(
+        main,
+        'c2488-classic',
+        'window.c2488Marker',
       );
+      const form = await reporterForm(address);
+      print(`c2488-classic the reporter form ${JSON.stringify(form)}`);
+      const toasts = await notifications('c2488-classic');
+      const centre = await notificationCentre('c2488-classic');
+      const dialog = await dialogOf('c2488-classic');
+      const pick = (await quickPickOf('c2488-classic'))?.items ?? null;
       print(
-        `c2488-classic the page marker after ${String(await evaluateAt<number | undefined>(main, 'c2488-classic', 'window.c2488Marker'))}`,
+        `c2488-classic the toasts ${JSON.stringify(toasts)} the centre ${JSON.stringify(centre)} the dialog ${JSON.stringify(dialog)} the quick pick ${JSON.stringify(pick)}`,
       );
-      if (reporter?.webSocketDebuggerUrl !== undefined) {
-        address = reporter.webSocketDebuggerUrl;
-        print(
-          `c2488-classic the reporter form ${JSON.stringify(await evaluateAt<ReporterForm>(address, 'the Issue Reporter window', FORM_READ, LONG_READ_MILLISECONDS))}`,
-        );
-        print(
-          `c2488-classic the system information row ${await evaluateAt<string>(address, 'the Issue Reporter window', SYSTEM_READ, LONG_READ_MILLISECONDS)}`,
-        );
-      }
+      const since = connectionLog().slice(logMark);
+      print(`c2488-classic the log since the command ${JSON.stringify(since)}`);
+      const toggled =
+        address === undefined
+          ? 'no reporter target'
+          : await evaluateAt<string>(
+              address,
+              'the Issue Reporter window',
+              SYSTEM_TOGGLE,
+              LONG_READ_MILLISECONDS,
+            );
+      print(`c2488-classic the system information show ${toggled}`);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const table =
+        address === undefined
+          ? 'no reporter target'
+          : await evaluateAt<string>(
+              address,
+              'the Issue Reporter window',
+              SYSTEM_TABLE,
+              LONG_READ_MILLISECONDS,
+            );
+      print(`c2488-classic the system information table ${table}`);
+      const rows =
+        table === 'no table' || table === 'no table rows'
+          ? undefined
+          : (JSON.parse(table) as SystemRows);
+      const remote = rows?.find(each => each[0] === 'Remote');
+      const remoteValue = remote?.[1] ?? '';
+      print(`c2488-classic the Remote row ${JSON.stringify(remote)}`);
+      const expanded = await reporterForm(address);
       print(
-        `c2488-classic the toasts ${JSON.stringify(await notifications('c2488-classic'))}`,
-      );
-      print(
-        `c2488-classic the centre ${JSON.stringify(await notificationCentre('c2488-classic'))}`,
-      );
-      print(
-        `c2488-classic the dialog ${JSON.stringify(await dialogOf('c2488-classic'))}`,
-      );
-      print(
-        `c2488-classic the quick pick ${JSON.stringify((await quickPickOf('c2488-classic'))?.items ?? null)}`,
-      );
-      print(
-        `c2488-classic the log since the command ${JSON.stringify(connectionLog().slice(logMark))}`,
+        `c2488-classic the form after the expansion ${JSON.stringify({text: expanded?.text.slice(0, 1200)})}`,
       );
       const before = reporterTargets(await listedTargets()).length;
       await startInWindow('c2488-classic', 'opensshremotes.reportIssue');
       await new Promise(resolve => setTimeout(resolve, 8000));
       const after = reporterTargets(await listedTargets());
+      const repeated = await reporterForm(after[0]?.webSocketDebuggerUrl);
       print(
-        `c2488-classic the reporters before and after the repeat ${JSON.stringify([before, after.length])}`,
+        `c2488-classic the reporters ${JSON.stringify([before, after.length])} the form after the repeat ${JSON.stringify({text: repeated?.text.slice(0, 1200)})}`,
       );
-      if (after.length > 0 && after[0]?.webSocketDebuggerUrl !== undefined) {
-        const form = await evaluateAt<ReporterForm>(
-          after[0].webSocketDebuggerUrl,
-          'the Issue Reporter window',
-          FORM_READ,
-          LONG_READ_MILLISECONDS,
-        );
-        print(
-          `c2488-classic the form after the repeat ${JSON.stringify({text: form.text.slice(0, 1200)})}`,
-        );
-      }
+      const source = form?.selects.find(select => select.id === 'issue-source');
+      const extension = form?.selects.find(
+        select => select.id === 'extension-selector',
+      );
+      const title = form?.fields.find(field => field.id === 'issue-title');
+      const description = form?.fields.find(
+        field => field.id === 'description',
+      );
+      deepStrictEqual(
+        {
+          reporter: reporter !== undefined,
+          openingWithinTenSeconds: opening <= 10_000,
+          titleUnchanged: titleBefore === titleAfter,
+          marker,
+          formTitle: form?.title,
+          formText: form?.text,
+          source: {value: source?.value, selected: source?.selected},
+          extension: {value: extension?.value, selected: extension?.selected},
+          title: {value: title?.value, placeholder: title?.placeholder},
+          description: {
+            value: description?.value,
+            placeholder: description?.placeholder,
+          },
+          toasts,
+          centre,
+          dialog,
+          pick,
+          connectionLog: since,
+          toggle: toggled,
+          remoteMatchesHost: remoteValue.startsWith(`SSH: ${HOST_ALIAS}`),
+          repeat: [before, after.length],
+          repeatUnchanged: repeated?.text === expanded?.text,
+        },
+        {
+          reporter: true,
+          openingWithinTenSeconds: true,
+          titleUnchanged: true,
+          marker: 1,
+          formTitle: 'Issue Reporter',
+          formText: OWN_FORM_TEXT,
+          source: {value: 'extension', selected: 'A VSCodium extension'},
+          extension: {
+            value: 'remote-oss.remote-ssh',
+            selected: 'Remote - SSH',
+          },
+          title: {value: '', placeholder: 'Please enter a title.'},
+          description: {value: '', placeholder: 'Please enter details.'},
+          toasts: [],
+          centre: [],
+          dialog: undefined,
+          pick: null,
+          connectionLog: [],
+          toggle: 'clicked',
+          remoteMatchesHost: true,
+          repeat: [1, 1],
+          repeatUnchanged: true,
+        },
+      );
     } finally {
       await closeReported(address);
     }
   });
 
-  it("F-2005 AC-9 (c2488-helpfirst): the reporter core's own Report Issue... opened first, then this command, and the source the open reporter keeps, measured", async () => {
+  it("F-2005 AC-9 (c2488-helpfirst): the reporter core's own Report Issue... opened first, then this command, and the source the open reporter keeps", async () => {
     await openConnected('c2488-helpfirst');
     let address: string | undefined;
     try {
@@ -266,88 +449,118 @@ describe('the Issue Reporter the Report Issue... command opens (card #2488)', fu
         'workbench.action.openIssueReporter',
       );
       const first = await reporterAppears(20_000);
-      print(`c2488-helpfirst the core reporter ${String(first !== undefined)}`);
-      if (first?.webSocketDebuggerUrl !== undefined) {
-        address = first.webSocketDebuggerUrl;
-        print(
-          `c2488-helpfirst the core reporter form ${JSON.stringify(await evaluateAt<ReporterForm>(address, 'the Issue Reporter window', FORM_READ, LONG_READ_MILLISECONDS))}`,
-        );
-      }
+      address = first?.webSocketDebuggerUrl;
+      const coreForm = await reporterForm(address);
+      print(
+        `c2488-helpfirst the core reporter form ${JSON.stringify(coreForm)}`,
+      );
       await startInWindow('c2488-helpfirst', 'opensshremotes.reportIssue');
       await new Promise(resolve => setTimeout(resolve, 8000));
       const after = reporterTargets(await listedTargets());
-      print(
-        `c2488-helpfirst the reporters after this command ${String(after.length)}`,
+      const kept = await reporterForm(after[0]?.webSocketDebuggerUrl);
+      const source = kept?.selects.find(select => select.id === 'issue-source');
+      const extension = kept?.selects.find(
+        select => select.id === 'extension-selector',
       );
-      if (after.length > 0 && after[0]?.webSocketDebuggerUrl !== undefined) {
-        print(
-          `c2488-helpfirst the form after this command ${JSON.stringify(await evaluateAt<ReporterForm>(after[0].webSocketDebuggerUrl, 'the Issue Reporter window', FORM_READ, LONG_READ_MILLISECONDS))}`,
-        );
-      }
+      print(
+        `c2488-helpfirst the reporters after this command ${String(after.length)} the form ${JSON.stringify({text: kept?.text.slice(0, 1200)})}`,
+      );
+      deepStrictEqual(
+        {
+          coreOpened: first !== undefined,
+          coreText: coreForm?.text,
+          reportersAfter: after.length,
+          sourceKept: source?.selected,
+          extensionKept: extension?.selected,
+        },
+        {
+          coreOpened: true,
+          coreText: CORE_FORM_TEXT,
+          reportersAfter: 1,
+          sourceKept: 'Select source',
+          extensionKept: 'Select extension',
+        },
+      );
     } finally {
       await closeReported(address);
     }
   });
 
-  it("F-2005 AC-10 (c2488-wizard): with the core wizard enabled, the command's reporter in the window's own editor tab, measured", async () => {
+  it("F-2005 AC-10 (c2488-wizard): with the core wizard enabled, the command's reporter in the window's own editor tab, not an auxiliary window", async () => {
     const saved = readUserSettings();
     await userSettings({issueReporter: {wizard: {enabled: true}}});
     try {
       await openConnected('c2488-wizard');
-      const titlesBefore = (await listedTargets()).map(target => target.title);
       await startInWindow('c2488-wizard', 'opensshremotes.reportIssue');
-      const deadline = Date.now() + 20_000;
-      let titles: string[] = titlesBefore;
-      while (Date.now() < deadline) {
-        titles = (await listedTargets()).map(target => target.title);
-        if (titles.some(title => title.includes('Report Issue'))) {
-          break;
-        }
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-      const main = await pageOf('c2488-wizard');
-      print(`c2488-wizard the targets ${JSON.stringify(titles)}`);
+      await new Promise(resolve => setTimeout(resolve, 15_000));
+      const targets = (await listedTargets()).map(target => target.title);
+      const text = await pageText('c2488-wizard');
       print(
-        `c2488-wizard the main title ${await evaluateAt<string>(main, 'c2488-wizard', 'document.title')}`,
+        `c2488-wizard the targets ${JSON.stringify(targets)} the window text ${JSON.stringify(text.slice(0, 2000))}`,
       );
-      print(
-        `c2488-wizard the window text ${(await pageText('c2488-wizard')).slice(0, 4000)}`,
+      deepStrictEqual(
+        {
+          auxiliary: reporterTargets(await listedTargets()).length,
+          missing: WIZARD_LINES.filter(line => !text.includes(line)),
+        },
+        {auxiliary: 0, missing: []},
       );
     } finally {
       restoreUserSettings(saved);
     }
   });
 
-  it('F-2005 AC-7 (c2488-activate): the command in a fresh empty window, the activation it causes and the reporter it opens, measured', async () => {
+  it('F-2005 AC-7 (c2488-activate): the command in a fresh empty window, the activation it causes and the reporter it opens', async () => {
     const {name, logFile} = await windowWithLog(emptyLocalWindow);
-    print(
-      `c2488-activate the activations before ${JSON.stringify(sshActivations(logFile))}`,
-    );
+    const before = sshActivations(logFile);
     const logMark = connectionLog().length;
     let address: string | undefined;
     try {
       await startInWindow(name, 'opensshremotes.reportIssue');
       const reporter = await reporterAppears(20_000);
-      print(`c2488-activate the reporter ${String(reporter !== undefined)}`);
+      address = reporter?.webSocketDebuggerUrl;
+      const after = sshActivations(logFile);
+      const since = connectionLog().slice(logMark);
+      const form = await reporterForm(address);
       print(
-        `c2488-activate the activations after ${JSON.stringify(sshActivations(logFile))}`,
+        `c2488-activate the activations ${JSON.stringify([before, after])} the log since the command ${JSON.stringify(since)} the reporter form ${JSON.stringify(form)}`,
       );
-      print(
-        `c2488-activate the log since the command ${JSON.stringify(connectionLog().slice(logMark))}`,
+      deepStrictEqual(
+        {
+          activationsBefore: before,
+          reporter: reporter !== undefined,
+          activationsAfter: after,
+          connectionLog: since,
+          formTitle: form?.title,
+          formText: form?.text,
+        },
+        {
+          activationsBefore: [],
+          reporter: true,
+          activationsAfter: ['onCommand:opensshremotes.reportIssue'],
+          connectionLog: [
+            'Log level: debug',
+            'Editor version: 1.140.0',
+            'remote-ssh 0.1.0',
+            'Client: linux x64',
+          ],
+          formTitle: 'Issue Reporter',
+          formText: OWN_FORM_TEXT,
+        },
       );
-      if (reporter?.webSocketDebuggerUrl !== undefined) {
-        address = reporter.webSocketDebuggerUrl;
-        print(
-          `c2488-activate the reporter form ${JSON.stringify(await evaluateAt<ReporterForm>(address, 'the Issue Reporter window', FORM_READ, LONG_READ_MILLISECONDS))}`,
-        );
-      }
     } finally {
       await closeReported(address);
     }
   });
 
-  it('F-2005 AC-12 (c2488-execute): the command run by executeCommand in a connected SSH window, its state, storage and settings footprint, measured', async () => {
+  it('F-2005 AC-12 (c2488-execute): the command run by executeCommand in a connected SSH window, its state, storage and settings footprint', async () => {
     await openConnected('c2488-execute');
+    const main = await pageOf('c2488-execute');
+    const titleBefore = await evaluateAt<string>(
+      main,
+      'c2488-execute',
+      'document.title',
+    );
     const storage = path.join(
       variable('HARNESS_USER_DATA'),
       'User',
@@ -357,6 +570,7 @@ describe('the Issue Reporter the Report Issue... command opens (card #2488)', fu
       .filter(entry => entry !== 'state.vscdb-journal')
       .sort();
     const settingsBefore = readUserSettings();
+    const stateBefore = await extensionState();
     const targetsBefore = (await listedTargets())
       .map(target => target.id)
       .sort();
@@ -365,27 +579,50 @@ describe('the Issue Reporter the Report Issue... command opens (card #2488)', fu
     try {
       await startInWindow('c2488-execute', 'opensshremotes.reportIssue');
       const reporter = await reporterAppears(20_000);
-      print(`c2488-execute the reporter ${String(reporter !== undefined)}`);
-      if (reporter?.webSocketDebuggerUrl !== undefined) {
-        address = reporter.webSocketDebuggerUrl;
-      }
+      address = reporter?.webSocketDebuggerUrl;
       const storageAfter = readdirSync(storage)
         .filter(entry => entry !== 'state.vscdb-journal')
         .sort();
-      const targetsAfter = (await listedTargets())
-        .map(target => target.id)
+      const settingsAfter = readUserSettings();
+      const stateAfter = await extensionState();
+      const fresh = (await listedTargets())
+        .filter(target => !targetsBefore.includes(target.id))
+        .map(target => target.title)
         .sort();
-      print(
-        `c2488-execute the storage diff ${JSON.stringify({added: storageAfter.filter(entry => !storageBefore.includes(entry)), removed: storageBefore.filter(entry => !storageAfter.includes(entry))})}`,
+      const titleAfter = await evaluateAt<string>(
+        main,
+        'c2488-execute',
+        'document.title',
       );
+      const since = connectionLog().slice(logMark);
       print(
-        `c2488-execute the settings unchanged ${String(readUserSettings() === settingsBefore)}`,
+        `c2488-execute the reporter ${String(reporter !== undefined)} the storage diff ${JSON.stringify({added: storageAfter.filter(entry => !storageBefore.includes(entry)), removed: storageBefore.filter(entry => !storageAfter.includes(entry))})} the new targets ${JSON.stringify(fresh)} the changed state keys ${JSON.stringify(changedKeys(stateBefore, stateAfter))} the log since the command ${JSON.stringify(since)}`,
       );
-      print(
-        `c2488-execute the new targets ${JSON.stringify(targetsAfter.filter(target => !targetsBefore.includes(target)))}`,
-      );
-      print(
-        `c2488-execute the log since the command ${JSON.stringify(connectionLog().slice(logMark))}`,
+      deepStrictEqual(
+        {
+          reporter: reporter !== undefined,
+          storageAdded: storageAfter.filter(
+            entry => !storageBefore.includes(entry),
+          ),
+          storageRemoved: storageBefore.filter(
+            entry => !storageAfter.includes(entry),
+          ),
+          settingsUnchanged: settingsAfter === settingsBefore,
+          stateKeysChanged: changedKeys(stateBefore, stateAfter),
+          newTargets: fresh,
+          titleUnchanged: titleBefore === titleAfter,
+          connectionLog: since,
+        },
+        {
+          reporter: true,
+          storageAdded: [],
+          storageRemoved: [],
+          settingsUnchanged: true,
+          stateKeysChanged: [],
+          newTargets: ['Issue Reporter'],
+          titleUnchanged: true,
+          connectionLog: [],
+        },
       );
     } finally {
       await closeReported(address);
