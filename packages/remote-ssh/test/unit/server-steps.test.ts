@@ -1545,7 +1545,9 @@ describe('the manual bootstrap (F-2406, ruling-2878-manual-bootstrap)', () => {
   ): ServerStepDependencies['files'] {
     return {
       remove: () => Promise.resolve(),
-      exists: file => Promise.resolve(present && file === BOOTSTRAP_ARCHIVE),
+      exists: () => Promise.resolve(false),
+      entryExists: file =>
+        Promise.resolve(present && file === BOOTSTRAP_ARCHIVE),
       size: () => Promise.resolve(0),
       sha256: () => Promise.resolve(''),
       rename: () => Promise.resolve({kind: 'renamed'}),
