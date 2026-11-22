@@ -2,10 +2,11 @@ import {createHash} from 'node:crypto';
 import {mkdtempSync, readFileSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {deepStrictEqual, rejects} from 'node:assert';
+import {deepStrictEqual, rejects, throws} from 'node:assert';
 import {privateAssetDownload} from './acceptance.ts';
 import {
   type FetchDependencies,
+  cliArchivesMarked,
   fetchCliArchives,
 } from './fetch-cli-archives.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
@@ -137,7 +138,7 @@ describe('fetch-cli-archives', () => {
     );
   });
 
-  it('fails on an entry that names nothing known, and on an empty --launches', async () => {
+  it('fails on an entry that names nothing known', async () => {
     const {dependencies} = fresh(() => Promise.resolve(BYTES));
     await rejects(
       fetchCliArchives(
@@ -148,6 +149,10 @@ describe('fetch-cli-archives', () => {
       ),
       /no-such-launch/u,
     );
+  });
+
+  it('fails on an empty --launches with the usage', async () => {
+    const {dependencies} = fresh(() => Promise.resolve(BYTES));
     await rejects(
       fetchCliArchives(
         REPOSITORY_ROOT,
@@ -155,7 +160,41 @@ describe('fetch-cli-archives', () => {
         'token',
         dependencies,
       ),
-      {message: 'usage: node tools/fetch-cli-archives.ts --launches <entries>'},
+      {
+        message:
+          'usage: node tools/fetch-cli-archives.ts --launches <entries> | --mark-parts',
+      },
+    );
+  });
+
+  it('marks a part whose launches start the CLI-source editor, and no other, whatever the entry form', () => {
+    deepStrictEqual(
+      cliArchivesMarked(REPOSITORY_ROOT, [
+        {name: 'cli', launches: 'cli-path', minutes: 30},
+        {name: 'mixed', launches: 'local,cli-path', minutes: 30},
+        {name: 'plain', launches: 'local,remote', minutes: 30},
+        {
+          name: 'files',
+          launches: 'windows:kill.test.ts,terminal-login',
+          minutes: 45,
+        },
+      ]).map(part => [part.name, part.cliArchives]),
+      [
+        ['cli', true],
+        ['mixed', true],
+        ['plain', false],
+        ['files', false],
+      ],
+    );
+  });
+
+  it('marking fails on a part whose launches name nothing known', () => {
+    throws(
+      () =>
+        cliArchivesMarked(REPOSITORY_ROOT, [
+          {name: 'odd', launches: 'no-such-launch', minutes: 30},
+        ]),
+      /no-such-launch/u,
     );
   });
 });

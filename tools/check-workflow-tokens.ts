@@ -50,49 +50,49 @@ const CLI_ARCHIVES_STEP = 'node tools/fetch-cli-archives.ts';
 /** Each string in `value` with the path of keys and indexes to it. */
 function stringsOf(
   value: unknown,
-  at: ReadonlyArray<string | number> = [],
+  keyPath: ReadonlyArray<string | number> = [],
 ): Array<[ReadonlyArray<string | number>, string]> {
   if (typeof value === 'string') {
-    return [[at, value]];
+    return [[keyPath, value]];
   }
   if (Array.isArray(value)) {
-    return value.flatMap((each, index) => stringsOf(each, [...at, index]));
+    return value.flatMap((each, index) => stringsOf(each, [...keyPath, index]));
   }
   return typeof value === 'object' && value !== null
     ? Object.entries(value).flatMap(([key, each]) =>
-        stringsOf(each, [...at, key]),
+        stringsOf(each, [...keyPath, key]),
       )
     : [];
 }
 
 /**
- * Whether the string at `at` in `workflow` may read the CLI archives' secret: the value of that variable in the `env`
- * of a step that runs the CLI archives' fetch, or of that name in a job's `secrets` for the workflow it calls.
+ * Whether the string at `keyPath` in `workflow` may read the CLI archives' secret: the value of that variable in the
+ * `env` of a step that runs the CLI archives' fetch, or of that name in a job's `secrets` for the workflow it calls.
  */
 function mayReadCliArchivesSecret(
   workflow: Record<string, unknown>,
-  at: ReadonlyArray<string | number>,
+  keyPath: ReadonlyArray<string | number>,
 ): boolean {
-  const [jobs, job, part, index, map, name] = at;
-  if (jobs !== 'jobs' || typeof job !== 'string') {
+  const [jobsKey, jobName, part, index, field, variable] = keyPath;
+  if (jobsKey !== 'jobs' || typeof jobName !== 'string') {
     return false;
   }
-  if (at.length === 4 && part === 'secrets') {
+  if (keyPath.length === 4 && part === 'secrets') {
     return index === CLI_ARCHIVES_SECRET;
   }
   if (
-    at.length !== 6 ||
+    keyPath.length !== 6 ||
     part !== 'steps' ||
-    map !== 'env' ||
-    name !== CLI_ARCHIVES_SECRET
+    field !== 'env' ||
+    variable !== CLI_ARCHIVES_SECRET
   ) {
     return false;
   }
   const steps = (
     workflow.jobs as Record<string, {steps?: Array<{run?: unknown}>}>
-  )[job]?.steps;
-  const run = steps?.[Number(index)]?.run;
-  return typeof run === 'string' && run.startsWith(CLI_ARCHIVES_STEP);
+  )[jobName]?.steps;
+  const command = steps?.[Number(index)]?.run;
+  return typeof command === 'string' && command.startsWith(CLI_ARCHIVES_STEP);
 }
 
 /** What is wrong with the workflow `file` whose text is `text` in the reach of the CLI archives' secret. */
@@ -104,18 +104,18 @@ export function cliArchivesSecretProblems(
   const problems = Object.entries(
     (workflow.jobs ?? {}) as Record<string, {secrets?: unknown}>,
   )
-    .filter(([, job]) => job.secrets === 'inherit')
+    .filter(([, definition]) => definition.secrets === 'inherit')
     .map(
       ([name]) =>
         `${file}: job ${name} passes every secret to the workflow it calls (secrets: inherit)`,
     );
-  for (const [at, value] of stringsOf(workflow)) {
+  for (const [keyPath, value] of stringsOf(workflow)) {
     if (
       value.includes(CLI_ARCHIVES_EXPRESSION) &&
-      !mayReadCliArchivesSecret(workflow, at)
+      !mayReadCliArchivesSecret(workflow, keyPath)
     ) {
       problems.push(
-        `${file}: ${at.join('.')} reads ${CLI_ARCHIVES_EXPRESSION}, which only the env of the CLI archives' fetch step may`,
+        `${file}: ${keyPath.join('.')} reads ${CLI_ARCHIVES_EXPRESSION}, which only the env of the CLI archives' fetch step may`,
       );
     }
   }
