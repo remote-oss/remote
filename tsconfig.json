@@ -173,6 +173,12 @@
       "path": "tests/acceptance/ssh-killed"
     },
     {
+      "path": "tests/acceptance/ssh-locks"
+    },
+    {
+      "path": "tests/acceptance/ssh-downloaders"
+    },
+    {
       "path": "tests/acceptance/ssh-containers"
     },
     {

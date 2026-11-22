@@ -56,7 +56,7 @@ function notingWorld(answering: readonly string[]): {
     world: {
       stop: (folder, namespace, recordKey) => {
         stops.push([folder, namespace, recordKey]);
-        return Promise.resolve();
+        return Promise.resolve('found');
       },
       answers: record => Promise.resolve(answering.includes(record.nonce)),
       processesHolding: text => (text === 'hung' ? [41, 42] : []),

@@ -1,6 +1,6 @@
 /** Where the server archive is downloaded: on the host first, on the client and then the host, or only on the client. */
 export type DownloadPlacement =
-  | {kind: 'hostFirst'; mode: 'auto' | 'always' | 'off'}
+  | {kind: 'hostFirst'; mode: 'auto' | 'always' | 'off' | 'manualBootstrap'}
   | {kind: 'clientFirstThenHost'}
   | {kind: 'clientOnly'};
 

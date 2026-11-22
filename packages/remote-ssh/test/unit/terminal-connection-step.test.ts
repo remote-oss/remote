@@ -233,6 +233,12 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     ]);
   });
 
+  it('F-2003 BR-6 item 5: terminal mode writes Started ssh when the login terminal is created', async () => {
+    const made = fixture();
+    await started(made);
+    deepStrictEqual(made.logged(), ['Started ssh']);
+  });
+
   it('#2457, reading-2457-echo-line: an answer typed at a recognised prompt of the install terminal is not in the log, shown or hidden, and the next line is', async () => {
     for (const reveal of [true, false]) {
       const made = fixture({level: 'trace', reveal});

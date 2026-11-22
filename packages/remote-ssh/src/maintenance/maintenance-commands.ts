@@ -36,8 +36,8 @@ export interface MaintenancePorts {
   ): Promise<MaintenanceRun>;
   /** The host and the connection mode of the window's held connection, or nothing when it holds none that is open. */
   heldHost(): {target: SshTarget; terminalMode: boolean} | undefined;
-  /** Ends the local connection server of the host string and forgets its stored details; silent when none runs. */
-  killLocalServer(hostString: string): PromiseLike<void>;
+  /** Ends the local connection server of the host string and forgets its stored details; also when none runs. */
+  killLocalServer(hostString: string): PromiseLike<'found' | 'none'>;
   /** Tells the window's resolver that the window is about to leave its remote, so its resolves end silently. */
   leaveWindow(): void;
   /** Takes back `leaveWindow()`, for a window that stays. */

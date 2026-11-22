@@ -295,7 +295,12 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
     await rememberPage('local');
   });
 
-  afterEach(async () => {
+  afterEach(async function () {
+    // A row that failed while it read an Open Recent pick of `local` leaves the pick open, and the window's agent takes no
+    // command while its `openRecent` runs, so the next row's `openWindow` waits on it: the pick is escaped through its page.
+    if (this.currentTest?.state === 'failed') {
+      await pressEscape('local').catch(() => undefined);
+    }
     await tidy();
   });
 
@@ -545,7 +550,7 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
       },
       {
         empty: [true, true],
-        tabs: ['Welcome', 'c2623nodotb', 'c2623nodotc'],
+        tabs: ['c2623nodotb', 'c2623nodotc'],
         windows: [window],
       },
     );

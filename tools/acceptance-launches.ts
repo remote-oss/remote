@@ -98,6 +98,12 @@ export interface RunnerLaunch extends LaunchCommon {
   kind?: undefined;
   /** The development extension the tests run in: `runner` (a local window) or `runner-remote` (a remote one). */
   runner: 'runner' | 'runner-remote';
+  /**
+   * Whether the launch starts the run's CLI-source copy of VSCodium (`tools/acceptance-cli-editor.ts`) and the download
+   * host serves a stand-in archive of the editor's CLI under `/cli/<platform>/`, made by the run, with no pin and no
+   * token: for a host case that only needs the client to fetch the CLI and the host to receive it.
+   */
+  cliStandIn?: true;
   /** The suite folder under tests/acceptance, bundled into `dist-<suite without "suite-">`. */
   suite: string;
   /** Whether the launch answers from its own script and record files (`<label>-script.json`, `<label>-record.jsonl`). */
@@ -196,6 +202,9 @@ export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
  * The harness refuses a run on a machine whose ephemeral range overlaps it (`windowPortRangeProblem`).
  */
 export const WINDOW_PORT_RANGE = '20000-20999';
+
+/** The lowest port of the client's ephemeral range on Linux by default: the ports a row names for the client to hold or search stay below it. */
+export const CLIENT_EPHEMERAL_LOWEST = 32_768;
 
 /** The setting that holds the window's port range. */
 export const WINDOW_PORT_RANGE_SETTING = 'remote.SSH.preferredLocalPortRange';
@@ -710,6 +719,8 @@ export interface HostCase {
    * a run makes it only when the case is named.
    */
   primer?: true;
+  /** Whether the case's launch starts the CLI-source editor, with a stand-in CLI archive on the download host. */
+  cliStandIn?: true;
   /** Further commands the host's `sh` runs, in order, after the suite's own setup. */
   setup?: string[];
   /** The script the case's window answers from; the suite's dialog script when absent. */
@@ -1192,7 +1203,17 @@ export function launchesOf(root: string): Launch[] {
       },
     },
     // The core features of the editor in a window on the SSH host, read through the renderer.
-    {...RENDERER_LAUNCH, label: 'ssh-core', suite: 'ssh-core'},
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-core',
+      suite: 'ssh-core',
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        // A new window opens no Welcome page of its own, as in the containers launches: a row reads the window's editors
+        // and the page it draws, and the page's focus is not what a row means to test.
+        'workbench.startupEditor': 'none',
+      },
+    },
     // The same with the pinned OpenSSH client as the user's `remote.SSH.path`, for the criteria about keywords newer than
     // the runners' client; the rows run plain `ssh` through the same path.
     {
@@ -1296,6 +1317,20 @@ export function launchesOf(root: string): Launch[] {
       suite: 'ssh-killed',
       environment: {HARNESS_KILLED_CASE: killedCase},
     })),
+    // The host's lock files while a window installs from the run's slow download source: one plain launch, each row a window of
+    // its own on a fresh host, with the settings it needs written to the user settings.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-locks',
+      suite: 'ssh-locks',
+    },
+    // A host whose login PATH has neither curl nor wget, the account `nofetch`: one plain launch, each row a window of its
+    // own on that account.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-downloaders',
+      suite: 'ssh-downloaders',
+    },
     // Dev Containers beside Remote - SSH, in a window on the SSH host: the commands that edit a configuration where it lives.
     {
       ...RENDERER_LAUNCH,
@@ -1811,6 +1846,7 @@ export function launchesOf(root: string): Launch[] {
               partOf: hostCaseLabel(suite, cases[position + 1] ?? hostCase),
             }
           : {}),
+        ...(hostCase.cliStandIn === true ? {cliStandIn: true as const} : {}),
         ownScript: true,
         hostSetup: hostSetupOf(hostCase, suite),
       })),

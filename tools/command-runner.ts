@@ -17,6 +17,7 @@ export interface CommandResult {
 export type CommandRunner = (
   program: string,
   programArguments: readonly string[],
+  timeoutMilliseconds?: number,
 ) => CommandResult;
 
 /** A program and its arguments as `spawnSync` takes them, and whether Node passes the arguments on as they are. */
@@ -57,6 +58,7 @@ export function spawnedCommandOf(
 export function runCommand(
   program: string,
   programArguments: readonly string[],
+  timeoutMilliseconds?: number,
 ): CommandResult {
   const {file, fileArguments, verbatim} = spawnedCommandOf(
     program,
@@ -66,6 +68,10 @@ export function runCommand(
   const result = spawnSync(file, fileArguments, {
     encoding: 'utf8',
     windowsVerbatimArguments: verbatim,
+    // A program that has not ended by then is killed, and its error says so: the answer is a failure, not a wait.
+    ...(timeoutMilliseconds === undefined
+      ? {}
+      : {timeout: timeoutMilliseconds}),
   });
   // A program that did not start (not installed, not executable) has no output at all: its error is the answer.
   if (result.error !== undefined) {
@@ -83,8 +89,12 @@ export function checked(
   command: CommandRunner,
   program: string,
   programArguments: readonly string[],
+  timeoutMilliseconds?: number,
 ): string {
-  const result = command(program, programArguments);
+  const result =
+    timeoutMilliseconds === undefined
+      ? command(program, programArguments)
+      : command(program, programArguments, timeoutMilliseconds);
   if (result.status !== 0) {
     throw new Error(
       `${program} ${programArguments.join(' ')} failed (${String(result.status)}): ${result.stderr.trim()}`,

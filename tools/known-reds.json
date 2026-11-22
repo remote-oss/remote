@@ -72,15 +72,6 @@
     "added": "2026-11-13"
   },
   {
-    "launch": "preconnect",
-    "file": "preconnect/failures.test.ts",
-    "title": "F-2108 AC-23 (retry-remembered): after Don't Ask Again on a failing script, Retry runs it with no dialog",
-    "card": 2458,
-    "owner": "dike",
-    "evidence": 42218054216,
-    "added": "2026-11-13"
-  },
-  {
     "launch": "explorer-folders",
     "file": "explorer-folders/folders-4-many.test.ts",
     "title": "F-2503 AC-21 (many-folders): 122 different folders opened one after another on one host are all listed, most recent first, none dropped",
@@ -117,6 +108,15 @@
     "added": "2026-11-13"
   },
   {
+    "launch": "ssh-core",
+    "file": "ssh-core/silent-flows.test.ts",
+    "title": "F-2508 AC-21 (c125-silent): after the terminal, the code command, the remote settings, a node program debugged to its end, a shell task and the Extensions view, the extension has shown no notification, logged no line, added nothing to the profile’s globalStorage, and registered no command or setting it lacked before",
+    "card": 2646,
+    "owner": "selene",
+    "evidence": 44289456794,
+    "added": "2026-11-18"
+  },
+  {
     "launch": "terminal-login",
     "file": "terminal-login/chat-absence.test.ts",
     "title": "F-2606 AC-25: with remote.SSH.experimental.chat true, the clear command is listed, the dialog has no Copilot button, the chat input offers no row, and the settings file marks the key",
@@ -131,7 +131,25 @@
     "title": "F-2505 AC-12 (c2663-third-wrong): the third wrong password at the reconnection’s input makes core show Cannot reconnect at once, with no further attempt",
     "card": 2753,
     "owner": "triton",
-    "evidence": 44046752757,
-    "added": "2026-11-17"
+    "evidence": 44541680836,
+    "added": "2026-11-19"
+  },
+  {
+    "launch": "windows",
+    "file": "windows/platform-pick.test.ts",
+    "title": "F-2206 AC-26 (c94-kill-current): Kill Current VS Code Server asks the platform in a connected window; after Escape the window stays connected with no dialog and no entry, and after Linux the kill completes with no entry",
+    "card": 2580,
+    "owner": "proteus",
+    "evidence": 44807795511,
+    "added": "2026-11-20"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/reconnect-give-up.test.ts",
+    "title": "F-0502 AC-5 (c43-five-minutes): after 5 minutes with the container running and the server down, the countdown still counts and the indicator still reads Reconnecting; Reload Window connects a new server on a new port within 8 s",
+    "card": 2523,
+    "owner": "dike",
+    "evidence": 44859397697,
+    "added": "2026-11-21"
   }
 ]

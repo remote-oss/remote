@@ -1,8 +1,10 @@
+import {settingLines} from '../../src/diagnostics/log-content.ts';
 import {deepStrictEqual} from 'node:assert';
 import type {SettingHost} from 'lib-identifiers';
 import {
   agentForwardingOf,
   defaultForwardsOf,
+  listedSettings,
   localDownloadModeOf,
   termsSettingsOf,
   x11ForwardingOf,
@@ -21,6 +23,53 @@ function hostWith(values: Readonly<Record<string, unknown>>): SettingHost {
 const MODE = 'remote.SSH.localServerDownload';
 const ALLOW = 'remote.SSH.allowLocalServerDownload';
 
+describe('the settings listing of the log (F-2003 BR-6 item 2, card connect-71)', () => {
+  it('lists every setting of the table by id, except the two the client search lists, and none twice', () => {
+    const listed = listedSettings(hostWith({})).map(([setting]) => setting);
+    deepStrictEqual(
+      [
+        listed.includes('remote.SSH.useFlock'),
+        listed.includes('remote.SSH.lockfilesInTmp'),
+        listed.includes('remote.SSH.useLocalServer'),
+        listed.includes('remote.SSH.path'),
+        listed.includes('remote.SSH.permitPtyAllocation'),
+        new Set(listed).size === listed.length,
+        listed.every(setting => setting.startsWith('remote.SSH.')),
+      ],
+      [true, true, true, false, false, true, true],
+    );
+  });
+
+  it('F-2003 BR-16, AC-29: in terminal mode the listing holds the useLocalServer line with false', () => {
+    deepStrictEqual(
+      settingLines(
+        listedSettings(hostWith({'remote.SSH.useLocalServer': false})),
+      ).filter(line => line.startsWith('remote.SSH.useLocalServer')),
+      ['remote.SSH.useLocalServer = false'],
+    );
+  });
+
+  it('gives each setting its effective value: the user value, or the default', () => {
+    const host: SettingHost = {
+      inspectSetting: settingId =>
+        settingId === 'remote.SSH.useFlock'
+          ? {defaultValue: true, globalValue: false}
+          : settingId === 'remote.SSH.lockfilesInTmp'
+            ? {defaultValue: false}
+            : {defaultValue: undefined},
+    };
+    const values = new Map(listedSettings(host));
+    deepStrictEqual(
+      [
+        values.get('remote.SSH.useFlock'),
+        values.get('remote.SSH.lockfilesInTmp'),
+        values.get('remote.SSH.bindHost'),
+      ],
+      [false, false, undefined],
+    );
+  });
+});
+
 describe('the download mode of a connect (F-2405 BR-1)', () => {
   it('F-2405.AC-6: auto, always and off are taken as written when the old switch is unset', () => {
     deepStrictEqual(
@@ -28,6 +77,18 @@ describe('the download mode of a connect (F-2405 BR-1)', () => {
         localDownloadModeOf(hostWith({[MODE]: mode})),
       ),
       ['auto', 'always', 'off'],
+    );
+  });
+
+  it('F-2406 BR-1: the undeclared value manual-bootstrap turns the manual bootstrap on; the old switch false still gives off', () => {
+    deepStrictEqual(
+      [
+        localDownloadModeOf(hostWith({[MODE]: 'manual-bootstrap'})),
+        localDownloadModeOf(
+          hostWith({[MODE]: 'manual-bootstrap', [ALLOW]: false}),
+        ),
+      ],
+      ['manualBootstrap', 'off'],
     );
   });
 

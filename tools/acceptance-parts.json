@@ -338,6 +338,7 @@
     "install-local-allow-false": 0.1,
     "install-local-always": 0.3,
     "install-local-copy-fails": 0.3,
+    "install-local-exec-cli": 0.3,
     "install-local-auto-online": 0.3,
     "install-local-fallback": 0.3,
     "install-local-junk": 0.2,
@@ -427,6 +428,8 @@
     "ssh-containers": {"configure-features.test.ts": 0.5},
     "ssh-core": {
       "reconnect-loop.test.ts": 23,
+      "command-out-of-context.test.ts": 4.1,
+      "command-catalogue.test.ts": 2.6,
       "activation.test.ts": 0.9,
       "agent-forwarding-live.test.ts": 1.4,
       "agent-forwarding.test.ts": 5.6,
@@ -442,6 +445,7 @@
       "exec-server.test.ts": 0.2,
       "forwarding-disabled.test.ts": 3.6,
       "kill-unsaved.test.ts": 0.6,
+      "lock-settings-log.test.ts": 1,
       "open-entry-points.test.ts": 10.6,
       "pty.test.ts": 14.4,
       "remote-settings.test.ts": 0.7,
@@ -469,6 +473,13 @@
     },
     "ssh-killed-14": {
       "killed.test.ts": 5.5
+    },
+    "ssh-locks": {
+      "host-locks.test.ts": 12,
+      "session-locks.test.ts": 7
+    },
+    "ssh-downloaders": {
+      "no-downloader.test.ts": 6
     },
     "ssh-newclient": {
       "jump-hosts-new-wording.test.ts": 0.7,

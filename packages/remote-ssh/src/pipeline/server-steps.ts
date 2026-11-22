@@ -19,6 +19,7 @@ import {
 } from 'lib-product';
 import {
   type AcceptanceStore,
+  addressForLog,
   type ArchiveCache,
   type ClientFilePort,
   classifyServerLicence,
@@ -72,7 +73,7 @@ export interface ServerStepDependencies {
   profile: ProductProfile;
   policy: ServerPolicyRecord;
   settings: HostServerSettings;
-  /** `remote.SSH.useExecServer`: the plan notes it and never applies it. */
+  /** `remote.SSH.useExecServer`: off, the plan takes the direct install; on, it takes the CLI path where the editor names a CLI source. */
   useExecServer: boolean;
   /** The user's download override and where it came from, when one is set. */
   override: OverrideValue | undefined;
@@ -103,8 +104,19 @@ export interface ServerStepDependencies {
   onInstallFolderInvalid: (value: string) => void;
   /** Keeps the hint of an install folder the host could not create, for the troubleshooting view. */
   onInstallFolderRefused: () => void;
+  /** Keeps the hint of a host the server's requirements check refused, for the troubleshooting view. */
+  onPrerequisitesMissing: () => void;
+  /** Keeps the hint of an install that stopped for a program the host does not have, `program` being `tar` or `gzip`. */
+  onCommandMissing: (program: string) => void;
   /** Keeps the hint of a download the client could not make, `value` being the reason the dialog gives. */
   onLocalDownloadFailed: (value: string) => void;
+  /** Where a manual bootstrap reads the user's server archive on the client. */
+  bootstrapArchive: string;
+  /** Keeps the hint of a manual bootstrap that could not start on the client: no archive at its path, or one it cannot read. */
+  onLocalBootstrapFailed: (
+    failure:
+      {cause: 'missing'; path: string} | {cause: 'unreadable'; detail: string},
+  ) => void;
   /** Whether the program the client's archive is copied to the host with can be started. */
   copyAvailable: () => Promise<boolean>;
   lockLoop: HostLockLoop;
@@ -242,8 +254,8 @@ export function createServerSteps(
   }
 
   /**
-   * Keeps the hint of a failure that has one: an install folder the host could not create, or a download the client
-   * could not make.
+   * Keeps the hint of a failure that has one: an install folder the host could not create, a program the host lacks
+   * for the unpack, a host the server's requirements check refused, or a download the client could not make.
    */
   function recordFailureHint(failure: TransferFailure | StartFailure): void {
     if (
@@ -251,9 +263,26 @@ export function createServerSteps(
       failure.status === 'CreateInstallDirFailed'
     ) {
       dependencies.onInstallFolderRefused();
+    } else if (failure.kind === 'unpack' && failure.missing !== undefined) {
+      dependencies.onCommandMissing(failure.missing);
+    } else if (failure.kind === 'prerequisitesMissing') {
+      dependencies.onPrerequisitesMissing();
     } else if (failure.kind === 'localDownload') {
       dependencies.onLocalDownloadFailed(localDownloadValue(failure));
+    } else if (
+      failure.kind === 'localBootstrap' &&
+      failure.cause !== 'windowsHost'
+    ) {
+      dependencies.onLocalBootstrapFailed(failure);
     }
+  }
+
+  /** Whether this connect runs a manual bootstrap: `remote.SSH.localServerDownload` is `manual-bootstrap`. */
+  function manualBootstrap(): boolean {
+    const placement = dependencies.policy.downloadPlacement;
+    return (
+      placement.kind === 'hostFirst' && placement.mode === 'manualBootstrap'
+    );
   }
 
   /** The CLI archive's address, which a CLI plan always comes with: asking for it before such a plan is a defect. */
@@ -413,8 +442,7 @@ export function createServerSteps(
           : {
               cliMode: {
                 useExecServerSetting: dependencies.useExecServer,
-                // `localServerDownload` has no manual bootstrap value in this extension.
-                manualBootstrap: false,
+                manualBootstrap: manualBootstrap(),
                 socketMode: dependencies.socketMode(),
                 cliTemplate: profile.cliDownloadUrlTemplate,
                 sourcesFree: serverFree && cliFree,
@@ -465,6 +493,13 @@ export function createServerSteps(
       onPhase,
       cancellation,
     ) => {
+      const bootstrap = manualBootstrap();
+      if (bootstrap && host.operatingSystem === 'win32') {
+        return {
+          kind: 'failed',
+          failure: {kind: 'localBootstrap', cause: 'windowsHost'},
+        };
+      }
       const outcome = await transfer(
         {
           plan: downloadPlan,
@@ -487,6 +522,9 @@ export function createServerSteps(
           temporaryToken: dependencies.newTemporaryToken(),
           verification: dependencies.policy.verification,
           hostFolder: host.temporaryFolder,
+          ...(bootstrap
+            ? {bootstrapArchive: dependencies.bootstrapArchive}
+            : {}),
           cancellation,
           discardDeadlineMilliseconds: dependencies.discardDeadlineMilliseconds,
         },
@@ -499,6 +537,7 @@ export function createServerSteps(
           lockLoop: dependencies.lockLoop,
           logger: dependencies.logger,
           onPhase,
+          sessionLock: true,
         },
       );
       const placement = dependencies.policy.downloadPlacement;
@@ -511,6 +550,16 @@ export function createServerSteps(
         placement.mode === 'off'
       ) {
         dependencies.onHostDownloadRefused(outcome.failure.cause);
+      }
+      if (
+        outcome.kind === 'failed' &&
+        outcome.failure.kind === 'localBootstrap' &&
+        outcome.failure.cause === 'missing'
+      ) {
+        dependencies.logger.warn(
+          `To stage the server, download ${addressForLog(downloadPlan.address)}`,
+        );
+        dependencies.logger.warn(`and save it as ${outcome.failure.path}`);
       }
       if (outcome.kind === 'failed') {
         recordFailureHint(outcome.failure);
@@ -528,7 +577,11 @@ export function createServerSteps(
           dependencies.socketMode(),
         ),
         dependencies.policy,
-        {lockLoop: dependencies.lockLoop, logger: dependencies.logger},
+        {
+          lockLoop: dependencies.lockLoop,
+          logger: dependencies.logger,
+          sessionLock: true,
+        },
         cancellation,
       );
       if (outcome.kind === 'failed') {
@@ -562,7 +615,6 @@ export function createServerSteps(
           download: dependencies.download,
           credentials: dependencies.credentials,
           files: dependencies.files,
-          lockLoop: dependencies.lockLoop,
           logger: dependencies.logger,
           onPhase,
         },
@@ -573,7 +625,6 @@ export function createServerSteps(
         lease.channel,
         cliParametersFor(cliPlan, host),
         controlToken,
-        {lockLoop: dependencies.lockLoop},
         cancellation,
       ),
     stopCli: async (input, lease, host, cliPlan, processId, cancellation) => {

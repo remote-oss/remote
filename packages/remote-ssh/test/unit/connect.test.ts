@@ -43,6 +43,7 @@ import {
   WAITS,
   waitsOf,
 } from './pipeline.fixture.ts';
+import {LOCAL_LOCK_TIMEOUT} from '../../src/pipeline/failure.ts';
 
 describe('the connect pipeline, when it works', () => {
   it('runs the steps in the order of the contract, transferring a server that is not there', async () => {
@@ -236,6 +237,53 @@ describe('the connect pipeline, when it works', () => {
       ),
       ['gate', 'start'],
     );
+  });
+
+  it('F-2003 BR-6 item 2: the settings listing follows the resolver line at every resolve, a reconnection included', async () => {
+    const first = setup();
+    first.options.settingLines = [
+      'remote.SSH.lockfilesInTmp = false',
+      'remote.SSH.useFlock = true',
+    ];
+    await connect(INPUT, steps(first.recording), first.options);
+    const again = setup();
+    again.options.settingLines = ['remote.SSH.useFlock = true'];
+    await connect(
+      {...INPUT, attempt: 2, isReconnection: true},
+      steps(again.recording),
+      again.options,
+    );
+    function lines(sink: typeof first.logSink): string[] {
+      return sink.lines.map(line => line.message).slice(0, 3);
+    }
+    deepStrictEqual(
+      [lines(first.logSink), lines(again.logSink)],
+      [
+        [
+          'Resolving ssh-remote+dev, attempt 1',
+          'remote.SSH.lockfilesInTmp = false',
+          'remote.SSH.useFlock = true',
+        ],
+        [
+          'Resolving ssh-remote+dev, attempt 2, reconnection',
+          'remote.SSH.useFlock = true',
+          'Host platform: linux x64',
+        ],
+      ],
+    );
+  });
+
+  it('F-2003 BR-5: the window start follows the settings listing at the resolve', async () => {
+    const {recording, options, logSink} = setup();
+    options.settingLines = ['remote.SSH.useFlock = true'];
+    options.writeWindowStart = () => {
+      options.logger.info('window start');
+    };
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(logSink.lines.map(line => line.message).slice(1, 3), [
+      'remote.SSH.useFlock = true',
+      'window start',
+    ]);
   });
 
   it('F-2506 BR-10: moves the legacy settings first at every resolve of a window, a reconnection included', async () => {
@@ -459,6 +507,99 @@ describe('the connect pipeline, when it works', () => {
       {kind: 'settingUpTunnel'},
       {kind: 'waitingForForwarding'},
     ]);
+  });
+});
+
+describe('the connect pipeline, with the client install lock (card #2844, F-2408 BR-6, 7.E2)', () => {
+  it('BR-6: the lock is held from after the lookup, before the connection opens, until the server started', async () => {
+    const {recording, options} = setup();
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(recording.clientLock, [
+      'held after locateClient',
+      'released after start',
+    ]);
+  });
+
+  it('6.1 step 2: a wait for the lock shows "Waiting for other windows to connect" before the connection opens', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        holdClientLock: (input, onWaiting) => {
+          onWaiting();
+          return Promise.resolve({
+            kind: 'done',
+            value: {release: () => undefined},
+          });
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(recording.phases.slice(0, 3), [
+      {kind: 'initializing', quiet: true},
+      {kind: 'waitingForOtherWindow'},
+      {kind: 'opened'},
+    ]);
+  });
+
+  it("7.E2: a lock wait that runs out is the connect's failure, with the local startup lock's reason, and no connection opens", async () => {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        holdClientLock: () =>
+          Promise.resolve({kind: 'failed', failure: LOCAL_LOCK_TIMEOUT}),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      {
+        kind: 'kind' in result ? result.kind : 'connected',
+        reason: 'reason' in result ? result.reason : undefined,
+        opened: recording.calls.includes('openConnection'),
+      },
+      {kind: 'lockTimeout', reason: {id: 'localLockTimeout'}, opened: false},
+    );
+  });
+
+  it('BR-6: a connect that fails after it took the lock gives it back', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        openConnection: () => {
+          recording.calls.push('openConnection');
+          return Promise.resolve({
+            kind: 'failed',
+            failure: {kind: 'channelClosed'},
+          });
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(recording.clientLock, [
+      'held after locateClient',
+      'released after openConnection',
+    ]);
+  });
+});
+
+describe('the warning of the download mode (F-2406 BR-3, ruling-2878-manual-bootstrap)', () => {
+  it('BR-3: a window asks for the warning once at the start of every attempt', async () => {
+    const {recording, options} = setup();
+    let warnings = 0;
+    const counted = steps(recording, {
+      warnOfDownloadMode: () => {
+        warnings += 1;
+      },
+    });
+    await connect(INPUT, counted, options);
+    await connect(
+      {...INPUT, attempt: 2, isReconnection: true},
+      counted,
+      options,
+    );
+    deepStrictEqual(warnings, 2);
   });
 });
 

@@ -43,6 +43,9 @@ import {
 } from '../windows/renderer.ts';
 import {PLATFORMS} from '../windows/tunnel-support.ts';
 
+/** The start of the line that names the client install lock a connect takes, which installs nothing on the host. */
+const CLIENT_LOCK_LINE = 'Acquiring local install lock';
+
 /** The setting of the feature. */
 const GRACE = 'remote.SSH.reconnectionGraceTime';
 
@@ -145,6 +148,21 @@ async function serverMain(): Promise<string> {
       `${DATA_FOLDER}/bin/.*/out/server-main.js`,
     ).catch(() => '')
   ).trim();
+}
+
+/**
+ * What the host holds of the server at this moment, for a failure to show: every process of the server folder with its
+ * parent, its start and its command line, the files of the folder with their times (the locks, the pid, token and log
+ * files), the content of the pid file and the end of the server's log.
+ */
+async function serverFacts(): Promise<string> {
+  return onHost(
+    'sh',
+    '-c',
+    `for pid in $(pgrep -f '${DATA_FOLDER}/bin/'); do [ "$pid" != "$$" ] || continue; echo "$pid parent $(awk '{print $4}' /proc/$pid/stat 2>/dev/null) start $(stat -c %y /proc/$pid 2>/dev/null) $(tr '\\0' ' ' </proc/$pid/cmdline 2>/dev/null)"; done; ls -lA --full-time ${DATA_FOLDER} ${DATA_FOLDER}/bin/* 2>&1; for pidfile in ${DATA_FOLDER}/.*.pid; do echo "$pidfile: $(cat "$pidfile" 2>&1)"; done; tail -n 20 ${DATA_FOLDER}/.*.log 2>&1; true`,
+  ).catch(
+    (caught: unknown) => `the facts could not be read: ${String(caught)}`,
+  );
 }
 
 /** The host's clock as a second of the day, which its log lines' own time stamps are on. */
@@ -521,15 +539,20 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
     await new Promise(resolve => setTimeout(resolve, 3000));
     await answerDialog(name, 'Reload Window');
     await connectedWithin(name, 120_000);
+    const reloaded = await serverMain();
     deepStrictEqual(
       [
-        await serverMain(),
+        reloaded,
         connectionLog()
           .slice(mark)
-          .filter(line => /install|download/i.test(line)),
+          .filter(
+            line =>
+              /install|download/i.test(line) &&
+              !line.includes(CLIENT_LOCK_LINE),
+          ),
       ],
       [server, []],
-      JSON.stringify(connectionLog().slice(mark)),
+      `${JSON.stringify(connectionLog().slice(mark))}\nthe host's server before the reload: ${server}\n${reloaded === server ? '' : await serverFacts()}`,
     );
   });
 

@@ -16,6 +16,7 @@ import {
   stop,
   type Timer,
 } from 'lib-helper';
+import type {SessionLock} from 'lib-host';
 import type {EffectiveOptions} from '../config/effective.ts';
 import type {FailureHint, FailureReason} from '../diagnostics/classify.ts';
 import type {FailureKind} from '../diagnostics/rules.ts';
@@ -69,6 +70,11 @@ export interface ConnectionAcquireRequest<Rejection = never> {
   prepare: () => Promise<PreparedConnection<Rejection>>;
   /** The end policy of the helper: the grace after its last lease (a policy value, 2 to 4 seconds). */
   policy: EndPolicy;
+  /**
+   * Called once when the acquire replaces a stale record: after the replacement is claimed, before the new helper
+   * starts; a join and a fresh claim call nothing.
+   */
+  onStaleReplaced?: () => void;
   cancellation: AbortSignal;
 }
 
@@ -143,6 +149,8 @@ export interface ConnectedState {
   sharedRecord: SharedRecord | null;
   /** What the session's opening found when the host's platform was unknown; null when it was known. */
   detectedPlatform: DetectedPlatform | null;
+  /** The pid of the ssh the helper runs; absent from a helper of an earlier build. */
+  sshProcessId?: number;
 }
 
 /** How the wait for the login ended. */
@@ -156,8 +164,11 @@ interface LoginSteps {
   timer: Timer;
   leaseId: number;
   askConnect(): Promise<Asked>;
-  /** The state of a connection that is set up: the SOCKS port the helper announced, if it did. */
-  setUp(announced: number | undefined): Promise<ConnectOutcome>;
+  /** The state of a connection that is set up: the SOCKS port the helper announced, and the ssh pid its connected gave. */
+  setUp(
+    announced: number | undefined,
+    sshProcessId?: number,
+  ): Promise<ConnectOutcome>;
   /** Another window owns the login. */
   waiting(): void;
   /** The login fell to this window after it was told to wait. */
@@ -279,9 +290,11 @@ class LoginWait {
         }
         break;
       case 'connected':
-        void this.steps.setUp(event.socksPort).then(outcome => {
-          this.end(outcome);
-        });
+        void this.steps
+          .setUp(event.socksPort, event.sshProcessId)
+          .then(outcome => {
+            this.end(outcome);
+          });
         break;
       case 'loginFailed':
         if (this.owner) {
@@ -332,6 +345,8 @@ export interface SessionRun {
   inputBase64: string | null;
   /** How long the script may take once it has started, in milliseconds. */
   deadlineMilliseconds: number;
+  /** The session-wide host lock of this run; absent for a run that takes none. */
+  sessionLock?: SessionLock;
 }
 
 /** How a script run on the shared session ended. */
@@ -370,6 +385,17 @@ export class SharedConnection {
     });
   }
 
+  /** The helper's process id, from the welcome's payload; absent from a helper of an earlier build. */
+  get helperProcessId(): number | undefined {
+    const value = this.lease.payload.helperProcessId;
+    return typeof value === 'number' ? value : undefined;
+  }
+
+  /** Whether this window's claim started the helper; a window that joined it took the lease the helper already held. */
+  get startedByMe(): boolean {
+    return this.lease.startedByMe;
+  }
+
   /** Calls `listener` with each notice from now on; the returned function stops it. */
   onNotice(listener: (notice: ConnectionNotice) => void): () => void {
     this.listeners.add(listener);
@@ -394,7 +420,8 @@ export class SharedConnection {
           timer: this.timer,
           leaseId: this.lease.leaseId,
           askConnect: () => this.askHelper({type: 'connect'}),
-          setUp: announced => this.connected(announced),
+          setUp: (announced, sshProcessId) =>
+            this.connected(announced, sshProcessId),
           waiting: () => {
             this.notify({type: 'waitingForOtherWindow'});
           },
@@ -471,7 +498,22 @@ export class SharedConnection {
     const runId = this.lastRunId;
     this.lineListeners.set(runId, onLine);
     const outcome = await this.lease.request(
-      {type: 'runScript', runId, ...script},
+      {
+        type: 'runScript',
+        runId,
+        script: script.script,
+        environment: script.environment,
+        inputBase64: script.inputBase64,
+        deadlineMilliseconds: script.deadlineMilliseconds,
+        ...(script.sessionLock === undefined
+          ? {}
+          : {
+              sessionLock: {
+                path: script.sessionLock.path,
+                action: script.sessionLock.action,
+              },
+            }),
+      },
       waitMilliseconds,
     );
     this.lineListeners.delete(runId);
@@ -519,9 +561,14 @@ export class SharedConnection {
     this.lease.release();
   }
 
-  /** The state of a connection that is set up: the SOCKS port (given, or the helper's) and the shared record. */
+  /**
+   * The state of a connection that is set up: the SOCKS port (announced, or the helper's), the shared record, and
+   * the ssh's pid from the connected event, else from the record's answer; a helper of an earlier build gives it in
+   * neither.
+   */
   private async connected(
     announced: number | undefined,
+    announcedSshProcessId?: number,
   ): Promise<ConnectOutcome> {
     const socksPort = announced ?? this.lease.payload.socksPort;
     if (typeof socksPort !== 'number') {
@@ -541,16 +588,15 @@ export class SharedConnection {
     if (asked.kind === 'failed') {
       return asked;
     }
+    const answered = asked.reply.type === 'sharedRecord' ? asked.reply : null;
+    const sshProcessId = announcedSshProcessId ?? answered?.sshProcessId;
     return {
       kind: 'connected',
       socksPort,
       runFacts,
-      sharedRecord:
-        asked.reply.type === 'sharedRecord' ? asked.reply.record : null,
-      detectedPlatform:
-        asked.reply.type === 'sharedRecord'
-          ? asked.reply.detectedPlatform
-          : null,
+      sharedRecord: answered?.record ?? null,
+      detectedPlatform: answered?.detectedPlatform ?? null,
+      ...(sshProcessId === undefined ? {} : {sshProcessId}),
     };
   }
 
@@ -695,6 +741,9 @@ export async function acquireConnection<Rejection = never>(
         payload: {socksPort, runFacts: JSON.stringify(prepared.runFacts)},
       };
     },
+    ...(request.onStaleReplaced === undefined
+      ? {}
+      : {onStaleReplaced: request.onStaleReplaced}),
     cancellation: request.cancellation,
   });
   return outcome.kind === 'acquired'
@@ -709,11 +758,14 @@ export async function acquireConnection<Rejection = never>(
     : outcome;
 }
 
-/** Ends the helper of a host and its `ssh`, silently; done also when no helper runs. */
+/**
+ * Ends the helper of a host and its `ssh`, silently; done also when no helper runs. Reports the record it looked up:
+ * `found` when the host's record was there, `none` when it was not.
+ */
 export function killConnection(
   environment: ConnectionClientEnvironment,
   folder: string,
   hostString: string,
-): Promise<void> {
+): Promise<'found' | 'none'> {
   return stop(environment.helper, folder, CONNECTION_NAMESPACE, hostString);
 }

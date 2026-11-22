@@ -41,6 +41,13 @@ async function startedOnStranger(): Promise<{ending: Promise<string>}> {
   // The command holds the window's agent until the row answers it, and the page of a window that has none of its own
   // is found by asking the agent for its state: so the page is found first, and the reads that follow reuse it.
   await pageOf('local');
+  // A pick left by the previous attempt must be gone, or the wait below would take it for this command's host pick and
+  // the command would wait for its own until the next attempt's answers reach it (card #2840).
+  await waitFor(
+    'the quick pick of the previous attempt to close',
+    async () => (await quickPickOf('local')) === undefined,
+    60_000,
+  ).catch(failedWithFacts);
   const ending = inWindow('local', 'opensshremotes.cleanDevBox').then(
     () => 'done',
     (caught: unknown) => String(caught),

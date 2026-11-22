@@ -116,6 +116,7 @@ function surfacesWith(
     },
     environmentHints: () => [],
     logMark: () => 0,
+    writeWindowStart: () => undefined,
     logText: () => '',
     parseUri: () => undefined,
     help: {
@@ -143,6 +144,7 @@ function surfacesWith(
         return Promise.resolve();
       },
     },
+    confirmationCopies: {read: () => undefined, write: () => Promise.resolve()},
     noticeState: {get: () => undefined, update: () => Promise.resolve()},
     logger: createLogger(calls.logged, {minimumLevel: () => 'info'}),
     applyTerminalEnvironment: () => undefined,

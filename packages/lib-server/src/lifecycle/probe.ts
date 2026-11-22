@@ -54,7 +54,6 @@ export type ProbeFailure =
       reported: string;
       libc: 'glibc' | 'musl' | 'unknown';
     }
-  | {kind: 'prerequisiteMissing'; missing: readonly string[]}
   | {kind: 'probeFailed'; status: string}
   | {kind: 'unreadableFacts'; field: 'os' | 'arch'}
   | {kind: 'noResultBlock'}
@@ -63,9 +62,6 @@ export type ProbeFailure =
 /** The outcome of a probe. */
 export type ProbeOutcome =
   {kind: 'probed'; host: ProbedHost} | {kind: 'failed'; failure: ProbeFailure};
-
-/** The tools a POSIX host must have for any server install: its archive is a tar file. A Windows host needs none. */
-const REQUIRED_TOOLS = ['tar'];
 
 const TOOL_NAMES = ['wget', 'curl', 'tar', 'unzip', 'flock', 'gzip'];
 
@@ -172,10 +168,5 @@ export async function probe(
       failure: {kind: 'unreadableFacts', field: read.unreadable},
     };
   }
-  const {host} = read;
-  const required = host.operatingSystem === 'win32' ? [] : REQUIRED_TOOLS;
-  const missing = required.filter(name => !host.tools.includes(name));
-  return missing.length > 0
-    ? {kind: 'failed', failure: {kind: 'prerequisiteMissing', missing}}
-    : {kind: 'probed', host};
+  return {kind: 'probed', host: read.host};
 }

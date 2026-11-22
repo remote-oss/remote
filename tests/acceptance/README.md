@@ -123,6 +123,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `ssh-core`: a plain launch with the renderer helpers and no setting of its own; `ssh-core/*.test.ts` opens windows on the SSH host and reads the core features of the editor in them (terminals first) through the renderer, F-2508's rows.
 - `ssh-killed-12`, `ssh-killed-13` and `ssh-killed-14`: the launch of `ssh-core` for the rows about the server's lifetime after the client's editor ended without closing the connection (F-2413 AC-12, 13, 14); they run the one suite `ssh-killed` and each names its case in `HARNESS_KILLED_CASE`, so that a launch runs one row, which kills the launch's editor tree after connecting a window and goes on against the host alone, as `containers-killed-*` do. The row of case 14 asks the harness for a new editor (`relaunchEditor`) to open the second window.
+- `ssh-locks`: the launch of `ssh-core` for the rows about the host's lock files while a window installs from the run's slow download source (F-2408 card B); each row is a window of its own on a fresh host, and the host is looked at once a second until the window has connected.
+- `ssh-downloaders`: the launch of `ssh-core` for the rows about a host whose login PATH has neither curl nor wget (F-2402): the account `harness-nofetch`, alias `nofetch`, has a login PATH of its own (`/opt/nofetch/bin`: every program of the host but `curl` and `wget`), and a copy of curl lies in `/opt/fetch-off`, on no account's PATH, for the rows that put it back.
 - `ssh-newclient`: the same as `ssh-core` with `remote.SSH.path` naming the pinned OpenSSH client, which `tools/install-openssh` builds once per runner (OpenSSH 10.6p2, checked against its sha256) and the run passes as HARNESS_SSH_CLIENT; `ssh-newclient/*.test.ts` holds F-2109's rows for keywords newer than the runners' own client, and each runs plain `ssh` through the same path. A run that cannot build the client refuses the launch.
 - `ssh-newclient-pickers`: the same as `ssh-newclient` (the pinned OpenSSH client through `remote.SSH.path`) with the empty script, which makes Remote - SSH show its real quick picks; `ssh-newclient-pickers/*.test.ts` read their items and the focused one through the renderer: the host-key question of a maintenance command in the wording of OpenSSH 10.2 (F-2412 AC-10).
 - `windows-host`: a plain launch with the renderer helpers on a Windows client only, in the platform workflow's Windows job, which starts Windows' OpenSSH Server on 127.0.0.1 with key authentication for the job's account and Windows PowerShell as its shell, and passes its port, user and key as HARNESS_WINHOST_*; the run's ssh_config gets the alias `winhost` for it and `remote.SSH.remotePlatform` names it `windows`; `windows-host/*.test.ts` reaches that host, by plain `ssh` through the run's ssh_config for now and by windows once the product bootstraps a Windows host. A run on another client, or without the server, refuses the launch.
@@ -381,6 +383,18 @@ from both sides; the download host's `hostrefused` and `hostjunk` sources answer
 with junk and any other client with the archive. Before each launch the run notes how many requests the download host has logged, in
 `<run>/<label>-requests-start`, so `downloadRequests()` of `suite-install/install.ts` reads only the case's own. The
 host's downloaders send a `Wget` or `curl` user agent, and the editor's download doesn't.
+
+A case with `cliStandIn: true` (`local-exec-cli`, F-2405 AC-8's exec half) starts the run's CLI-source copy of VSCodium, whose
+`product.json` names `cliDownloadUrlTemplate` on the download host (`tools/acceptance-cli-editor.ts`), and the download host
+serves under `/cli/<os>-<arch>/<commit>/` a stand-in archive of the editor's CLI that the run makes: a gzipped tar of one
+script that fails, with no pin and no token, so the case runs in the gate. The copy's template names the client's loopback
+(`HARNESS_DOWNLOADS_LOCAL`) there, which the client resolves and the host's downloader cannot reach, and the case sets
+`remote.SSH.localServerDownload` to `always`, so the client itself fetches the archive. The case's rows check that the
+client asked once for the CLI of the host's platform and of the copy's commit (`HARNESS_CLIENT_COMMIT`), and that the
+archive's file was run from the server folder under its commit-keyed name: the stand-in writes the path it was run as to
+`/tmp/stand-in-cli-ran`, since the install removes the file of a CLI that fails; the file in the archive is named by the product's `applicationName`, which the install unpacks the CLI by, and a run whose editor names another is refused. The stand-in is no CLI, so
+the case's outcome is `any`. Where a run also
+names the `cli-path` launch, whose pins give real CLI archives for the host's downloader, the copy's template names the host's own base (`downloads`) and the host serves those archives for the platforms they cover.
 
 A case that keeps what an earlier connect left (`keepServer`, `keepFiles`) names a primer in `needs`: the case listed right
 before it with `primer: true`, whose connect makes that state. The primer's launch is `named only` and a part of the

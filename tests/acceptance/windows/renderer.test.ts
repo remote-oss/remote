@@ -1,6 +1,5 @@
 import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import {
-  pageAmong,
   pageTitleByName,
   nextListKey,
   walkToPosition,
@@ -10,10 +9,12 @@ import {
   pagesForState,
   pagesOfRemoteness,
   pressUntilClosed,
+  withoutAdministratorMark,
   retypingOf,
   type FolderDialogReading,
   type FolderDialogWait,
 } from './renderer.ts';
+import {pageAmong} from './page-list.ts';
 
 describe('pageTitleByName', () => {
   it('containers-19: a folder window finds its page by its name, with or without the remote part of the title', () => {
@@ -50,6 +51,45 @@ describe('pageTitleByName', () => {
         pageTitleByName('local', ['[]', '[]']),
       ],
       [undefined, undefined],
+    );
+  });
+});
+
+describe('the titles of an elevated editor', () => {
+  const ELEVATED = [
+    '[c70-twice [Dev Container: c70-twice @ tcp://127.0.0.1:61168]] [Administrator]',
+    '[c70-no-docker] [Administrator]',
+    '[] [Administrator]',
+  ];
+
+  it('card #2829: the mark of an elevated editor is taken off every title, and only at its end', () => {
+    deepStrictEqual(
+      [
+        ...ELEVATED.map(withoutAdministratorMark),
+        withoutAdministratorMark('[an [Administrator] folder]'),
+      ],
+      [
+        '[c70-twice [Dev Container: c70-twice @ tcp://127.0.0.1:61168]]',
+        '[c70-no-docker]',
+        '[]',
+        '[an [Administrator] folder]',
+      ],
+    );
+  });
+
+  it('card #2829: on the titles of a Windows runner the local window is the empty brackets, and the folder windows find their pages by name', () => {
+    const titles = ELEVATED.map(withoutAdministratorMark);
+    deepStrictEqual(
+      [
+        pageTitleByName('local', titles),
+        pageTitleByName('c70-no-docker', titles),
+        pageTitleByName('c70-twice', titles),
+      ],
+      [
+        '[]',
+        '[c70-no-docker]',
+        '[c70-twice [Dev Container: c70-twice @ tcp://127.0.0.1:61168]]',
+      ],
     );
   });
 });

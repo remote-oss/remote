@@ -335,7 +335,11 @@ describe('the reconnection loop of a window whose host stops answering (card #27
       }
       await new Promise(resolve => setTimeout(resolve, 50));
     }
-    return {before, toasts: [...toasts], reconnectedAfter};
+    // The window's progress record holds every phase it showed, each with its time, whatever the sampling above saw.
+    const phases = recordLines('progress', name)
+      .filter(line => line.time >= began)
+      .map(line => `${line.question} @${String(line.time - began)} ms`);
+    return {before, toasts: [...toasts], reconnectedAfter, phases};
   }
 
   const SETTING_UP = 'Setting up SSH Host harness';
@@ -361,7 +365,7 @@ describe('the reconnection loop of a window whose host stops answering (card #27
   ) {
     await userSettings(settings);
     await connectedWindow(name);
-    const {before, toasts, reconnectedAfter} = await killedSsh(name);
+    const {before, toasts, reconnectedAfter, phases} = await killedSsh(name);
     console.log(
       `F-2505 AC-10: ${name} reconnected ${String(reconnectedAfter)} ms after the kill`,
     );
@@ -370,16 +374,12 @@ describe('the reconnection loop of a window whose host stops answering (card #27
         before.length > 0,
         // "About 1 s": the spec's value and an "about" of 1 s.
         reconnectedAfter !== undefined && reconnectedAfter <= 2000,
-        toasts.some(text =>
-          // The terminal mode's notification carries the details link, as F-2304 has it.
-          new RegExp(
-            `^${SETTING_UP}: (\\(details\\) )?Setting up SSH tunnel$`,
-            'u',
-          ).test(text),
-        ),
+        // The phase is read from the progress record, which keeps every phase with its time: a phase shown for less
+        // than a sampling round is in it all the same.
+        phases.some(phase => phase.startsWith('Setting up SSH tunnel @')),
       ],
       [true, true, true],
-      `it reconnected after ${String(reconnectedAfter)} ms, the notifications seen were ${JSON.stringify(toasts)}`,
+      `it reconnected after ${String(reconnectedAfter)} ms; its progress record since the kill was ${JSON.stringify(phases)}; the notifications seen by sampling were ${JSON.stringify(toasts)}`,
     );
   }
 
@@ -426,6 +426,52 @@ describe('the reconnection loop of a window whose host stops answering (card #27
     };
   }
 
+  /** Each of `pids` as the host shows it now: its parent, its start and its command line, or that it is gone. */
+  async function describedPids(
+    pids: readonly number[],
+  ): Promise<Map<number, string>> {
+    if (pids.length === 0) {
+      return new Map();
+    }
+    const text = await onHost(
+      'sh',
+      '-c',
+      'for pid in "$@"; do if [ -r /proc/$pid/stat ]; then echo "$pid parent $(awk \'{print $4}\' /proc/$pid/stat 2>/dev/null) start $(stat -c %y /proc/$pid 2>/dev/null) $(tr \'\\0\' \' \' </proc/$pid/cmdline 2>/dev/null)"; else echo "$pid gone"; fi; done',
+      'sh',
+      ...pids.map(String),
+    ).catch((caught: unknown) => `0 could not be read: ${String(caught)}`);
+    return new Map(
+      text
+        .split('\n')
+        .filter(line => line !== '')
+        .map(line => [
+          Number(line.split(' ')[0]),
+          line.slice(line.indexOf(' ') + 1),
+        ]),
+    );
+  }
+
+  /** The process ids that `hostBefore` had and `hostAfter` lacks, each with what the host showed of it before and shows now. */
+  async function lostProcesses(
+    hostBefore: Awaited<ReturnType<typeof hostProcesses>>,
+    describedBefore: ReadonlyMap<number, string>,
+    hostAfter: Awaited<ReturnType<typeof hostProcesses>>,
+  ): Promise<string> {
+    const kept = hostAfter.server.concat(hostAfter.shells);
+    const lost = [
+      ...hostBefore.server.map(processId => ({kind: 'server', processId})),
+      ...hostBefore.shells.map(processId => ({kind: 'shell', processId})),
+    ].filter(each => !kept.includes(each.processId));
+    const nowShown = await describedPids(lost.map(each => each.processId));
+    return [
+      `server before ${JSON.stringify(hostBefore.server)}, after ${JSON.stringify(hostAfter.server)}; shells before ${JSON.stringify(hostBefore.shells)}, after ${JSON.stringify(hostAfter.shells)}`,
+      ...lost.map(
+        each =>
+          `lost ${each.kind} ${String(each.processId)}: before: ${describedBefore.get(each.processId) ?? 'not read'}; now: ${nowShown.get(each.processId) ?? 'not read'}`,
+      ),
+    ].join('\n');
+  }
+
   it('F-2505 AC-4 (c2703-new-ssh): a reconnection uses a new local ssh and a new forwarding port, and the server, the remote extension host and the terminal’s shell keep their process ids', async () => {
     const name = 'c2703-new-ssh';
     await connectedWindow(name);
@@ -436,6 +482,9 @@ describe('the reconnection loop of a window whose host stops answering (card #27
       60_000,
     );
     const hostBefore = await hostProcesses();
+    const describedBefore = await describedPids(
+      hostBefore.server.concat(hostBefore.shells),
+    );
     const {before, reconnectedAfter} = await killedSsh(name);
     const after = localSshOfHarness();
     const hostAfter = await hostProcesses();
@@ -467,6 +516,7 @@ describe('the reconnection loop of a window whose host stops answering (card #27
         found: [true, true],
         kept: true,
       },
+      `a server or shell process id was lost:\n${await lostProcesses(hostBefore, describedBefore, hostAfter)}`,
     );
   });
 

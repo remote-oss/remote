@@ -15,6 +15,7 @@ import {
 import {readFile} from 'node:fs/promises';
 import {homedir, tmpdir} from 'node:os';
 import path from 'node:path';
+import {confirmationFilesOf} from './preconnect/confirmation-files.ts';
 import * as vscode from 'vscode';
 import {
   familySetupPortsOf,
@@ -302,6 +303,9 @@ export async function activate(
       result.dispose();
     },
   });
+  if (vscode.env.remoteName !== 'ssh-remote') {
+    result.writeWindowStart();
+  }
   const connect = await registerConnectOf(
     context,
     manifest,
@@ -311,6 +315,9 @@ export async function activate(
         result.revealLog(preserveFocus);
       },
       logMark: () => result.logMark(),
+      writeWindowStart: () => {
+        result.writeWindowStart();
+      },
       logText: from => result.logText(from),
       logger: result.logger,
       help: helpHandlers(help, helpLinksOf(manifest), extension),
@@ -429,6 +436,8 @@ interface ServedActivation {
   revealLog(preserveFocus?: boolean): void;
   /** How many lines the log holds now. */
   logMark(): number;
+  /** Writes the editor version, the extension and the platform to the log, once. */
+  writeWindowStart(): void;
   /** The log's text from its `from`-th line on. */
   logText(from: number): string;
   logger: Logger;
@@ -479,6 +488,9 @@ async function registerConnectOf(
         displayName: manifest.displayName,
       },
       acceptanceState: context.globalState,
+      confirmationCopies: confirmationFilesOf(
+        path.join(context.globalStorageUri.fsPath, 'preconnect-confirmations'),
+      ),
       noticeState: context.globalState,
       hintState: context.globalState,
       documentation: () => helpLinksOf(manifest).documentation,
@@ -516,6 +528,9 @@ async function registerConnectOf(
           }),
         ),
       logMark: () => served.logMark(),
+      writeWindowStart: () => {
+        served.writeWindowStart();
+      },
       logText: from => served.logText(from),
       logger: served.logger,
       applyTerminalEnvironment: terminalEnvironmentOf(
@@ -557,6 +572,16 @@ async function registerConnectOf(
       workingDirectory: process.cwd(),
     },
   );
+  context.subscriptions.push({
+    dispose: () => {
+      machine.clientLocks.releaseAll();
+    },
+  });
+  // The extension host can end without the extension's deactivation (a closed window, a signal); the process's end
+  // still removes the client locks it holds, as the deactivation would.
+  process.once('exit', () => {
+    machine.clientLocks.releaseAll();
+  });
   const registration = await registerConnect(
     {
       resolverEditor: acceptanceResolverEditorOf(

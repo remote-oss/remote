@@ -20,7 +20,9 @@ export type FailureStringId =
   | 'S031'
   | 'S032'
   | 'S041'
+  | 'S144'
   | 'S118'
+  | 'S042'
   | 'S043'
   | 'S044'
   | 'S045'
@@ -79,6 +81,9 @@ export type FailureStringId =
   | 'preconnectValueNumber'
   | 'preconnectValueObject'
   | 'scpInstallationNotFound'
+  | 'localLockTimeout'
+  | 'S069'
+  | 'S161'
   | 'trustRefused';
 
 /** The English template of each string id, with `{0}`, `{1}` for the values. */
@@ -94,6 +99,7 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S031: 'Could not establish connection to "{0}": {1}',
   S032: 'Could not resolve hostname',
   S041: 'Downloading VS Code Server',
+  S042: 'Downloading VS Code Server failed - please install either curl or wget on the remote.',
   S043: 'Downloading VS Code Server failed. Please try again later.',
   S044: 'Downloading VS Code Server locally',
   S045: 'Downloading VS Code Server...',
@@ -103,6 +109,7 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S073: 'Failed to find a free local port: {0}',
   S070: "Failed to create the remote server's install directory",
   S075: 'Failed to install the VS Code Server',
+  S144: 'The remote host does not meet the prerequisites for running VS Code Server',
   S077: 'Help',
   S079: 'Hostname contains invalid characters',
   S082: 'Initializing VS Code Server',
@@ -157,6 +164,9 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   templateUnknownPlaceholder: 'the placeholder {0} is not known',
   trustRefused: 'Got bad result from install script',
   scpInstallationNotFound: 'scp installation not found',
+  localLockTimeout: 'Timed out while waiting for the local startup lock',
+  S069: 'Expected tarball at local path {0}',
+  S161: 'Windows remotes do not support local bootstrap',
 };
 
 /** The two dialogs of a missing or unusable server download location, which have no string id yet. */

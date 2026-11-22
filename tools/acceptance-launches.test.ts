@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   bundleFolderOf,
   clientCases,
+  CLIENT_EPHEMERAL_LOWEST,
   CONFIG_FILE_LAUNCHES,
   extensionsOf,
   failureCases,
@@ -343,9 +344,9 @@ describe('the launches of the VSCodium run', () => {
         'ssh-askpass',
         'ssh-askpass-env',
         'ssh-askpass-space',
-        'ssh-killed-12',
-        'ssh-killed-13',
-        'ssh-killed-14',
+        ...['12', '13', '14'].map(killedCase => `ssh-killed-${killedCase}`),
+        'ssh-locks',
+        'ssh-downloaders',
         'ssh-containers',
         'no-proposals',
         'cli-path',
@@ -453,6 +454,8 @@ describe('the launches of the VSCodium run', () => {
         ['ssh-killed-12', undefined, true, undefined],
         ['ssh-killed-13', undefined, true, undefined],
         ['ssh-killed-14', undefined, true, undefined],
+        ['ssh-locks', undefined, true, undefined],
+        ['ssh-downloaders', undefined, true, undefined],
         ['ssh-containers', ['remote-oss.remote-containers'], true, undefined],
         ['wsl-linux', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl-linux-web', ['remote-oss.remote-wsl'], true, undefined],
@@ -1293,7 +1296,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('#2600: only ssh-newclient asks for the pinned OpenSSH client, its remote.SSH.path is the path the run passes, and ssh-core keeps the machine’s ssh', () => {
+  it('#2600: only ssh-newclient asks for the pinned OpenSSH client, its remote.SSH.path is the path the run passes, and ssh-core keeps the machine’s ssh and opens no Welcome page', () => {
     const client = '/cache/remote-oss/openssh-10.6p2-9ae44872090c/bin/ssh';
     deepStrictEqual(
       [
@@ -1308,7 +1311,7 @@ describe('the launches of the VSCodium run', () => {
       [
         ['ssh-newclient', 'ssh-newclient-pickers'],
         {'window.title': '[${rootName}]', 'remote.SSH.path': client},
-        {'window.title': '[${rootName}]'},
+        {'window.title': '[${rootName}]', 'workbench.startupEditor': 'none'},
       ],
     );
   });
@@ -1403,6 +1406,8 @@ describe('the launches of the VSCodium run', () => {
         'ssh-killed-12',
         'ssh-killed-13',
         'ssh-killed-14',
+        'ssh-locks',
+        'ssh-downloaders',
         'ssh-containers',
         ...labelsFromExplorer(),
       ],
@@ -1578,6 +1583,23 @@ describe('the launches of the VSCodium run', () => {
   });
 });
 
+describe('the install case with a stand-in CLI', () => {
+  it('#2735: the launch of a case that names a stand-in CLI starts the CLI-source editor, and no other launch of the table does', () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    deepStrictEqual(
+      [
+        launches
+          .filter(launch => launch.kind === undefined && launch.cliStandIn)
+          .map(launch => launch.label),
+        hostCases(REPOSITORY_ROOT, 'suite-install')
+          .filter(hostCase => hostCase.cliStandIn === true)
+          .map(hostCase => `install-${hostCase.label}`),
+      ],
+      [['install-local-exec-cli'], ['install-local-exec-cli']],
+    );
+  });
+});
+
 describe('the ports cases', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
   const cases = hostCases(REPOSITORY_ROOT, 'suite-ports');
@@ -1683,6 +1705,33 @@ describe('the ports cases', () => {
       .filter(port => port >= 40000);
     deepStrictEqual(
       [named.length > 0, named.filter(port => port >= lowest)],
+      [true, []],
+    );
+  });
+
+  it("#2453: every port the tunnel range rows name is above the launch's window ports and below the client's ephemeral range, so no outgoing connection of the client can hold one", () => {
+    const [, lastWindowPort = 0] = WINDOW_PORT_RANGE.split('-').map(Number);
+    const named = (
+      readFileSync(
+        path.join(
+          REPOSITORY_ROOT,
+          'tests',
+          'acceptance',
+          'ssh-core',
+          'tunnel-ranges.test.ts',
+        ),
+        'utf8',
+      ).match(/\b\d{5}\b/gu) ?? []
+    )
+      .map(Number)
+      .filter(port => port <= 65_535);
+    deepStrictEqual(
+      [
+        named.length > 0,
+        named.filter(
+          port => port >= CLIENT_EPHEMERAL_LOWEST || port <= lastWindowPort,
+        ),
+      ],
       [true, []],
     );
   });
@@ -2451,7 +2500,7 @@ describe('the platform cases (card coverage-12)', () => {
     const all = launchesOf(REPOSITORY_ROOT);
     deepStrictEqual(
       [
-        (first ?? 0) > 1023 && (last ?? 65535) < 32768,
+        (first ?? 0) > 1023 && (last ?? 65535) < CLIENT_EPHEMERAL_LOWEST,
         all
           .filter(
             launch =>

@@ -82,6 +82,10 @@ import {
   migrateLegacyExtensions,
 } from '../settings/legacy-extensions.ts';
 import {
+  type ClientLockStepDependencies,
+  holdClientLockStep,
+} from './client-lock-step.ts';
+import {
   createServerSteps,
   type ServerStepDependencies,
 } from './server-steps.ts';
@@ -153,6 +157,8 @@ export interface WiringPorts {
   /** The user's settings, where the legacy extensions key is moved from. */
   legacySettings: LegacyExtensionPorts;
   settings: WiringSettings;
+  /** Shows the warning that the manual bootstrap is on and the exec server is off, without waiting for it. */
+  warnManualBootstrap(): void;
   /** The editor's tunnel service, which the default forwarded ports are opened through. */
   tunnels: TunnelOpener;
   /** Resolves with what ended the wait before the default forwards are read: the window has its remote settings by then. */
@@ -197,6 +203,8 @@ export interface WiringPorts {
     'environment' | 'connectWait' | 'tunnelInvocation' | 'tunnelInput'
   >;
   cliPath: CliWiring;
+  /** The client install lock's files, folder and clock, apart from the log. */
+  clientLock: Omit<ClientLockStepDependencies, 'logger'>;
   /** The window's forwarding, apart from the settings and the log: its draw, its earlier link and its terminals. */
   forwarding: Omit<
     ForwardingDependencies,
@@ -473,6 +481,11 @@ export function stepsOf(
     checkInstallFolder: input => serverSteps(input).checkInstallFolder(input),
     checkProxy: input => serverSteps(input).checkProxy(input),
     migrateLegacySettings: () => migrateLegacyExtensions(ports.legacySettings),
+    warnOfDownloadMode: () => {
+      if (ports.settings.localDownloadMode() === 'manualBootstrap') {
+        ports.warnManualBootstrap();
+      }
+    },
     preconnect: preconnectStep({
       setting: ports.settings.preconnect,
       ports: ports.preconnect,
@@ -483,6 +496,10 @@ export function stepsOf(
     }),
     decideTerms: terms.decideTerms,
     pickAfterBrokenPipe: terms.pickAfterBrokenPipe,
+    holdClientLock: holdClientLockStep({
+      ...ports.clientLock,
+      logger: ports.logger,
+    }),
     lookupBeforeConnection: () => ports.locate.mode() === 'terminal',
     locateClient,
     holdLookupFailure: (failed, cancellation) => {

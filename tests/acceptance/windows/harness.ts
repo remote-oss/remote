@@ -42,8 +42,23 @@ import {
   signalFile,
   type AppendedEntry,
 } from '../../../tools/script-file.ts';
+import {commandEventLines} from './agent-events.ts';
+import {
+  holdingText,
+  unfinishedCommands,
+  windowFolderOf,
+} from './agent-standing.ts';
 import {explainedFailure, section} from './connect-failure.ts';
 import {editorFolderOf} from './editor-folder.ts';
+import {
+  type CloseAttempt,
+  closeUntilGone,
+  type DebugTarget,
+  listedPages,
+  pagesDescription,
+  REMEMBERED_PAGES,
+  waitUntilPageLeft,
+} from './page-list.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -266,6 +281,16 @@ export function windowEvents(name: string): AgentEvent[] {
   return linesOf<AgentEvent>(agentFile(name, 'events'));
 }
 
+/** The lines for what window `name`'s agent reported about the commands sent to it from `since` (a time in milliseconds) on: at most a dozen progress events, each with its command's name. */
+export function commandEventsSince(name: string, since: number): string[] {
+  return commandEventLines(
+    windowEvents(name),
+    linesOf<{id: string; command?: string}>(agentFile(name, 'commands')),
+    since,
+    12,
+  );
+}
+
 /**
  * Writes the launch's script with `entries`, which the extensions read when they activate: a window that opens after
  * the write answers its questions from it. A window that activated before the write keeps the entries it read, so an
@@ -298,11 +323,14 @@ function stampedLogLinesOf(variableName: string): string[] {
     .filter(line => line !== '');
 }
 
+/** `line` without its time stamp. */
+function withoutStamp(line: string): string {
+  return line.slice(line.indexOf('] ') + 2);
+}
+
 /** The lines of the log file named by `variableName`, without their time stamps; none before the first is written. */
 function logLinesOf(variableName: string): string[] {
-  return stampedLogLinesOf(variableName).map(line =>
-    line.slice(line.indexOf('] ') + 2),
-  );
+  return stampedLogLinesOf(variableName).map(withoutStamp);
 }
 
 /** The folder the launch's editor keeps its state in, its logs included: one session folder per start of the editor, with `main.log` below it. */
@@ -310,16 +338,23 @@ export function editorLogsFolder(): string {
   return variable('HARNESS_EDITOR_LOGS');
 }
 
+/** A line of the log's settings listing, `remote.SSH.<name> = <value>`: its words are the settings', which no row about anything else may match. */
+const SETTING_LINE =
+  /^remote\.SSH\.(?!path = |permitPtyAllocation = )[\w.]+ = /u;
+
 /**
  * The lines of the log the launch's extensions write, without their time stamps, or with them when `withTimes` is set,
- * for a failure to show the order and the gaps of a race; none before the first is written.
+ * for a failure to show the order and the gaps of a race; none before the first is written. The settings listing of each
+ * resolve is left out unless `withSettings` is set, so that a row's filter cannot match a setting's name or value.
  */
 export function connectionLog({
   withTimes = false,
-}: {withTimes?: boolean} = {}): string[] {
-  return withTimes
-    ? stampedLogLinesOf('REMOTE_OSS_ACCEPTANCE_LOG')
-    : logLinesOf('REMOTE_OSS_ACCEPTANCE_LOG');
+  withSettings = false,
+}: {withTimes?: boolean; withSettings?: boolean} = {}): string[] {
+  const kept = stampedLogLinesOf('REMOTE_OSS_ACCEPTANCE_LOG').filter(
+    line => withSettings || !SETTING_LINE.test(withoutStamp(line)),
+  );
+  return withTimes ? kept : kept.map(withoutStamp);
 }
 
 /** One push that Remote Explorer's inbox received from Remote - SSH, as the explorer records it. */
@@ -713,7 +748,17 @@ export async function inWindow(
   }
   await waitUntil(
     () =>
-      `window ${name} to finish ${command} (events: ${JSON.stringify(windowEvents(name))})`,
+      `window ${name} to finish ${command} (${holdingText(
+        () =>
+          unfinishedCommands(
+            windowEvents(name),
+            linesOf<{id: string; command?: string}>(
+              agentFile(name, 'commands'),
+            ),
+            Date.now(),
+          ),
+        () => windowEvents(name).slice(-5),
+      )})`,
     () => concerning().some(each => each.event !== 'accepted'),
   );
   const failed = concerning().find(each => each.event === 'failed');
@@ -1415,17 +1460,39 @@ export async function killWindow(
   }
 }
 
+/** How long a closed window's page may stay in the editor's list after the window deactivated. */
+const PAGE_LEFT_MILLISECONDS = 30_000;
+
+/** The pages the editor lists now; none when the launch has no debugging port to read or it cannot be read. */
+async function pagesListedNow(): Promise<DebugTarget[] | undefined> {
+  try {
+    return await listedPages(variable('HARNESS_USER_DATA'));
+  } catch {
+    return undefined;
+  }
+}
+
+/** How many times a close is sent while the window stays listed and open: the close, and one more. */
+const CLOSE_ATTEMPTS = 2;
+
+/** How long the close that is sent once more waits for the window to end. */
+const SECOND_CLOSE_MILLISECONDS = 30_000;
+
 /**
- * Closes window `name` and resolves once it's gone: its agent reports `deactivated`, or the extension host it recorded
- * has exited. Some closes never get the event (8 of 576 in a full containers launch, 2026-11-01): the extension host
- * ends before its agent writes it. A window whose extension host still runs after the wait fails, naming it.
+ * One close of window `name`: the command, the wait for its agent's `deactivated` or its extension host's end, and the
+ * wait for the page it was last found by to leave the editor's list. A window whose extension host still runs after the
+ * wait fails, naming it.
  */
-export async function closeWindow(
+async function closeOnce(
   name: string,
-  milliseconds = WAIT_MILLISECONDS,
-): Promise<void> {
+  milliseconds: number,
+): Promise<CloseAttempt> {
   const before = countOf(name, 'deactivated');
   const extensionHost = liveProcessIdOf(name);
+  // The page the window was last found by: it must leave the list, whatever other windows do meanwhile.
+  const ownPage = REMEMBERED_PAGES.get(name);
+  const listedBefore =
+    ownPage === undefined ? undefined : await pagesListedNow();
   const commandId = send(name, 'workbench.action.closeWindow', []);
   try {
     await waitUntil(
@@ -1443,6 +1510,72 @@ export async function closeWindow(
     );
   } finally {
     withdrawUnaccepted(name, commandId);
+  }
+  if (
+    ownPage === undefined ||
+    listedBefore?.some(page => page.id === ownPage) !== true
+  ) {
+    return {state: 'left'};
+  }
+  const waited = await waitUntilPageLeft(
+    name,
+    ownPage,
+    pagesListedNow,
+    PAGE_LEFT_MILLISECONDS,
+    pause => new Promise(resolve => setTimeout(resolve, pause)),
+  );
+  // A page that lingers is told by name, with the pages the editor listed at the close and after the wait and who
+  // remembers each, and the close goes on: it is not something a close, or the hook that runs it, can end, and a launch
+  // must not fail for it. The lists say whether the window's page stayed or the id was another window's (card #2909).
+  if (waited.state === 'stayed') {
+    process.stderr.write(
+      `closing window ${name}: ${waited.note}; the pages at the close: ${pagesDescription(listedBefore, REMEMBERED_PAGES, isOpen)}; after the wait: ${pagesDescription(waited.listed, REMEMBERED_PAGES, isOpen)}\n`,
+    );
+  }
+  return waited;
+}
+
+/**
+ * Closes window `name` and resolves once it's gone: its agent reports `deactivated`, or the extension host it recorded
+ * has exited, and the page it was last found by has left the editor's list, so that the next row does not find it beside
+ * its own. Some closes never get the event (8 of 576 in a full containers launch, 2026-11-01): the extension host ends
+ * before its agent writes it. A close that met the window's own reload (a window that reopens as the local folder
+ * deactivates and comes back on the same page) leaves the window open, and the deactivation withdraws the close: while the
+ * page stays and the window is open again, the close is sent once more. A page that still stays is told on stderr and the
+ * close ends; a window whose extension host still runs after the wait fails, naming it.
+ */
+export async function closeWindow(
+  name: string,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<void> {
+  let first = true;
+  const closed = await closeUntilGone(
+    async () => {
+      if (first) {
+        first = false;
+        return closeOnce(name, milliseconds);
+      }
+      process.stderr.write(
+        `closing window ${name}: its page stayed listed and the window is open again, so the close is sent once more\n`,
+      );
+      // The second close is the one that repairs a window the first left open: its own failure is told and does not fail
+      // a hook that could not have done more.
+      return closeOnce(
+        name,
+        Math.min(milliseconds, SECOND_CLOSE_MILLISECONDS),
+      ).catch((caught: unknown): CloseAttempt => ({
+        state: 'stayed',
+        note: `the close sent once more did not end the window: ${caught instanceof Error ? caught.message : String(caught)}`,
+        listed: [],
+      }));
+    },
+    () => isOpen(name),
+    CLOSE_ATTEMPTS,
+  );
+  if (closed.tried > 1 && closed.last.state === 'left') {
+    process.stderr.write(
+      `closing window ${name}: the page left after the close was sent ${String(closed.tried)} times\n`,
+    );
   }
 }
 
@@ -1465,17 +1598,7 @@ function closeStateOf(name: string, commandId: string): string {
         'a command'
       );
     }
-    const ended = new Set(
-      events
-        .filter(each => each.event === 'done' || each.event === 'failed')
-        .map(each => each.id),
-    );
-    const running = events
-      .filter(each => each.event === 'accepted' && !ended.has(each.id))
-      .map(
-        each =>
-          `${nameOf(each.id)} accepted ${String(Math.round((now - each.time) / 1000))} s ago`,
-      );
+    const running = unfinishedCommands(events, commands, now);
     const last = events
       .slice(-5)
       .map(
@@ -2486,6 +2609,28 @@ function newestSshLog(folder: string): string[] {
     : readFileSync(newest, 'utf8')
         .split('\n')
         .filter(line => line !== '');
+}
+
+/** When window `name`'s agent activated and deactivated: an extension host that started again shows as a second activation. */
+export function agentLife(name: string): Array<{event: string; time: number}> {
+  return windowEvents(name)
+    .filter(each => each.event === 'activated' || each.event === 'deactivated')
+    .map(each => ({event: each.event, time: each.time}));
+}
+
+/** The lines of window `name`'s own renderer log, in the window's folder of the editor's logs, which its agent's log folder names. */
+export function rendererLines(name: string): string[] {
+  const logFolder = windowEvents(name)
+    .filter(each => each.event === 'activated')
+    .at(-1)?.logFolder;
+  const folder =
+    logFolder === undefined ? undefined : windowFolderOf(logFolder);
+  if (folder === undefined) {
+    throw new Error(
+      `the agent of ${name} gave no window folder of the editor's logs: ${String(logFolder)}`,
+    );
+  }
+  return readFileSync(path.join(folder, 'renderer.log'), 'utf8').split('\n');
 }
 
 /**

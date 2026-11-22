@@ -4,6 +4,7 @@ import {
   closeWindow,
   connectedWithin,
   connectionHelpers,
+  connectionLog,
   hostPassword,
   isOpen,
   noHelperWithin,
@@ -97,5 +98,36 @@ describe('the shared login of the local connection server (card coverage-97)', f
     await openWindow('password', 's2');
     await connectedWithin('s2', 60_000);
     deepStrictEqual([questions('s2'), await connectionHelpers()], [0, helper]);
+  });
+
+  it('#847 (c97-reuse-pid): two fresh windows, the first log names the started server and the second the reused one, with the helper’s pid', async () => {
+    await coldHost();
+    const mark = connectionLog().length;
+    appendScript([answer('s1')]);
+    await openWindow('password', 's1');
+    await connectedWithin('s1', 60_000);
+    await openWindow('password', 's2');
+    await connectedWithin('s2', 60_000);
+    const helper = (await connectionHelpers())[0];
+    if (helper === undefined) {
+      throw new Error('no connection helper runs');
+    }
+    const lines = connectionLog().slice(mark);
+    deepStrictEqual(
+      [
+        (await connectionHelpers()).length,
+        lines.filter(line =>
+          line.startsWith(
+            `Local connection server started: pid ${String(helper)}, ssh pid `,
+          ),
+        ).length,
+        lines.filter(line =>
+          line.startsWith(
+            `Local connection server reused: pid ${String(helper)}, ssh pid `,
+          ),
+        ).length,
+      ],
+      [1, 1, 1],
+    );
   });
 });

@@ -1,13 +1,13 @@
 #!/bin/sh
 # Installs the run's public key, given in AUTHORIZED_KEY, and the further keys of AUTHORIZED_KEYS_FURTHER (one per line,
 # may be empty) for the users harness, harness-nofwd, harness-nosock, harness-noall, harness-nox11, harness-mute, harness-ro, harness-i686, harness-fish,
-# harness-bash, harness-zsh, harness-dash, harness-ksh, harness-csh, harness-tcsh and harness-tmpdir, writes CA_PUBLIC_KEY (may be empty)
+# harness-bash, harness-zsh, harness-dash, harness-ksh, harness-csh, harness-tcsh, harness-tmpdir and harness-nofetch, writes CA_PUBLIC_KEY (may be empty)
 # to /etc/ssh/ca.pub for the certificate-only user harness-cert, sets
 # the password HOST_PASSWORD (from the run's env file) for harness-pw and harness-pwonly and forgets it, leaves the host with the download tool
 # HOST_FETCH names (busybox-wget, the default; gnu-wget; curl; none), then runs sshd in the foreground.
 # The tools are removed with rm: apk del would put BusyBox's wget link back.
 set -eu
-for account in harness harness-nofwd harness-nosock harness-noall harness-nox11 harness-mute harness-ro harness-i686 harness-fish harness-bash harness-zsh harness-dash harness-ksh harness-csh harness-tcsh harness-tmpdir; do
+for account in harness harness-nofwd harness-nosock harness-noall harness-nox11 harness-mute harness-ro harness-i686 harness-fish harness-bash harness-zsh harness-dash harness-ksh harness-csh harness-tcsh harness-tmpdir harness-nofetch; do
   install -d -m 700 -o "$account" -g "$account" "/home/$account/.ssh"
   printf '%s\n' "$AUTHORIZED_KEY" "${AUTHORIZED_KEYS_FURTHER:-}" > "/home/$account/.ssh/authorized_keys"
   chown "$account:$account" "/home/$account/.ssh/authorized_keys"
@@ -19,6 +19,9 @@ harness-pw:$HOST_PASSWORD
 harness-pwonly:$HOST_PASSWORD
 EOF
 unset HOST_PASSWORD
+# A copy of curl stays where no account's PATH reaches, for the rows that put it back for harness-nofetch.
+install -d /opt/fetch-off
+if [ -x /usr/bin/curl ]; then cp -p /usr/bin/curl /opt/fetch-off/curl; fi
 case "${HOST_FETCH:-busybox-wget}" in
   busybox-wget) rm -f /usr/bin/curl /usr/bin/wget; ln -s /bin/busybox /usr/bin/wget ;;
   gnu-wget) rm -f /usr/bin/curl ;;

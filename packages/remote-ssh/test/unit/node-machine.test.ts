@@ -1,5 +1,14 @@
 import {deepStrictEqual, match} from 'node:assert';
+import {
+  existsSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import {createServer} from 'node:net';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
 import {
   clientSearchOf,
   drawLinkNumber,
@@ -131,6 +140,20 @@ describe('the machine a connect runs on', () => {
       [machine.platform, machine.homeFolder, machine.clientSearch.searchPath],
       ['macOS', '/home/alex', '/usr/bin'],
     );
+  });
+
+  it("F-2408 BR-8 (card #2844): the extension's end removes the file of a client lock still held", () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'node-machine-'));
+    try {
+      const lockFile = path.join(folder, 'held.lock');
+      writeFileSync(lockFile, '');
+      const {clientLocks} = nodeMachineOf(PLACES, FACTS);
+      clientLocks.hold(lockFile, statSync(lockFile).mtimeMs);
+      clientLocks.releaseAll();
+      deepStrictEqual(existsSync(lockFile), false);
+    } finally {
+      rmSync(folder, {recursive: true, force: true});
+    }
   });
 
   it('connect-14: the scheduler and the clock wait on real time', async () => {

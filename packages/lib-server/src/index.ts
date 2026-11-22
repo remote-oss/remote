@@ -107,10 +107,12 @@ export {
 export {
   type Clock,
   type ClientLockOptions,
+  clientLockPath,
   type LockFilePort,
   lockIdFor,
   withClientLock,
 } from './locks/client-lock.ts';
+export {type NodeLockFiles, nodeLockFiles} from './locks/node-lock-files.ts';
 export {type HostLockStep, hostLockLoop} from './locks/host-lock-loop.ts';
 export type {
   ClientFilePort,
@@ -137,7 +139,6 @@ export {
 export {
   type CliInstallOutcome,
   type CliPlacement,
-  type CliStartDependencies,
   type CliStopOutcome,
   installCli,
   startCli,

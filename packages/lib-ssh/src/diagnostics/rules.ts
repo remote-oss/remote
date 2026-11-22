@@ -20,6 +20,12 @@ export type FailureKind =
 
 /** The string ids of the reasons and hint texts the classifier returns. */
 export type DiagnosticStringId =
+  | 'S016'
+  | 'S036'
+  | 'S040'
+  | 'S051'
+  | 'S106'
+  | 'S124'
   | 'S005'
   | 'S014'
   | 'S032'
@@ -34,12 +40,17 @@ export type DiagnosticStringId =
   | 'S080'
   | 'S081'
   | 'S083'
+  | 'S004'
+  | 'S062'
   | 'S109'
   | 'S113'
   | 'S151'
   | 'S152'
   | 'S154'
   | 'S159'
+  | 'S144'
+  | 'S145'
+  | 'S165'
   | 'S050'
   | 'S033'
   | 'S038'
@@ -176,6 +187,9 @@ export const FORWARDING_SETTING = {
 
 /** The documentation topic the forwarding hint points to. */
 export const FAILING_CONNECTIONS_TOPIC = 'hangingOrFailingConnections';
+
+/** The documentation topic the prerequisites hint points to: the page about what a Linux host needs. */
+export const LINUX_PREREQUISITES_TOPIC = 'linuxPrerequisites';
 
 /** Characters that already end a sentence, so no full stop is added after them. */
 export const SENTENCE_ENDINGS = /[.!?。．！？]$/u;

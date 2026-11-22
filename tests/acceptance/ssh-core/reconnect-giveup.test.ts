@@ -6,6 +6,7 @@
 
 import {deepStrictEqual} from 'node:assert';
 import {
+  agentLife,
   appendScript,
   closeWindow,
   connectedWithin,
@@ -16,15 +17,22 @@ import {
   openWindow,
   readUserSettings,
   recordLines,
+  rendererLines,
   restoreUserSettings,
   userSettings,
 } from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
+import {changeTimeline} from '../windows/change-timeline.ts';
 import {explainedFailure} from '../windows/connect-failure.ts';
-import {reconnectionState} from '../windows/reconnection-state.ts';
+import {
+  reconnectionGlance,
+  reconnectionState,
+  type StateReads,
+} from '../windows/reconnection-state.ts';
 import {
   dialogOf,
   notifications,
+  pageFocusFacts,
   statusBarText,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -83,25 +91,49 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     const mark = connectionLog().length;
     const asked = recordLines('maskedInput', name).length;
     const endedAt = Date.now();
+    // The window's page is read once before the outage: core's dialog did not show in a window whose page the harness
+    // had not read before the shared connection ended (21 of 24 rows of the third wrong password), and shows in one it had.
+    const readStarted = Date.now();
+    await statusBarText(name, 'status.host');
+    const readEnded = Date.now();
     await inWindow(name, 'opensshremotes.cleanLocalServer');
+    const outageDone = Date.now();
+    // What the window shows of dialogs and notifications over the next seconds, a read every 250 ms, for a red to tell a
+    // dialog that was drawn and closed again from one that never was.
+    const timeline = changeTimeline(
+      async () => {
+        const shown = await dialogOf(name).catch(() => undefined);
+        const toasts = await notifications(name).catch(() => []);
+        return `dialog ${shown === undefined ? 'none' : JSON.stringify(shown.details)}; notifications ${JSON.stringify(toasts)}`;
+      },
+      endedAt,
+      250,
+      60_000,
+    );
+    const reads: StateReads = {
+      recorded: () => recordLines(undefined, name),
+      indicator: () => statusBarText(name, 'status.host'),
+      dialog: () => dialogOf(name),
+      notifications: () => notifications(name),
+      logLines: () => connectionLog(),
+      pageFacts: () => pageFocusFacts(),
+      pageRead: () =>
+        `the read began ${String(readStarted - endedAt)} ms after the end was noted, took ${String(readEnded - readStarted)} ms, and the outage command took ${String(outageDone - readEnded)} ms`,
+      agentLife: () => agentLife(name),
+      rendererLines: () => rendererLines(name),
+      timeline: () => timeline.lines(),
+    };
     const dialog = await waitForDialog(name, 180_000).catch(
       async (caught: unknown) => {
+        await timeline.stop();
         throw await explainedFailure(caught, () =>
-          reconnectionState(
-            {
-              recorded: () => recordLines(undefined, name),
-              indicator: () => statusBarText(name, 'status.host'),
-              dialog: () => dialogOf(name),
-              notifications: () => notifications(name),
-              logLines: () => connectionLog(),
-            },
-            name,
-            mark,
-            endedAt,
-          ),
+          reconnectionState(reads, name, mark, endedAt),
         );
       },
     );
+    await timeline.stop();
+    // What a window shows when the dialog does come, to set beside the lines of a red.
+    console.log(`${name}:\n${await reconnectionGlance(reads, endedAt)}`);
     // Time for an attempt the extension should not make.
     await new Promise(resolve => setTimeout(resolve, 20_000));
     return {

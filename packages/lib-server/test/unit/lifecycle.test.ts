@@ -122,6 +122,28 @@ describe('runStep (a step over the host channel)', () => {
     );
   });
 
+  it('F-2408 BR-4: a step given a session lock hands it to the channel with the run, and a step given none hands none', async () => {
+    const withLock = recording(block('Ok'));
+    await runStep(withLock, single('probe'), parametersFor(), {
+      cancellation: NEVER_CANCELLED,
+      sessionLock: {path: '/tmp/lock', action: 'open'},
+    });
+    const without = recording(block('Ok'));
+    await runStep(without, single('probe'), parametersFor(), {
+      cancellation: NEVER_CANCELLED,
+    });
+    function lockOf(channel: ReturnType<typeof recording>): unknown {
+      const call = channel.calls[0];
+      return call?.operation === 'runScript'
+        ? call.request.sessionLock
+        : 'no run';
+    }
+    deepStrictEqual(
+      [lockOf(withLock), lockOf(without)],
+      [{path: '/tmp/lock', action: 'open'}, undefined],
+    );
+  });
+
   it('V1: output without a block is noResultBlock', async () => {
     const result = await runStep(
       recording(['nothing useful']),
@@ -537,7 +559,7 @@ describe('probe (V2)', () => {
     );
   });
 
-  it('F-2401.BR-1: a host without tar lacks a prerequisite', async () => {
+  it('F-2402 BR-5: a host without tar is probed, with tar absent from its tools, and the unpack reports it', async () => {
     const outcome = await probe(
       recording(
         block(
@@ -551,8 +573,8 @@ describe('probe (V2)', () => {
       NEVER_CANCELLED,
     );
     deepStrictEqual(
-      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
-      {kind: 'prerequisiteMissing', missing: ['tar']},
+      outcome.kind === 'probed' ? outcome.host.tools : outcome.kind,
+      ['wget', 'flock'],
     );
   });
 

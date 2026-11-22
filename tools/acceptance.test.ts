@@ -27,8 +27,10 @@ import {
   bundleSuite,
   FRESH_RESOLVE_WAIT_MILLISECONDS,
   type Sleeper,
+  DOWNLOAD_PAUSES_MILLISECONDS,
   downloadWithRetry,
   privateAssetDownload,
+  retriedGhcrLayer,
   editorChoiceOf,
   chosenLaunches,
   selectionLine,
@@ -53,11 +55,11 @@ import {
   installsOf,
   packagedExtensions,
   removeBundles,
-  RETRY_PAUSE_MILLISECONDS,
   runAcceptance,
   runCommand,
   runLaunches,
   runTestCli,
+  engineHostVariable,
   standInEngines,
   archiveKindOf,
   releaseAssetUrlOf,
@@ -70,7 +72,7 @@ import {
   vscodiumConfigurations,
   vscodiumCliOf,
   vscodiumExecutableOf,
-  withOneRetry,
+  withRetries,
   markDownloadRequests,
   writeUserSettings,
 } from './acceptance.ts';
@@ -311,16 +313,21 @@ class FakeHarness implements HarnessDependencies {
   /** Whether each start of the download host was asked for the CLI archives. */
   readonly cliAsked: boolean[] = [];
 
+  /** Whether each start of the download host was asked for a stand-in CLI archive. */
+  readonly standInAsked: boolean[] = [];
+
   readonly startDownloads = (
     ...asked: [
       root?: string,
       runFolder?: string,
       earlier?: boolean,
       cli?: boolean,
+      standIn?: boolean,
     ]
   ): Promise<RunDownloads> => {
     this.earlierAsked.push(asked[2] ?? false);
     this.cliAsked.push(asked[3] ?? false);
+    this.standInAsked.push(asked[4] ?? false);
     this.calls.push('downloads started');
     return Promise.resolve({
       variables: {
@@ -554,6 +561,8 @@ const LAUNCH_ORDER = [
   'ssh-killed-12',
   'ssh-killed-13',
   'ssh-killed-14',
+  'ssh-locks',
+  'ssh-downloaders',
   'ssh-containers',
   'no-proposals',
   'wsl-linux',
@@ -1332,6 +1341,15 @@ describe('acceptance', () => {
     strictEqual(
       accountBlock('mute'),
       [...sharedLines('mute', 'harness-mute'), ...KEY_ALIAS_LINES].join('\n'),
+    );
+  });
+
+  it('#2854: Host nofetch logs in to harness-nofetch with the run key', () => {
+    strictEqual(
+      accountBlock('nofetch'),
+      [...sharedLines('nofetch', 'harness-nofetch'), ...KEY_ALIAS_LINES].join(
+        '\n',
+      ),
     );
   });
 
@@ -3393,62 +3411,75 @@ describe('acceptance', () => {
     });
   });
 
-  describe('withOneRetry', () => {
+  describe('withRetries (card tooling-179)', () => {
     it('returns the step result without sleeping or reporting when the step resolves', async () => {
       const recorder = new RetryRecorder();
       const {step} = scriptedStep(['ok']);
-      const result = await withOneRetry(step, recorder.sleep, recorder.report);
+      const result = await withRetries(step, recorder.sleep, recorder.report);
       deepStrictEqual(
         [result, recorder.sleeps, recorder.lines],
         ['ok', [], []],
       );
     });
 
-    it('returns the retry result when the first attempt rejects', async () => {
+    it('tooling-179: after three failures the fourth try returns, each retry after its pause of 5, 15 and 45 s, each failure reported', async () => {
       const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), 'ok']);
-      const result = await withOneRetry(step, recorder.sleep, recorder.report);
-      strictEqual(result, 'ok');
-    });
-
-    it('sleeps the retry pause before the one retry', async () => {
-      const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), 'ok']);
-      await withOneRetry(step, recorder.sleep, recorder.report);
-      deepStrictEqual(recorder.sleeps, [RETRY_PAUSE_MILLISECONDS]);
-    });
-
-    it('reports the failure and the pause in seconds before the one retry', async () => {
-      const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), 'ok']);
-      await withOneRetry(step, recorder.sleep, recorder.report);
-      deepStrictEqual(recorder.lines, [
-        'acceptance: busy; retrying once in 5 s',
+      const {step, called} = scriptedStep([
+        new Error('504'),
+        new Error('504'),
+        new Error('busy'),
+        'ok',
       ]);
-    });
-
-    it('rejects with the second error when the retry rejects too', async () => {
-      const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), new Error('down')]);
-      await rejects(
-        withOneRetry(step, recorder.sleep, recorder.report),
-        /down/,
+      const result = await withRetries(step, recorder.sleep, recorder.report);
+      deepStrictEqual(
+        [result, called(), recorder.sleeps, recorder.lines],
+        [
+          'ok',
+          4,
+          [...DOWNLOAD_PAUSES_MILLISECONDS],
+          [
+            'acceptance: 504; try 2 in 5 s',
+            'acceptance: 504; try 3 in 15 s',
+            'acceptance: busy; try 4 in 45 s',
+          ],
+        ],
       );
     });
 
-    it('runs the step once more after a rejection, and no more', async () => {
+    it("tooling-179: when every try fails it rejects with every try's error, and tries no more", async () => {
       const recorder = new RetryRecorder();
       const {step, called} = scriptedStep([
-        new Error('busy'),
-        new Error('busy'),
+        new Error('504'),
+        new Error('504'),
+        new Error('504'),
+        new Error('down'),
+        'never',
       ]);
-      let rejected = false;
+      let message = '';
       try {
-        await withOneRetry(step, recorder.sleep, recorder.report);
-      } catch {
-        rejected = true;
+        await withRetries(step, recorder.sleep, recorder.report);
+      } catch (error) {
+        message = error instanceof Error ? error.message : '';
       }
-      deepStrictEqual([called(), rejected], [2, true]);
+      deepStrictEqual(
+        [message, called()],
+        ['try 1: 504; try 2: 504; try 3: 504; try 4: down', 4],
+      );
+    });
+
+    it('takes its pauses from the caller: none is one try', async () => {
+      const recorder = new RetryRecorder();
+      const {step, called} = scriptedStep([new Error('busy'), 'ok']);
+      let message = '';
+      try {
+        await withRetries(step, recorder.sleep, recorder.report, []);
+      } catch (error) {
+        message = error instanceof Error ? error.message : '';
+      }
+      deepStrictEqual(
+        [message, called(), recorder.sleeps],
+        ['try 1: busy', 1, []],
+      );
     });
   });
 
@@ -3648,9 +3679,88 @@ describe('acceptance', () => {
           [false, true],
           [],
           [
-            'cli editor of codium-insiders: http://downloads:8080/cli/${os}-${arch}/cli-${os}-${arch}.tar.gz',
+            'cli editor of codium-insiders: http://downloads:8080/cli/${os}-${arch}/${commit}/cli-${os}-${arch}.tar.gz',
           ],
         ],
+      );
+    });
+
+    /** Makes the workspace's install cases one, `standin`, whose launch starts the CLI-source copy against a stand-in CLI. */
+    function writeStandInCase(): void {
+      workspace.write(
+        'tests/acceptance/suite-install/cases.json',
+        JSON.stringify({
+          cases: [
+            {
+              label: 'standin',
+              cite: 'F-2405 AC-8 (standin)',
+              cliStandIn: true,
+              settings: {},
+              outcome: 'any',
+            },
+          ],
+        }),
+      );
+    }
+
+    it('#2735: a run that chooses an install case with a stand-in CLI asks for the stand-in archives, not the pinned ones, and makes the CLI-source editor with the client’s loopback base, which the client can resolve', async () => {
+      writeStandInCase();
+      await runAcceptance(workspace.root, harness, 'vscodium', [
+        'install-standin',
+      ]);
+      deepStrictEqual(
+        [
+          harness.cliAsked,
+          harness.standInAsked,
+          harness.calls.filter(call => call.startsWith('cli editor')),
+        ],
+        [
+          [false],
+          [true],
+          [
+            'cli editor of codium-insiders: http://127.0.0.1:8080/cli/${os}-${arch}/${commit}/cli-${os}-${arch}.tar.gz',
+          ],
+        ],
+      );
+    });
+
+    it('#2735: a run that names cli-path and an install case with a stand-in CLI fails before anything starts, naming both', async () => {
+      writeStandInCase();
+      const {result, lines} = await withErrorLines(() =>
+        runAcceptance(workspace.root, harness, 'vscodium', [
+          'cli-path',
+          'install-standin',
+        ]),
+      );
+      deepStrictEqual(
+        [result, lines, harness.calls],
+        [
+          2,
+          [
+            'acceptance: the run names a launch with real CLI archives (cli-path) and one with a stand-in CLI (install-standin): the CLI-source copy has one template, so name them in separate runs',
+          ],
+          [],
+        ],
+      );
+    });
+
+    it('#2735: a run that chooses no stand-in case asks for no stand-in archive, and the launch of a stand-in case starts the CLI-source copy where the run made one', () => {
+      writeStandInCase();
+      function started(environment: Record<string, string>): string[] {
+        return vscodiumConfigurations(
+          workspace.root,
+          {...CONFIGURATION_ENVIRONMENT, ...environment},
+          EXECUTABLE,
+        )
+          .filter(configuration => configuration.label === 'install-standin')
+          .map(configuration => configuration.useInstallation.fromPath);
+      }
+      deepStrictEqual(
+        [
+          started({HARNESS_CLI_EDITOR_EXECUTABLE: '/run/cli-editor/codium'}),
+          started({}),
+        ],
+        [['/run/cli-editor/codium'], [EXECUTABLE]],
       );
     });
 
@@ -4636,14 +4746,65 @@ describe('acceptance', () => {
       );
     });
 
-    it('#253 Q14: a download that answers with an error status throws after its one retry', async () => {
+    it('#253 Q14, tooling-179: a download that answers with an error status throws after its four tries, with each one', async () => {
+      const failure = 'https://example.invalid/a: 404';
       await rejects(
         downloadWithRetry(
           'https://example.invalid/a',
           () => Promise.resolve(new Response('', {status: 404})),
           () => Promise.resolve(),
         ),
-        {message: 'https://example.invalid/a: 404'},
+        {
+          message: `try 1: ${failure}; try 2: ${failure}; try 3: ${failure}; try 4: ${failure}`,
+        },
+      );
+    });
+
+    it('#2927: a template layer whose token request is dropped once is read on the next try, after the first pause', async () => {
+      const pauses: number[] = [];
+      let calls = 0;
+      function fakeFetch(): Promise<Response> {
+        calls += 1;
+        // The first token request is dropped; the second answers with a token and the layer request with the layer.
+        if (calls === 1) {
+          return Promise.reject(
+            new TypeError('fetch failed', {
+              cause: new Error('read ECONNRESET'),
+            }),
+          );
+        }
+        return Promise.resolve(
+          calls === 2
+            ? Response.json({token: 'pull-token'})
+            : new Response(new Uint8Array([5, 6])),
+        );
+      }
+      const layer = await retriedGhcrLayer(fakeFetch, milliseconds => {
+        pauses.push(milliseconds);
+        return Promise.resolve();
+      })({name: 'tiny', version: '1.2.3', layerDigest: 'sha256:00'});
+      deepStrictEqual(
+        [layer, pauses, calls],
+        [new Uint8Array([5, 6]), [5000], 3],
+      );
+    });
+
+    it('#2927: a template layer that ghcr.io never gives fails after its four tries, each naming the address and the reason', async () => {
+      const failure =
+        'https://ghcr.io/token?scope=repository:devcontainers/templates/tiny:pull: fetch failed (read ECONNRESET)';
+      await rejects(
+        retriedGhcrLayer(
+          () =>
+            Promise.reject(
+              new TypeError('fetch failed', {
+                cause: new Error('read ECONNRESET'),
+              }),
+            ),
+          () => Promise.resolve(),
+        )({name: 'tiny', version: '1.2.3', layerDigest: 'sha256:00'}),
+        {
+          message: `try 1: ${failure}; try 2: ${failure}; try 3: ${failure}; try 4: ${failure}`,
+        },
       );
     });
 
@@ -4674,6 +4835,48 @@ describe('acceptance', () => {
           caught instanceof Error ? caught.message : String(caught),
       );
     }
+
+    /** A rejection as undici's `fetch` gives it for a request with no answer. */
+    function droppedRequest(): Promise<Response> {
+      return Promise.reject(
+        new TypeError('fetch failed', {cause: new Error('read ECONNRESET')}),
+      );
+    }
+
+    it('#2927: a download whose requests get no answer fails after its four tries, each naming the address and the reason', async () => {
+      const failure =
+        'https://example.invalid/a: fetch failed (read ECONNRESET)';
+      await rejects(
+        downloadWithRetry('https://example.invalid/a', droppedRequest, () =>
+          Promise.resolve(),
+        ),
+        {
+          message: `try 1: ${failure}; try 2: ${failure}; try 3: ${failure}; try 4: ${failure}`,
+        },
+      );
+    });
+
+    it("#2927: a private asset whose signed address gets no answer names the asset's address, never the signed one", async () => {
+      const failure = await assetFailureOf('secret', (address, init) =>
+        init === undefined
+          ? droppedRequest()
+          : Promise.resolve(
+              new Response(null, {
+                status: 302,
+                headers: {location: 'https://signed.example.invalid/x?sig=1'},
+              }),
+            ),
+      );
+      const each =
+        'https://api.example.invalid/assets/41 (its signed address): fetch failed (read ECONNRESET)';
+      deepStrictEqual(
+        [failure, failure.includes('signed.example.invalid')],
+        [
+          `try 1: ${each}; try 2: ${each}; try 3: ${each}; try 4: ${each}`,
+          false,
+        ],
+      );
+    });
 
     it('tooling-111: a private asset is asked for with the token, and its signed address is fetched without it', async () => {
       const asked: unknown[] = [];
@@ -4728,7 +4931,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('tooling-111: an asset the token may not read throws after its one retry, and a redirect with no address is an error', async () => {
+    it('tooling-111, tooling-179: an asset the token may not read throws after its four tries, and a redirect with no address is an error', async () => {
       const outcomes = await Promise.all(
         [
           new Response(null, {status: 404}),
@@ -4737,10 +4940,17 @@ describe('acceptance', () => {
           assetFailureOf('secret', () => Promise.resolve(answer.clone())),
         ),
       );
-      deepStrictEqual(outcomes, [
-        'https://api.example.invalid/assets/41: 404',
-        'https://api.example.invalid/assets/41: 302',
-      ]);
+      deepStrictEqual(
+        outcomes,
+        ['404', '302'].map(status =>
+          [1, 2, 3, 4]
+            .map(
+              tries =>
+                `try ${String(tries)}: https://api.example.invalid/assets/41: ${status}`,
+            )
+            .join('; '),
+        ),
+      );
     });
 
     it('tooling-111: with no token the download fails at once and names the variable', async () => {
@@ -5457,5 +5667,18 @@ describe('the harness of the windows suites, bundled for the editor', () => {
     } finally {
       rmSync(folder, {recursive: true, force: true});
     }
+  });
+});
+
+describe('the run’s own engine (card #2830)', () => {
+  it('#2830: the run names the DOCKER_HOST it started with, which a launch may replace for its editor, and none when it has none', () => {
+    deepStrictEqual(
+      [
+        engineHostVariable({DOCKER_HOST: 'tcp://127.0.0.1:2375'}),
+        engineHostVariable({DOCKER_HOST: ''}),
+        engineHostVariable({}),
+      ],
+      [{HARNESS_ENGINE_HOST: 'tcp://127.0.0.1:2375'}, {}, {}],
+    );
   });
 });
