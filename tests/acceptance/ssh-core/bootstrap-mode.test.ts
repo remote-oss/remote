@@ -120,7 +120,6 @@ describe('the setting and the legacy bootstrap on the standard editor (card #302
     await userSettings({
       ...PLATFORMS,
       [SETTING]: false,
-      'window.title': '[${rootName}]${remoteName}',
     });
     const name = 'c3027-off';
     await openWindow('harness', name);
