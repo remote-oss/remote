@@ -80,6 +80,7 @@
       "created-container.test.ts": 0.2,
       "details.test.ts": 1.2,
       "dev-port.test.ts": 0.9,
+      "dev-volumes.test.ts": 0.5,
       "docker-context.test.ts": 0.5,
       "dockerfile.test.ts": 0.7,
       "edit-session-dormant.test.ts": 0.1,
