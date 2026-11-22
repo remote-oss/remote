@@ -213,9 +213,59 @@ export function scopeNamed(name: string | undefined): CoverageScope {
   return scope;
 }
 
+/** What a run of the tool does: the file text to write, if any, the lines to print and the failure, if any. */
+export interface SeedAction {
+  write?: string;
+  lines: string[];
+  failure?: string;
+}
+
+/**
+ * What the tool does for the coverage file `file`, whose text is `existing` or none when there is no file: it writes
+ * the seed of a new file; it merges into an existing one and never replaces it with the seed; with `check` it writes
+ * nothing and fails when the file is missing or lacks a criterion.
+ */
+export function seedAction(
+  file: string,
+  existing: string | undefined,
+  criteria: readonly string[],
+  features: readonly string[],
+  check: boolean,
+): SeedAction {
+  if (existing === undefined) {
+    return check
+      ? {lines: [], failure: `${file} does not exist`}
+      : {
+          write: seedOf(criteria),
+          lines: [`wrote ${String(criteria.length)} criteria`],
+        };
+  }
+  const merged = mergedSeed(existing, criteria, features);
+  const lines =
+    merged.unlisted.length === 0
+      ? []
+      : [
+          `kept ${String(merged.unlisted.length)} lines the issues no longer list: ${merged.unlisted.join(', ')}`,
+        ];
+  if (!check) {
+    return {
+      write: merged.text,
+      lines: [
+        ...lines,
+        `added ${String(merged.added.length)} criteria: ${merged.added.join(', ')}`,
+      ],
+    };
+  }
+  return merged.added.length > 0
+    ? {
+        lines,
+        failure: `${file} lacks ${String(merged.added.length)} criteria: ${merged.added.join(', ')}`,
+      }
+    : {lines: [...lines, 'the file has every criterion']};
+}
+
 if (isMainModule(import.meta.url)) {
   try {
-    const check = process.argv.includes('--check');
     const scope = scopeNamed(
       process.argv.slice(2).find(word => !word.startsWith('--')),
     );
@@ -229,36 +279,21 @@ if (isMainModule(import.meta.url)) {
       scope,
     );
     const file = path.join(REPOSITORY_ROOT, scope.file);
-    if (!existsSync(file)) {
-      if (check) {
-        throw new Error(`${scope.file} does not exist`);
-      }
-      writeFileSync(file, seedOf(criteria));
-      console.log(`seed-coverage: wrote ${String(criteria.length)} criteria`);
-    } else {
-      const merged = mergedSeed(
-        readFileSync(file, 'utf8'),
-        criteria,
-        scope.features,
-      );
-      if (merged.unlisted.length > 0) {
-        console.log(
-          `seed-coverage: kept ${String(merged.unlisted.length)} lines the issues no longer list: ${merged.unlisted.join(', ')}`,
-        );
-      }
-      if (check) {
-        if (merged.added.length > 0) {
-          throw new Error(
-            `${scope.file} lacks ${String(merged.added.length)} criteria: ${merged.added.join(', ')}`,
-          );
-        }
-        console.log('seed-coverage: the file has every criterion');
-      } else {
-        writeFileSync(file, merged.text);
-        console.log(
-          `seed-coverage: added ${String(merged.added.length)} criteria: ${merged.added.join(', ')}`,
-        );
-      }
+    const action = seedAction(
+      scope.file,
+      existsSync(file) ? readFileSync(file, 'utf8') : undefined,
+      criteria,
+      scope.features,
+      process.argv.includes('--check'),
+    );
+    if (action.write !== undefined) {
+      writeFileSync(file, action.write);
+    }
+    for (const line of action.lines) {
+      console.log(`seed-coverage: ${line}`);
+    }
+    if (action.failure !== undefined) {
+      throw new Error(action.failure);
     }
   } catch (error) {
     console.error(`seed-coverage: ${messageOf(error)}`);

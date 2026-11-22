@@ -7,6 +7,7 @@ import {
   mergedSeed,
   type Program,
   scopeNamed,
+  seedAction,
   seedFor,
   seedOf,
 } from './seed-coverage.ts';
@@ -406,6 +407,106 @@ describe('seed-coverage', () => {
           repository: 'remote-containers',
         }),
         ['F-0101.AC-1', 'F-0102.AC-1'],
+      );
+    });
+  });
+
+  describe('what a run does (card #2988)', () => {
+    const FEATURES = ['F-0101'];
+    const EXISTING =
+      'ac\ttag\treason\nF-0101.AC-1\tunit\t\nF-0101.AC-3\tdeferred\tlater\n';
+    const CRITERIA = ['F-0101.AC-1', 'F-0101.AC-2', 'F-0101.AC-3'];
+
+    it('#2988: a file that does not exist is written as the seed, every line todo', () => {
+      deepStrictEqual(
+        seedAction('x.tsv', undefined, CRITERIA, FEATURES, false),
+        {
+          write: seedOf(CRITERIA),
+          lines: ['wrote 3 criteria'],
+        },
+      );
+    });
+
+    it('#2988: a file that exists is merged and never replaced by the seed: its tags and reasons stay, and the missing criterion is added as todo', () => {
+      const action = seedAction('x.tsv', EXISTING, CRITERIA, FEATURES, false);
+      deepStrictEqual(
+        [
+          action.write,
+          action.write === seedOf(CRITERIA),
+          action.lines,
+          action.failure,
+        ],
+        [
+          'ac\ttag\treason\nF-0101.AC-1\tunit\t\nF-0101.AC-2\ttodo\t\nF-0101.AC-3\tdeferred\tlater\n',
+          false,
+          ['added 1 criteria: F-0101.AC-2'],
+          undefined,
+        ],
+      );
+    });
+
+    it('#2988: --check on a file that lacks a criterion fails naming it and writes nothing', () => {
+      deepStrictEqual(seedAction('x.tsv', EXISTING, CRITERIA, FEATURES, true), {
+        lines: [],
+        failure: 'x.tsv lacks 1 criteria: F-0101.AC-2',
+      });
+    });
+
+    it('#2988: --check on a complete file passes and writes nothing', () => {
+      deepStrictEqual(
+        seedAction(
+          'x.tsv',
+          EXISTING,
+          ['F-0101.AC-1', 'F-0101.AC-3'],
+          FEATURES,
+          true,
+        ),
+        {lines: ['the file has every criterion']},
+      );
+    });
+
+    it('#2988: --check with no file fails naming it and writes nothing', () => {
+      deepStrictEqual(
+        seedAction('x.tsv', undefined, CRITERIA, FEATURES, true),
+        {
+          lines: [],
+          failure: 'x.tsv does not exist',
+        },
+      );
+    });
+
+    it('#2988: the lines the issues no longer list are reported in a write and in a check, and kept', () => {
+      const listed = ['F-0101.AC-1'];
+      const written = seedAction('x.tsv', EXISTING, listed, FEATURES, false);
+      const checked = seedAction('x.tsv', EXISTING, listed, FEATURES, true);
+      deepStrictEqual(
+        [written.lines, written.write?.includes('F-0101.AC-3'), checked.lines],
+        [
+          [
+            'kept 1 lines the issues no longer list: F-0101.AC-3',
+            'added 0 criteria: ',
+          ],
+          true,
+          [
+            'kept 1 lines the issues no longer list: F-0101.AC-3',
+            'the file has every criterion',
+          ],
+        ],
+      );
+    });
+
+    it('#2988: two missing criteria that come in reverse order are added in numeric order', () => {
+      const merged = mergedSeed(
+        'ac\ttag\treason\nF-0101.AC-1\tunit\t\n',
+        ['F-0101.AC-1', 'F-0101.AC-10', 'F-0101.AC-2'],
+        FEATURES,
+      );
+      deepStrictEqual(
+        [merged.added, merged.text],
+        [
+          ['F-0101.AC-2', 'F-0101.AC-10'],
+          'ac\ttag\treason\nF-0101.AC-1\tunit\t\nF-0101.AC-2\ttodo\t\nF-0101.AC-10\ttodo\t\n',
+        ],
       );
     });
   });
