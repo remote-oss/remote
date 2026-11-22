@@ -482,6 +482,7 @@ describe('the install location the user setting picks (card #2487)', function ()
   it('F-2407 AC-8 (c2487-charset-part2): the bang, ampersand, brackets, braces, angle, pipe, question, caret, plus, backslash, tab and non-ASCII letter in an absolute value are all refused as in AC-7, with no SSH login', async () => {
     await keepingSettings(async () => {
       const chars = [
+        '!',
         '&',
         '(',
         ')',
@@ -509,7 +510,7 @@ describe('the install location the user setting picks (card #2487)', function ()
             pickHost('harness'),
           ]);
         }
-        const name = `c2487-charset-${String(index)}`;
+        const name = `c2487-charset2-${String(index)}`;
         appendScript([
           {
             surface: 'failureDialog',
@@ -526,7 +527,7 @@ describe('the install location the user setting picks (card #2487)', function ()
       deepStrictEqual(
         {details, logins: await acceptedKeyLogins(since)},
         {
-          details: items.map(item => invalidDetail(item.replaceAll('\t', ' '))),
+          details: items.map(invalidDetail),
           logins: 0,
         },
       );
@@ -638,6 +639,8 @@ describe('the install location the user setting picks (card #2487)', function ()
   it('F-2407 AC-12 (c2487-homedir): without the setting, a home directory the remote user cannot write gives the same dialog', async () => {
     await freshHost();
     const name = 'c2487-homedir';
+    // A left-over install in the home would be reused by the connect; the failure must meet an absent one.
+    await onHost('rm', '-rf', DATA_FOLDER);
     // openWindow creates the window's folder as the remote user; it must exist before the home is read-only.
     await onHost('mkdir', '-p', `${HOME}/${name}`);
     await onHost('chown', 'harness', `${HOME}/${name}`);
