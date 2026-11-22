@@ -23,7 +23,9 @@ reference extension's file, and none of it is Microsoft's hosted service.
 1. **`microsoft/dev-tunnels` is an allowed source on the clean side**, cited `[dev-tunnels] <path>@<commit>`:
    - its Rust crate, its TypeScript SDK and its contracts, at the commit `[cli]` pins (`64048c1`) and at each later
      commit a pinned `[cli]` names;
-   - the public dev tunnels documentation.
+   - the public dev tunnels documentation;
+   - `microsoft/dev-tunnels-ssh` (MIT), the SSH library the TypeScript SDK depends on (`ts/package.json:24-25`), cited
+     `[dev-tunnels-ssh]`, at the version that SDK names.
 
    It is read for the management API (tunnels, ports, endpoints, access tokens), the relay protocol (the
    `tunnel-relay-client` and `tunnel-relay-host` WebSocket subprotocols and the SSH channels they carry) and their

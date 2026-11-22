@@ -17,7 +17,8 @@ negotiable inside a session. A question about them goes to the architecture lead
   VS Code OSS, as built by VSCodium), source and documentation, cited `[devcontainers-cli]` and `[cli]` (R-76,
   ADR-0005).
 - The dev tunnels code (`microsoft/dev-tunnels`, MIT) at the commit `[cli]` pins and each later one a pinned `[cli]`
-  names, and the public dev tunnels documentation, cited `[dev-tunnels]` (ADR-0014). Never Microsoft's hosted
+  names, and the public dev tunnels documentation, cited `[dev-tunnels]`, with the SSH library its TypeScript SDK
+  depends on (`microsoft/dev-tunnels-ssh`, MIT), cited `[dev-tunnels-ssh]` (ADR-0014). Never Microsoft's hosted
   tunnel service itself.
 
 ## What you never read, open or ask for
