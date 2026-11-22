@@ -1,22 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {spawnSync} from 'node:child_process';
 import {endAfterGrace, timedStep} from './prepare-steps.ts';
-
-/** A clock that each reading advances by `step` milliseconds, and the lines said. */
-function environmentOf(step: number) {
-  let now = 0;
-  const said: string[] = [];
-  return {
-    said,
-    environment: {
-      now: () => {
-        now += step;
-        return now;
-      },
-      report: (line: string) => said.push(line),
-    },
-  };
-}
+import {endingOf, environmentOf} from './step-clock.ts';
 
 describe('the timed and bounded steps of a run’s preparation (#2865)', () => {
   it('#2865: a step that finishes gives its value and says how long it took', async () => {
@@ -37,14 +22,13 @@ describe('the timed and bounded steps of a run’s preparation (#2865)', () => {
 
   it('#2865: a step that throws says how long it ran and its own error stands', async () => {
     const {said, environment} = environmentOf(2000);
-    const outcome = await timedStep(
-      'the host',
-      1000,
-      () => Promise.reject(new Error('no host')),
-      environment,
-    ).then(
-      () => 'finished',
-      (caught: unknown) => String(caught),
+    const outcome = await endingOf(
+      timedStep(
+        'the host',
+        1000,
+        () => Promise.reject(new Error('no host')),
+        environment,
+      ),
     );
     deepStrictEqual(
       [outcome, said],
@@ -54,14 +38,13 @@ describe('the timed and bounded steps of a run’s preparation (#2865)', () => {
 
   it('#2865: a step that does not finish within its limit fails naming itself', async () => {
     const {said, environment} = environmentOf(1000);
-    const outcome = await timedStep(
-      'the editor download',
-      20,
-      () => new Promise<string>(() => undefined),
-      environment,
-    ).then(
-      () => 'finished',
-      (caught: unknown) => String(caught),
+    const outcome = await endingOf(
+      timedStep(
+        'the editor download',
+        20,
+        () => new Promise<string>(() => undefined),
+        environment,
+      ),
     );
     deepStrictEqual(
       [outcome, said],

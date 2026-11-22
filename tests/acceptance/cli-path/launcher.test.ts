@@ -12,6 +12,7 @@ import {
   openWindow,
 } from '../windows/harness.ts';
 import {runFromPalette} from '../windows/palette.ts';
+import {stamped} from '../windows/stamped-steps.ts';
 import {dialogOf, pressEscape} from '../windows/renderer.ts';
 
 /** The server folder of the editor under test on the host. */
@@ -35,26 +36,50 @@ function launcherAmong(names: readonly string[]): string {
   return found;
 }
 
+/** The row's name in the lines it prints. */
+const ROW_NAME = 'c2500-launcher';
+
 describe('the launcher of the exec-server path (card #2500, F-2008)', function () {
-  this.timeout(300_000);
+  // The row's steps are bounded and say how long each took, so a hang stops at its step with its name before this cut
+  // (card #3003: the row's first run on CI stopped at the runner's 300 s with no line to say where).
+  this.timeout(600_000);
 
   it('F-2008 AC-15 (c2500-launcher): after the launcher is deleted and the server killed, the next connection installs the same launcher again and shows no error dialog', async () => {
-    await openWindow('harness', 'f2008-launcher');
+    await stamped(ROW_NAME, 'the first window opens', 60_000, () =>
+      openWindow('harness', 'f2008-launcher'),
+    );
     let launcher: string;
     try {
-      await connectedWithin('f2008-launcher', 120_000);
-      launcher = launcherAmong(await namesInServerFolder());
-      await onHostAs('harness', 'rm', '-f', `${SERVER_FOLDER}/${launcher}`);
-      await runFromPalette(
-        'f2008-launcher',
-        'Remote-SSH: Kill Current VS Code Server',
+      await stamped(ROW_NAME, 'the first connect', 130_000, () =>
+        connectedWithin('f2008-launcher', 120_000),
+      );
+      launcher = await stamped(
+        ROW_NAME,
+        'the server folder is listed',
+        60_000,
+        async () => launcherAmong(await namesInServerFolder()),
+      );
+      await stamped(ROW_NAME, 'the launcher is deleted', 60_000, () =>
+        onHostAs('harness', 'rm', '-f', `${SERVER_FOLDER}/${launcher}`),
+      );
+      await stamped(ROW_NAME, 'Kill Current VS Code Server', 90_000, () =>
+        runFromPalette(
+          'f2008-launcher',
+          'Remote-SSH: Kill Current VS Code Server',
+        ),
       );
     } finally {
-      await closeContained('f2008-launcher', pressEscape);
+      await stamped(ROW_NAME, 'the first window closes', 200_000, () =>
+        closeContained('f2008-launcher', pressEscape),
+      );
     }
-    await openWindow('harness', 'f2008-launcher-again');
+    await stamped(ROW_NAME, 'the second window opens', 60_000, () =>
+      openWindow('harness', 'f2008-launcher-again'),
+    );
     try {
-      await connectedWithin('f2008-launcher-again', 120_000);
+      await stamped(ROW_NAME, 'the second connect', 130_000, () =>
+        connectedWithin('f2008-launcher-again', 120_000),
+      );
       deepStrictEqual(
         {
           back: (await namesInServerFolder()).includes(launcher),
