@@ -8,7 +8,11 @@
  */
 
 import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
-import {mergeReads, type ViewRowRead} from '../../../tools/view-rows.ts';
+import {
+  mergeReads,
+  wheelDirection,
+  type ViewRowRead,
+} from '../../../tools/view-rows.ts';
 import path from 'node:path';
 import {inWindow, isOpen, variable, windowState} from './harness.ts';
 import {
@@ -80,23 +84,10 @@ const first = () => {
 /**
  * The wheel to the list's top, standing on the list's `labels` and `move`: the wheel's sign that scrolls the list
  * up varies with the build, so it is probed — at a boundary only one sign moves — and a move's direction, told by
- * its labels as `wheelDirection` tells it, sets the sign; the list is wheeled up with it until it stands at its
- * top.
+ * its labels with `wheelDirection`'s own text (the page runs the very function the unit rows test), sets the
+ * sign; the list is wheeled up with it until it stands at its top.
  */
-const WHEEL_TO_TOP = `const direction = (before, after) => {
-  if (before.length === 0 || after.length === 0) {
-    return null;
-  }
-  if (before.indexOf(after[0]) > 0) {
-    return 'down';
-  }
-  const last = after.at(-1);
-  if (last === undefined) {
-    return null;
-  }
-  const index = before.indexOf(last);
-  return index !== -1 && index < before.length - 1 ? 'up' : null;
-};
+const WHEEL_TO_TOP = `const direction = ${wheelDirection.toString()};
 const probe = async delta => {
   const before = labels();
   const moved = await move(delta);
