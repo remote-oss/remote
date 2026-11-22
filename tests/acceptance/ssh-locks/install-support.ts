@@ -52,6 +52,12 @@ export function distinctLocks(
   ].toSorted();
 }
 
+/** Empties the host of install folders and of every lock file in them and in `/tmp`, whatever an earlier row or launch left. */
+export async function withoutStaleLocks(): Promise<void> {
+  await freshHost();
+  await onHost('sh', '-c', 'rm -f /tmp/*remote-lock.*');
+}
+
 /**
  * Installs on a fresh host in the window `name` with `settings` in legacy mode and gives the looks of the install; `body`
  * runs with the window still open, and the window is closed after it.
@@ -63,8 +69,7 @@ export async function installedWith<Result>(
 ): Promise<Result> {
   const saved = readUserSettings();
   try {
-    await freshHost();
-    await onHost('sh', '-c', 'rm -f /tmp/*remote-lock.*');
+    await withoutStaleLocks();
     await userSettings({
       ...PLATFORMS,
       'remote.SSH.serverDownloadUrlTemplate': `${variable('HARNESS_DOWNLOADS_HTTP')}/slow/\${os}-\${arch}/\${commit}`,
