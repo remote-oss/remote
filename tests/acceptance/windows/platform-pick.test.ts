@@ -27,7 +27,7 @@ import {
   pickHost,
   platformAnswer,
   runWith,
-  serverProcesses,
+  serverMainProcesses,
   serversGoneWithin,
   setting,
   settingsText,
@@ -378,7 +378,7 @@ describe('the remote platform pick of the commands and the reconnections (card c
 
   it('F-2206 AC-26 (c94-kill-current): Kill Current VS Code Server asks the platform in a connected window; after Escape the window stays connected with no notification, no dialog and no entry, and after Linux the kill completes with no entry', async () => {
     await connectedWithoutEntry('k26');
-    const servers = await serverProcesses();
+    const servers = await serverMainProcesses();
     const escape = await runWith(
       'k26',
       'opensshremotes.cleanCurrentRemoteServer',
@@ -387,7 +387,9 @@ describe('the remote platform pick of the commands and the reconnections (card c
     const escaped = [
       surfacesSince(escape, 'k26'),
       await connected('k26'),
-      (await serverProcesses()).length === servers.length,
+      // An empty list would make the comparison hold for nothing.
+      servers.length > 0 &&
+        (await serverMainProcesses()).length === servers.length,
       storedPlatform(),
     ];
     const linux = await runWith(

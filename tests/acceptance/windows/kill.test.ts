@@ -145,14 +145,15 @@ describe('Kill VS Code Server (card coverage-39)', function () {
   });
 
   it('F-2411 AC-2, AC-4: the host pick lists the hosts and the fixed rows, and Escape kills nothing', async () => {
-    const servers = await serverProcesses();
+    const servers = await serverMainProcesses();
     const mark = await killWith('local', [hostAnswer('local', 'dismiss')]);
     deepStrictEqual(
       [
         recordLines()
           .slice(mark)
           .map(line => [line.window, line.surface, line.question, line.items]),
-        await serverProcesses(),
+        await serverMainProcesses(),
+        servers.length > 0,
       ],
       [
         [
@@ -164,6 +165,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
           ],
         ],
         servers,
+        true,
       ],
     );
   });
@@ -284,7 +286,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
 
   it('F-2411 AC-12: Configure SSH Hosts and Add New SSH Host end the kill with no notice', async () => {
     await openConnected('x1');
-    const servers = await serverProcesses();
+    const servers = await serverMainProcesses();
     const before = settingsText();
     const configure = await killWith('local', [
       pickHost('Configure SSH Hosts...'),
@@ -303,12 +305,14 @@ describe('Kill VS Code Server (card coverage-39)', function () {
       [
         linesSince(configure, 'local').map(line => line.surface),
         linesSince(adding, 'local').map(line => line.surface),
-        await serverProcesses(),
+        await serverMainProcesses(),
+        servers.length > 0,
       ],
       [
         ['hostPick', 'filePick', 'hostPick', 'textInput'],
         ['hostPick', 'textInput'],
         servers,
+        true,
       ],
     );
   });
@@ -577,12 +581,12 @@ describe('Kill VS Code Server (card coverage-39)', function () {
 
   it('F-2411 AC-21: Kill on Host picking the window’s own host acts as Kill Current, in each mode', async () => {
     await openConnected('x1');
-    const servers = await serverProcesses();
+    const servers = await serverMainProcesses();
     const describedBefore = await describedPids(servers);
     appendScript([{...pickHost('harness'), window: 'x1'}]);
     const name = await nextEmptyWindow(() => killOnHost('x1'));
     const remoteName = (await windowState(name)).remoteName;
-    const afterKill = await serverProcesses();
+    const afterKill = await serverMainProcesses();
     const defaultMode = [remoteName, afterKill];
     const lost = servers.filter(server => !afterKill.includes(server));
     const describedNow = await describedPids(lost);
@@ -605,8 +609,14 @@ describe('Kill VS Code Server (card coverage-39)', function () {
           defaultMode,
           noticesSince(mark, 'x1'),
           (await windowState('x1')).remoteName,
+          servers.length > 0,
         ],
-        [[null, servers], [[killed('harness'), ['Open Logs']]], 'ssh-remote'],
+        [
+          [null, servers],
+          [[killed('harness'), ['Open Logs']]],
+          'ssh-remote',
+          true,
+        ],
         lostFacts,
       );
     } finally {
