@@ -6,42 +6,21 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {existsSync, readdirSync, readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
-  DIST,
+  folderOf,
   installedIn,
+  installing,
   launcher,
+  type Manifest,
+  manifestOf,
   namedAfterPack,
   PACK_ID,
   PACK_VERSION,
   type Profile,
   profileOf,
-  REPOSITORY,
 } from './pack-support.ts';
-
-/** The manifest fields these rows read. */
-interface Manifest {
-  extensionPack?: string[];
-  extensionDependencies?: string[];
-}
-
-/** The manifest of the package folder `folder` of the repository. */
-function manifestOf(folder: string): Manifest {
-  return JSON.parse(
-    readFileSync(
-      path.join(REPOSITORY, 'packages', folder, 'package.json'),
-      'utf8',
-    ),
-  ) as Manifest;
-}
-
-/** The package folder of an extension identifier of the family: its name after the publisher, the pack's own folder aside. */
-function folderOf(identifier: string): string {
-  return identifier === PACK_ID
-    ? 'remote-extensionpack'
-    : (identifier.split('.')[1] ?? '');
-}
 
 /** The identifiers the pack names. */
 const MEMBERS = manifestOf('remote-extensionpack').extensionPack ?? [];
@@ -56,27 +35,6 @@ const SSH_MEMBER = 'remote-oss.remote-ssh';
 
 /** Every identifier of the pack's profile: the members' own pack members, the members and the pack, in the order they install in. */
 const FAMILY = [...MEMBERS.flatMap(ownPackOf), ...MEMBERS, PACK_ID];
-
-/** The VSIX file of extension `identifier` that `pnpm package` built. */
-function vsixOf(identifier: string): string {
-  const name =
-    identifier === PACK_ID
-      ? 'vscode-remote-extensionpack'
-      : folderOf(identifier);
-  return path.join(
-    DIST,
-    readdirSync(DIST).find(file => new RegExp(`^${name}-\\d`).test(file)) ??
-      `${name}-missing.vsix`,
-  );
-}
-
-/** The arguments that install the VSIX files of `identifiers`, in order. */
-function installing(identifiers: readonly string[]): string[] {
-  return identifiers.flatMap(identifier => [
-    '--install-extension',
-    vsixOf(identifier),
-  ]);
-}
 
 /** The identifiers of the extensions a profile lists, sorted. */
 function listed(profile: Profile): string[] {
@@ -104,6 +62,33 @@ function uninstallLines(identifier: string): string[] {
 
 describe('uninstalling the extension pack and its members through the command line (card #3037, F-9102)', function () {
   this.timeout(300_000);
+
+  it('F-9102 AC-17 (c3037-cli-pack): with no window, uninstalling the pack through the command line prints the uninstalling and the uninstalled lines for the pack, exits 0, and the profile lists none of the pack, its members and their own pack members afterwards', () => {
+    const profile = profileOf('manage-pack-cli');
+    launcher(profile, installing(FAMILY));
+    const present = listed(profile);
+    const removal = uninstalled(profile, PACK_ID);
+    deepStrictEqual(
+      {present, removal, after: listed(profile)},
+      {
+        present: FAMILY.toSorted(),
+        removal: {status: 0, lines: uninstallLines(PACK_ID)},
+        after: [],
+      },
+    );
+  });
+
+  it('F-9102 AC-3 (c3037-pack-gone): after the pack is uninstalled the profile lists none of the pack, its members and their own pack members, and a second start of the launcher lists them no more and reinstalls nothing', () => {
+    const profile = profileOf('manage-pack-gone');
+    launcher(profile, installing(FAMILY));
+    uninstalled(profile, PACK_ID);
+    const first = listed(profile);
+    const second = listed(profile);
+    deepStrictEqual(
+      {first, second, folders: installedIn(profile).length},
+      {first: [], second: [], folders: FAMILY.length},
+    );
+  });
 
   it('F-9102 AC-26 (c3037-no-dependencies): the pack’s manifest as installed names its members in `extensionPack` and declares no `extensionDependencies`', () => {
     const profile = profileOf('manage-manifest');

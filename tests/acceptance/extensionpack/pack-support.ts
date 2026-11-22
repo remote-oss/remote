@@ -10,7 +10,7 @@ import path from 'node:path';
 import {variable} from '../windows/harness.ts';
 
 /** The repository's root folder. */
-export const REPOSITORY = path.join(import.meta.dirname, '..', '..', '..');
+const REPOSITORY = path.join(import.meta.dirname, '..', '..', '..');
 /** The folder `pnpm package` writes the VSIX files to. */
 export const DIST = path.join(REPOSITORY, 'dist');
 /** The extension pack's id. */
@@ -105,4 +105,48 @@ export function namedAfterPack(folder: string): string[] {
         entry.toLowerCase().includes(PACK_ID) &&
         !entry.includes('CachedExtensionVSIXs'),
     );
+}
+
+/** The manifest fields these rows read. */
+export interface Manifest {
+  extensionPack?: string[];
+  extensionDependencies?: string[];
+}
+
+/** The manifest of the package folder `folder` of the repository. */
+export function manifestOf(folder: string): Manifest {
+  return JSON.parse(
+    readFileSync(
+      path.join(REPOSITORY, 'packages', folder, 'package.json'),
+      'utf8',
+    ),
+  ) as Manifest;
+}
+
+/** The package folder of an extension identifier of the family: its name after the publisher, the pack's own folder aside. */
+export function folderOf(identifier: string): string {
+  return identifier === PACK_ID
+    ? 'remote-extensionpack'
+    : (identifier.split('.')[1] ?? '');
+}
+
+/** The VSIX file of extension `identifier` that `pnpm package` built. */
+function vsixOf(identifier: string): string {
+  const name =
+    identifier === PACK_ID
+      ? 'vscode-remote-extensionpack'
+      : folderOf(identifier);
+  return path.join(
+    DIST,
+    readdirSync(DIST).find(file => new RegExp(`^${name}-\\d`).test(file)) ??
+      `${name}-missing.vsix`,
+  );
+}
+
+/** The arguments that install the VSIX files of `identifiers`, in order. */
+export function installing(identifiers: readonly string[]): string[] {
+  return identifiers.flatMap(identifier => [
+    '--install-extension',
+    vsixOf(identifier),
+  ]);
 }
