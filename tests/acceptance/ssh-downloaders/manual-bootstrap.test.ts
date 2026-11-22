@@ -25,6 +25,7 @@ import {
   appendScript,
   closeWindow,
   connectedWithin,
+  connectionLog,
   inWindow,
   onHost,
   openWindow,
@@ -71,6 +72,7 @@ import {keepingSettings} from '../windows/tunnel-support.ts';
 import {
   failedOn,
   firstRowOf,
+  troubleshootingTabs,
   wholeTableOf,
 } from '../windows/troubleshooting-support.ts';
 
@@ -131,6 +133,25 @@ const NOT_AN_ARCHIVE = 'not a server archive.\n';
 function placeNotAnArchive(): void {
   mkdirSync(BOOTSTRAP_FOLDER, {recursive: true});
   writeFileSync(BOOTSTRAP_FILE, NOT_AN_ARCHIVE);
+}
+
+/**
+ * The install folder `bin/<commit>` after a failed unpack. The failed unpack leaves its own `<commit>.stage.<pid>`
+ * sibling beside it, which `installFolder` counts as a second install, so the stage siblings are left out here.
+ */
+async function installFolderAfterFailure(): Promise<string> {
+  const folders = (
+    await onHost('sh', '-c', `ls -A '${DATA_FOLDER}/bin' 2>/dev/null; true`)
+  )
+    .split('\n')
+    .filter(line => line !== '' && !line.includes('.stage.'));
+  const [commit] = folders;
+  if (folders.length !== 1 || commit === undefined) {
+    throw new Error(
+      `the host holds ${String(folders.length)} install folders besides the stage ones, not one: ${JSON.stringify(folders)}`,
+    );
+  }
+  return `${DATA_FOLDER}/bin/${commit}`;
 }
 
 /** The standard output of `tar` with `commandWords`; fails with its standard error when it does not end well. */
@@ -561,26 +582,36 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
       );
     });
   });
-  it('F-2406 AC-12 (c2948-text-part): the text case of AC-12: a bootstrap file that is not a server archive is copied, and the dialog reason is "Failed to install the VS Code Server." with the UnpackFailed row of the table', async () => {
+  it('F-2406 AC-12 (c2948-text-part): the text case of AC-12: a bootstrap file that is not a server archive is copied, and the dialog reason is "Failed to install the VS Code Server." with no troubleshooting table, so no S087 issue', async () => {
     await withSettings({}, async () => {
       const name = 'c2948-text-part';
       placeNotAnArchive();
       appendScript(dismissals(name));
+      const mark = connectionLog().length;
       await failedOn(ALIAS, name);
       try {
-        const [status] = firstRowOf(await wholeTableOf(name));
+        await waitFor(
+          'the check of the attempt',
+          () =>
+            connectionLog()
+              .slice(mark)
+              .some(line =>
+                line.includes('No hints found in the recent session.'),
+              ),
+          60_000,
+        );
         deepStrictEqual(
           {
             dialogs: recordLines('failureDialog', name).map(
               line => line.question,
             ),
             copied: copiedByScp(name),
-            status,
+            tables: await troubleshootingTabs(name),
           },
           {
             dialogs: [reason(ALIAS, 'Failed to install the VS Code Server.')],
             copied: true,
-            status: 'UnpackFailed',
+            tables: [],
           },
         );
       } finally {
@@ -610,7 +641,7 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
           () => recordLines('failureDialog', name).length > 0,
           INSTALL_MILLISECONDS,
         );
-        const install = await installFolder();
+        const install = await installFolderAfterFailure();
         const listed = await onHost('ls', '-A', install);
         const size = await onHost(
           'stat',
