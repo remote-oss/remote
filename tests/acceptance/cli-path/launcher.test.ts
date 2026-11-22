@@ -9,9 +9,16 @@ import {
   closeWindow,
   connectedWithin,
   onHostAs,
+  isOpen,
   openWindow,
+  variable,
   windowEvents,
 } from '../windows/harness.ts';
+import {
+  listedPages,
+  pagesDescription,
+  REMEMBERED_PAGES,
+} from '../windows/page-list.ts';
 import {runFromPalette} from '../windows/palette.ts';
 import {stamped} from '../windows/stamped-steps.ts';
 import {section, settledSection} from '../windows/connect-failure.ts';
@@ -75,6 +82,20 @@ async function windowFacts(name: string): Promise<string> {
             `${each.event}${each.id === undefined ? '' : ` ${each.id.slice(0, 8)}`} ${String(Math.round((Date.now() - each.time) / 1000))} s ago`,
         )
         .join(', '),
+    ),
+    // The page the row's reads address, and the pages the editor lists now with who remembers each: a window that
+    // reloaded or reconnected has a new page, and a read of the old one never answers.
+    section('the page the row’s reads use', () =>
+      JSON.stringify(REMEMBERED_PAGES.get(name)?.slice(0, 8) ?? null),
+    ),
+    await settledSection(
+      'the pages the editor lists',
+      bounded(async () => {
+        const listed = await listedPages(variable('HARNESS_USER_DATA'));
+        return listed === undefined
+          ? undefined
+          : pagesDescription(listed, REMEMBERED_PAGES, isOpen);
+      }),
     ),
     await settledSection(
       'the quick pick',
