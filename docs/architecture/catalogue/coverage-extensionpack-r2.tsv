@@ -49,7 +49,7 @@ F-9102.AC-47	todo
 F-9102.AC-48	todo	
 F-9102.AC-49	todo	
 F-9102.AC-50	todo	
-F-9102.AC-51	todo	
+F-9102.AC-51	core	the cleared Installed list before a restart is VS Code core's rendering, and the reference's members were running too: athena's ruling on #3037, reference data in remote-extensionpack#12
 F-9102.AC-52	todo	
 F-9102.AC-53	todo	
 F-9102.AC-54	todo	
