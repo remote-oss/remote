@@ -27,6 +27,7 @@ import {
   skipping,
   wiringPortsOf,
 } from '../../src/connect-ports.ts';
+import {ofStart} from '../../src/pipeline/failure.ts';
 import {settings as SETTINGS} from '../../src/identifiers.generated.ts';
 import {
   type ConnectorDependencies,
@@ -711,6 +712,42 @@ describe("the assembled ports' settings", () => {
     await connector.connect(input);
     await connector.connect({...input, attempt: 2, isReconnection: true});
     deepStrictEqual(reads.length >= 2, true);
+  });
+});
+
+describe('the exec server switch the assembled connect is told (F-2406 BR-2, AC-13, card #2971)', () => {
+  /** The exec server switch the connector of an assembly over `written` is given, read as a connect reads it. */
+  function toldExecServer(written: Written): boolean | undefined {
+    const {surfaces, machine, recorded} = assemblyInputs(written);
+    let told: boolean | undefined;
+    connectAssemblyOf(surfaces, machine, loggerOf(recorded), dependencies => {
+      told = dependencies.options.useExecServer;
+      return connectorOf(dependencies);
+    });
+    return told;
+  }
+
+  it('F-2406 BR-2, AC-13: with the manual bootstrap on and the switch configured on, the connect is told it is off, so a failed start gives STR:S135', () => {
+    const told = toldExecServer({
+      [SETTINGS.localServerDownload.id]: 'manual-bootstrap',
+      [SETTINGS.useExecServer.id]: true,
+    });
+    deepStrictEqual(
+      [told, ofStart({kind: 'serverStart'}, {useExecServer: told ?? true})],
+      [false, {kind: 'serverStart', reason: {id: 'S135', values: []}}],
+    );
+  });
+
+  it('F-2406 BR-2: in another mode the connect is told the configured switch', () => {
+    deepStrictEqual(
+      [true, false].map(configured =>
+        toldExecServer({
+          [SETTINGS.localServerDownload.id]: 'auto',
+          [SETTINGS.useExecServer.id]: configured,
+        }),
+      ),
+      [true, false],
+    );
   });
 });
 
