@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
@@ -46,6 +47,15 @@ describe('the client lock files on Node.js (V5, F-2408 BR-6)', () => {
         ],
         ['created', 'exists', ''],
       );
+    });
+  });
+
+  it('BR-6: a create has made the file by the time it returns, before its promise settles', async () => {
+    await inFolder(async folder => {
+      const file = path.join(folder, 'a.lock');
+      const creating = nodeLockFiles.createExclusive(file);
+      const madeOnReturn = existsSync(file);
+      deepStrictEqual([madeOnReturn, await creating], [true, 'created']);
     });
   });
 
@@ -93,7 +103,7 @@ describe('the client lock files on Node.js (V5, F-2408 BR-6)', () => {
     });
   });
 
-  it('BR-8: remove and removeNow delete the file, and an absent file is no error', async () => {
+  it('BR-8: remove and removeNow (of the file it created) delete the file, and an absent file is no error', async () => {
     await inFolder(async folder => {
       const first = path.join(folder, 'a.lock');
       const second = path.join(folder, 'b.lock');
@@ -101,8 +111,9 @@ describe('the client lock files on Node.js (V5, F-2408 BR-6)', () => {
       writeFileSync(second, '');
       await nodeLockFiles.remove(first);
       await nodeLockFiles.remove(first);
-      nodeLockFiles.removeNow(second);
-      nodeLockFiles.removeNow(second);
+      const modified = statSync(second).mtimeMs;
+      nodeLockFiles.removeNow(second, modified);
+      nodeLockFiles.removeNow(second, modified);
       deepStrictEqual([existsSync(first), existsSync(second)], [false, false]);
     });
   });
@@ -112,9 +123,74 @@ describe('the client lock files on Node.js (V5, F-2408 BR-6)', () => {
       const busy = path.join(folder, 'busy');
       mkdirSync(busy);
       writeFileSync(path.join(busy, 'inside'), '');
-      nodeLockFiles.removeNow(busy);
+      nodeLockFiles.removeNow(busy, statSync(busy).mtimeMs);
       deepStrictEqual(existsSync(busy), true);
       return Promise.resolve();
+    });
+  });
+
+  it('BR-6 (card #2918): a release of the file it created removes it; a file modified since, as after a takeover, is left', async () => {
+    await inFolder(async folder => {
+      const own = path.join(folder, 'own.lock');
+      const takenOver = path.join(folder, 'taken.lock');
+      await nodeLockFiles.createExclusive(own);
+      await nodeLockFiles.createExclusive(takenOver);
+      const ownModified = await nodeLockFiles.modifiedMilliseconds(own);
+      const created = await nodeLockFiles.modifiedMilliseconds(takenOver);
+      const later = (Date.now() + 240000) / 1000;
+      utimesSync(takenOver, later, later);
+      await nodeLockFiles.removeIfModified(own, ownModified);
+      await nodeLockFiles.removeIfModified(takenOver, created);
+      nodeLockFiles.removeNow(takenOver, created);
+      await nodeLockFiles.removeIfModified(own, ownModified);
+      deepStrictEqual([existsSync(own), existsSync(takenOver)], [false, true]);
+    });
+  });
+
+  it('BR-6 (card #2918): a release that read no modification time removes nothing', async () => {
+    await inFolder(async folder => {
+      const file = path.join(folder, 'a.lock');
+      writeFileSync(file, '');
+      await nodeLockFiles.removeIfModified(file, undefined);
+      nodeLockFiles.removeNow(file, undefined);
+      deepStrictEqual(existsSync(file), true);
+    });
+  });
+
+  it("BR-8 (card #2918): the modification time is the file's own, an absent file has none, and a path under a file rejects", async () => {
+    await inFolder(async folder => {
+      const file = path.join(folder, 'a.lock');
+      writeFileSync(file, '');
+      deepStrictEqual(
+        [
+          await nodeLockFiles.modifiedMilliseconds(file),
+          await nodeLockFiles.modifiedMilliseconds(path.join(folder, 'b.lock')),
+          await codeOfRejection(() =>
+            nodeLockFiles.modifiedMilliseconds(path.join(file, 'a.lock')),
+          ),
+        ],
+        [statSync(file).mtimeMs, undefined, 'ENOTDIR'],
+      );
+    });
+  });
+
+  it('BR-6 (card #2918): the age, the modification time and the removals have done their work by the time they return', async () => {
+    await inFolder(async folder => {
+      const file = path.join(folder, 'a.lock');
+      writeFileSync(file, '');
+      const modified = statSync(file).mtimeMs;
+      const reading = nodeLockFiles.modifiedMilliseconds(file);
+      const guarded = nodeLockFiles.removeIfModified(file, modified);
+      const goneOnReturn = !existsSync(file);
+      writeFileSync(file, '');
+      const removing = nodeLockFiles.remove(file);
+      const removedOnReturn = !existsSync(file);
+      await guarded;
+      await removing;
+      deepStrictEqual(
+        [goneOnReturn, removedOnReturn, await reading],
+        [true, true, modified],
+      );
     });
   });
 });

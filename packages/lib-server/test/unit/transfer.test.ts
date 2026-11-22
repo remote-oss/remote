@@ -184,6 +184,12 @@ interface Setup {
   copyStall?: number;
   /** Makes the host Windows, so that a look at a file's size is a PowerShell script. */
   windows?: boolean;
+  /** Tells the transfer that the channel's shell lives as long as the session. */
+  sessionLock?: boolean;
+  /** The user's archive of a manual bootstrap. */
+  bootstrapArchive?: string;
+  /** How staging that archive ends; it fails when absent. */
+  staged?: {kind: 'staged'; archive: string} | {kind: 'failed'; detail: string};
 }
 
 async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
@@ -221,6 +227,9 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
       cache: setup.cache ?? {kind: 'none'},
       verification: setup.verification ?? ['none'],
       hostFolder: HOST_FOLDER,
+      ...(setup.bootstrapArchive === undefined
+        ? {}
+        : {bootstrapArchive: setup.bootstrapArchive}),
       cancellation: setup.cancellation ?? NEVER_CANCELLED,
       discardDeadlineMilliseconds: TEST_DEADLINE_MILLISECONDS,
     },
@@ -263,12 +272,19 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
           ),
         size: file => Promise.resolve(setup.sizes?.[file] ?? 0),
         sha256: file => Promise.resolve(setup.digests?.[file] ?? ''),
+        stage: () =>
+          Promise.resolve(
+            setup.staged ?? {kind: 'failed', detail: 'nothing is staged here'},
+          ),
         rename: (source, destination) => {
           renames.push(`${source} -> ${destination}`);
           return Promise.resolve(setup.renameResult ?? {kind: 'renamed'});
         },
       },
       lockLoop: setup.lockLoop ?? runOnce,
+      ...(setup.sessionLock === undefined
+        ? {}
+        : {sessionLock: setup.sessionLock}),
       ...(setup.copyAvailable === undefined
         ? {}
         : {copyAvailable: () => Promise.resolve(setup.copyAvailable === true)}),
@@ -340,6 +356,90 @@ describe('a download on the host (F-2403, F-2405.BR-2)', () => {
       kind: 'transferred',
       installFolder: INSTALL_FOLDER,
     });
+  });
+
+  /** The answer of a host that takes a `flock` lock for the session, to the run that asks where the lock is. */
+  const FLOCK_PLACE: ScriptAnswer = {
+    interpreter: 'posixShell',
+    matches: script => script.includes('lock-path='),
+    lines: ['lock-method=flock', 'lock-path=/tmp/vscode-lock.user.abc123'],
+    ending: {kind: 'exit', status: 0},
+  };
+
+  /** The install's block when the script took the lock, as it reports it. */
+  const INSTALLED_HOLDING = block(
+    'Ok',
+    `server.installDir=${INSTALL_FOLDER}`,
+    'timing.install=5',
+    'server.lockHeld=yes',
+  );
+
+  /** The scripted answers of an install over a session: the lock place, then the install's output, then the release. */
+  function overSession(
+    install: ScriptAnswer['ending'] | readonly string[],
+  ): ScriptAnswer[] {
+    return [
+      FLOCK_PLACE,
+      {
+        interpreter: 'posixShell',
+        matches: script => script.includes('lock_take'),
+        lines: Array.isArray(install) ? install : [],
+        ending: Array.isArray(install)
+          ? {kind: 'exit', status: 0}
+          : (install as ScriptAnswer['ending']),
+      },
+      {...answering([]), matches: script => script === ':'},
+    ];
+  }
+
+  const LOCK_OPEN = {path: '/tmp/vscode-lock.user.abc123', action: 'open'};
+  const LOCK_RELEASE = {
+    path: '/tmp/vscode-lock.user.abc123',
+    action: 'release',
+  };
+
+  it('F-2408 BR-4: an install over a caller whose shell lives as long as the session asks the host where the lock is, runs with that session lock open, and keeps it when the script took the lock', async () => {
+    const {channel, outcome} = await runTransfer({
+      sessionLock: true,
+      answers: overSession(INSTALLED_HOLDING),
+    });
+    deepStrictEqual(
+      [outcome.kind, channel.sessionLocks()],
+      ['transferred', [LOCK_OPEN]],
+    );
+  });
+
+  it('F-2402 AC-26, F-2408 BR-4: an install that found the server installed took no lock, so the session gives up what the shell made', async () => {
+    const {channel, outcome} = await runTransfer({
+      sessionLock: true,
+      answers: overSession(INSTALLED),
+    });
+    deepStrictEqual(
+      [outcome.kind, channel.sessionLocks()],
+      ['transferred', [LOCK_OPEN, LOCK_RELEASE]],
+    );
+  });
+
+  it('F-2402 AC-26, F-2408 BR-4: an install that ends in a failure gives the session lock up', async () => {
+    const {channel, outcome} = await runTransfer({
+      sessionLock: true,
+      answers: overSession(block('CreateInstallDirFailed')),
+    });
+    deepStrictEqual(
+      [outcome.kind, channel.sessionLocks()],
+      ['failed', [LOCK_OPEN, LOCK_RELEASE]],
+    );
+  });
+
+  it('F-2402 AC-26, F-2408 BR-4: an install whose run the channel lost, as a cancelled one is, gives the session lock up', async () => {
+    const {channel, outcome} = await runTransfer({
+      sessionLock: true,
+      answers: overSession({kind: 'fail', failure: CHANNEL_CLOSED}),
+    });
+    deepStrictEqual(
+      [outcome.kind, channel.sessionLocks()],
+      ['failed', [LOCK_OPEN, LOCK_RELEASE]],
+    );
   });
 
   it('F-2403: the install folder comes from the plan when the script reports none', async () => {
@@ -2064,6 +2164,83 @@ describe('the copy to the host that makes no progress (card connect-122)', () =>
     deepStrictEqual(
       [failureOf(outcome), Date.now() - started >= 250 + 80],
       [{kind: 'copyStalled'}, true],
+    );
+  });
+});
+
+describe('a manual bootstrap (F-2406, ruling-2878-manual-bootstrap)', () => {
+  const ARCHIVE = '/home/me/vscode-remote-ssh-bootstrap/vscode-server.tar.gz';
+  const STAGED = `${CLIENT_FOLDER}/vsc_server_1/vscode-server.tar.gz`;
+
+  it('7.E1: an archive that is not at its path ends the transfer with its path, with no download and no copy', async () => {
+    const bootstrapped = await runTransfer({
+      plan: {where: 'client', clientFallback: false},
+      bootstrapArchive: ARCHIVE,
+    });
+    deepStrictEqual(
+      {
+        outcome: bootstrapped.outcome,
+        downloads: bootstrapped.downloads.length,
+        calls: bootstrapped.channel.calls.length,
+      },
+      {
+        outcome: {
+          kind: 'failed',
+          failure: {kind: 'localBootstrap', cause: 'missing', path: ARCHIVE},
+        },
+        downloads: 0,
+        calls: 0,
+      },
+    );
+  });
+
+  it("7.E2: an archive that cannot be staged ends the transfer with the file system's text, before any copy", async () => {
+    const bootstrapped = await runTransfer({
+      plan: {where: 'client', clientFallback: false},
+      bootstrapArchive: ARCHIVE,
+      existing: [ARCHIVE],
+      staged: {kind: 'failed', detail: 'EACCES: permission denied'},
+    });
+    deepStrictEqual(
+      {outcome: bootstrapped.outcome, calls: bootstrapped.channel.calls.length},
+      {
+        outcome: {
+          kind: 'failed',
+          failure: {
+            kind: 'localBootstrap',
+            cause: 'unreadable',
+            detail: 'EACCES: permission denied',
+          },
+        },
+        calls: 0,
+      },
+    );
+  });
+
+  it('5.0 steps 4–6, BR-6: a staged archive is copied and installed into the install folder, with no download', async () => {
+    const bootstrapped = await runTransfer({
+      plan: {where: 'client', clientFallback: false},
+      bootstrapArchive: ARCHIVE,
+      existing: [ARCHIVE],
+      staged: {kind: 'staged', archive: STAGED},
+    });
+    deepStrictEqual(
+      {
+        kind: bootstrapped.outcome.kind,
+        downloads: bootstrapped.downloads.length,
+        copied: bootstrapped.channel.calls.flatMap(call =>
+          call.operation === 'copyToHost' ? [call.request.localFile] : [],
+        ),
+        intoInstall: scriptsOf(bootstrapped.channel).some(script =>
+          script.includes("ARCHIVE_INTO_INSTALL='yes'"),
+        ),
+      },
+      {
+        kind: 'transferred',
+        downloads: 0,
+        copied: [STAGED],
+        intoInstall: true,
+      },
     );
   });
 });

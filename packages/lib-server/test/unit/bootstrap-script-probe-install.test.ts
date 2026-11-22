@@ -841,6 +841,71 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(existsSync(parameters.archivePath), false);
     });
 
+    /** The install folder of the fixture's commit, where a bootstrap archive goes. */
+    function bootstrapFolder(): string {
+      return path.join(
+        host.home,
+        '.server-data',
+        'bin',
+        'abc1230000000000000000000000000000000000',
+      );
+    }
+
+    it('F-2406 BR-8 (ruling-2878-manual-bootstrap): a manual bootstrap moves the copy into the install folder under the lock and removes it and its marker once unpacked', () => {
+      const parameters = {
+        ...copiedParameters(true),
+        archiveIntoInstall: true,
+      };
+      const status = statusOf(host, single('install'), parameters);
+      deepStrictEqual(
+        {
+          status,
+          copyLeft: existsSync(parameters.archivePath),
+          archive: existsSync(
+            path.join(bootstrapFolder(), 'vscode-server.tar.gz'),
+          ),
+          marker: existsSync(
+            path.join(bootstrapFolder(), 'vscode-server.tar.gz.done'),
+          ),
+        },
+        {status: 'Ok', copyLeft: false, archive: false, marker: false},
+      );
+    });
+
+    it('F-2406 7.E3, AC-24 (ruling-2878-manual-bootstrap): a bootstrap archive that does not unpack stays in the install folder, its marker gone', () => {
+      const parameters = {
+        ...copiedParameters(true),
+        archiveIntoInstall: true,
+      };
+      writeFileSync(parameters.archivePath, 'not a server archive.\n');
+      const status = statusOf(host, single('install'), parameters);
+      const archive = path.join(bootstrapFolder(), 'vscode-server.tar.gz');
+      deepStrictEqual(
+        {
+          status,
+          archive: existsSync(archive) ? readFileSync(archive, 'utf8') : '',
+          marker: existsSync(`${archive}.done`),
+        },
+        {
+          status: 'UnpackFailed',
+          archive: 'not a server archive.\n',
+          marker: false,
+        },
+      );
+    });
+
+    it('ruling-2878-manual-bootstrap: an archive the host reads in place is copied into the install folder, never moved', () => {
+      const parameters = {
+        ...copiedParameters(false),
+        archiveIntoInstall: true,
+      };
+      const status = statusOf(host, single('install'), parameters);
+      deepStrictEqual(
+        {status, source: existsSync(parameters.archivePath)},
+        {status: 'Ok', source: true},
+      );
+    });
+
     it('V4: a copied archive is removed when the unpack fails', () => {
       const parameters = copiedParameters(true);
       writeFileSync(parameters.archivePath, 'not an archive');

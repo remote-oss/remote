@@ -111,6 +111,10 @@ function assemblyInputs(
       recorded.revealed += 1;
     },
   );
+  const lockFiles = new MemoryLockPort({
+    now: () => clock.now(),
+    wait: () => Promise.resolve(),
+  });
   const machine: ConnectMachine = {
     profile: PROFILE,
     platform: 'linux',
@@ -155,11 +159,10 @@ function assemblyInputs(
     download: {} as unknown as ConnectMachine['download'],
     scheduler: clock.scheduler(),
     clock: {now: () => clock.now(), wait: () => Promise.resolve()},
-    lockFiles: new MemoryLockPort({
-      now: () => clock.now(),
-      wait: () => Promise.resolve(),
+    lockFiles,
+    clientLocks: new HeldClientLocks((path, modified) => {
+      void lockFiles.removeIfModified(path, modified);
     }),
-    clientLocks: new HeldClientLocks(() => undefined),
     local: new FakeLocalPort(),
     prober: changes.prober ?? new FakeProber({}),
     newTemporaryToken: () => 'token',
@@ -491,6 +494,11 @@ describe("the assembled ports' settings", () => {
     ports.server.onCommandMissing('tar');
     ports.server.onPrerequisitesMissing();
     ports.server.onLocalDownloadFailed('Failed to fetch');
+    ports.server.onLocalBootstrapFailed({cause: 'missing', path: '/x.tar.gz'});
+    ports.server.onLocalBootstrapFailed({
+      cause: 'unreadable',
+      detail: 'EACCES',
+    });
     deepStrictEqual(kept, [
       'ServerDownloadFailed',
       'NoDownloaderAvailable',
@@ -500,6 +508,8 @@ describe("the assembled ports' settings", () => {
       'CommandMissing',
       'LinuxPrereqs',
       'LocalDownloadFailed',
+      'LocalBootstrapFailed',
+      'LocalBootstrapFailed',
     ]);
   });
 
@@ -1360,6 +1370,39 @@ describe("the assembled ports' platform notice", () => {
     deepStrictEqual(
       shown.map(message => message.includes('"linux"')),
       [true],
+    );
+  });
+});
+
+describe("the assembled ports' manual bootstrap (F-2406, ruling-2878-manual-bootstrap)", () => {
+  it("BR-3, BR-4: the warning is STR:S088 through the surfaces' notice, and the archive is read from the home's bootstrap folder", async () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const warned: string[] = [];
+    const ports = wiringPortsOf(
+      {
+        ...surfaces,
+        notice: {
+          showInformation: () => Promise.resolve(undefined),
+          showWarning: message => {
+            warned.push(message);
+            return Promise.resolve(undefined);
+          },
+          showError: () => Promise.resolve(undefined),
+        },
+      },
+      machine,
+      loggerOf(recorded),
+    );
+    ports.warnManualBootstrap();
+    await new Promise(resolve => setImmediate(resolve));
+    deepStrictEqual(
+      {warned, archive: ports.server.bootstrapArchive},
+      {
+        warned: [
+          "<Local download mode is configured as 'manual-bootstrap'. Exec server mode will be disabled.'>",
+        ],
+        archive: '/home/alex/vscode-remote-ssh-bootstrap/vscode-server.tar.gz',
+      },
     );
   });
 });
