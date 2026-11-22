@@ -1364,7 +1364,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, login-shells, preconnect, agent-notmp, default-ports, the explorer, trust and containers launches and every ports case', () => {
+  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, login-shells, preconnect, agent-notmp, default-ports, cli-path, the explorer, trust and containers launches and every ports case', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
@@ -1410,6 +1410,7 @@ describe('the launches of the VSCodium run', () => {
         'ssh-locks',
         'ssh-downloaders',
         'ssh-containers',
+        'cli-path',
         ...labelsFromExplorer(),
       ],
     );
