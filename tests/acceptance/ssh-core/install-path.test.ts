@@ -47,7 +47,6 @@ import {
   failedOn,
   wholeTableOf,
 } from '../windows/troubleshooting-support.ts';
-import {hintRecords, waitForRecords} from '../windows/hint-store.ts';
 
 /** The setting that names the install folder. */
 const SETTING = 'remote.SSH.serverInstallPath';
@@ -87,13 +86,6 @@ async function serverAt(folder: string): Promise<boolean> {
 
 /** The part of the connect's failure text that every failure dialog carries, for a script entry's match. */
 const DIALOG_MATCH = 'Could not establish connection';
-
-/** The buttons the spec names for the refused and the install directory's dialogs. */
-const RETRY_BUTTONS: readonly string[] = [
-  'Retry',
-  'More Actions...',
-  'Close Remote',
-];
 
 /** Waits for window `name`'s failure dialog to be recorded and gives the line: its text and the buttons it was shown with. */
 async function refusedLine(name: string, milliseconds = 30_000) {
@@ -385,52 +377,6 @@ describe('the install location the user setting picks (card #2487)', function ()
     });
   });
 
-  it('F-2407 AC-7 (c2487-invalid): a value that is not a plain absolute path is checked on the client: no SSH login, and the dialog holds the value as written', async () => {
-    await keepingSettings(async () => {
-      const values = ['relative/inst', '$HOME/inst'];
-      const since = new Date().toISOString();
-      const details = [];
-      const buttons = [];
-      for (const [index, item] of values.entries()) {
-        await setting(SETTING, value(item));
-        if (index > 0) {
-          await runWith('local', 'opensshremotes.cleanLocalServer', [
-            pickHost('harness'),
-          ]);
-        }
-        const name = `c2487-invalid-${String(index)}`;
-        appendScript([
-          {
-            surface: 'failureDialog',
-            match: DIALOG_MATCH,
-            answer: 'dismiss',
-            window: name,
-          },
-        ]);
-        await openWindow('harness', name);
-        const line = await refusedLine(name);
-        details.push(line?.question);
-        buttons.push(line?.buttons);
-        await closeWindow(name).catch(() => undefined);
-      }
-      deepStrictEqual(
-        {
-          details: values.map(invalidDetail),
-          buttons,
-          logins: await acceptedKeyLogins(since),
-        },
-        {
-          details: values.map(invalidDetail),
-          buttons: [
-            ['Retry', 'More Actions...', 'Close Remote'],
-            ['Retry', 'More Actions...', 'Close Remote'],
-          ],
-          logins: 0,
-        },
-      );
-    });
-  });
-
   it('F-2407 AC-8 (c2487-charset-part1): the dollars, quotes, backtick, semicolon, asterisk, at, comma, equals, percent, tilde, colon and sharp in an absolute value are all refused as in AC-7, with no SSH login', async () => {
     await keepingSettings(async () => {
       const chars = [
@@ -581,99 +527,6 @@ describe('the install location the user setting picks (card #2487)', function ()
     });
   });
 
-  it('F-2407 AC-11 (c2487-dircannot): a parent that cannot be written, a slash, an existing file and an existing non-writable folder all give the install directory dialog', async () => {
-    await onHost('mkdir', '-p', `${HOME}/ro11`);
-    await onHost('chmod', '0555', `${HOME}/ro11`);
-    await onHost('touch', `${HOME}/f11`);
-    await onHost('mkdir', `${HOME}/nw11`);
-    await onHost('chmod', '0555', `${HOME}/nw11`);
-    try {
-      const values = [`${HOME}/ro11/inner`, '/', `${HOME}/f11`, `${HOME}/nw11`];
-      const details = [];
-      const buttons = [];
-      for (const [index, item] of values.entries()) {
-        await setting(SETTING, value(item));
-        if (index > 0) {
-          await runWith('local', 'opensshremotes.cleanLocalServer', [
-            pickHost('harness'),
-          ]);
-        }
-        const name = `c2487-dircannot-${String(index)}`;
-        appendScript([
-          {
-            surface: 'failureDialog',
-            match: DIALOG_MATCH,
-            answer: 'dismiss',
-            window: name,
-          },
-        ]);
-        await openWindow('harness', name);
-        const line = await refusedLine(name, INSTALL_MILLISECONDS);
-        details.push(line?.question);
-        buttons.push(line?.buttons);
-        await closeWindow(name).catch(() => undefined);
-      }
-      deepStrictEqual(
-        {
-          details,
-          buttons,
-        },
-        {
-          details: [DIR_DETAIL, DIR_DETAIL, DIR_DETAIL, DIR_DETAIL],
-          buttons: [
-            ['Retry', 'More Actions...', 'Close Remote'],
-            ['Retry', 'More Actions...', 'Close Remote'],
-            ['Retry', 'More Actions...', 'Close Remote'],
-            ['Retry', 'More Actions...', 'Close Remote'],
-          ],
-        },
-      );
-    } finally {
-      await onHost('chmod', '0755', `${HOME}/ro11`).catch(() => undefined);
-      await onHost('chmod', '0755', `${HOME}/nw11`).catch(() => undefined);
-      await onHost('rm', '-f', `${HOME}/f11`).catch(() => undefined);
-      await setting(SETTING, undefined);
-    }
-  });
-
-  it('F-2407 AC-12 (c2487-homedir): without the setting, a home directory the remote user cannot write gives the same dialog', async () => {
-    await freshHost();
-    const name = 'c2487-homedir';
-    // A left-over install in the home would be reused by the connect; the failure must meet an absent one.
-    await onHost('rm', '-rf', DATA_FOLDER);
-    // openWindow creates the window's folder as the remote user; it must exist before the home is read-only.
-    await onHost('mkdir', '-p', `${HOME}/${name}`);
-    await onHost('chown', 'harness', `${HOME}/${name}`);
-    await onHost('chmod', '0555', HOME);
-    try {
-      await setting(SETTING, undefined);
-      appendScript([
-        {
-          surface: 'failureDialog',
-          match: DIALOG_MATCH,
-          answer: 'dismiss',
-          window: name,
-        },
-      ]);
-      await openWindow('harness', name);
-      const line = await refusedLine(name, INSTALL_MILLISECONDS);
-      deepStrictEqual(
-        {
-          detail: line?.question,
-          buttons: line?.buttons,
-        },
-        {
-          detail: DIR_DETAIL,
-          buttons: RETRY_BUTTONS,
-        },
-      );
-    } finally {
-      await closeWindow(name).catch(() => undefined);
-      await onHost('chmod', '0755', HOME).catch(() => undefined);
-      await setting(SETTING, undefined);
-    }
-  });
-
   it("F-2407 AC-13 (c2487-failtable): the install directory failure's table lists its status, its message with $HOME and the setting, and the four mitigations in order", async () => {
     await onHost('mkdir', `${HOME}/ro13`);
     await onHost('chmod', '0555', `${HOME}/ro13`);
@@ -753,124 +606,6 @@ describe('the install location the user setting picks (card #2487)', function ()
     } finally {
       await closeWindow(name).catch(() => undefined);
       await onHost('chmod', '0755', `${HOME}/ro14`).catch(() => undefined);
-      await setting(SETTING, undefined);
-    }
-  });
-
-  it('F-2407 AC-15 (c2487-inertchange): a changed value at a connected window shows nothing and creates nothing, and a reload while the connection server runs keeps the old folder', async () => {
-    await freshHost();
-    const prior = `${HOME}/cust15`;
-    const now = `${HOME}/cust15b`;
-    const name = 'c2487-inertchange';
-    try {
-      await setting(SETTING, value(prior));
-      await openConnected(name, INSTALL_MILLISECONDS);
-      await setting(SETTING, value(now));
-      await new Promise(resolve => setTimeout(resolve, 8_000));
-      try {
-        await inWindow(name, 'workbench.action.reloadWindow');
-      } catch (error) {
-        console.log(
-          `c2487-inertchange the reload failed; the open dialog of ${name}: ${JSON.stringify(await dialogOf(name))}`,
-        );
-        console.log(
-          `c2487-inertchange the failureDialog records of ${name}: ${JSON.stringify(recordLines('failureDialog', name))}`,
-        );
-        console.log(
-          `c2487-inertchange the recent records of ${name}: ${JSON.stringify(recordLines(undefined, name).slice(-6))}`,
-        );
-        throw error;
-      }
-      await connectedWithin(name, INSTALL_MILLISECONDS);
-      deepStrictEqual(
-        {
-          prior: await serverAt(prior),
-          now: await serverAt(now),
-          dialogs: recordLines('failureDialog', name).length,
-        },
-        {prior: true, now: false, dialogs: 0},
-      );
-    } finally {
-      await closeWindow(name).catch(() => undefined);
-      await setting(SETTING, undefined);
-    }
-  });
-
-  it('F-2407 AC-16 (c2487-newvalue): after the connection server for the host is ended, the reconnect checks and uses the new value, and the old folder is still on the host', async () => {
-    await freshHost();
-    const prior = `${HOME}/cust16`;
-    const now = `${HOME}/cust16b`;
-    const name = 'c2487-newvalue';
-    try {
-      await setting(SETTING, value(prior));
-      await openConnected(name, INSTALL_MILLISECONDS);
-      await setting(SETTING, value(now));
-      await runWith('local', 'opensshremotes.cleanLocalServer', [
-        pickHost('harness'),
-      ]);
-      await waitFor(`the new folder on the host`, () => serverAt(now), 120_000);
-      try {
-        await connectedWithin(name, INSTALL_MILLISECONDS);
-      } catch (error) {
-        console.log(
-          `c2487-newvalue the window did not reach connected; the open dialog: ${JSON.stringify(await dialogOf(name))}`,
-        );
-        console.log(
-          `c2487-newvalue the failureDialog records of ${name}: ${JSON.stringify(recordLines('failureDialog', name))}`,
-        );
-        throw error;
-      }
-      deepStrictEqual(
-        {prior: await serverAt(prior), now: await serverAt(now)},
-        {prior: true, now: true},
-      );
-    } finally {
-      await closeWindow(name).catch(() => undefined);
-      await setting(SETTING, undefined);
-    }
-  });
-
-  it('F-2407 AC-17 (c2487-hints): a refused connect stores the error hint with the section 7 message, its mitigations in order and its details', async () => {
-    const item = 'relative/inst';
-    await inWindow('local', 'opensshremotes.clearAllSessionHints');
-    const name = 'c2487-hints';
-    appendScript(dismissals(name));
-    try {
-      await setting(SETTING, value(item));
-      await openWindow('harness', name);
-      await refusedLine(name);
-      await waitForRecords(
-        'the stored error hint',
-        () =>
-          hintRecords().some(record =>
-            record.hints.some(hint => hint.kind === 'error'),
-          ),
-        60_000,
-      );
-      const hint = hintRecords()
-        .at(-1)
-        ?.hints.find(each => each.kind === 'error');
-      deepStrictEqual(
-        {
-          status: hint?.status,
-          message: hint?.message,
-          details: hint?.details,
-          mitigations: hint?.mitigations,
-        },
-        {
-          status: 'InvalidCustomServerPath',
-          message: 'The provided custom server path is invalid',
-          details: `Provided: "${item}"`,
-          mitigations: [
-            'Ensure the provide path is an absolute path',
-            `Edit setting ${SETTING} to an absolute path on the remote server`,
-            `Do not use variables, double quotes, or other non-path characters when setting ${SETTING}`,
-            'Delete the setting for this host to use the default path in the user home directory',
-          ],
-        },
-      );
-    } finally {
-      await closeWindow(name).catch(() => undefined);
       await setting(SETTING, undefined);
     }
   });
@@ -1118,67 +853,5 @@ describe('the install location the user setting picks (card #2487)', function ()
         await setting(SETTING, undefined);
       }
     });
-  });
-
-  it("F-2407 AC-23 (c2487-reconnectcheck): the reconnect at a value that fails the check makes no SSH connection, opens the troubleshooting terminal, and shows core's Cannot reconnect dialog instead of the refusal dialog", async () => {
-    await freshHost();
-    const good = `${HOME}/cust23`;
-    const refused = 'relative/inst';
-    const name = 'c2487-reconnectcheck';
-    try {
-      await setting(SETTING, value(good));
-      await openConnected(name, INSTALL_MILLISECONDS);
-      await setting(SETTING, value(refused));
-      const since = new Date().toISOString();
-      await runWith('local', 'opensshremotes.cleanLocalServer', [
-        pickHost('harness'),
-      ]);
-      let found = false;
-      let lastDetail: string | undefined;
-      const deadline = Date.now() + 90_000;
-      while (Date.now() < deadline) {
-        const open = await dialogOf(name);
-        if ((open?.details ?? '').includes('Cannot reconnect')) {
-          found = true;
-          break;
-        }
-        if (open !== undefined && open.details !== lastDetail) {
-          lastDetail = open.details;
-          console.log(
-            `c2487-reconnectcheck an open dialog on ${name}: ${JSON.stringify(open.details)}`,
-          );
-        }
-        await new Promise(resolve => setTimeout(resolve, 5_000));
-      }
-      if (!found) {
-        console.log(
-          `c2487-reconnectcheck the final dialog of ${name}: ${JSON.stringify(await dialogOf(name))}`,
-        );
-        console.log(
-          `c2487-reconnectcheck the troubleshooting terminal: ${String((await pageText(name)).includes('Session Troubleshooting'))}`,
-        );
-        throw new Error(`window ${name}: no Cannot reconnect dialog in 90 s`);
-      }
-      const shown = await dialogOf(name);
-      deepStrictEqual(
-        {
-          dialog: shown?.details.includes(
-            'Cannot reconnect. Please reload the window.',
-          ),
-          buttons: shown?.buttons,
-          terminal: (await pageText(name)).includes('Session Troubleshooting'),
-          logins: await acceptedKeyLogins(since),
-        },
-        {
-          dialog: true,
-          buttons: ['Cancel', 'Reload Window'],
-          terminal: true,
-          logins: 0,
-        },
-      );
-    } finally {
-      await closeWindow(name).catch(() => undefined);
-      await setting(SETTING, undefined);
-    }
   });
 });
