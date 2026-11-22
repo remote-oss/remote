@@ -1,7 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
+import {createServer} from 'node:http';
 import {
+  brokerUrlOf,
   corruptArchiveLines,
   corruptArchiveName,
+  probeArchive,
+  probeText,
 } from '../tests/acceptance/windows/corrupt-archive.ts';
 
 describe('the corrupt archive of a Feature download (card #2675)', () => {
@@ -63,5 +67,47 @@ describe('the corrupt archive of a Feature download (card #2675)', () => {
       corruptArchiveName(['#14 64.43 Downloading: maven 3.10.1']),
       undefined,
     );
+  });
+
+  it('#2675: the broker address is built from the candidate and its version, and from nothing else', () => {
+    deepStrictEqual(
+      [brokerUrlOf('maven 3.10.1'), brokerUrlOf('maven'), brokerUrlOf('a b c')],
+      [
+        'https://api.sdkman.io/2/broker/download/maven/3.10.1/linuxx64',
+        undefined,
+        undefined,
+      ],
+    );
+  });
+
+  it('#2675: a probe of an address that answers with something that is no zip says its status, size, type, address and the zip test', async () => {
+    const server = createServer((incoming, response) => {
+      incoming.resume();
+      response.writeHead(200, {'content-type': 'text/html'});
+      response.end('<html>refused</html>');
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const url = `http://127.0.0.1:${String(typeof address === 'object' && address !== null ? address.port : 0)}/x`;
+    try {
+      const probe = await probeArchive(url);
+      deepStrictEqual(
+        [
+          probe.status,
+          probe.size,
+          probe.type,
+          probe.url,
+          /zip|End-of-central|cannot find/iu.test(probe.zipTest),
+        ],
+        ['200', 20, 'text/html', url, true],
+      );
+    } finally {
+      server.close();
+    }
+  });
+
+  it('#2675: a probe of an address nobody listens on does not throw and says the request failed', async () => {
+    const probe = await probeArchive('http://127.0.0.1:1/x');
+    deepStrictEqual(probeText(probe).includes('the request failed'), true);
   });
 });

@@ -21,8 +21,11 @@ import {
   variable,
 } from '../windows/harness.ts';
 import {
+  brokerUrlOf,
   corruptArchiveLines,
   corruptArchiveName,
+  probeArchive,
+  probeText,
 } from '../windows/corrupt-archive.ts';
 import {runTemplatesReady} from '../windows/run-templates.ts';
 
@@ -150,8 +153,17 @@ export function featureBuilds(): {
           };
         } catch (second) {
           const again = corruptArchiveLines(containersLogSince(secondMark));
+          const download = /Downloading: (\S+ \S+)/u.exec(
+            reasons.find(line => line.includes('Downloading: ')) ?? '',
+          )?.[1];
+          const broker =
+            download === undefined ? undefined : brokerUrlOf(download);
+          const fromHere =
+            broker === undefined
+              ? ''
+              : ` Probe of the broker address: ${probeText(await probeArchive(broker))}.`;
           throw new Error(
-            `${corruptArchiveName(containersLogSince(firstMark)) ?? 'The first build failed'} and so did the second build of ${name}; this is the third party's fault, not the product's. First: ${reasons.join(' | ')}. Second: ${again.length === 0 ? 'no corrupt-archive verdict, so it failed for another reason' : again.join(' | ')}. ${second instanceof Error ? second.message : String(second)}`,
+            `${corruptArchiveName(containersLogSince(firstMark)) ?? 'The first build failed'} and so did the second build of ${name}; this is the third party's fault, not the product's. First: ${reasons.join(' | ')}. Second: ${again.length === 0 ? 'no corrupt-archive verdict, so it failed for another reason' : again.join(' | ')}. ${second instanceof Error ? second.message : String(second)}${fromHere}`,
             {cause: second},
           );
         }
