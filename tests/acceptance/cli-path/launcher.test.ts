@@ -10,6 +10,9 @@ import {
   connectedWithin,
   onHostAs,
   openWindow,
+  readUserSettings,
+  restoreUserSettings,
+  userSettings,
 } from '../windows/harness.ts';
 import {runFromPalette} from '../windows/palette.ts';
 import {stamped} from '../windows/stamped-steps.ts';
@@ -43,6 +46,19 @@ describe('the launcher of the exec-server path (card #2500, F-2008)', function (
   // The row's steps are bounded and say how long each took, so a hang stops at its step with its name before this cut
   // (card #3003: the row's first run on CI stopped at the runner's 300 s with no line to say where).
   this.timeout(600_000);
+  let saved: string | undefined;
+
+  // Kill Current VS Code Server asks the platform of the host when none is stored (F-2206 AC-26), and this row has no
+  // answer for that pick: the likely reason the command did not finish in the first CI run (card #3003), which stopped at
+  // that step. With the platform stored the command has nothing to ask.
+  before(async () => {
+    saved = readUserSettings();
+    await userSettings({'remote.SSH.remotePlatform': {harness: 'linux'}});
+  });
+
+  after(() => {
+    restoreUserSettings(saved);
+  });
 
   it('F-2008 AC-15 (c2500-launcher): after the launcher is deleted and the server killed, the next connection installs the same launcher again and shows no error dialog', async () => {
     await stamped(ROW_NAME, 'the first window opens', 60_000, () =>
