@@ -30,6 +30,11 @@ export interface StateReads {
   rendererLines(): string[];
   /** What the window's dialog and notifications showed over the time since the end, as the changes between the reads. */
   timeline(): string[];
+  /**
+   * Asks the window for a dialog of core's that the reconnection's own listener does not open, and tells whether it
+   * showed: it shows at once when the window's dialog queue is free, and not when an earlier dialog holds the queue.
+   */
+  probeDialog(): Promise<string>;
 }
 
 /** How many of the connection log's last lines the explanation keeps. */
@@ -51,6 +56,9 @@ const LINE_LENGTH = 240;
  * protocol: a page that does not answer must not hold a passing row until its test's own timeout.
  */
 const PAGE_FACTS_MILLISECONDS = 10_000;
+
+/** How long the probe of the second dialog may take, the palette and the wait for the dialog included. */
+const PROBE_MILLISECONDS = 45_000;
 
 /** What `read` gives, or a line saying it gave nothing within `milliseconds`; a late failure of it is dropped. */
 async function withinMilliseconds(
@@ -100,6 +108,47 @@ export function logLinesBetween(
     }
   }
   return kept.slice(0, capacity);
+}
+
+/** The lines of the renderer log that tell core gave a reconnection up, or what it did with the end. */
+const FAILURE_PATTERN =
+  /permanent failure|Will give up now|Error handled|Cannot reconnect/iu;
+
+/**
+ * The lines of a renderer log (`2026-11-20 00:03:15.909`, UTC) before `endedMs` that tell a reconnection was given up,
+ * each with its time from the end, or the words that there are none and what the log held: a failure of an earlier
+ * connection of the window could have made core keep its dialog back for this one.
+ */
+export function earlierFailureLines(
+  lines: readonly string[],
+  endedMs: number,
+  width: number,
+): string[] {
+  const before: Array<{time: number; line: string}> = [];
+  for (const line of lines) {
+    const stamp = /^(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d(?:\.\d+)?)/u.exec(line);
+    if (stamp === null) {
+      continue;
+    }
+    const time = Date.parse(`${stamp[1] ?? ''}T${stamp[2] ?? ''}Z`);
+    if (time < endedMs) {
+      before.push({time, line});
+    }
+  }
+  const told = before
+    .filter(each => FAILURE_PATTERN.test(each.line))
+    .map(
+      each =>
+        `[${signedSeconds(each.time - endedMs)}] ${each.line.slice(0, width)}`,
+    );
+  const first = before[0];
+  return told.length > 0 || first === undefined
+    ? told.length > 0
+      ? told
+      : ['none (the log holds no stamped line before the end)']
+    : [
+        `none (the log holds ${String(before.length)} stamped lines before the end, the first ${signedSeconds(first.time - endedMs)} from it)`,
+      ];
 }
 
 /** `milliseconds` as seconds with a sign, to one decimal. */
@@ -159,6 +208,7 @@ export async function reconnectionState(
   name: string,
   mark: number,
   endedAt: number,
+  probeMilliseconds = PROBE_MILLISECONDS,
 ): Promise<string> {
   return [
     section(`what ${name} recorded since the shared connection ended`, () =>
@@ -204,6 +254,18 @@ export async function reconnectionState(
         .filter(line => !line.startsWith('Searched for ssh in:'))
         .slice(-LOG_LINES)
         .join('\n'),
+    ),
+    section(
+      'the window’s renderer log before the end: every line about a reconnection given up, with its time from the end',
+      () =>
+        earlierFailureLines(reads.rendererLines(), endedAt, LINE_LENGTH).join(
+          '\n',
+        ),
+    ),
+    // Last, since it opens a dialog in the window: a dialog of core's that the reconnection listener does not open.
+    await settledSection(
+      'a second dialog asked of the window by its palette, File: Clear Recently Opened (it shows when the dialog queue is free)',
+      () => withinMilliseconds(reads.probeDialog(), probeMilliseconds),
     ),
   ].join('\n');
 }
