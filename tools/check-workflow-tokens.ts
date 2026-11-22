@@ -7,6 +7,11 @@
  * or `pull_request` behind the guard that skips a fork's pull request. Every other event, `pull_request_target`,
  * `workflow_run`, `issue_comment` and `issues` among them, fails the check, and so does a workflow that leaves its
  * token to the repository's default.
+ *
+ * The secret that reads the CLI archives' repository reaches one kind of step only: the step that fetches the CLI
+ * archives, which holds it in its own `env`. A job that calls a workflow may pass it there by name; no job passes
+ * every secret (`secrets: inherit`), and no workflow or job `env` holds it, so the acceptance step, which starts the
+ * editor, the hosts and the containers with its environment, never sees it.
  */
 
 import {readdirSync, readFileSync} from 'node:fs';
@@ -35,6 +40,86 @@ interface Workflow {
   on?: unknown;
   permissions?: Permissions;
   jobs?: Record<string, {permissions?: Permissions; if?: unknown}>;
+}
+
+/** The secret that reads the CLI archives' repository, the expression that reads it, and the one step that may. */
+const CLI_ARCHIVES_SECRET = 'REMOTE_OSS_CLI_ARCHIVES_TOKEN';
+const CLI_ARCHIVES_EXPRESSION = `secrets.${CLI_ARCHIVES_SECRET}`;
+const CLI_ARCHIVES_STEP = 'node tools/fetch-cli-archives.ts';
+
+/** Each string in `value` with the path of keys and indexes to it. */
+function stringsOf(
+  value: unknown,
+  at: ReadonlyArray<string | number> = [],
+): Array<[ReadonlyArray<string | number>, string]> {
+  if (typeof value === 'string') {
+    return [[at, value]];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((each, index) => stringsOf(each, [...at, index]));
+  }
+  return typeof value === 'object' && value !== null
+    ? Object.entries(value).flatMap(([key, each]) =>
+        stringsOf(each, [...at, key]),
+      )
+    : [];
+}
+
+/**
+ * Whether the string at `at` in `workflow` may read the CLI archives' secret: the value of that variable in the `env`
+ * of a step that runs the CLI archives' fetch, or of that name in a job's `secrets` for the workflow it calls.
+ */
+function mayReadCliArchivesSecret(
+  workflow: Record<string, unknown>,
+  at: ReadonlyArray<string | number>,
+): boolean {
+  const [jobs, job, part, index, map, name] = at;
+  if (jobs !== 'jobs' || typeof job !== 'string') {
+    return false;
+  }
+  if (at.length === 4 && part === 'secrets') {
+    return index === CLI_ARCHIVES_SECRET;
+  }
+  if (
+    at.length !== 6 ||
+    part !== 'steps' ||
+    map !== 'env' ||
+    name !== CLI_ARCHIVES_SECRET
+  ) {
+    return false;
+  }
+  const steps = (
+    workflow.jobs as Record<string, {steps?: Array<{run?: unknown}>}>
+  )[job]?.steps;
+  const run = steps?.[Number(index)]?.run;
+  return typeof run === 'string' && run.startsWith(CLI_ARCHIVES_STEP);
+}
+
+/** What is wrong with the workflow `file` whose text is `text` in the reach of the CLI archives' secret. */
+export function cliArchivesSecretProblems(
+  file: string,
+  text: string,
+): string[] {
+  const workflow = (parseYaml(text) ?? {}) as Record<string, unknown>;
+  const problems = Object.entries(
+    (workflow.jobs ?? {}) as Record<string, {secrets?: unknown}>,
+  )
+    .filter(([, job]) => job.secrets === 'inherit')
+    .map(
+      ([name]) =>
+        `${file}: job ${name} passes every secret to the workflow it calls (secrets: inherit)`,
+    );
+  for (const [at, value] of stringsOf(workflow)) {
+    if (
+      value.includes(CLI_ARCHIVES_EXPRESSION) &&
+      !mayReadCliArchivesSecret(workflow, at)
+    ) {
+      problems.push(
+        `${file}: ${at.join('.')} reads ${CLI_ARCHIVES_EXPRESSION}, which only the env of the CLI archives' fetch step may`,
+      );
+    }
+  }
+  return problems;
 }
 
 /** The events of a workflow's `on`: a name, a list of names, or a map from name to its filters. */
@@ -123,18 +208,20 @@ export function workflowTokenProblems(file: string, text: string): string[] {
   return problems;
 }
 
-/** The problems of every workflow under `root`'s `.github/workflows`. */
+/** The problems of every workflow under `root`'s `.github/workflows`: its tokens, and the reach of the CLI archives' secret. */
 export function workflowsTokenProblems(root: string): string[] {
   const folder = path.join(root, WORKFLOWS);
   return readdirSync(folder)
     .filter(entry => /\.ya?ml$/.test(entry))
     .sort()
-    .flatMap(entry =>
-      workflowTokenProblems(
-        `${WORKFLOWS}/${entry}`,
-        readFileSync(path.join(folder, entry), 'utf8'),
-      ),
-    );
+    .flatMap(entry => {
+      const file = `${WORKFLOWS}/${entry}`;
+      const text = readFileSync(path.join(folder, entry), 'utf8');
+      return [
+        ...workflowTokenProblems(file, text),
+        ...cliArchivesSecretProblems(file, text),
+      ];
+    });
 }
 
 if (isMainModule(import.meta.url)) {

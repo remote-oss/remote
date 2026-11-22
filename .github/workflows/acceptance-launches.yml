@@ -13,6 +13,10 @@ on:
         description: Whether the pull request carries the acceptance-full label
         type: boolean
         required: true
+    secrets:
+      REMOTE_OSS_CLI_ARCHIVES_TOKEN:
+        description: The token that reads the CLI archives' repository, for a part that starts the CLI-source editor
+        required: false
 
 permissions:
   contents: read
@@ -98,6 +102,12 @@ jobs:
       # the buildx plugin when the machine's Docker has none (the harness builds with `docker build --load`)
       - run: tools/install-buildx
       - run: tools/start-display
+      # the pinned CLI archives, when one of the part's launches starts the CLI-source editor, into the run's download
+      # cache; only this step holds the token that reads the CLI archives' repository, and the run finds them cached
+      - run: node tools/fetch-cli-archives.ts --launches "$LAUNCHES"
+        env:
+          LAUNCHES: ${{ matrix.part.launches }}
+          REMOTE_OSS_CLI_ARCHIVES_TOKEN: ${{ secrets.REMOTE_OSS_CLI_ARCHIVES_TOKEN }}
       - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         env:
           LAUNCHES: ${{ matrix.part.launches }}

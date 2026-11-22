@@ -444,6 +444,9 @@ jobs:
     uses: ./.github/workflows/acceptance-launches.yml
     with:
       full: ${{ contains(github.event.pull_request.labels.*.name, 'acceptance-full') }}
+    # the one secret the called workflow takes, never inherit: only its CLI archives' step reads it
+    secrets:
+      REMOTE_OSS_CLI_ARCHIVES_TOKEN: ${{ secrets.REMOTE_OSS_CLI_ARCHIVES_TOKEN }}
 
   # The acceptance tests in the pinned VSCodium Insiders: a local window and a remote one on the
   # SSH host. The harness downloads the pinned release itself and checks its sha256, so the job needs nothing placed on
@@ -515,6 +518,12 @@ jobs:
       # the buildx plugin when the machine's Docker has none (the harness builds with `docker build --load`)
       - run: tools/install-buildx
       - run: tools/start-display
+      # the pinned CLI archives, when one of the part's launches starts the CLI-source editor, into the run's download
+      # cache; only this step holds the token that reads the CLI archives' repository, and the run finds them cached
+      - run: node tools/fetch-cli-archives.ts --launches "$LAUNCHES"
+        env:
+          LAUNCHES: ${{ matrix.part.launches }}
+          REMOTE_OSS_CLI_ARCHIVES_TOKEN: ${{ secrets.REMOTE_OSS_CLI_ARCHIVES_TOKEN }}
       # the part's launches: whole launches and some files of launches, or the launches a dispatch names
       - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         env:
