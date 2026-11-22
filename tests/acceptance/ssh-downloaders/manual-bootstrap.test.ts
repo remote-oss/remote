@@ -551,9 +551,9 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
       );
     });
   });
-  it('F-2406 AC-12 (c2948-text): a bootstrap file that is not a server archive is copied, and the dialog reason is "Failed to install the VS Code Server." with the UnpackFailed row of the table', async () => {
+  it('F-2406 AC-12 (c2948-text-part): the text case of AC-12: a bootstrap file that is not a server archive is copied, and the dialog reason is "Failed to install the VS Code Server." with the UnpackFailed row of the table', async () => {
     await withSettings({}, async () => {
-      const name = 'c2948-text';
+      const name = 'c2948-text-part';
       placeNotAnArchive();
       appendScript(dismissals(name));
       await failedOn(ALIAS, name);
