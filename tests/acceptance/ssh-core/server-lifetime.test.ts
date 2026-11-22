@@ -43,6 +43,9 @@ import {
 } from '../windows/renderer.ts';
 import {PLATFORMS} from '../windows/tunnel-support.ts';
 
+/** The start of the line that names the client install lock a connect takes, which installs nothing on the host. */
+const CLIENT_LOCK_LINE = 'Acquiring local install lock';
+
 /** The setting of the feature. */
 const GRACE = 'remote.SSH.reconnectionGraceTime';
 
@@ -542,7 +545,11 @@ describe('the grace time of the server a connect starts (card #2651, F-2413)', f
         reloaded,
         connectionLog()
           .slice(mark)
-          .filter(line => /install|download/i.test(line)),
+          .filter(
+            line =>
+              /install|download/i.test(line) &&
+              !line.includes(CLIENT_LOCK_LINE),
+          ),
       ],
       [server, []],
       `${JSON.stringify(connectionLog().slice(mark))}\nthe host's server before the reload: ${server}\n${reloaded === server ? '' : await serverFacts()}`,

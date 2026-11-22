@@ -211,6 +211,37 @@ describe('connection helper', () => {
     await ended;
   });
 
+  it('F-2102 §9: the welcome and connected carry the pids', async () => {
+    const ended = start(REQUEST);
+    const connection = await join();
+    connection.send({type: 'request', requestId: 1, body: {type: 'connect'}});
+    await settled();
+    const client = spawner.started[0];
+    if (client === undefined) {
+      throw new Error('no ssh was started');
+    }
+    client.processId = 7331;
+    authenticate(client);
+    await settled();
+    const welcome = received.find(
+      message => (message as {type?: string}).type === 'welcome',
+    );
+    const connected = received.find(
+      message =>
+        (message as {type?: string}).type === 'message' &&
+        (message as {body: {type: string}}).body.type === 'connected',
+    );
+    deepStrictEqual(
+      [
+        (welcome as {payload: Record<string, unknown>}).payload.helperProcessId,
+        (connected as {body: {sshProcessId?: number}}).body.sshProcessId,
+      ],
+      [process.pid, 7331],
+    );
+    connection.send({type: 'stop'});
+    await ended;
+  });
+
   async function lastArgumentFor(
     request: SshRequest,
     changes: Partial<ConnectionHelperOptions> = {},

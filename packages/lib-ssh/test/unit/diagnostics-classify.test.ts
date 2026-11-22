@@ -5,6 +5,7 @@ import {
   endWithFullStop,
   isDebugLine,
   logLinesOf,
+  warnsForwardingDisabled,
 } from '../../src/index.ts';
 import type {
   ClassifyPurpose,
@@ -731,6 +732,16 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
     deepStrictEqual(
       classifyRun([MITM_FORWARDING_LINE], 255, 'connection', 'shared'),
       {kind: 'unknown', hints: [], logLines: []},
+    );
+  });
+  it('F-2604.BR-6: the forwarding-disabled warning is named with or without its line break, and a prohibited open is not', () => {
+    deepStrictEqual(
+      [
+        warnsForwardingDisabled(MITM_FORWARDING_LINE),
+        warnsForwardingDisabled(`${MITM_FORWARDING_LINE}\r`),
+        warnsForwardingDisabled(PROHIBITED_LINE),
+      ],
+      [true, true, false],
     );
   });
 

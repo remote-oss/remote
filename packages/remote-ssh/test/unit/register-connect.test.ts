@@ -100,9 +100,9 @@ async function registered(
       ? {}
       : {heldHost: () => ({target: {host: 'dev'}, terminalMode: false})}),
   };
-  function killLocalServer(hostString: string): Promise<void> {
+  function killLocalServer(hostString: string): Promise<'found' | 'none'> {
     seen.killed.push(hostString);
-    return Promise.resolve();
+    return Promise.resolve('none');
   }
   function maintain(
     action: 'kill' | 'uninstall',

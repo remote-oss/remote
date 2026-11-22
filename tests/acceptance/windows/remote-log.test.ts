@@ -1,9 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   closeWindow,
+  connectedWithin,
   connectionLog,
   onHost,
   readUserSettings,
+  reloadWindow,
   restoreUserSettings,
   userSettings,
 } from './harness.ts';
@@ -31,6 +33,21 @@ function remoteSideOf(lines: readonly string[]): {
       line.includes('remote-oss-server-progress unpack'),
     ),
   };
+}
+
+/**
+ * The read log's slice of one window's connect since its mark: it must hold the window's own lines, or the absence
+ * checks on it pass vacuously. The row passes its own read of the log, not a mark to read at: a second read could
+ * hold a line that landed after the first, and the guard is about the slice (card #2954).
+ */
+function ownLogSlice(lines: readonly string[], mark: number): string[] {
+  const slice = lines.slice(mark);
+  deepStrictEqual(
+    slice.length > 0,
+    true,
+    'the slice holds no line of the connect or its reload, so the absence check would pass vacuously',
+  );
+  return slice;
 }
 
 describe('the remote install and start output in the log (card connect-67)', function () {
@@ -69,6 +86,54 @@ describe('the remote install and start output in the log (card connect-67)', fun
       );
     } finally {
       await closeWindow('rl1');
+    }
+  });
+
+  it('F-2003 AC-29 (empty-slice): the read of a connect\u2019s log fails named when the slice holds none of its lines, so the absence check cannot pass vacuously', () => {
+    const connectLines = [
+      'Progress: installing',
+      '[remote] the script started',
+    ];
+    const emptySliceThrows = (() => {
+      try {
+        ownLogSlice([], 0);
+        return false;
+      } catch (caught) {
+        return (
+          caught instanceof Error && caught.message.includes('pass vacuously')
+        );
+      }
+    })();
+    deepStrictEqual(
+      {emptySliceThrows, fullSlice: ownLogSlice(connectLines, 0)},
+      {emptySliceThrows: true, fullSlice: connectLines},
+    );
+  });
+
+  it('F-2003 AC-29 (terminal-reload): a terminal-mode connect and its reload log no local-server line, started, reused or stale (BR-16)', async () => {
+    const saved = readUserSettings();
+    await userSettings({
+      'remote.SSH.useLocalServer': false,
+      'remote.SSH.remotePlatform': {harness: 'linux'},
+    });
+    try {
+      await freshHost();
+      const mark = connectionLog().length;
+      await openConnected('rl3', INSTALL_MILLISECONDS);
+      try {
+        await reloadWindow('rl3');
+        await connectedWithin('rl3', 120_000);
+        deepStrictEqual(
+          ownLogSlice(connectionLog(), mark).filter(line =>
+            /local connection server/i.test(line),
+          ),
+          [],
+        );
+      } finally {
+        await closeWindow('rl3');
+      }
+    } finally {
+      restoreUserSettings(saved);
     }
   });
 

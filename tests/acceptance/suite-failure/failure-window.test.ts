@@ -1,4 +1,5 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
+import {homedir} from 'node:os';
 import * as vscode from 'vscode';
 import {
   launchScript,
@@ -18,6 +19,7 @@ interface FailureCase {
   /** The criteria the case's dialog text proves. */
   cite: string;
   script: ScriptEntry[];
+  /** The dialog's text; `${home}` stands for the home folder of the window's editor. */
   dialog: string;
   /** Settings merged over the run's base settings for the case's launch. */
   settings?: Record<string, unknown>;
@@ -65,7 +67,7 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
   it(`${failure?.cite ?? 'F-2601'}: the dialog names the alias, with the reason of the failure`, () => {
     strictEqual(
       record.find(line => line.surface === 'failureDialog')?.question,
-      failure?.dialog,
+      failure?.dialog.replaceAll('${home}', homedir()),
     );
   });
 

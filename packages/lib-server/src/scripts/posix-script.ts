@@ -3,6 +3,7 @@
  * roles name, and the step's body, which ends in the result block.
  */
 
+import {MANUAL_BOOTSTRAP_ARCHIVE} from 'lib-product';
 import {
   CVE_LINE,
   NO_FREE_PORT_PREFIX,
@@ -119,6 +120,28 @@ function probeBody(installTree: string): readonly string[] {
   ];
 }
 
+/**
+ * A manual bootstrap's archive goes into the install folder under the host lock, under its fixed name with its marker
+ * file, by a rename of the copy (or a copy and a rename of a file the host reads in place), and is unpacked from
+ * there only while the marker is present. A failed unpack leaves the archive and drops the marker; a good one removes
+ * both.
+ */
+const BOOTSTRAP_INTO_INSTALL_LINES: readonly string[] = [
+  'if [ "$ARCHIVE_INTO_INSTALL" = yes ] && [ -n "$ARCHIVE_PATH" ]; then',
+  `  BOOTSTRAP_ARCHIVE=$INSTALL_DIR/${MANUAL_BOOTSTRAP_ARCHIVE}`,
+  '  rm -f "$BOOTSTRAP_ARCHIVE.done"',
+  '  if [ "$ARCHIVE_REMOVE" = yes ]; then',
+  '    mv -f "$ARCHIVE_PATH" "$BOOTSTRAP_ARCHIVE" || leave UnpackFailed',
+  '  else',
+  '    cp "$ARCHIVE_PATH" "$BOOTSTRAP_ARCHIVE.part.$$" && mv -f "$BOOTSTRAP_ARCHIVE.part.$$" "$BOOTSTRAP_ARCHIVE" || leave UnpackFailed',
+  '  fi',
+  '  printf \'complete\\n\' >"$BOOTSTRAP_ARCHIVE.done" || leave UnpackFailed',
+  '  ARCHIVE_PATH=$BOOTSTRAP_ARCHIVE',
+  '  ARCHIVE_REMOVE=no',
+  '  [ -f "$BOOTSTRAP_ARCHIVE.done" ] || leave UnpackFailed',
+  'fi',
+];
+
 const INSTALL_BODY: readonly string[] = [
   'STARTED_AT=$(now_seconds)',
   '[ -n "$DATA_ROOT" ] || finish CreateInstallDirFailed',
@@ -127,11 +150,17 @@ const INSTALL_BODY: readonly string[] = [
   '  have wget || have curl || finish NoDownloaderAvailable',
   'fi',
   'MKDIR_ERROR=$(mkdir -p "$INSTALL_DIR" 2>&1) || write_failed "$INSTALL_DIR" "$MKDIR_ERROR"',
+  'leave_if_installed() {',
+  '  if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
+  '    fact server.installDir "$INSTALL_DIR"',
+  '    leave Ok',
+  '  fi',
+  '}',
+  // The lock is for writing: an installed server needs none, and an install repeats the check under the lock.
+  'leave_if_installed',
   'take_lock_or_finish "$COMMIT"',
-  'if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
-  '  fact server.installDir "$INSTALL_DIR"',
-  '  leave Ok',
-  'fi',
+  'leave_if_installed',
+  ...BOOTSTRAP_INTO_INSTALL_LINES,
   'prepare_environment',
   'if [ -n "$ARCHIVE_PATH" ]; then',
   '  ARCHIVE=$ARCHIVE_PATH',
@@ -142,6 +171,10 @@ const INSTALL_BODY: readonly string[] = [
   'fi',
   'DOWNLOADED_AT=$(now_seconds)',
   'unpack_into "$ARCHIVE" "$INSTALL_DIR" || UNPACK_FAILED=yes',
+  'if [ -n "${BOOTSTRAP_ARCHIVE:-}" ]; then',
+  '  rm -f "$BOOTSTRAP_ARCHIVE.done"',
+  '  [ -n "${UNPACK_FAILED:-}" ] || rm -f "$BOOTSTRAP_ARCHIVE"',
+  'fi',
   '[ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"',
   '[ -z "${UNPACK_FAILED:-}" ] || leave_unpack_failed',
   '[ -x "$INSTALL_DIR/$LAUNCHER" ] || leave UnpackFailed',
@@ -404,8 +437,12 @@ function startBody(start: StartParameters, installTree: string): string[] {
     '}',
     ...(installTree === '' ? [] : ['ensure_install_link']),
     '[ -x "$INSTALL_DIR/$LAUNCHER" ] || finish ServerFailedToStart',
-    'take_lock_or_finish "$COMMIT"',
     'RUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)',
+    // The lock is for launching: a live server is reused without it, and a launch repeats the check under the lock.
+    'if ! is_server_process "$RUNNING_PID" "$INSTALL_DIR"; then',
+    '  take_start_lock_or_finish',
+    '  RUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)',
+    'fi',
     'if is_server_process "$RUNNING_PID" "$INSTALL_DIR"; then',
     '  SERVER_PID=$RUNNING_PID',
     '  LAUNCHED=no',
@@ -443,7 +480,7 @@ function startBody(start: StartParameters, installTree: string): string[] {
     '  WRITE_ERROR=$( (umask 077; printf \'\' >"$LOG_FILE") 2>&1 ) || write_failed_leave "$LOG_FILE" "$WRITE_ERROR"',
     `  printf '%s\\n' ${shellQuote(LAUNCHING_LINE)}`,
     '  fact server.launching yes',
-    '  nohup "$INSTALL_DIR/$LAUNCHER" "$@" </dev/null >"$LOG_FILE" 2>&1 9>&- &',
+    '  nohup "$INSTALL_DIR/$LAUNCHER" "$@" </dev/null >"$LOG_FILE" 2>&1 8>&- 9>&- &',
     '  SERVER_PID=$!',
     '  WRITE_ERROR=$( { echo "$SERVER_PID" >"$PID_FILE"; } 2>&1 ) || { kill "$SERVER_PID" 2>/dev/null; write_failed_leave "$PID_FILE" "$WRITE_ERROR"; }',
     '  LAUNCHED=yes',
@@ -640,12 +677,8 @@ function stepBody(
   }
 }
 
-/** The POSIX script of one request: the guard, the parameters, the role functions and the step's body. */
-export function posixScript(
-  request: BootstrapRequest,
-  parameters: ScriptParameters,
-): string {
-  const body = stepBody(request, parameters);
+/** The lines every POSIX script starts with: the guard, the parameters, and the policy's umask. */
+function preambleOf(parameters: ScriptParameters): readonly string[] {
   return [
     ...GUARD,
     ...parameterValuesOf(parameters).map(
@@ -653,8 +686,42 @@ export function posixScript(
     ),
     // The install and start scripts set the policy's umask; the token and log files keep their own.
     '[ "$INSTALL_UMASK" = inherit ] || umask "$INSTALL_UMASK"',
+  ];
+}
+
+/** The POSIX script of one request: the guard, the parameters, the role functions and the step's body. */
+export function posixScript(
+  request: BootstrapRequest,
+  parameters: ScriptParameters,
+): string {
+  const body = stepBody(request, parameters);
+  return [
+    ...preambleOf(parameters),
     ...rolesOf(request, parameters).flatMap(role => POSIX_FUNCTIONS[role]),
     ...body,
+    '',
+  ].join('\n');
+}
+
+/** The line that names the lock method the host will use, as `lockPathScript` prints it. */
+export const LOCK_METHOD_LINE = 'lock-method=';
+
+/** The line that names the lock file's path, as `lockPathScript` prints it. */
+export const LOCK_PATH_LINE = 'lock-path=';
+
+/**
+ * The script that prints the method and the path of the host lock of `parameters`, from the script's own lock
+ * functions, and makes the folder the lock file is in: the session shell opens the file itself before the step runs.
+ */
+export function lockPathScript(parameters: ScriptParameters): string {
+  return [
+    ...preambleOf(parameters),
+    ...POSIX_FUNCTIONS.common,
+    ...POSIX_FUNCTIONS.lock,
+    'LOCK_CANDIDATE=$(lock_path "$COMMIT")',
+    'mkdir -p "${LOCK_CANDIDATE%/*}" 2>/dev/null || true',
+    `printf '${LOCK_METHOD_LINE}%s\\n' "$(lock_method)"`,
+    `printf '${LOCK_PATH_LINE}%s\\n' "$LOCK_CANDIDATE"`,
     '',
   ].join('\n');
 }

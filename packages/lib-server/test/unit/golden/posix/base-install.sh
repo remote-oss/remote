@@ -8,6 +8,7 @@ COMMIT='abc1230000000000000000000000000000000000'
 ARCHIVE_URL='https://example.invalid/server.tar.gz'
 ARCHIVE_PATH=''
 ARCHIVE_REMOVE='no'
+ARCHIVE_INTO_INSTALL='no'
 ARCHIVE_FORMAT='tar.gz'
 STAGING_SUFFIX='1700000000000'
 INSTALL_TREE=''
@@ -105,6 +106,24 @@ lock_link() {
   [ ! -e "$LOCK_CANDIDATE.target" ] || return 1
   return 2
 }
+lock_descriptor() {
+  LOCK_TRIES=0
+  while [ "$LOCK_TRIES" -lt 3 ]; do
+    LOCK_TRIES=$((LOCK_TRIES + 1))
+    if LOCK_ERROR=$(flock -n 9 2>&1); then
+      LOCK_ERROR=''
+      [ "$LOCK_CANDIDATE" -ef /dev/fd/9 ] && return 0
+      LOCK_SESSION=
+      [ -d "${LOCK_CANDIDATE%/*}" ] || mkdir -p "${LOCK_CANDIDATE%/*}" 2>/dev/null
+      LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2
+      exec 9>>"$LOCK_CANDIDATE"
+    else
+      [ -z "$LOCK_ERROR" ] || return 2
+      return 1
+    fi
+  done
+  return 1
+}
 lock_take() {
   LOCK_CANDIDATE=$(lock_path "$1")
   LOCK_ERROR=''
@@ -115,14 +134,16 @@ lock_take() {
     fi
   fi
   if [ "$(lock_method)" = flock ]; then
-    LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2
-    exec 9>>"$LOCK_CANDIDATE"
-    if LOCK_ERROR=$(flock -n 9 2>&1); then
-      LOCK_ERROR=''
+    LOCK_SESSION=
+    if ( : >&9 ) 2>/dev/null && [ "$LOCK_CANDIDATE" -ef /dev/fd/9 ]; then
+      LOCK_SESSION=yes
     else
-      [ -z "$LOCK_ERROR" ] || return 2
-      return 1
+      [ -d "${LOCK_CANDIDATE%/*}" ] || mkdir -p "${LOCK_CANDIDATE%/*}" 2>/dev/null
+      LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2
+      exec 9>>"$LOCK_CANDIDATE"
     fi
+    lock_descriptor || return $?
+    [ -z "$LOCK_SESSION" ] || fact server.lockHeld yes
   else
     for LOCK_ATTEMPT in 1 2; do
       LOCK_ERROR=$( { true >>"$LOCK_CANDIDATE"; } 2>&1 ) || return 2
@@ -156,6 +177,28 @@ take_lock_or_finish() {
       write_failed "$LOCK_CANDIDATE" "$LOCK_ERROR"
       ;;
   esac
+}
+write_failed_start() {
+  fact server.lockPath "$START_LOCK"
+  fact server.lockInTemporary "$LOCK_IN_TEMPORARY"
+  write_failed "$START_LOCK" "$LOCK_ERROR"
+}
+take_start_lock_or_finish() {
+  if [ "$(lock_method)" != flock ]; then
+    take_lock_or_finish "$COMMIT"
+    return
+  fi
+  START_LOCK=$DATA_DIR/.$COMMIT.start.lock
+  LOCK_ERROR=$( ( exec 8>>"$START_LOCK" ) 2>&1 ) || write_failed_start
+  exec 8>>"$START_LOCK"
+  if LOCK_ERROR=$(flock -n 8 2>&1); then
+    LOCK_ERROR=''
+  elif [ -z "$LOCK_ERROR" ]; then
+    fact server.lockPath "$START_LOCK"
+    finish LockBusy
+  else
+    write_failed_start
+  fi
 }
 lock_release() {
   [ -n "${LOCK_HELD:-}" ] || return 0
@@ -302,10 +345,27 @@ if [ ! -x "$INSTALL_DIR/$LAUNCHER" ] && [ -z "$ARCHIVE_PATH" ]; then
   have wget || have curl || finish NoDownloaderAvailable
 fi
 MKDIR_ERROR=$(mkdir -p "$INSTALL_DIR" 2>&1) || write_failed "$INSTALL_DIR" "$MKDIR_ERROR"
+leave_if_installed() {
+  if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then
+    fact server.installDir "$INSTALL_DIR"
+    leave Ok
+  fi
+}
+leave_if_installed
 take_lock_or_finish "$COMMIT"
-if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then
-  fact server.installDir "$INSTALL_DIR"
-  leave Ok
+leave_if_installed
+if [ "$ARCHIVE_INTO_INSTALL" = yes ] && [ -n "$ARCHIVE_PATH" ]; then
+  BOOTSTRAP_ARCHIVE=$INSTALL_DIR/vscode-server.tar.gz
+  rm -f "$BOOTSTRAP_ARCHIVE.done"
+  if [ "$ARCHIVE_REMOVE" = yes ]; then
+    mv -f "$ARCHIVE_PATH" "$BOOTSTRAP_ARCHIVE" || leave UnpackFailed
+  else
+    cp "$ARCHIVE_PATH" "$BOOTSTRAP_ARCHIVE.part.$$" && mv -f "$BOOTSTRAP_ARCHIVE.part.$$" "$BOOTSTRAP_ARCHIVE" || leave UnpackFailed
+  fi
+  printf 'complete\n' >"$BOOTSTRAP_ARCHIVE.done" || leave UnpackFailed
+  ARCHIVE_PATH=$BOOTSTRAP_ARCHIVE
+  ARCHIVE_REMOVE=no
+  [ -f "$BOOTSTRAP_ARCHIVE.done" ] || leave UnpackFailed
 fi
 prepare_environment
 if [ -n "$ARCHIVE_PATH" ]; then
@@ -317,6 +377,10 @@ else
 fi
 DOWNLOADED_AT=$(now_seconds)
 unpack_into "$ARCHIVE" "$INSTALL_DIR" || UNPACK_FAILED=yes
+if [ -n "${BOOTSTRAP_ARCHIVE:-}" ]; then
+  rm -f "$BOOTSTRAP_ARCHIVE.done"
+  [ -n "${UNPACK_FAILED:-}" ] || rm -f "$BOOTSTRAP_ARCHIVE"
+fi
 [ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"
 [ -z "${UNPACK_FAILED:-}" ] || leave_unpack_failed
 [ -x "$INSTALL_DIR/$LAUNCHER" ] || leave UnpackFailed

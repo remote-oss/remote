@@ -85,6 +85,11 @@ interface AcquireRequestFields<Refusal> {
    * helper's start values and payload. A window that joins a running helper never calls it.
    */
   prepare: () => Promise<PreparedStart<Refusal>>;
+  /**
+   * Called once when the acquire replaces a stale record: after the replacement is claimed, before the new helper
+   * starts. A join and a fresh claim call nothing.
+   */
+  onStaleReplaced?: () => void;
   cancellation: AbortSignal;
 }
 
@@ -381,6 +386,7 @@ export async function acquire<Refusal = never>(
     staleText,
   );
   if (replaced.outcome === 'claimed') {
+    request.onStaleReplaced?.();
     return start(environment, request, folder, record, prepared);
   }
   const lease =
@@ -416,23 +422,24 @@ function closesAfterStop(
  * Tells the helper that holds the key to end and waits for it to close, which means it has removed its own record.
  * A helper that does not answer or does not close within the limit is gone or hung: its record is removed then, if it
  * still carries the nonce read here. Done also when no helper runs, and at once for an instance's folder that can't
- * be found, where no helper can have been registered.
+ * be found, where no helper can have been registered. Reports the record it looked up: `found` when one was there,
+ * `none` when there was none.
  */
 export async function stop(
   environment: ClientEnvironment,
   folder: RegistryFolder,
   namespace: string,
   helperKey: string,
-): Promise<void> {
+): Promise<'found' | 'none'> {
   const resolved = folderPath(folder);
   if (resolved === undefined) {
-    return;
+    return 'none';
   }
   const recordFile = recordPath(resolved, namespace, helperKey);
   const text = await environment.files.read(recordFile);
   const record = text === undefined ? undefined : parseRecord(text);
   if (record === undefined) {
-    return;
+    return 'none';
   }
   const connection = await environment.endpoints
     .connect(record.endpoint)
@@ -445,4 +452,5 @@ export async function stop(
       () => undefined,
     );
   }
+  return 'found';
 }

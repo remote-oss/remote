@@ -26,8 +26,12 @@ const HELLO_LIMIT_MILLISECONDS = 2000;
 
 /** What stopping the recorded helpers needs of the world; the program passes the real one. */
 export interface HelperStopWorld {
-  /** Ends the helper that holds the key, as lib-helper's `stop` does. */
-  stop(folder: string, namespace: string, recordKey: string): Promise<void>;
+  /** Ends the helper that holds the key, as lib-helper's `stop` does, reporting its record. */
+  stop(
+    folder: string,
+    namespace: string,
+    recordKey: string,
+  ): Promise<'found' | 'none'>;
   /** Whether a helper at the record's endpoint welcomes a hello with the record's nonce. */
   answers(record: FoundRecord): Promise<boolean>;
   /** The ids of the processes whose environment holds `text`. */

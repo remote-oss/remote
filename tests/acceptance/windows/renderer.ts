@@ -8,9 +8,23 @@
  */
 
 import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
-import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {inWindow, isOpen, variable, windowState} from './harness.ts';
+import {
+  dispatchAt,
+  evaluateAt,
+  LONG_READ_MILLISECONDS,
+  unavailableWhenNoAnswer,
+} from './page-protocol.ts';
+import {
+  type DebugTarget,
+  listedTargets,
+  localPageAmong,
+  pageAmong,
+  pagesDescription,
+  portIn,
+  REMEMBERED_PAGES,
+} from './page-list.ts';
 
 /** How long a wait for the renderer lasts, in milliseconds. */
 const WAIT_MILLISECONDS = 60_000;
@@ -23,28 +37,6 @@ export interface ViewRow {
   description: string;
   level: number;
   expanded: boolean | undefined;
-}
-
-/** A target of the debugging port's list. */
-interface DebugTarget {
-  /** The target's id, which a window's page keeps for as long as the window lives, a reload in place included. */
-  id: string;
-  type: string;
-  title: string;
-  webSocketDebuggerUrl?: string;
-}
-
-/** The answer of the protocol's `Runtime.evaluate`. */
-interface EvaluateAnswer {
-  id: number;
-  result?: {
-    result?: {value?: unknown};
-    exceptionDetails?: {
-      text: string;
-      exception?: {description?: string};
-    };
-  };
-  error?: {message: string};
 }
 
 /** A dialog of core's, as the window shows it: its message, its detail and its buttons' labels in order. */
@@ -99,12 +91,7 @@ async function debuggingPort(): Promise<number> {
   const file = path.join(variable('HARNESS_USER_DATA'), 'DevToolsActivePort');
   return settled(
     () => `the editor's debugging port in ${file}`,
-    () => {
-      const port = existsSync(file)
-        ? Number.parseInt(readFileSync(file, 'utf8').split('\n')[0] ?? '', 10)
-        : Number.NaN;
-      return Promise.resolve(Number.isInteger(port) ? port : undefined);
-    },
+    () => Promise.resolve(portIn(file)),
   );
 }
 
@@ -205,40 +192,9 @@ export function pagesForState(
     : fitting;
 }
 
-/**
- * The page of window `name` among `candidates`, the pages whose titles fit its state. A page the window remembered is
- * the one when it is there. Otherwise the one candidate; or, of several, the one that no other open window
- * remembered: two folder-less windows have the same title, but each keeps its own page's id. Nothing when it stays
- * ambiguous.
- */
-export function pageAmong(
-  candidates: readonly DebugTarget[],
-  name: string,
-  remembered: ReadonlyMap<string, string>,
-  open: (window: string) => boolean,
-): DebugTarget | undefined {
-  const own = candidates.find(page => page.id === remembered.get(name));
-  if (own !== undefined || candidates.length === 1) {
-    return own ?? candidates[0];
-  }
-  const taken = new Set(
-    [...remembered]
-      .filter(([other]) => other !== name && open(other))
-      .map(([, pageId]) => pageId),
-  );
-  const left = candidates.filter(page => !taken.has(page.id));
-  return left.length === 1 ? left[0] : undefined;
-}
-
-/** The id of the page each window's name was last found by, while the window lives. */
-const REMEMBERED_PAGES = new Map<string, string>();
-
 /** The pages of the renderer, from the debugging port's list. */
 async function pages(): Promise<DebugTarget[]> {
-  const answer = await fetch(
-    `http://127.0.0.1:${String(await debuggingPort())}/json/list`,
-  );
-  const targets = (await answer.json()) as DebugTarget[];
+  const targets = await listedTargets(await debuggingPort());
   return targets.filter(target => target.type === 'page');
 }
 
@@ -348,15 +304,18 @@ export async function pageOf(
   milliseconds = WAIT_MILLISECONDS,
 ): Promise<string> {
   let titles: string[] = [];
+  let described = '';
   const started = Date.now();
   return settled(
-    () => `one page of window ${name} among ${JSON.stringify(titles)}`,
+    () =>
+      `one page of window ${name} among ${JSON.stringify(titles)}; the pages and who remembers each: ${described}`,
     async () => {
       const found = (await pages()).map(page => ({
         ...page,
         title: withoutAdministratorMark(page.title),
       }));
       titles = found.map(page => page.title);
+      described = pagesDescription(found, REMEMBERED_PAGES, isOpen);
       const named = pageTitleByName(name, titles);
       if (named !== undefined) {
         const page = found.find(each => each.title === named);
@@ -376,6 +335,16 @@ export async function pageOf(
         titlesOfName(name, titles).length < 2
       ) {
         return remembered.webSocketDebuggerUrl;
+      }
+      // The local window is the one titled `[]`, so with several such pages it is chosen from them as its state would, without
+      // asking its agent: the agent may be running the command whose pick the caller waits for, and takes nothing else.
+      const local =
+        name === 'local'
+          ? localPageAmong(found, REMEMBERED_PAGES, isOpen)
+          : undefined;
+      if (local !== undefined) {
+        REMEMBERED_PAGES.set(name, local.id);
+        return local.webSocketDebuggerUrl;
       }
       const state = await stateForPage(
         name,
@@ -419,47 +388,6 @@ export async function rememberPage(name: string): Promise<void> {
   await pageOf(name);
 }
 
-/** Evaluates `expression` in the page at protocol address `address` and returns its value; `owner` names the page in a failure. */
-async function evaluateAt<Value>(
-  address: string,
-  owner: string,
-  expression: string,
-): Promise<Value> {
-  const socket = new WebSocket(address);
-  try {
-    await new Promise<void>((resolve, reject) => {
-      socket.addEventListener('open', () => {
-        resolve();
-      });
-      socket.addEventListener('error', () => {
-        reject(new Error(`no protocol connection to ${owner}`));
-      });
-    });
-    const answer = await new Promise<EvaluateAnswer>(resolve => {
-      socket.addEventListener('message', event => {
-        resolve(JSON.parse(String(event.data)) as EvaluateAnswer);
-      });
-      socket.send(
-        JSON.stringify({
-          id: 1,
-          method: 'Runtime.evaluate',
-          params: {expression, returnByValue: true, awaitPromise: true},
-        }),
-      );
-    });
-    const failure =
-      answer.error?.message ??
-      answer.result?.exceptionDetails?.exception?.description ??
-      answer.result?.exceptionDetails?.text;
-    if (failure !== undefined) {
-      throw new Error(`${owner}: ${failure}`);
-    }
-    return answer.result?.result?.value as Value;
-  } finally {
-    socket.close();
-  }
-}
-
 /**
  * Evaluates `expression` in window `name`'s page and returns its value; a thrown error fails with its text. A read that
  * a reload of the window meets (Retry at a connection dialog reloads it) ends with the protocol's "Inspected target
@@ -468,6 +396,8 @@ async function evaluateAt<Value>(
 async function evaluate<Value>(
   name: string,
   expression: string,
+  milliseconds?: number,
+  diagnosticsExpression?: string,
 ): Promise<Value> {
   const deadline = Date.now() + WAIT_MILLISECONDS;
   for (;;) {
@@ -476,6 +406,8 @@ async function evaluate<Value>(
         await pageOf(name),
         `window ${name}`,
         expression,
+        milliseconds,
+        diagnosticsExpression,
       );
     } catch (caught) {
       if (
@@ -503,26 +435,16 @@ const PAGE_FACTS_MILLISECONDS = 10_000;
 export async function terminalPageFacts(
   name: string,
 ): Promise<TerminalPageFacts | 'unavailable'> {
-  let timer: NodeJS.Timeout | undefined;
-  const expired = new Promise<'unavailable'>(resolve => {
-    timer = setTimeout(() => {
-      resolve('unavailable');
-    }, PAGE_FACTS_MILLISECONDS);
-  });
-  try {
-    return await Promise.race([
-      evaluate<TerminalPageFacts>(
-        name,
-        `({
-          rows: document.querySelectorAll('.xterm-rows').length,
-          tabs: [...document.querySelectorAll('.terminal-tabs-entry')].map(each => (each.textContent ?? '').trim()),
-        })`,
-      ),
-      expired,
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
+  return unavailableWhenNoAnswer(
+    evaluate<TerminalPageFacts>(
+      name,
+      `({
+        rows: document.querySelectorAll('.xterm-rows').length,
+        tabs: [...document.querySelectorAll('.terminal-tabs-entry')].map(each => (each.textContent ?? '').trim()),
+      })`,
+      PAGE_FACTS_MILLISECONDS,
+    ),
+  );
 }
 
 /** The page-side lookup of a view's pane by its header title; `undefined` when no pane has it. */
@@ -669,6 +591,23 @@ export async function viewRows(
         }
       };
       const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      // The trace of this walk, for a read that no one answers: the page's visibility at the start and at each
+      // change, and each move's wall time against the 600 ms it set. It stands on the page, so a read that dies on
+      // its bound can still ask the page for it (the protocol's diagnostics read); a finished walk clears it.
+      const walkStart = Date.now();
+      const walkTrace = ['visibilityState ' + document.visibilityState];
+      let walkVisibility = document.visibilityState;
+      let walkStep = 0;
+      const markWalk = part => {
+        if (document.visibilityState !== walkVisibility) {
+          walkTrace.push(
+            'visibilityState ' + walkVisibility + ' -> ' + document.visibilityState,
+          );
+          walkVisibility = document.visibilityState;
+        }
+        walkTrace.push(part);
+      };
+      window.remoteOssViewRowsTrace = walkTrace.join(' ');
       // The first and the last rendered rows: a list that overflows by less than a row moves its last row in while the
       // first stays, so the first alone does not tell that the list moved.
       const first = () => {
@@ -687,7 +626,19 @@ export async function viewRows(
             deltaMode: 0,
           })
         );
+        const waitStartedAt = Date.now();
         await wait(600);
+        walkStep += 1;
+        markWalk(
+          'move ' +
+            walkStep +
+            ' +' +
+            (waitStartedAt - walkStart) +
+            'ms took ' +
+            (Date.now() - waitStartedAt) +
+            'ms',
+        );
+        window.remoteOssViewRowsTrace = walkTrace.join(' ');
         return first() !== before;
       };
       const topFirst = first();
@@ -717,8 +668,11 @@ export async function viewRows(
       }
       await wait(200);
       collect();
+      window.remoteOssViewRowsTrace = undefined;
       return order.map(key => seen.get(key));
     })()`,
+    LONG_READ_MILLISECONDS,
+    'String(window.remoteOssViewRowsTrace ?? null)',
   );
   // The protocol returns values as JSON, where `expanded: undefined` would drop: read it back as it is.
   return (
@@ -854,7 +808,7 @@ async function moveMouseTo(
   name: string,
   point: {x: number; y: number},
 ): Promise<void> {
-  await dispatchInput(await pageOf(name), name, [
+  await dispatchAt(await pageOf(name), name, [
     {
       method: 'Input.dispatchMouseEvent',
       params: {type: 'mouseMoved', ...point},
@@ -925,7 +879,7 @@ export async function clickRowLabel(
       return found ?? undefined;
     },
   );
-  await dispatchInput(
+  await dispatchAt(
     await pageOf(name),
     name,
     ['mousePressed', 'mouseReleased'].map(type => ({
@@ -971,7 +925,7 @@ export async function actionTooltip(
       return found ?? undefined;
     },
   );
-  await dispatchInput(await pageOf(name), name, [
+  await dispatchAt(await pageOf(name), name, [
     {
       method: 'Input.dispatchMouseEvent',
       params: {type: 'mouseMoved', ...point},
@@ -1358,7 +1312,7 @@ export async function chatInputRows(
   if (point === null) {
     return [];
   }
-  await dispatchInput(
+  await dispatchAt(
     address,
     name,
     ['mousePressed', 'mouseReleased'].map(type => ({
@@ -1589,10 +1543,7 @@ export interface RenderedReadme {
  */
 export async function extensionReadmeOf(name: string): Promise<RenderedReadme> {
   const address = await pageOf(name);
-  const answer = await fetch(
-    `http://127.0.0.1:${String(await debuggingPort())}/json/list`,
-  );
-  const targets = (await answer.json()) as DebugTarget[];
+  const targets = await listedTargets(await debuggingPort());
   for (const target of targets.flatMap(each =>
     each.type === 'iframe' && each.webSocketDebuggerUrl !== undefined
       ? [each.webSocketDebuggerUrl]
@@ -1631,10 +1582,7 @@ export async function issueReporterExtensions(): Promise<string[]> {
   const address = await settled(
     () => 'the Issue Reporter window',
     async () => {
-      const answer = await fetch(
-        `http://127.0.0.1:${String(await debuggingPort())}/json/list`,
-      );
-      return ((await answer.json()) as DebugTarget[]).find(
+      return (await listedTargets(await debuggingPort())).find(
         target => target.type === 'page' && target.title === 'Issue Reporter',
       )?.webSocketDebuggerUrl;
     },
@@ -1793,6 +1741,7 @@ export async function portsRows(name: string): Promise<PortsRow[]> {
       }
       return order.map(key => seen.get(key));
     })()`,
+    LONG_READ_MILLISECONDS,
   );
   if (typeof rows === 'string') {
     throw new Error(`window ${name}: ${rows}`);
@@ -3414,6 +3363,7 @@ export async function allQuickPickRows(
       reads.push(read());
       return reads;
     })()}`,
+    LONG_READ_MILLISECONDS,
   );
   return reads === null ? [] : combineQuickPickReads(reads);
 }
@@ -4005,50 +3955,13 @@ interface KeyStroke {
   modifiers?: number;
 }
 
-/** One protocol input command. */
-interface InputEvent {
-  method: 'Input.dispatchKeyEvent' | 'Input.dispatchMouseEvent';
-  params: Record<string, unknown>;
-}
-
-/** Sends the input commands `events` one after the other to the page at protocol address `address`, each awaiting its answer. */
-async function dispatchInput(
-  address: string,
-  owner: string,
-  events: readonly InputEvent[],
-): Promise<void> {
-  const socket = new WebSocket(address);
-  try {
-    await new Promise<void>((resolve, reject) => {
-      socket.addEventListener('open', () => {
-        resolve();
-      });
-      socket.addEventListener('error', () => {
-        reject(new Error(`no protocol connection to window ${owner}`));
-      });
-    });
-    for (const [index, event] of events.entries()) {
-      const answered = new Promise<void>(resolve => {
-        socket.addEventListener('message', function listener() {
-          socket.removeEventListener('message', listener);
-          resolve();
-        });
-      });
-      socket.send(JSON.stringify({id: index + 1, ...event}));
-      await answered;
-    }
-  } finally {
-    socket.close();
-  }
-}
-
 /** Sends `stroke` to the page at protocol address `address`, with its key down and up. */
 async function pressStroke(
   address: string,
   owner: string,
   stroke: KeyStroke,
 ): Promise<void> {
-  await dispatchInput(
+  await dispatchAt(
     address,
     owner,
     ['keyDown', 'keyUp'].map(type => ({
@@ -4085,7 +3998,7 @@ export async function clickQuickPickRow(
       `window ${name}: no quick pick row ${JSON.stringify(label)}`,
     );
   }
-  await dispatchInput(
+  await dispatchAt(
     await pageOf(name),
     name,
     ['mousePressed', 'mouseReleased'].map(type => ({

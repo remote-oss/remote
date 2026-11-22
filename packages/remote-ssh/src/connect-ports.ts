@@ -4,6 +4,7 @@
  * Node; the extension passes the real surfaces and the machine, and a test passes fakes.
  */
 
+import path from 'node:path';
 import {STEP_RULE} from './diagnostics/session-summary.ts';
 import type {Troubleshooting} from './diagnostics/troubleshooting.ts';
 import type {TunnelOpener} from './forwarding/default-forwards.ts';
@@ -30,6 +31,7 @@ import type {Scheduler} from 'lib-helper';
 import type {SettingHost} from 'lib-identifiers';
 import type {Logger} from 'lib-log';
 import {
+  MANUAL_BOOTSTRAP_ARCHIVE,
   OVERRIDE_POLICIES,
   type OverridePolicy,
   type ProductProfile,
@@ -43,6 +45,7 @@ import {
   type DownloadPort,
   hostLockLoopOf,
   type LicenceModal,
+  type LockFilePort,
   type AcceptanceStore,
 } from 'lib-server';
 import {
@@ -69,8 +72,10 @@ import {
 import {announcePlatform} from './connect/platform-notice.ts';
 import type {PlatformPickVariant} from './connect/platform-picker.ts';
 import type {RemotePlatform} from './pipeline/platform.ts';
+import type {HeldClientLocks} from './pipeline/client-lock-step.ts';
 import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
+import {ownText} from './surfaces/own-strings.ts';
 import type {HintRecorder} from './diagnostics/hint-recorder.ts';
 import {downloadRefusalHint} from './diagnostics/download-refusal.ts';
 import {commandMissingHint} from './diagnostics/command-missing-hint.ts';
@@ -78,6 +83,7 @@ import {installFolderHint} from './diagnostics/install-folder-hint.ts';
 import {prerequisitesHint} from './diagnostics/prerequisites-hint.ts';
 import {installPathHint} from './diagnostics/install-path-hint.ts';
 import {localDownloadHint} from './diagnostics/local-download-hint.ts';
+import {localBootstrapHint} from './diagnostics/local-bootstrap-hint.ts';
 import {invalidProxyHint} from './diagnostics/invalid-proxy.ts';
 import {
   openingAttached,
@@ -218,6 +224,10 @@ export interface ConnectMachine {
   credentials: CredentialsPort;
   scheduler: Scheduler;
   clock: Clock;
+  /** The client install lock's files. */
+  lockFiles: LockFilePort;
+  /** The client install locks this extension holds, which its end removes. */
+  clientLocks: HeldClientLocks;
   local: LocalPort;
   prober: PortProber;
   /** A new token, different in every window and in every call. */
@@ -230,8 +240,8 @@ export interface ConnectMachine {
 export interface ConnectAssembly {
   connector: SshConnector;
   options: ResolverOptions;
-  /** Ends the local connection server of a host string; silent, also when none runs. */
-  killLocalServer(hostString: string): Promise<void>;
+  /** Ends the local connection server of a host string, reporting the record it looked up; also when none runs. */
+  killLocalServer(hostString: string): Promise<'found' | 'none'>;
   /** Runs the kill or the uninstall on a host in a connection of its own, outside any window. */
   maintain(
     action: 'kill' | 'uninstall',
@@ -361,6 +371,12 @@ export function wiringPortsOf(
       x11Forwarding: () => x11ForwardingOf(settings),
       defaultForwards: () => defaultForwardsOf(settings),
     },
+    warnManualBootstrap: () => {
+      void surfaces.notice.showWarning(
+        ownText({id: 'S088', values: []}, surfaces.translate),
+        [],
+      );
+    },
     tunnels: surfaces.tunnels,
     defaultRead: () =>
       waitForDefaultRead(surfaces.defaultReadEvents, machine.scheduler),
@@ -483,6 +499,21 @@ export function wiringPortsOf(
       onLocalDownloadFailed: value => {
         surfaces.hints.record(localDownloadHint(value, surfaces.translate));
       },
+      bootstrapArchive: path.join(
+        machine.homeFolder,
+        BOOTSTRAP_FOLDER,
+        MANUAL_BOOTSTRAP_ARCHIVE,
+      ),
+      onLocalBootstrapFailed: failure => {
+        surfaces.hints.record(
+          localBootstrapHint(
+            failure.cause === 'missing'
+              ? textOfId('S069', surfaces.translate, [failure.path])
+              : failure.detail,
+            surfaces.translate,
+          ),
+        );
+      },
       lockLoop: hostLockLoopOf(
         machine.clock,
         HOST_LOCK_ATTEMPTS,
@@ -499,6 +530,12 @@ export function wiringPortsOf(
         surfaces.hints.record(invalidProxyHint(problem, surfaces.translate));
       },
       logger,
+    },
+    clientLock: {
+      port: machine.lockFiles,
+      folder: machine.folders.clientTemporary,
+      clock: machine.clock,
+      held: machine.clientLocks,
     },
     cliPath: {
       local: machine.local,
@@ -542,6 +579,9 @@ export function wiringPortsOf(
     logger,
   };
 }
+
+/** The folder in the client's home where a manual bootstrap reads the user's server archive. */
+const BOOTSTRAP_FOLDER = 'vscode-remote-ssh-bootstrap';
 
 /** The name of the terminal a Kill or an Uninstall logs in with. */
 const MAINTENANCE_TERMINAL = 'Uninstall VS Code Server';
