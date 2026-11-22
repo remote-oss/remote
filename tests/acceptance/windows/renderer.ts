@@ -11,12 +11,14 @@ import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
 import path from 'node:path';
 import {inWindow, isOpen, variable, windowState} from './harness.ts';
 import {
+  dispatchAt,
   evaluateAt,
   LONG_READ_MILLISECONDS,
   unavailableWhenNoAnswer,
 } from './page-protocol.ts';
 import {
   type DebugTarget,
+  listedTargets,
   localPageAmong,
   pageAmong,
   pagesDescription,
@@ -192,10 +194,7 @@ export function pagesForState(
 
 /** The pages of the renderer, from the debugging port's list. */
 async function pages(): Promise<DebugTarget[]> {
-  const answer = await fetch(
-    `http://127.0.0.1:${String(await debuggingPort())}/json/list`,
-  );
-  const targets = (await answer.json()) as DebugTarget[];
+  const targets = await listedTargets(await debuggingPort());
   return targets.filter(target => target.type === 'page');
 }
 
@@ -809,7 +808,7 @@ async function moveMouseTo(
   name: string,
   point: {x: number; y: number},
 ): Promise<void> {
-  await dispatchInput(await pageOf(name), name, [
+  await dispatchAt(await pageOf(name), name, [
     {
       method: 'Input.dispatchMouseEvent',
       params: {type: 'mouseMoved', ...point},
@@ -880,7 +879,7 @@ export async function clickRowLabel(
       return found ?? undefined;
     },
   );
-  await dispatchInput(
+  await dispatchAt(
     await pageOf(name),
     name,
     ['mousePressed', 'mouseReleased'].map(type => ({
@@ -926,7 +925,7 @@ export async function actionTooltip(
       return found ?? undefined;
     },
   );
-  await dispatchInput(await pageOf(name), name, [
+  await dispatchAt(await pageOf(name), name, [
     {
       method: 'Input.dispatchMouseEvent',
       params: {type: 'mouseMoved', ...point},
@@ -1313,7 +1312,7 @@ export async function chatInputRows(
   if (point === null) {
     return [];
   }
-  await dispatchInput(
+  await dispatchAt(
     address,
     name,
     ['mousePressed', 'mouseReleased'].map(type => ({
@@ -1544,10 +1543,7 @@ export interface RenderedReadme {
  */
 export async function extensionReadmeOf(name: string): Promise<RenderedReadme> {
   const address = await pageOf(name);
-  const answer = await fetch(
-    `http://127.0.0.1:${String(await debuggingPort())}/json/list`,
-  );
-  const targets = (await answer.json()) as DebugTarget[];
+  const targets = await listedTargets(await debuggingPort());
   for (const target of targets.flatMap(each =>
     each.type === 'iframe' && each.webSocketDebuggerUrl !== undefined
       ? [each.webSocketDebuggerUrl]
@@ -1586,10 +1582,7 @@ export async function issueReporterExtensions(): Promise<string[]> {
   const address = await settled(
     () => 'the Issue Reporter window',
     async () => {
-      const answer = await fetch(
-        `http://127.0.0.1:${String(await debuggingPort())}/json/list`,
-      );
-      return ((await answer.json()) as DebugTarget[]).find(
+      return (await listedTargets(await debuggingPort())).find(
         target => target.type === 'page' && target.title === 'Issue Reporter',
       )?.webSocketDebuggerUrl;
     },
@@ -3962,50 +3955,13 @@ interface KeyStroke {
   modifiers?: number;
 }
 
-/** One protocol input command. */
-interface InputEvent {
-  method: 'Input.dispatchKeyEvent' | 'Input.dispatchMouseEvent';
-  params: Record<string, unknown>;
-}
-
-/** Sends the input commands `events` one after the other to the page at protocol address `address`, each awaiting its answer. */
-async function dispatchInput(
-  address: string,
-  owner: string,
-  events: readonly InputEvent[],
-): Promise<void> {
-  const socket = new WebSocket(address);
-  try {
-    await new Promise<void>((resolve, reject) => {
-      socket.addEventListener('open', () => {
-        resolve();
-      });
-      socket.addEventListener('error', () => {
-        reject(new Error(`no protocol connection to window ${owner}`));
-      });
-    });
-    for (const [index, event] of events.entries()) {
-      const answered = new Promise<void>(resolve => {
-        socket.addEventListener('message', function listener() {
-          socket.removeEventListener('message', listener);
-          resolve();
-        });
-      });
-      socket.send(JSON.stringify({id: index + 1, ...event}));
-      await answered;
-    }
-  } finally {
-    socket.close();
-  }
-}
-
 /** Sends `stroke` to the page at protocol address `address`, with its key down and up. */
 async function pressStroke(
   address: string,
   owner: string,
   stroke: KeyStroke,
 ): Promise<void> {
-  await dispatchInput(
+  await dispatchAt(
     address,
     owner,
     ['keyDown', 'keyUp'].map(type => ({
@@ -4042,7 +3998,7 @@ export async function clickQuickPickRow(
       `window ${name}: no quick pick row ${JSON.stringify(label)}`,
     );
   }
-  await dispatchInput(
+  await dispatchAt(
     await pageOf(name),
     name,
     ['mousePressed', 'mouseReleased'].map(type => ({
