@@ -34,8 +34,8 @@ reference extension's file, and none of it is Microsoft's hosted service.
 3. **Not admitted:**
    - the reference extensions' files, which the wall still keeps out;
    - the hosted service's implementation, which nobody outside can see;
-   - any recording of Microsoft's hosted service, until the user decides whether the lab may observe it
-     (remote-oss/remote-server#21, question 2).
+   - any recording or observation of Microsoft's hosted service: the user ruled it out (D-107, question 2 of
+     remote-oss/remote-server#21).
 4. **Where the code and the documentation are silent**, our service sets its own rule. The specs record it as ours
    through a spec question (R-113).
 5. **This supersedes ADR-0005's decision 2** (Remote - Tunnels not built) under D-107.
@@ -45,15 +45,15 @@ reference extension's file, and none of it is Microsoft's hosted service.
 | Option | For | Against |
 |---|---|---|
 | A (chosen): the MIT dev tunnels code and documentation as the protocol source | The protocol exactly as the clients and the host speak it, with nothing guessed | It admits a new source, so the wall's list grows by one MIT repository |
-| B: specify the protocol by observing Microsoft's service | No new source | It waits on the user's question 2, and observation can't show the service's own rules |
+| B: specify the protocol by observing Microsoft's service | No new source | The user ruled observation out (D-107), and it couldn't show the service's own rules anyway |
 | C: a protocol of our own (D-101's reading (b)) | No protocol source is needed | The user chose wire-compatible (D-107), and the editor's tunnel host and the SDKs would not work against it |
 
 ## Consequences
 
 - **Citations:** the designs of the relay, the host side and `lib-tunnels` cite `[dev-tunnels]` for every protocol
   and data shape.
-- **What the dirty side specifies:** its revision for our service covers only what that code and the documentation
-  leave open, scoped by question 2.
+- **What the dirty side specifies:** its revision for our service (remote-oss/remote-server#22) marks which clauses
+  that code and the documentation settle. Where they're silent, the rule is ours, with no observation of Microsoft's service.
 - **The `code tunnel` measurement** (can its service address be set?) reads `[dev-tunnels]` `rs/` at the pinned
   commit.
 - **Licence:** a dependency, or any copied part, carries the MIT notice in the package's third-party notices.
@@ -63,5 +63,5 @@ reference extension's file, and none of it is Microsoft's hosted service.
 - `AGENTS.md`'s list of what may be read names `[dev-tunnels]`.
 - Every protocol citation in a design or a card is `[dev-tunnels] <path>@<commit>` or the public documentation, and
   none is a reference extension's file.
-- No recording of Microsoft's hosted service exists before question 2 is answered yes.
+- No recording or observation of Microsoft's hosted service exists (D-107).
 - No extension's SSH connection goes through the SDK's JavaScript SSH implementation (ADR-0004).
