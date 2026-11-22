@@ -1,0 +1,93 @@
+[
+ {
+  "id": "F-8101",
+  "issue": 10,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Connect to Tunnel: command, entry points and the tunnel picker",
+  "epic": "E81",
+  "acCount": 26,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.connectCurrentWindowToTunnel",
+    "remote-tunnels.connectNewWindowToTunnel",
+    "workbench.remoteTunnel.actions.turnOn (core, optional)"
+   ],
+   "settings": [
+    "remote.tunnels.tunnelCredentialCommand",
+    "remote.tunnels.alwaysUpdateCLI",
+    "remote.tunnels.defaultExtensions"
+   ],
+   "views": [],
+   "menus": [
+    "statusBar/remoteIndicator group remote_10_tunnel_0_local@1",
+    "commandPalette"
+   ],
+   "contextKeys": [
+    "remote-tunnels.entriesEnabled"
+   ],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "tunnel quick pick with Online and Offline groups",
+    "Learn More row",
+    "Switch Account row"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createQuickPick",
+    "QuickPickItemKind.Separator",
+    "authentication.getSession",
+    "env.openExternal",
+    "ExtensionContext.globalState",
+    "commands.executeCommand vscode.openFolder",
+    "vscode.l10n.t"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "dev-tunnels client (VS Code CLI based)"
+   ],
+   "network": [
+    "dev-tunnels service",
+    "devtunnels.ms"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-server#F-8102",
+   "remote-server#F-8103",
+   "remote-server#F-8104",
+   "remote-server#F-8201",
+   "remote-server#F-8203",
+   "remote-server#F-8302",
+   "remote-server#F-8901",
+   "remote-server#F-8902",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5202",
+   "remote-explorer#F-5902",
+   "remote-containers#F-1403",
+   "remote-server#F-8001"
+  ],
+  "coreUi": false,
+  "candidateComponent": "tunnels.connect-picker",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Account step, then tunnel list from the tunnel service, then reload window into tunnel+name authority. Remembers last-used account in global state. Offline and empty states are inferred, not observed.",
+  "questions": [
+   "How does the clean team list tunnels: which client and service does F-8902 choose for Code-OSS builds?",
+   "What does picking an Offline tunnel do, and is Create a Tunnel real?",
+   "Is Last used also shown on tunnel rows?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
+  ]
+ }
+]

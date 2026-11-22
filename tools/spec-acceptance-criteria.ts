@@ -282,6 +282,31 @@ export const SSH_RELEASE_TWO_SCOPE: CoverageScope = {
   repository: 'remote-ssh',
 };
 
+/** The features of Remote - Server release 1, with its two decisions. */
+export const SERVER_RELEASE_ONE_FEATURES: readonly string[] = [
+  'F-8001',
+  'F-8002',
+  'F-8101',
+  'F-8102',
+  'F-8103',
+  'F-8104',
+  'F-8201',
+  'F-8202',
+  'F-8203',
+  'F-8301',
+  'F-8302',
+  'F-8901',
+  'F-8902',
+];
+
+/** The coverage file of Remote - Server release 1. */
+export const SERVER_RELEASE_ONE_SCOPE: CoverageScope = {
+  name: 'server-r1',
+  file: path.join(CATALOGUE_FOLDER, 'coverage-server-r1.tsv'),
+  features: SERVER_RELEASE_ONE_FEATURES,
+  repository: 'remote-server',
+};
+
 /** Every coverage file the check reads. */
 export const COVERAGE_SCOPES: readonly CoverageScope[] = [
   SLICE_ONE_SCOPE,
@@ -291,6 +316,7 @@ export const COVERAGE_SCOPES: readonly CoverageScope[] = [
   CONTAINERS_RELEASE_TWO_SCOPE,
   EXPLORER_RELEASE_TWO_SCOPE,
   EXTENSIONPACK_RELEASE_TWO_SCOPE,
+  SERVER_RELEASE_ONE_SCOPE,
   SSH_RELEASE_TWO_SCOPE,
 ];
 

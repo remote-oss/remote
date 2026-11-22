@@ -1,0 +1,90 @@
+[
+ {
+  "id": "F-8103",
+  "issue": 12,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "The tunnel remote authority, the connected window and connection errors",
+  "epic": "E81",
+  "acCount": 30,
+  "surfaces": {
+   "commands": [
+    "workbench.action.remote.close (core)",
+    "workbench.action.closeRemoteConnection (not in core)"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [
+    "remoteName == tunnel"
+   ],
+   "authorities": [
+    "tunnel",
+    "tunnel+<name>"
+   ],
+   "other": [
+    "onResolveRemoteAuthority:tunnel",
+    "progress notification Connecting to name",
+    "label formatter for vscode-remote",
+    "local relay on 127.0.0.1"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress",
+    "window.showErrorMessage",
+    "window.showQuickPick",
+    "ExtensionContext.globalState",
+    "window.createOutputChannel",
+    "workspace.registerResourceLabelFormatter"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "local relay helper (tunnel client)",
+    "VS Code CLI on host"
+   ],
+   "network": [
+    "dev-tunnels relay",
+    "global.rel.tunnels.api.visualstudio.com",
+    "127.0.0.1 websocket"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "vscode-tunneling-* socket",
+    "Remote - Tunnels log"
+   ]
+  },
+  "cites": [
+   "remote-server#F-8102",
+   "remote-server#F-8101",
+   "remote-server#F-8104",
+   "remote-server#F-8201",
+   "remote-server#F-8302",
+   "remote-server#F-8901",
+   "remote-server#F-8902",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5202",
+   "remote-containers#F-1403",
+   "remote-server#F-8001"
+  ],
+  "coreUi": false,
+  "candidateComponent": "tunnels.resolver-relay",
+  "candidateLibrary": "lib-forwarding",
+  "area": "A",
+  "reuse": [
+   "editor-cli",
+   "openssh"
+  ],
+  "errorPaths": 10,
+  "notes": "Resolver for tunnel authority: find tunnel, start or reuse local relay, return loopback address. Owns ten error states. Relay may outlive editor; socket naming is reference data. Draft status.",
+  "questions": [
+   "Should Close Connection run core close-remote (option b) or match the reference no-op?",
+   "What triggers the outdated-connection error and what does Upgrade do?",
+   "Where do relay sockets live on Windows and macOS, and does the relay outlive the editor there?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
+  ]
+ }
+]

@@ -1,0 +1,76 @@
+[
+ {
+  "id": "F-8002",
+  "issue": 9,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Help, settings and issue-reporting commands",
+  "epic": "E80",
+  "acCount": 21,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.getStarted",
+    "remote-tunnels.settings",
+    "remote-tunnels.reportIssue"
+   ],
+   "settings": [
+    "remote.tunnels.alwaysUpdateCLI (read)",
+    "remote.tunnels.defaultExtensions (read)",
+    "remote.tunnels.tunnelCredentialCommand (read)",
+    "workbench.editor.useModal (core)"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "README help section with project URLs"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "env.openExternal",
+    "workbench.action.openSettings (core)"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "external browser"
+   ],
+   "network": [
+    "project documentation URL (https)"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "package.json bugs and repository fields"
+   ]
+  },
+  "cites": [
+   "remote-server#F-8001",
+   "remote-server#F-8901",
+   "remote-server#F-8104",
+   "remote-server#F-8102",
+   "remote-server#F-8101",
+   "remote-server#F-8103",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5202",
+   "remote-server#F-8201",
+   "remote-server#F-8203",
+   "remote-server#F-8301"
+  ],
+  "coreUi": true,
+  "candidateComponent": "tunnels.help-commands",
+  "candidateLibrary": "lib-product",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 3,
+  "notes": "Three stateless hand-offs: browser, filtered Settings editor, core Issue Reporter. Writes nothing. Needs only project identity values; trivial component.",
+  "questions": [
+   "Is the project documentation URL a build-time constant from the identity card or a runtime config value?",
+   "Settings and reporter behavior in a signed-in tunnel window is unobserved; is that a blocker?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
+  ]
+ }
+]

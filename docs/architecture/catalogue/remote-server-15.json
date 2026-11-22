@@ -1,0 +1,88 @@
+[
+ {
+  "id": "F-8202",
+  "issue": 15,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Port forwarding over a tunnel: Private and Public ports",
+  "epic": "E82",
+  "acCount": 24,
+  "surfaces": {
+   "commands": [
+    "remote.tunnel.privacyprivate",
+    "remote.tunnel.privacypublic",
+    "remote.tunnel.forwardCommandPalette",
+    "remote.tunnel.forwardInline",
+    "remote.tunnelsView.makePublic (core)"
+   ],
+   "settings": [
+    "remote.autoForwardPorts",
+    "remote.autoForwardPortsSource",
+    "remote.portsAttributes",
+    "remote.otherPortsAttributes",
+    "remote.restoreForwardedPorts"
+   ],
+   "views": [
+    "Ports view (core)"
+   ],
+   "menus": [
+    "Port Visibility submenu"
+   ],
+   "contextKeys": [
+    "remoteName == tunnel"
+   ],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "privacy options private and public",
+    "tunnelFeatures elevation false protocol false"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "l10n.t"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "dev-tunnels client"
+   ],
+   "network": [
+    "https devtunnels.ms forwarded addresses",
+    "dev-tunnels service"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "core global storage remote.tunnels.toRestore.*",
+    "core global storage remote.tunnels.toRestoreExpiration.*"
+   ]
+  },
+  "cites": [
+   "remote-server#F-8103",
+   "remote-server#F-8102",
+   "remote-server#F-8201",
+   "remote-server#F-8203",
+   "remote-server#F-8001",
+   "remote-server#F-8901",
+   "remote-containers#F-1403",
+   "remote-server#F-8902"
+  ],
+  "coreUi": true,
+  "candidateComponent": "tunnels.port-forwarder",
+  "candidateLibrary": "lib-forwarding",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Tunnel provider features via resolvers: two privacy options, factory adds ports to the tunnel with access control. Public was never run on the reference. Core draws the Ports view.",
+  "questions": [
+   "What does Public do in practice, and should the clean side offer it with a warning or at all?",
+   "What does the user see when the service refuses a forward or visibility change?",
+   "Which icon does Public use?"
+  ]
+ }
+]

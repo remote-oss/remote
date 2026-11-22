@@ -1,0 +1,98 @@
+[
+ {
+  "id": "F-8201",
+  "issue": 14,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Tunnel data and actions behind the Remotes view",
+  "epic": "E82",
+  "acCount": 38,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.internal.isAuthenticated",
+    "remote-tunnels.internal.getTunnelsList",
+    "remote-tunnels.internal.getActiveRemote",
+    "remote-tunnels.internal.getFoldersHistory",
+    "remote-tunnels.internal.connectToRemote",
+    "remote-tunnels.internal.deleteFolderFromHistory",
+    "remote-tunnels.internal.unregisterTunnel",
+    "remote-tunnels.isConnectedToRemote",
+    "remote-tunnels.connectNewWindowToTunnel",
+    "remote-internal.setActiveFolders"
+   ],
+   "settings": [
+    "remote-explorer.foldersSortOrder (read)",
+    "remote-explorer.collapseRecentFolders (read)",
+    "workbench.iconTheme (core)",
+    "security.workspace.trust.enabled (core)"
+   ],
+   "views": [
+    "remoteTargets"
+   ],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "folder history in global state key remote-tunnels.folder-history",
+    "nine onCommand activation events"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand",
+    "authentication.getSession silent",
+    "ExtensionContext.globalState",
+    "workspace.workspaceFolders",
+    "workspace.workspaceFile",
+    "window.showWarningMessage modal",
+    "commands.executeCommand vscode.openFolder"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "dev-tunnels client",
+    "code tunnel unregister"
+   ],
+   "network": [
+    "dev-tunnels service"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "globalState remote-tunnels.folder-history"
+   ]
+  },
+  "cites": [
+   "remote-explorer#F-5902",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5202",
+   "remote-explorer#F-5104",
+   "remote-server#F-8102",
+   "remote-server#F-8103",
+   "remote-server#F-8101",
+   "remote-server#F-8202",
+   "remote-server#F-8203",
+   "remote-server#F-8901",
+   "remote-containers#F-1403",
+   "remote-server#F-8001",
+   "remote-server#F-8104",
+   "remote-server#F-8902"
+  ],
+  "coreUi": false,
+  "candidateComponent": "tunnels.explorer-data-api",
+  "candidateLibrary": "lib-companion",
+  "area": "B",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Command-based data and action interface for Remote Explorer Tunnels group plus folder history store. Spec chooses to fix three reference quirks; owner of two hover texts undecided.",
+  "questions": [
+   "Confirm fixing the three reference quirks: connected state, folder-active flag, per-window history copies?",
+   "Who owns the hover texts: Remote Explorer or this extension?",
+   "What are the purpose and argument of isConnectedToRemote, which nothing calls?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
+  ]
+ }
+]

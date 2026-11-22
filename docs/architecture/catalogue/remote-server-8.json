@@ -1,0 +1,107 @@
+[
+ {
+  "id": "F-8001",
+  "issue": 8,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Package, activation, extension kind and web entry",
+  "epic": "E80",
+  "acCount": 26,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.connectCurrentWindowToTunnel",
+    "remote-tunnels.getStarted",
+    "remote-tunnels.reportIssue",
+    "remote-tunnels.settings",
+    "remote-tunnels.showUsageLimits",
+    "remote-tunnels.signIntoTunnelWithDifferentAccount",
+    "remote-tunnels.openOnDesktop"
+   ],
+   "settings": [
+    "security.workspace.trust.enabled (core)"
+   ],
+   "views": [],
+   "menus": [
+    "statusBar/remoteIndicator",
+    "commandPalette",
+    "remote_10_tunnel_0_remote@1"
+   ],
+   "contextKeys": [
+    "remote-tunnels.entriesEnabled",
+    "remoteName",
+    "isWeb",
+    "workspaceFolderCount"
+   ],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "extensionKind ui",
+    "main and browser entries",
+    "extensionPack to remote-explorer",
+    "14 language l10n sets",
+    "untrustedWorkspaces supported",
+    "R-54 coexistence warning",
+    "Output channel Remote - Tunnels"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "extensions.getExtension",
+    "commands.executeCommand",
+    "window.createOutputChannel",
+    "window.showWarningMessage",
+    "ExtensionContext.globalState",
+    "commands.executeCommand workbench.extensions.search (core)"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "argv.json enable-proposed-api",
+    "package.nls.<lang>.json",
+    "l10n bundles",
+    "Remote - Tunnels.log"
+   ]
+  },
+  "cites": [
+   "remote-server#F-8901",
+   "remote-server#F-8902",
+   "remote-containers#F-1403",
+   "remote-containers#F-1404",
+   "remote-explorer#F-5001",
+   "remote-server#F-8002",
+   "remote-server#F-8101",
+   "remote-server#F-8102",
+   "remote-server#F-8103",
+   "remote-server#F-8201",
+   "remote-server#F-8301",
+   "remote-server#F-8302",
+   "remote-containers#F-1406",
+   "remote-containers#F-0101",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5202",
+   "remote-explorer#F-5902",
+   "remote-server#F-8104",
+   "remote-server#F-8203"
+  ],
+  "coreUi": true,
+  "candidateComponent": "tunnels.extension-shell",
+  "candidateLibrary": "lib-product",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Manifest-level shell: ten activation events plus startup activation, coexistence check against the reference, gating context key, ordered activation so a missing resolvers grant cannot abort it.",
+  "questions": [
+   "Which package owns the 14 language bundles and the coexistence check: lib-product or the extension shell?",
+   "Is argv.json enable-proposed-api the only supported proposal route for derivatives besides product config?",
+   "Spec cites lab observation ids and a reference manifest path; not for the clean side."
+  ]
+ }
+]

@@ -1,0 +1,72 @@
+[
+ {
+  "id": "F-8203",
+  "issue": 16,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Tunnel usage limits",
+  "epic": "E82",
+  "acCount": 26,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.showUsageLimits"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "output channel Remote - Tunnels",
+    "Checking usage limits progress notification"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand",
+    "window.withProgress",
+    "window.showQuickPick",
+    "authentication.getSession",
+    "window.createOutputChannel",
+    "l10n.t"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "dev-tunnels client"
+   ],
+   "network": [
+    "dev-tunnels service limits request",
+    "aka.ms learn-more link"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "Remote - Tunnels log"
+   ]
+  },
+  "cites": [
+   "remote-server#F-8102",
+   "remote-server#F-8001",
+   "remote-server#F-8101",
+   "remote-server#F-8103",
+   "remote-server#F-8202",
+   "remote-server#F-8901",
+   "remote-server#F-8902"
+  ],
+  "coreUi": false,
+  "candidateComponent": "tunnels.usage-limits",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Single command: account question, session, limits request, three log lines in the output channel. Limit-reached strings exist but were never produced.",
+  "questions": [
+   "What replaces No limits are currently in place when a tunnel or bandwidth limit is reached?",
+   "What does Show Limits run, and what carries it?",
+   "Is the Learn more link a project URL or the service documentation link?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
+  ]
+ }
+]

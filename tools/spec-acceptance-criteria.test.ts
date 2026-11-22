@@ -14,6 +14,8 @@ import {
   EXTENSIONPACK_RELEASE_TWO_SCOPE,
   SLICE_ONE_FEATURES,
   SLICE_ONE_SCOPE,
+  SERVER_RELEASE_ONE_FEATURES,
+  SERVER_RELEASE_ONE_SCOPE,
   SSH_RELEASE_TWO_FEATURES,
   SSH_RELEASE_TWO_SCOPE,
 } from './spec-acceptance-criteria.ts';
@@ -169,7 +171,7 @@ describe('acceptanceCriteriaOf, the forms of Remote - Containers', () => {
 });
 
 describe('the coverage files', () => {
-  it('coverage-25a, seed-01: the four release 1 files and the four release 2 files, each with its features and repository', () => {
+  it('coverage-25a, seed-01: the five release 1 files and the four release 2 files, each with its features and repository', () => {
     deepStrictEqual(
       COVERAGE_SCOPES.map(scope => [
         scope.file,
@@ -200,6 +202,11 @@ describe('the coverage files', () => {
         ],
         [EXPLORER_RELEASE_TWO_SCOPE.file, 4, 'remote-explorer'],
         [EXTENSIONPACK_RELEASE_TWO_SCOPE.file, 2, 'remote-extensionpack'],
+        [
+          SERVER_RELEASE_ONE_SCOPE.file,
+          SERVER_RELEASE_ONE_FEATURES.length,
+          'remote-server',
+        ],
         [
           SSH_RELEASE_TWO_SCOPE.file,
           SSH_RELEASE_TWO_FEATURES.length,

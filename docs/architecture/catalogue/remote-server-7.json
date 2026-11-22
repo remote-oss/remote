@@ -1,0 +1,122 @@
+[
+ {
+  "id": "F-8901",
+  "issue": 7,
+  "repo": "remote-server",
+  "kind": "decision",
+  "label": "spec:reviewed",
+  "title": "Decision: identity, invented identifiers and telemetry",
+  "epic": "E89",
+  "acCount": 17,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.connectCurrentWindowToTunnel",
+    "remote-tunnels.getStarted",
+    "remote-tunnels.reportIssue",
+    "remote-tunnels.settings",
+    "remote-tunnels.openOnDesktop",
+    "remote-tunnels.showUsageLimits",
+    "remote-tunnels.signIntoTunnelWithDifferentAccount",
+    "remote-tunnels.isConnectedToRemote",
+    "remote-tunnels.connectNewWindowToTunnel",
+    "remote-tunnels.internal.isAuthenticated",
+    "remote-tunnels.internal.getTunnelsList",
+    "remote-tunnels.internal.getActiveRemote",
+    "remote-tunnels.internal.getFoldersHistory",
+    "remote-tunnels.internal.connectToRemote",
+    "remote-tunnels.internal.deleteFolderFromHistory",
+    "remote-tunnels.internal.unregisterTunnel"
+   ],
+   "settings": [
+    "remote.tunnels.defaultExtensions",
+    "remote.tunnels.alwaysUpdateCLI",
+    "remote.tunnels.tunnelCredentialCommand",
+    "remote.tunnels.access.hostNameOverride (reserved core)",
+    "remote.tunnels.access.preventSleep (reserved core)",
+    "workbench.remoteIndicator.showExtensionRecommendations (core)"
+   ],
+   "views": [
+    "explorer (welcome)"
+   ],
+   "menus": [
+    "commandPalette",
+    "statusBar/remoteIndicator"
+   ],
+   "contextKeys": [
+    "remote-tunnels.entriesEnabled",
+    "remoteName",
+    "isWeb",
+    "workspaceFolderCount"
+   ],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "extension id remote-oss.remote-server",
+    "activation events: ten plus onStartupFinished",
+    "R-54 coexistence stand-down with one warning",
+    "extensionPack remote-oss.remote-explorer",
+    "14 locales",
+    "webOpener vscode-remote",
+    "no telemetry",
+    "product key remoteExtensionTips.tunnel",
+    "product key tunnelApplicationConfig",
+    "product key extensionEnabledApiProposals",
+    "product key trustedExtensionAuthAccess"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "extensions.getExtension",
+    "env.uriScheme"
+   ],
+   "proposedApi": [
+    "resolvers",
+    "tunnels",
+    "contribViewsWelcome"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "package.json",
+    "package.nls.json",
+    "l10n bundles",
+    "identity.yaml",
+    "product.json (editor, read only)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-1401",
+   "remote-containers#F-1403",
+   "remote-containers#F-1405",
+   "remote-containers#F-1406",
+   "remote-explorer#F-5901",
+   "remote-explorer#F-5902",
+   "remote-server#F-8001",
+   "remote-server#F-8002",
+   "remote-server#F-8101",
+   "remote-server#F-8102",
+   "remote-server#F-8103",
+   "remote-server#F-8104",
+   "remote-server#F-8201",
+   "remote-server#F-8202",
+   "remote-server#F-8203",
+   "remote-server#F-8301",
+   "remote-server#F-8302",
+   "remote-server#F-8902"
+  ],
+  "coreUi": true,
+  "candidateComponent": "server.identity-and-standdown",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "Identity card, verbatim identifier tables, telemetry ban and the R-54 stand-down protocol with positive gating key and a light startup activation. Anchor for lib-identifiers and lib-standdown shared across the family. Name and id tables belong in generated data. Proposals tunnels and contribViewsWelcome are grants in the reference product configuration; the 1.5.3 manifest requests only resolvers.",
+  "questions": [
+   "Should lib-standdown be one shared library for all family extensions, given F-5901 omits startup activation while this adds it?",
+   "Who owns the 14-locale string reuse and the per-language identity substitution in conformance cases?",
+   "Is the unsatisfied-dependency notification of core acceptable as the only handling for third-party dependents?"
+  ]
+ }
+]

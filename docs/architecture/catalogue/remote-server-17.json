@@ -1,0 +1,81 @@
+[
+ {
+  "id": "F-8301",
+  "issue": 17,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Continue Working in VS Code Desktop",
+  "epic": "E83",
+  "acCount": 18,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.openOnDesktop"
+   ],
+   "settings": [
+    "security.promptForRemoteFileProtocolHandling (core)"
+   ],
+   "views": [],
+   "menus": [
+    "commandPalette",
+    "statusBar/remoteIndicator",
+    "remote_10_tunnel_0_remote@1"
+   ],
+   "contextKeys": [
+    "remoteName",
+    "isWeb",
+    "workspaceFolderCount"
+   ],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "gated when clause with remote-tunnels.entriesEnabled",
+    "vscode-remote link on the editor's own URI scheme"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand",
+    "workspace.workspaceFolders",
+    "workspace.workspaceFile",
+    "env.remoteName",
+    "env.uiKind",
+    "env.uriScheme",
+    "Uri.from",
+    "env.openExternal"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "desktop editor via OS protocol handler"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "tunnel host folder or .code-workspace path"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-server#F-8103",
+   "remote-server#F-8001",
+   "remote-server#F-8901",
+   "remote-server#F-8302",
+   "remote-server#F-8101",
+   "remote-server#F-8201",
+   "remote-server#F-8102",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": true,
+  "candidateComponent": "server.web-handoff",
+  "candidateLibrary": "lib-authority",
+  "area": "A",
+  "reuse": [],
+  "errorPaths": 6,
+  "notes": "Small web-only command that builds one desktop link from scheme, tunnel authority and folder, then opens it externally. Dialogs on both ends are core. Link shape and multi-folder rule are inferred, not observed.",
+  "questions": [
+   "Which exact link does the reference build (scheme, query, folder versus workspace file)? Q1 needs a web client and is unresolved.",
+   "Out-of-context invocation: keep silent no-op or show the R-46 info notification? Spec allows both.",
+   "Spec cites lab transcripts and VS Code core source file names; spec cites material not for the clean side. Who vets them?"
+  ]
+ }
+]

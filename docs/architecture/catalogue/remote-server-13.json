@@ -1,0 +1,83 @@
+[
+ {
+  "id": "F-8104",
+  "issue": 13,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "VS Code Server and CLI on the tunnel host: download, CLI updates, default extensions",
+  "epic": "E81",
+  "acCount": 31,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.tunnels.defaultExtensions",
+    "remote.tunnels.alwaysUpdateCLI",
+    "remote.tunnels.access.hostNameOverride (core)",
+    "remote.tunnels.access.preventSleep (core)"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "CLI update prompt Update, Always update, Not Now",
+    "server download and extract progress"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration inspect",
+    "ConfigurationTarget.Global",
+    "window.showInformationMessage",
+    "window.withProgress"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "VS Code CLI on host (code tunnel)",
+    "VS Code Server"
+   ],
+   "network": [
+    "update service of host CLI",
+    "server distribution"
+   ],
+   "remoteFiles": [
+    "cached server for client commit",
+    "host CLI binary"
+   ],
+   "localFiles": [
+    "user settings.json"
+   ]
+  },
+  "cites": [
+   "remote-server#F-8103",
+   "remote-server#F-8102",
+   "remote-server#F-8101",
+   "remote-server#F-8201",
+   "remote-server#F-8901",
+   "remote-server#F-8902",
+   "remote-containers#F-1403",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5202",
+   "remote-server#F-8001"
+  ],
+  "coreUi": false,
+  "candidateComponent": "tunnels.host-software",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Mostly delegates to the host CLI: server download, install of default extensions per relay connection, CLI update prompt. Download, extract and update screens are inferred from strings. Spec mentions lab files forbidden to clean side.",
+  "questions": [
+   "Do download and extract messages appear inside the Connecting notification or in a separate one?",
+   "If one default-extension id fails on a running server, are the others installed first?",
+   "What does Always update store, and how do true, false and unset differ?"
+  ]
+ }
+]

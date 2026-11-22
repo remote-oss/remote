@@ -1,0 +1,76 @@
+[
+ {
+  "id": "F-8102",
+  "issue": 11,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Tunnel sign-in: GitHub or Microsoft account and switching accounts",
+  "epic": "E81",
+  "acCount": 26,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.signIntoTunnelWithDifferentAccount"
+   ],
+   "settings": [
+    "remote.tunnels.tunnelCredentialCommand"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "account-type quick pick",
+    "modal not-found dialog with Pick a different account"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createQuickPick",
+    "authentication.getSession",
+    "window.showInformationMessage",
+    "window.showErrorMessage",
+    "ExtensionContext.globalState",
+    "vscode.l10n.t"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "GitHub auth provider",
+    "Microsoft auth provider",
+    "dev-tunnels service"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "globalState tunnelClearSessionOnNextProvider"
+   ]
+  },
+  "cites": [
+   "remote-server#F-8101",
+   "remote-server#F-8103",
+   "remote-server#F-8201",
+   "remote-server#F-8901",
+   "remote-server#F-8902",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5902",
+   "remote-server#F-8001"
+  ],
+  "coreUi": false,
+  "candidateComponent": "tunnels.account-session",
+  "candidateLibrary": "lib-authority",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Obtains github or microsoft sessions through core auth, persists last choice, reports consent refusal and tunnel-not-found. Credential-command setting is declared but has no desktop effect. Different-account command is inferred.",
+  "questions": [
+   "What value shape does remote.tunnels.tunnelCredentialCommand expect for delegated web authentication?",
+   "What exactly does the different-account command do, given it was never run?",
+   "Which scopes are required for the Microsoft provider session?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
+  ]
+ }
+]
