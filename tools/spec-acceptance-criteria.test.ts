@@ -14,6 +14,8 @@ import {
   EXTENSIONPACK_RELEASE_TWO_SCOPE,
   SLICE_ONE_FEATURES,
   SLICE_ONE_SCOPE,
+  SSH_EDIT_RELEASE_ONE_FEATURES,
+  SSH_EDIT_RELEASE_ONE_SCOPE,
   SSH_RELEASE_TWO_FEATURES,
   SSH_RELEASE_TWO_SCOPE,
 } from './spec-acceptance-criteria.ts';
@@ -204,6 +206,11 @@ describe('the coverage files', () => {
           SSH_RELEASE_TWO_SCOPE.file,
           SSH_RELEASE_TWO_FEATURES.length,
           'remote-ssh',
+        ],
+        [
+          SSH_EDIT_RELEASE_ONE_SCOPE.file,
+          SSH_EDIT_RELEASE_ONE_FEATURES.length,
+          'remote-ssh-edit',
         ],
       ],
     );

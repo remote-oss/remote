@@ -282,6 +282,29 @@ export const SSH_RELEASE_TWO_SCOPE: CoverageScope = {
   repository: 'remote-ssh',
 };
 
+/** The features and decisions of Remote - SSH Edit release 1, in numeric order; the two decisions, the last two, have no criteria. */
+export const SSH_EDIT_RELEASE_ONE_FEATURES: readonly string[] = [
+  'F-4001',
+  'F-4002',
+  'F-4003',
+  'F-4101',
+  'F-4102',
+  'F-4201',
+  'F-4202',
+  'F-4203',
+  'F-4204',
+  'F-4901',
+  'F-4902',
+];
+
+/** The coverage file of Remote - SSH Edit release 1. */
+export const SSH_EDIT_RELEASE_ONE_SCOPE: CoverageScope = {
+  name: 'ssh-edit-r1',
+  file: path.join(CATALOGUE_FOLDER, 'coverage-ssh-edit-r1.tsv'),
+  features: SSH_EDIT_RELEASE_ONE_FEATURES,
+  repository: 'remote-ssh-edit',
+};
+
 /** Every coverage file the check reads. */
 export const COVERAGE_SCOPES: readonly CoverageScope[] = [
   SLICE_ONE_SCOPE,
@@ -292,6 +315,7 @@ export const COVERAGE_SCOPES: readonly CoverageScope[] = [
   EXPLORER_RELEASE_TWO_SCOPE,
   EXTENSIONPACK_RELEASE_TWO_SCOPE,
   SSH_RELEASE_TWO_SCOPE,
+  SSH_EDIT_RELEASE_ONE_SCOPE,
 ];
 
 /**
