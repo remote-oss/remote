@@ -1,13 +1,9 @@
 import {deepStrictEqual} from 'node:assert';
-import {jsonOf} from './manifest.fixture.ts';
+import {jsonOf, propertyOf} from './manifest.fixture.ts';
 
 /** What the manifest declares of `key`, with the text of its description from the strings file. */
 function declaredAs(key: string): Record<string, unknown> {
-  const properties = (
-    (jsonOf('package.json').contributes as {configuration: unknown})
-      .configuration as {properties: Record<string, Record<string, unknown>>}
-  ).properties;
-  const setting = properties[key] ?? {};
+  const setting = propertyOf(key);
   const reference = String(setting.markdownDescription).replaceAll('%', '');
   return {
     type: setting.type,

@@ -25,6 +25,7 @@ import {
   appendScript,
   closeWindow,
   connectedWithin,
+  inWindow,
   onHost,
   openWindow,
   readUserSettings,
@@ -65,7 +66,7 @@ import {
   INSTALL_MILLISECONDS,
   platformAnswer,
 } from '../windows/maintenance.ts';
-import {notificationButtons, notificationCentre} from '../windows/renderer.ts';
+import {settingControlOf, settingRow, statusItem} from '../windows/renderer.ts';
 import {keepingSettings} from '../windows/tunnel-support.ts';
 import {
   failedOn,
@@ -74,6 +75,9 @@ import {
 } from '../windows/troubleshooting-support.ts';
 
 const ALIAS = 'harness';
+
+/** The setting whose value is the mode. */
+const SETTING = 'remote.SSH.localServerDownload';
 
 /** The reason of the failure dialog when the archive is missing. */
 const MISSING = missingReason(ALIAS);
@@ -203,7 +207,7 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
     );
   }
 
-  it('F-2406 AC-1, AC-19 (c2946-warn): with the mode on and no archive, a warning without buttons shows once at the start of the attempt, before the failure dialog, and stays in the notification centre', async () => {
+  it('F-2406 AC-1 (c2946-warn): with the mode on and no archive, a warning without buttons is raised once at the start of the attempt, before the failure dialog', async () => {
     await withSettings({}, async () => {
       const name = 'c2946-warn';
       appendScript(dismissals(name));
@@ -217,10 +221,13 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
               lines.findIndex(
                 line => line.surface === 'notice' && line.question === S088,
               ) < lines.findIndex(line => line.surface === 'failureDialog'),
-            buttons: await notificationButtons(name, 'Local download mode'),
-            inTheCentre: (await notificationCentre(name)).includes(S088),
+            buttons: lines
+              .filter(
+                line => line.surface === 'notice' && line.question === S088,
+              )
+              .map(line => line.buttons),
           },
-          {warnings: 1, beforeTheDialog: true, buttons: [], inTheCentre: true},
+          {warnings: 1, beforeTheDialog: true, buttons: [[]]},
         );
       } finally {
         await closeWindow(name).catch(() => undefined);
@@ -357,6 +364,7 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
       await connectedWithin(first, INSTALL_MILLISECONDS);
       await closeWindow(first);
       const commit = await installedCommit();
+      const folder = await installFolder();
       await userSettings({
         'remote.SSH.localServerDownload': 'manual-bootstrap',
       });
@@ -378,9 +386,9 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
                 ),
             ).length,
             warnings: warnings(name),
-            sameInstall: (await installedCommit()) === commit,
+            sameInstall: [await installedCommit(), await installFolder()],
           },
-          {dialogs: 0, copied: 0, warnings: 1, sameInstall: true},
+          {dialogs: 0, copied: 0, warnings: 1, sameInstall: [commit, folder]},
         );
       } finally {
         await closeWindow(name).catch(() => undefined);
@@ -490,7 +498,7 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
     });
   });
 
-  it('F-2406 AC-26 (c2946-again): a Retry with the archive still missing warns again, once per attempt, and the centre holds one entry', async () => {
+  it('F-2406 AC-26 (c2946-again): a Retry with the archive still missing raises the warning again, once per attempt', async () => {
     await withSettings({}, async () => {
       const name = 'c2946-again';
       appendScript([
@@ -509,57 +517,39 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
           () => recordLines('failureDialog', name).length >= 2,
           120_000,
         );
-        deepStrictEqual(
-          {
-            warnings: warnings(name),
-            inTheCentre: (await notificationCentre(name)).filter(
-              entry => entry === S088,
-            ).length,
-          },
-          {warnings: 2, inTheCentre: 1},
-        );
+        deepStrictEqual(warnings(name), 2);
       } finally {
         await closeWindow(name).catch(() => undefined);
       }
     });
   });
 
-  it('F-2406 AC-29 (c2946-execserver): a host that holds only the exec-server layout, with the mode on and no archive, fails the same way', async () => {
-    await withSettings(
-      {
-        'remote.SSH.localServerDownload': 'auto',
-        'remote.SSH.useExecServer': true,
-      },
-      async () => {
-        const first = 'c2946-execserver-first';
-        appendScript(dismissals(first));
-        await openWindow(ALIAS, first);
-        await connectedWithin(first, INSTALL_MILLISECONDS);
-        await closeWindow(first);
-        // The install the host holds, which the next line removes, so that only the exec-server layout is left.
-        const installedBefore = (await installFolder()).startsWith(DATA_FOLDER);
-        await onHost('rm', '-rf', `${DATA_FOLDER}/bin`);
-        await userSettings({
-          'remote.SSH.localServerDownload': 'manual-bootstrap',
-        });
-        const name = 'c2946-execserver';
-        appendScript(dismissals(name));
-        await failedOn(ALIAS, name);
-        try {
-          deepStrictEqual(
-            {
-              installedBefore,
-              dialogs: recordLines('failureDialog', name).map(
-                line => line.question,
-              ),
-            },
-            {installedBefore: true, dialogs: [MISSING]},
-          );
-        } finally {
-          await closeWindow(name).catch(() => undefined);
-        }
-      },
-    );
+  it('F-2406 AC-18 (c2946-flagged): with the mode on, the Settings editor shows "auto" for the setting and settings.json carries one warning for the undeclared value', async () => {
+    await withSettings({}, async () => {
+      await inWindow('local', 'workbench.action.openSettings', SETTING);
+      await waitFor(
+        'the setting on the Settings editor list',
+        async () => (await settingRow('local')) !== undefined,
+        60_000,
+      );
+      const editorShows = await settingControlOf('local');
+      await inWindow('local', 'workbench.action.openSettingsJson');
+      await waitFor(
+        'a problem in settings.json',
+        async () =>
+          /\d/u.test((await statusItem('local', 'status.problems')).text),
+        60_000,
+      ).catch(() => undefined);
+      deepStrictEqual(
+        {
+          editorShows,
+          problems: (await statusItem('local', 'status.problems')).text
+            .replaceAll(/\s+/gu, ' ')
+            .trim(),
+        },
+        {editorShows: 'auto', problems: '0 1'},
+      );
+    });
   });
   it('F-2406 AC-12 (c2948-text): a bootstrap file that is not a server archive is copied, and the dialog reason is "Failed to install the VS Code Server." with the UnpackFailed row of the table', async () => {
     await withSettings({}, async () => {

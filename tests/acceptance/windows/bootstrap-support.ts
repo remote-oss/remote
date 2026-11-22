@@ -85,7 +85,8 @@ export function compact(text: string): string {
 
 /**
  * Runs `body` with the bootstrap folder set aside: a folder of the developer's own is renamed first and put back after,
- * and whatever the rows placed is removed, so that nothing of either is lost or left behind.
+ * and whatever the rows placed is removed, so that nothing of either is lost or left behind. A run killed between the
+ * rename and the restore leaves the developer's folder as `vscode-remote-ssh-bootstrap.aside-<pid>`.
  */
 export async function withBootstrapFolderAside(
   body: () => Promise<void>,
