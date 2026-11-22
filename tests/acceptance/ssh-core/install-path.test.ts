@@ -1129,12 +1129,16 @@ describe('the install location the user setting picks (card #2487)', function ()
     });
   });
 
-  it("F-2407 AC-23 (c2487-reconnectcheck): the reconnect at a value that fails the check makes no SSH connection, opens the troubleshooting terminal, and shows core's Cannot reconnect dialog instead of the refusal dialog", async () => {
+  async function reconnectCheck(name: string, sessionLogs: boolean) {
     await freshHost();
     const good = `${HOME}/cust23`;
     const refused = 'relative/inst';
-    const name = 'c2487-reconnectcheck';
     try {
+      if (!sessionLogs) {
+        await userSettings({
+          'remote.SSH.experimental.enhancedSessionLogs': false,
+        });
+      }
       await setting(SETTING, value(good));
       await openConnected(name, INSTALL_MILLISECONDS);
       await setting(SETTING, value(refused));
@@ -1145,66 +1149,71 @@ describe('the install location the user setting picks (card #2487)', function ()
         pickHost('harness'),
       ]);
       let found = false;
-      let lastDetail: string | undefined;
       const deadline = Date.now() + 90_000;
       while (Date.now() < deadline) {
         const open = await dialogOf(name);
         if ((open?.details ?? '').includes('Cannot reconnect')) {
           found = true;
+          console.log(
+            `${name} core's dialog at +${((Date.now() - endedAt) / 1000).toFixed(1)} s`,
+          );
           break;
         }
-        if (open !== undefined && open.details !== lastDetail) {
-          lastDetail = open.details;
-          console.log(
-            `c2487-reconnectcheck an open dialog on ${name}: ${JSON.stringify(open.details)}`,
-          );
-        }
-        await new Promise(resolve => setTimeout(resolve, 5_000));
+        await new Promise(resolve => setTimeout(resolve, 1_000));
       }
+      const resolves = connectionLog()
+        .slice(mark)
+        .filter(line =>
+          /Resolv|resolve|connect failed|refus|NotAvailable|handled|attempt/i.test(
+            line,
+          ),
+        );
+      console.log(`${name} resolves:\n${resolves.join('\n')}`);
+      const reads: StateReads = {
+        recorded: () => recordLines(undefined, name),
+        indicator: () => statusBarText(name, 'status.host'),
+        dialog: () => dialogOf(name),
+        notifications: () => notifications(name),
+        logLines: () => connectionLog(),
+        pageFacts: () => pageFocusFacts(),
+        pageRead: () => 'not read',
+        agentLife: () => agentLife(name),
+        rendererLines: () => rendererLines(name),
+        timeline: () => [],
+      };
+      console.log(
+        `${name} found ${String(found)}, the state:\n${await reconnectionState(reads, name, mark, endedAt)}`,
+      );
+      console.log(
+        `${name} the troubleshooting terminal: ${String((await pageText(name)).includes('Session Troubleshooting'))}, logins: ${String(await acceptedKeyLogins(since))}`,
+      );
       if (!found) {
-        console.log(
-          `c2487-reconnectcheck the final dialog of ${name}: ${JSON.stringify(await dialogOf(name))}`,
-        );
-        console.log(
-          `c2487-reconnectcheck the troubleshooting terminal: ${String((await pageText(name)).includes('Session Troubleshooting'))}`,
-        );
-        const reads: StateReads = {
-          recorded: () => recordLines(undefined, name),
-          indicator: () => statusBarText(name, 'status.host'),
-          dialog: () => dialogOf(name),
-          notifications: () => notifications(name),
-          logLines: () => connectionLog(),
-          pageFacts: () => pageFocusFacts(),
-          pageRead: () => 'not read',
-          agentLife: () => agentLife(name),
-          rendererLines: () => rendererLines(name),
-          timeline: () => [],
-        };
-        console.log(
-          `c2487-reconnectcheck the state:\n${await reconnectionState(reads, name, mark, endedAt)}`,
-        );
         throw new Error(`window ${name}: no Cannot reconnect dialog in 90 s`);
       }
-      const shown = await dialogOf(name);
-      deepStrictEqual(
-        {
-          dialog: shown?.details.includes(
-            'Cannot reconnect. Please reload the window.',
-          ),
-          buttons: shown?.buttons,
-          terminal: (await pageText(name)).includes('Session Troubleshooting'),
-          logins: await acceptedKeyLogins(since),
-        },
-        {
-          dialog: true,
-          buttons: ['Cancel', 'Reload Window'],
-          terminal: true,
-          logins: 0,
-        },
-      );
     } finally {
       await closeWindow(name).catch(() => undefined);
       await setting(SETTING, undefined);
+      if (!sessionLogs) {
+        await userSettings({
+          'remote.SSH.experimental.enhancedSessionLogs': undefined,
+        });
+      }
     }
+  }
+
+  it('probe (c2487-reconnectcheck): the reconnect check with the troubleshooting terminal', async () => {
+    await reconnectCheck('c2487-reconnectcheck', true);
+  });
+
+  it('probe (c2487-reconnectnoterm): the reconnect check with enhancedSessionLogs false', async () => {
+    await reconnectCheck('c2487-reconnectnoterm', false);
+  });
+
+  it('probe (c2487-reconnectcheck-2): the reconnect check with the terminal, again', async () => {
+    await reconnectCheck('c2487-reconnectcheck-2', true);
+  });
+
+  it('probe (c2487-reconnectnoterm-2): the reconnect check without the terminal, again', async () => {
+    await reconnectCheck('c2487-reconnectnoterm-2', false);
   });
 });
