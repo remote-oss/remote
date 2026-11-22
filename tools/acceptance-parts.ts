@@ -151,7 +151,7 @@ export function heldTogether(table: PartsTable): (launch: Launch) => boolean {
 /**
  * Whether the parts leave a launch out: the genuine group's, which have a job of their own, a launch that starts the
  * CLI-source editor, which needs the CLI archives' token that CI does not hold, and a launch with WSL distros, the
- * Windows SSH host or the WSL engine, which needs a Windows client and runs in the platform workflow's Windows job.
+ * Windows SSH host or any other need of a Windows client, which runs in the platform workflow's Windows job.
  */
 function leftOut(launch: Launch): boolean {
   return (
@@ -159,7 +159,7 @@ function leftOut(launch: Launch): boolean {
     (launch.kind === 'plain' && launch.cliSource === true) ||
     launch.wslDistros === true ||
     launch.windowsHost === true ||
-    launch.windowsEngine === true
+    launch.windowsClient === true
   );
 }
 

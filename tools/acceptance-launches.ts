@@ -41,11 +41,8 @@ interface LaunchCommon {
    * one; their names are HARNESS_WSL_DISTROS. Only a Windows client can, and another refuses the launch.
    */
   wslDistros?: true;
-  /**
-   * Whether the launch needs a Windows client, whose engine is a WSL distro's own: the platform workflow's Windows job
-   * runs it by name, and the parts leave it out.
-   */
-  windowsEngine?: true;
+  /** Whether the launch needs a Windows client: left out of the Linux parts, named by platform.yml's Windows job. */
+  windowsClient?: true;
   /**
    * Whether the launch's windows open the run's Windows SSH host, the alias `winhost`: Windows' OpenSSH Server on
    * 127.0.0.1, which the platform workflow's Windows job starts and passes as HARNESS_WINHOST_*. Only a Windows client
@@ -1412,7 +1409,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'containers-wsl',
       suite: 'containers-wsl',
       namedOnly: true,
-      windowsEngine: true,
+      windowsClient: true,
     },
     {
       ...RENDERER_LAUNCH,
