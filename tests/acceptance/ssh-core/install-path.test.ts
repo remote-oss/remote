@@ -17,6 +17,7 @@ import {
   recordLines,
   readUserSettings,
   restoreUserSettings,
+  signal,
   userSettings,
   variable,
   waitFor,
@@ -33,7 +34,6 @@ import {
   setting,
 } from '../windows/maintenance.ts';
 import {
-  answerDialog,
   dialogOf,
   notifications,
   pageText,
@@ -85,14 +85,24 @@ async function serverAt(folder: string): Promise<boolean> {
   return (await listed(folder))?.includes(SERVER_NAME) ?? false;
 }
 
-/** Waits for window `name`'s failure dialog and gives it. */
-async function failedDialog(name: string) {
+/** The part of the connect's failure text that every failure dialog carries, for a script entry's match. */
+const DIALOG_MATCH = 'Could not establish connection';
+
+/** The buttons the spec names for the refused and the install directory's dialogs. */
+const RETRY_BUTTONS: readonly string[] = [
+  'Retry',
+  'More Actions...',
+  'Close Remote',
+];
+
+/** Waits for window `name`'s failure dialog to be recorded and gives the line: its text and the buttons it was shown with. */
+async function refusedLine(name: string, milliseconds = 30_000) {
   await waitFor(
     `the failure dialog of ${name}`,
     () => recordLines('failureDialog', name).length > 0,
-    60_000,
+    milliseconds,
   );
-  return dialogOf(name);
+  return recordLines('failureDialog', name)[0];
 }
 
 /** `text` without its white space (the table draws a space as a no-break space): the row compares what is written. */
@@ -170,13 +180,19 @@ describe('the install location the user setting picks (card #2487)', function ()
       appendScript(dismissals(name));
       try {
         await openConnected(name, INSTALL_MILLISECONDS);
+        await waitFor(
+          `the server in ${folder}`,
+          async () =>
+            (await listed(`${folder}/${SERVER_NAME}/bin`)) !== undefined,
+          60_000,
+        );
         deepStrictEqual(
           {
             server: await serverAt(folder),
             binary:
-              (await listed(`${folder}/${SERVER_NAME}`))?.includes('bin') ??
-              false,
-            homeBinary: (await listed(`${HOME}/${SERVER_NAME}`)) !== undefined,
+              (await listed(`${folder}/${SERVER_NAME}/bin`)) !== undefined,
+            homeBinary:
+              (await listed(`${HOME}/${SERVER_NAME}/bin`)) !== undefined,
             messages: (await notifications(name)).filter(text =>
               text.includes(folder),
             ).length,
@@ -383,10 +399,18 @@ describe('the install location the user setting picks (card #2487)', function ()
           ]);
         }
         const name = `c2487-invalid-${String(index)}`;
+        appendScript([
+          {
+            surface: 'failureDialog',
+            match: DIALOG_MATCH,
+            answer: 'dismiss',
+            window: name,
+          },
+        ]);
         await openWindow('harness', name);
-        const shown = await failedDialog(name);
-        details.push(shown?.details);
-        buttons.push(shown?.buttons);
+        const line = await refusedLine(name);
+        details.push(line?.question);
+        buttons.push(line?.buttons);
         await closeWindow(name).catch(() => undefined);
       }
       deepStrictEqual(
@@ -435,9 +459,17 @@ describe('the install location the user setting picks (card #2487)', function ()
           ]);
         }
         const name = `c2487-charset-${String(index)}`;
+        appendScript([
+          {
+            surface: 'failureDialog',
+            match: DIALOG_MATCH,
+            answer: 'dismiss',
+            window: name,
+          },
+        ]);
         await openWindow('harness', name);
-        const shown = await failedDialog(name);
-        details.push(shown?.details ?? '');
+        const line = await refusedLine(name);
+        details.push(line?.question ?? '');
         await closeWindow(name).catch(() => undefined);
       }
       deepStrictEqual(
@@ -478,9 +510,17 @@ describe('the install location the user setting picks (card #2487)', function ()
           ]);
         }
         const name = `c2487-charset-${String(index)}`;
+        appendScript([
+          {
+            surface: 'failureDialog',
+            match: DIALOG_MATCH,
+            answer: 'dismiss',
+            window: name,
+          },
+        ]);
         await openWindow('harness', name);
-        const shown = await failedDialog(name);
-        details.push(shown?.details ?? '');
+        const line = await refusedLine(name);
+        details.push(line?.question ?? '');
         await closeWindow(name).catch(() => undefined);
       }
       deepStrictEqual(
@@ -499,21 +539,32 @@ describe('the install location the user setting picks (card #2487)', function ()
       const since = new Date().toISOString();
       await setting(SETTING, value(item));
       const name = 'c2487-retry';
+      appendScript([
+        {
+          surface: 'failureDialog',
+          match: DIALOG_MATCH,
+          answer: {button: 'Retry'},
+          window: name,
+        },
+        {
+          surface: 'failureDialog',
+          match: DIALOG_MATCH,
+          answer: 'dismiss',
+          window: name,
+        },
+      ]);
       try {
         await openWindow('harness', name);
-        const first = await failedDialog(name);
-        const mark = recordLines('failureDialog', name).length;
-        await answerDialog(name, 'Retry');
         await waitFor(
           `the dialog again on ${name}`,
-          () => recordLines('failureDialog', name).length > mark,
+          () => recordLines('failureDialog', name).length > 1,
           60_000,
         );
-        const again = await dialogOf(name);
+        const lines = recordLines('failureDialog', name);
         deepStrictEqual(
           {
-            first: first?.details,
-            again: again?.details,
+            first: lines[0]?.question,
+            again: lines[1]?.question,
             logins: await acceptedKeyLogins(since),
           },
           {
@@ -547,10 +598,18 @@ describe('the install location the user setting picks (card #2487)', function ()
           ]);
         }
         const name = `c2487-dircannot-${String(index)}`;
+        appendScript([
+          {
+            surface: 'failureDialog',
+            match: DIALOG_MATCH,
+            answer: 'dismiss',
+            window: name,
+          },
+        ]);
         await openWindow('harness', name);
-        const shown = await failedDialog(name);
-        details.push(shown?.details);
-        buttons.push(shown?.buttons);
+        const line = await refusedLine(name, INSTALL_MILLISECONDS);
+        details.push(line?.question);
+        buttons.push(line?.buttons);
         await closeWindow(name).catch(() => undefined);
       }
       deepStrictEqual(
@@ -585,16 +644,24 @@ describe('the install location the user setting picks (card #2487)', function ()
     await onHost('chmod', '0555', HOME);
     try {
       await setting(SETTING, undefined);
+      appendScript([
+        {
+          surface: 'failureDialog',
+          match: DIALOG_MATCH,
+          answer: 'dismiss',
+          window: name,
+        },
+      ]);
       await openWindow('harness', name);
-      const shown = await failedDialog(name);
+      const line = await refusedLine(name, INSTALL_MILLISECONDS);
       deepStrictEqual(
         {
-          detail: shown?.details,
-          buttons: shown?.buttons,
+          detail: line?.question,
+          buttons: line?.buttons,
         },
         {
           detail: DIR_DETAIL,
-          buttons: ['Retry', 'More Actions...', 'Close Remote'],
+          buttons: RETRY_BUTTONS,
         },
       );
     } finally {
@@ -646,16 +713,36 @@ describe('the install location the user setting picks (card #2487)', function ()
     await onHost('mkdir', '-p', `${HOME}/ro14`);
     await onHost('chmod', '0555', `${HOME}/ro14`);
     const name = 'c2487-retryfix';
+    const hold = 'c2487-retryfix-hold';
+    appendScript([
+      {
+        surface: 'failureDialog',
+        match: DIALOG_MATCH,
+        answer: {button: 'Retry'},
+        window: name,
+        after: hold,
+      },
+    ]);
     try {
       await setting(SETTING, value(`${HOME}/ro14/inner`));
       await openWindow('harness', name);
-      const shown = await failedDialog(name);
+      await waitFor(
+        `the held dialog on ${name}`,
+        () =>
+          recordLines('failureDialog', name).some(
+            line => line.answer === 'held',
+          ),
+        INSTALL_MILLISECONDS,
+      );
+      const held = recordLines('failureDialog', name).find(
+        line => line.answer === 'held',
+      );
       await onHost('chmod', '0755', `${HOME}/ro14`);
-      await answerDialog(name, 'Retry');
+      signal(hold);
       await connectedWithin(name, INSTALL_MILLISECONDS);
       deepStrictEqual(
         {
-          detail: shown?.details,
+          detail: held?.question,
           server: await serverAt(`${HOME}/ro14/inner`),
         },
         {detail: DIR_DETAIL, server: true},
@@ -685,6 +772,9 @@ describe('the install location the user setting picks (card #2487)', function ()
         );
         console.log(
           `c2487-inertchange the failureDialog records of ${name}: ${JSON.stringify(recordLines('failureDialog', name))}`,
+        );
+        console.log(
+          `c2487-inertchange the recent records of ${name}: ${JSON.stringify(recordLines(undefined, name).slice(-6))}`,
         );
         throw error;
       }
@@ -745,7 +835,7 @@ describe('the install location the user setting picks (card #2487)', function ()
     try {
       await setting(SETTING, value(item));
       await openWindow('harness', name);
-      await failedDialog(name);
+      await refusedLine(name);
       await waitForRecords(
         'the stored error hint',
         () =>
@@ -837,6 +927,7 @@ describe('the install location the user setting picks (card #2487)', function ()
         async () => (await settingsTabs(remote)).length > 0,
         30_000,
       );
+      await settingsTab(remote, 'Remote [SSH: harness]');
       const remoteText = await pageText(remote);
       await settingsTab(remote, 'Workspace');
       const workspaceText = await pageText(remote);
@@ -865,7 +956,7 @@ describe('the install location the user setting picks (card #2487)', function ()
       deepStrictEqual(
         {
           title: entry?.lines[0],
-          description: entry?.lines[1] === settingDescription(),
+          description: entry?.lines[2] === settingDescription(),
           table: [
             local.includes('Item'),
             local.includes('Value'),
@@ -901,19 +992,42 @@ describe('the install location the user setting picks (card #2487)', function ()
     const item = 'relative/inst';
     const fixed = `${HOME}/q20`;
     const name = 'c2487-retryfixed';
+    const hold = 'c2487-retryfixed-hold';
+    appendScript([
+      {
+        surface: 'failureDialog',
+        match: DIALOG_MATCH,
+        answer: {button: 'Retry'},
+        window: name,
+        after: hold,
+      },
+    ]);
     try {
       await setting(SETTING, value(item));
       await openWindow('harness', name);
-      await failedDialog(name);
+      await waitFor(
+        `the held dialog on ${name}`,
+        () =>
+          recordLines('failureDialog', name).some(
+            line => line.answer === 'held',
+          ),
+        30_000,
+      );
+      const held = recordLines('failureDialog', name).find(
+        line => line.answer === 'held',
+      );
       await setting(SETTING, value(fixed));
-      await answerDialog(name, 'Retry');
+      signal(hold);
       await waitFor(
         `the new folder on the host`,
         () => serverAt(fixed),
         120_000,
       );
       await connectedWithin(name, INSTALL_MILLISECONDS);
-      deepStrictEqual({fixed: await serverAt(fixed)}, {fixed: true});
+      deepStrictEqual(
+        {detail: held?.question, fixed: await serverAt(fixed)},
+        {detail: invalidDetail(item), fixed: true},
+      );
     } finally {
       await closeWindow(name).catch(() => undefined);
       await setting(SETTING, undefined);
@@ -932,6 +1046,7 @@ describe('the install location the user setting picks (card #2487)', function ()
       const home = [];
       const named = [];
       for (const [index, entry] of entries.entries()) {
+        await freshHost();
         await userSettings({
           ...PLATFORMS,
           [SETTING]: entry,
@@ -944,7 +1059,7 @@ describe('the install location the user setting picks (card #2487)', function ()
         const name = `c2487-userhost-${String(index)}`;
         await openWindow(authority, name);
         await connectedWithin(name, INSTALL_MILLISECONDS);
-        home.push(await serverAt(HOME));
+        home.push((await listed(`${HOME}/${SERVER_NAME}/bin`)) !== undefined);
         named.push(await serverAt(folder));
         await closeWindow(name).catch(() => undefined);
       }
