@@ -1,12 +1,13 @@
 /**
  * @fileoverview What the Remote Explorer leaves behind in the launch's profile and in a window: folders, log folders,
- * state keys, an output channel and notifications (F-5301 AC-14, section 9).
+ * state keys, an output channel and notifications (F-5301 AC-14, section 9). The dialog is read as core draws it in the window, so the launch must set `window.dialogStyle`
+ * to `custom`.
  */
 
 import {existsSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {commandsOf, editorLogsFolder, variable} from './harness.ts';
-import {notifications} from './renderer.ts';
+import {dialogOf, notifications, type ShownDialog} from './renderer.ts';
 import {readStateDatabase} from './state-database.ts';
 
 /** The folders of `folder` whose name says they are the explorer's, at any depth. */
@@ -45,6 +46,8 @@ export interface ExplorerTraces {
   outputChannel: string[];
   /** The notifications the window shows. */
   notifications: string[];
+  /** The dialog the window shows, which core draws in the window only when the launch sets `window.dialogStyle` to `custom`. */
+  dialog: ShownDialog | undefined;
 }
 
 /** What the explorer left in the profile and in window `name`. */
@@ -59,6 +62,7 @@ export async function explorerTraces(name: string): Promise<ExplorerTraces> {
       'workbench.action.output.show.extension-output-remote-oss.remote-explorer',
     ),
     notifications: await notifications(name),
+    dialog: await dialogOf(name),
   };
 }
 
@@ -69,4 +73,5 @@ export const NO_TRACES: ExplorerTraces = {
   stateKeys: [],
   outputChannel: [],
   notifications: [],
+  dialog: undefined,
 };

@@ -1452,6 +1452,8 @@ export function launchesOf(root: string): Launch[] {
       ...EXPLORER_LAUNCH,
       label: 'explorer-rows',
       suite: 'explorer-rows',
+      // Core's dialogs are drawn in the window, where the rows that read what the explorer shows can see them.
+      settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
     },
     {
       ...EXPLORER_LAUNCH,

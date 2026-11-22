@@ -125,7 +125,7 @@ describe('the view in SSH windows and its connect actions (card coverage-25c, pa
     }
   });
 
-  it('F-5301 AC-14, AC-23 (ssh-cell): in an SSH window of the base set the Remote Explorer has no Ports section, and after its Refresh the explorer left no folder, log folder, state key, output channel or notification', async () => {
+  it('F-5301 AC-14, AC-23 (ssh-cell): in an SSH window of the base set the Remote Explorer has no Ports section, and after its Refresh the explorer left no folder, log folder, state key, output channel, notification or dialog', async () => {
     const name = 'x5301-ssh-cell';
     await openWindow('harness', name);
     try {
