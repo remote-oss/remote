@@ -97,6 +97,8 @@ export const CONTAINERS_RELEASE_ONE_FEATURES: readonly string[] = [
 export const CONTAINERS_RELEASE_TWO_FEATURES: readonly string[] = [
   'F-0102',
   'F-0103',
+  'F-0104',
+  'F-0105',
   'F-0107',
   'F-0108',
   'F-0109',
@@ -147,6 +149,7 @@ export const CONTAINERS_RELEASE_TWO_FEATURES: readonly string[] = [
   'F-1007',
   'F-1103',
   'F-1201',
+  'F-1202',
   'F-1301',
   'F-1302',
   'F-1404',
