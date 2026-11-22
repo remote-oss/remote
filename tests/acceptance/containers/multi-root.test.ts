@@ -9,6 +9,7 @@ import {
   devContainerFolder,
   devContainersOf,
   inWindow,
+  reloadWindow,
   runLabelArguments,
   startInWindow,
   variable,
@@ -34,6 +35,7 @@ import {
   windowTitle,
 } from '../windows/renderer.ts';
 import {closeScreen, rowsOf} from '../windows/authoring-support.ts';
+import {showsNotice} from './resolve-support.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -47,6 +49,18 @@ const WORKSPACE_NOTICE_START =
 /** The follow-up of Don't Show Again... in a workspace window (S152). */
 const WORKSPACE_FOLLOW_UP =
   "Don't show again for the current workspace or for any workspace?";
+
+/** The reopen notification a folder added to a window carries, the links as their words. */
+const ADDED_NOTICE =
+  'There is a Dev Container configuration available for this repository. Reopen folder to develop in a container (learn more).';
+
+/** The start of the notification a folder added to a window carries. */
+const ADDED_NOTICE_START =
+  'There is a Dev Container configuration available for this repository.';
+
+/** The follow-up of Don't Show Again... in a folder window. */
+const FOLDER_FOLLOW_UP =
+  "Don't show again for the current folder or for any folder?";
 
 /** The page the notification's link opens. */
 const INTRODUCTION =
@@ -145,6 +159,44 @@ async function showsWorkspaceNotice(name: string): Promise<boolean> {
   );
 }
 
+/**
+ * Opens `first`, adds `second` to it as the user's Add Folder to Workspace does, and gives the window and the lines
+ * its notification centre gained: the window becomes an untitled workspace, and the notification of the roots that
+ * carry a configuration follows.
+ */
+async function addedTo(
+  label: string,
+  first: string,
+  second: string,
+): Promise<{window: string; added: string[]}> {
+  const window = await openFolderWindow(first);
+  const before = await notificationCentre(window);
+  await inWindow(window, 'acceptance.agent.addFolder', second);
+  await waitFor(
+    `window ${window} of ${label} to become an untitled workspace`,
+    async () =>
+      (
+        await windowState(window).catch(() => undefined)
+      )?.workspaceFile?.startsWith('untitled:') === true,
+    60_000,
+  );
+  await waitFor(
+    `a new line of the notification centre for ${label} in window ${window}`,
+    async () =>
+      (await notificationCentre(window)).some(text => !before.includes(text)),
+    20_000,
+  ).then(
+    () => true,
+    () => false,
+  );
+  return {
+    window,
+    added: (await notificationCentre(window)).filter(
+      text => !before.includes(text),
+    ),
+  };
+}
+
 /** The bind mounts of container `containerId`: their sources. */
 async function bindSources(containerId: string): Promise<string[]> {
   const {stdout} = await execFileAsync('docker', [
@@ -187,7 +239,7 @@ describe('multi-root workspaces (card coverage-104)', function () {
     }
   });
 
-  it('F-0301 AC-50, F-0101 AC-3b (c104-notice): a workspace of two configured roots, and one of a configured root beside a plain one, each show the workspace notification with its link, severity, source and buttons', async () => {
+  it('F-0402 AC-6, F-0301 AC-50, F-0101 AC-3b (c104-notice): a workspace of two configured roots, and one of a configured root beside a plain one, each show the workspace notification with its link, severity, source and buttons', async () => {
     const seen: unknown[] = [];
     for (const [label, roots] of [
       [
@@ -231,7 +283,7 @@ describe('multi-root workspaces (card coverage-104)', function () {
     deepStrictEqual(seen, [shown, shown]);
   });
 
-  it('F-0402 AC-7, F-0301 AC-50 (c104-current): Don’t Show Again... asks with Any Workspace and Current Workspace, and Current Workspace keeps the notification away from that workspace only', async () => {
+  it('F-0402 AC-6, AC-7, F-0301 AC-50 (c104-current): Don’t Show Again... asks with Any Workspace and Current Workspace, and Current Workspace keeps the notification away from that workspace only', async () => {
     const kept = workspaceWith('c104-current', {'c104-current-a': true});
     const other = workspaceWith('c104-other', {'c104-other-a': true});
     try {
@@ -246,6 +298,9 @@ describe('multi-root workspaces (card coverage-104)', function () {
         (await notificationCentre(window)).includes(WORKSPACE_FOLLOW_UP),
         await notificationButtons(window, WORKSPACE_FOLLOW_UP),
       ];
+      const primaries = (await toastFacts(window))
+        .filter(each => each.message === WORKSPACE_FOLLOW_UP)
+        .map(each => each.buttons.map(button => button.primary));
       await answerNotification(
         window,
         WORKSPACE_FOLLOW_UP,
@@ -259,8 +314,13 @@ describe('multi-root workspaces (card coverage-104)', function () {
       const otherShows = await showsWorkspaceNotice(elsewhere);
       await closeWindow(elsewhere);
       deepStrictEqual(
-        [followUp, keptShows, otherShows],
-        [[true, ['Any Workspace', 'Current Workspace']], false, true],
+        [followUp, primaries, keptShows, otherShows],
+        [
+          [true, ['Any Workspace', 'Current Workspace']],
+          [[true, false]],
+          false,
+          true,
+        ],
       );
     } finally {
       await inWindow('local', NOTIFICATION_RESET);
@@ -393,6 +453,133 @@ describe('multi-root workspaces (card coverage-104)', function () {
       );
     } finally {
       await closeWindow(window).catch(() => undefined);
+    }
+  });
+
+  it('F-0402 AC-15 (c3013-added): a folder added to a folder window makes an untitled workspace whose notification has the folder wording with the repository sentence, for one configured root and for two; Current Folder keeps it from that workspace only; two plain roots show nothing', async () => {
+    const windows: string[] = [];
+    try {
+      const onePlain = path.join(
+        variable('HARNESS_RUN_FOLDER'),
+        'c3013-added-one-a',
+      );
+      mkdirSync(onePlain, {recursive: true});
+      const single = await addedTo(
+        'c3013-one',
+        onePlain,
+        devContainerFolder('c3013-added-one-b'),
+      );
+      windows.push(single.window);
+      const singleLinks = await notificationLinks(
+        single.window,
+        ADDED_NOTICE_START,
+      );
+      const singleButtons = await notificationButtons(
+        single.window,
+        ADDED_NOTICE_START,
+      );
+      await closeWindow(single.window).catch(() => undefined);
+
+      const both = await addedTo(
+        'c3013-both',
+        devContainerFolder('c3013-added-both-a'),
+        devContainerFolder('c3013-added-both-b'),
+      );
+      windows.push(both.window);
+      await answerNotification(
+        both.window,
+        ADDED_NOTICE_START,
+        "Don't Show Again...",
+      );
+      const followUp = [
+        (await notificationCentre(both.window)).includes(FOLDER_FOLLOW_UP),
+        await notificationButtons(both.window, FOLDER_FOLLOW_UP),
+      ];
+      await answerNotification(both.window, FOLDER_FOLLOW_UP, 'Current Folder');
+      await reloadWindow(both.window);
+      await waitFor(
+        `window ${both.window} to become an untitled workspace again`,
+        async () =>
+          (
+            await windowState(both.window).catch(() => undefined)
+          )?.workspaceFile?.startsWith('untitled:') === true,
+        60_000,
+      );
+      const afterReload = await waitFor(
+        `the added-folder notification in window ${both.window}`,
+        async () =>
+          (await notificationCentre(both.window)).some(text =>
+            text.startsWith(ADDED_NOTICE_START),
+          ),
+        10_000,
+      ).then(
+        () => true,
+        () => false,
+      );
+      await closeWindow(both.window).catch(() => undefined);
+
+      const rootA = await openFolderWindow(
+        devContainerFolder('c3013-added-both-a'),
+      );
+      windows.push(rootA);
+      const rootAShows = await showsNotice(rootA);
+      await closeWindow(rootA).catch(() => undefined);
+      const rootB = await openFolderWindow(
+        devContainerFolder('c3013-added-both-b'),
+      );
+      windows.push(rootB);
+      const rootBShows = await showsNotice(rootB);
+      await closeWindow(rootB).catch(() => undefined);
+
+      const nonePlainA = path.join(
+        variable('HARNESS_RUN_FOLDER'),
+        'c3013-added-none-a',
+      );
+      mkdirSync(nonePlainA, {recursive: true});
+      const nonePlainB = path.join(
+        variable('HARNESS_RUN_FOLDER'),
+        'c3013-added-none-b',
+      );
+      mkdirSync(nonePlainB, {recursive: true});
+      const plain = await addedTo('c3013-none', nonePlainA, nonePlainB);
+      windows.push(plain.window);
+      await closeWindow(plain.window).catch(() => undefined);
+
+      deepStrictEqual(
+        [
+          single.added,
+          singleLinks,
+          singleButtons,
+          both.added,
+          followUp,
+          afterReload,
+          rootAShows,
+          rootBShows,
+          plain.added,
+        ],
+        [
+          [ADDED_NOTICE],
+          [
+            {
+              text: 'Dev Container configuration',
+              href: 'command:remote-containers.openDevContainerFile',
+            },
+            {text: 'learn more', href: INTRODUCTION},
+          ],
+          ['Reopen in Container', "Don't Show Again..."],
+          [ADDED_NOTICE],
+          [true, ['Any Folder', 'Current Folder']],
+          false,
+          true,
+          true,
+          [],
+        ],
+      );
+    } finally {
+      for (const window of windows) {
+        await closeWindow(window).catch(() => undefined);
+      }
+      await inWindow('local', NOTIFICATION_RESET);
     }
   });
 });
