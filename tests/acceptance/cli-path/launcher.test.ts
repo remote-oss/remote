@@ -10,10 +10,11 @@ import {
   connectedWithin,
   onHostAs,
   openWindow,
+  windowEvents,
 } from '../windows/harness.ts';
 import {runFromPalette} from '../windows/palette.ts';
 import {stamped} from '../windows/stamped-steps.ts';
-import {settledSection} from '../windows/connect-failure.ts';
+import {section, settledSection} from '../windows/connect-failure.ts';
 import {
   dialogOf,
   notifications,
@@ -47,7 +48,7 @@ function launcherAmong(names: readonly string[]): string {
 const FACTS_MILLISECONDS = 10_000;
 
 /**
- * What window `name` shows when a step has not finished: the quick pick, the dialog, the notifications and the remote
+ * What window `name` shows when a step has not finished: its agent's last events, the quick pick, the dialog, the notifications and the remote
  * indicator, each read within a bound and told as it came, so that a row that stops says what it was waiting on.
  */
 async function windowFacts(name: string): Promise<string> {
@@ -65,6 +66,16 @@ async function windowFacts(name: string): Promise<string> {
       );
   }
   return [
+    // The agent's own record needs no read of the page, which every read below may wait on if the window does not answer.
+    section('the last events of the window’s agent', () =>
+      windowEvents(name)
+        .slice(-8)
+        .map(
+          each =>
+            `${each.event}${each.id === undefined ? '' : ` ${each.id.slice(0, 8)}`} ${String(Math.round((Date.now() - each.time) / 1000))} s ago`,
+        )
+        .join(', '),
+    ),
     await settledSection(
       'the quick pick',
       bounded(async () => (await quickPickOf(name))?.items.slice(0, 8)),
