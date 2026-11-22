@@ -58,6 +58,25 @@ describe('the wait for the labels a window shows of its host (card #2970)', () =
     );
   });
 
+  it('#2970: an indicator that reads at once does not end the wait while the title is still pending, and the wait says after how many seconds the title read', async () => {
+    const attempt = waited([
+      {indicator: SHOWN.indicator, title: PENDING.title},
+      {indicator: SHOWN.indicator, title: PENDING.title},
+      SHOWN,
+    ]);
+    const shown = await attempt.result;
+    deepStrictEqual(
+      [shown.title, attempt.readCount(), attempt.said],
+      [
+        '[SSH: harness]',
+        3,
+        [
+          'win: the labels read "SSH: harness" and "[SSH: harness]" only 1.0 s after the connect ended',
+        ],
+      ],
+    );
+  });
+
   it('#2970: labels that never read stop at the bound and name the last five reads with their times', async () => {
     const attempt = waited([PENDING]);
     const shown = await attempt.result;
