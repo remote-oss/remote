@@ -1392,6 +1392,80 @@ describe('the manifest', () => {
     );
   });
 
+  it('F-0904 3.1, 3.3, F-0906 AC-2: the Dev Volumes view is in the remote container below the details with no reference to the targets, its welcome has the key and the one link, its three title buttons are in the order of the spec, its row menu has Inspect and Remove for both kinds, and Refresh and Remove are out of the palette', () => {
+    function own(entry: {when: string}): boolean {
+      return entry.when.includes('view == devVolumes');
+    }
+    deepStrictEqual(
+      [
+        VIEW_PARTS.views.remote?.find(entry => entry.id === 'devVolumes'),
+        VIEW_PARTS.viewsWelcome.filter(
+          welcome => welcome.view === 'devVolumes',
+        ),
+        englishEntry(
+          readJson('package.nls.json')['viewsWelcome.devVolumes.noDevVolumes'],
+        ).text,
+        (VIEW_PARTS.menus['view/title'] ?? []).filter(own),
+        (VIEW_PARTS.menus['view/item/context'] ?? []).filter(own),
+        VIEW_PARTS.menus.commandPalette
+          ?.filter(entry =>
+            [
+              'remote-containers.explorerVolumesRefresh',
+              'remote-containers.removeVolume',
+            ].includes(entry.command),
+          )
+          .map(entry => entry.when),
+      ],
+      [
+        {
+          id: 'devVolumes',
+          name: '%views.devVolumes.name%',
+          group: 'details@2',
+          when: '!hideConnectCommands',
+          remoteName: ['dev-container', 'attached-container'],
+        },
+        [
+          {
+            view: 'devVolumes',
+            contents: '%viewsWelcome.devVolumes.noDevVolumes%',
+            when: 'remote-containers:noDevVolumes && !remote-containers:standingDown',
+          },
+        ],
+        "If there's a repository you want to work with you can clone that directly in a container volume. [Clone Repository in Container Volume](command:remote-containers.openRepositoryInUniqueVolume)",
+        [
+          {
+            command: 'remote-containers.openRepositoryInUniqueVolume',
+            group: 'navigation@1',
+            when: 'view == devVolumes && !remote-containers:standingDown',
+          },
+          {
+            command: 'remote-containers.pruneVolumes',
+            group: 'navigation@2',
+            when: 'view == devVolumes && !remote-containers:standingDown',
+          },
+          {
+            command: 'remote-containers.explorerVolumesRefresh',
+            group: 'navigation@3',
+            when: 'view == devVolumes && !remote-containers:standingDown',
+          },
+        ],
+        [
+          {
+            command: 'remote-containers.inspectDockerResource',
+            group: '2_volumes@2',
+            when: 'view == devVolumes && viewItem =~ /^(devVolume|uniqueDevVolume)$/ && !remote-containers:standingDown',
+          },
+          {
+            command: 'remote-containers.removeVolume',
+            group: '3_volumes-destructive@1',
+            when: 'view == devVolumes && viewItem =~ /^(devVolume|uniqueDevVolume)$/ && !remote-containers:standingDown',
+          },
+        ],
+        ['false', 'false'],
+      ],
+    );
+  });
+
   it('#960 link rule: every link of a welcome text names a command the package registers, and the words of the links to others stay as plain words', () => {
     const registered = VIEW_PARTS.commands.map(entry => entry.command);
     const linked = VIEW_PARTS.viewsWelcome.flatMap(welcome =>
@@ -1414,9 +1488,11 @@ describe('the manifest', () => {
           'remote-containers.explorerTargetsRefresh',
           'remote-containers.openFolder',
           'remote-containers.openFolder',
+          'remote-containers.openRepositoryInUniqueVolume',
           'remote-containers.reopenInContainer',
         ],
         [
+          'devVolumes',
           'targetsContainers',
           'targetsContainers',
           'targetsContainers',
@@ -1438,7 +1514,7 @@ describe('the manifest', () => {
         clauses.every(clause => clause.endsWith(` && ${STANDING_DOWN}`)),
         JSON.stringify(VIEW_PARTS.views).includes('standingDown'),
       ],
-      [28, true, false],
+      [34, true, false],
     );
   });
 
@@ -1527,7 +1603,9 @@ describe('the manifest', () => {
         VIEW_PARTS.menus.commandPalette?.find(
           entry => entry.command === 'remote-containers.explorerDetailsRefresh',
         ),
-        VIEW_PARTS.menus['view/title']?.slice(2),
+        VIEW_PARTS.menus['view/title']
+          ?.filter(entry => !entry.when.includes('devVolumes'))
+          .slice(2),
         ENGLISH['views.detailsContainers.name'],
       ],
       [
@@ -1575,7 +1653,9 @@ describe('the manifest', () => {
   it('F-0902 3.1, 3.3: Start, Stop and Remove are out of the palette; the row menu and the inline bar carry the actions of the tokens in the groups of the reference, and the three commands of containers-104 stay shut with false', () => {
     deepStrictEqual(
       [
-        VIEW_PARTS.menus['view/item/context']?.slice(2, -3),
+        VIEW_PARTS.menus['view/item/context']
+          ?.filter(entry => !entry.when.includes('devVolumes'))
+          .slice(2, -3),
         VIEW_PARTS.commands
           .map(entry => entry.command)
           .filter(command =>
@@ -1616,7 +1696,7 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-0902 3.1, containers-104: Show Details, Inspect and Show Container Log are registered, are in the row menu and the Image row, are out of the palette, and no menu entry is staged', () => {
+  it('F-0902 3.1, containers-104: Show Details, Inspect and Show Container Log are registered, are in the row menu, the Image row and the Dev Volumes row of Inspect, are out of the palette, and no menu entry is staged', () => {
     const names = [
       'remote-containers.showDetails',
       'remote-containers.inspectDockerResource',
@@ -1637,7 +1717,7 @@ describe('the manifest', () => {
         menu.filter(entry => / && false\b/.test(entry.when)),
         palette.map(entry => entry.when),
       ],
-      [names, 4, [], ['false', 'false', 'false']],
+      [names, 5, [], ['false', 'false', 'false']],
     );
   });
 
