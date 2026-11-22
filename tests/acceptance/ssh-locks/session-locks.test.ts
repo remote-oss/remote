@@ -1,7 +1,8 @@
 /**
- * @fileoverview The lock for the whole session (card #2820, F-2408 AC-5 and AC-40, ruling-2820-flock-session): in flock
- * mode the host lock exists while the window is connected and is gone a few seconds after it is closed. These rows assert
- * the spec and are red until the product holds the lock for the session; they are held off the pull request.
+ * @fileoverview The lock for the whole session (F-2408 AC-5 and AC-40): in flock mode the host lock exists while the
+ * window is connected, in the install folder or, with `remote.SSH.lockfilesInTmp`, in `/tmp`, and it is gone a few seconds
+ * after the window is closed in order. The rows install from the run's slow download source and look at the host with the
+ * listing of `lock-listing.ts`.
  */
 
 import {deepStrictEqual} from 'node:assert';
