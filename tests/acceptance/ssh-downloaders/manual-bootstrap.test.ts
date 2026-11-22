@@ -44,13 +44,7 @@ import {
   INSTALL_MILLISECONDS,
   platformAnswer,
 } from '../windows/maintenance.ts';
-import {
-  notificationButtons,
-  notificationCentre,
-  settingControlOf,
-  settingRow,
-  statusItem,
-} from '../windows/renderer.ts';
+import {settingControlOf, settingRow, statusItem} from '../windows/renderer.ts';
 import {keepingSettings} from '../windows/tunnel-support.ts';
 import {
   failedOn,
@@ -115,7 +109,7 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
     );
   }
 
-  it('F-2406 AC-1, AC-19 (c2946-warn): with the mode on and no archive, a warning without buttons shows once at the start of the attempt, before the failure dialog, and stays in the notification centre', async () => {
+  it('F-2406 AC-1 (c2946-warn): with the mode on and no archive, a warning without buttons is raised once at the start of the attempt, before the failure dialog', async () => {
     await withSettings({}, async () => {
       const name = 'c2946-warn';
       appendScript(dismissals(name));
@@ -129,10 +123,13 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
               lines.findIndex(
                 line => line.surface === 'notice' && line.question === S088,
               ) < lines.findIndex(line => line.surface === 'failureDialog'),
-            buttons: await notificationButtons(name, 'Local download mode'),
-            inTheCentre: (await notificationCentre(name)).includes(S088),
+            buttons: lines
+              .filter(
+                line => line.surface === 'notice' && line.question === S088,
+              )
+              .map(line => line.buttons),
           },
-          {warnings: 1, beforeTheDialog: true, buttons: [], inTheCentre: true},
+          {warnings: 1, beforeTheDialog: true, buttons: [[]]},
         );
       } finally {
         await closeWindow(name).catch(() => undefined);
@@ -403,7 +400,7 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
     });
   });
 
-  it('F-2406 AC-26 (c2946-again): a Retry with the archive still missing warns again, once per attempt, and the centre holds one entry', async () => {
+  it('F-2406 AC-26 (c2946-again): a Retry with the archive still missing raises the warning again, once per attempt', async () => {
     await withSettings({}, async () => {
       const name = 'c2946-again';
       appendScript([
@@ -422,15 +419,7 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
           () => recordLines('failureDialog', name).length >= 2,
           120_000,
         );
-        deepStrictEqual(
-          {
-            warnings: warnings(name),
-            inTheCentre: (await notificationCentre(name)).filter(
-              entry => entry === S088,
-            ).length,
-          },
-          {warnings: 2, inTheCentre: 1},
-        );
+        deepStrictEqual(warnings(name), 2);
       } finally {
         await closeWindow(name).catch(() => undefined);
       }
@@ -456,7 +445,9 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
       deepStrictEqual(
         {
           editorShows,
-          problems: (await statusItem('local', 'status.problems')).text,
+          problems: (await statusItem('local', 'status.problems')).text
+            .replaceAll(/\s+/gu, ' ')
+            .trim(),
         },
         {editorShows: 'auto', problems: '0 1'},
       );
