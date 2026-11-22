@@ -7,6 +7,7 @@
 
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
+import {NoAnswerError} from './page-protocol.ts';
 
 /** A target of the debugging port's list. */
 export interface DebugTarget {
@@ -114,7 +115,36 @@ export function portIn(file: string): number | undefined {
   return Number.isInteger(port) ? port : undefined;
 }
 
-/** The pages the editor lists now; none when the port or its list cannot be read. */
+/**
+ * How long the debugging port's list may take to answer, in milliseconds. The list is one small document the editor
+ * answers at once; half a minute is far over any answer and under a row's own limit.
+ */
+const LIST_MILLISECONDS = 30_000;
+
+/**
+ * The targets the debugging port at `port` lists now, of every type. A port that accepts and does not answer within
+ * `milliseconds` fails with a {@link NoAnswerError} that names the port and the list.
+ */
+export async function listedTargets(
+  port: number,
+  milliseconds: number = LIST_MILLISECONDS,
+): Promise<DebugTarget[]> {
+  try {
+    const answer = await fetch(`http://127.0.0.1:${String(port)}/json/list`, {
+      signal: AbortSignal.timeout(milliseconds),
+    });
+    return (await answer.json()) as DebugTarget[];
+  } catch (caught) {
+    if (caught instanceof DOMException && caught.name === 'TimeoutError') {
+      throw new NoAnswerError(
+        `the debugging port ${String(port)}: no answer within ${String(Math.round(milliseconds / 100) / 10)} s to its list of targets`,
+      );
+    }
+    throw caught;
+  }
+}
+
+/** The pages the editor lists now; none when the port or its list cannot be read, or does not answer in time. */
 export async function listedPages(
   userDataFolder: string,
 ): Promise<DebugTarget[] | undefined> {
@@ -123,9 +153,7 @@ export async function listedPages(
     return undefined;
   }
   try {
-    const answer = await fetch(`http://127.0.0.1:${String(port)}/json/list`);
-    const targets = (await answer.json()) as DebugTarget[];
-    return targets.filter(target => target.type === 'page');
+    return (await listedTargets(port)).filter(target => target.type === 'page');
   } catch {
     return undefined;
   }

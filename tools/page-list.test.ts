@@ -1,13 +1,17 @@
 import {deepStrictEqual} from 'node:assert';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {createServer, type ServerResponse} from 'node:http';
+import type {AddressInfo} from 'node:net';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {NoAnswerError} from '../tests/acceptance/windows/page-protocol.ts';
 import {
   type DebugTarget,
   type CloseAttempt,
   closeUntilGone,
   lingeringPageNote,
   listedPages,
+  listedTargets,
   localPageAmong,
   pagesDescription,
   portIn,
@@ -259,6 +263,90 @@ describe('the wait for a closed window’s page to leave the list (card #2890)',
     deepStrictEqual(
       lingeringPageNote('c50-generic', '15D82FFDAB', 2, 30_000),
       'the page of window c50-generic (#15D82FFD) was still listed 30 s after the window deactivated: the editor lists 2 pages',
+    );
+  });
+});
+
+describe('the debugging port’s list (card #2908)', () => {
+  /** A list server on a port of its own that answers each request as `answer` says; `stop` closes it. */
+  async function listServer(
+    answer: (response: ServerResponse) => void,
+  ): Promise<{port: number; stop(): Promise<void>}> {
+    const server = createServer((request, response) => {
+      answer(response);
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    return {
+      port: (server.address() as AddressInfo).port,
+      stop: () =>
+        new Promise<void>(resolve => {
+          server.closeAllConnections();
+          server.close(() => {
+            resolve();
+          });
+        }),
+    };
+  }
+
+  it('#2908: the targets of every type come back as the port listed them', async () => {
+    const targets = [page('p1', 'one'), {id: 'f1', type: 'iframe', title: 'x'}];
+    const server = await listServer(response => {
+      response.end(JSON.stringify(targets));
+    });
+    try {
+      deepStrictEqual(await listedTargets(server.port), targets);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('#2908: a port that accepts and does not answer fails within the bound with a failure that names the port and the list', async () => {
+    const server = await listServer(() => undefined);
+    try {
+      const outcome = await listedTargets(server.port, 150).then(
+        () => 'answered',
+        (caught: unknown) => [
+          String(caught).replace(String(server.port), 'PORT'),
+          caught instanceof NoAnswerError,
+        ],
+      );
+      deepStrictEqual(outcome, [
+        'Error: the debugging port PORT: no answer within 0.2 s to its list of targets',
+        true,
+      ]);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('#2908: a port that answers the head and stalls the body fails within the bound too', async () => {
+    const server = await listServer(response => {
+      response.writeHead(200, {'content-type': 'application/json'});
+      response.write('[');
+    });
+    try {
+      deepStrictEqual(
+        await listedTargets(server.port, 150).then(
+          () => false,
+          (caught: unknown) => caught instanceof NoAnswerError,
+        ),
+        true,
+      );
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('#2908: a port that refuses the connection fails with the refusal, which is no timeout', async () => {
+    const server = await listServer(() => undefined);
+    const {port} = server;
+    await server.stop();
+    deepStrictEqual(
+      await listedTargets(port, 5000).then(
+        () => 'answered',
+        (caught: unknown) => caught instanceof NoAnswerError,
+      ),
+      false,
     );
   });
 });
