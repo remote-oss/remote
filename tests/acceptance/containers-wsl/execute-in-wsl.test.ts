@@ -95,6 +95,11 @@ describe('Dev Containers with its engine in a WSL distro (F-0411, card #3022)', 
         '--filter',
         `label=devcontainer.local_folder=${folder}`,
       );
+      if (containerId === '') {
+        throw new Error(
+          `no container in the distro is labelled devcontainer.local_folder=${folder}; the distro's containers: ${await inDistro('ps', '-a', '--format', '{{.ID}} {{.Names}} [{{.Label "devcontainer.local_folder"}}]')}`,
+        );
+      }
       const inspected = (JSON.parse(
         await inDistro(
           'inspect',
