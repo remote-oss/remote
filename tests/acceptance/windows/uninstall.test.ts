@@ -40,6 +40,7 @@ import {
   platformAnswer,
   restoreConfig,
   runWith,
+  serverMainProcesses,
   serverProcesses,
   serversGoneWithin,
   setting,
@@ -683,13 +684,16 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       await openConnected('u1', INSTALL_MILLISECONDS);
       // The pick is asked only for a host with no `remotePlatform` entry; the window above needed one.
       await setting('remote.SSH.remotePlatform', undefined);
-      const servers = await settledServerProcesses();
+      // The settled read takes the snapshot of the host's processes that a failure shows; the comparison is of the
+      // servers' main processes on both sides, which no window's child can join or leave.
+      await settledServerProcesses();
+      const servers = await serverMainProcesses();
       const mark = await uninstallWith('local', [
         pickHost('harness'),
         platformAnswer('windows'),
       ]);
       await new Promise(resolve => setTimeout(resolve, 2000));
-      const observed = await serverProcesses();
+      const observed = await serverMainProcesses();
       deepStrictEqual(
         [
           servers.length > 0,
