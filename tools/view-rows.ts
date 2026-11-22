@@ -38,7 +38,8 @@ export function mergeReads(
  * The direction a wheel of a virtualized list went, told by the labels the viewport showed before and after it:
  * 'down' when the new top stood below the old one in the list, 'up' when the new bottom stood above the old one,
  * and undefined when the labels do not tell. The sticky (pinned) rows are left out of the labels by the page,
- * since they do not move.
+ * since they do not move. Its own text is stringified into the page (the wheel to the list's top in
+ * `renderer.ts`), so it must not name a helper of this module: the page runs it as plain JavaScript.
  */
 export function wheelDirection(
   before: readonly string[],

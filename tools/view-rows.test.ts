@@ -32,6 +32,27 @@ describe('the merge of the viewport reads of a virtualized list (card #2960)', (
     deepStrictEqual(mergeReads(scrolled), mergeReads(FRESH));
   });
 
+  it('a row the reads show twice keeps the first read’s values at its first place', () => {
+    // One read draws the row expanded with a description; the read that shows it again draws it collapsed with
+    // another. The merge's one rule — the first read's values win — is what a pinned header the walk passes again
+    // needs, so this row is the one a last-read-wins merge breaks.
+    const reads: ReadonlyArray<readonly ViewRowRead[]> = [
+      [
+        sampleRow('ssh'),
+        {label: 'tty', description: 'work', level: 2, expanded: true},
+      ],
+      [
+        {label: 'tty', description: 'now idle', level: 2, expanded: false},
+        sampleRow('modem'),
+      ],
+    ];
+    deepStrictEqual(mergeReads(reads), [
+      sampleRow('ssh'),
+      {label: 'tty', description: 'work', level: 2, expanded: true},
+      sampleRow('modem'),
+    ]);
+  });
+
   it('a walk that never reaches the top misses the rows above it', () => {
     const midOnly: ReadonlyArray<readonly ViewRowRead[]> = [
       [sampleRow('c'), sampleRow('d')],
