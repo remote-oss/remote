@@ -6,6 +6,7 @@ import {createServer, type Server} from 'node:http';
 import {
   createServer as createNetServer,
   type AddressInfo,
+  type Server as NetServer,
   type Socket,
 } from 'node:net';
 import {
@@ -25,6 +26,33 @@ function textFrame(text: string): Buffer {
       ? Buffer.from([0x81, payload.length])
       : Buffer.from([0x81, 126, payload.length >> 8, payload.length & 255]);
   return Buffer.concat([head, payload]);
+}
+
+/** A test server's address and its stop. */
+interface Listening {
+  address: string;
+  stop(): Promise<void>;
+}
+
+/** Starts `server` on a port of the loopback; its stop ends `sockets` and closes it. */
+async function listening(
+  server: NetServer,
+  sockets: ReadonlySet<Socket>,
+): Promise<Listening> {
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const {port} = server.address() as AddressInfo;
+  return {
+    address: `ws://127.0.0.1:${String(port)}`,
+    stop: () =>
+      new Promise<void>(resolve => {
+        server.close(() => {
+          resolve();
+        });
+        for (const socket of sockets) {
+          socket.destroy();
+        }
+      }),
+  };
 }
 
 /** A protocol server of the test: what each client socket does as each of its requests arrives is `onRequest`'s. */
@@ -49,20 +77,7 @@ async function protocolServer(
       onRequest(socket, frame);
     });
   });
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-  const {port} = server.address() as AddressInfo;
-  return {
-    address: `ws://127.0.0.1:${String(port)}`,
-    stop: () =>
-      new Promise<void>(resolve => {
-        for (const socket of sockets) {
-          socket.destroy();
-        }
-        server.close(() => {
-          resolve();
-        });
-      }),
-  };
+  return listening(server, sockets);
 }
 
 /**
@@ -434,10 +449,7 @@ describe('the protocol connection of the page inputs (card #2908)', () => {
   });
 
   /** A port that accepts the connection and never completes the upgrade, as a browser process that stopped answering does. */
-  async function silentPort(): Promise<{
-    address: string;
-    stop(): Promise<void>;
-  }> {
+  async function silentPort(): Promise<Listening> {
     const sockets = new Set<Socket>();
     let stopped = false;
     const server = createNetServer(socket => {
@@ -449,20 +461,13 @@ describe('the protocol connection of the page inputs (card #2908)', () => {
       sockets.add(socket);
       socket.on('error', () => undefined);
     });
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-    const {port} = server.address() as AddressInfo;
+    const port = await listening(server, sockets);
     return {
-      address: `ws://127.0.0.1:${String(port)}`,
-      stop: () =>
-        new Promise<void>(resolve => {
-          stopped = true;
-          server.close(() => {
-            resolve();
-          });
-          for (const socket of sockets) {
-            socket.destroy();
-          }
-        }),
+      address: port.address,
+      stop: () => {
+        stopped = true;
+        return port.stop();
+      },
     };
   }
 
