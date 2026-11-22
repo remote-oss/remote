@@ -1353,6 +1353,47 @@ export async function extensionContextMenu(
   return menu;
 }
 
+/**
+ * Chooses the item `label` of the context menu that a right click on the entry `displayName` of the Extensions view in
+ * window `name` opens. It fails naming the entry when the view lists it not once, and the items when the menu has no
+ * item of that name.
+ */
+export async function extensionMenuAction(
+  name: string,
+  displayName: string,
+  label: string,
+): Promise<void> {
+  const outcome = await evaluate<string | null>(
+    name,
+    `(async () => {
+      const rows = ${extensionRowsExpression(displayName)};
+      if (rows.length !== 1) {
+        return 'not one Extensions entry named ' + ${JSON.stringify(JSON.stringify(displayName))};
+      }
+      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const box = rows[0].getBoundingClientRect();
+      rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
+      await wait(800);
+      const items = [...document.querySelectorAll('.context-view .monaco-menu .action-item')];
+      const item = items.find(each => (each.querySelector('.action-label')?.textContent ?? '') === ${JSON.stringify(label)});
+      if (item === undefined) {
+        const labels = items.map(each => each.querySelector('.action-label')?.textContent ?? '').filter(each => each !== '');
+        for (const type of ['keydown', 'keyup']) {
+          (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
+        }
+        return 'no menu item ' + ${JSON.stringify(JSON.stringify(label))} + ' among ' + JSON.stringify(labels);
+      }
+      for (const type of ['mouseover', 'mouseenter', 'mousedown', 'mouseup', 'click']) {
+        item.dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, button: 0}));
+      }
+      return null;
+    })()`,
+  );
+  if (outcome !== null) {
+    throw new Error(`window ${name}: ${outcome}`);
+  }
+}
+
 /** The display language window `name` runs in, as its page reports it: the one the editor was started with (`--locale`). */
 export async function displayLanguageOf(name: string): Promise<string> {
   return evaluate<string>(name, 'navigator.language');
@@ -2302,6 +2343,46 @@ export async function selectRemote(
   if (missing !== null) {
     throw new Error(`window ${name}: ${missing}`);
   }
+}
+
+/** The labels of the activity bar items of window `name`, from the top, the bottom ones last. */
+export async function activityBarItems(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `[...document.querySelectorAll('.activitybar .action-item .action-label')]
+      .map(label => label.getAttribute('aria-label') ?? '')
+      .filter(label => label !== '')`,
+  );
+}
+
+/**
+ * The entries of the menu of the side bar's "Views and More Actions..." button in window `name`, as it lists them for
+ * the view that is in front, closed again.
+ */
+export async function moreActionsEntries(name: string): Promise<string[]> {
+  const entries = await evaluate<string[] | null>(
+    name,
+    `(async () => {
+      const button = document.querySelector('.part.sidebar [aria-label="Views and More Actions..."]');
+      if (button === null) {
+        return null;
+      }
+      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      for (const type of ['mousedown', 'mouseup', 'click']) {
+        button.dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, button: 0}));
+      }
+      for (let tries = 0; tries < 30 && document.querySelector('.context-view .monaco-menu .action-label') === null; tries += 1) {
+        await wait(100);
+      }
+      await wait(300);
+      return [...document.querySelectorAll('.context-view .monaco-menu .action-label')].map(label => label.textContent ?? '').filter(label => label !== '');
+    })()`,
+  );
+  await pressEscape(name);
+  if (entries === null) {
+    throw new Error(`window ${name}: no "Views and More Actions..." button`);
+  }
+  return entries;
 }
 
 /** The box of core's open dialog, and its buttons inside it ([oss] `src/vs/base/browser/ui/dialog/dialog.ts`). */

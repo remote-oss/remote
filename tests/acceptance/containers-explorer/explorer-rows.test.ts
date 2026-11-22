@@ -17,11 +17,14 @@ import {
   windowState,
 } from '../windows/harness.ts';
 import {
+  moreActionsEntries,
+  paletteRun,
   remoteExplorerSections,
   rowAction,
   selectedRemote,
   selectRemote,
 } from '../windows/renderer.ts';
+import {anyTypeStored} from '../windows/explorer-type.ts';
 import {rowsOf, rowsSettled, VIEW} from '../windows/explorer-rows.ts';
 
 const EXPLORER = 'remote-oss.remote-explorer';
@@ -29,6 +32,9 @@ const SHOW_REMOTE_EXPLORER = 'workbench.view.remote';
 
 /** The hosts of the run's ssh_config. */
 const HOSTS = hostAliases();
+
+/** How long a row waits after focusing a view before it reads what core stored. */
+const FOCUS_MILLISECONDS = 3_000;
 
 /** How long a dev container window stays untouched before a row asks whether the explorer activated. */
 const UNTOUCHED_MILLISECONDS = 30_000;
@@ -63,6 +69,36 @@ describe('the Remote Explorer beside Dev Containers (card coverage-25c, part b)'
         selected: 'Dev Containers',
       },
     );
+  });
+
+  // Like the row before it, this one must run before any row that selects an option of the Switch Remote dropdown.
+  it('F-5301 AC-16 (more-actions): with Dev Containers beside the explorer, "Views and More Actions..." in a local folder lists only Help and feedback, and focusing Help and feedback stores no remote.explorerType', async () => {
+    const name = await openFolderWindow(
+      devContainerFolder('x5301-more-actions', {name: 'More Actions'}),
+    );
+    try {
+      await inWindow(name, SHOW_REMOTE_EXPLORER);
+      await waitFor(
+        `the sections of the Remote Explorer in window ${name}`,
+        async () =>
+          (
+            await remoteExplorerSections(name).catch((): string[] => [])
+          ).includes('Help and feedback'),
+        60_000,
+      );
+      const entries = await moreActionsEntries(name);
+      await paletteRun(
+        name,
+        'Remote Explorer: Focus on Help and feedback View',
+      );
+      await new Promise(resolve => setTimeout(resolve, FOCUS_MILLISECONDS));
+      deepStrictEqual(
+        [entries, anyTypeStored()],
+        [['Help and feedback'], false],
+      );
+    } finally {
+      await closeWindow(name);
+    }
   });
 
   it('F-5101 AC-30 (sections): with Dev Containers installed, the Remotes section’s group and host rows are those of a window without it', async () => {

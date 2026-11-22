@@ -32,6 +32,7 @@ import {
   extensionContextMenu,
   extensionsViewSections,
   notifications,
+  remoteExplorerSections,
   rememberPage,
   renderedRows,
   type RenderedRow,
@@ -40,6 +41,7 @@ import {
   statusItem,
   titleAction,
 } from '../windows/renderer.ts';
+import {explorerTraces, NO_TRACES} from '../windows/explorer-traces.ts';
 import {
   nothingFails,
   rowsOf,
@@ -118,6 +120,32 @@ describe('the view in SSH windows and its connect actions (card coverage-25c, pa
         `ls ${SERVER_EXTENSIONS} 2>/dev/null || true`,
       );
       deepStrictEqual(serverExtensions.includes('remote-explorer'), false);
+    } finally {
+      await closeWindow(name);
+    }
+  });
+
+  it('F-5301 AC-14, AC-23 (ssh-cell): in an SSH window of the base set the Remote Explorer has no Ports section, and after its Refresh the explorer left no folder, log folder, state key, output channel or notification', async () => {
+    const name = 'x5301-ssh-cell';
+    await openWindow('harness', name);
+    try {
+      await connectedTo(name, 'harness');
+      await inWindow(name, SHOW_REMOTE_EXPLORER);
+      await rowsSettled(name, rowsOf(HOSTS, 'harness'));
+      await waitFor(
+        `the sections of the Remote Explorer in window ${name}`,
+        async () =>
+          (await remoteExplorerSections(name)).includes('Help and feedback'),
+        60_000,
+      );
+      const sections = await remoteExplorerSections(name);
+      await titleAction(name, VIEW, 'Refresh');
+      await rowsSettled(name, rowsOf(HOSTS, 'harness'));
+      deepStrictEqual(
+        [sections.includes('Ports'), await explorerTraces(name)],
+        [false, NO_TRACES],
+        `the sections were ${JSON.stringify(sections)}`,
+      );
     } finally {
       await closeWindow(name);
     }

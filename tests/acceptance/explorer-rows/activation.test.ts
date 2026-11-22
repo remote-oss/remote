@@ -5,12 +5,11 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {existsSync, mkdirSync, readdirSync} from 'node:fs';
+import {mkdirSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
-  commandsOf,
   editorLogsFolder,
   extensionActive,
   hostAliases,
@@ -26,7 +25,7 @@ import {
   rowsSettled,
   VIEW,
 } from '../windows/explorer-rows.ts';
-import {readStateDatabase} from '../windows/state-database.ts';
+import {explorerTraces, NO_TRACES} from '../windows/explorer-traces.ts';
 
 const EXPLORER = 'remote-oss.remote-explorer';
 const SSH_COMPANION = 'remote-oss.remote-ssh';
@@ -53,30 +52,6 @@ function folderWindow(name: string): Promise<string> {
 
 function untouched(): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, UNTOUCHED_MILLISECONDS));
-}
-
-/** The folders of `folder` whose name says they are the explorer's, at any depth. */
-function explorerFolders(folder: string): string[] {
-  if (!existsSync(folder)) {
-    return [];
-  }
-  return readdirSync(folder, {recursive: true, encoding: 'utf8'}).filter(
-    entry => path.basename(entry).includes('remote-explorer'),
-  );
-}
-
-/** The keys of the profile's global state database that name the explorer. */
-function explorerStateKeys(userData: string): string[] {
-  const database = path.join(userData, 'User', 'globalStorage', 'state.vscdb');
-  if (!existsSync(database)) {
-    return [];
-  }
-  return readStateDatabase(database, opened =>
-    opened
-      .prepare("SELECT key FROM ItemTable WHERE key LIKE '%remote-explorer%'")
-      .all()
-      .map(entry => String(entry.key)),
-  );
 }
 
 describe('when the explorer activates, and what it leaves (card coverage-25c, part b)', function () {
@@ -173,25 +148,13 @@ describe('when the explorer activates, and what it leaves (card coverage-25c, pa
     );
   });
 
-  it('F-5001 AC-13, F-5101 AC-23, F-5102 AC-29, F-5103 AC-21, F-5901 AC-18 (nothing-left): after the view was shown, refreshed and its connects used, the profile holds no folder, log folder, state key or output channel of the explorer', async () => {
-    const userData = variable('HARNESS_USER_DATA');
+  it('F-5001 AC-13, F-5101 AC-23, F-5102 AC-29, F-5103 AC-21, F-5301 AC-14, F-5901 AC-18 (nothing-left): after the view was shown, refreshed and its connects used, the profile holds no folder, log folder, state key or output channel of the explorer, and the window shows no notification', async () => {
     const name = await folderWindow('activation-traces');
     try {
       await inWindow(name, SHOW_REMOTE_EXPLORER);
       await rowsSettled(name, rowsOf(HOSTS, undefined));
       await inWindow(name, 'remote-explorer.refresh');
-      deepStrictEqual(
-        [
-          explorerFolders(path.join(userData, 'User', 'globalStorage')),
-          explorerFolders(editorLogsFolder()),
-          explorerStateKeys(userData),
-          await commandsOf(
-            name,
-            'workbench.action.output.show.extension-output-remote-oss.remote-explorer',
-          ),
-        ],
-        [[], [], [], []],
-      );
+      deepStrictEqual(await explorerTraces(name), NO_TRACES);
     } finally {
       await closeWindow(name);
     }
