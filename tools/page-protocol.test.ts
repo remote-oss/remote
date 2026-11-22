@@ -338,7 +338,7 @@ describe('the protocol connection of the page reads (card #2858)', () => {
 });
 
 describe('the long bound of the reads that walk a list in the page (card #2858)', () => {
-  it('#2858: every function of the renderer helpers whose in-page code loops with while and awaits passes the long bound, and the three that do are the walkers', () => {
+  it('#2858: every function of the renderer helpers whose in-page code loops with while and awaits passes the long bound, and the four that do are the walkers', () => {
     const source = readFileSync(
       path.join(
         REPOSITORY_ROOT,
@@ -362,6 +362,7 @@ describe('the long bound of the reads that walk a list in the page (card #2858)'
       });
     deepStrictEqual(walkers, [
       ['viewRows', true],
+      ['ensureRowDrawn', true],
       ['portsRows', true],
       ['allQuickPickRows', true],
     ]);
