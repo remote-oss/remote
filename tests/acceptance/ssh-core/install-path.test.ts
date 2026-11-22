@@ -8,20 +8,27 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   acceptedKeyLogins,
+  agentLife,
   appendScript,
   closeWindow,
   connectedWithin,
+  connectionLog,
   inWindow,
   onHost,
   openWindow,
   recordLines,
   readUserSettings,
+  rendererLines,
   restoreUserSettings,
   signal,
   userSettings,
   variable,
   waitFor,
 } from '../windows/harness.ts';
+import {
+  reconnectionState,
+  type StateReads,
+} from '../windows/reconnection-state.ts';
 import {
   DATA_FOLDER,
   INSTALL_MILLISECONDS,
@@ -36,10 +43,12 @@ import {
 import {
   dialogOf,
   notifications,
+  pageFocusFacts,
   pageText,
   settingRow,
   settingsTab,
   settingsTabs,
+  statusBarText,
 } from '../windows/renderer.ts';
 import {PLATFORMS, keepingSettings} from '../windows/tunnel-support.ts';
 import {
@@ -1130,6 +1139,8 @@ describe('the install location the user setting picks (card #2487)', function ()
       await openConnected(name, INSTALL_MILLISECONDS);
       await setting(SETTING, value(refused));
       const since = new Date().toISOString();
+      const mark = connectionLog().length;
+      const endedAt = Date.now();
       await runWith('local', 'opensshremotes.cleanLocalServer', [
         pickHost('harness'),
       ]);
@@ -1156,6 +1167,21 @@ describe('the install location the user setting picks (card #2487)', function ()
         );
         console.log(
           `c2487-reconnectcheck the troubleshooting terminal: ${String((await pageText(name)).includes('Session Troubleshooting'))}`,
+        );
+        const reads: StateReads = {
+          recorded: () => recordLines(undefined, name),
+          indicator: () => statusBarText(name, 'status.host'),
+          dialog: () => dialogOf(name),
+          notifications: () => notifications(name),
+          logLines: () => connectionLog(),
+          pageFacts: () => pageFocusFacts(),
+          pageRead: () => 'not read',
+          agentLife: () => agentLife(name),
+          rendererLines: () => rendererLines(name),
+          timeline: () => [],
+        };
+        console.log(
+          `c2487-reconnectcheck the state:\n${await reconnectionState(reads, name, mark, endedAt)}`,
         );
         throw new Error(`window ${name}: no Cannot reconnect dialog in 90 s`);
       }
