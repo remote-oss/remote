@@ -1,4 +1,9 @@
-import {startInWindow, terminalFacts, windowEvents} from './harness.ts';
+import {
+  commandEventsSince,
+  startInWindow,
+  terminalFacts,
+  windowEvents,
+} from './harness.ts';
 import {
   answerDialog,
   chooseQuickPickRow,
@@ -89,6 +94,7 @@ const CLEAR_HISTORY_MILLISECONDS = 15_000;
  */
 async function clearedHistory(name: string): Promise<void> {
   const before = windowEvents(name).length;
+  const sent = Date.now();
   await startInWindow(name, 'workbench.action.clearCommandHistory');
   const deadline = Date.now() + CLEAR_HISTORY_MILLISECONDS;
   while (Date.now() < deadline) {
@@ -112,8 +118,9 @@ async function clearedHistory(name: string): Promise<void> {
       setTimeout(resolve, SAMPLE_INTERVAL_MILLISECONDS),
     );
   }
+  const dialog = await dialogOf(name).catch(() => undefined);
   throw new Error(
-    `window ${name}: the command that clears the palette's history did not end within ${String(CLEAR_HISTORY_MILLISECONDS)} ms`,
+    `window ${name}: the command that clears the palette's history did not end within ${String(CLEAR_HISTORY_MILLISECONDS)} ms; its events ${JSON.stringify(commandEventsSince(name, sent))}; the dialog ${JSON.stringify(dialog ?? null)}`,
   );
 }
 
