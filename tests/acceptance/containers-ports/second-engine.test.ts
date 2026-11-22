@@ -27,6 +27,19 @@ import {
 import {statusItem} from '../windows/renderer.ts';
 import {echoes, freePort, rowsWhen, showPorts} from './ports-support.ts';
 
+/** How many times, one second apart, the status text is read again after a mismatch, to say whether it was a moment or stayed. */
+const READ_AGAIN_SECONDS = 5;
+
+/** The status bar's forwarded-ports text of `window`, read `READ_AGAIN_SECONDS` more times, a second apart. */
+async function statusAgain(window: string): Promise<string[]> {
+  const seen: string[] = [];
+  for (let second = 0; second < READ_AGAIN_SECONDS; second += 1) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    seen.push((await statusItem(window, 'status.forwardedPorts')).ariaLabel);
+  }
+  return seen;
+}
+
 describe('the ports of a dev container on an engine of its own namespace (card tooling-123)', function () {
   this.timeout(900_000);
 
@@ -94,24 +107,29 @@ describe('the ports of a dev container on an engine of its own namespace (card t
       );
       await showPorts(window);
       const rows = await rowsWhen(window, shown => shown.length > 0);
-      deepStrictEqual(
-        {
-          answersHere,
-          publishedHere: await echoes(`127.0.0.1:${String(published)}`),
-          hostHere: await echoes(`127.0.0.1:${String(host)}`),
-          staticRows: rows.filter(
-            each => each.origin === 'Statically Forwarded',
-          ).length,
-          status: (await statusItem(window, 'status.forwardedPorts')).ariaLabel,
-        },
-        {
-          answersHere: true,
-          publishedHere: false,
-          hostHere: false,
-          staticRows: 0,
-          status: `Forwarded Ports: ${String(forwarded)}`,
-        },
-      );
+      const observed = {
+        answersHere,
+        publishedHere: await echoes(`127.0.0.1:${String(published)}`),
+        hostHere: await echoes(`127.0.0.1:${String(host)}`),
+        staticRows: rows.filter(each => each.origin === 'Statically Forwarded')
+          .length,
+        status: (await statusItem(window, 'status.forwardedPorts')).ariaLabel,
+      };
+      const expected = {
+        answersHere: true,
+        publishedHere: false,
+        hostHere: false,
+        staticRows: 0,
+        status: `Forwarded Ports: ${String(forwarded)}`,
+      };
+      try {
+        deepStrictEqual(observed, expected);
+      } catch (mismatch) {
+        throw new Error(
+          `${String(mismatch)}\nthe Ports rows at the read: ${JSON.stringify(rows.map(each => [each.port, each.forwardedAddress, each.origin]))}\nthe status text over the next ${String(READ_AGAIN_SECONDS)} s: ${JSON.stringify(await statusAgain(window))}`,
+          {cause: mismatch},
+        );
+      }
     } finally {
       if (window !== undefined) {
         await closeWindow(window).catch(() => undefined);
