@@ -131,6 +131,49 @@ export function pagesOfNoOpenWindow(
   );
 }
 
+/** The pause of the wait for the pages to leave, which a test replaces with a clock that only a pause advances. */
+export interface PagesLeaveEnvironment {
+  now(): number;
+  pause(milliseconds: number): Promise<void>;
+}
+
+/** How long the pages of closed windows get to leave the editor's list, and how often the list is read in that time. */
+const PAGES_LEAVE_MILLISECONDS = 5_000;
+const PAGES_LEAVE_STEP_MILLISECONDS = 500;
+
+const REAL_PAGES_LEAVE: PagesLeaveEnvironment = {
+  now: Date.now,
+  pause: milliseconds =>
+    new Promise(resolve => setTimeout(resolve, milliseconds)),
+};
+
+/**
+ * The editor's list once the pages of the windows that were closed a moment ago have had time to leave it: read again every half a second
+ * for up to five seconds while a page that no open window remembers is listed, so that a page on its way out (a window
+ * whose page no row read has none remembered, and its close returns as soon as its agent ends) is not told as one that
+ * stays. It gives the last list read, the first when no such page was listed, and nothing when the list cannot be read.
+ * It reads at most eleven times and throws nothing of its own.
+ */
+export async function listAfterPagesLeave(
+  read: () => Promise<readonly DebugTarget[] | undefined>,
+  remembered: ReadonlyMap<string, string>,
+  open: (window: string) => boolean,
+  environment: PagesLeaveEnvironment = REAL_PAGES_LEAVE,
+): Promise<readonly DebugTarget[] | undefined> {
+  const started = environment.now();
+  for (;;) {
+    const listed = await read();
+    if (
+      listed === undefined ||
+      pagesOfNoOpenWindow(listed, remembered, open).length === 0 ||
+      environment.now() - started >= PAGES_LEAVE_MILLISECONDS
+    ) {
+      return listed;
+    }
+    await environment.pause(PAGES_LEAVE_STEP_MILLISECONDS);
+  }
+}
+
 /**
  * What to say of the pages that stay in the editor's list once the windows are closed, and what has been said by now:
  * the note names the pages of `pagesOfNoOpenWindow` when they differ from those `told` names, and says nothing for the

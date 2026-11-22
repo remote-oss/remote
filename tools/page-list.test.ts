@@ -11,6 +11,7 @@ import {
   closeUntilGone,
   leftoverNote,
   lingeringPageNote,
+  listAfterPagesLeave,
   listedPages,
   listedTargets,
   localPageAmong,
@@ -481,6 +482,84 @@ describe('the close that is sent again while the page stays and the window is op
         {note: undefined, told: ''},
         true,
       ],
+    );
+  });
+
+  /** A list read that gives each of `lists` in turn and the last again, with a clock that only a pause advances. */
+  function leaveFixture(
+    lists: ReadonlyArray<readonly DebugTarget[] | undefined>,
+  ) {
+    let now = 0;
+    let reads = 0;
+    function open(window: string): boolean {
+      return window !== 'closed';
+    }
+    const remembered = new Map([['kept', 'kept-page-0001']]);
+    const result = listAfterPagesLeave(
+      () => {
+        const list = lists[Math.min(reads, lists.length - 1)];
+        reads += 1;
+        return Promise.resolve(list);
+      },
+      remembered,
+      open,
+      {
+        now: () => now,
+        pause: milliseconds => {
+          now += milliseconds;
+          return Promise.resolve();
+        },
+      },
+    );
+    return {
+      result,
+      remembered,
+      open,
+      state: () => ({reads, seconds: now / 1000}),
+    };
+  }
+
+  const KEPT = page('kept-page-0001', '[kept]');
+  const LEAVING = page('leaving-page-0002', '[c9]');
+
+  it('#2936: a page that leaves the list within the wait is not left in the list the wait gives', async () => {
+    const attempt = leaveFixture([[KEPT, LEAVING], [KEPT, LEAVING], [KEPT]]);
+    const listed = await attempt.result;
+    deepStrictEqual(
+      [
+        pagesOfNoOpenWindow(listed ?? [], attempt.remembered, attempt.open),
+        attempt.state(),
+      ],
+      [[], {reads: 3, seconds: 1}],
+    );
+  });
+
+  it('#2936: a page that stays is in the list after eleven reads over five seconds, and the note says it as before', async () => {
+    const attempt = leaveFixture([[KEPT, LEAVING]]);
+    const listed = await attempt.result;
+    deepStrictEqual(
+      [
+        leftoverNote(listed ?? [], attempt.remembered, attempt.open, '').note,
+        attempt.state(),
+      ],
+      [
+        "1 pages of the editor's list that no open window remembers: [c9] #leaving- remembered by none",
+        {reads: 11, seconds: 5},
+      ],
+    );
+  });
+
+  it('#2936: a list with no page of a closed window is read once and a list that cannot be read is given as it is', async () => {
+    const clean = leaveFixture([[KEPT]]);
+    const unreadable = leaveFixture([undefined]);
+    deepStrictEqual(
+      [
+        await clean.result,
+        clean.state(),
+        await unreadable.result,
+        unreadable.state(),
+      ],
+      [[KEPT], {reads: 1, seconds: 0}, undefined, {reads: 1, seconds: 0}],
     );
   });
 });

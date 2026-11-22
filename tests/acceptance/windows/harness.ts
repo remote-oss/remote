@@ -56,6 +56,7 @@ import {
   type DebugTarget,
   listedPages,
   leftoverNote,
+  listAfterPagesLeave,
   pagesDescription,
   REMEMBERED_PAGES,
   waitUntilPageLeft,
@@ -1479,11 +1480,15 @@ let toldLeftoverPages = '';
 /**
  * What the editor lists that no open window remembers, told when it differs from what was told last: the pages that a
  * window left behind after its close or its row's failure stay in the list for the rest of the launch, and every later
- * row has more pages to tell apart (#2936). Nothing when none is listed, when the list cannot be read, or when these were
- * told already.
+ * row has more pages to tell apart (#2936). The list is read again for a few seconds while such pages are listed, so a page
+ * on its way out is not told. Nothing when none is listed, when the list cannot be read, or when these were told already.
  */
 export async function leftoverPagesNote(): Promise<string | undefined> {
-  const listed = await pagesListedNow();
+  const listed = await listAfterPagesLeave(
+    pagesListedNow,
+    REMEMBERED_PAGES,
+    isOpen,
+  );
   if (listed === undefined) {
     return undefined;
   }
