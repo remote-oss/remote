@@ -682,7 +682,7 @@ describe('the launches of the VSCodium run', () => {
         ...['containers-a', 'containers-b'].map(label => [
           label,
           'containers',
-          shared,
+          {...shared, 'workbench.commandPalette.history': 0},
           ['ms-vscode-remote.remote-containers'],
           undefined,
         ]),
@@ -1311,8 +1311,31 @@ describe('the launches of the VSCodium run', () => {
       [
         ['ssh-newclient', 'ssh-newclient-pickers'],
         {'window.title': '[${rootName}]', 'remote.SSH.path': client},
-        {'window.title': '[${rootName}]', 'workbench.startupEditor': 'none'},
+        {
+          'window.title': '[${rootName}]',
+          'workbench.startupEditor': 'none',
+          'workbench.commandPalette.history': 0,
+        },
       ],
+    );
+  });
+
+  it('#2940: every launch whose rows read the order of the palette’s list starts with the palette’s history switched off, so no earlier command leads the alphabetical list', () => {
+    function history(launch: Launch): unknown {
+      return settingsOfLaunch(launch)?.['workbench.commandPalette.history'];
+    }
+    deepStrictEqual(
+      [
+        ['ssh-core', 'ssh-agents', 'terminal-login', 'wsl-linux'].map(label =>
+          history(launchLabelled(launches, label)),
+        ),
+        launches
+          .filter(launch => launch.suite === 'containers')
+          .map(history)
+          .filter(value => value !== 0),
+        history(launchLabelled(launches, 'windows')),
+      ],
+      [[0, 0, 0, 0], [], undefined],
     );
   });
 

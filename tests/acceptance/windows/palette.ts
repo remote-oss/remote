@@ -1,9 +1,4 @@
-import {
-  startInWindow,
-  terminalFacts,
-  userSettings,
-  windowEvents,
-} from './harness.ts';
+import {startInWindow, terminalFacts, windowEvents} from './harness.ts';
 import {
   chooseQuickPickRow,
   moveQuickPickFocus,
@@ -82,12 +77,11 @@ async function showedPalette(name: string): Promise<void> {
   }
 }
 
-/** The labels of the items that the command palette of window `name` lists for `text`, once its list has settled, with the palette's history of run commands switched off first: the palette lists the commands run from it ahead of its alphabetical list, so a row that reads the order assumes a profile in which none ran (`workbench.commandPalette.history` 0, "Set to 0 to disable command history" [oss] `src/vs/workbench/browser/workbench.contribution.ts`). */
+/** The labels of the items that the command palette of window `name` lists for `text`, once its list has settled, whose launch has the palette's history of run commands switched off (`PALETTE_HISTORY_OFF` in `tools/acceptance-launches.ts`), so a row that reads the order of the list finds the alphabetical one. */
 export async function paletteItems(
   name: string,
   text: string,
 ): Promise<string[]> {
-  await userSettings({'workbench.commandPalette.history': 0});
   await showedPalette(name);
   await typeInQuickPick(name, `>${text}`);
   let items: string[] = [];

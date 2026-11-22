@@ -238,6 +238,13 @@ export function windowPortRangeProblem(
     : undefined;
 }
 
+/**
+ * The setting that switches off the palette's history of commands run from it ([oss]
+ * `src/vs/workbench/browser/workbench.contribution.ts`: "Set to 0 to disable command history"): a launch whose rows read
+ * the order of the palette's list has it from the start, so no earlier row's command leads the alphabetical list.
+ */
+const PALETTE_HISTORY_OFF = {'workbench.commandPalette.history': 0} as const;
+
 const RENDERER_LAUNCH = {
   kind: 'plain',
   debuggingPort: true,
@@ -1075,6 +1082,7 @@ export function launchesOf(root: string): Launch[] {
       suite: 'terminal-login',
       settings: {
         ...RENDERER_LAUNCH.settings,
+        ...PALETTE_HISTORY_OFF,
         'remote.SSH.useLocalServer': false,
         'remote.SSH.showLoginTerminal': true,
         'remote.SSH.remotePlatform': {
@@ -1212,6 +1220,7 @@ export function launchesOf(root: string): Launch[] {
         // A new window opens no Welcome page of its own, as in the containers launches: a row reads the window's editors
         // and the page it draws, and the page's focus is not what a row means to test.
         'workbench.startupEditor': 'none',
+        ...PALETTE_HISTORY_OFF,
       },
     },
     // The same with the pinned OpenSSH client as the user's `remote.SSH.path`, for the criteria about keywords newer than
@@ -1247,6 +1256,7 @@ export function launchesOf(root: string): Launch[] {
       suite: 'ssh-agents',
       settings: {
         'window.title': '[${rootName}]${remoteName}',
+        ...PALETTE_HISTORY_OFF,
         'window.dialogStyle': 'custom',
         'chat.disableAIFeatures': true,
         'chat.remoteAgentHostsEnabled': true,
@@ -1364,6 +1374,7 @@ export function launchesOf(root: string): Launch[] {
       suite: 'wsl',
       files: ['activation.test.ts'],
       withExtensions: ['remote-oss.remote-wsl'],
+      settings: {...RENDERER_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
     },
     {
       ...RENDERER_LAUNCH,
@@ -1548,6 +1559,7 @@ export function launchesOf(root: string): Launch[] {
       partOf: 'containers',
       registry: true,
       templates: true,
+      settings: {...CONTAINERS_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
       // A recording xdg-open first on the editor's PATH, so that a row can tell whether a link was opened.
       environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
       // The other Dev Containers, installed and disabled: the package works beside it and warns of nothing.
