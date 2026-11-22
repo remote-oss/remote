@@ -1,10 +1,18 @@
 /**
- * @fileoverview The merge of the viewport reads of a virtualized list (card #2960): a read that starts mid-list is
- * corrected by the wheel to the top, and a walk that never reaches the top misses the rows above it.
+ * @fileoverview The reads of a virtualized list's walk (card #2960): the merge of the viewport reads, where a read
+ * that starts mid-list is corrected by the wheel to the top and a walk that never reaches the top misses the rows
+ * above it, and the direction a wheel went, told by its labels; the sign of the wheel that stands the list at its
+ * top stands on the direction its probe told, re-read while the list's rows are still filling (card #3000).
  */
 
-import {deepStrictEqual, notDeepStrictEqual} from 'node:assert';
-import {mergeReads, wheelDirection, type ViewRowRead} from './view-rows.ts';
+import {deepStrictEqual, notDeepStrictEqual, rejects} from 'node:assert';
+import {
+  mergeReads,
+  wheelDirection,
+  wheelTopSign,
+  type ViewRowRead,
+  type WheelProbeRead,
+} from './view-rows.ts';
 
 /** A row of the fake list. */
 function sampleRow(label: string, level = 2): ViewRowRead {
@@ -102,5 +110,57 @@ describe('the direction of a wheel of a virtualized list, told by its labels (ca
       wheelDirection(['ssh', 'a', 'b', 'c'], ['ssh', 'b', 'c', 'd']),
       undefined,
     );
+  });
+});
+
+describe('the sign of the wheel that stands a virtualized list at its top (card #3000)', () => {
+  /** A probe that answers each wheel with the read it stands at, in order, echoing the wheel's delta. */
+  function scriptedProbe(reads: readonly WheelProbeRead[]) {
+    let stands = 0;
+    return (delta: number) => {
+      const read = reads[stands];
+      stands += 1;
+      if (read === undefined) {
+        throw new Error('the scripted probe ran out of reads');
+      }
+      return Promise.resolve({...read, delta});
+    };
+  }
+
+  it('a list that fills after the first read tells its direction on the re-read', async () => {
+    // The list fills while the first read stands: the viewport gains a row and its top does not shift, so the
+    // labels tell no direction; the probe wheels the list again, and the shifted read tells it.
+    const reads: readonly WheelProbeRead[] = [
+      {delta: -400, moved: true, before: ['a', 'b'], after: ['a', 'b', 'c']},
+      {
+        delta: -400,
+        moved: true,
+        before: ['a', 'b', 'c'],
+        after: ['b', 'c', 'd'],
+      },
+    ];
+    deepStrictEqual(await wheelTopSign(scriptedProbe(reads)), 400);
+  });
+
+  it('a list that never stops filling names its reads when the direction still cannot be told', async () => {
+    const reads: readonly WheelProbeRead[] = [
+      {delta: -400, moved: true, before: ['h', 'i'], after: ['h', 'i', 'j']},
+      {
+        delta: -400,
+        moved: true,
+        before: ['h', 'i', 'j'],
+        after: ['h', 'i', 'j', 'k'],
+      },
+      {
+        delta: -400,
+        moved: true,
+        before: ['h', 'i', 'j', 'k'],
+        after: ['h', 'i', 'j', 'k', 'l'],
+      },
+    ];
+    await rejects(wheelTopSign(scriptedProbe(reads)), {
+      message:
+        'the wheel to the top still could not tell its direction after 3 reads, before [h, i, j, k], after [h, i, j, k, l]',
+    });
   });
 });

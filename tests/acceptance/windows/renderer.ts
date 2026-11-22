@@ -11,6 +11,7 @@ import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
 import {
   mergeReads,
   wheelDirection,
+  wheelTopSign,
   type ViewRowRead,
 } from '../../../tools/view-rows.ts';
 import path from 'node:path';
@@ -84,30 +85,19 @@ const first = () => {
 /**
  * The wheel to the list's top, standing on the list's `labels` and `move`: the wheel's sign that scrolls the list
  * up varies with the build, so it is probed — at a boundary only one sign moves — and a move's direction, told by
- * its labels with `wheelDirection`'s own text (the page runs the very function the unit rows test), sets the
- * sign; the list is wheeled up with it until it stands at its top.
+ * its labels with `wheelDirection`'s own text (the page runs the very functions the unit rows test), sets the
+ * sign; a list that is still filling its rows tells no direction from one read, so the probe reads it again, and
+ * fails naming its reads when the direction still cannot be told; the list is wheeled up with the sign until it
+ * stands at its top.
  */
-const WHEEL_TO_TOP = `const direction = ${wheelDirection.toString()};
+const WHEEL_TO_TOP = `const wheelDirection = ${wheelDirection.toString()};
+const topSign = ${wheelTopSign.toString()};
 const probe = async delta => {
   const before = labels();
   const moved = await move(delta);
   return {delta, moved, before, after: labels()};
 };
-let upSign = 0;
-let topStep = await probe(-400);
-if (!topStep.moved) {
-  topStep = await probe(400);
-}
-if (topStep.moved) {
-  const way = direction(topStep.before, topStep.after);
-  if (way === 'down') {
-    upSign = -topStep.delta;
-  } else if (way === 'up') {
-    upSign = topStep.delta;
-  } else {
-    throw new Error('the wheel to the top could not tell its direction');
-  }
-}
+const upSign = await topSign(probe);
 let topMoves = 0;
 while (upSign !== 0 && topMoves < 200 && (await move(upSign))) {
   topMoves += 1;
