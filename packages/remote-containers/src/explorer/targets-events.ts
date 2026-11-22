@@ -1,5 +1,5 @@
 /**
- * @fileoverview The stream of Docker's container events that keeps the Dev Containers view current: one `docker
+ * @fileoverview The stream of Docker's container and volume events that keeps the Dev Containers and Dev Volumes views current: one `docker
  * events` process while the view is visible, and one rebuild after a quiet moment, however many events came.
  */
 
@@ -12,6 +12,8 @@ export const EVENTS_ARGUMENTS: readonly string[] = [
   'events',
   '--filter',
   'type=container',
+  '--filter',
+  'type=volume',
   '--format',
   '{{json .}}',
 ];

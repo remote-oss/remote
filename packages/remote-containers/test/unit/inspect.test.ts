@@ -96,6 +96,20 @@ describe('Inspect of the Dev Containers view (card containers-104)', () => {
     ]);
   });
 
+  it('F-0902 AC-29: a Dev Volumes row of either kind is inspected as a volume by its raw name, and its object is opened', async () => {
+    const {scene, inspect} = sceneOf(
+      finished(0, '[{"Name":"owner-repo-1","Driver":"local"}]'),
+    );
+    await inspect({name: 'owner-repo-1', viewItem: 'uniqueDevVolume'});
+    await inspect({name: '-dashed', viewItem: 'devVolume'});
+    await inspect({name: 'ignored', viewItem: 'other'});
+    await inspect({name: 5, viewItem: 'devVolume'});
+    deepStrictEqual(
+      scene.events.filter(event => !event.startsWith('open ')),
+      ['volume inspect -- owner-repo-1', 'volume inspect -- -dashed'],
+    );
+  });
+
   it('F-0902 AC-56: anything else than a container row or an Image row with a reference does nothing at all', async () => {
     const {scene, inspect} = sceneOf(finished(0, '[{}]'));
     for (const argument of [

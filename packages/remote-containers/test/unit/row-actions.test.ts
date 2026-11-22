@@ -8,6 +8,8 @@ import {
   containerRowOf,
   rowActionsOf,
 } from '../../src/explorer/row-actions.ts';
+import type {ListedContainer} from '../../src/explorer/listed-containers.ts';
+import type {ListedVolume} from '../../src/explorer/listed-volumes.ts';
 import type {TargetRow} from '../../src/explorer/targets-model.ts';
 
 /** What a scripted Docker answers to an argument list. */
@@ -53,7 +55,14 @@ interface Scene {
 /** The actions over a scripted Docker, with `confirmed` as the answer of every dialog. */
 function sceneOf(
   script: Script,
-  options: {confirmed?: boolean; engine?: boolean; program?: string} = {},
+  options: {
+    confirmed?: boolean | boolean[];
+    engine?: boolean;
+    program?: string;
+    containers?: ListedContainer[];
+    volumes?: ListedVolume[];
+    listFails?: boolean;
+  } = {},
 ) {
   const scene: Scene = {events: [], confirmations: [], errors: []};
   const engine: EngineHost = {
@@ -70,8 +79,20 @@ function sceneOf(
     confirm: confirmation => {
       scene.confirmations.push(confirmation);
       scene.events.push('dialog');
-      return Promise.resolve(options.confirmed ?? true);
+      const answers = options.confirmed ?? true;
+      return Promise.resolve(
+        typeof answers === 'boolean'
+          ? answers
+          : (answers[scene.confirmations.length - 1] ?? true),
+      );
     },
+    listed: () => ({
+      containers: () =>
+        options.listFails === true
+          ? Promise.reject(new Error('no list'))
+          : Promise.resolve(options.containers ?? []),
+      volumes: () => Promise.resolve(options.volumes ?? []),
+    }),
     showError: text => {
       scene.events.push(`error: ${text}`);
       scene.errors.push(text);
@@ -391,5 +412,158 @@ describe('the row actions of the Dev Containers view (card containers-102)', () 
         `${WORDS}\nThis is the last container using 'data'.`,
       ],
     );
+  });
+
+  /** A listed container with the labels and the volumes given. */
+  function listed(
+    containerId: string,
+    labels: Record<string, string>,
+    volumes: string[],
+    createdAt = 1,
+  ): ListedContainer {
+    return {
+      id: containerId,
+      name: containerId,
+      image: 'image',
+      state: 'exited',
+      createdAt,
+      startedAt: undefined,
+      finishedAt: undefined,
+      labels,
+      binds: [],
+      volumes,
+    };
+  }
+
+  const UNIQUE_VOLUME: ListedVolume = {
+    name: 'repo-volume',
+    labels: {'vsch.local.repository.unique': 'true'},
+  };
+  const OWN = listed(
+    'target',
+    {'vsch.local.repository.volume': 'repo-volume'},
+    ['repo-volume'],
+  );
+
+  it('F-0904 AC-11: a Remove whose container names a unique volume no other container mounts asks the second dialog S347/S133, and Remove deletes the container and then the volume', async () => {
+    const {scene, actions} = sceneOf(quiet, {
+      containers: [OWN],
+      volumes: [UNIQUE_VOLUME],
+    });
+    await actions.remove(EXITED);
+    deepStrictEqual(
+      [
+        scene.confirmations.map(each => [
+          each.message,
+          each.detail,
+          each.accept,
+          each.severity,
+        ]),
+        scene.events.filter(
+          event => event.startsWith('rm ') || event.startsWith('volume'),
+        ),
+      ],
+      [
+        [
+          [
+            'Remove this container?',
+            'This action is not reversible and deletes the container permanently.',
+            'Remove',
+            undefined,
+          ],
+          [
+            'The container is using a volume with a cloned repository.',
+            'Do you want to remove the volume and the data it contains?',
+            'Remove',
+            'info',
+          ],
+        ],
+        ['rm target', 'volume rm repo-volume'],
+      ],
+    );
+  });
+
+  it('F-0904 AC-11: Cancel on the second dialog deletes only the container', async () => {
+    const {scene, actions} = sceneOf(quiet, {
+      confirmed: [true, false],
+      containers: [OWN],
+      volumes: [UNIQUE_VOLUME],
+    });
+    await actions.remove(EXITED);
+    deepStrictEqual(
+      scene.events.filter(
+        event => event.startsWith('rm ') || event.startsWith('volume'),
+      ),
+      ['rm target'],
+    );
+  });
+
+  it('F-0904 AC-12, AC-13, AC-35, AC-36: no second dialog for a devVolume, for a container with no volume label, for a volume another container mounts in any state, or when the label names no volume; one for a volume that only another container’s label names', async () => {
+    const asked = async (
+      containers: ListedContainer[],
+      volumes: ListedVolume[],
+    ): Promise<number> => {
+      const {scene, actions} = sceneOf(quiet, {containers, volumes});
+      await actions.remove(EXITED);
+      return scene.confirmations.length;
+    };
+    deepStrictEqual(
+      [
+        await asked([OWN], [{name: 'repo-volume', labels: {}}]),
+        await asked(
+          [OWN],
+          [
+            {
+              name: 'repo-volume',
+              labels: {'vsch.local.repository.unique': 'false'},
+            },
+          ],
+        ),
+        await asked([listed('target', {}, ['repo-volume'])], [UNIQUE_VOLUME]),
+        await asked(
+          [OWN, listed('other', {}, ['repo-volume'], 2)],
+          [UNIQUE_VOLUME],
+        ),
+        await asked([OWN], []),
+        await asked([listed('else', {})], [UNIQUE_VOLUME]),
+        await asked(
+          [
+            OWN,
+            listed(
+              'named',
+              {'vsch.local.repository.volume': 'repo-volume'},
+              [],
+              2,
+            ),
+          ],
+          [UNIQUE_VOLUME],
+        ),
+      ],
+      [1, 1, 1, 1, 1, 1, 2],
+    );
+  });
+
+  it('F-0904 AC-11: a Remove whose lists cannot be read asks only the first dialog and removes the container', async () => {
+    const {scene, actions} = sceneOf(quiet, {listFails: true});
+    await actions.remove(EXITED);
+    deepStrictEqual(
+      [
+        scene.confirmations.length,
+        scene.events.filter(event => event.startsWith('rm ')),
+      ],
+      [1, ['rm target']],
+    );
+  });
+
+  it('F-0904 BR-5: a volume removal that fails after the container went is the error S169 naming the command, and the view is read again', async () => {
+    const {scene, actions} = sceneOf(
+      argv => (argv[0] === 'volume' ? finished(1) : finished(0)),
+      {containers: [OWN], volumes: [UNIQUE_VOLUME]},
+    );
+    await actions.remove(EXITED);
+    deepStrictEqual(scene.events.slice(-2), [
+      'error: Error removing volume: Command failed: docker volume rm repo-volume',
+      'refresh',
+    ]);
   });
 });

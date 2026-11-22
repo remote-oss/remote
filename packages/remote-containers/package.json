@@ -194,6 +194,20 @@
         "category": "Dev Containers"
       },
       {
+        "command": "remote-containers.explorerVolumesRefresh",
+        "title": "%commands.explorerVolumesRefresh.title%",
+        "category": "Dev Containers",
+        "icon": {
+          "light": "resources/light/refresh.svg",
+          "dark": "resources/dark/refresh.svg"
+        }
+      },
+      {
+        "command": "remote-containers.removeVolume",
+        "title": "%commands.removeVolume.title%",
+        "category": "Dev Containers"
+      },
+      {
         "command": "remote-containers.explorerDetailsRefresh",
         "title": "%commands.explorerDetailsRefresh.title%",
         "category": "Dev Containers",
@@ -326,6 +340,14 @@
           "when": "false"
         },
         {
+          "command": "remote-containers.explorerVolumesRefresh",
+          "when": "false"
+        },
+        {
+          "command": "remote-containers.removeVolume",
+          "when": "false"
+        },
+        {
           "command": "remote-containers.explorerDetailsRefresh",
           "when": "false"
         },
@@ -408,6 +430,21 @@
       ],
       "view/title": [
         {
+          "command": "remote-containers.openRepositoryInUniqueVolume",
+          "group": "navigation@1",
+          "when": "view == devVolumes && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.pruneVolumes",
+          "group": "navigation@2",
+          "when": "view == devVolumes && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.explorerVolumesRefresh",
+          "group": "navigation@3",
+          "when": "view == devVolumes && !remote-containers:standingDown"
+        },
+        {
           "command": "remote-containers.explorerTargetsRefresh",
           "group": "navigation@3",
           "when": "view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:needsSSHCredentials && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown"
@@ -429,6 +466,16 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "remote-containers.inspectDockerResource",
+          "group": "2_volumes@2",
+          "when": "view == devVolumes && viewItem =~ /^(devVolume|uniqueDevVolume)$/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.removeVolume",
+          "group": "3_volumes-destructive@1",
+          "when": "view == devVolumes && viewItem =~ /^(devVolume|uniqueDevVolume)$/ && !remote-containers:standingDown"
+        },
         {
           "command": "workbench.action.closeFolder",
           "group": "1_folder@1",
@@ -619,10 +666,25 @@
             "dev-container",
             "attached-container"
           ]
+        },
+        {
+          "id": "devVolumes",
+          "name": "%views.devVolumes.name%",
+          "group": "details@2",
+          "when": "!hideConnectCommands",
+          "remoteName": [
+            "dev-container",
+            "attached-container"
+          ]
         }
       ]
     },
     "viewsWelcome": [
+      {
+        "view": "devVolumes",
+        "contents": "%viewsWelcome.devVolumes.noDevVolumes%",
+        "when": "remote-containers:noDevVolumes && !remote-containers:standingDown"
+      },
       {
         "view": "targetsContainers",
         "contents": "%viewsWelcome.targetsContainers.needsDockerStartOrInstall%",

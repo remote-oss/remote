@@ -1,5 +1,5 @@
 /**
- * @fileoverview Inspect, for a container row of the Dev Containers view and for the Image row of the Details view: it
+ * @fileoverview Inspect, for a container row of the Dev Containers view, a volume row of the Dev Volumes view and the Image row of the Details view: it
  * runs Docker's inspect on the view's own engine and opens the first object of the reply as an untitled JSON document,
  * indented with tabs. Every call opens a new document, and a call without such a row does nothing at all.
  */
@@ -9,6 +9,7 @@ import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {filled} from '../surfaces/filled.ts';
 import {recordOf} from './listed-containers.ts';
 import {containerRowOf} from './row-actions.ts';
+import {volumeNameOf} from './volume-actions.ts';
 
 /** The English template of the text of a failed inspect; it has no string id of its own. */
 const FAILED_TEMPLATE = 'Error inspecting: {0}';
@@ -27,11 +28,15 @@ export interface InspectPorts {
   cancellation: AbortSignal;
 }
 
-/** The Docker arguments for the target a command was given; none when it is neither a container row nor an Image row. */
+/** The Docker arguments for the target a command was given; none when it is neither a container row, an Image row nor a volume row. */
 function inspectArgumentsOf(argument: unknown): string[] | undefined {
   const container = containerRowOf(argument);
   if (container !== undefined) {
     return ['inspect', container.id];
+  }
+  const volume = volumeNameOf(argument);
+  if (volume !== undefined) {
+    return ['volume', 'inspect', '--', volume];
   }
   const imageRow = recordOf(argument);
   return imageRow?.viewItem === 'image' &&

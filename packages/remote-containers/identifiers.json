@@ -58,6 +58,10 @@
       "setter": "extension"
     },
     {
+      "id": "remote-containers:noDevVolumes",
+      "setter": "extension"
+    },
+    {
       "id": "remote-containers:showDetails",
       "setter": "extension"
     }

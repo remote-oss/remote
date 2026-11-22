@@ -22,6 +22,7 @@ import {
   type ListedContainer,
   listedContainersOf,
 } from './listed-containers.ts';
+import type {TooltipLine} from './volumes-model.ts';
 import {whenRegistered} from './when-registered.ts';
 import {
   type RowIcon,
@@ -68,7 +69,7 @@ export interface TreeItemSpec {
   id: string;
   label: string;
   description: string | undefined;
-  tooltip: string | undefined;
+  tooltip: string | readonly TooltipLine[] | undefined;
   contextValue: string | undefined;
   /** Whether the node starts expanded; a node with nothing under it never does. */
   expanded: boolean;

@@ -262,12 +262,17 @@ import {
 import {containerLogOf} from './explorer/container-log.ts';
 import {inspectOf} from './explorer/inspect.ts';
 import {
+  type Confirmation,
   containerRowOf,
   type RowActions,
   rowActionsOf,
 } from './explorer/row-actions.ts';
 import {rowOpenOf} from './explorer/row-open.ts';
 import {sharedContainerEvents} from './explorer/targets-events.ts';
+import {removeVolumeOf} from './explorer/volume-actions.ts';
+import type {TooltipLine} from './explorer/volumes-model.ts';
+import {showVolumesWhenRegistered} from './explorer/volumes-view.ts';
+import type {ShownView} from './explorer/when-registered.ts';
 import {registeredNameOf} from './explorer/view-name.ts';
 import {
   engineOfWindow,
@@ -526,6 +531,29 @@ function treeViewOf<Node>(
   };
 }
 
+/**
+ * The hover of a row: one paragraph for each line, its icon first. Every text goes in as text and so shows as it is
+ * written, never as markup; only the address of a link is markup, and the model builds it.
+ */
+function tooltipOf(lines: readonly TooltipLine[]): vscode.MarkdownString {
+  const tooltip = new vscode.MarkdownString(undefined, true);
+  tooltip.isTrusted = false;
+  tooltip.supportHtml = false;
+  lines.forEach((line, index) => {
+    if (index > 0) {
+      tooltip.appendMarkdown('\n\n');
+    }
+    tooltip.appendMarkdown(`$(${line.icon}) `);
+    if (line.link === undefined) {
+      tooltip.appendText(line.text);
+    } else {
+      tooltip.appendMarkdown('[').appendText(line.text);
+      tooltip.appendMarkdown(`](${line.link})`);
+    }
+  });
+  return tooltip;
+}
+
 /** The editor's tree item for what the view says of a node; the package's own icons are in its `resources`. */
 function treeItemOf(
   spec: TreeItemSpec,
@@ -541,8 +569,10 @@ function treeItemOf(
   if (spec.description !== undefined) {
     item.description = spec.description;
   }
-  if (spec.tooltip !== undefined) {
+  if (typeof spec.tooltip === 'string') {
     item.tooltip = spec.tooltip;
+  } else if (spec.tooltip !== undefined) {
+    item.tooltip = tooltipOf(spec.tooltip);
   }
   if (spec.contextValue !== undefined) {
     item.contextValue = spec.contextValue;
@@ -888,6 +918,8 @@ export async function activate(
       );
   }
   let targetsView: TargetsView | undefined;
+  let volumesView: ShownView | undefined;
+  let removeVolume: ((argument: unknown) => Promise<void>) | undefined;
   let detailsView: DetailsView | undefined;
   let rowActions: RowActions | undefined;
   let cleanUp: CleanUpCommands | undefined;
@@ -2222,6 +2254,8 @@ export async function activate(
         rebuildContainer: {execute: rebuildHandler(false)},
         rebuildContainerNoCache: {execute: rebuildHandler(true)},
         explorerTargetsRefresh: {execute: () => targetsView?.refresh()},
+        explorerVolumesRefresh: {execute: () => volumesView?.refresh()},
+        removeVolume: {execute: argument => removeVolume?.(argument)},
         explorerDetailsRefresh: {execute: () => detailsView?.refresh()},
         startContainer: {execute: argument => rowActions?.start(argument)},
         stopContainer: {execute: argument => rowActions?.stop(argument)},
@@ -3028,15 +3062,30 @@ export async function activate(
       logger,
     });
     const rowActionsStop = new AbortController();
+    const listing = engineListingOf({
+      engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
+      program: () => executableOf(windowEngine.dockerPath(), undefined).written,
+      cancellation: rowActionsStop.signal,
+    });
+    volumeListing = listing;
+    /** A modal dialog with the button that confirms, the warning icon unless the confirmation is of the information kind. */
+    async function confirmed({
+      message,
+      detail,
+      accept,
+      severity,
+    }: Confirmation): Promise<boolean> {
+      const show =
+        severity === 'info'
+          ? vscode.window.showInformationMessage
+          : vscode.window.showWarningMessage;
+      return (await show(message, {modal: true, detail}, accept)) === accept;
+    }
     rowActions = rowActionsOf({
       engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
       program: () => executableOf(windowEngine.dockerPath(), undefined).written,
-      confirm: async ({message, detail, accept}) =>
-        (await vscode.window.showWarningMessage(
-          message,
-          {modal: true, detail},
-          accept,
-        )) === accept,
+      confirm: confirmed,
+      listed: () => listing,
       showError: text => {
         void vscode.window.showErrorMessage(text);
       },
@@ -3046,10 +3095,47 @@ export async function activate(
       translate,
       cancellation: rowActionsStop.signal,
     });
-    volumeListing = engineListingOf({
+    removeVolume = removeVolumeOf({
       engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
       program: () => executableOf(windowEngine.dockerPath(), undefined).written,
+      containers: () => listing.containers(),
+      confirm: confirmed,
+      inform: detail =>
+        vscode.window.showInformationMessage(
+          '',
+          {modal: true, detail},
+          {title: 'OK', isCloseAffordance: true},
+        ),
+      showError: text => {
+        void vscode.window.showErrorMessage(text);
+      },
+      refresh: async () => {
+        await volumesView?.refresh();
+      },
+      translate,
       cancellation: rowActionsStop.signal,
+    });
+    volumesView = showVolumesWhenRegistered({
+      editor: explorerEditor,
+      listing: () => listing,
+      events: containerEvents,
+      held: () => connector.heldConnection(),
+      now: Date.now,
+      setTimer: (milliseconds, callback) =>
+        served.preflight.setTimer(milliseconds, callback),
+      onEngineChange: listener => engineWatch.onEngineChange(listener),
+      onDockerPathChange: listener =>
+        vscode.workspace.onDidChangeConfiguration(event => {
+          if (event.affectsConfiguration(settings.dockerPath.id)) {
+            listener();
+          }
+        }),
+      onTrustGranted: listener =>
+        vscode.workspace.onDidGrantWorkspaceTrust(() => {
+          listener();
+        }),
+      translate,
+      logger,
     });
     cleanUp = cleanUpCommandsOf({
       engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
@@ -3134,6 +3220,7 @@ export async function activate(
         dispose: () => {
           rowActionsStop.abort();
           targetsView?.dispose();
+          volumesView?.dispose();
         },
       },
       {

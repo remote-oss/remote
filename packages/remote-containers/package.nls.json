@@ -81,8 +81,17 @@
     "message": "Get started with containers by running one of the Dev Containers commands. You can open an existing folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
     "comment": ["{Locked='](command:remote-containers.openFolder)'}"]
   },
+  "commands.explorerVolumesRefresh.title": "Refresh",
+  "commands.removeVolume.title": "Remove",
   "commands.explorerDetailsRefresh.title": "Refresh",
   "views.detailsContainers.name": "Details (Containers)",
+  "views.devVolumes.name": "Dev Volumes",
+  "viewsWelcome.devVolumes.noDevVolumes": {
+    "message": "If there's a repository you want to work with you can clone that directly in a container volume. [Clone Repository in Container Volume](command:remote-containers.openRepositoryInUniqueVolume)",
+    "comment": [
+      "{Locked='](command:remote-containers.openRepositoryInUniqueVolume)'}"
+    ]
+  },
   "setting.DefaultFeatures.description": "Configures the list of features to always install while creating a container.",
   "setting.Lockfile.description": "Controls whether a devcontainer-lock.json should be written.",
   "setting.RepositoryConfigurationPaths.description": "Absolute paths of folders that hold dev container configurations for repositories. A configuration for a repository goes in <folder>/<host>/<path of the repository>/.devcontainer/devcontainer.json, with the host and the path as the repository's remote URL gives them. Only literal absolute paths are read: no ~ and no variables.",

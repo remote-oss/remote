@@ -14,6 +14,9 @@ import {
   recordOf,
 } from './listed-containers.ts';
 import type {TargetRow} from './targets-model.ts';
+import type {ListedContainer} from './listed-containers.ts';
+import type {ListedVolume} from './listed-volumes.ts';
+import {chainedVolumeOf, VOLUME_TEMPLATES} from './volume-actions.ts';
 
 /** The English template of each text of the actions, by its string id. */
 const ACTION_TEMPLATES = {
@@ -24,6 +27,8 @@ const ACTION_TEMPLATES = {
   S335: 'Stop Container',
   S337: 'Stop {0}?',
   S369: 'This action is not reversible and deletes the container permanently.',
+  S133: 'Do you want to remove the volume and the data it contains?',
+  S347: 'The container is using a volume with a cloned repository.',
   S373: "This is the last container using '{0}'.",
   /** The Remove button of the confirmation; it has no string id of its own. */
   remove: 'Remove',
@@ -39,6 +44,8 @@ export interface Confirmation {
   detail: string;
   /** The text of the button that confirms. */
   accept: string;
+  /** `info` for the information icon; none for the warning icon. */
+  severity?: 'info';
 }
 
 /** What the actions need of their surroundings. */
@@ -49,6 +56,11 @@ export interface RowActionPorts {
   program(): string;
   /** Shows the dialog and says whether the button that confirms was chosen. */
   confirm(confirmation: Confirmation): Promise<boolean>;
+  /** The engine's containers and volumes, which decide whether Remove offers to remove a volume too. */
+  listed(): {
+    containers(): Promise<ListedContainer[]>;
+    volumes(): Promise<ListedVolume[]>;
+  };
   /** Shows an error notification with no buttons. */
   showError(text: string): void;
   /** Reads the engine again and rebuilds the view. */
@@ -183,6 +195,30 @@ export function rowActionsOf(ports: RowActionPorts): RowActions {
     ports.showError(filled(translate, template, [failureText(argv)]));
   }
 
+  /** The volume the user agreed to remove with the container, after the dialog that asks; none for none. */
+  async function volumeAgreed(
+    containerId: string,
+  ): Promise<string | undefined> {
+    const listed = ports.listed();
+    const volume = await Promise.all([
+      listed.containers(),
+      listed.volumes(),
+    ]).then(
+      ([containers, volumes]) =>
+        chainedVolumeOf(containerId, containers, volumes),
+      () => undefined,
+    );
+    return volume !== undefined &&
+      (await ports.confirm({
+        message: translate(ACTION_TEMPLATES.S347),
+        detail: translate(ACTION_TEMPLATES.S133),
+        accept: translate(ACTION_TEMPLATES.remove),
+        severity: 'info',
+      }))
+      ? volume
+      : undefined;
+  }
+
   return {
     start: async argument => {
       const target = containerRowOf(argument);
@@ -223,6 +259,7 @@ export function rowActionsOf(ports: RowActionPorts): RowActions {
       if (!confirmed) {
         return;
       }
+      const volume = await volumeAgreed(target.id);
       if (target.viewItem.split(' ').includes('running')) {
         const stopping = ['stop', target.id];
         if ((await attempt(stopping)) !== undefined) {
@@ -234,6 +271,12 @@ export function rowActionsOf(ports: RowActionPorts): RowActions {
       const removing = ['rm', target.id];
       if ((await attempt(removing)) !== undefined) {
         reportFailure(ACTION_TEMPLATES.S168, removing);
+        await ports.refresh();
+        return;
+      }
+      const dropping = ['volume', 'rm', volume ?? ''];
+      if (volume !== undefined && (await attempt(dropping)) !== undefined) {
+        reportFailure(VOLUME_TEMPLATES.S169, dropping);
         await ports.refresh();
       }
     },
