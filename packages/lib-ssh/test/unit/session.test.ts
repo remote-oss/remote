@@ -3,6 +3,7 @@ import {spawn} from 'node:child_process';
 import {existsSync, mkdtempSync, readFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {mock} from 'node:test';
 import {pathToFileURL} from 'node:url';
 import {FakeClientProcess} from './fake-client-process.ts';
 import {
@@ -467,13 +468,65 @@ describe('Node.js process spawner', () => {
     );
   });
 
-  it('connect-51: a process that exits while another holds its stdio is seen to exit after the drain, which releases its three streams', async () => {
+  /**
+   * Takes over the timer of the spawner's drain (the only timer set with the drain's 500 ms) so that a row decides when it
+   * ends: the other timers of the process run as they are, and the timer given back is a real one that a clear ends.
+   */
+  function takenOverDrain() {
+    const original = globalThis.setTimeout;
+    const delays: number[] = [];
+    const endings: Array<() => void> = [];
+    mock.method(globalThis, 'setTimeout', ((
+      callback: () => void,
+      delay?: number,
+      ...rest: unknown[]
+    ) => {
+      if (delay !== 500) {
+        return Reflect.apply(original, globalThis, [
+          callback,
+          delay,
+          ...rest,
+        ]) as NodeJS.Timeout;
+      }
+      delays.push(delay);
+      endings.push(callback);
+      const unused = original(() => undefined, 2_147_000_000);
+      unused.unref();
+      return unused;
+    }) as typeof setTimeout);
+    return {delays, endings};
+  }
+
+  /** Waits up to five seconds for the drain's timer to be set, which happens once the child has exited. */
+  async function drainSet(endings: readonly unknown[]): Promise<void> {
+    for (let waited = 0; waited < 5000 && endings.length === 0; waited += 10) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  }
+
+  afterEach(() => {
+    mock.restoreAll();
+  });
+
+  it('connect-51: a process that exits while another holds its stdio is not seen to exit while the drain of 500 ms runs, and is seen to exit when it ends, which releases its three streams', async () => {
+    const drain = takenOverDrain();
+    const {exits, notes} = await heldStreams('process.exit(4);');
+    await drainSet(drain.endings);
+    const during = [...exits];
+    drain.endings[0]?.();
+    deepStrictEqual(
+      [drain.delays, during, exits, await releasedStreams(notes)],
+      [[500], [], [4], ['stderr', 'stdin', 'stdout']],
+    );
+  });
+
+  it('connect-51: a process that exits while another holds its stdio is seen to exit well before two seconds after its print, though no drain is taken over', async () => {
     const {exited, notes, printedAt} = await heldStreams('process.exit(4);');
     const status = await exited;
     const elapsed = Date.now() - printedAt;
     deepStrictEqual(
-      [status, elapsed >= 500, elapsed < 2000, await releasedStreams(notes)],
-      [4, true, true, ['stderr', 'stdin', 'stdout']],
+      [status, elapsed < 2000, await releasedStreams(notes)],
+      [4, true, ['stderr', 'stdin', 'stdout']],
     );
   });
 
