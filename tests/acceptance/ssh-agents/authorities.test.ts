@@ -16,6 +16,7 @@ import {
   userSettings,
   variable,
 } from '../windows/harness.ts';
+import {labelsWithin} from '../windows/labels-wait.ts';
 import {authorityHex} from './authority-hex.ts';
 import {
   answerDialog,
@@ -45,41 +46,13 @@ async function labelsOf(
   };
 }
 
-/** How long a window's labels get to read its host after its connect ended: the indicator and the title are drawn after it. */
-const LABELS_MILLISECONDS = 10_000;
-
-/**
- * The labels of `window` once its indicator reads `indicatorText` and its title `titleText`, read again every half a
- * second for up to `LABELS_MILLISECONDS`, with the last reads and when each was taken, so that a miss says what each label
- * showed and when. A pass that needed a second read says how long it took; a label that never reads it fails the caller's
- * comparison, which names the reads.
- */
-async function labelsShowing(
+/** The labels of `window` once its indicator reads `indicatorText` and its title `titleText`, within the bound of `labels-wait.ts`. */
+function labelsShowing(
   window: string,
   indicatorText: string,
   titleText: string,
 ): Promise<{indicator: string; title: string; reads: string}> {
-  const started = Date.now();
-  const reads: string[] = [];
-  for (;;) {
-    const shown = await labelsOf(window);
-    const seconds = (Date.now() - started) / 1000;
-    reads.push(
-      `[+${seconds.toFixed(1)} s] indicator ${JSON.stringify(shown.indicator)}, title ${JSON.stringify(shown.title)}`,
-    );
-    const matched =
-      shown.indicator.includes(indicatorText) &&
-      shown.title.includes(titleText);
-    if (matched && reads.length > 1) {
-      console.log(
-        `${window}: the labels read ${JSON.stringify(indicatorText)} and ${JSON.stringify(titleText)} only ${seconds.toFixed(1)} s after the connect ended`,
-      );
-    }
-    if (matched || seconds * 1000 >= LABELS_MILLISECONDS) {
-      return {...shown, reads: reads.slice(-5).join('; ')};
-    }
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
+  return labelsWithin(() => labelsOf(window), window, indicatorText, titleText);
 }
 
 /** The lines of `file`. */
