@@ -1,0 +1,83 @@
+[
+ {
+  "id": "F-6303",
+  "issue": 30,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Server environment",
+  "epic": "E63",
+  "acCount": 29,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.showLog"
+   ],
+   "settings": [
+    "remote.WSL.useShellEnvironment",
+    "terminal.integrated.inheritEnv",
+    "terminal.integrated.env.linux",
+    "application.shellEnvironmentResolutionTimeout"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "server-env-setup file read by sh",
+    "environment layering: server process, shell probe, handed-over launching shell",
+    "per-window environment handed from code launcher"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "sh (reads server-env-setup)",
+    "wsl.exe -d <distro>",
+    "interactive login shell probe (core)"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "~/.vscode-server/server-env-setup",
+    "~/.vscode-server-insiders/server-env-setup",
+    "<server data folder>/server-env-setup",
+    "user default shell from user database"
+   ],
+   "localFiles": [
+    "VS Code user settings (reads useShellEnvironment)"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-6301",
+   "remote-wsl#F-6304",
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-6401",
+   "remote-wsl#F-6002",
+   "remote-wsl#F-6302",
+   "remote-wsl#F-6602",
+   "remote-wsl#F-6701",
+   "remote-wsl#F-7901",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6206",
+   "remote-containers#F-1403",
+   "remote-containers#F-0109"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.server-env",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "openssh (SSH room has equivalent script)"
+  ],
+  "errorPaths": 7,
+  "notes": "Extension only reads the user's setup file and passes the launching shell environment per window; layering mostly VS Code core. Setup-script semantics (sh, exit failure) likely shared with other server-based rooms.",
+  "questions": [
+   "Which launching-shell variables (PWD, SHLVL, WSL_INTEROP) are excluded from the handed-over environment (Q1)?",
+   "Must the reimplementation provide Windows certificates to remote extensions (Q3)?",
+   "Is server-env-setup behaviour common to all rooms and owned by lib-server?"
+  ]
+ }
+]

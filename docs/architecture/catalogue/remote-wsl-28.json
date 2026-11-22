@@ -1,0 +1,102 @@
+[
+ {
+  "id": "F-6301",
+  "issue": 28,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Server download and install",
+  "epic": "E63",
+  "acCount": 25,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.showLog"
+   ],
+   "settings": [
+    "remote.WSL.downloadInBackground",
+    "http.proxy",
+    "http.proxyStrictSSL",
+    "remote.WSL.experimental.scriptLessStartup"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "wsl"
+   ],
+   "other": [
+    "progress stages Downloading server..., Unpacking server...",
+    "cache of server archives per commit on Windows",
+    "background download every ~30 s per window",
+    "global state keys wsl.lastUpdateCheck, wsl.downloadInProgress, wsl.usageTime.<platform>",
+    "env input http_proxy",
+    "env input https_proxy",
+    "env input NODE_EXTRA_CA_CERTS"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress",
+    "env.appName",
+    "version",
+    "http.proxy support via Node https"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "wsl.exe -d <distro>",
+    "wget (in distro, fallback)",
+    "tar (in distro)",
+    "wslpath"
+   ],
+   "network": [
+    "update service (updateUrl from product.json)",
+    "serverDownloadUrlTemplate host",
+    "update.code.visualstudio.com:443",
+    "vscode.download.prss.microsoft.com:443"
+   ],
+   "remoteFiles": [
+    "~/.vscode-server/bin/<commit>",
+    "~/.wgetrc",
+    "<server data folder from product.json>"
+   ],
+   "localFiles": [
+    "%USERPROFILE%\\vscode-remote-wsl\\<quality>\\<commit>\\vscode-server-<quality>-<platform>.tar.gz",
+    "client product.json fields (commit, quality, updateUrl, serverDownloadUrlTemplate, serverApplicationName, serverDataFolderName)"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6101",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-6302",
+   "remote-wsl#F-6303",
+   "remote-wsl#F-6304",
+   "remote-wsl#F-6002",
+   "remote-wsl#F-6401",
+   "remote-wsl#F-6701",
+   "remote-wsl#F-7901",
+   "remote-ssh#F-2403",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6205",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.server-installer",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "wsl.exe",
+   "wget",
+   "tar"
+  ],
+  "errorPaths": 9,
+  "notes": "P0: source order installed, cached, Windows download, in-distro wget fallback; checksum then length; atomic cache rename. Derives build from client product.json (R-47). Strong lib-server and lib-product candidate shared with SSH and tunnels.",
+  "questions": [
+   "Report specific reasons S019, S020, S023 in the log before fallback (Q1)?",
+   "Quality checks S007/S056 for Code-OSS derivatives: only when URL comes from updateUrl (Q3)?",
+   "Is the server cache layout shared with other rooms through lib-server?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
+  ]
+ }
+]

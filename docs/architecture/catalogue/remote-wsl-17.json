@@ -1,0 +1,12 @@
+[
+ {
+  "id": "F-6101",
+  "issue": 17,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:pending",
+  "title": "WSL presence, version checks and distro enumeration",
+  "epic": "E61",
+  "acCount": 0
+ }
+]
