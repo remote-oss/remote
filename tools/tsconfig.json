@@ -18,6 +18,7 @@
     "../tests/acceptance/windows/agent-standing.ts",
     "../tests/acceptance/windows/change-timeline.ts",
     "../tests/acceptance/windows/connect-failure.ts",
+    "../tests/acceptance/windows/contribution-polling.ts",
     "../tests/acceptance/windows/corrupt-archive.ts",
     "../tests/acceptance/windows/page-protocol.ts",
     "../tests/acceptance/windows/command-text.ts",
