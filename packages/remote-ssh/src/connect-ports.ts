@@ -639,6 +639,9 @@ export function connectAssemblyOf(
       get useExecServer() {
         return effectiveUseExecServer(surfaces.settings);
       },
+      get manualBootstrap() {
+        return localDownloadModeOf(surfaces.settings) === 'manualBootstrap';
+      },
       get settingLines() {
         return settingLines(listedSettings(surfaces.settings));
       },

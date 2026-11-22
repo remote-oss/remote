@@ -716,15 +716,23 @@ describe("the assembled ports' settings", () => {
 });
 
 describe('the exec server switch the assembled connect is told (F-2406 BR-2, AC-13, card #2971)', () => {
-  /** The exec server switch the connector of an assembly over `written` is given, read as a connect reads it. */
-  function toldExecServer(written: Written): boolean | undefined {
+  /** What the connector of an assembly over `written` is told, read as a connect reads it: the switch and the mode. */
+  function toldOf(written: Written): [boolean, boolean] | undefined {
     const {surfaces, machine, recorded} = assemblyInputs(written);
-    let told: boolean | undefined;
+    let told: [boolean, boolean] | undefined;
     connectAssemblyOf(surfaces, machine, loggerOf(recorded), dependencies => {
-      told = dependencies.options.useExecServer;
+      told = [
+        dependencies.options.useExecServer,
+        dependencies.options.manualBootstrap,
+      ];
       return connectorOf(dependencies);
     });
     return told;
+  }
+
+  /** The exec server switch the connector of an assembly over `written` is given. */
+  function toldExecServer(written: Written): boolean | undefined {
+    return toldOf(written)?.[0];
   }
 
   it('F-2406 BR-2, AC-13: with the manual bootstrap on and the switch configured on, the connect is told it is off, so a failed start gives STR:S135', () => {
@@ -735,6 +743,36 @@ describe('the exec server switch the assembled connect is told (F-2406 BR-2, AC-
     deepStrictEqual(
       [told, ofStart({kind: 'serverStart'}, {useExecServer: told ?? true})],
       [false, {kind: 'serverStart', reason: {id: 'S135', values: []}}],
+    );
+  });
+
+  it('F-2406 BR-2 (card #2971): the connect is told the manual bootstrap is on only in that mode', () => {
+    deepStrictEqual(
+      ['manual-bootstrap', 'auto'].map(
+        mode => toldOf({[SETTINGS.localServerDownload.id]: mode})?.[1],
+      ),
+      [true, false],
+    );
+  });
+
+  it('F-2406 BR-2 (card #2971): the install plan is given the effective switch: off in the manual bootstrap, the configured one otherwise', () => {
+    deepStrictEqual(
+      [
+        ['manual-bootstrap', true],
+        ['auto', true],
+        ['auto', false],
+      ].map(([mode, configured]) => {
+        const {surfaces, machine, recorded} = assemblyInputs({
+          [SETTINGS.localServerDownload.id]: mode,
+          [SETTINGS.useExecServer.id]: configured,
+        });
+        return wiringPortsOf(
+          surfaces,
+          machine,
+          loggerOf(recorded),
+        ).settings.useExecServer();
+      }),
+      [false, true, false],
     );
   });
 

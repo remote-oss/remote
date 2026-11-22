@@ -889,11 +889,12 @@ or the extension that asked, shows the cause once.
 
 | Case | When | What serves it | Failure |
 |---|---|---|---|
-| The SSH window | the connector holds the window's connection | `execServerOf(control)` over the control connection the window's bridge rides on, wrapped by `watchedExecServer`; one per held connection, made on the first request | `EXEC_SERVER_SETTING_OFF` or `EXEC_SERVER_NO_CLI` when the window installed its server directly; `EXEC_SERVER_LOST` after its transport was lost |
+| The SSH window | the connector holds the window's connection | `execServerOf(control)` over the control connection the window's bridge rides on, wrapped by `watchedExecServer`; one per held connection, made on the first request | `EXEC_SERVER_MANUAL_BOOTSTRAP`, `EXEC_SERVER_SETTING_OFF` or `EXEC_SERVER_NO_CLI` (in that order, by `directInstallRefusal`) when the window installed its server directly; `EXEC_SERVER_LOST` after its transport was lost |
 | A nested window | the connector holds none | its own connect, by `connectControl`: the same steps up to the authenticated control connection (host key, authentication with the window's prompts, install, start, tunnel to the control port, token check), then no `serve` and no window tunnel; the control connection is held for the window's life | the same refusals; `execServerUnavailable` with a reason when the program could not be set up; the failures of the steps |
 
-**Direct mode.** `remote.SSH.useExecServer` off, or no command-line program for the host's platform, refuses with the
-failure kind `execServerUnavailable` and a reason of its own (the setting, or the platform). No second route over plain
+**Direct mode.** The manual bootstrap (F-2406 BR-2: the effective `remote.SSH.useExecServer` is false while it is on),
+`remote.SSH.useExecServer` off, or no command-line program for the host's platform, refuses with the failure kind
+`execServerUnavailable` and a reason of its own (the mode, the setting, or the platform). No second route over plain
 ssh channels exists, and no direct install is made for an exec server.
 
 **The lost transport.** The returned exec server is a `WatchedExecServer`: `ExecServer` plus the owner's
