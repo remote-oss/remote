@@ -478,6 +478,7 @@
       "host-locks.test.ts": 12
     },
     "ssh-downloaders": {
+      "manual-bootstrap.test.ts": 3,
       "no-downloader.test.ts": 6
     },
     "ssh-newclient": {
