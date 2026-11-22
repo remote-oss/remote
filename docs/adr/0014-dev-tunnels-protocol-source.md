@@ -60,6 +60,7 @@ reference extension's file, and none of it is Microsoft's hosted service.
 
 ## Check
 
+- `AGENTS.md`'s list of what may be read names `[dev-tunnels]`.
 - Every protocol citation in a design or a card is `[dev-tunnels] <path>@<commit>` or the public documentation, and
   none is a reference extension's file.
 - No recording of Microsoft's hosted service exists before question 2 is answered yes.
