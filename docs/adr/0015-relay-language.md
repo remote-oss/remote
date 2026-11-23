@@ -30,10 +30,11 @@ Every package in the repository is TypeScript, and every gate is built for it (A
    serves the brief's management API, and it terminates the host leg with a dev-tunnels-ssh `SshServerSession` on
    `SshSessionConfiguration(false)`. It depends on `@microsoft/dev-tunnels-ssh`, which ADR-0014 admits, and reuses
    `[dev-tunnels]`'s TypeScript contract types where they fit.
-2. **The condition:** before the first relay card, the T.6 spike shows that this server session completes the host
-   leg with **both** `[dev-tunnels]`'s Rust host (`russh`, which is `[cli]`'s path) and its TypeScript host, and
-   pipes a `client-ssh-session-stream` channel end to end. The two libraries interoperating is inferred, since both
-   talk to Microsoft's service, and is unverified until that run.
+2. **The condition, met by T.6 (run 45110368187, remote-oss/remote#3050):** this server session completed the host
+   leg with **both** `[dev-tunnels]`'s Rust host (`russh` with `[cli]`'s patch, which is `[cli]`'s path) and its
+   TypeScript host, with key exchange, host key, cipher and MAC all `none`. For each host, a 64 KiB payload from the
+   TypeScript client came back through a `client-ssh-session-stream` channel byte for byte (the same SHA-256). No Rust
+   *client* was run: T.4's Rust client is part of the conformance plan, not a result of T.6.
 3. **The fallback, not needed:** had T.6 been red, the relay would have been Rust with `russh`, under the R section
    below. That would also have needed `russh` (Apache-2.0) admitted as a dependency, which is a licensing decision
    for the user. ADR-0014 admits only MIT sources. T.6 was green, so R is not taken.
@@ -44,7 +45,7 @@ Every package in the repository is TypeScript, and every gate is built for it (A
 
 | Option | For | Against |
 |---|---|---|
-| T (chosen, on T.6): TypeScript with dev-tunnels-ssh | One toolchain: every gate applies as it is, and every coder writes TypeScript. The TypeScript SDK's own library | The interoperation of `none` with `russh` rests on T.6 |
+| T (chosen, on T.6): TypeScript with dev-tunnels-ssh | One toolchain: every gate applies as it is, and every coder writes TypeScript. The TypeScript SDK's own library | None found: T.6 showed the interoperation of `none` with `russh` (both hosts' legs, a byte-exact pipe) |
 | R: Rust with `russh` | The same library as `[cli]`'s host, so interoperation with it is certain | `russh` is Apache-2.0, which needs its own admission (the user's). A second toolchain in CI, adding about 5 to 10 min to every gate that touches it (an estimate; the spike's Rust host cold-built in 68 s). `dupes` and `dead` have no Rust counterpart |
 | A TypeScript relay with a JavaScript SSH server patched for `none` | — | It maintains a fork, when dev-tunnels-ssh already offers `none` |
 
@@ -53,7 +54,8 @@ Every package in the repository is TypeScript, and every gate is built for it (A
 ### T (chosen): the relay in TypeScript, on dev-tunnels-ssh
 
 1. **One workspace package.** The relay is the pnpm workspace package `tunnel-relay` in `packages/tunnel-relay`, beside the
-   extensions. It runs on the repository's Node (`.node-version`). The checks job's
+   extensions. (The spike's relay copies each buffer that dev-tunnels-ssh's `WebSocketStream` hands `send`, because the
+   library reuses it for the next packet: the relay keeps that copy.) It runs on the repository's Node (`.node-version`). The checks job's
    gates apply to it as they are, with nothing new to build: `typecheck`, `lint` (ADR-0003), `dupes`, `dead` (its
    entry in `knip.jsonc`), `format-check`, `check-coverage` and `coverage-all` (its package joins the per-package
    thresholds), and `check-licences`. The last carries `@microsoft/dev-tunnels-ssh`'s MIT notice and its
