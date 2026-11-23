@@ -5,6 +5,7 @@ import type {RelayConfig} from '../../src/config.ts';
 import {API_VERSION, type RouteContext} from '../../src/routes.ts';
 import {answerRequest, relayServer, write} from '../../src/server.ts';
 import {Store} from '../../src/store.ts';
+import {Tokens} from '../../src/auth/tokens.ts';
 
 const CONFIG: RelayConfig = {
   domain: 'relay.test',
@@ -80,7 +81,9 @@ describe('the HTTPS service of the relay', () => {
     context = {
       store,
       config: CONFIG,
-      authenticate: () => Promise.resolve({id: 7, login: 'owner'}),
+      authenticate: () =>
+        Promise.resolve({kind: 'account', id: 7, login: 'owner'}),
+      tokens: new Tokens(Buffer.alloc(32, 1), () => 0),
       report: error => {
         reported.push(error);
       },
