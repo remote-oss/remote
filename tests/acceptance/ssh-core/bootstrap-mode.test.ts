@@ -129,9 +129,25 @@ describe('the setting and the legacy bootstrap on the standard editor (card #302
       indicator: string;
       shown: string[];
     }> = [];
+    /** The polls at which the title or the indicator changed: when, the title and the indicator. */
+    function transitions(): string {
+      return JSON.stringify(
+        samples
+          .filter(
+            (sample, index) =>
+              sample.title !== samples[index - 1]?.title ||
+              sample.indicator !== samples[index - 1]?.indicator,
+          )
+          .map(sample => [
+            sample.time - (samples[0]?.time ?? 0),
+            sample.title,
+            sample.indicator,
+          ]),
+      );
+    }
     try {
       await waitFor(
-        `${name} to be connected`,
+        `${name} to show the host in its title and its indicator`,
         async () => {
           samples.push({
             time: Date.now(),
@@ -139,10 +155,16 @@ describe('the setting and the legacy bootstrap on the standard editor (card #302
             indicator: await statusBarText(name, 'status.host').catch(() => ''),
             shown: await notifications(name).catch(() => []),
           });
-          return (samples.at(-1)?.indicator ?? '') === 'SSH: harness';
+          const last = samples.at(-1);
+          return (
+            last?.indicator === 'SSH: harness' &&
+            last.title.includes('SSH: harness')
+          );
         },
         INSTALL_MILLISECONDS,
-      );
+      ).catch((caught: unknown) => {
+        throw new Error(`${String(caught)}\n${transitions()}`);
+      });
       await connectedWithin(name, INSTALL_MILLISECONDS);
       const firstTitle = samples.find(sample =>
         sample.title.includes('SSH: harness'),
@@ -172,6 +194,7 @@ describe('the setting and the legacy bootstrap on the standard editor (card #302
           downloadNotice: false,
           together: true,
         },
+        transitions(),
       );
     } finally {
       await closeWindow(name).catch(() => undefined);
