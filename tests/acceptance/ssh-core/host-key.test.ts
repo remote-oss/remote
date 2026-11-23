@@ -4,7 +4,8 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {mkdirSync, readFileSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   ASK_WITHOUT,
@@ -92,6 +93,62 @@ function refusals(window: string) {
       window,
     },
   ] as const;
+}
+
+/** The line `known` holds for `alias` with a key that is not the host's: the type and key of a fresh ed25519 key. */
+function changedKnown(alias: string): string {
+  const folder = variable('HARNESS_RUN_FOLDER');
+  const other = path.join(folder, `${alias}.other`);
+  execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', other]);
+  const [type, key] = readFileSync(`${other}.pub`, 'utf8').split(/\s+/);
+  const known = path.join(folder, `${alias}.known`);
+  writeFileSync(known, `${alias} ${type ?? ''} ${key ?? ''}\n`);
+  return known;
+}
+
+/** Points the editor at a config file of a host `alias` whose known-hosts file is `known`, with `checking` as its StrictHostKeyChecking. */
+async function checking(
+  alias: string,
+  known: string,
+  mode: string,
+  settings: Readonly<Record<string, unknown>> = {},
+): Promise<void> {
+  const file = writeConfig(alias, [
+    hostBlock(
+      alias,
+      [
+        `UserKnownHostsFile ${known}`,
+        `StrictHostKeyChecking ${mode}`,
+        `HostKeyAlias ${alias}`,
+        'HashKnownHosts no',
+      ],
+      ASK_WITHOUT,
+    ),
+  ]);
+  await userSettings({
+    'remote.SSH.configFile': file,
+    'remote.SSH.remotePlatform': {[alias]: 'linux'},
+    ...settings,
+  });
+}
+
+/** The dialog the refusal of a connection shows when the key of the host changed. */
+function changedDialog(alias: string): string {
+  return `Could not establish connection to "${alias}": Remote host key has changed, port forwarding is disabled.`;
+}
+
+/** The questions of the failure dialogs window `window` showed. */
+function failuresOf(window: string): string[] {
+  return recordLines('failureDialog', window).map(line => line.question);
+}
+
+/** Waits for window `window` to show a failure dialog. */
+function failureShown(window: string, milliseconds: number): Promise<void> {
+  return waitFor(
+    `${window} to show its failure dialog`,
+    () => recordLines('failureDialog', window).length > 0,
+    milliseconds,
+  );
 }
 
 /** Waits for window `window` to be asked its fingerprint pick. */
@@ -282,6 +339,134 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
         `"${alias}" has fingerprint "${fingerprint}".`,
       ]);
     } finally {
+      await closeWindow(alias).catch(() => undefined);
+    }
+  });
+  for (const mode of ['ask', 'yes', 'accept-new']) {
+    it(`F-2305 AC-16, AC-28 (c3021-changed-${mode.replace('-', '')}): a changed key with StrictHostKeyChecking ${mode} fails at once with the reason that the key changed, asks nothing, and changes no file and no setting`, async () => {
+      const alias = `c3021-changed-${mode.replace('-', '')}`;
+      const known = changedKnown(alias);
+      await checking(alias, known, mode);
+      const settings = readUserSettings();
+      appendScript(refusals(alias));
+      try {
+        const before = readFileSync(known, 'utf8');
+        await openWindow(alias, alias);
+        await failureShown(alias, 60_000);
+        deepStrictEqual(
+          {
+            failures: failuresOf(alias),
+            asked: [
+              ...recordLines('pick', alias),
+              ...recordLines('maskedInput', alias),
+            ].length,
+            known: readFileSync(known, 'utf8') === before,
+            settingsKept: readUserSettings() === settings,
+          },
+          {
+            failures: [changedDialog(alias)],
+            asked: 0,
+            known: true,
+            settingsKept: true,
+          },
+        );
+      } finally {
+        await closeWindow(alias).catch(() => undefined);
+      }
+    });
+  }
+
+  it('F-2305 AC-17 (c3021-retry-changed): Retry on the changed key’s dialog gives the same dialog again and changes no file', async () => {
+    const alias = 'c3021-retry-changed';
+    const known = changedKnown(alias);
+    await checking(alias, known, 'ask');
+    const again = nextEmptyName();
+    appendScript([
+      {
+        surface: 'failureDialog',
+        match: 'Could not establish connection',
+        answer: {button: 'Retry'},
+        window: alias,
+      },
+      ...refusals(again),
+    ]);
+    try {
+      const before = readFileSync(known, 'utf8');
+      await openWindow(alias, alias);
+      await failureShown(again, 90_000);
+      deepStrictEqual(
+        {
+          first: failuresOf(alias),
+          second: failuresOf(again),
+          known: readFileSync(known, 'utf8') === before,
+        },
+        {
+          first: [changedDialog(alias)],
+          second: [changedDialog(alias)],
+          known: true,
+        },
+      );
+    } finally {
+      await closeWindow(again).catch(() => undefined);
+      await closeWindow(alias).catch(() => undefined);
+    }
+  });
+
+  it('F-2305 AC-18 (c3021-changed-terminal): in terminal mode the dialog of a changed key has no reason', async () => {
+    const alias = 'c3021-changed-terminal';
+    const known = changedKnown(alias);
+    const saved = readUserSettings();
+    await checking(alias, known, 'ask', {'remote.SSH.useLocalServer': false});
+    appendScript(refusals(alias));
+    try {
+      const before = readFileSync(known, 'utf8');
+      await openWindow(alias, alias);
+      await failureShown(alias, 60_000);
+      deepStrictEqual(
+        {
+          failures: failuresOf(alias),
+          asked: picksOf(alias).length,
+          known: readFileSync(known, 'utf8') === before,
+        },
+        {
+          failures: [`Could not establish connection to "${alias}".`],
+          asked: 0,
+          known: true,
+        },
+      );
+    } finally {
+      await closeWindow(alias).catch(() => undefined);
+      restoreUserSettings(saved);
+    }
+  });
+
+  it('F-2305 AC-34 (c3021-retry-pick): after a refused pick, Retry never accepts the key without Continue', async () => {
+    const alias = 'c3021-retry-pick';
+    const known = await asking(alias);
+    const again = nextEmptyName();
+    appendScript([
+      {surface: 'pick', match: 'fingerprint', answer: 'no', window: alias},
+      {
+        surface: 'failureDialog',
+        match: 'Could not establish connection',
+        answer: {button: 'Retry'},
+        window: alias,
+      },
+      {surface: 'pick', match: 'fingerprint', answer: 'no', window: again},
+      ...refusals(again),
+    ]);
+    try {
+      await openWindow(alias, alias);
+      await failureShown(again, 90_000);
+      deepStrictEqual(
+        {known: knownLines(known), failures: failuresOf(again)},
+        {
+          known: [],
+          failures: [`Could not establish connection to "${alias}".`],
+        },
+      );
+    } finally {
+      await closeWindow(again).catch(() => undefined);
       await closeWindow(alias).catch(() => undefined);
     }
   });
