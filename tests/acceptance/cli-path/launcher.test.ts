@@ -20,7 +20,7 @@ import {
   REMEMBERED_PAGES,
 } from '../windows/page-list.ts';
 import {runFromPalette} from '../windows/palette.ts';
-import {stamped} from '../windows/stamped-steps.ts';
+import {stamped} from './stamped-steps.ts';
 import {section, settledSection} from '../windows/connect-failure.ts';
 import {
   dialogOf,

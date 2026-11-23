@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {stamped} from '../tests/acceptance/windows/stamped-steps.ts';
+import {stamped} from '../tests/acceptance/cli-path/stamped-steps.ts';
 import {endingOf, environmentOf} from './step-clock.ts';
 
 describe('the stamped and bounded steps of a row (card #3003)', () => {
