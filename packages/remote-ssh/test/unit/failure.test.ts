@@ -1,8 +1,9 @@
 import {deepStrictEqual} from 'node:assert';
 import {
-  type FailedKind,
-  type FailureDetail,
-  type FailureContext,
+  directInstallRefusal,
+  EXEC_SERVER_MANUAL_BOOTSTRAP,
+  EXEC_SERVER_NO_CLI,
+  EXEC_SERVER_SETTING_OFF,
   failedWith,
   KIND_MAY_RECOVER,
   ofAcquire,
@@ -13,6 +14,9 @@ import {
   ofStart,
   ofTransfer,
   reconnectionLimitReached,
+  type FailedKind,
+  type FailureContext,
+  type FailureDetail,
 } from '../../src/pipeline/failure.ts';
 
 const RECONNECTION: FailureContext = {
@@ -499,6 +503,23 @@ describe('the reading of each library failure (no library text is shown)', () =>
         kind: 'serverInstall',
         reason: {id: 'S075'},
       },
+    );
+  });
+
+  it('F-2406 BR-2 (card #2971): a direct install refuses an exec server for the manual bootstrap, else for the setting off, else for the platform', () => {
+    deepStrictEqual(
+      [
+        directInstallRefusal({useExecServer: false, manualBootstrap: true}),
+        directInstallRefusal({useExecServer: true, manualBootstrap: true}),
+        directInstallRefusal({useExecServer: false, manualBootstrap: false}),
+        directInstallRefusal({useExecServer: true, manualBootstrap: false}),
+      ],
+      [
+        EXEC_SERVER_MANUAL_BOOTSTRAP,
+        EXEC_SERVER_MANUAL_BOOTSTRAP,
+        EXEC_SERVER_SETTING_OFF,
+        EXEC_SERVER_NO_CLI,
+      ],
     );
   });
 
