@@ -78,11 +78,13 @@ Every package in the repository is TypeScript, and every gate is built for it (A
    may also take the pool under #2219, with its same-repository guard. It builds a client image:
    - a Rust stage: a pinned toolchain image, by digest, that builds `[dev-tunnels]`'s Rust management client, relay
      host and relay client from `rs/` at the pinned commit;
+     it builds `russh` (Apache-2.0) only as part of that test peer, as we already run the `[cli]` binary: use in a
+     test, never a dependency we ship, so Decision 3's admission point is R's alone;
    - a Node stage with the TS SDK at the lockfile's version.
 
    It runs §8's routes, auth answers, tokens, both legs (Rust host and TS host, each with a TS client and a Rust
    client) and limits against the per-run relay. Both clients trust the run's authority: `NODE_EXTRA_CA_CERTS` for the
-   TS side, and `SSL_CERT_FILE` or the build's root store for the Rust side, measured in the spike. Rust is in this
+   TS side, and `SSL_CERT_FILE` for the Rust side (both measured in T.6). Rust is in this
    image only, never in the PR's checks job.
 5. **When it runs.**
    - **On a pull request:** when the change reaches the relay package, its Dockerfile, the suite or the pins, through
