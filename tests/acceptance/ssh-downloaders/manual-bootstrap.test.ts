@@ -5,11 +5,27 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {readdirSync, readFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
+import {
+  chmodSync,
+  closeSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  rmSync,
+  writeFileSync,
+  writeSync,
+} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
 import {
   appendScript,
   closeWindow,
   connectedWithin,
+  connectionLog,
   inWindow,
   onHost,
   openWindow,
@@ -36,6 +52,13 @@ import {
   S088,
   withBootstrapFolderAside,
 } from '../windows/bootstrap-support.ts';
+import {
+  ELF_MACHINE_OFFSET,
+  nodeEntryOf,
+  otherMachine,
+  topFolderOf,
+  withElfMachine,
+} from '../windows/foreign-archive.ts';
 import {
   closeAllButLocal,
   DATA_FOLDER,
@@ -71,6 +94,92 @@ function requestsLogged(): number {
 function warnings(name: string): number {
   return recordLines('notice', name).filter(line => line.question === S088)
     .length;
+}
+
+/** The progress line the scp copy of an archive shows. */
+const COPY_STAGE = 'Copying VS Code Server to host with scp';
+
+/** Whether window `name` showed the scp copy of an archive. */
+function copiedByScp(name: string): boolean {
+  return recordLines('progress', name).some(line =>
+    line.question.includes(COPY_STAGE),
+  );
+}
+
+/** The text a bootstrap file holds that is no server archive: 22 bytes. */
+const NOT_AN_ARCHIVE = 'not a server archive.\n';
+
+/** Writes `NOT_AN_ARCHIVE` as the bootstrap file. */
+function placeNotAnArchive(): void {
+  mkdirSync(BOOTSTRAP_FOLDER, {recursive: true});
+  writeFileSync(BOOTSTRAP_FILE, NOT_AN_ARCHIVE);
+}
+
+/**
+ * The install folder `bin/<commit>` after a failed unpack. The failed unpack leaves its own `<commit>.stage.<pid>`
+ * sibling beside it, which `installFolder` counts as a second install, so the stage siblings are left out here.
+ */
+async function installFolderAfterFailure(): Promise<string> {
+  const folders = (
+    await onHost('sh', '-c', `ls -A '${DATA_FOLDER}/bin' 2>/dev/null; true`)
+  )
+    .split('\n')
+    .filter(line => line !== '' && !line.includes('.stage.'));
+  const [commit] = folders;
+  if (folders.length !== 1 || commit === undefined) {
+    throw new Error(
+      `the host holds ${String(folders.length)} install folders besides the stage ones, not one: ${JSON.stringify(folders)}`,
+    );
+  }
+  return `${DATA_FOLDER}/bin/${commit}`;
+}
+
+/** The standard output of `tar` with `commandWords`; fails with its standard error when it does not end well. */
+function tarOutput(...commandWords: string[]): string {
+  const ended = spawnSync('tar', commandWords, {encoding: 'utf8'});
+  if (ended.status !== 0) {
+    throw new Error(
+      `tar ${commandWords.join(' ')} ended with ${String(ended.status)}: ${ended.stderr}`,
+    );
+  }
+  return ended.stdout;
+}
+
+/**
+ * Places the run's server archive unpacked and packed again, the way the foreign archive is made, and when `foreign` is set
+ * turns it into one for the other architecture: the file `node` has the machine of its ELF header changed, so that the
+ * archive unpacks on the host and its server cannot start there. Without it, the repack is the control: the same archive,
+ * packed the same way, whose server starts.
+ */
+async function placeRepackedServerArchive(foreign: boolean): Promise<void> {
+  await placeServerArchive();
+  const listing = tarOutput('-tzf', BOOTSTRAP_FILE).split('\n');
+  const nodeEntry = nodeEntryOf(listing).replace(/^\.\//u, '');
+  const topFolder = topFolderOf(listing);
+  const folder = mkdtempSync(path.join(tmpdir(), 'c2948-foreign-'));
+  try {
+    tarOutput('-xzpf', BOOTSTRAP_FILE, '-C', folder);
+    if (foreign) {
+      const descriptor = openSync(path.join(folder, nodeEntry), 'r+');
+      try {
+        const header = Buffer.alloc(ELF_MACHINE_OFFSET + 2);
+        readSync(descriptor, header, 0, header.length, 0);
+        const patched = withElfMachine(header, otherMachine(process.arch));
+        writeSync(
+          descriptor,
+          patched,
+          ELF_MACHINE_OFFSET,
+          2,
+          ELF_MACHINE_OFFSET,
+        );
+      } finally {
+        closeSync(descriptor);
+      }
+    }
+    tarOutput('-czf', BOOTSTRAP_FILE, '-C', folder, topFolder ?? '.');
+  } finally {
+    rmSync(folder, {recursive: true, force: true});
+  }
 }
 
 describe('the manual local bootstrap: the switch, the warning and the missing archive (card #2946, F-2406)', function () {
@@ -456,5 +565,260 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
         {editorShows: 'auto', problems: '0 1'},
       );
     });
+  });
+  /**
+   * Connects window `name` with what `place` puts at the bootstrap path, and gives its failure dialogs, whether it
+   * copied the archive with scp, and the LocalBootstrapFailed issues its log raised.
+   */
+  async function unpackFailure(
+    name: string,
+    place: () => void,
+  ): Promise<Record<string, unknown>> {
+    let outcome: Record<string, unknown> = {};
+    await withSettings({}, async () => {
+      place();
+      appendScript(dismissals(name));
+      const mark = connectionLog().length;
+      await failedOn(ALIAS, name);
+      try {
+        await waitFor(
+          'the check of the attempt',
+          () =>
+            connectionLog()
+              .slice(mark)
+              .some(
+                line =>
+                  line.includes('No hints found in the recent session.') ||
+                  line.includes('[Session Summary]'),
+              ),
+          60_000,
+        );
+        outcome = {
+          dialogs: recordLines('failureDialog', name).map(
+            line => line.question,
+          ),
+          copied: copiedByScp(name),
+          bootstrapIssues: connectionLog()
+            .slice(mark)
+            .filter(line => line.includes('[LocalBootstrapFailed]')),
+        };
+      } finally {
+        await closeWindow(name).catch(() => undefined);
+      }
+    });
+    return outcome;
+  }
+
+  it('F-2406 AC-12 (c2948-not-archive): a bootstrap file that is not a server archive, and a folder at the bootstrap path, are each copied, and the dialog reason is "Failed to install the VS Code Server." with no LocalBootstrapFailed issue (S087)', async () => {
+    const text = await unpackFailure('c2948-text', placeNotAnArchive);
+    const folder = await unpackFailure('c2948-folder', () => {
+      mkdirSync(BOOTSTRAP_FILE, {recursive: true});
+    });
+    const failed = {
+      dialogs: [reason(ALIAS, 'Failed to install the VS Code Server.')],
+      copied: true,
+      bootstrapIssues: [],
+    };
+    deepStrictEqual({text, folder}, {text: failed, folder: failed});
+  });
+
+  it('F-2406 AC-24 (c2948-leftover): the failed text file stays in the install folder, 22 bytes and nothing unpacked, and after a valid archive and Retry the window connects and that file is gone', async () => {
+    await withSettings({}, async () => {
+      const name = 'c2948-leftover';
+      placeNotAnArchive();
+      appendScript([
+        {
+          surface: 'failureDialog',
+          match: `"${ALIAS}"`,
+          answer: {button: 'Retry'},
+          window: name,
+          after: `${name}-placed`,
+        },
+        ...dismissals(name),
+      ]);
+      await openWindow(ALIAS, name);
+      try {
+        await waitFor(
+          'the first failure dialog',
+          () => recordLines('failureDialog', name).length > 0,
+          INSTALL_MILLISECONDS,
+        );
+        const install = await installFolderAfterFailure();
+        const listed = await onHost('ls', '-A', install);
+        const size = await onHost(
+          'stat',
+          '-c',
+          '%s',
+          `${install}/vscode-server.tar.gz`,
+        );
+        await placeServerArchive();
+        signal(`${name}-placed`);
+        await connectedWithin(name, INSTALL_MILLISECONDS);
+        const after = await onHost('ls', '-A', install);
+        deepStrictEqual(
+          {
+            listed,
+            size,
+            leftAfter: after.split('\n').includes('vscode-server.tar.gz'),
+          },
+          {listed: 'vscode-server.tar.gz\n', size: '22\n', leftAfter: false},
+        );
+      } finally {
+        await closeWindow(name).catch(() => undefined);
+      }
+    });
+  });
+
+  it('F-2406 AC-13 (c2948-arch-control): the run\u2019s archive, unpacked and packed again without the architecture patch, connects: the control of the foreign-archive row, which comes with #2971', async () => {
+    await withSettings({}, async () => {
+      const name = 'c2948-arch-control';
+      await placeRepackedServerArchive(false);
+      appendScript(dismissals(name));
+      await openWindow(ALIAS, name);
+      try {
+        await connectedWithin(name, INSTALL_MILLISECONDS);
+        deepStrictEqual(
+          recordLines('failureDialog', name).map(line => line.question),
+          [],
+        );
+      } finally {
+        await closeWindow(name).catch(() => undefined);
+      }
+    });
+  });
+
+  it('F-2406 AC-14 (c2948-unreadable): a bootstrap file the editor cannot read gives its read error as the reason, and the LocalBootstrapFailed row with S087 and S106', async () => {
+    if (process.getuid?.() === 0) {
+      throw new Error('an unreadable file needs a client that is not root');
+    }
+    await withSettings({}, async () => {
+      const name = 'c2948-unreadable';
+      await placeServerArchive();
+      chmodSync(BOOTSTRAP_FILE, 0o000);
+      appendScript(dismissals(name));
+      await failedOn(ALIAS, name);
+      try {
+        const question = recordLines('failureDialog', name)[0]?.question ?? '';
+        const [status, message, mitigations] = firstRowOf(
+          await wholeTableOf(name),
+        );
+        deepStrictEqual(
+          {
+            reason: question.startsWith(
+              `Could not establish connection to "${ALIAS}": `,
+            ),
+            error: question.includes('EACCES'),
+            path: question.includes(BOOTSTRAP_FILE),
+            status,
+            message: compact(message ?? '').startsWith(
+              compact(BOOTSTRAP_MESSAGE),
+            ),
+            steps: compact(mitigations ?? '').includes(
+              compact(BOOTSTRAP_MITIGATIONS[3] ?? ''),
+            ),
+          },
+          {
+            reason: true,
+            error: true,
+            path: true,
+            status: 'LocalBootstrapFailed',
+            message: true,
+            steps: true,
+          },
+        );
+      } finally {
+        await closeWindow(name).catch(() => undefined);
+      }
+    });
+  });
+
+  it('F-2406 AC-27 (c2948-unreadable-host): after that failure nothing was copied to the host: its install folders hold no archive, and once the file is readable and Retry is pressed the same listing shows the install', async () => {
+    await withSettings({}, async () => {
+      const name = 'c2948-unreadable-host';
+      await placeServerArchive();
+      chmodSync(BOOTSTRAP_FILE, 0o000);
+      appendScript([
+        {
+          surface: 'failureDialog',
+          match: `"${ALIAS}"`,
+          answer: {button: 'Retry'},
+          window: name,
+          after: `${name}-readable`,
+        },
+        ...dismissals(name),
+      ]);
+      await openWindow(ALIAS, name);
+      try {
+        await waitFor(
+          'the first failure dialog',
+          () => recordLines('failureDialog', name).length > 0,
+          INSTALL_MILLISECONDS,
+        );
+        async function listing(): Promise<string[]> {
+          const output = await onHost(
+            'sh',
+            '-c',
+            `ls -A '${DATA_FOLDER}'/bin/*/ 2>/dev/null; true`,
+          );
+          return output.split('\n').filter(line => line !== '');
+        }
+        const failed = {
+          archive: (await listing()).includes('vscode-server.tar.gz'),
+          copied: copiedByScp(name),
+        };
+        // The control: the same listing, once the file is readable and a Retry installs, shows the install folder, so
+        // that an empty listing before it is an empty install folder and not a path that holds nothing.
+        chmodSync(BOOTSTRAP_FILE, 0o644);
+        signal(`${name}-readable`);
+        await connectedWithin(name, INSTALL_MILLISECONDS);
+        const installed = (await installFolder()).startsWith(
+          `${DATA_FOLDER}/bin/`,
+        );
+        const after = await listing();
+        deepStrictEqual(
+          {
+            failed,
+            installed,
+            listingSeesTheInstall: after.length > 0,
+            archiveAfter: after.includes('vscode-server.tar.gz'),
+          },
+          {
+            failed: {archive: false, copied: false},
+            installed: true,
+            listingSeesTheInstall: true,
+            archiveAfter: false,
+          },
+        );
+      } finally {
+        await closeWindow(name).catch(() => undefined);
+      }
+    });
+  });
+
+  it('F-2406 AC-15 (c2948-noscp): with the mode on and no scp next to the configured ssh the dialog reason is "scp installation not found."', async () => {
+    await withSettings(
+      {
+        'remote.SSH.path': path.join(
+          variable('HARNESS_RUN_FOLDER'),
+          'clients',
+          'configured',
+          'ssh',
+        ),
+      },
+      async () => {
+        const name = 'c2948-noscp';
+        await placeServerArchive();
+        appendScript(dismissals(name));
+        await failedOn(ALIAS, name);
+        try {
+          deepStrictEqual(
+            recordLines('failureDialog', name).map(line => line.question),
+            [reason(ALIAS, 'scp installation not found.')],
+          );
+        } finally {
+          await closeWindow(name).catch(() => undefined);
+        }
+      },
+    );
   });
 });

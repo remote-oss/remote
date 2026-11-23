@@ -782,14 +782,15 @@ function unpackFailed(outcome: TransferOutcome): boolean {
 
 /**
  * A manual bootstrap: the user's archive at `file` is staged in the client's temporary folder and delivered, with no
- * download on either side; a missing file and a file that cannot be staged end the transfer before any copy.
+ * download on either side; nothing at the path, or a file that cannot be staged, ends the transfer before any copy.
+ * Whatever is at the path is staged unchecked, a folder too.
  */
 async function viaBootstrap(
   input: TransferInput,
   dependencies: TransferDependencies,
   file: string,
 ): Promise<TransferOutcome> {
-  if (!(await dependencies.files.exists(file))) {
+  if (!(await dependencies.files.entryExists(file))) {
     return failed({kind: 'localBootstrap', cause: 'missing', path: file});
   }
   const staged = await dependencies.files.stage(file, input.clientFolder);

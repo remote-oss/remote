@@ -1336,7 +1336,8 @@ describe('the launches of the VSCodium run', () => {
           .map(launch => launch.label.includes('ssh-newclient')),
       ],
       [
-        [2, 2],
+        // the cache and the install, in the shared steps and in the CLI job's copy of them
+        [4, 4],
         [true, true],
       ],
     );

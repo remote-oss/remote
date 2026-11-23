@@ -112,7 +112,7 @@
   "label": "spec:reviewed",
   "title": "Logging, the log terminal and log files",
   "epic": "E01",
-  "acCount": 34,
+  "acCount": 33,
   "surfaces": {
    "commands": [
     "remote-containers.revealLogTerminal",
@@ -837,7 +837,7 @@
   "label": "spec:draft",
   "title": "Help, feedback and getting started",
   "epic": "E01",
-  "acCount": 22,
+  "acCount": 26,
   "surfaces": {
    "commands": [
     "remote-containers.getHelp",

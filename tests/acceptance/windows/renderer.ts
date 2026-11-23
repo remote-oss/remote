@@ -11,6 +11,7 @@ import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
 import {
   mergeReads,
   wheelDirection,
+  wheelTopProbe,
   type ViewRowRead,
 } from '../../../tools/view-rows.ts';
 import path from 'node:path';
@@ -82,39 +83,30 @@ const first = () => {
 };`;
 
 /**
- * The wheel to the list's top, standing on the list's `labels` and `move`: the wheel's sign that scrolls the list
- * up varies with the build, so it is probed — at a boundary only one sign moves — and a move's direction, told by
- * its labels with `wheelDirection`'s own text (the page runs the very function the unit rows test), sets the
- * sign; the list is wheeled up with it until it stands at its top.
+ * The probe of the wheel to the list's top, standing on the list's `labels` and `move`: the wheel's sign that
+ * scrolls the list up varies with the build, so it is probed — at a boundary only one sign moves — and a move's
+ * direction, told by its labels with `wheelDirection`'s own text (the page runs the very functions the unit rows
+ * test), settles the sign; a list that is still filling its rows tells no direction from three reads, and the
+ * probe stands unsettled, for the walk to read the list where it stands. `toTop` wheels the list up with the
+ * settled sign, and fails when 200 moves do not reach the top.
  */
-const WHEEL_TO_TOP = `const direction = ${wheelDirection.toString()};
+const WHEEL_TOP_PROBE = `const wheelDirection = ${wheelDirection.toString()};
+const wheelTopProbe = ${wheelTopProbe.toString()};
 const probe = async delta => {
   const before = labels();
   const moved = await move(delta);
   return {delta, moved, before, after: labels()};
 };
-let upSign = 0;
-let topStep = await probe(-400);
-if (!topStep.moved) {
-  topStep = await probe(400);
-}
-if (topStep.moved) {
-  const way = direction(topStep.before, topStep.after);
-  if (way === 'down') {
-    upSign = -topStep.delta;
-  } else if (way === 'up') {
-    upSign = topStep.delta;
-  } else {
-    throw new Error('the wheel to the top could not tell its direction');
+const wheelTop = await wheelTopProbe(probe);
+const toTop = async sign => {
+  let moves = 0;
+  while (sign !== 0 && moves < 200 && (await move(sign))) {
+    moves += 1;
   }
-}
-let topMoves = 0;
-while (upSign !== 0 && topMoves < 200 && (await move(upSign))) {
-  topMoves += 1;
-}
-if (upSign !== 0 && topMoves >= 200) {
-  throw new Error('the list did not reach its top in 200 moves');
-}`;
+  if (sign !== 0 && moves >= 200) {
+    throw new Error('the list did not reach its top in 200 moves');
+  }
+};`;
 
 /** A row of a view, as the window shows it. */
 export interface ViewRow {
@@ -622,6 +614,12 @@ export async function renderedRows(
   );
 }
 
+/** The reads of a virtualized list's walk, and whether the walk stood at the list's top. */
+interface ViewRowsWalk {
+  settled: boolean;
+  reads: ViewRowRead[][];
+}
+
 /**
  * The rows of view `viewName` in window `name`, in the order shown; `undefined` when the window has no such view. A
  * virtualized list keeps only the rows of its viewport in the DOM, so a list that overflows its container is read
@@ -629,13 +627,15 @@ export async function renderedRows(
  * above it, and the top's read and the reads of the walk over the list are merged with the values of the read that
  * first shows a row. The list is wheeled back to its top, so a later user action finds it there. The wheel's sign
  * that scrolls a list varies with the build, so it is probed, and a list that overflows moves for exactly one of
- * the two.
+ * the two. A list that is still filling its rows tells the wheel no direction, so the read stands where the list
+ * stands, is told on stderr with the rows it shows, and the list is left where it is for the next read's own
+ * wheel.
  */
 export async function viewRows(
   name: string,
   viewName: string,
 ): Promise<ViewRow[] | undefined> {
-  const reads = await evaluate<ViewRowRead[][] | null>(
+  const walk = await evaluate<ViewRowsWalk | null>(
     name,
     `(async () => {
       const pane = ${paneExpression(viewName)};
@@ -654,7 +654,7 @@ export async function viewRows(
           }));
       ${LIST_CONTAINER}
       if (list === undefined) {
-        return [read()];
+        return {settled: true, reads: [read()]};
       }
       ${ROW_LABELS}
       ${WHEEL_SETTLE}
@@ -696,7 +696,14 @@ export async function viewRows(
         window.remoteOssViewRowsTrace = walkTrace.join(' ');
         return first() !== before;
       };
-      ${WHEEL_TO_TOP}
+      ${WHEEL_TOP_PROBE}
+      if (!wheelTop.settled) {
+        // The list is still filling its rows, and its wheel tells no direction: the walk reads it where it stands
+        // and stands, so the read's wait may wheel it again once its rows have told.
+        window.remoteOssViewRowsTrace = undefined;
+        return {settled: false, reads: [read()]};
+      }
+      await toTop(wheelTop.sign);
       // The walk stands at the list's top now, where a fresh read would, so the reads after it read the list the
       // way a fresh one would: the top's read, the read after the probe of the wheel that scrolls the list down,
       // the reads of the walk over the list, and the read that closes it, once the list is wheeled back to its top
@@ -729,17 +736,25 @@ export async function viewRows(
       await wait(200);
       reads.push(read());
       window.remoteOssViewRowsTrace = undefined;
-      return reads;
+      return {settled: true, reads};
     })()`,
     LONG_READ_MILLISECONDS,
     'String(window.remoteOssViewRowsTrace ?? null)',
   );
-  if (reads === null) {
+  if (walk === null) {
     return undefined;
+  }
+  if (!walk.settled) {
+    process.stderr.write(
+      `window ${name}, view ${viewName}: the wheel to the top could not tell its direction, and the list stands where it is, showing ${
+        walk.reads.flatMap(read => read.map(each => each.label)).join(', ') ||
+        'no row'
+      }\n`,
+    );
   }
   // The protocol returns values as JSON, where `expanded: undefined` would drop: the null a read did not draw
   // is no state.
-  return mergeReads(reads).map(each => ({
+  return mergeReads(walk.reads).map(each => ({
     ...each,
     expanded: each.expanded ?? undefined,
   }));
@@ -794,8 +809,9 @@ async function clickAction(
 /**
  * Wheels the one row labelled `rowLabel` of view `viewName` in window `name` into the viewport of its virtualized
  * list, so the row is drawn where an action on it is looked for: the list is wheeled to its top and then down over
- * the row, and it stands where the row was found; `false` when the row is not drawn then, so the look for the
- * action stands and fails naming it.
+ * the row, and it stands where the row was found; a list that is still filling its rows is wheeled down over the
+ * row where it stands; `false` when the row is not drawn then, so the look for the action stands and fails naming
+ * it.
  */
 async function ensureRowDrawn(
   name: string,
@@ -829,7 +845,10 @@ async function ensureRowDrawn(
         await wheel(delta);
         return first() !== before;
       };
-      ${WHEEL_TO_TOP}
+      ${WHEEL_TOP_PROBE}
+      if (wheelTop.settled) {
+        await toTop(wheelTop.sign);
+      }
       let down = 0;
       if (await move(-400)) {
         down = -400;

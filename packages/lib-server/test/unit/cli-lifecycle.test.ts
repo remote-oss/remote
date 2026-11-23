@@ -321,6 +321,7 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
         files: {
           remove: () => Promise.resolve(),
           exists: () => Promise.resolve(false),
+          entryExists: () => Promise.resolve(false),
           size: () => Promise.resolve(0),
           sha256: () => Promise.resolve(''),
           stage: () =>
