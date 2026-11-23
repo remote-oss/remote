@@ -94,7 +94,7 @@ describe('Dev Containers with its engine in a WSL distro (F-0411, card #3022)', 
     }
   });
 
-  it.skip('F-0411 AC-25 (c3022-execute-in-wsl): with executeInWSL true, a Windows folder’s window reopens in its container, bound from /mnt/<drive>, labelled with the Windows path, and with no consistency or S356 (todo: waits for the fix of the workspace mount, which carries consistency=cached under executeInWSL)', async () => {
+  it.skip('F-0411 AC-25 (c3022-execute-in-wsl): with executeInWSL true, a Windows folder’s window reopens in its container, bound from /mnt/<drive>, labelled with the Windows path, and with no consistency or S356 (todo: waits for #3072: the workspace mount carries consistency=cached under executeInWSL)', async () => {
     const folder = devContainerFolder('c3022-wsl', {name: 'c3022-wsl'});
     const label = labelOf(folder);
     await setUserSetting('dev.containers.executeInWSL', true);
