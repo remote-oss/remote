@@ -188,6 +188,8 @@ interface Setup {
   sessionLock?: boolean;
   /** The user's archive of a manual bootstrap. */
   bootstrapArchive?: string;
+  /** Paths where an entry that is not a file is, such as a folder. */
+  entries?: string[];
   /** How staging that archive ends; it fails when absent. */
   staged?: {kind: 'staged'; archive: string} | {kind: 'failed'; detail: string};
 }
@@ -269,6 +271,11 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
           Promise.resolve(
             (setup.existing?.includes(file) ?? false) ||
               (renames.length > 0 && setup.appearsAfterRename === file),
+          ),
+        entryExists: file =>
+          Promise.resolve(
+            (setup.existing?.includes(file) ?? false) ||
+              (setup.entries?.includes(file) ?? false),
           ),
         size: file => Promise.resolve(setup.sizes?.[file] ?? 0),
         sha256: file => Promise.resolve(setup.digests?.[file] ?? ''),
@@ -2214,6 +2221,24 @@ describe('a manual bootstrap (F-2406, ruling-2878-manual-bootstrap)', () => {
         },
         calls: 0,
       },
+    );
+  });
+
+  it("F-2406 BR-4, 7.E3 (card #2949): a folder at the archive's path is staged and copied as any file is, not refused as missing", async () => {
+    const bootstrapped = await runTransfer({
+      plan: {where: 'client', clientFallback: false},
+      bootstrapArchive: ARCHIVE,
+      entries: [ARCHIVE],
+      staged: {kind: 'staged', archive: STAGED},
+    });
+    deepStrictEqual(
+      {
+        kind: bootstrapped.outcome.kind,
+        copied: bootstrapped.channel.calls.flatMap(call =>
+          call.operation === 'copyToHost' ? [call.request.localFile] : [],
+        ),
+      },
+      {kind: 'transferred', copied: [STAGED]},
     );
   });
 

@@ -269,6 +269,7 @@ function dependenciesOf(
           ? !seen.removed.includes(file)
           : seen.renames.some(([, kept]) => kept === file),
       ),
+    entryExists: () => Promise.resolve(false),
     size: () => Promise.resolve(10),
     sha256: () => Promise.resolve('00'),
     stage: () =>
