@@ -10,6 +10,7 @@
 import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
 import {
   mergeReads,
+  shownLabels,
   wheelDirection,
   wheelTopProbe,
   type ViewRowRead,
@@ -618,6 +619,7 @@ export async function renderedRows(
 interface ViewRowsWalk {
   settled: boolean;
   reads: ViewRowRead[][];
+  probeReads?: number;
 }
 
 /**
@@ -701,7 +703,7 @@ export async function viewRows(
         // The list is still filling its rows, and its wheel tells no direction: the walk reads it where it stands
         // and stands, so the read's wait may wheel it again once its rows have told.
         window.remoteOssViewRowsTrace = undefined;
-        return {settled: false, reads: [read()]};
+        return {settled: false, reads: [read()], probeReads: wheelTop.reads};
       }
       await toTop(wheelTop.sign);
       // The walk stands at the list's top now, where a fresh read would, so the reads after it read the list the
@@ -746,8 +748,10 @@ export async function viewRows(
   }
   if (!walk.settled) {
     process.stderr.write(
-      `window ${name}, view ${viewName}: the wheel to the top could not tell its direction, and the list stands where it is, showing ${
-        walk.reads.flatMap(read => read.map(each => each.label)).join(', ') ||
+      `window ${name}, view ${viewName}: the wheel to the top could not tell its direction in ${String(
+        walk.probeReads,
+      )} reads, and the list stands where it is, showing ${
+        shownLabels(walk.reads.flatMap(read => read.map(each => each.label))) ||
         'no row'
       }\n`,
     );
