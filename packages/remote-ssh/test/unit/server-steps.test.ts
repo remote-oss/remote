@@ -785,6 +785,76 @@ describe('the server steps: transfer and start', () => {
     });
   });
 
+  async function transferOver(
+    channel: RecordingChannel,
+  ): Promise<ReturnType<ReturnType<typeof createServerSteps>['transfer']>> {
+    const steps = createServerSteps(dependencies());
+    const result = steps.plan(INPUT, HOST);
+    if (!('plan' in result) || result.plan.kind !== 'download') {
+      throw new Error('the plan should download');
+    }
+    return steps.transfer(
+      INPUT,
+      leaseOn(channel),
+      HOST,
+      result.plan,
+      () => undefined,
+      new AbortController().signal,
+    );
+  }
+
+  it('F-2408 BR-4: the install of a host with flock has the session shell hold the host lock, so its run carries the lock path the host named, and the session keeps it when the script took the lock', async () => {
+    const channel = channelAnswering(
+      lines(
+        'Ok',
+        'server.installDir=/home/alex/.fixture-server/bin/abc123',
+        'timing.install=5',
+        'server.lockHeld=yes',
+      ),
+      'flock',
+    );
+    await transferOver(channel);
+    deepStrictEqual(channel.sessionLocks(), [{path: '/lock', action: 'open'}]);
+  });
+
+  it('F-2402 AC-26: an install that found the server installed took no lock, so the session gives up what the shell made', async () => {
+    const channel = channelAnswering(
+      lines(
+        'Ok',
+        'server.installDir=/home/alex/.fixture-server/bin/abc123',
+        'timing.install=5',
+      ),
+      'flock',
+    );
+    await transferOver(channel);
+    deepStrictEqual(channel.sessionLocks(), [
+      {path: '/lock', action: 'open'},
+      {path: '/lock', action: 'release'},
+    ]);
+  });
+
+  it('F-2408 BR-4: an install that fails gives the session lock up', async () => {
+    const channel = channelAnswering(lines('CreateInstallDirFailed'), 'flock');
+    await transferOver(channel);
+    deepStrictEqual(channel.sessionLocks(), [
+      {path: '/lock', action: 'open'},
+      {path: '/lock', action: 'release'},
+    ]);
+  });
+
+  it('F-2408 BR-4: the start carries no session lock of its own: the install holds it', async () => {
+    const steps = createServerSteps(dependencies());
+    const channel = channelAnswering(STARTED, 'flock');
+    await steps.start(
+      INPUT,
+      leaseOn(channel),
+      HOST,
+      false,
+      new AbortController().signal,
+    );
+    deepStrictEqual(channel.sessionLocks(), []);
+  });
+
   it('F-3902 AC-13: starts the server with the licence flag only when the gate cleared it', async () => {
     const steps = createServerSteps(dependencies());
     const withFlag = channelAnswering(STARTED);
@@ -1475,7 +1545,9 @@ describe('the manual bootstrap (F-2406, ruling-2878-manual-bootstrap)', () => {
   ): ServerStepDependencies['files'] {
     return {
       remove: () => Promise.resolve(),
-      exists: file => Promise.resolve(present && file === BOOTSTRAP_ARCHIVE),
+      exists: () => Promise.resolve(false),
+      entryExists: file =>
+        Promise.resolve(present && file === BOOTSTRAP_ARCHIVE),
       size: () => Promise.resolve(0),
       sha256: () => Promise.resolve(''),
       rename: () => Promise.resolve({kind: 'renamed'}),
@@ -1495,8 +1567,15 @@ describe('the manual bootstrap (F-2406, ruling-2878-manual-bootstrap)', () => {
       platformHint: 'linux',
       scripts: [
         {
+          // The host names the lock's place to the install; it has no `flock`, so no session lock follows.
           interpreter: 'posixShell',
-          matches: () => true,
+          matches: script => script.includes('lock-path='),
+          lines: ['lock-method=link', 'lock-path=/lock'],
+          ending: {kind: 'exit', status: 0},
+        },
+        {
+          interpreter: 'posixShell',
+          matches: script => !script.includes('lock-path='),
           lines: lines('Ok', 'timing.install=5'),
           ending: {kind: 'exit', status: 0},
         },

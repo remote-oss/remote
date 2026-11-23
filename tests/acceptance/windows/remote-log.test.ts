@@ -1,4 +1,4 @@
-import {deepStrictEqual, throws} from 'node:assert';
+import {deepStrictEqual} from 'node:assert';
 import {
   closeWindow,
   connectedWithin,
@@ -36,17 +36,18 @@ function remoteSideOf(lines: readonly string[]): {
 }
 
 /**
- * The log of one window's connect since its mark: it must hold the window's own lines, or the absence checks on it
- * pass vacuously.
+ * The read log's slice of one window's connect since its mark: it must hold the window's own lines, or the absence
+ * checks on it pass vacuously. The row passes its own read of the log, not a mark to read at: a second read could
+ * hold a line that landed after the first, and the guard is about the slice (card #2954).
  */
-function ownLogSlice(mark: number): string[] {
-  const lines = connectionLog().slice(mark);
+function ownLogSlice(lines: readonly string[], mark: number): string[] {
+  const slice = lines.slice(mark);
   deepStrictEqual(
-    lines.length > 0,
+    slice.length > 0,
     true,
     'the slice holds no line of the connect or its reload, so the absence check would pass vacuously',
   );
-  return lines;
+  return slice;
 }
 
 describe('the remote install and start output in the log (card connect-67)', function () {
@@ -89,8 +90,24 @@ describe('the remote install and start output in the log (card connect-67)', fun
   });
 
   it('F-2003 AC-29 (empty-slice): the read of a connect\u2019s log fails named when the slice holds none of its lines, so the absence check cannot pass vacuously', () => {
-    const mark = connectionLog().length;
-    throws(() => ownLogSlice(mark), /pass vacuously/);
+    const connectLines = [
+      'Progress: installing',
+      '[remote] the script started',
+    ];
+    const emptySliceThrows = (() => {
+      try {
+        ownLogSlice([], 0);
+        return false;
+      } catch (caught) {
+        return (
+          caught instanceof Error && caught.message.includes('pass vacuously')
+        );
+      }
+    })();
+    deepStrictEqual(
+      {emptySliceThrows, fullSlice: ownLogSlice(connectLines, 0)},
+      {emptySliceThrows: true, fullSlice: connectLines},
+    );
   });
 
   it('F-2003 AC-29 (terminal-reload): a terminal-mode connect and its reload log no local-server line, started, reused or stale (BR-16)', async () => {
@@ -107,7 +124,7 @@ describe('the remote install and start output in the log (card connect-67)', fun
         await reloadWindow('rl3');
         await connectedWithin('rl3', 120_000);
         deepStrictEqual(
-          ownLogSlice(mark).filter(line =>
+          ownLogSlice(connectionLog(), mark).filter(line =>
             /local connection server/i.test(line),
           ),
           [],

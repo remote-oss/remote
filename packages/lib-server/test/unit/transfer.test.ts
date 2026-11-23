@@ -184,8 +184,12 @@ interface Setup {
   copyStall?: number;
   /** Makes the host Windows, so that a look at a file's size is a PowerShell script. */
   windows?: boolean;
+  /** Tells the transfer that the channel's shell lives as long as the session. */
+  sessionLock?: boolean;
   /** The user's archive of a manual bootstrap. */
   bootstrapArchive?: string;
+  /** Paths where an entry that is not a file is, such as a folder. */
+  entries?: string[];
   /** How staging that archive ends; it fails when absent. */
   staged?: {kind: 'staged'; archive: string} | {kind: 'failed'; detail: string};
 }
@@ -268,6 +272,11 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
             (setup.existing?.includes(file) ?? false) ||
               (renames.length > 0 && setup.appearsAfterRename === file),
           ),
+        entryExists: file =>
+          Promise.resolve(
+            (setup.existing?.includes(file) ?? false) ||
+              (setup.entries?.includes(file) ?? false),
+          ),
         size: file => Promise.resolve(setup.sizes?.[file] ?? 0),
         sha256: file => Promise.resolve(setup.digests?.[file] ?? ''),
         stage: () =>
@@ -280,6 +289,9 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
         },
       },
       lockLoop: setup.lockLoop ?? runOnce,
+      ...(setup.sessionLock === undefined
+        ? {}
+        : {sessionLock: setup.sessionLock}),
       ...(setup.copyAvailable === undefined
         ? {}
         : {copyAvailable: () => Promise.resolve(setup.copyAvailable === true)}),
@@ -351,6 +363,90 @@ describe('a download on the host (F-2403, F-2405.BR-2)', () => {
       kind: 'transferred',
       installFolder: INSTALL_FOLDER,
     });
+  });
+
+  /** The answer of a host that takes a `flock` lock for the session, to the run that asks where the lock is. */
+  const FLOCK_PLACE: ScriptAnswer = {
+    interpreter: 'posixShell',
+    matches: script => script.includes('lock-path='),
+    lines: ['lock-method=flock', 'lock-path=/tmp/vscode-lock.user.abc123'],
+    ending: {kind: 'exit', status: 0},
+  };
+
+  /** The install's block when the script took the lock, as it reports it. */
+  const INSTALLED_HOLDING = block(
+    'Ok',
+    `server.installDir=${INSTALL_FOLDER}`,
+    'timing.install=5',
+    'server.lockHeld=yes',
+  );
+
+  /** The scripted answers of an install over a session: the lock place, then the install's output, then the release. */
+  function overSession(
+    install: ScriptAnswer['ending'] | readonly string[],
+  ): ScriptAnswer[] {
+    return [
+      FLOCK_PLACE,
+      {
+        interpreter: 'posixShell',
+        matches: script => script.includes('lock_take'),
+        lines: Array.isArray(install) ? install : [],
+        ending: Array.isArray(install)
+          ? {kind: 'exit', status: 0}
+          : (install as ScriptAnswer['ending']),
+      },
+      {...answering([]), matches: script => script === ':'},
+    ];
+  }
+
+  const LOCK_OPEN = {path: '/tmp/vscode-lock.user.abc123', action: 'open'};
+  const LOCK_RELEASE = {
+    path: '/tmp/vscode-lock.user.abc123',
+    action: 'release',
+  };
+
+  it('F-2408 BR-4: an install over a caller whose shell lives as long as the session asks the host where the lock is, runs with that session lock open, and keeps it when the script took the lock', async () => {
+    const {channel, outcome} = await runTransfer({
+      sessionLock: true,
+      answers: overSession(INSTALLED_HOLDING),
+    });
+    deepStrictEqual(
+      [outcome.kind, channel.sessionLocks()],
+      ['transferred', [LOCK_OPEN]],
+    );
+  });
+
+  it('F-2402 AC-26, F-2408 BR-4: an install that found the server installed took no lock, so the session gives up what the shell made', async () => {
+    const {channel, outcome} = await runTransfer({
+      sessionLock: true,
+      answers: overSession(INSTALLED),
+    });
+    deepStrictEqual(
+      [outcome.kind, channel.sessionLocks()],
+      ['transferred', [LOCK_OPEN, LOCK_RELEASE]],
+    );
+  });
+
+  it('F-2402 AC-26, F-2408 BR-4: an install that ends in a failure gives the session lock up', async () => {
+    const {channel, outcome} = await runTransfer({
+      sessionLock: true,
+      answers: overSession(block('CreateInstallDirFailed')),
+    });
+    deepStrictEqual(
+      [outcome.kind, channel.sessionLocks()],
+      ['failed', [LOCK_OPEN, LOCK_RELEASE]],
+    );
+  });
+
+  it('F-2402 AC-26, F-2408 BR-4: an install whose run the channel lost, as a cancelled one is, gives the session lock up', async () => {
+    const {channel, outcome} = await runTransfer({
+      sessionLock: true,
+      answers: overSession({kind: 'fail', failure: CHANNEL_CLOSED}),
+    });
+    deepStrictEqual(
+      [outcome.kind, channel.sessionLocks()],
+      ['failed', [LOCK_OPEN, LOCK_RELEASE]],
+    );
   });
 
   it('F-2403: the install folder comes from the plan when the script reports none', async () => {
@@ -2125,6 +2221,24 @@ describe('a manual bootstrap (F-2406, ruling-2878-manual-bootstrap)', () => {
         },
         calls: 0,
       },
+    );
+  });
+
+  it("F-2406 BR-4, 7.E3 (card #2949): a folder at the archive's path is staged and copied as any file is, not refused as missing", async () => {
+    const bootstrapped = await runTransfer({
+      plan: {where: 'client', clientFallback: false},
+      bootstrapArchive: ARCHIVE,
+      entries: [ARCHIVE],
+      staged: {kind: 'staged', archive: STAGED},
+    });
+    deepStrictEqual(
+      {
+        kind: bootstrapped.outcome.kind,
+        copied: bootstrapped.channel.calls.flatMap(call =>
+          call.operation === 'copyToHost' ? [call.request.localFile] : [],
+        ),
+      },
+      {kind: 'transferred', copied: [STAGED]},
     );
   });
 

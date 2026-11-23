@@ -7,6 +7,7 @@
 
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
+import {NoAnswerError} from './page-protocol.ts';
 
 /** A target of the debugging port's list. */
 export interface DebugTarget {
@@ -106,6 +107,53 @@ export function pagesDescription(
     : described.join('; ');
 }
 
+/**
+ * The pages of `found` that no open window remembers: what the editor still lists once every window of the launch is
+ * closed. The folder-less local window owns the one `[]` page that no other window remembers, whether or not a suite
+ * remembered it (most do not), so that page is no leftover; with two such pages it is not known which is the local
+ * window's, and both are told.
+ */
+export function pagesOfNoOpenWindow(
+  found: readonly DebugTarget[],
+  remembered: ReadonlyMap<string, string>,
+  open: (window: string) => boolean,
+): DebugTarget[] {
+  const local = localPageAmong(found, remembered, open);
+  const owners = new Map(remembered);
+  if (local !== undefined && open('local')) {
+    owners.set('local', local.id);
+  }
+  return found.filter(
+    page =>
+      ![...owners].some(
+        ([window, pageId]) => pageId === page.id && open(window),
+      ),
+  );
+}
+
+/**
+ * What to say of the pages that stay in the editor's list once the windows are closed, and what has been said by now:
+ * the note names the pages of `pagesOfNoOpenWindow` when they differ from those `told` names, and says nothing for the
+ * same pages again or for none. `told` is the identifiers of the pages last told, empty after a list with none, so that
+ * pages that come back are told again.
+ */
+export function leftoverNote(
+  found: readonly DebugTarget[],
+  remembered: ReadonlyMap<string, string>,
+  open: (window: string) => boolean,
+  told: string,
+): {note: string | undefined; told: string} {
+  const leftover = pagesOfNoOpenWindow(found, remembered, open);
+  const identifiers = leftover.map(page => page.id).join(',');
+  if (identifiers === told || leftover.length === 0) {
+    return {note: undefined, told: identifiers};
+  }
+  return {
+    note: `${String(leftover.length)} pages of the editor's list that no open window remembers: ${pagesDescription(leftover, remembered, open)}`,
+    told: identifiers,
+  };
+}
+
 /** The port the editor chose, read from the file it writes in the launch's user-data folder; none while there is no port. */
 export function portIn(file: string): number | undefined {
   const port = existsSync(file)
@@ -114,7 +162,36 @@ export function portIn(file: string): number | undefined {
   return Number.isInteger(port) ? port : undefined;
 }
 
-/** The pages the editor lists now; none when the port or its list cannot be read. */
+/**
+ * How long the debugging port's list may take to answer, in milliseconds. The list is one small document the editor
+ * answers at once; half a minute is far over any answer and under a row's own limit.
+ */
+const LIST_MILLISECONDS = 30_000;
+
+/**
+ * The targets the debugging port at `port` lists now, of every type. A port that accepts and does not answer within
+ * `milliseconds` fails with a {@link NoAnswerError} that names the port and the list.
+ */
+export async function listedTargets(
+  port: number,
+  milliseconds: number = LIST_MILLISECONDS,
+): Promise<DebugTarget[]> {
+  try {
+    const answer = await fetch(`http://127.0.0.1:${String(port)}/json/list`, {
+      signal: AbortSignal.timeout(milliseconds),
+    });
+    return (await answer.json()) as DebugTarget[];
+  } catch (caught) {
+    if (caught instanceof DOMException && caught.name === 'TimeoutError') {
+      throw new NoAnswerError(
+        `the debugging port ${String(port)}: no answer within ${String(Math.round(milliseconds / 100) / 10)} s to its list of targets`,
+      );
+    }
+    throw caught;
+  }
+}
+
+/** The pages the editor lists now; none when the port or its list cannot be read, or does not answer in time. */
 export async function listedPages(
   userDataFolder: string,
 ): Promise<DebugTarget[] | undefined> {
@@ -123,9 +200,7 @@ export async function listedPages(
     return undefined;
   }
   try {
-    const answer = await fetch(`http://127.0.0.1:${String(port)}/json/list`);
-    const targets = (await answer.json()) as DebugTarget[];
-    return targets.filter(target => target.type === 'page');
+    return (await listedTargets(port)).filter(target => target.type === 'page');
   } catch {
     return undefined;
   }
@@ -174,4 +249,45 @@ export async function waitUntilPageLeft(
     }
     await pause(250);
   }
+}
+
+/** What one close of a window ended with: its page gone, or still listed with the note and the list that say so. */
+export type CloseAttempt =
+  | {state: 'left'}
+  | {state: 'stayed'; note: string; listed: readonly DebugTarget[]};
+
+/** The end of a close that may be sent again: the last attempt, how many were made and the note of each that left the page. */
+export interface ClosedOutcome {
+  last: CloseAttempt;
+  tried: number;
+  notes: string[];
+}
+
+/**
+ * Makes `attempt` (a close of the window and the wait for its page) until the page has left the editor's list, at most
+ * `attempts` times, and sends the close again only while the window is open: a close that met the window's own reload
+ * (it deactivated and came back on the same page, as a window that reopens as the local folder does) is withdrawn with the
+ * deactivation, and the window stays listed until a close reaches the agent it came back with. A window that is not open
+ * has nothing to send a close to, so a page that stays then ends the closes.
+ */
+export async function closeUntilGone(
+  attempt: () => Promise<CloseAttempt>,
+  windowOpen: () => boolean,
+  attempts: number,
+): Promise<ClosedOutcome> {
+  const notes: string[] = [];
+  let last: CloseAttempt = {state: 'left'};
+  let tried = 0;
+  while (tried < attempts) {
+    last = await attempt();
+    tried += 1;
+    if (last.state === 'left') {
+      break;
+    }
+    notes.push(last.note);
+    if (!windowOpen()) {
+      break;
+    }
+  }
+  return {last, tried, notes};
 }

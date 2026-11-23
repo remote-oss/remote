@@ -51,8 +51,11 @@ import {
 import {explainedFailure, section} from './connect-failure.ts';
 import {editorFolderOf} from './editor-folder.ts';
 import {
+  type CloseAttempt,
+  closeUntilGone,
   type DebugTarget,
   listedPages,
+  leftoverNote,
   pagesDescription,
   REMEMBERED_PAGES,
   waitUntilPageLeft,
@@ -1470,17 +1473,45 @@ async function pagesListedNow(): Promise<DebugTarget[] | undefined> {
   }
 }
 
+/** The ids of the pages that the last `leftoverPagesNote` told, so that a page that stays is told once and not at every teardown. */
+let toldLeftoverPages = '';
+
 /**
- * Closes window `name` and resolves once it's gone: its agent reports `deactivated`, or the extension host it recorded
- * has exited, and the page it was last found by has left the editor's list, so that the next row does not find it beside
- * its own; a page that is still listed after 30 s is told on stderr and the close ends. Some closes
- * never get the event (8 of 576 in a full containers launch, 2026-11-01): the extension host ends before its agent
- * writes it. A window whose extension host still runs after the wait fails, naming it.
+ * What the editor lists that no open window remembers, told when it differs from what was told last: the pages that a
+ * window left behind after its close or its row's failure stay in the list for the rest of the launch, and every later
+ * row has more pages to tell apart (#2936). Nothing when none is listed, when the list cannot be read, or when these were
+ * told already.
  */
-export async function closeWindow(
+export async function leftoverPagesNote(): Promise<string | undefined> {
+  const listed = await pagesListedNow();
+  if (listed === undefined) {
+    return undefined;
+  }
+  const next = leftoverNote(
+    listed,
+    REMEMBERED_PAGES,
+    isOpen,
+    toldLeftoverPages,
+  );
+  toldLeftoverPages = next.told;
+  return next.note;
+}
+
+/** How many times a close is sent while the window stays listed and open: the close, and one more. */
+const CLOSE_ATTEMPTS = 2;
+
+/** How long the close that is sent once more waits for the window to end. */
+const SECOND_CLOSE_MILLISECONDS = 30_000;
+
+/**
+ * One close of window `name`: the command, the wait for its agent's `deactivated` or its extension host's end, and the
+ * wait for the page it was last found by to leave the editor's list. A window whose extension host still runs after the
+ * wait fails, naming it.
+ */
+async function closeOnce(
   name: string,
-  milliseconds = WAIT_MILLISECONDS,
-): Promise<void> {
+  milliseconds: number,
+): Promise<CloseAttempt> {
   const before = countOf(name, 'deactivated');
   const extensionHost = liveProcessIdOf(name);
   // The page the window was last found by: it must leave the list, whatever other windows do meanwhile.
@@ -1506,24 +1537,70 @@ export async function closeWindow(
     withdrawUnaccepted(name, commandId);
   }
   if (
-    ownPage !== undefined &&
-    listedBefore?.some(page => page.id === ownPage) === true
+    ownPage === undefined ||
+    listedBefore?.some(page => page.id === ownPage) !== true
   ) {
-    const waited = await waitUntilPageLeft(
-      name,
-      ownPage,
-      pagesListedNow,
-      PAGE_LEFT_MILLISECONDS,
-      pause => new Promise(resolve => setTimeout(resolve, pause)),
+    return {state: 'left'};
+  }
+  const waited = await waitUntilPageLeft(
+    name,
+    ownPage,
+    pagesListedNow,
+    PAGE_LEFT_MILLISECONDS,
+    pause => new Promise(resolve => setTimeout(resolve, pause)),
+  );
+  // A page that lingers is told by name, with the pages the editor listed at the close and after the wait and who
+  // remembers each, and the close goes on: it is not something a close, or the hook that runs it, can end, and a launch
+  // must not fail for it. The lists say whether the window's page stayed or the id was another window's (card #2909).
+  if (waited.state === 'stayed') {
+    process.stderr.write(
+      `closing window ${name}: ${waited.note}; the pages at the close: ${pagesDescription(listedBefore, REMEMBERED_PAGES, isOpen)}; after the wait: ${pagesDescription(waited.listed, REMEMBERED_PAGES, isOpen)}\n`,
     );
-    // A page that lingers is told by name, with the pages the editor listed at the close and after the wait and who
-    // remembers each, and the close goes on: it is not something a close, or the hook that runs it, can end, and a launch
-    // must not fail for it. The lists say whether the window's page stayed or the id was another window's (card #2909).
-    if (waited.state === 'stayed') {
+  }
+  return waited;
+}
+
+/**
+ * Closes window `name` and resolves once it's gone: its agent reports `deactivated`, or the extension host it recorded
+ * has exited, and the page it was last found by has left the editor's list, so that the next row does not find it beside
+ * its own. Some closes never get the event (8 of 576 in a full containers launch, 2026-11-01): the extension host ends
+ * before its agent writes it. A close that met the window's own reload (a window that reopens as the local folder
+ * deactivates and comes back on the same page) leaves the window open, and the deactivation withdraws the close: while the
+ * page stays and the window is open again, the close is sent once more. A page that still stays is told on stderr and the
+ * close ends; a window whose extension host still runs after the wait fails, naming it.
+ */
+export async function closeWindow(
+  name: string,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<void> {
+  let first = true;
+  const closed = await closeUntilGone(
+    async () => {
+      if (first) {
+        first = false;
+        return closeOnce(name, milliseconds);
+      }
       process.stderr.write(
-        `closing window ${name}: ${waited.note}; the pages at the close: ${pagesDescription(listedBefore, REMEMBERED_PAGES, isOpen)}; after the wait: ${pagesDescription(waited.listed, REMEMBERED_PAGES, isOpen)}\n`,
+        `closing window ${name}: its page stayed listed and the window is open again, so the close is sent once more\n`,
       );
-    }
+      // The second close is the one that repairs a window the first left open: its own failure is told and does not fail
+      // a hook that could not have done more.
+      return closeOnce(
+        name,
+        Math.min(milliseconds, SECOND_CLOSE_MILLISECONDS),
+      ).catch((caught: unknown): CloseAttempt => ({
+        state: 'stayed',
+        note: `the close sent once more did not end the window: ${caught instanceof Error ? caught.message : String(caught)}`,
+        listed: [],
+      }));
+    },
+    () => isOpen(name),
+    CLOSE_ATTEMPTS,
+  );
+  if (closed.tried > 1 && closed.last.state === 'left') {
+    process.stderr.write(
+      `closing window ${name}: the page left after the close was sent ${String(closed.tried)} times\n`,
+    );
   }
 }
 

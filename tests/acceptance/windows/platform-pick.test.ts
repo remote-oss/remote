@@ -314,11 +314,6 @@ function surfacesSince(mark: number, window: string): string[] {
   return linesSince(mark, window).map(line => line.surface);
 }
 
-/** The surfaces window `window` wrote since `mark`, but its notices. */
-function withoutNotices(mark: number, window: string): string[] {
-  return surfacesSince(mark, window).filter(surface => surface !== 'notice');
-}
-
 describe('the remote platform pick of the commands and the reconnections (card coverage-94)', function () {
   this.timeout(900_000);
 
@@ -347,12 +342,12 @@ describe('the remote platform pick of the commands and the reconnections (card c
     await setting('remote.SSH.useLocalServer', undefined);
   });
 
-  it('F-2206 AC-26 (c94-kill-host): Kill VS Code Server on Host... asks the platform; after Linux it kills and writes no entry, after Escape nothing runs, no dialog shows and no entry is written; in default mode there is no pick', async () => {
+  it('F-2206 AC-26 (c94-kill-host): Kill VS Code Server on Host... asks the platform; after Linux it kills and writes no entry, after Escape nothing runs, no notification or dialog shows and no entry is written; in default mode there is no pick', async () => {
     const escape = await runWith('local', 'opensshremotes.cleanRemoteServer', [
       pickHost('harness'),
       pickFor('local', 'dismiss'),
     ]);
-    const escaped = [withoutNotices(escape, 'local'), storedPlatform()];
+    const escaped = [surfacesSince(escape, 'local'), storedPlatform()];
     const linux = await runWith('local', 'opensshremotes.cleanRemoteServer', [
       pickHost('harness'),
       pickFor('local', 'linux'),
@@ -381,7 +376,7 @@ describe('the remote platform pick of the commands and the reconnections (card c
     );
   });
 
-  it('F-2206 AC-26 (c94-kill-current): Kill Current VS Code Server asks the platform in a connected window; after Escape the window stays connected with no dialog and no entry, and after Linux the kill completes with no entry', async () => {
+  it('F-2206 AC-26 (c94-kill-current): Kill Current VS Code Server asks the platform in a connected window; after Escape the window stays connected with no notification, no dialog and no entry, and after Linux the kill completes with no entry', async () => {
     await connectedWithoutEntry('k26');
     const servers = await serverProcesses();
     const escape = await runWith(
@@ -390,7 +385,7 @@ describe('the remote platform pick of the commands and the reconnections (card c
       [pickFor('k26', 'dismiss')],
     );
     const escaped = [
-      withoutNotices(escape, 'k26'),
+      surfacesSince(escape, 'k26'),
       await connected('k26'),
       (await serverProcesses()).length === servers.length,
       storedPlatform(),

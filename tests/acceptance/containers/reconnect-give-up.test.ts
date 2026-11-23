@@ -403,8 +403,14 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
       const reloadMark = containersLog().length;
       const began = Date.now();
       await answerDialog(name, 'Reload Window');
+      const clicked = Date.now();
       await connectedToContainer(name);
       const seconds = (Date.now() - began) / 1000;
+      // Where the time of the reload went, for the message of a red: the click's own call, and the wait that follows it.
+      const spans = `the click's call took ${String((clicked - began) / 1000)} s and the wait for the connected window ${String((Date.now() - clicked) / 1000)} s`;
+      console.log(
+        `c43-five-minutes: the reload took ${String(seconds)} s: ${spans}`,
+      );
       const gaps = gapsOf(arrivals);
       const state = {
         numbered: numbersOf(logSince(mark))
@@ -437,7 +443,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
           newPort: true,
           started: true,
         },
-        `the reload took ${String(seconds)} s from the click to the connected window; the log since the click: ${JSON.stringify(logSince(reloadMark).filter(line => /Resolving Remote|Starting container|Starting VS Code Server|server listening|lifecycle commands finished|Reading configuration/.test(line)))}; ${labelNote('c43-five')}`,
+        `the reload took ${String(seconds)} s from the click to the connected window (${spans}); the log since the click: ${JSON.stringify(logSince(reloadMark).filter(line => /Resolving Remote|Starting container|Starting VS Code Server|server listening|lifecycle commands finished|Reading configuration/.test(line)))}; ${labelNote('c43-five')}`,
       );
     } finally {
       await removeContainers(folder);

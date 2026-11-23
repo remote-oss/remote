@@ -1,13 +1,21 @@
 import {deepStrictEqual} from 'node:assert';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {createServer, type ServerResponse} from 'node:http';
+import type {AddressInfo} from 'node:net';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {NoAnswerError} from '../tests/acceptance/windows/page-protocol.ts';
 import {
   type DebugTarget,
+  type CloseAttempt,
+  closeUntilGone,
+  leftoverNote,
   lingeringPageNote,
   listedPages,
+  listedTargets,
   localPageAmong,
   pagesDescription,
+  pagesOfNoOpenWindow,
   portIn,
   waitUntilPageLeft,
 } from '../tests/acceptance/windows/page-list.ts';
@@ -257,6 +265,222 @@ describe('the wait for a closed window’s page to leave the list (card #2890)',
     deepStrictEqual(
       lingeringPageNote('c50-generic', '15D82FFDAB', 2, 30_000),
       'the page of window c50-generic (#15D82FFD) was still listed 30 s after the window deactivated: the editor lists 2 pages',
+    );
+  });
+});
+
+describe('the debugging port’s list (card #2908)', () => {
+  /** A list server on a port of its own that answers each request as `answer` says; `stop` closes it. */
+  async function listServer(
+    answer: (response: ServerResponse) => void,
+  ): Promise<{port: number; stop(): Promise<void>}> {
+    const server = createServer((request, response) => {
+      answer(response);
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    return {
+      port: (server.address() as AddressInfo).port,
+      stop: () =>
+        new Promise<void>(resolve => {
+          server.closeAllConnections();
+          server.close(() => {
+            resolve();
+          });
+        }),
+    };
+  }
+
+  it('#2908: the targets of every type come back as the port listed them', async () => {
+    const targets = [page('p1', 'one'), {id: 'f1', type: 'iframe', title: 'x'}];
+    const server = await listServer(response => {
+      response.end(JSON.stringify(targets));
+    });
+    try {
+      deepStrictEqual(await listedTargets(server.port), targets);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('#2908: a port that accepts and does not answer fails within the bound with a failure that names the port and the list', async () => {
+    const server = await listServer(() => undefined);
+    try {
+      const outcome = await listedTargets(server.port, 150).then(
+        () => 'answered',
+        (caught: unknown) => [
+          String(caught).replace(String(server.port), 'PORT'),
+          caught instanceof NoAnswerError,
+        ],
+      );
+      deepStrictEqual(outcome, [
+        'Error: the debugging port PORT: no answer within 0.2 s to its list of targets',
+        true,
+      ]);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('#2908: a port that answers the head and stalls the body fails within the bound too', async () => {
+    const server = await listServer(response => {
+      response.writeHead(200, {'content-type': 'application/json'});
+      response.write('[');
+    });
+    try {
+      deepStrictEqual(
+        await listedTargets(server.port, 150).then(
+          () => false,
+          (caught: unknown) => caught instanceof NoAnswerError,
+        ),
+        true,
+      );
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('#2908: a port that refuses the connection fails with the refusal, which is no timeout', async () => {
+    const server = await listServer(() => undefined);
+    const {port} = server;
+    await server.stop();
+    deepStrictEqual(
+      await listedTargets(port, 5000).then(
+        () => 'answered',
+        (caught: unknown) => caught instanceof NoAnswerError,
+      ),
+      false,
+    );
+  });
+});
+
+describe('the close that is sent again while the page stays and the window is open (card #2909)', () => {
+  const LEFT: CloseAttempt = {state: 'left'};
+
+  /** An attempt that gives `results` in turn, counting how often it ran. */
+  function attemptsGiving(results: readonly CloseAttempt[]) {
+    const counted = {runs: 0};
+    return {
+      counted,
+      attempt: () => {
+        const result = results[Math.min(counted.runs, results.length - 1)];
+        counted.runs += 1;
+        return Promise.resolve(result ?? LEFT);
+      },
+    };
+  }
+
+  function stayed(note: string): CloseAttempt {
+    return {state: 'stayed', note, listed: []};
+  }
+
+  it('#2909: a close whose page leaves is made once', async () => {
+    const {attempt, counted} = attemptsGiving([LEFT]);
+    deepStrictEqual(
+      [await closeUntilGone(attempt, () => true, 2), counted.runs],
+      [{last: LEFT, tried: 1, notes: []}, 1],
+    );
+  });
+
+  it('#2909: a page that stays while the window is open again is closed once more, and the second close that works ends it, with the first one’s note kept', async () => {
+    const {attempt, counted} = attemptsGiving([stayed('first'), LEFT]);
+    deepStrictEqual(
+      [await closeUntilGone(attempt, () => true, 2), counted.runs],
+      [{last: LEFT, tried: 2, notes: ['first']}, 2],
+    );
+  });
+
+  it('#2909: a page that stays while the window is not open has nothing to send a close to, so the close ends with its note', async () => {
+    const {attempt, counted} = attemptsGiving([stayed('first'), LEFT]);
+    deepStrictEqual(
+      [await closeUntilGone(attempt, () => false, 2), counted.runs],
+      [{last: stayed('first'), tried: 1, notes: ['first']}, 1],
+    );
+  });
+
+  it('#2909, negative: a page that stays after every close is told for each, and the closes stop at the bound instead of going on', async () => {
+    const {attempt, counted} = attemptsGiving([
+      stayed('first'),
+      stayed('second'),
+    ]);
+    deepStrictEqual(
+      [await closeUntilGone(attempt, () => true, 2), counted.runs],
+      [{last: stayed('second'), tried: 2, notes: ['first', 'second']}, 2],
+    );
+  });
+
+  it('#2936: the pages of no open window are those that no open window remembers: a closed window’s page and a page nobody remembers are left over, a page of an open window or of local is not', () => {
+    function open(window: string): boolean {
+      return window !== 'closed';
+    }
+    deepStrictEqual(
+      pagesOfNoOpenWindow(
+        [
+          page('open-page-0001', '[c1]'),
+          page('closed-page-0002', '[c2]'),
+          page('local-page-0003', '[]'),
+          page('nobody-page-0004', '[c4]'),
+        ],
+        new Map([
+          ['w1', 'open-page-0001'],
+          ['closed', 'closed-page-0002'],
+          ['local', 'local-page-0003'],
+        ]),
+        open,
+      ).map(each => each.id),
+      ['closed-page-0002', 'nobody-page-0004'],
+    );
+  });
+
+  it('#2936: the one `[]` page nobody remembers is the local window’s, as the suites that never remember it have it, and two such pages are both told', () => {
+    function open(): boolean {
+      return true;
+    }
+    const withLocal = pagesOfNoOpenWindow(
+      [page('local-page-0001', '[]'), page('window-page-0002', '[c1]')],
+      new Map([['w1', 'window-page-0002']]),
+      open,
+    ).map(each => each.id);
+    const ambiguous = pagesOfNoOpenWindow(
+      [page('first-page-0001', '[]'), page('second-page-0002', '[]')],
+      new Map(),
+      open,
+    ).map(each => each.id);
+    deepStrictEqual(
+      [withLocal, ambiguous],
+      [[], ['first-page-0001', 'second-page-0002']],
+    );
+  });
+
+  it('#2936: the note of the pages that stay is said once for the same pages, again when they change or come back after none, and never for none', () => {
+    function open(window: string): boolean {
+      return window !== 'closed';
+    }
+    const remembered = new Map([['closed', 'closed-page-0001']]);
+    const single = [page('closed-page-0001', '[c1]')];
+    const pair = [...single, page('other-page-0002', '[c2]')];
+    const first = leftoverNote(single, remembered, open, '');
+    const again = leftoverNote(single, remembered, open, first.told);
+    const changed = leftoverNote(pair, remembered, open, again.told);
+    const none = leftoverNote([], remembered, open, changed.told);
+    const back = leftoverNote(single, remembered, open, none.told);
+    deepStrictEqual(
+      [
+        first,
+        again,
+        changed.note?.startsWith('2 pages'),
+        none,
+        back.note === first.note,
+      ],
+      [
+        {
+          note: "1 pages of the editor's list that no open window remembers: [c1] #closed-p remembered by closed (closed)",
+          told: 'closed-page-0001',
+        },
+        {note: undefined, told: 'closed-page-0001'},
+        true,
+        {note: undefined, told: ''},
+        true,
+      ],
     );
   });
 });

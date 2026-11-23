@@ -58,6 +58,7 @@ import {
 } from '../windows/dev-containers-view.ts';
 import {answerNativeFolderDialog} from './native-folder-dialog.ts';
 import {folderWrapper, recordedCalls} from '../windows/folder-wrapper.ts';
+import {closeLeftoverWindows} from '../windows/maintenance.ts';
 
 /** The question core asks of a folder, F-0106 5.0 step 2. */
 /** The button of the Workspace Trust editor that trusts the folder. */
@@ -189,6 +190,12 @@ function dialogOfNameAfter(name: string, answered: string) {
 
 describe('Dev Containers trust gate rows (card containers-12)', function () {
   this.timeout(600_000);
+
+  // A row that fails before its own close, and the windows that a row opens to open an entry from and never closes, would
+  // stay in the editor's list for the rest of the launch (#2936).
+  afterEach(async () => {
+    await closeLeftoverWindows();
+  });
 
   it('F-0106 AC-3, AC-4, AC-7, F-0401 AC-21, F-0201 AC-12 (gate-row-11): Reopen in Container in an untrusted folder asks core’s dialog with S265 before anything runs (BR-2); Cancel leaves everything as it was, twice (6.4); Trust Folder & Continue goes on to the container', async () => {
     await setUserSetting('dev.containers.dockerPath', dockerRecorder());

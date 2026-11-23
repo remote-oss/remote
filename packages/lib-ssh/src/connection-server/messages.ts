@@ -5,6 +5,7 @@
  */
 
 import type {PlainData} from 'lib-helper';
+import type {SessionLock} from 'lib-host';
 import type {FailureHint, FailureReason} from '../diagnostics/classify.ts';
 import type {FailureKind} from '../diagnostics/rules.ts';
 import type {SpawnFailure} from '../process/session.ts';
@@ -53,6 +54,8 @@ export type ConnectionRequest =
       inputBase64: string | null;
       /** How long the run may take once it has started, in milliseconds. */
       deadlineMilliseconds: number;
+      /** The session-wide host lock of this run; absent for a run that takes none. */
+      sessionLock?: SessionLock;
     }
   | {type: 'kill'}
   | {type: 'checkSession'};
@@ -124,6 +127,19 @@ type Fields = Record<string, unknown>;
 
 function isFields(value: unknown): value is Fields {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Whether `value` is a session lock: a non-empty path and one of the two actions. */
+function isSessionLock(value: unknown): value is SessionLock {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const {path, action} = value as Record<string, unknown>;
+  return (
+    typeof path === 'string' &&
+    path !== '' &&
+    (action === 'open' || action === 'release')
+  );
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {
@@ -233,7 +249,8 @@ export function readConnectionRequest(
         isStringRecord(body.environment) &&
         (body.inputBase64 === null || typeof body.inputBase64 === 'string') &&
         typeof body.deadlineMilliseconds === 'number' &&
-        body.deadlineMilliseconds > 0
+        body.deadlineMilliseconds > 0 &&
+        (body.sessionLock === undefined || isSessionLock(body.sessionLock))
         ? {
             type: 'runScript',
             runId: body.runId,
@@ -241,6 +258,9 @@ export function readConnectionRequest(
             environment: body.environment,
             inputBase64: body.inputBase64,
             deadlineMilliseconds: body.deadlineMilliseconds,
+            ...(body.sessionLock === undefined
+              ? {}
+              : {sessionLock: body.sessionLock}),
           }
         : undefined;
     default:

@@ -99,8 +99,45 @@ apt_install() {
   return 1
 }
 
+# Where apt keeps its sources and where the release is named; the stub runs of the functions point them elsewhere.
+APT_SOURCES=/etc/apt
+OS_RELEASE=/etc/os-release
+
+# Writes the standard sources of the runner's Ubuntu release when no apt source names an Ubuntu archive. A hosted
+# runner's image came with packages.microsoft.com alone (main's push run 44886359098), and on it no update finds
+# openbox or xdotool, so neither a retry nor the second attempt can help (#2832). A machine that is not Ubuntu, or
+# whose sources name an archive, is left as it is.
+ubuntu_sources() {
+  local release codename archive
+  release=$(cat "$OS_RELEASE" 2>/dev/null || true)
+  [ -n "$(printf '%s\n' "$release" | sed -n 's/^ID=ubuntu$/yes/p')" ] || return 0
+  # The sources are read into one text first: a file that is not there (sources.list on a deb822 image) is no error, and
+  # under pipefail a pipe into a match would fail when cat or the match ends early.
+  local sources
+  sources=$(cat "$APT_SOURCES/sources.list" "$APT_SOURCES"/sources.list.d/* 2>/dev/null || true)
+  if [[ $sources =~ (archive|security|ports)\.ubuntu\.com ]]; then
+    return 0
+  fi
+  codename=$(printf '%s\n' "$release" | sed -n 's/^VERSION_CODENAME=//p' | tr -d '"')
+  [ -n "$codename" ] || return 0
+  case "$(dpkg --print-architecture 2>/dev/null)" in
+    amd64 | i386) archive=http://archive.ubuntu.com/ubuntu/ ;;
+    *) archive=http://ports.ubuntu.com/ubuntu-ports/ ;;
+  esac
+  # A file of our own name, so that an image's own ubuntu.sources is never replaced.
+  echo "start-display: no apt source names an Ubuntu archive; writing $APT_SOURCES/sources.list.d/start-display-ubuntu.sources for $codename from $archive" >&2
+  printf '%s\n' \
+    'Types: deb' \
+    "URIs: $archive" \
+    "Suites: $codename $codename-updates $codename-security" \
+    'Components: main universe restricted multiverse' \
+    'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' |
+    sudo tee "$APT_SOURCES/sources.list.d/start-display-ubuntu.sources" >/dev/null
+}
+
 if [ "${#missing[@]}" -gt 0 ]; then
   echo "start-display: installing ${missing[*]}"
+  ubuntu_sources
   apt_install "${missing[@]}"
 fi
 
