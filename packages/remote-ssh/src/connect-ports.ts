@@ -102,6 +102,7 @@ import {
   agentForwardingOf,
   defaultForwardsOf,
   connectionSettingsOf,
+  effectiveUseExecServer,
   localDownloadModeOf,
   overrideOf,
   listedSettings,
@@ -365,7 +366,7 @@ export function wiringPortsOf(
       server: () => serverSettingsOf(settings),
       connection: () => connectionSettingsOf(settings),
       override: () => overrideOf(settings),
-      useExecServer: () => switchOf(settings, 'useExecServer'),
+      useExecServer: () => effectiveUseExecServer(settings),
       localDownloadMode: () => localDownloadModeOf(settings),
       agentForwarding: () => agentForwardingOf(settings),
       x11Forwarding: () => x11ForwardingOf(settings),
@@ -636,7 +637,10 @@ export function connectAssemblyOf(
       logger: watch.logger,
       serve: {commit: machine.profile.commit, quality: machine.profile.quality},
       get useExecServer() {
-        return switchOf(surfaces.settings, 'useExecServer');
+        return effectiveUseExecServer(surfaces.settings);
+      },
+      get manualBootstrap() {
+        return localDownloadModeOf(surfaces.settings) === 'manualBootstrap';
       },
       get settingLines() {
         return settingLines(listedSettings(surfaces.settings));
