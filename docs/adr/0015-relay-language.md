@@ -1,6 +1,6 @@
 # ADR-0015: The tunnel relay is written in TypeScript on dev-tunnels-ssh, with Rust as the fallback
 
-- Status: proposed (accepted once the T.6 dispatch is green; that run is its evidence)
+- Status: accepted (2026-11-23). T.6's evidence: run 45110368187, `tunnels-spike` at 224201c1, green on both hosts (remote-oss/remote#3050)
 - Date: 2026-11-22
 - Deciders: athena and proteus
 - Scope: the tunnel relay service (`packages/tunnel-relay`, package `tunnel-relay`), its build, its CI and its conformance suite
