@@ -94,7 +94,7 @@
       "lifecycle-more.test.ts": 1.7,
       "lifecycle-order.test.ts": 2.6,
       "mount-settings.test.ts": 1.5,
-      "multi-root.test.ts": 5,
+      "multi-root.test.ts": 12.2,
       "open-folder-dialog.test.ts": 0.1,
       "open-folder-failure.test.ts": 1.2,
       "open-folder-virtual.test.ts": 1.5,
