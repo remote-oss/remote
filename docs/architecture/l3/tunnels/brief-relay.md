@@ -18,7 +18,7 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
 - **Release 1's scope:**
   - only listed GitHub accounts;
   - private access only;
-  - no web addresses for ports (`ruling-22-tunnel-rules` 7, pending the user);
+  - no web addresses for ports (`ruling-22-tunnel-rules` 7; the user, 2026-11-22, via hermes);
   - our own limits (§6).
 
 ## 2. The management API the relay serves
@@ -41,6 +41,8 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
 | `DELETE /tunnels/{id}/endpoints/{eid}` | Unregister. It accepts both `{hostId}-relay` and `{hostId}` (`[dev-tunnels] connections/relay_tunnel_host.rs:251,401`; `[cli] dev_tunnels.rs:599-608`) |
 | `GET/PUT/DELETE /tunnels/{id}/ports[/{n}]` | Ports. A PUT of an existing port with the same protocol succeeds, a changed protocol is 400 with the detail `The tunnel port protocol cannot be changed.` (`[cli] dev_tunnels.rs:38,1040-1049`), and 409 is read as "exists" (`relay_tunnel_host.rs:287`) |
 | `GET /userlimits` | Our limits as `NamedRateStatus` (`contracts/rate_status.rs:12-26`) |
+| `GET /clusters` | Our one cluster, as `[ClusterDetails]` `{clusterId, uri: "https://cp.<domain>", azureLocation: ""}` (the TypeScript SDK's `listClusters`, `ts/src/management/tunnelManagementHttpClient.ts:687-698`; `ts/src/contracts/clusterDetails.ts:11-26`) |
+| `GET /clusters/recommendations` | **404**, with a ProblemDetails body. The npm TypeScript SDK 1.3.82 (the lockfile's version, ADR-0015) asks it before creating a tunnel. In T.6 (run 45110368187) our relay answered 404 and the host carried on with the one cluster. The route isn't in `[dev-tunnels]` at the pin, so the relay offers no recommendation |
 
 - **Shapes:** the `[dev-tunnels] contracts` types, camelCase, with null fields left out. Every `Tunnel` the relay returns
   carries `clusterId` and `tunnelId`, which `[cli]` unwraps (`dev_tunnels.rs:449,580,638,692-693`).
@@ -72,8 +74,8 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
   identifies an account works, a personal access token included (`ruling-22-tunnel-rules` 2). The scopes our client
   and agent ask for are `read:user`, the identity part of `[cli]`'s `read:user+read:org` (`auth.rs:96`). The relay
   needs no organization data.
-- **The allowlist:** a file of numeric GitHub ids in the relay's deployment, kept by the operator (pending the user,
-  `ruling-22-tunnel-rules` 4). An account not on it gets **403** with the detail
+- **The allowlist:** a file of numeric GitHub ids in the relay's deployment, kept by the operator (the user, 2026-11-22,
+  via hermes; `ruling-22-tunnel-rules` 4, remote-oss/remote-server#22). An account not on it gets **403** with the detail
   `The tunnel service doesn't admit the GitHub account {login}.`. Our client shows that text, and offers to sign in
   with another account (F-8101's re-sign-in sequence).
 
@@ -118,7 +120,7 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
 - **Not offered in release 1:** the TypeScript SDK's `-v2-dev` subprotocols (`ts/src/connections/tunnelRelayTunnelHost.ts:63`,
   `tunnelRelayTunnelClient.ts:42`). A client that asks only for them is refused at the upgrade.
 
-## 6. Our limits (F-8203), pending the user's confirmation
+## 6. Our limits (F-8203), as the user answered (2026-11-22, via hermes; remote-oss/remote-server#22)
 
 - **Tunnels per account:** 10. One more create gets **429** with a detail containing `TunnelsPerUserPerLocation`,
   which `[cli]` matches to delete an idle tunnel and retry (`dev_tunnels.rs:37,657-679,746-773`).
