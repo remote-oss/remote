@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   acceptedKeyLogins,
   appendScript,
+  closeWindow,
   connectionHelpers,
   connectedWithin,
   emptyWindows,
@@ -79,6 +80,25 @@ async function sshOfHost(): Promise<number[]> {
   return (await hostConnections())
     .filter(each => each.program === 'ssh')
     .map(each => each.processId);
+}
+
+/** Waits up to 15 s for the host to be clean, no helper or ssh of the run's hosts left, and a timeout names the pids that are. */
+async function hostClean(): Promise<void> {
+  const clean = await waitFor(
+    'no helper or ssh left',
+    async () =>
+      (await connectionHelpers()).length === 0 &&
+      (await sshOfHost()).length === 0,
+    15_000,
+  ).then(
+    () => true,
+    () => false,
+  );
+  if (!clean) {
+    throw new Error(
+      `helpers left: ${(await connectionHelpers()).join(', ')}; ssh left: ${(await sshOfHost()).join(', ')}`,
+    );
+  }
 }
 
 describe('Connect Current Window to Host', function () {
@@ -426,27 +446,33 @@ describe('Connect Current Window to Host', function () {
     const helpers = await connectionHelpers();
     const sshPids = await sshOfHost();
     const servers = await serverMainProcesses();
-    await switched('c3014-leave', {label: 'noforward'});
-    await new Promise(resolve => setTimeout(resolve, 10_000));
-    const after = await serverMainProcesses();
-    deepStrictEqual(
-      [
-        {
-          helpers: helpers.length,
-          sshPids: sshPids.length > 0,
-          servers: servers.length > 0,
-        },
-        (await connectionHelpers()).filter(each => helpers.includes(each)),
-        (await sshOfHost()).filter(each => sshPids.includes(each)),
-        servers.every(each => after.includes(each)),
-      ],
-      [{helpers: 1, sshPids: true, servers: true}, [], [], true],
-    );
+    const next = await switched('c3014-leave', {label: 'noforward'});
+    try {
+      await new Promise(resolve => setTimeout(resolve, 10_000));
+      const after = await serverMainProcesses();
+      deepStrictEqual(
+        [
+          {
+            helpers: helpers.length,
+            sshPids: sshPids.length > 0,
+            servers: servers.length > 0,
+          },
+          (await connectionHelpers()).filter(each => helpers.includes(each)),
+          (await sshOfHost()).filter(each => sshPids.includes(each)),
+          servers.every(each => after.includes(each)),
+        ],
+        [{helpers: 1, sshPids: true, servers: true}, [], [], true],
+      );
+    } finally {
+      await closeWindow(next).catch(() => undefined);
+      await hostClean();
+    }
   });
 
   it('F-2302 AC-33 (c3014-own): with the local server off, a switch ends the window’s ssh within 10 s, and picking the window’s own host ends its ssh and logs one new login', async () => {
     try {
       await closeAllButLocal();
+      await hostClean();
       await userSettings({
         'remote.SSH.remotePlatform': {
           ...PLATFORMS['remote.SSH.remotePlatform'],
