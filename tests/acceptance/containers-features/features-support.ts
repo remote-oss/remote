@@ -22,6 +22,7 @@ import {
 } from '../windows/harness.ts';
 import {
   brokerUrlOf,
+  secondBuildText,
   corruptArchiveLines,
   corruptArchiveName,
   probeArchive,
@@ -163,7 +164,14 @@ export function featureBuilds(): {
               ? ''
               : ` Probe of the broker address: ${probeText(await probeArchive(broker))}.`;
           throw new Error(
-            `${corruptArchiveName(containersLogSince(firstMark)) ?? 'The first build failed'} and so did the second build of ${name}; this is the third party's fault, not the product's. First: ${reasons.join(' | ')}. Second: ${again.length === 0 ? 'no corrupt-archive verdict, so it failed for another reason' : again.join(' | ')}. ${second instanceof Error ? second.message : String(second)}${fromHere}`,
+            `${secondBuildText({
+              firstName: corruptArchiveName(containersLogSince(firstMark)),
+              featureRow: name,
+              first: reasons,
+              second: again,
+              secondMessage:
+                second instanceof Error ? second.message : String(second),
+            })}${fromHere}`,
             {cause: second},
           );
         }

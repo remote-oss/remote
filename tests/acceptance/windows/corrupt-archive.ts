@@ -45,12 +45,20 @@ export function corruptArchiveName(
     : `SDKMAN served a corrupt ${download} archive (${verdict.trim()})`;
 }
 
-/** SDKMAN's broker address for `download`, as the log names it (`<candidate> <version>`), for Linux x64; none for any other text. */
-export function brokerUrlOf(download: string): string | undefined {
+/** SDKMAN's platform name for the machine that runs the rows: Linux on ARM or on x64. */
+function platformOf(architecture: string): string {
+  return architecture === 'arm64' ? 'linuxarm64' : 'linuxx64';
+}
+
+/** SDKMAN's broker address for `download`, as the log names it (`<candidate> <version>`), for Linux on `architecture`; none for any other text. */
+export function brokerUrlOf(
+  download: string,
+  architecture: string = process.arch,
+): string | undefined {
   const found = /^(\S+) (\S+)$/u.exec(download.trim());
   return found === null
     ? undefined
-    : `https://api.sdkman.io/2/broker/download/${found[1] ?? ''}/${found[2] ?? ''}/linuxx64`;
+    : `https://api.sdkman.io/2/broker/download/${found[1] ?? ''}/${found[2] ?? ''}/${platformOf(architecture)}`;
 }
 
 /** What one download of the archive from the machine that runs the rows gave. */
@@ -127,4 +135,23 @@ export async function probeArchive(url: string): Promise<ArchiveProbe> {
 /** The probe as one line for a failure message. */
 export function probeText(probe: ArchiveProbe): string {
   return `from this machine the broker first answered ${probe.broker || 'nothing'}; then ${probe.status}, ${String(probe.size)} bytes, sha256 ${probe.digest || 'none'}, content type "${probe.type}", final address ${probe.url}; unzip -t: ${probe.zipTest || 'not run'}`;
+}
+
+/**
+ * The text of the red of a Feature row whose second build failed after a first that came back corrupt. It blames the third
+ * party only when the second build shows the corrupt verdict too; a second build that failed for another reason says so
+ * and blames no one.
+ */
+export function secondBuildText(parts: {
+  firstName: string | undefined;
+  featureRow: string;
+  first: readonly string[];
+  second: readonly string[];
+  secondMessage: string;
+}): string {
+  const both = parts.second.length > 0;
+  const blame = both
+    ? "; this is the third party's fault, not the product's"
+    : '; the second build failed for another reason, which this does not blame on the third party';
+  return `${parts.firstName ?? 'The first build failed'} and so did the second build of ${parts.featureRow}${blame}. First: ${parts.first.join(' | ')}. Second: ${both ? parts.second.join(' | ') : 'no corrupt-archive verdict'}. ${parts.secondMessage}`;
 }

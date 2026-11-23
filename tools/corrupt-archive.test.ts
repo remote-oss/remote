@@ -7,6 +7,7 @@ import {
   corruptArchiveName,
   probeArchive,
   probeText,
+  secondBuildText,
 } from '../tests/acceptance/windows/corrupt-archive.ts';
 
 describe('the corrupt archive of a Feature download (card #2675)', () => {
@@ -72,7 +73,11 @@ describe('the corrupt archive of a Feature download (card #2675)', () => {
 
   it('#2675: the broker address is built from the candidate and its version, and from nothing else', () => {
     deepStrictEqual(
-      [brokerUrlOf('maven 3.10.1'), brokerUrlOf('maven'), brokerUrlOf('a b c')],
+      [
+        brokerUrlOf('maven 3.10.1', 'x64'),
+        brokerUrlOf('maven'),
+        brokerUrlOf('a b c'),
+      ],
       [
         'https://api.sdkman.io/2/broker/download/maven/3.10.1/linuxx64',
         undefined,
@@ -141,5 +146,38 @@ describe('the corrupt archive of a Feature download (card #2675)', () => {
   it('#2675: a probe of an address nobody listens on does not throw and says the request failed', async () => {
     const probe = await probeArchive('http://127.0.0.1:1/x');
     deepStrictEqual(probeText(probe).includes('the request failed'), true);
+  });
+
+  it('#2675: the broker address of an ARM machine names the ARM platform', () => {
+    deepStrictEqual(
+      brokerUrlOf('maven 3.10.1', 'arm64'),
+      'https://api.sdkman.io/2/broker/download/maven/3.10.1/linuxarm64',
+    );
+  });
+
+  it('#2675: a second build with the verdict too is blamed on the third party', () => {
+    deepStrictEqual(
+      secondBuildText({
+        firstName: 'the name',
+        featureRow: 'the-row',
+        first: ['one'],
+        second: ['two'],
+        secondMessage: 'it failed',
+      }),
+      "the name and so did the second build of the-row; this is the third party's fault, not the product's. First: one. Second: two. it failed",
+    );
+  });
+
+  it('#2675: a second build that failed for another reason is not blamed on the third party', () => {
+    deepStrictEqual(
+      secondBuildText({
+        firstName: undefined,
+        featureRow: 'the-row',
+        first: ['one'],
+        second: [],
+        secondMessage: 'it failed',
+      }).includes("third party's fault"),
+      false,
+    );
   });
 });
