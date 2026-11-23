@@ -79,6 +79,7 @@ describe('Dev Containers with its engine in a WSL distro (F-0411, card #3022)', 
 
   it('F-0411 AC-25 (c3022-execute-in-wsl): with executeInWSL true, a Windows folder’s window reopens in its container, bound from /mnt/<drive>, labelled with the Windows path, and with no consistency or S356', async () => {
     const folder = devContainerFolder('c3022-wsl', {name: 'c3022-wsl'});
+    const label = `${folder.slice(0, 1).toLowerCase()}${folder.slice(1)}`;
     await setUserSetting('dev.containers.executeInWSL', true);
     await setUserSetting('dev.containers.executeInWSLDistro', DISTRO);
     let name: string | undefined;
@@ -93,11 +94,11 @@ describe('Dev Containers with its engine in a WSL distro (F-0411, card #3022)', 
         'ps',
         '-q',
         '--filter',
-        `label=devcontainer.local_folder=${folder}`,
+        `label=devcontainer.local_folder=${label}`,
       );
       if (containerId === '') {
         throw new Error(
-          `no container in the distro is labelled devcontainer.local_folder=${folder}; the distro's containers: ${await inDistro('ps', '-a', '--format', '{{.ID}} {{.Names}} [{{.Label "devcontainer.local_folder"}}]')}`,
+          `no container in the distro is labelled devcontainer.local_folder=${label}; the distro's containers: ${await inDistro('ps', '-a', '--format', '{{.ID}} {{.Names}} [{{.Label "devcontainer.local_folder"}}]')}`,
         );
       }
       const inspected = (JSON.parse(
@@ -145,7 +146,7 @@ describe('Dev Containers with its engine in a WSL distro (F-0411, card #3022)', 
           ],
           target: '/workspaces/c3022-wsl',
           consistency: '',
-          labelled: folder,
+          labelled: label,
           openedAt: ['/workspaces/c3022-wsl'],
           s356: [false, false],
         },
