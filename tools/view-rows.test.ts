@@ -253,4 +253,36 @@ describe('the labels a walk that could not reach its list’s top tells on stder
       `${'x'.repeat(80)}…, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s and 3 more`,
     );
   });
+
+  it('a list of 20 labels, one of exactly 80 characters, stands whole with no tail, and the empty list tells nothing', () => {
+    const labels = [
+      'y'.repeat(80),
+      'a',
+      'b',
+      'c',
+      'd',
+      'e',
+      'f',
+      'g',
+      'h',
+      'i',
+      'j',
+      'k',
+      'l',
+      'm',
+      'n',
+      'o',
+      'p',
+      'q',
+      'r',
+      's',
+    ];
+    deepStrictEqual(
+      [shownLabels(labels), shownLabels([])],
+      [
+        `${'y'.repeat(80)}, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s`,
+        '',
+      ],
+    );
+  });
 });
