@@ -5,6 +5,7 @@ import {API_VERSION, type RouteContext} from '../../src/routes.ts';
 import {answerRequest, relayServer, write} from '../../src/server.ts';
 import {Store} from '../../src/store.ts';
 import {Tokens} from '../../src/auth/tokens.ts';
+import {Legs} from '../../src/legs/legs.ts';
 import {TEST_CONFIG} from './settings.ts';
 
 /** A request as the server reads it: its method, address, headers and body text. */
@@ -63,7 +64,7 @@ function recorder(): {
 
 describe('the HTTPS service of the relay', () => {
   let store: Store;
-  let context: RouteContext;
+  let context: RouteContext & {legs: Legs};
   let reported: unknown[];
 
   beforeEach(() => {
@@ -78,6 +79,9 @@ describe('the HTTPS service of the relay', () => {
       report: error => {
         reported.push(error);
       },
+      legs: new Legs(() =>
+        Promise.resolve({kind: 'account', id: 7, login: 'owner'}),
+      ),
     };
   });
 
@@ -259,5 +263,22 @@ describe('the HTTPS service of the relay', () => {
         },
       ],
     );
+  });
+
+  it('hands each upgrade to the legs, one with no address as an upgrade of /', async () => {
+    const server = relayServer(context, '', '');
+    const written = new Promise<string>(resolve => {
+      server.emit(
+        'upgrade',
+        incoming('GET', undefined),
+        {
+          end(text: string) {
+            resolve(text);
+          },
+        },
+        Buffer.alloc(0),
+      );
+    });
+    deepStrictEqual((await written).split('\r\n')[0], 'HTTP/1.1 404 Refused');
   });
 });

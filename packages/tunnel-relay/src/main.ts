@@ -8,6 +8,7 @@ import {authenticateWith} from './auth/authenticate.ts';
 import {GithubIdentity} from './auth/github.ts';
 import {Tokens} from './auth/tokens.ts';
 import {configOf} from './config.ts';
+import {Legs} from './legs/legs.ts';
 import {relayServer} from './server.ts';
 import {Store} from './store.ts';
 
@@ -29,6 +30,7 @@ const server = relayServer(
     config,
     authenticate,
     tokens,
+    legs: new Legs(authenticate),
     report: error => {
       process.stderr.write(`the relay failed: ${String(error)}\n`);
     },
@@ -42,6 +44,7 @@ server.listen(config.port, () => {
   );
 });
 process.once('SIGTERM', () => {
+  server.closeAllConnections();
   server.close(() => {
     store.close();
   });

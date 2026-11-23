@@ -24,6 +24,7 @@ const TOKENS = new Tokens(Buffer.alloc(32, 1), () => 0);
 describe('the management routes of the relay', () => {
   let store: Store;
   let caller: Caller | Answer;
+  let closedLegs: string[] = [];
 
   function authenticate(): ReturnType<Authenticate> {
     return Promise.resolve(caller);
@@ -36,6 +37,11 @@ describe('the management routes of the relay', () => {
       authenticate,
       tokens: TOKENS,
       report: () => undefined,
+      legs: {
+        closeTunnel(tunnelId) {
+          closedLegs.push(tunnelId);
+        },
+      },
     };
   }
 
@@ -359,18 +365,21 @@ describe('the management routes of the relay', () => {
       );
     });
 
-    it('is deleted by its owner, and is not found after', async () => {
+    it('is deleted by its owner with its legs closed, and is not found after', async () => {
       await send('PUT', '/tunnels/one', {body: {}});
+      closedLegs = [];
       deepStrictEqual(
         [
           (await send('DELETE', '/tunnels/one')).status,
           detailOf(await send('DELETE', '/tunnels/one')),
           detailOf(await send('GET', '/tunnels/one')),
+          closedLegs,
         ],
         [
           200,
           [404, 'There is no such tunnel.'],
           [404, 'There is no such tunnel.'],
+          ['one'],
         ],
       );
     });

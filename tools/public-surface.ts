@@ -13,6 +13,7 @@ import path from 'node:path';
 import {forbiddenMatches} from './public-surface-terms.ts';
 import {
   isMainModule,
+  isServiceFolder,
   packageFolders,
   REPOSITORY_ROOT,
   sortedEntries,
@@ -57,7 +58,10 @@ function surfaceFiles(root: string): string[] {
     absolute.push(path.join(root, 'CONTRIBUTING.md'));
   }
   absolute.push(...filesBelow(path.join(root, '.github')));
-  for (const folder of packageFolders(root)) {
+  // A service ships to no user, so its files are not shipped text (ADR-0015).
+  for (const folder of packageFolders(root).filter(
+    name => !isServiceFolder(name),
+  )) {
     const directory = path.join(root, 'packages', folder);
     absolute.push(
       ...sortedEntries(directory)

@@ -60,6 +60,13 @@ export interface RouteContext {
   tokens: Tokens;
   /** Hears an error a route threw, which the caller's answer doesn't carry. */
   report(error: unknown): void;
+  legs: TunnelLegs;
+}
+
+/** The legs of the relay, as a tunnel's deletion closes them. */
+export interface TunnelLegs {
+  /** Closes the legs of tunnel `tunnelId`. */
+  closeTunnel(tunnelId: string): void;
 }
 
 /** Whether `value` is a TCP port number: an integer from 1 to 65535. */
@@ -287,6 +294,7 @@ function tunnelRoute(
   }
   if (request.method === 'DELETE') {
     context.store.deleteTunnel(tunnel.id);
+    context.legs.closeTunnel(tunnel.id);
     return success();
   }
   return problem(404, 'There is no such route.');
