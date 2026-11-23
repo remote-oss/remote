@@ -24,6 +24,7 @@
     "../tests/acceptance/windows/page-protocol.ts",
     "../tests/acceptance/windows/command-text.ts",
     "../tests/acceptance/windows/editor-folder.ts",
+    "../tests/acceptance/windows/empty-probe.ts",
     "../tests/acceptance/windows/foreign-archive.ts",
     "../tests/acceptance/windows/platform-forms.ts",
     "../tests/acceptance/windows/image-pull.ts",
