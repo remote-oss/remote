@@ -94,6 +94,37 @@ function refusals(window: string) {
   ] as const;
 }
 
+/** Answers the fingerprint pick of the window `alias` with `answer` and checks the failure dialog, the known-hosts file and that the window is unconnected. */
+async function cancelledPick(
+  alias: string,
+  answer: 'no' | 'dismiss',
+): Promise<void> {
+  const known = await asking(alias);
+  appendScript([
+    {surface: 'pick', match: 'fingerprint', answer, window: alias},
+    ...refusals(alias),
+  ]);
+  try {
+    await openWindow(alias, alias);
+    await waitFor(
+      `${alias} to show the failure dialog`,
+      () => recordLines('failureDialog', alias).length > 0,
+      90_000,
+    );
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    deepStrictEqual(
+      [
+        recordLines('failureDialog', alias).map(line => line.question),
+        knownLines(known),
+        await connected(alias),
+      ],
+      [[`Could not establish connection to "${alias}".`], [], false],
+    );
+  } finally {
+    await closeWindow(alias).catch(() => undefined);
+  }
+}
+
 /** Waits for window `window` to be asked its fingerprint pick. */
 function pickAsked(window: string): Promise<void> {
   return waitFor(
@@ -144,38 +175,13 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
     }
   });
 
-  for (const [suffix, answer] of [
-    ['no', 'no'],
-    ['closed', 'dismiss'],
-  ] as const) {
-    it(`F-2305 AC-12, AC-13 (c3019-cancel-${suffix}): ${suffix === 'no' ? 'Cancel' : 'the pick closed with no choice'} ends in the failure dialog with no reason, leaves the known-hosts file empty, and leaves the window unconnected`, async () => {
-      const alias = `c3019-cancel-${suffix}`;
-      const known = await asking(alias);
-      appendScript([
-        {surface: 'pick', match: 'fingerprint', answer, window: alias},
-        ...refusals(alias),
-      ]);
-      try {
-        await openWindow(alias, alias);
-        await waitFor(
-          `${alias} to show the failure dialog`,
-          () => recordLines('failureDialog', alias).length > 0,
-          90_000,
-        );
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        deepStrictEqual(
-          [
-            recordLines('failureDialog', alias).map(line => line.question),
-            knownLines(known),
-            await connected(alias),
-          ],
-          [[`Could not establish connection to "${alias}".`], [], false],
-        );
-      } finally {
-        await closeWindow(alias).catch(() => undefined);
-      }
-    });
-  }
+  it('F-2305 AC-12, AC-13 (c3019-cancel-no): Cancel ends in the failure dialog with no reason, leaves the known-hosts file empty, and leaves the window unconnected', async () => {
+    await cancelledPick('c3019-cancel-no', 'no');
+  });
+
+  it('F-2305 AC-12, AC-13 (c3019-cancel-closed): the pick closed with no choice, which is how Escape and a loss of focus reach the extension, ends in the failure dialog with no reason, leaves the known-hosts file empty, and leaves the window unconnected', async () => {
+    await cancelledPick('c3019-cancel-closed', 'dismiss');
+  });
 
   it('F-2305 AC-9 (c3019-typed): a typed user@host gets the pick with the host part only', async () => {
     const alias = 'c3019-typed';
