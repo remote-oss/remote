@@ -10,18 +10,7 @@ import {
 } from '../../src/routes.ts';
 import {Store} from '../../src/store.ts';
 import {Tokens} from '../../src/auth/tokens.ts';
-
-const CONFIG: RelayConfig = {
-  domain: 'relay.test',
-  port: 443,
-  certificateFile: '',
-  keyFile: '',
-  storeFile: ':memory:',
-  clusterId: 'usw2',
-  githubApi: 'https://github.test',
-  allowlistFile: '',
-  tokenKeyFile: '',
-};
+import {TEST_CONFIG} from './settings.ts';
 
 const OWNER: Caller = {kind: 'account', id: 7, login: 'owner'};
 const OTHER: Caller = {kind: 'account', id: 8, login: 'other'};
@@ -37,7 +26,7 @@ describe('the management routes of the relay', () => {
     return Promise.resolve(caller);
   }
 
-  function context(config: RelayConfig = CONFIG): RouteContext {
+  function context(config: RelayConfig = TEST_CONFIG): RouteContext {
     return {
       store,
       config,
@@ -144,8 +133,11 @@ describe('the management routes of the relay', () => {
       deepStrictEqual(
         [
           await send('GET', '/clusters'),
-          (await send('GET', '/clusters', {config: {...CONFIG, port: 8443}}))
-            .body,
+          (
+            await send('GET', '/clusters', {
+              config: {...TEST_CONFIG, port: 8443},
+            })
+          ).body,
         ],
         [
           {
@@ -506,7 +498,7 @@ describe('the management routes of the relay', () => {
       const elsewhere = await send('PUT', '/tunnels/one/endpoints/h2-relay', {
         query: {connectionMode: 'TunnelRelay'},
         body: {hostId: 'h2'},
-        config: {...CONFIG, port: 8443},
+        config: {...TEST_CONFIG, port: 8443},
       });
       deepStrictEqual(
         [
