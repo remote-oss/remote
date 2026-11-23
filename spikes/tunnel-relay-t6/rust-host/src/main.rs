@@ -23,6 +23,7 @@ fn say(text: &str) {
 
 #[tokio::main]
 async fn main() {
+    env_logger::init();
     let domain = required("RELAY_DOMAIN");
     let tunnel_id = required("TUNNEL_ID");
     let echo_port: u16 = required("ECHO_PORT").parse().expect("ECHO_PORT is a port");

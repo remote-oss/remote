@@ -264,6 +264,16 @@ async function hostLeg(socket: WebSocket, tunnelId: string, agent: string): Prom
       hostSessions.delete(tunnelId);
     }
   });
+  if (process.env.RELAY_DEBUG === '1') {
+    const send = socket.send.bind(socket);
+    let written = 0;
+    socket.send = ((data: ArrayBuffer | Buffer, ...rest: unknown[]) => {
+      const bytes = Buffer.from(data instanceof ArrayBuffer ? new Uint8Array(data) : data);
+      written += 1;
+      say(`host leg ${tunnelId}: relay -> host message ${String(written)}, ${String(bytes.length)} bytes, starts ${bytes.subarray(0, 12).toString('hex')}`);
+      return (send as (...parameters: unknown[]) => void)(data, ...rest);
+    }) as typeof socket.send;
+  }
   try {
     await session.connect(new WebSocketStream(socket as never));
   } catch (caught) {
@@ -289,8 +299,12 @@ async function clientLeg(socket: WebSocket, tunnelId: string): Promise<void> {
   const opened = Date.now();
   const opening = session.openChannel(CLIENT_CHANNEL);
   let sending: Promise<unknown> = opening;
+  const debug = process.env.RELAY_DEBUG === '1';
   socket.on('message', (data: Buffer) => {
     toHost += data.length;
+    if (debug) {
+      say(`client leg ${tunnelId}: client -> host ${String(data.length)} bytes at ${String(Date.now() - opened)} ms`);
+    }
     sending = sending
       .then(() => opening)
       .then(open => open.send(data))
@@ -300,6 +314,9 @@ async function clientLeg(socket: WebSocket, tunnelId: string): Promise<void> {
   say(`client leg ${tunnelId}: ${CLIENT_CHANNEL} channel ${String(channel.channelId)} open in ${String(Date.now() - opened)} ms`);
   channel.onDataReceived(data => {
     toClient += data.length;
+    if (debug) {
+      say(`client leg ${tunnelId}: host -> client ${String(data.length)} bytes at ${String(Date.now() - opened)} ms`);
+    }
     socket.send(data);
     channel.adjustWindow(data.length);
   });

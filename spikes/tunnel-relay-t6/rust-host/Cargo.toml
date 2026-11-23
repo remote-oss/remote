@@ -10,6 +10,7 @@ publish = false
 tunnels = { git = "https://github.com/microsoft/dev-tunnels", rev = "64048c1409ff56cb958b879de7ea069ec71edc8b", default-features = false, features = ["connections"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "native-tls"] }
 tokio = { version = "1.52", features = ["full"] }
+env_logger = "0.11"
 
 [patch.crates-io]
 russh = { git = "https://github.com/microsoft/vscode-russh", rev = "fd4f608a83753f9f3e137f95600faffede71cf65" }
