@@ -15,9 +15,10 @@ cipher are all `none` (`[dev-tunnels] rs/src/connections/relay_tunnel_host.rs:36
 SSH session end to end with the host, which the relay only pipes through a `client-ssh-session-stream` channel
 (`:958-969`).
 
-Two SSH libraries speak that `none` exchange, both MIT and both in `[dev-tunnels]`'s own dependencies:
-- `russh` 0.37.1, for the Rust SDK and `[cli]` (`rs/Cargo.toml:22-23`);
-- `@microsoft/dev-tunnels-ssh`, for the TypeScript SDK, whose V1 host opens the leg with
+Two SSH libraries speak that `none` exchange, both in `[dev-tunnels]`'s own dependencies:
+- `russh` 0.37.1, for the Rust SDK, and `[cli]`'s patch of it from `microsoft/vscode-russh` (`rs/Cargo.toml:22-23`;
+  `[cli]` `Cargo.toml:79-81`). Its licence is **Apache-2.0**, not MIT, both upstream and in the fork;
+- `@microsoft/dev-tunnels-ssh` (**MIT**), for the TypeScript SDK, whose V1 host opens the leg with
   `SshSessionConfiguration(false)` (`ts/package.json:24-25`; `ts/src/connections/tunnelRelayTunnelHost.ts:224-225`),
   and which also provides an `SshServerSession`.
 
@@ -33,8 +34,9 @@ Every package in the repository is TypeScript, and every gate is built for it (A
    leg with **both** `[dev-tunnels]`'s Rust host (`russh`, which is `[cli]`'s path) and its TypeScript host, and
    pipes a `client-ssh-session-stream` channel end to end. The two libraries interoperating is inferred, since both
    talk to Microsoft's service, and is unverified until that run.
-3. **The fallback:** if T.6 is red, the relay is Rust with `russh`, under the R section below, and this ADR is
-   revised.
+3. **The fallback, not needed:** had T.6 been red, the relay would have been Rust with `russh`, under the R section
+   below. That would also have needed `russh` (Apache-2.0) admitted as a dependency, which is a licensing decision
+   for the user. ADR-0014 admits only MIT sources. T.6 was green, so R is not taken.
 4. **ADR-0004 is unchanged:** the relay is a service, and no SSH connection that an extension opens goes through it
    or through dev-tunnels-ssh.
 
@@ -43,7 +45,7 @@ Every package in the repository is TypeScript, and every gate is built for it (A
 | Option | For | Against |
 |---|---|---|
 | T (chosen, on T.6): TypeScript with dev-tunnels-ssh | One toolchain: every gate applies as it is, and every coder writes TypeScript. The TypeScript SDK's own library | The interoperation of `none` with `russh` rests on T.6 |
-| R: Rust with `russh` | The same library as `[cli]`'s host, so interoperation with it is certain | A second toolchain in CI, adding 5 to 10 min to every gate that touches it. `dupes` and `dead` have no Rust counterpart |
+| R: Rust with `russh` | The same library as `[cli]`'s host, so interoperation with it is certain | `russh` is Apache-2.0, which needs its own admission (the user's). A second toolchain in CI, adding about 5 to 10 min to every gate that touches it (an estimate; the spike's Rust host cold-built in 68 s). `dupes` and `dead` have no Rust counterpart |
 | A TypeScript relay with a JavaScript SSH server patched for `none` | — | It maintains a fork, when dev-tunnels-ssh already offers `none` |
 
 ## Build and CI (proteus)
@@ -92,7 +94,8 @@ Every package in the repository is TypeScript, and every gate is built for it (A
    - a `client-ssh-session-stream` channel pipes a client's bytes end to end;
    - the measured times.
 
-   That run is the ADR's evidence; a red one sends us to R.
+   That run is the ADR's evidence; a red one sends us to R. Run 45110368187 used the TypeScript client for both
+   hosts; T.4's Rust client stays part of the conformance plan, not a result of T.6.
 
 ### R (fallback): the relay in Rust, with russh
 
@@ -105,6 +108,8 @@ only:
 - **Lock and layout:** `Cargo.lock` is committed, and `check-layout` names the crate's folder.
 - **Gaps against T:** `jscpd` and `knip` don't read Rust, so `dupes` and `dead` have no Rust counterpart. ADR-0003's
   no-duplication rule rests on review for the crate.
-- **Cost:** a cold build adds about 5–10 minutes to every run that reaches the crate, and a warm cache about 1–2.
+- **Cost (an estimate, not measured for a relay crate):** a cold build adds about 5–10 minutes to every run that
+  reaches the crate, and a warm cache about 1–2. The spike's Rust host (the tunnels crate and `vscode-russh`)
+  cold-built in 68 s.
 
 Either way, §8's conformance suite, the per-run container and the stub identities are as in T.4–T.5.
