@@ -482,7 +482,7 @@
       "session-locks.test.ts": 7
     },
     "ssh-downloaders": {
-      "manual-bootstrap.test.ts": 3,
+      "manual-bootstrap.test.ts": 7,
       "no-downloader.test.ts": 6
     },
     "ssh-newclient": {

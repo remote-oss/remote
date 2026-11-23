@@ -12,6 +12,7 @@ import {
 import {connectorOf} from '../../src/pipeline/connector.ts';
 import {
   EXEC_SERVER_LOST,
+  EXEC_SERVER_MANUAL_BOOTSTRAP,
   EXEC_SERVER_NO_CLI,
   EXEC_SERVER_SETTING_OFF,
 } from '../../src/pipeline/failure.ts';
@@ -44,6 +45,8 @@ const NO_READY_LINE = {
 const SETTING_OFF_TEXT =
   'The exec server is off: the setting remote.SSH.useExecServer is false.';
 
+const MANUAL_BOOTSTRAP_TEXT =
+  'The exec server is off: the setting remote.SSH.localServerDownload is manual-bootstrap.';
 const NO_CLI_TEXT =
   'The exec server is not available for this host: there is no command-line program for its platform.';
 
@@ -163,6 +166,15 @@ describe('the connect for an exec server', () => {
       useExecServer: false,
     }));
     deepStrictEqual(reasonOf(result), SETTING_OFF_TEXT);
+  });
+
+  it('F-2406 BR-2 (card #2971): in the manual bootstrap the connect refuses with the mode, not the setting or the platform', async () => {
+    const {result} = await controlled(directInstall, options => ({
+      ...options,
+      useExecServer: false,
+      manualBootstrap: true,
+    }));
+    deepStrictEqual(reasonOf(result), MANUAL_BOOTSTRAP_TEXT);
   });
 
   it('brief-remote-ssh-engines §2: with the setting on and no command-line program for the host, the connect refuses with that reason', async () => {
@@ -325,6 +337,7 @@ function connectorOverCli(
       logger: settings.logger,
       serve: settings.serve,
       useExecServer: settings.useExecServer,
+      manualBootstrap: settings.manualBootstrap,
       settingLines: settings.settingLines,
       writeWindowStart: settings.writeWindowStart,
     },
@@ -377,6 +390,20 @@ describe('the connector’s exec server in the SSH window', () => {
     deepStrictEqual(
       'kind' in result ? result.reason : result,
       EXEC_SERVER_NO_CLI.reason,
+    );
+  });
+
+  it('F-2406 BR-2 (card #2971): a window of the manual bootstrap refuses with the mode', async () => {
+    const {connector} = connectorOverCli(directInstall, options => ({
+      ...options,
+      useExecServer: false,
+      manualBootstrap: true,
+    }));
+    await connector.connect(INPUT);
+    const result = await connector.execServer(INPUT);
+    deepStrictEqual(
+      'kind' in result ? result.reason : result,
+      EXEC_SERVER_MANUAL_BOOTSTRAP.reason,
     );
   });
 

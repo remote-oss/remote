@@ -256,13 +256,41 @@ describe('the dialer of the SOCKS relay', () => {
     );
   });
 
-  it('fails at the bound when the relay never answers, and closes it', async () => {
+  it('fails at the bound when the relay never answers, and closes it, saying that the greeting had no reply', async () => {
     const {dial, relay, clock} = fixture();
     const outcome = outcomeOf(dial());
     await advanced(clock, 5000);
     deepStrictEqual(
       [outcome.reason, relay()?.closed],
-      ['the relay did not answer in time', true],
+      ['the relay did not answer in time: no reply to the greeting', true],
+    );
+  });
+
+  it('#2951: a relay that answers the greeting and never the connect request fails at the bound saying that the connect request had no reply', async () => {
+    const {dial, relay, clock} = fixture();
+    const outcome = outcomeOf(dial());
+    await settled();
+    relay()?.receive(GREETING_ANSWER);
+    await advanced(clock, 5000);
+    deepStrictEqual(
+      [outcome.reason, relay()?.closed],
+      [
+        'the relay did not answer in time: no reply to the connect request',
+        true,
+      ],
+    );
+  });
+
+  it('#2951: a relay that sends a part of its reply and stops fails at the bound saying how many bytes of the reply came', async () => {
+    const {dial, relay, clock} = fixture();
+    const outcome = outcomeOf(dial());
+    await settled();
+    relay()?.receive(GREETING_ANSWER);
+    relay()?.receive(Uint8Array.of(5, 0));
+    await advanced(clock, 5000);
+    deepStrictEqual(
+      outcome.reason,
+      'the relay did not answer in time: only 2 bytes of the reply to the connect request',
     );
   });
 
