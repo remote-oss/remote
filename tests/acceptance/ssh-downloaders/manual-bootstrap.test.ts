@@ -566,10 +566,17 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
       );
     });
   });
-  it('F-2406 AC-12 (c2948-text-part): the text case of AC-12: a bootstrap file that is not a server archive is copied, and the dialog reason is "Failed to install the VS Code Server." with no LocalBootstrapFailed issue (S087)', async () => {
+  /**
+   * Connects window `name` with what `place` puts at the bootstrap path, and gives its failure dialogs, whether it
+   * copied the archive with scp, and the LocalBootstrapFailed issues its log raised.
+   */
+  async function unpackFailure(
+    name: string,
+    place: () => void,
+  ): Promise<Record<string, unknown>> {
+    let outcome: Record<string, unknown> = {};
     await withSettings({}, async () => {
-      const name = 'c2948-text-part';
-      placeNotAnArchive();
+      place();
       appendScript(dismissals(name));
       const mark = connectionLog().length;
       await failedOn(ALIAS, name);
@@ -586,26 +593,33 @@ describe('the manual local bootstrap: the switch, the warning and the missing ar
               ),
           60_000,
         );
-        deepStrictEqual(
-          {
-            dialogs: recordLines('failureDialog', name).map(
-              line => line.question,
-            ),
-            copied: copiedByScp(name),
-            bootstrapIssues: connectionLog()
-              .slice(mark)
-              .filter(line => line.includes('[LocalBootstrapFailed]')),
-          },
-          {
-            dialogs: [reason(ALIAS, 'Failed to install the VS Code Server.')],
-            copied: true,
-            bootstrapIssues: [],
-          },
-        );
+        outcome = {
+          dialogs: recordLines('failureDialog', name).map(
+            line => line.question,
+          ),
+          copied: copiedByScp(name),
+          bootstrapIssues: connectionLog()
+            .slice(mark)
+            .filter(line => line.includes('[LocalBootstrapFailed]')),
+        };
       } finally {
         await closeWindow(name).catch(() => undefined);
       }
     });
+    return outcome;
+  }
+
+  it('F-2406 AC-12 (c2948-not-archive): a bootstrap file that is not a server archive, and a folder at the bootstrap path, are each copied, and the dialog reason is "Failed to install the VS Code Server." with no LocalBootstrapFailed issue (S087)', async () => {
+    const text = await unpackFailure('c2948-text', placeNotAnArchive);
+    const folder = await unpackFailure('c2948-folder', () => {
+      mkdirSync(BOOTSTRAP_FILE, {recursive: true});
+    });
+    const failed = {
+      dialogs: [reason(ALIAS, 'Failed to install the VS Code Server.')],
+      copied: true,
+      bootstrapIssues: [],
+    };
+    deepStrictEqual({text, folder}, {text: failed, folder: failed});
   });
 
   it('F-2406 AC-24 (c2948-leftover): the failed text file stays in the install folder, 22 bytes and nothing unpacked, and after a valid archive and Retry the window connects and that file is gone', async () => {
