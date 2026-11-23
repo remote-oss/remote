@@ -1,4 +1,5 @@
 import {spawnSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -63,6 +64,26 @@ export interface ArchiveProbe {
   url: string;
   /** What `unzip -t` said of the body, or why it could not be run. */
   zipTest: string;
+  /** The SHA-256 of the body, to compare with the checksum the broker's own answer names. */
+  digest: string;
+  /** What the broker answered before any redirect: its status, where it sent the request and every header it names SDKMAN's. */
+  broker: string;
+}
+
+/** The status, the redirect target and the `x-sdkman` headers of the answer `url` gives before any redirect is followed. */
+async function brokerAnswer(url: string): Promise<string> {
+  try {
+    const answer = await fetch(url, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(30_000),
+    });
+    const named = [...answer.headers]
+      .filter(([name]) => name === 'location' || name.startsWith('x-sdkman'))
+      .map(([name, value]) => `${name}: ${value}`);
+    return [String(answer.status), ...named].join('; ');
+  } catch (caught) {
+    return `the request failed: ${caught instanceof Error ? caught.message : String(caught)}`;
+  }
 }
 
 /** Downloads `url` once, following redirects, and tests the body as a zip; bounded at 30 s, and it never throws. */
@@ -77,6 +98,8 @@ export async function probeArchive(url: string): Promise<ArchiveProbe> {
       const tested = spawnSync('unzip', ['-tq', file], {encoding: 'utf8'});
       return {
         status: String(response.status),
+        digest: createHash('sha256').update(body).digest('hex'),
+        broker: await brokerAnswer(url),
         size: body.length,
         type: response.headers.get('content-type') ?? '',
         url: response.url,
@@ -95,11 +118,13 @@ export async function probeArchive(url: string): Promise<ArchiveProbe> {
       type: '',
       url,
       zipTest: '',
+      digest: '',
+      broker: '',
     };
   }
 }
 
 /** The probe as one line for a failure message. */
 export function probeText(probe: ArchiveProbe): string {
-  return `from this machine the broker answered ${probe.status}, ${String(probe.size)} bytes, content type "${probe.type}", final address ${probe.url}; unzip -t: ${probe.zipTest || 'not run'}`;
+  return `from this machine the broker first answered ${probe.broker || 'nothing'}; then ${probe.status}, ${String(probe.size)} bytes, sha256 ${probe.digest || 'none'}, content type "${probe.type}", final address ${probe.url}; unzip -t: ${probe.zipTest || 'not run'}`;
 }

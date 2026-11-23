@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {createHash} from 'node:crypto';
 import {createServer} from 'node:http';
 import {
   brokerUrlOf,
@@ -100,6 +101,37 @@ describe('the corrupt archive of a Feature download (card #2675)', () => {
           /zip|End-of-central|cannot find/iu.test(probe.zipTest),
         ],
         ['200', 20, 'text/html', url, true],
+      );
+    } finally {
+      server.close();
+    }
+  });
+
+  it('#2675: a probe of an address that redirects says what the broker answered before it and the digest of what it led to', async () => {
+    const server = createServer((incoming, response) => {
+      incoming.resume();
+      if (incoming.url === '/broker') {
+        response.writeHead(302, {
+          location: '/body',
+          'x-sdkman-checksum-sha-256': 'abc',
+        });
+        response.end();
+        return;
+      }
+      response.writeHead(200, {'content-type': 'application/zip'});
+      response.end('body');
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const url = `http://127.0.0.1:${String(typeof address === 'object' && address !== null ? address.port : 0)}/broker`;
+    try {
+      const probe = await probeArchive(url);
+      deepStrictEqual(
+        [probe.broker, probe.digest],
+        [
+          '302; location: /body; x-sdkman-checksum-sha-256: abc',
+          createHash('sha256').update('body').digest('hex'),
+        ],
       );
     } finally {
       server.close();
