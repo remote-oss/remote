@@ -1604,6 +1604,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'containers-volume',
       suite: 'containers-volume',
       files: [
+        'clone-named-volume.test.ts',
         'clone.test.ts',
         'recovery.test.ts',
         'uri-handler.test.ts',

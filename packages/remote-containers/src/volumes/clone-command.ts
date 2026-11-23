@@ -126,14 +126,15 @@ async function sourceTextOf(
 }
 
 /**
- * The source `given` names once it is refused or found unreachable, each shown with S052, or found to be the window's
- * own repository; undefined in all three cases, and when the check was cancelled.
+ * The source `given` names once it is refused or found unreachable, each shown with S052, or, when `ownRefused`, found
+ * to be the window's own repository; undefined in all those cases, and when the check was cancelled.
  */
 async function reachableSource(
   ports: CloneCommandPorts,
   given: string,
   origin: CloneOrigin,
   cancellation: AbortSignal,
+  ownRefused: boolean,
 ): Promise<CloneSource | undefined> {
   const source = cloneSourceOf(given, origin);
   if ('refused' in source) {
@@ -141,7 +142,7 @@ async function reachableSource(
     await ports.cannotAccess(given.trim());
     return undefined;
   }
-  if (ports.currentRepository() === source.repositoryPath) {
+  if (ownRefused && ports.currentRepository() === source.repositoryPath) {
     ports.logger.info('the window is the clone of this repository already');
     return undefined;
   }
@@ -157,7 +158,10 @@ async function ready(ports: CloneCommandPorts): Promise<boolean> {
   return (await cloneConsented(ports.trust)) && (await ports.engineReady());
 }
 
-/** The steps both clone commands share, up to the volume: the consent, the engine check, the source the user gives and its check. */
+/**
+ * The steps both clone commands share, up to the volume: the consent, the engine check, the source the user gives and
+ * its check. A window that is the clone of the source already is not refused here: a named volume may take another clone.
+ */
 export async function givenSourceOf(
   ports: CloneCommandPorts,
   cancellation: AbortSignal,
@@ -168,7 +172,7 @@ export async function givenSourceOf(
   const given = await sourceTextOf(ports);
   return given === undefined
     ? undefined
-    : reachableSource(ports, given, 'typed', cancellation);
+    : reachableSource(ports, given, 'typed', cancellation, false);
 }
 
 /**
@@ -189,7 +193,13 @@ export async function cloneInUniqueVolume(
   if (given === undefined) {
     return;
   }
-  const source = await reachableSource(ports, given, origin, cancellation);
+  const source = await reachableSource(
+    ports,
+    given,
+    origin,
+    cancellation,
+    true,
+  );
   if (source === undefined) {
     return;
   }
@@ -212,7 +222,7 @@ export async function cloneFromLink(
   if (!(await ports.engineReady())) {
     return;
   }
-  const source = await reachableSource(ports, link, 'link', cancellation);
+  const source = await reachableSource(ports, link, 'link', cancellation, true);
   if (source === undefined || !(await cloneConsented(ports.trust))) {
     return;
   }

@@ -197,11 +197,12 @@ describe('Clone Repository in Named Container Volume, up to the reload (card con
     ]);
   });
 
-  it('F-0702 AC-37, 6.8, BR-18: the same clone from its own window does nothing after the folder name is accepted', async () => {
+  it('F-0702 AC-37, 6.8, BR-18: the same clone from its own window, whose repository the unique flow refuses at once, goes on to the pick and does nothing after the folder name is accepted', async () => {
     deepStrictEqual(
       await runWith({
         picked: 'data',
         volumes: [{name: 'data'}],
+        currentRepository: 'https://github.com/o/r/tree/main',
         current: {
           repositoryPath: 'https://github.com/o/r/tree/main',
           volumeName: 'data',
