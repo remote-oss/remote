@@ -10,7 +10,7 @@ import path from 'node:path';
 import {variable} from '../windows/harness.ts';
 
 /** The repository's root folder. */
-const REPOSITORY = path.join(import.meta.dirname, '..', '..', '..');
+export const REPOSITORY = path.join(import.meta.dirname, '..', '..', '..');
 /** The folder `pnpm package` writes the VSIX files to. */
 export const DIST = path.join(REPOSITORY, 'dist');
 /** The extension pack's id. */

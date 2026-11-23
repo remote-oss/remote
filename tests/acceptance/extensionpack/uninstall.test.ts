@@ -106,6 +106,7 @@ describe('uninstalling the extension pack and its members in a window (card #303
   });
 
   it('F-9102 AC-14 (c3037-member): uninstalling one member on its own leaves the pack and the other members installed, with no notification', async () => {
+    const markedBefore = obsoleteFolders();
     await inWindow(
       window,
       'workbench.extensions.uninstallExtension',
@@ -113,13 +114,15 @@ describe('uninstalling the extension pack and its members in a window (card #303
     );
     await waitFor(
       'Dev Containers to be marked for deletion',
-      () => obsoleteFolders().length > 0,
+      () => obsoleteFolders().length > markedBefore.length,
       30_000,
     );
     await new Promise(resolve => setTimeout(resolve, 3000));
     deepStrictEqual(
       {
-        marked: obsoleteFolders().map(folder => folder.split('-0.')[0]),
+        marked: obsoleteFolders()
+          .filter(folder => !markedBefore.includes(folder))
+          .map(folder => folder.split('-0.')[0]),
         listed: launcher(launchProfile(), ['--list-extensions'])
           .stdout.filter(line => line !== 'remote-oss.acceptance-window-agent')
           .toSorted(),
