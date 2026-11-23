@@ -328,6 +328,15 @@ describe('F-0502 the failures of the resolution (card containers-43)', function 
           (await activeEditorOf(name).catch(() => null)) === configuration,
         30_000,
       );
+      // The log opens after the configuration, so the row waits for it before reading the groups.
+      await waitFor(
+        'the attempt’s log to open in a second editor group',
+        async () =>
+          (await editorGroupLabels(name).catch(() => []))[1]?.some(label =>
+            label.startsWith('dev-containers-attempt-'),
+          ) === true,
+        30_000,
+      );
       const groups = await editorGroupLabels(name);
       const logTab = (await editorTabs(name)).find(entry =>
         entry.label.startsWith('dev-containers-attempt-'),

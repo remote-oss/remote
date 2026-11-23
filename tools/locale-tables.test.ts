@@ -164,6 +164,74 @@ describe('locale-tables', () => {
     );
   });
 
+  it("F-0103 AC-3 (c2503-qps-generated): a pseudo-localized package's qps-ploc tables hold the pseudo-localized English for every key", () => {
+    write('identifiers.json', {
+      source: 'remote-oss/remote-x#1 (F-0001)',
+      standsDownFor: 'example.remote-x',
+      pseudoLocalized: true,
+      locales: ['qps-ploc'],
+    });
+    deepStrictEqual(
+      [
+        generatedTable('package.nls.qps-ploc.json'),
+        generatedTable('l10n/bundle.l10n.qps-ploc.json'),
+      ],
+      [
+        {title: 'Tïtlë', body: 'ßøðÿ'},
+        {Open: 'Øpëñ', Close: 'Çløsë'},
+      ],
+    );
+  });
+
+  it('F-0103 AC-9 (c2503-qps-locked): an object value with a {Locked=...} comment keeps its text byte for byte', () => {
+    write('identifiers.json', {
+      source: 'remote-oss/remote-x#1 (F-0001)',
+      standsDownFor: 'example.remote-x',
+      pseudoLocalized: true,
+      locales: ['qps-ploc'],
+    });
+    write('package.nls.json', {
+      link: {
+        message: 'Open [the log](command:open.log)',
+        comment: ["{Locked='](command:open.log)'}"],
+      },
+    });
+    deepStrictEqual(generatedTable('package.nls.qps-ploc.json'), {
+      link: 'Øpëñ [thë løg](command:open.log)',
+    });
+  });
+
+  it('F-0103 AC-3 (c2503-qps-refused): a hand-written qps-ploc translation of a pseudo-localized package is a problem', () => {
+    write('identifiers.json', {
+      source: 'remote-oss/remote-x#1 (F-0001)',
+      standsDownFor: 'example.remote-x',
+      pseudoLocalized: true,
+      locales: ['qps-ploc'],
+    });
+    write('translations/qps-ploc.json', {runtime: {Open: 'Text'}});
+    deepStrictEqual(problems(), [
+      'translations/qps-ploc.json: qps-ploc is generated for this package, never written',
+    ]);
+  });
+
+  it('F-0103 AC-3 (c2503-qps-english): a package without the flag still falls back to English for qps-ploc', () => {
+    write('identifiers.json', {
+      source: 'remote-oss/remote-x#1 (F-0001)',
+      standsDownFor: 'example.remote-x',
+      locales: ['qps-ploc'],
+    });
+    deepStrictEqual(
+      [
+        generatedTable('package.nls.qps-ploc.json'),
+        generatedTable('l10n/bundle.l10n.qps-ploc.json'),
+      ],
+      [
+        {title: 'Title', body: 'Body'},
+        {Open: 'Open', Close: 'Close'},
+      ],
+    );
+  });
+
   describe('--check', () => {
     function check(): string[] {
       return localeTableProblems(workspace.root);

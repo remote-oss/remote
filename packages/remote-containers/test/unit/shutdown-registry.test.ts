@@ -1,5 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
-import type {ShutdownReply} from '../../src/shutdown/protocol.ts';
+import type {
+  ContainerIdentity,
+  ShutdownReply,
+} from '../../src/shutdown/protocol.ts';
 import {
   CHECK_MILLISECONDS,
   createShutdownRegistry,
@@ -69,10 +72,10 @@ function connect(
   registry: ShutdownRegistry,
   leaseId: number,
   connectionId: string,
-  identity = IDENTITY,
+  identity: ContainerIdentity = IDENTITY,
   container?: {containerId: string; action: 'stop' | 'none'},
 ): void {
-  registry.register(leaseId, {
+  void registry.register(leaseId, {
     type: 'register',
     connectionId,
     identity,
@@ -84,6 +87,26 @@ function connect(
 }
 
 const STOP = {containerId: 'c0ffee', action: 'stop'} as const;
+
+/** Every docker run answers that c0ffee runs. */
+function running(): DockerResult {
+  return {status: 0, stdout: 'c0ffee'};
+}
+
+/** A scene in which the only connection, to `identity`, has ended and the docker query has found c0ffee. */
+async function lookedUp(
+  identity: ContainerIdentity,
+): Promise<ReturnType<typeof scene>> {
+  const found = scene(argv =>
+    argv[0] === 'ps'
+      ? {status: 0, stdout: 'c0ffee\n'}
+      : {status: 0, stdout: ''},
+  );
+  connect(found.registry, 1, 'a', identity);
+  found.registry.leasesChanged([]);
+  await found.advance(CHECK_MILLISECONDS);
+  return found;
+}
 
 describe('the shutdown registry (card containers-68)', () => {
   it('F-0417 AC-1, BR-3: a connection that ends stops its container at exactly ten seconds, with one docker stop', async () => {
@@ -139,6 +162,31 @@ describe('the shutdown registry (card containers-68)', () => {
       [late.runs, failing.runs.slice(0, 1)],
       [['10s stop c0ffee'], ['10s stop c0ffee']],
     );
+  });
+
+  /** Two windows of one container: the first closes, and nine seconds later the second closes or reloads. */
+  async function secondGoesAfterFirst(): Promise<ReturnType<typeof scene>> {
+    const closing = scene();
+    connect(closing.registry, 1, 'first', IDENTITY, STOP);
+    connect(closing.registry, 2, 'second', IDENTITY, STOP);
+    closing.registry.leasesChanged([2]);
+    await closing.advance(9000);
+    closing.registry.leasesChanged([]);
+    return closing;
+  }
+
+  it("F-0417 AC-24: an earlier close's check that falls inside another window's reload stops nothing, and the reloaded window keeps the container", async () => {
+    const {registry, advance, runs} = await secondGoesAfterFirst();
+    await advance(2000);
+    connect(registry, 3, 'reloaded', IDENTITY, STOP);
+    await advance(2 * CHECK_MILLISECONDS);
+    deepStrictEqual(runs, []);
+  });
+
+  it("F-0417 AC-1, BR-5: when two windows close in turn, the container stops once, at the last close's check", async () => {
+    const {advance, runs} = await secondGoesAfterFirst();
+    await advance(2 * CHECK_MILLISECONDS);
+    deepStrictEqual(runs, ['19s stop c0ffee']);
   });
 
   it('F-0417 BR-5: another live connection with the same container id keeps it running, and the check leaves a line in the log', async () => {
@@ -254,6 +302,75 @@ describe('the shutdown registry (card containers-68)', () => {
     );
   });
 
+  it('brief-volumes §7 (card containers-151): a clone in a volume is looked up by its volume and folder, held by a connection of the same volume, and never by a folder’s', async () => {
+    const volume = {volumeName: 'r-1', folder: 'r'};
+    const found = await lookedUp(volume);
+    const held = scene(running);
+    connect(held.registry, 1, 'a', volume);
+    connect(held.registry, 2, 'b', volume);
+    held.registry.leasesChanged([2]);
+    await held.advance(CHECK_MILLISECONDS);
+    const mixed = [
+      [volume, IDENTITY],
+      [IDENTITY, volume],
+    ].map(async ([ending, staying]) => {
+      const each = scene(running);
+      connect(each.registry, 1, 'a', ending);
+      connect(each.registry, 2, 'b', staying);
+      each.registry.leasesChanged([2]);
+      await each.advance(CHECK_MILLISECONDS);
+      return each.runs.at(-1);
+    });
+    const never = scene();
+    connect(never.registry, 1, 'a', volume);
+    never.registry.leasesChanged([]);
+    await never.advance(20 * CHECK_MILLISECONDS);
+    deepStrictEqual(
+      [found.runs, held.logs, await Promise.all(mixed), never.logs],
+      [
+        [
+          '10s ps -q --filter label=vsch.local.repository.volume=r-1 --filter label=vsch.local.repository.folder=r',
+          '10s stop c0ffee',
+        ],
+        ['container c0ffee is in use and stays running'],
+        ['10s stop c0ffee', '10s stop c0ffee'],
+        ['no running container for the volume r-1; the lookup ends'],
+      ],
+    );
+  });
+
+  it('F-0705 BR-7 (card containers-155): an explored volume is looked up by its volume and the shared configuration, held by a connection of the same volume only, and never taken for another volume’s', async () => {
+    const explored = {volumeName: 'data', configFile: '/t/devcontainer.json'};
+    const other = {volumeName: 'more', configFile: '/t/devcontainer.json'};
+    const found = await lookedUp(explored);
+    const same = scene(running);
+    connect(same.registry, 1, 'a', explored);
+    connect(same.registry, 2, 'b', explored);
+    same.registry.leasesChanged([2]);
+    await same.advance(CHECK_MILLISECONDS);
+    const different = scene(running);
+    connect(different.registry, 1, 'a', explored);
+    connect(different.registry, 2, 'b', other);
+    different.registry.leasesChanged([2]);
+    await different.advance(CHECK_MILLISECONDS);
+    const never = scene();
+    connect(never.registry, 1, 'a', explored);
+    never.registry.leasesChanged([]);
+    await never.advance(20 * CHECK_MILLISECONDS);
+    deepStrictEqual(
+      [found.runs, same.logs, different.runs.at(-1), never.logs],
+      [
+        [
+          '10s ps -q --filter label=vsch.local.volume=data --filter label=devcontainer.config_file=/t/devcontainer.json',
+          '10s stop c0ffee',
+        ],
+        ['container c0ffee is in use and stays running'],
+        '10s stop c0ffee',
+        ['no running container for the explored volume data; the lookup ends'],
+      ],
+    );
+  });
+
   it('F-0417 BR-8: a leave ends the connection once, and the close of its lease afterwards changes nothing more', async () => {
     const {registry, advance, runs} = scene();
     connect(registry, 1, 'a', IDENTITY, STOP);
@@ -297,7 +414,7 @@ describe('the shutdown registry (card containers-68)', () => {
   it('F-0417 BR-11: a request about a connection nobody registered is answered and changes nothing, and so is a second register', () => {
     const {registry} = scene();
     connect(registry, 1, 'a');
-    const replies: ShutdownReply[] = [
+    const replies: Array<ShutdownReply | Promise<ShutdownReply>> = [
       registry.setContainer({
         type: 'container',
         connectionId: 'nobody',
@@ -331,5 +448,522 @@ describe('the shutdown registry (card containers-68)', () => {
     await advance(20 * CHECK_MILLISECONDS);
     await draining;
     deepStrictEqual([midway, drained], [false, true]);
+  });
+});
+
+/** A Compose project's containers as the engine holds them: `running` by service, and what `kill` removed. */
+function project(services: ReadonlyArray<readonly [string, string]>) {
+  const running = new Map<string, string>(services);
+  return {
+    answer: (argv: readonly string[]): DockerResult => {
+      if (argv[0] === 'ps') {
+        return {
+          status: 0,
+          stdout: [...running]
+            .map(([service, container]) => `${container}\t${service}`)
+            .join('\n'),
+        };
+      }
+      for (const [service, container] of running) {
+        if (argv[0] === 'kill' && argv[1] === container) {
+          running.delete(service);
+        }
+      }
+      return {status: 0, stdout: ''};
+    },
+    running: () => [...running.keys()].sort(),
+    recreate: (service: string, container: string) =>
+      running.set(service, container),
+  };
+}
+
+/** Registers connection `connectionId` of lease `leaseId` as a Compose one of project `proj` with `scope`, primary service `service`. */
+function composeConnect(
+  registry: ShutdownRegistry,
+  leaseId: number,
+  connectionId: string,
+  scope: readonly string[],
+  options: {
+    action?: 'stop' | 'none';
+    engine?: typeof ENGINE;
+    containerId?: string;
+  } = {},
+): void {
+  void registry.register(leaseId, {
+    type: 'register',
+    connectionId,
+    identity: {
+      hostPath: `/home/user/${connectionId}`,
+      configFile: `/home/user/${connectionId}/devcontainer.json`,
+    },
+    engine: options.engine ?? ENGINE,
+  });
+  registry.setCompose({
+    type: 'compose',
+    connectionId,
+    compose: {project: 'proj', service: scope[0] ?? 'app', scope},
+  });
+  if (options.containerId !== undefined) {
+    registry.setContainer({
+      type: 'container',
+      connectionId,
+      containerId: options.containerId,
+      action: options.action ?? 'stop',
+    });
+  }
+}
+
+/** Services `app` and `db`, whose containers are `a1` and `d1`. */
+const APP_AND_DB = [
+  ['app', 'a1'],
+  ['db', 'd1'],
+] as const;
+
+/**
+ * The services running after each of the lease lists in `steps` is the live set and ten seconds have passed, for
+ * connections of the project that `connections` describe (lease 1, 2, ... in order).
+ */
+async function runningAfter(
+  services: ReadonlyArray<readonly [string, string]>,
+  connections: ReadonlyArray<readonly string[]>,
+  steps: ReadonlyArray<readonly number[]>,
+): Promise<string[][]> {
+  const world = project(services);
+  const {registry, advance} = scene(world.answer);
+  connections.forEach((scope, position) => {
+    composeConnect(
+      registry,
+      position + 1,
+      `conn${String(position + 1)}`,
+      scope,
+    );
+  });
+  const seen: string[][] = [];
+  for (const live of steps) {
+    registry.leasesChanged(live);
+    await advance(CHECK_MILLISECONDS);
+    seen.push(world.running());
+  }
+  return seen;
+}
+
+describe('the shutdown registry, the Compose stop (card containers-144)', () => {
+  it('F-0417 AC-10, AC-11: a Compose connection that ends kills the running containers of its scope at ten seconds, with docker kill and no Compose call', async () => {
+    const world = project(APP_AND_DB);
+    const {registry, advance, runs} = scene(world.answer);
+    composeConnect(registry, 1, 'a', ['app', 'db'], {containerId: 'a1'});
+    registry.leasesChanged([]);
+    await advance(CHECK_MILLISECONDS);
+    deepStrictEqual(
+      [runs, world.running()],
+      [
+        [
+          '10s ps --filter label=com.docker.compose.project=proj --format {{.ID}}\t{{.Label "com.docker.compose.service"}}',
+          '10s kill a1',
+          '10s kill d1',
+        ],
+        [],
+      ],
+    );
+  });
+
+  it('F-0417 AC-4, BR-12: a Compose connection whose action is none runs no docker command', async () => {
+    const world = project([['app', 'a1']]);
+    const {registry, advance, runs} = scene(world.answer);
+    composeConnect(registry, 1, 'a', ['app'], {
+      containerId: 'a1',
+      action: 'none',
+    });
+    registry.leasesChanged([]);
+    await advance(10 * CHECK_MILLISECONDS);
+    deepStrictEqual(runs, []);
+  });
+
+  it('F-0417 AC-13, AC-63, AC-59: a service outside the scope, a depends_on one or one started by hand, stays running', async () => {
+    deepStrictEqual(
+      await runningAfter(
+        [
+          ['app', 'a1'],
+          ['db', 'd1'],
+          ['hand', 'h1'],
+        ],
+        [['app']],
+        [[]],
+      ),
+      [['db', 'hand']],
+    );
+  });
+
+  it('F-0417 AC-16, AC-38: the close of one of two connections of a project stops nothing, and the last close stops every container', async () => {
+    deepStrictEqual(
+      await runningAfter(
+        APP_AND_DB,
+        [
+          ['app', 'db'],
+          ['app', 'db'],
+        ],
+        [[1], []],
+      ),
+      [['app', 'db'], []],
+    );
+  });
+
+  it('F-0417 AC-39, AC-40: with disjoint scopes each close stops its own service only', async () => {
+    deepStrictEqual(
+      await runningAfter(APP_AND_DB, [['app'], ['db']], [[2], []]),
+      [['db'], []],
+    );
+  });
+
+  /** Three services, a window of all three and one of two of them, closed in the order of `steps`. */
+  function threeServices(steps: ReadonlyArray<readonly number[]>) {
+    return runningAfter(
+      [
+        ['py', 'p1'],
+        ['node', 'n1'],
+        ['db', 'd1'],
+      ],
+      [
+        ['py', 'node', 'db'],
+        ['py', 'node'],
+      ],
+      steps,
+    );
+  }
+
+  it('F-0417 AC-48: the first close stops the service only it ran, and the last close stops what the first one skipped', async () => {
+    deepStrictEqual(await threeServices([[2], []]), [['node', 'py'], []]);
+  });
+
+  it('F-0417 AC-49: when the smaller scope closes first nothing stops, and the last close stops all three', async () => {
+    deepStrictEqual(await threeServices([[1], []]), [['db', 'node', 'py'], []]);
+  });
+
+  it('F-0417 AC-53: a container an attach window holds stays up through both closes, and the last close stops it with the rest', async () => {
+    const world = project([
+      ['app', 'a1'],
+      ['db', 'd1'],
+      ['web', 'w1'],
+    ]);
+    const {registry, advance} = scene(world.answer);
+    composeConnect(registry, 1, 'a', ['app', 'db']);
+    composeConnect(registry, 2, 'b', ['web', 'app']);
+    connect(registry, 3, 'attached', OTHER_IDENTITY, {
+      containerId: 'd1',
+      action: 'none',
+    });
+    const seen: string[][] = [];
+    for (const live of [[2, 3], [2], []]) {
+      registry.leasesChanged(live);
+      await advance(CHECK_MILLISECONDS);
+      seen.push(world.running());
+    }
+    deepStrictEqual(seen, [['app', 'db', 'web'], ['app', 'db', 'web'], []]);
+  });
+
+  /** A closing window of `app` and `db`, an attach window on the container `held`, and a second window of `db` alone. */
+  async function attachScene(held: string): Promise<string[][]> {
+    const world = project(APP_AND_DB);
+    const {registry, advance} = scene(world.answer);
+    composeConnect(registry, 1, 'a', ['app', 'db']);
+    connect(registry, 2, 'attached', OTHER_IDENTITY, {
+      containerId: held,
+      action: 'none',
+    });
+    composeConnect(registry, 3, 'c', ['db']);
+    const seen: string[][] = [];
+    for (const live of [[2, 3], [3], []]) {
+      registry.leasesChanged(live);
+      await advance(CHECK_MILLISECONDS);
+      seen.push(world.running());
+    }
+    return seen;
+  }
+
+  it('F-0417 AC-15 (reading-1912-primary-in-use): an attach window on the primary container makes the close stop nothing, and the last close of the project stops what it skipped', async () => {
+    deepStrictEqual(await attachScene('a1'), [
+      ['app', 'db'],
+      ['app', 'db'],
+      [],
+    ]);
+  });
+
+  it('F-0417 AC-15: an attach window on a container that is not the primary keeps only that container up', async () => {
+    deepStrictEqual(await attachScene('d1'), [['db'], ['db'], []]);
+  });
+
+  it('F-0417 AC-15, AC-16 (reading-1912-primary-in-use): a second window on the same primary service makes the first close stop nothing, and the last close stops the whole scope', async () => {
+    const world = project(APP_AND_DB);
+    const {registry, advance} = scene(world.answer);
+    composeConnect(registry, 1, 'a', ['app', 'db'], {containerId: 'a1'});
+    composeConnect(registry, 2, 'b', ['app'], {containerId: 'a1'});
+    const seen: string[][] = [];
+    for (const live of [[2], []]) {
+      registry.leasesChanged(live);
+      await advance(CHECK_MILLISECONDS);
+      seen.push(world.running());
+    }
+    deepStrictEqual(seen, [['app', 'db'], []]);
+  });
+
+  /** The services running after a window of `app` and `db` ends while a reloaded window of the same folder, on `engine`, has not yet said which project it holds. */
+  async function reloadedAfter(engine: typeof ENGINE): Promise<string[]> {
+    const world = project(APP_AND_DB);
+    const {registry, advance} = scene(world.answer);
+    composeConnect(registry, 1, 'a', ['app', 'db']);
+    void registry.register(2, {
+      type: 'register',
+      connectionId: 'reloaded',
+      identity: {
+        hostPath: '/home/user/a',
+        configFile: '/home/user/a/devcontainer.json',
+      },
+      engine,
+    });
+    registry.leasesChanged([2]);
+    await advance(CHECK_MILLISECONDS);
+    return world.running();
+  }
+
+  it('F-0417 AC-24, BR-7: a reloaded window of the same folder and configuration on the same engine holds the project before it says which, so the old connection’s end stops nothing', async () => {
+    deepStrictEqual(await reloadedAfter(ENGINE), ['app', 'db']);
+  });
+
+  it('F-0417 BR-7: a window of the same folder on another engine holds nothing of this one', async () => {
+    deepStrictEqual(
+      await reloadedAfter({
+        dockerPath: 'docker',
+        environment: {DOCKER_HOST: 'ssh://far'},
+      }),
+      [],
+    );
+  });
+
+  it('F-0417 AC-18: a connection whose action is none still counts as using its services', async () => {
+    const world = project([['app', 'a1']]);
+    const {registry, advance} = scene(world.answer);
+    composeConnect(registry, 1, 'a', ['app'], {
+      containerId: 'a1',
+      action: 'none',
+    });
+    composeConnect(registry, 2, 'b', ['app'], {containerId: 'a1'});
+    registry.leasesChanged([1]);
+    await advance(3 * CHECK_MILLISECONDS);
+    deepStrictEqual(world.running(), ['app']);
+  });
+
+  it('F-0417 AC-52, BR-8: a connection that ended does not count, and its own obligation runs at its end', async () => {
+    const world = project(APP_AND_DB);
+    const {registry, advance} = scene(world.answer);
+    composeConnect(registry, 1, 'a', ['app', 'db']);
+    composeConnect(registry, 2, 'b', ['app', 'db']);
+    registry.leave({type: 'leave', connectionId: 'b'});
+    await advance(CHECK_MILLISECONDS);
+    const afterLost = world.running();
+    registry.leasesChanged([]);
+    await advance(CHECK_MILLISECONDS);
+    deepStrictEqual([afterLost, world.running()], [['app', 'db'], []]);
+  });
+
+  it('F-0417 BR-7: a service a close skipped is stopped at the last close even when its container was recreated, and a project of another engine does not count', async () => {
+    const world = project(APP_AND_DB);
+    const {registry, advance} = scene(world.answer);
+    composeConnect(registry, 1, 'a', ['app', 'db']);
+    composeConnect(registry, 2, 'b', ['app'], {
+      engine: {dockerPath: 'docker', environment: {DOCKER_HOST: 'ssh://far'}},
+    });
+    composeConnect(registry, 3, 'c', ['db']);
+    registry.leasesChanged([1, 3]);
+    await advance(CHECK_MILLISECONDS);
+    const afterB = world.running();
+    world.recreate('db', 'd2');
+    registry.leasesChanged([1]);
+    await advance(CHECK_MILLISECONDS);
+    const afterC = world.running();
+    registry.leasesChanged([]);
+    await advance(CHECK_MILLISECONDS);
+    deepStrictEqual([afterB, afterC, world.running()], [['db'], ['db'], []]);
+  });
+
+  it('F-0417 BR-10, BR-11, AC-64: a failing listing or kill is one log line each and is not tried again', async () => {
+    const failing = scene(argv =>
+      argv[0] === 'ps' ? {status: 1, stdout: ''} : {status: 0, stdout: ''},
+    );
+    composeConnect(failing.registry, 1, 'a', ['app']);
+    failing.registry.leasesChanged([]);
+    await failing.advance(10 * CHECK_MILLISECONDS);
+    const killing = scene(argv =>
+      argv[0] === 'ps'
+        ? {status: 0, stdout: 'a1\tapp'}
+        : {status: 125, stdout: ''},
+    );
+    composeConnect(killing.registry, 1, 'a', ['app']);
+    killing.registry.leasesChanged([]);
+    await killing.advance(10 * CHECK_MILLISECONDS);
+    deepStrictEqual(
+      [failing.logs, failing.runs.length, killing.logs, killing.runs.length],
+      [
+        ['docker ps for the project proj failed with status 1'],
+        1,
+        ['docker kill a1 failed with status 125'],
+        2,
+      ],
+    );
+  });
+
+  it('F-0417 AC-9, BR-4: an image connection still stops with docker stop, and a Compose message for an unknown connection is refused', async () => {
+    const {registry, advance, runs} = scene();
+    connect(registry, 1, 'a', IDENTITY, STOP);
+    registry.leasesChanged([]);
+    await advance(CHECK_MILLISECONDS);
+    deepStrictEqual(
+      [
+        runs,
+        registry.setCompose({
+          type: 'compose',
+          connectionId: 'nobody',
+          compose: {project: 'proj', service: 'app', scope: ['app']},
+        }),
+      ],
+      [['10s stop c0ffee'], {accepted: false, problem: 'unknown connection'}],
+    );
+  });
+
+  it('F-0417 AC-14, AC-44 (c163-non-owning): a connection that does not own stops nothing when it ends, and while it lives another connection to the same container stops nothing either', async () => {
+    const alone = scene();
+    void alone.registry.register(1, {
+      type: 'register',
+      connectionId: 'attached',
+      identity: {containerName: 'web'},
+      engine: ENGINE,
+      owning: false,
+    });
+    alone.registry.setContainer({
+      type: 'container',
+      connectionId: 'attached',
+      containerId: 'c0ffee',
+      action: 'none',
+    });
+    alone.registry.leasesChanged([]);
+    await alone.advance(10 * CHECK_MILLISECONDS);
+    const shared = scene();
+    connect(shared.registry, 1, 'owner', IDENTITY, STOP);
+    void shared.registry.register(2, {
+      type: 'register',
+      connectionId: 'attached',
+      identity: {containerName: 'web'},
+      engine: ENGINE,
+      owning: false,
+    });
+    shared.registry.setContainer({
+      type: 'container',
+      connectionId: 'attached',
+      containerId: 'c0ffee',
+      action: 'none',
+    });
+    shared.registry.leasesChanged([2]);
+    await shared.advance(CHECK_MILLISECONDS);
+    deepStrictEqual([alone.runs, shared.runs], [[], []]);
+  });
+
+  it('F-0417 AC-14 (c163-non-owning-end): the owner stops the container when the non-owning connection has gone too', async () => {
+    const {registry, advance, runs} = scene();
+    connect(registry, 1, 'owner', IDENTITY, STOP);
+    void registry.register(2, {
+      type: 'register',
+      connectionId: 'attached',
+      identity: {containerName: 'web'},
+      engine: ENGINE,
+      owning: false,
+    });
+    registry.setContainer({
+      type: 'container',
+      connectionId: 'attached',
+      containerId: 'c0ffee',
+      action: 'none',
+    });
+    registry.leasesChanged([]);
+    await advance(CHECK_MILLISECONDS);
+    deepStrictEqual(runs, ['10s stop c0ffee']);
+  });
+});
+
+describe('the shutdown registry, a register while a stop runs (card #2645)', () => {
+  /** A registry whose `docker stop` ends only when the test says, with its timers fired by hand. */
+  function heldStop() {
+    const timers: Array<() => void> = [];
+    const stop = {end: (): void => undefined};
+    const runs: string[] = [];
+    const registry = createShutdownRegistry({
+      runDocker: (engine, argv) => {
+        runs.push(argv.join(' '));
+        return argv[0] === 'stop'
+          ? new Promise<DockerResult>(resolve => {
+              stop.end = () => {
+                resolve({status: 0, stdout: ''});
+              };
+            })
+          : Promise.resolve({status: 0, stdout: ''});
+      },
+      setTimer: (milliseconds, callback) => {
+        timers.push(callback);
+        return () => undefined;
+      },
+      logLine: () => undefined,
+    });
+    /** Ends connection `a` and fires its check, which starts the stop of c0ffee and holds it. */
+    async function stopStarted(): Promise<void> {
+      connect(registry, 1, 'a', IDENTITY, STOP);
+      registry.leave({type: 'leave', connectionId: 'a'});
+      for (const timer of timers.splice(0)) {
+        timer();
+      }
+      await new Promise(resolve => setImmediate(resolve));
+    }
+    return {
+      registry,
+      runs,
+      stopStarted,
+      endStop: () => {
+        stop.end();
+      },
+    };
+  }
+
+  it('F-0417 BR-5, F-0701 AC-14: a register for the identity whose container is being stopped is answered once the stop has ended', async () => {
+    const {registry, runs, stopStarted, endStop} = heldStop();
+    await stopStarted();
+    let answered = false;
+    const reply = Promise.resolve(
+      registry.register(2, {
+        type: 'register',
+        connectionId: 'b',
+        identity: IDENTITY,
+        engine: ENGINE,
+      }),
+    ).then(given => {
+      answered = true;
+      return given;
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    const beforeEnd = answered;
+    endStop();
+    deepStrictEqual(
+      [runs, beforeEnd, await reply],
+      [['stop c0ffee'], false, {accepted: true}],
+    );
+  });
+
+  it('F-0417 BR-5: a register for another identity while a stop runs is answered at once', async () => {
+    const {registry, stopStarted, endStop} = heldStop();
+    await stopStarted();
+    const reply = registry.register(2, {
+      type: 'register',
+      connectionId: 'b',
+      identity: OTHER_IDENTITY,
+      engine: ENGINE,
+    });
+    endStop();
+    deepStrictEqual(reply, {accepted: true});
   });
 });

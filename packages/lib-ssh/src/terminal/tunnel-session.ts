@@ -8,7 +8,7 @@
 import {type Invocation, TUNNEL_SUCCESS_LINE} from '../arguments/invocation.ts';
 import {setupMarkerOf} from '../diagnostics/setup-report.ts';
 import {LineSplitter} from '../process/line-splitter.ts';
-import type {LoginTerminals} from './login-terminal.ts';
+import type {LoginTerminals, TerminalEnd} from './login-terminal.ts';
 
 /** The general line `ssh` prints when a forward could not be set up. */
 const FORWARD_REFUSED_LINE = 'Could not request local forwarding.';
@@ -18,7 +18,9 @@ const CANNOT_LISTEN = 'cannot listen to port: ';
 
 /** How the tunnel session got past its gate, or why it did not. The gate settles once, with the first answer. */
 export type TunnelGate =
-  {kind: 'forwarded'} | {kind: 'forwardFailed'; line: string} | {kind: 'ended'};
+  | {kind: 'forwarded'}
+  | {kind: 'forwardFailed'; line: string}
+  | {kind: 'ended'; end: TerminalEnd};
 
 /** A tunnel `ssh` running in its terminal. */
 export interface TunnelSession {
@@ -91,9 +93,9 @@ export function openTunnelSession(
   terminal.onOutput(text => {
     splitter.push(text);
   });
-  terminal.onEnd(() => {
+  terminal.onEnd(end => {
     // A gate settles once: the end after the success line leaves the answer the success line gave.
-    settle({kind: 'ended'});
+    settle({kind: 'ended', end});
   });
   let stopped = false;
   return {

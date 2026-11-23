@@ -21,7 +21,11 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {changedKeys, extensionState} from '../windows/global-state.ts';
-import {type HintRecords, hintRecords} from '../windows/hint-store.ts';
+import {
+  type HintRecords,
+  hintRecords,
+  waitForRecords,
+} from '../windows/hint-store.ts';
 import {
   notificationCentre,
   notifications,
@@ -129,7 +133,8 @@ async function recordsWithLog(count: number): Promise<HintRecords> {
       hintRecords()
         .at(-1)
         ?.hints.some(hint => hint.kind === 'log') ?? false,
-    60_000,
+    // The log hint is kept when the attempt has ended, which a slower runner takes longer to do.
+    180_000,
   );
   return hintRecords();
 }
@@ -156,6 +161,8 @@ describe('the session record of every resolve (card connect-135)', function () {
 
   before(async () => {
     saved = readUserSettings();
+    // The record lists which of the 22 settings the user customised, and the launch's window port range is one of them.
+    await userSettings({'remote.SSH.preferredLocalPortRange': undefined});
     await closeAllButLocal();
     await inWindow('local', CLEAR);
     await waitFor('an empty store', () => hintRecords().length === 0, 60_000);
@@ -242,7 +249,7 @@ describe('the session record of every resolve (card connect-135)', function () {
       await closeWindow('c135-b2').catch(() => undefined);
     }
     await failingAttempt('c135-b3');
-    await waitFor(
+    await waitForRecords(
       'the third attempt to replace the first',
       () =>
         hintRecords()
@@ -322,9 +329,10 @@ describe('the session record of every resolve (card connect-135)', function () {
       const mark = recordLines().length;
       const logMark = connectionLog().length;
       await inWindow('c135-d1', CLEAR);
+      // The clear writes an empty store that says when it was cleared: the record list is empty, as the accessor reads it.
       await waitFor(
         'the records to be gone',
-        async () => !('remote.ssh.hints' in (await extensionState())),
+        () => hintRecords().length === 0,
         60_000,
       );
       deepStrictEqual(

@@ -1,9 +1,14 @@
 import {deepStrictEqual} from 'node:assert';
 import type {ConnectInput, ConnectPhase, FailureHint} from 'lib-authority';
 import type {TransferPhase} from 'lib-server';
+import type {Level} from 'lib-log';
 import type {FailureHint as SshFailureHint} from 'lib-ssh';
 import type {ConnectOptions, PhaseEvent} from '../../src/pipeline/connect.ts';
-import {connectorOf, type SshConnector} from '../../src/pipeline/connector.ts';
+import {
+  connectorOf,
+  type ResolveOutcome,
+  type SshConnector,
+} from '../../src/pipeline/connector.ts';
 import type {ConnectSteps} from '../../src/pipeline/steps.ts';
 import {
   endTunnel,
@@ -29,14 +34,39 @@ function connectorOptions(
     logger: options.logger,
     serve: options.serve,
     useExecServer: options.useExecServer,
+    settingLines: options.settingLines,
+    writeWindowStart: options.writeWindowStart,
   };
+}
+
+/** A connector whose steps throw, which tells `resolveEnded` how its resolve ended. */
+function throwingConnector(
+  resolveEnded: (
+    hints: readonly FailureHint[],
+    outcome: ResolveOutcome,
+  ) => void,
+): SshConnector {
+  return connectorOf({
+    stepsFor: () => {
+      throw new Error('broken');
+    },
+    terminalMode: () => false,
+    options: connectorOptions(setup().options),
+    revealLog: () => undefined,
+    applyTerminalEnvironment: () => undefined,
+    resolveEnded,
+  });
 }
 
 /** A connector over the fixture's steps, with the recording, and a log the details reveal counts in. */
 function connectorFor(
   changes: Partial<ConnectSteps> = {},
   terminalMode: () => boolean = () => false,
-  resolveEnded?: (hints: readonly FailureHint[]) => void,
+  resolveEnded?: (
+    hints: readonly FailureHint[],
+    outcome: ResolveOutcome,
+  ) => void,
+  level: Level = 'info',
 ): {
   connector: SshConnector;
   recording: Recording;
@@ -44,7 +74,7 @@ function connectorFor(
   environments: Array<Readonly<Record<string, string>>>;
   logged: () => string[];
 } {
-  const {recording, options, logSink} = setup();
+  const {recording, options, logSink} = setup(level);
   const revealed: string[] = [];
   const environments: Array<Readonly<Record<string, string>>> = [];
   return {
@@ -93,6 +123,54 @@ describe('the connector over the connect pipeline', () => {
     deepStrictEqual(environments, [{}]);
   });
 
+  describe('F-2003 BR-9 item 2 (#2538): the terminal environments update is a line at trace', () => {
+    /** The lines about the terminal environments that a connect wrote at `level`. */
+    async function environmentLines(
+      level: Level,
+      changes: Partial<ConnectSteps> = {},
+    ): Promise<string[]> {
+      const {connector, logged} = connectorFor(
+        changes,
+        () => false,
+        undefined,
+        level,
+      );
+      await connector.connect(HOST_INPUT);
+      return logged().filter(line => line.includes('terminal environments'));
+    }
+
+    it('names the variables the window’s terminals got, never their values', async () => {
+      deepStrictEqual(
+        await environmentLines('trace', {
+          planForwarding: () => Promise.resolve(LINKED),
+        }),
+        ['the terminal environments were updated: SSH_AUTH_SOCK, DISPLAY'],
+      );
+    });
+
+    it('says there were none when the plans set no variable', async () => {
+      deepStrictEqual(await environmentLines('trace'), [
+        'the terminal environments were updated: no variables',
+      ]);
+    });
+
+    it('writes nothing about them at debug', async () => {
+      deepStrictEqual(
+        await environmentLines('debug', {
+          planForwarding: () => Promise.resolve(LINKED),
+        }),
+        [],
+      );
+    });
+
+    it('writes nothing about them for a connect that fails, which leaves the variables as they were', async () => {
+      deepStrictEqual(
+        await environmentLines('trace', {openTunnel: tunnelFails}),
+        [],
+      );
+    });
+  });
+
   it("F-2311 7.E6: a connect that fails leaves the window's terminal variables as they were", async () => {
     const {connector, environments} = connectorFor({openTunnel: tunnelFails});
     await connector.connect(HOST_INPUT);
@@ -139,6 +217,33 @@ describe('the connector over the connect pipeline', () => {
     await connector.connect(HOST_INPUT);
     return heard;
   }
+
+  it('F-2502 5.0 step 3: a connect whose host reported tells the host-report listeners its target, and a removed listener hears nothing', async () => {
+    const {connector} = connectorFor();
+    const heard: unknown[] = [];
+    const removed: unknown[] = [];
+    connector.onHostReported(target => {
+      heard.push(target);
+    });
+    const stop = connector.onHostReported(target => {
+      removed.push(target);
+    });
+    stop();
+    await connector.connect(HOST_INPUT);
+    deepStrictEqual(
+      [heard, removed],
+      [
+        [
+          {
+            family: 'ssh-remote',
+            target: INPUT.target,
+            rawHostString: INPUT.rawHostString,
+          },
+        ],
+        [],
+      ],
+    );
+  });
 
   it('F-2304: the stages of the connect reach the phase listeners', async () => {
     deepStrictEqual((await phasesHeard({kind: 'downloading'})).slice(0, 3), [
@@ -320,18 +425,46 @@ describe('the connector over the connect pipeline', () => {
     );
     await failing.connector.connect(HOST_INPUT);
     await connectorFor({}, () => false, record).connector.connect(HOST_INPUT);
-    const throwing = connectorOf({
-      stepsFor: () => {
-        throw new Error('broken');
-      },
-      terminalMode: () => false,
-      options: connectorOptions(setup().options),
-      revealLog: () => undefined,
-      applyTerminalEnvironment: () => undefined,
-      resolveEnded: record,
-    });
-    await throwing.connect(HOST_INPUT).catch(() => undefined);
+    await throwingConnector(record)
+      .connect(HOST_INPUT)
+      .catch(() => undefined);
     deepStrictEqual(told, [[hint], [], []]);
+  });
+
+  it('#2537: the resolve step’s end tells how it ended: succeeded for a connection, failed for a failure and for a connect that throws, cancelled when the connect was cancelled', async () => {
+    const outcomes: ResolveOutcome[] = [];
+    function record(...ended: [readonly FailureHint[], ResolveOutcome]): void {
+      outcomes.push(ended[1]);
+    }
+    await connectorFor({}, () => false, record).connector.connect(HOST_INPUT);
+    await connectorFor(
+      {
+        openTunnel: () =>
+          Promise.resolve({
+            kind: 'failed' as const,
+            failure: {kind: 'channelClosed' as const, hints: []},
+          }),
+      },
+      () => false,
+      record,
+    ).connector.connect(HOST_INPUT);
+    await throwingConnector(record)
+      .connect(HOST_INPUT)
+      .catch(() => undefined);
+    const window: {connector?: SshConnector} = {};
+    const cancelled = connectorFor(
+      {
+        rememberPlatform: () => {
+          window.connector?.cancel();
+          return Promise.resolve();
+        },
+      },
+      () => false,
+      record,
+    );
+    window.connector = cancelled.connector;
+    await cancelled.connector.connect(HOST_INPUT);
+    deepStrictEqual(outcomes, ['succeeded', 'failed', 'failed', 'cancelled']);
   });
 
   it('contracts §3.2: a cancel after a connect releases the connection once', async () => {
@@ -365,6 +498,56 @@ describe('the connector over the connect pipeline', () => {
     await connector.connect(HOST_INPUT);
     await connector.connect({...HOST_INPUT, attempt: 2, isReconnection: true});
     deepStrictEqual(recording.releases, 1);
+  });
+
+  it('F-2505 AC-25: the first reconnection attempt asks the held connection whether its session answers, before it gives the connection back, and says what it found', async () => {
+    const {connector, recording, logged} = connectorFor();
+    await connector.connect(HOST_INPUT);
+    await connector.connect({...HOST_INPUT, attempt: 2, isReconnection: true});
+    deepStrictEqual(
+      [
+        recording.releasesAtCheck,
+        recording.releases,
+        logged().filter(line => line.startsWith('the held connection was')),
+      ],
+      [[0], 1, ['the held connection was checked: its session answers']],
+    );
+  });
+
+  it('F-2505 AC-25: a connect that is not a reconnection asks nothing', async () => {
+    const {connector, recording} = connectorFor();
+    await connector.connect(HOST_INPUT);
+    await connector.connect(HOST_INPUT);
+    deepStrictEqual(recording.releasesAtCheck, []);
+  });
+
+  it('F-2505 AC-25: a session that did not answer is said to have been ended, and a connection that cannot be checked is said so and the attempt goes on as before', async () => {
+    const seen: string[][] = [];
+    for (const found of ['ended', 'unchecked'] as const) {
+      const {connector, recording, logged} = connectorFor();
+      recording.sessionCheck = found;
+      await connector.connect(HOST_INPUT);
+      const result = await connector.connect({
+        ...HOST_INPUT,
+        attempt: 2,
+        isReconnection: true,
+      });
+      seen.push([
+        'connectionToken' in result ? 'connected' : 'failed',
+        ...logged().filter(line => line.startsWith('the held connection was')),
+        ...logged().filter(line => line.includes('could not be checked')),
+      ]);
+    }
+    deepStrictEqual(seen, [
+      [
+        'connected',
+        'the held connection was checked: no live session answered: it did not within the bound and was ended, or there was none',
+      ],
+      [
+        'connected',
+        'the held connection could not be checked: its helper did not answer the check',
+      ],
+    ]);
   });
 
   /** Which transport listeners hear `notice` sent through the lease of a connection that worked. */

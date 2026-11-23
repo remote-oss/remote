@@ -40,13 +40,23 @@ interface Scene {
   stored: Candidate | undefined;
   /** How many times the store was asked. */
   storedAsked: number;
+  /** The configurations the folder's remotes map to under the roots; none by default. */
+  mirrored: Candidate[];
+  /** How many times the mirrored lookup was asked. */
+  mirroredAsked: number;
   /** The absolute paths that exist besides the configuration files; none by default, so a named Dockerfile is missing. */
   existing: string[];
   /** What the Compose check answers; none when the flow has no such check. */
   composeCheck: FirstCheckResult | undefined;
   calls: string[];
+  /** The title each picker was given. */
+  titles: Array<string | undefined>;
   rows: unknown[];
   targets: unknown[];
+  /** The results the next reads give, in turn, before `read` is the answer. */
+  queued: Array<ConfigurationResult | CliFailure>;
+  /** Whether each read asked for the merged configuration. */
+  merged: Array<boolean | undefined>;
   sink: MemorySink;
 }
 
@@ -72,11 +82,16 @@ function sceneOf(contents: Scene['contents']): Scene {
     mountGitWorktreeCommonDir: false,
     stored: undefined,
     storedAsked: 0,
+    mirrored: [],
+    mirroredAsked: 0,
     existing: [],
     composeCheck: undefined,
     calls: [],
     rows: [],
+    titles: [],
     targets: [],
+    merged: [],
+    queued: [],
     sink: new MemorySink(),
   };
 }
@@ -107,6 +122,9 @@ function listing(scene: Scene): Record<string, Array<[string, string]>> {
 async function choose(
   scene: Scene,
   configFile?: string,
+  switching?: {current: string; reconnectCurrent: boolean},
+  external?: boolean,
+  mergedRead?: boolean,
 ): Promise<ConfigurationChoice> {
   const tree = listing(scene);
   return chooseConfiguration(
@@ -118,6 +136,9 @@ async function choose(
       cancellation: NEVER,
       engineCheck: scene.engineCheck,
       ...(configFile === undefined ? {} : {configFile}),
+      ...(switching === undefined ? {} : {switching}),
+      ...(external === undefined ? {} : {external}),
+      ...(mergedRead === undefined ? {} : {mergedRead}),
     },
     {
       files: {
@@ -145,8 +166,9 @@ async function choose(
         },
       },
       surfaces: {
-        pick: (rows, placeholder, tooltip) => {
+        pick: (rows, placeholder, tooltip, title) => {
           scene.calls.push('pick');
+          scene.titles.push(title);
           scene.rows.push([rows, placeholder, tooltip]);
           return Promise.resolve(scene.answer);
         },
@@ -176,14 +198,26 @@ async function choose(
         scene.storedAsked += 1;
         return Promise.resolve(scene.stored);
       },
+      mirrored: () => {
+        scene.mirroredAsked += 1;
+        return Promise.resolve(scene.mirrored);
+      },
       useTemplate: folder => {
         scene.calls.push(`useTemplate ${folder}`);
         return Promise.resolve();
       },
       // eslint-disable-next-line id-length -- the choice's dependency is named cli
       cli: {
-        readConfiguration: (target, containerId, onEvent) => {
+        readConfiguration: (
+          target,
+          containerId,
+          onEvent,
+          cancellation,
+          onStdin,
+          includeMerged,
+        ) => {
           scene.targets.push([target, containerId]);
+          scene.merged.push(includeMerged);
           scene.calls.push('readConfiguration');
           onEvent({
             kind: 'log',
@@ -200,7 +234,9 @@ async function choose(
             status: 'running',
             detail: undefined,
           });
-          return scene.reading ?? Promise.resolve(scene.read);
+          return (
+            scene.reading ?? Promise.resolve(scene.queued.shift() ?? scene.read)
+          );
         },
       },
       ...(scene.composeCheck === undefined
@@ -215,6 +251,13 @@ async function choose(
       translate: template => template,
       logger: createLogger(scene.sink, {minimumLevel: () => 'debug'}),
     },
+  );
+}
+
+/** The descriptions of the rows of each picker the scene showed. */
+function descriptionsOf(scene: Scene): string[][] {
+  return (scene.rows as Array<[Array<{description: string}>]>).map(([rows]) =>
+    rows.map(each => each.description),
   );
 }
 
@@ -256,6 +299,37 @@ describe('choosing the configuration (card containers-13)', () => {
           features: [],
         },
         [true],
+      ],
+    );
+  });
+
+  it('F-0206 BR-13: a merged read reports what the merged configuration asks of the daemon, and a read that is not merged reports nothing', async () => {
+    const merged = sceneOf({[ONLY]: IMAGE});
+    merged.read = {
+      ...configurationOf('/workspaces/p'),
+      mergedConfiguration: {hostRequirements: {cpus: 64, memory: '512gb'}},
+    };
+    const plain = sceneOf({[ONLY]: IMAGE});
+    const mergedChoice = await choose(
+      merged,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+    const plainChoice = await choose(plain);
+    deepStrictEqual(
+      [
+        mergedChoice.kind === 'chosen' && mergedChoice.hostRequirements,
+        merged.merged,
+        plainChoice.kind === 'chosen' && 'hostRequirements' in plainChoice,
+        plain.merged,
+      ],
+      [
+        {cpus: 64, memory: 512 * 1024 ** 3, needsGpu: false},
+        [true],
+        false,
+        [false],
       ],
     );
   });
@@ -641,6 +715,55 @@ describe('choosing the configuration (card containers-13)', () => {
     );
   });
 
+  it('F-0206 reading-2146-requirements-lookup: a merged read that fails is followed by the plain one, which is chosen with no merged requirements and one warn line', async () => {
+    const scene = sceneOf({[ONLY]: IMAGE});
+    scene.queued = [{kind: 'configurationFailed', message: 'no image'}];
+    const choice = await choose(scene, undefined, undefined, undefined, true);
+    deepStrictEqual(
+      [
+        choice.kind === 'chosen' && 'hostRequirements' in choice,
+        scene.merged,
+        lines(scene).filter(line => line.startsWith('warn')),
+      ],
+      [
+        false,
+        [true, false],
+        [
+          'warn: the merged configuration could not be read (configurationFailed: no image); the configuration is read without it',
+        ],
+      ],
+    );
+  });
+
+  it('F-0206 reading-2146-requirements-lookup: when the plain read fails too, the configuration is refused with S181', async () => {
+    const scene = sceneOf({[ONLY]: IMAGE});
+    scene.read = {kind: 'configurationFailed', message: 'bad'};
+    deepStrictEqual(
+      [
+        await choose(scene, undefined, undefined, undefined, true),
+        scene.merged,
+        scene.calls.filter(call => call.startsWith('showError')),
+      ],
+      [
+        {kind: 'rejected'},
+        [true, false],
+        [`showError ${JSON.stringify(['', S181(ONLY), ['Show Log']])}`],
+      ],
+    );
+  });
+
+  it('F-0206 reading-2146-requirements-lookup: a merged read that is cancelled ends the choice, and no plain read follows', async () => {
+    const scene = sceneOf({[ONLY]: IMAGE});
+    scene.read = {kind: 'cancelled'};
+    deepStrictEqual(
+      [
+        await choose(scene, undefined, undefined, undefined, true),
+        scene.merged,
+      ],
+      [{kind: 'dismissed'}, [true]],
+    );
+  });
+
   it('F-0301 7.E1: a read that fails without a message is logged with its kind', async () => {
     const scene = sceneOf({[ONLY]: IMAGE});
     scene.read = {kind: 'noResult', status: 1};
@@ -1016,6 +1139,103 @@ describe('choosing the configuration while the engine is checked (card container
     );
   });
 
+  const MIRRORED_FILE =
+    '/roots/one/github.com/o/n/.devcontainer/devcontainer.json';
+  const MIRRORED: Candidate = {
+    file: MIRRORED_FILE,
+    relative: MIRRORED_FILE,
+    place: {kind: 'main'},
+  };
+  const OTHER_FILE = '/roots/two/github.com/o/n/.devcontainer.json';
+  const OTHER: Candidate = {
+    file: OTHER_FILE,
+    relative: OTHER_FILE,
+    place: {kind: 'dotfile'},
+  };
+
+  it('F-0302 AC-1, BR-14: a mirrored configuration alone is chosen with no picker, and the CLI reads it with the mirrored file and the opened folder', async () => {
+    const scene = sceneOf({[MIRRORED_FILE]: IMAGE});
+    scene.mirrored = [MIRRORED];
+    const choice = await choose(scene);
+    deepStrictEqual(
+      [
+        choice.kind === 'chosen' ? choice.configFile : choice.kind,
+        scene.calls.includes('pick'),
+        (scene.targets[0] as [{workspaceFolder: string; configFile: string}])[0]
+          .configFile,
+        (scene.targets[0] as [{workspaceFolder: string; configFile: string}])[0]
+          .workspaceFolder,
+      ],
+      [MIRRORED_FILE, false, MIRRORED_FILE, FOLDER],
+    );
+  });
+
+  it('F-0302 AC-12: two mirrored configurations give the pick, ordered by absolute path with the first focused, and nothing is chosen silently', async () => {
+    const scene = sceneOf({
+      [MIRRORED_FILE]: IMAGE,
+      [OTHER_FILE]: '{"image":"i"}',
+    });
+    scene.mirrored = [OTHER, MIRRORED];
+    await choose(scene);
+    deepStrictEqual(
+      (scene.rows[0] as [Array<{description: string}>])[0].map(
+        entry => entry.description,
+      ),
+      [MIRRORED_FILE, OTHER_FILE],
+    );
+  });
+
+  it('F-0302 AC-13, AC-19: the folder’s own file, a stored one and mirrored ones are all listed, none collapsed, ordered by absolute path whatever the source; the one picked is chosen', async () => {
+    const scene = sceneOf({
+      [ONLY]: IMAGE,
+      [STORED_FILE]: '{"image":"i"}',
+      [MIRRORED_FILE]: '{"image":"i"}',
+      [OTHER_FILE]: '{"image":"i"}',
+    });
+    scene.stored = STORED;
+    scene.mirrored = [OTHER, MIRRORED];
+    scene.answer = {kind: 'picked', index: 2};
+    const choice = await choose(scene);
+    deepStrictEqual(
+      [
+        (scene.rows[0] as [Array<{description: string}>])[0].map(
+          entry => entry.description,
+        ),
+        choice.kind === 'chosen' ? choice.configFile : choice.kind,
+      ],
+      [[STORED.relative, MIRRORED_FILE, OTHER_FILE, ONLY], OTHER_FILE],
+    );
+  });
+
+  it('F-0302 BR-3: a file that two sources find counts once, so one candidate is chosen with no picker', async () => {
+    const scene = sceneOf({[MIRRORED_FILE]: IMAGE});
+    scene.mirrored = [MIRRORED, MIRRORED];
+    scene.stored = {...MIRRORED, place: {kind: 'stored', slot: 'p'}};
+    const choice = await choose(scene);
+    deepStrictEqual(
+      [choice.kind, scene.calls.includes('pick')],
+      ['chosen', false],
+    );
+  });
+
+  it('F-0302 BR-12: with external false neither source is asked and the folder’s own files are all there is', async () => {
+    const scene = sceneOf({[MIRRORED_FILE]: IMAGE, [STORED_FILE]: IMAGE});
+    scene.mirrored = [MIRRORED];
+    scene.stored = STORED;
+    const choice = await choose(scene, undefined, undefined, false);
+    deepStrictEqual(
+      [choice.kind, scene.mirroredAsked, scene.storedAsked],
+      ['noConfiguration', 0, 0],
+    );
+  });
+
+  it('F-0302 BR-3: a file the caller names does not ask the mirrored lookup either', async () => {
+    const scene = sceneOf({[ONLY]: IMAGE});
+    scene.mirrored = [MIRRORED];
+    await choose(scene, `${FOLDER}/${ONLY}`);
+    deepStrictEqual(scene.mirroredAsked, 0);
+  });
+
   it('F-0412 5.1: an existing Dockerfile goes on to the read', async () => {
     const scene = sceneOf({[ONLY]: MISSING});
     scene.existing = ['/w/p/.devcontainer/Missing'];
@@ -1130,5 +1350,59 @@ describe('choosing the configuration while the engine is checked (card container
         '{"dockerComposeFile":"c.yml","service":"app","workspaceFolder":"/workspace"}',
     });
     deepStrictEqual((await choose(scene)).kind, 'chosen');
+  });
+
+  it('F-0407 AC-2, AC-19: switching gives the picker the title S299 and marks the description of the connected configuration " (Current)"; a plain choice gives no title and no mark', async () => {
+    const plain = sceneOf({[ALPHA]: IMAGE, [BETA]: IMAGE});
+    await choose(plain);
+    const switching = sceneOf({[ALPHA]: IMAGE, [BETA]: IMAGE});
+    await choose(switching, undefined, {
+      current: `${FOLDER}/${BETA}`,
+      reconnectCurrent: false,
+    });
+    deepStrictEqual(
+      [
+        plain.titles,
+        descriptionsOf(plain),
+        switching.titles,
+        descriptionsOf(switching),
+      ],
+      [
+        [undefined],
+        [[ALPHA, BETA]],
+        ['Select Configuration'],
+        [[ALPHA, `${BETA} (Current)`]],
+      ],
+    );
+  });
+
+  it('F-0407 AC-4, BR-5: choosing the connected configuration ends the choice as dismissed with nothing read; in a window with no folder it goes on and reads it', async () => {
+    const results = [];
+    for (const reconnectCurrent of [false, true]) {
+      const scene = sceneOf({[ALPHA]: IMAGE, [BETA]: IMAGE});
+      scene.answer = {kind: 'picked', index: 1};
+      const choice = await choose(scene, undefined, {
+        current: `${FOLDER}/${BETA}`,
+        reconnectCurrent,
+      });
+      results.push([choice.kind, scene.calls.includes('readConfiguration')]);
+    }
+    deepStrictEqual(results, [
+      ['dismissed', false],
+      ['chosen', true],
+    ]);
+  });
+
+  it('F-0407 BR-5: the connected configuration alone, with the engine check stopped, ends the choice as stopped and not as dismissed', async () => {
+    const scene = sceneOf({[ONLY]: IMAGE});
+    scene.engineCheck = Promise.resolve('stopped');
+    const choice = await choose(scene, undefined, {
+      current: `${FOLDER}/${ONLY}`,
+      reconnectCurrent: false,
+    });
+    deepStrictEqual(
+      [choice.kind, scene.calls.includes('pick')],
+      ['stopped', false],
+    );
   });
 });

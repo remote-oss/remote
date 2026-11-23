@@ -23,6 +23,7 @@ export interface QuickPickHandle {
   items: readonly QuickPickRow[];
   activeItems: readonly QuickPickRow[];
   readonly selectedItems: readonly QuickPickRow[];
+  title: string | undefined;
   placeholder: string | undefined;
   canSelectMany: boolean;
   matchOnDescription: boolean;
@@ -62,7 +63,7 @@ export function configSurfacesOf(
   logger: Logger,
 ): ConfigSurfaces {
   return {
-    pick: (rows, placeholder, openFileTooltip) =>
+    pick: (rows, placeholder, openFileTooltip, title) =>
       new Promise<PickerAnswer>(resolve => {
         const quick = host.createQuickPick();
         const items = rows.map(entry => ({
@@ -83,6 +84,7 @@ export function configSurfacesOf(
           resolve(given);
           quick.hide();
         }
+        quick.title = title;
         quick.placeholder = placeholder;
         quick.canSelectMany = false;
         quick.matchOnDescription = false;

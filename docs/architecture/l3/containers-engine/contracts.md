@@ -26,6 +26,38 @@ process's stdin and stdout. The relay script (shipped as text, written into the 
 the server, owned by the remote user, mode 0644) connects to `127.0.0.1:<port>` and pipes both ways; it exits when either
 side ends. `{kind: 'socket'}` is refused in release 1.
 
+**The relay host (C16; brief-personalization §2, #2086):** `startRelayHost(dependencies, request)` in
+`relays/relay-host.ts`, called in the connect's phase E (§2 step 5) with the connect's kinds. With no kind it runs
+nothing and gives no variables. Otherwise it writes `relay-host.js` into the server's data folder through this channel
+(as the relay script is, mode 0644, under a name that follows its text) and runs `docker exec -i --user <remote user>
+<containerId> <node> <relay-host.js> <kind>=<socket path> …`, one socket per kind at `/tmp/remote-oss-<kind>-<random>.sock`,
+each created mode 0600. The connect waits for its `ready` frame, at most 10 s (R-79); one that ends, isn't ready in time
+or is cancelled first fails the start, which C10 logs, and the connect goes on with no relays. Its process lives as long
+as the window's connection, and a connect that fails after phase E ends it.
+
+- **Frames** (ours, R-27), on the exec's standard streams both ways: a type byte, a stream number (32-bit,
+  big-endian), a payload length (32-bit, big-endian), then the payload.
+
+  | Type | Byte | Stream | Payload |
+  |---|---|---|---|
+  | `open` | 1 | the new stream, from 1 | the kind's name, not empty |
+  | `data` | 2 | an open stream | the bytes, at most 64 KiB |
+  | `close` | 3 | an open stream | empty |
+  | `ready` | 4 | 0 | empty; sent once, when every socket listens |
+
+  Only the relay host opens streams: each connection accepted on a socket is a new number and an `open` of its socket's
+  kind. Either side may send `data` and `close`.
+- **The extension's checks** (the frames are untrusted): a payload over 64 KiB, an unknown type, a payload or stream
+  its type doesn't allow, an `open` of a kind this connection didn't set up, or an `open` of a stream number in use ends
+  the relay host, every stream closed, with one log line. An `open` beyond 64 open streams is closed at once, with one
+  log line. Backpressure holds both ways: a host end that wants no more pauses the exec's output until it drains.
+- **Host ends:** a stream's host end connects when its `open` arrives, bounded at 10 s, after which the stream closes;
+  the bytes before it connects wait, with the exec's output paused. Payloads are never logged; the log names kinds and
+  paths only (R-26).
+- **Kinds:** each personalization card adds its own, with its variable. The harness's `echo` (its host end writes back
+  what it reads, variable `REMOTE_OSS_RELAY_ECHO_SOCK`) exists only while `REMOTE_OSS_ACCEPTANCE=1` and
+  `REMOTE_OSS_ACCEPTANCE_RELAY_ECHO=1`.
+
 ## 2. C10 container connector (a lib-authority `Connector`)
 
 `containerConnectorOf(dependencies): Connector` for the `dev-container` family only.
@@ -42,13 +74,29 @@ side ends. `{kind: 'socket'}` is refused in release 1.
    or a project name Compose would not accept, ends the step as a setup failure (F-0410's generic dialog). The CLI is run
    with `COMPOSE_PROJECT_NAME` in its environment and `--user-data-folder <global storage>/data`. Its `up` also gets
    `BUILDX_BAKE_ENTITLEMENTS_FS=0`, unless the editor's environment sets that variable (brief-compose §3.3, #1915).
-4. lib-server: probe, plan, transfer and start over C11 with the remote-containers policy row (§5), the licence gate
-   (R-68) and `installTree` from V9 when the `vscode` volume is mounted.
-5. The host listener: choose the local port with lib-forwarding's port search, preferring the server's container
+   `up` runs with `--skip-post-create` (brief-personalization §1, #2085): it runs no lifecycle command in the container
+   (`onCreateCommand` and `updateContentCommand` included); `initializeCommand` still runs on the host.
+4. lib-server: probe, plan and transfer over C11 with the remote-containers policy row (§5), the licence gate (R-68) and
+   `installTree` from V9 when the `vscode` volume is mounted, under "Installing server" (S209). The server does not
+   start yet.
+5. Phase E (brief-personalization §3): the relay host (§2), the relays and their variables, and the early
+   personalization. The step is empty until those cards land, and the relay variables are an empty set until then.
+6. The blocking hooks, under "Starting server" (S334): C7 runs `run-user-commands --container-id <id>
+   --skip-non-blocking-commands` with `--remote-env NAME=value` per relay variable. C8 classifies its outcome as it did
+   `up`'s (F-0410's dialogs, S420), with the container found, and the lifecycle presenter (S085's terminal) takes its
+   JSON log stream.
+7. lib-server starts the server. The extension host's environment is `extensionHostEnvironmentOf(probed, relays,
+   remoteEnv)`: the probed environment, then the relay variables, then `remoteEnv`, each later layer winning.
+8. The host listener: choose the local port with lib-forwarding's port search, preferring the server's container
    port (F-0502 BR-3); `openRelayTunnel` with C11's exec dialer and the target `{kind: 'port', port: <container
    port>}`. The log names both ports.
-6. Return `Connected{address: {host: '127.0.0.1', port}, connectionToken, extensionHostEnv: {}, environmentTunnels: [],
-   trusted}`. `trusted` is `false` for a folder, and `true` for a clone in a volume (F-0106 BR-13's forced trust,
+9. The background, not awaited by the connect: run 1 is `run-user-commands … --stop-for-personalization`; phase P
+   (brief-personalization §4, empty until its cards land) and run 2, `run-user-commands` with no stop, run only when
+   run 1 succeeded: a failed `postCreateCommand` isn't marked, so run 2 would run it again. The CLI's markers skip what
+   already ran. Both take the relay variables as `--remote-env`. Their
+   outcome is logged, as the single background run's was; the lifecycle presenter takes their JSON log streams.
+10. Return `Connected{address: {host: '127.0.0.1', port}, connectionToken, extensionHostEnv, environmentTunnels: [],
+   trusted}`, where `extensionHostEnv` is step 7's environment. `trusted` is `false` for a folder, and `true` for a clone in a volume (F-0106 BR-13's forced trust,
    brief-volumes §3.8); the family registers with `allowsTrust: true`, so lib-authority passes it on. No tunnel factory
    and no tunnel features are given to core (brief ruling 1).
 
@@ -56,6 +104,14 @@ side ends. `{kind: 'socket'}` is refused in release 1.
 stopped or was removed while connected answers `silent: true` (F-0502's "plain NotAvailable, no dialog"), and every
 other failure is presented. `retryable` is true only for a lost transport of a container that still runs (F-0502's
 reconnection rules). `diagnostics` never hold the token.
+
+**The nested resolve (brief-remote-ssh-engines §2; connect-146, #2070).** For `dev-container+…@ssh-remote+host` core calls
+the outer resolver's `resolveExecServer` only, then this connector's `connect` with `context.execServer` set. The
+connector takes that exec server afresh on each resolve and never keeps one across a loss: core asks the outer resolver
+again on every resolve attempt, and the owner makes a new connect when its held one has ended (transport-and-server
+contracts V7c). The exec server is a `WatchedExecServer`, so `onTransportLost` follows its `onTransportLost` while the
+window holds it. When the outer resolver cannot serve one, core ends the chain before this connector runs, and shows the
+message of remote-ssh's error.
 
 **`cancel()`** ends C3's and C2's processes and the exec relays. **`onTransportLost`** fires when the relay's exec
 process ends while the container runs, and **`onTransportClosed`** when the container stops.
@@ -68,16 +124,21 @@ environment setting is taken. A host wins over a context, and a context brings i
 joins only when nothing else picks the engine. C3, C11, C15 and the shutdown helper spawn with the coordinate and never
 read the settings; a connected window's engine comes from its payload. C2 raises an engine-change event, with no payload, when the effective engine of a local window changes: the current context or its endpoint, when no setting or variable names the engine; C15 is its only listener.
 
+**The shutdown protocol's Compose member (F-0417; containers-144, #1912).** A window tells the shutdown helper about its connection with `register` (the folder, the configuration file and the engine coordinates), then `container` (the container and what its end owes it). An attached window registers with the container's name as its identity (`{containerName}`) and `owning: false`: it counts as a live user of its container in another connection's check, and its own end stops nothing (containers-163, #2030). A Compose configuration adds a third message, `compose`: `{connectionId, project, service, scope}`, the project name and scope that C7's resolve computed. C7 sends it before `up`, so a window still starting its services already counts. An image configuration sends no `compose`. When a Compose connection ends the helper waits 10 s and runs `docker ps` filtered by `com.docker.compose.project=<project>` with the service label in the format, then `docker kill` for each running container of the connection's scope that no other live connection uses (a connection uses a container when it is connected to it, or when it is a live connection of the same project and engine whose scope names the service; an action of `none` still counts). When another live connection is connected to the closing connection's primary service's container (an attach window, or a window on the same primary service), the close kills nothing of its scope and counts its running services as skipped (athena's ruling reading-1912-primary-in-use, amending brief-compose §6.2). A live connection for the same folder and configuration on the same engine counts as holding the project even before it has said which one, so a reloading window is not stopped under. At the last close of the project it also kills the running containers of the services that earlier closes of the project left running. It calls Compose never and creates nothing; a failure is one log line and is not retried.
+
 ## 3. The `dev-container` payload (F-0501 BR-2a)
 
 lib-authority's `containerCodec('dev-container', …)` carries the payload as an opaque string. remote-containers owns
 its content:
 - **The text:** lowercase hex of the UTF-8 JSON `{"hostPath": <folder>, "localDocker": false, "configFile": {"$mid": 1,
   "fsPath", "external", "path", "scheme"}}`, with `"settings": {"context": <name>}` when a non-default Docker context
-  is current. Field order and spelling are F-0501's. The same member also holds `"host"`, `"certPath"` and
+  is current. Field order and spelling are F-0501's. A payload without `localDocker` reads as `false`: that's the form
+  `devcontainer open --config` writes (F-1201 BR-17). The same member also holds `"host"`, `"certPath"` and
   `"tlsVerify"` (in that order, after `"context"`) when the effective engine of §2 names a host: the window is pinned
   to the engine it was opened on, and a reload, a rebuild and the window's title use it whatever the settings say then
   (F-0205 BR-19; containers-133, #1811).
+  A window whose engine host is a WSL distro (brief-wsl-engine §2.4) records it as `"wslDistro": "<registered name>"`,
+  the last member of `settings`, with the same pinning. A payload without it is local.
 - **The rebuild intent** (C6 → C7) isn't part of the authority, which must stay stable (F-1102 §16). The reloaded
   window has another workspace identity, so its workspace state can't carry it. C6 stores it in the extension's
   `globalState` under a key of ours (R-27), keyed by the payload, with the time, before the reload. C10 takes it once at
@@ -100,6 +161,19 @@ its content:
   takes the source as one argument after `--`, with `GIT_TERMINAL_PROMPT=0`, and a call for a source from a link
   pins `protocol.allow=never` with those four allowed.
 
+### The `attached-container` payload (F-0601 BR-8, F-0205 BR-19)
+
+lib-authority's `containerCodec('attached-container', …)` carries it the same way, as an opaque string.
+- **The text:** lowercase hex of the UTF-8 JSON `{"containerName": "/<name>"}`, with the container's name as Docker
+  keeps it, slash included. The name is the only identity: no container id is kept, so the Open Recent entries and the
+  storage keys interoperate.
+- **The engine:** a `"settings"` member follows `"containerName"` exactly as the dev-container payload's does:
+  `"context"`, then `"host"`, `"certPath"` and `"tlsVerify"`, from the effective engine of §2; it is absent for the
+  default engine.
+- **A WSL window:** a last member `"cwd"` holds the distro's UNC root, `\\wsl.localhost\<distro>`.
+- **The codec functions:** `attachedPayloadOf(target) → string` and `attachedTargetOf(payload) → target | malformed`
+  are pure, with rows for every member and a malformed hex, JSON and shape (`src/attach/payload.ts`).
+
 ## 4. Ports C1–C8 use (all faked in unit rows)
 
 | Port | Operations | Real adapter |
@@ -108,6 +182,7 @@ its content:
 | `CliHost` (C3) | `run(arguments, onJsonLine, cancellation, onStdin?) → {kind: 'ran', result: <the first stdout line, or undefined>, status: <the exit status, or null after an abort>}`, or `{kind: 'spawnFailed', message}` when the process can't start; `onStdin`, when given, gets the writer for the CLI's stdin and the run's `StdinPresentation` once the host knows it, from the preload's `remote-oss-cli-preload` marker: `echoed` when the preload loaded `node-pty` (the run's reader is a pty, which echoes), `plain` when it didn't or no marker came (amended 2026-10-14 on #764, 2026-10-15 on remote-containers#124, 2026-10-16 for ADR-0011) | spawns `process.execPath` with `ELECTRON_RUN_AS_NODE=1` and `REMOTE_OSS_EDITOR_MODULES=<appRoot>/node_modules.asar` on the bundled CLI's entry script, after the preload, which removes both variables and resolves `node-pty` from the editor's folder for this process alone (ADR-0009, ADR-0011); the CLI's stdin is piped |
 | `TrustPort` (C5) | `isTrusted()`, `request(message) → granted or not` | `vscode.workspace` (proposal `workspaceTrust`) |
 | `ConfigFiles` (C4) | `exists`, `read`, `list` over workspace URIs | `vscode.workspace.fs` |
+| `git` remotes (C4, F-0302) | the one-shot `run` of `EngineHost` over the `git` program: `git -C <folder> config --get-regexp '^remote\..*\.url$'`, arguments apart, no shell, a failure or an empty answer read as no remotes (`gitRemotesOf`) | `nodeEngineHost('git')` |
 | notices and dialogs | as remote-ssh's surfaces: an adapter per surface, scripted in the harness | `vscode.window` |
 | `ResolverHandle` (lib-authority, existing) | `lastResolve() → 'none' \| 'succeeded' \| 'failed'`: how this window's last settled resolve ended. C6's Switch Container shows S240 with no discovery on `'failed'` (F-0407 AC-23, `brief-views-and-commands.md` §1) | lib-authority's resolver registration (`resolver/host.ts`) |
 
@@ -258,3 +333,23 @@ export type FeaturesOutcome =
   registries and not the engine), then removes the folder. What it finds is one line in the Dev Containers log; a failure of
   any step is one line too and reaches no dialog. The run does not wait for it, and a run that wrote nothing starts none. A
   window attached to a dev container needs nothing here for the rebuild prompt: C20's watch of the configuration shows it.
+
+## 8. C4 external sources (card containers-161, F-0302; brief-repository-configurations.md)
+
+```ts
+export function mirroredPathsOf(url: string): string[];
+export function mirroredCandidatesOf(ports: MirroredLookupPorts, folder: string): Promise<Candidate[]>;
+export function joinedCandidates(local: readonly Candidate[], external: readonly Candidate[]): Candidate[];
+```
+
+- `mirroredPathsOf` applies BR-1's table to a remote's URL as text and refuses any path that could leave its root;
+  `mirroredCandidatesOf` reads the opened folder's remotes (nothing before the folder is trusted, `git` included), finds F-0301's
+  three file shapes under each root of `dev.containers.repositoryConfigurationPaths` and gives each candidate its `~`-relative path
+  as its description. Its log lines name a remote's URL and the folder without the URL's userinfo (R-26).
+- `joinedCandidates` is the candidate list of an opening command and of Configure Container Features: with no external candidate
+  the folder's own order stands; with one, every candidate is ordered by absolute file path whatever its source, a file found twice
+  counts once, and one candidate is used without a picker. A window that opens a multi-root workspace consults neither external
+  source (BR-12): `ConfigurationRequest.external` is false for it, and Configure Container Features looks outside the folder only
+  in a local window of one folder.
+- The chosen candidate's own path is the payload's `configFile`; the reopen notification (F-0402) uses S368 whenever the folder's
+  configuration is external, a stored one or a mirrored one, even when the folder has its own.

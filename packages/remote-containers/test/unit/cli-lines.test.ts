@@ -8,6 +8,7 @@ import {
   parseLogLine,
   readConfigurationResult,
   readRunUserCommandsResult,
+  readSetUpResult,
   readUpResult,
 } from '../../src/cli/cli-lines.ts';
 
@@ -54,6 +55,37 @@ describe('the output of the dev container CLI (card containers-04)', () => {
         remoteWorkspaceFolder: '/w',
         composeProjectName: 'proj',
       },
+    );
+  });
+
+  it('F-0408 AC-14: an up success that includes the configuration gives it and its merge with the container, and a value that is no object is left out', () => {
+    deepStrictEqual(
+      [
+        readUpResult(
+          '{"outcome":"success","containerId":"c","remoteUser":"r","remoteWorkspaceFolder":"/w","configuration":{"name":"N"},"mergedConfiguration":{"remoteEnv":{"FIRST":"1"}}}',
+          0,
+        ),
+        readUpResult(
+          '{"outcome":"success","containerId":"c","remoteUser":"r","remoteWorkspaceFolder":"/w","configuration":"x","mergedConfiguration":[]}',
+          0,
+        ),
+      ],
+      [
+        {
+          kind: 'up',
+          containerId: 'c',
+          remoteUser: 'r',
+          remoteWorkspaceFolder: '/w',
+          configuration: {name: 'N'},
+          mergedConfiguration: {remoteEnv: {FIRST: '1'}},
+        },
+        {
+          kind: 'up',
+          containerId: 'c',
+          remoteUser: 'r',
+          remoteWorkspaceFolder: '/w',
+        },
+      ],
     );
   });
 
@@ -180,19 +212,55 @@ describe('the output of the dev container CLI (card containers-04)', () => {
     );
   });
 
-  it('C3: run-user-commands succeeds with done, and any other result is malformed', () => {
+  it('C3: run-user-commands succeeds with done, skipNonBlocking and stopForPersonalization, and any other result is malformed', () => {
     deepStrictEqual(
       [
         readRunUserCommandsResult(
           resultOf('run-user-commands-success.jsonl'),
           0,
         ),
-        readRunUserCommandsResult(
-          '{"outcome":"success","result":"skipNonBlocking"}',
+        ...['skipNonBlocking', 'stopForPersonalization', 'prebuild', 'x'].map(
+          result =>
+            readRunUserCommandsResult(
+              `{"outcome":"success","result":"${result}"}`,
+              0,
+            ),
+        ),
+        readRunUserCommandsResult('{"outcome":"success","result":1}', 0),
+      ],
+      [
+        {kind: 'done'},
+        {kind: 'done'},
+        {kind: 'done'},
+        {kind: 'malformedResult', field: 'result'},
+        {kind: 'malformedResult', field: 'result'},
+        {kind: 'malformedResult', field: 'result'},
+      ],
+    );
+  });
+
+  it('F-0601 BR-13: set-up gives the merged configuration, an error line gives its failure, and anything else is malformed or no result', () => {
+    deepStrictEqual(
+      [
+        readSetUpResult(
+          '{"outcome":"success","mergedConfiguration":{"remoteUser":"vscode"}}',
           0,
         ),
+        readSetUpResult(
+          '{"outcome":"error","message":"no user","description":"d"}',
+          1,
+        ).kind,
+        readSetUpResult('{"outcome":"success"}', 0),
+        readSetUpResult('not json', 0),
+        readSetUpResult(undefined, 1),
       ],
-      [{kind: 'done'}, {kind: 'malformedResult', field: 'result'}],
+      [
+        {kind: 'setUp', mergedConfiguration: {remoteUser: 'vscode'}},
+        'setupFailed',
+        {kind: 'malformedResult', field: 'mergedConfiguration'},
+        {kind: 'malformedResult', field: 'result'},
+        {kind: 'noResult', status: 1},
+      ],
     );
   });
 
@@ -443,10 +511,29 @@ describe('the daemon refusal (card containers-11)', () => {
   const PORT_TAKEN =
     'docker: Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint laughing_pare (da74): Bind for 0.0.0.0:47321 failed: port is already allocated';
 
-  it('F-0410 7.E1, AC-11: a refused bind mount, with or without the docker prefix, is invalidMount', () => {
+  it('F-0410 7.E1, AC-11: a bind mount Docker refuses, for any reason and with or without the docker prefix, is invalidMount', () => {
     deepStrictEqual(
-      [MOUNT_MISSING, MOUNT_EMPTY, MOUNT_RESTART].map(daemonRefusalOf),
-      ['invalidMount', 'invalidMount', 'invalidMount'],
+      [
+        MOUNT_MISSING,
+        MOUNT_EMPTY,
+        MOUNT_RESTART,
+        'Error response from daemon: invalid mount config for type "bind": invalid mount path: \'rel\' mount path must be absolute',
+      ].map(daemonRefusalOf),
+      ['invalidMount', 'invalidMount', 'invalidMount', 'invalidMount'],
+    );
+  });
+
+  it('F-0306 7.E5, AC-30, F-0410 7.E3: a volume mount Docker refuses, or a mount of an unknown type, is no refusal', () => {
+    const volumeUndefined =
+      'Error response from daemon: invalid mount config for type "volume": invalid mount path: \'undefined\' mount path must be absolute';
+    deepStrictEqual(
+      [
+        volumeUndefined,
+        `docker: ${volumeUndefined}`,
+        'Error response from daemon: invalid mount config for type "tmpfs": invalid mount path: \'rel\' mount path must be absolute',
+        'Error response from daemon: invalid mount config for type "cluster": mount type unknown',
+      ].map(daemonRefusalOf),
+      [undefined, undefined, undefined, undefined],
     );
   });
 
@@ -454,6 +541,15 @@ describe('the daemon refusal (card containers-11)', () => {
     deepStrictEqual(
       [PORT_TAKEN, PORT_TAKEN.slice('docker: '.length)].map(daemonRefusalOf),
       ['portAllocated', 'portAllocated'],
+    );
+  });
+
+  it('F-0410 7.E2, AC-12: the wording of Docker 28 for a port that is taken, failed to bind host port … address already in use, is portAllocated too', () => {
+    const taken =
+      'Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint angry_cohen (1e85834bf3fa): failed to bind host port for 0.0.0.0:32770:172.17.0.5:8000/tcp: address already in use';
+    deepStrictEqual(
+      [taken, `docker: ${taken}`, `${taken} (retrying)`].map(daemonRefusalOf),
+      ['portAllocated', 'portAllocated', undefined],
     );
   });
 

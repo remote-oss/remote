@@ -10,11 +10,85 @@ export interface EngineCoordinates {
   environment: Readonly<Record<string, string>>;
 }
 
-/** What identifies a dev container before its id is known: the folder and configuration it is for. */
-export interface ContainerIdentity {
-  hostPath: string;
-  /** The configuration file's path on the host. */
-  configFile: string;
+/**
+ * What identifies a dev container before its id is known: the folder and configuration it is for; for a clone in a
+ * volume, the volume and the folder in it; or, for an explored volume, the volume and the shared definition's
+ * configuration.
+ */
+export type ContainerIdentity =
+  | {
+      hostPath: string;
+      /** The configuration file's path on the host. */
+      configFile: string;
+    }
+  | {volumeName: string; folder: string}
+  | {volumeName: string; configFile: string}
+  /** A container the window attached to, by its name. */
+  | {containerName: string};
+
+/** What names an identity, so that two identities of the same container name it alike. */
+function identityKey(identity: ContainerIdentity): string {
+  if ('hostPath' in identity) {
+    return JSON.stringify(['folder', identity.hostPath, identity.configFile]);
+  }
+  if ('containerName' in identity) {
+    return JSON.stringify(['attached', identity.containerName]);
+  }
+  return 'folder' in identity
+    ? JSON.stringify(['clone', identity.volumeName, identity.folder])
+    : JSON.stringify(['explored', identity.volumeName, identity.configFile]);
+}
+
+/** Whether two identities name the same dev container. */
+export function sameIdentity(
+  left: ContainerIdentity,
+  right: ContainerIdentity,
+): boolean {
+  return identityKey(left) === identityKey(right);
+}
+
+/** What the log calls the container of an identity. */
+export function identityLabel(identity: ContainerIdentity): string {
+  if ('hostPath' in identity) {
+    return identity.hostPath;
+  }
+  if ('containerName' in identity) {
+    return `the container ${identity.containerName}`;
+  }
+  return `the ${'folder' in identity ? 'volume' : 'explored volume'} ${identity.volumeName}`;
+}
+
+/** The `docker ps` filters that find the dev container of an identity by its labels. */
+export function identityFilters(identity: ContainerIdentity): string[] {
+  if ('containerName' in identity) {
+    return ['--filter', `name=^/${identity.containerName}$`];
+  }
+  let labels: string[];
+  if ('hostPath' in identity) {
+    labels = [
+      `devcontainer.local_folder=${identity.hostPath}`,
+      `devcontainer.config_file=${identity.configFile}`,
+    ];
+  } else if ('folder' in identity) {
+    labels = [
+      `vsch.local.repository.volume=${identity.volumeName}`,
+      `vsch.local.repository.folder=${identity.folder}`,
+    ];
+  } else {
+    labels = [
+      `vsch.local.volume=${identity.volumeName}`,
+      `devcontainer.config_file=${identity.configFile}`,
+    ];
+  }
+  return labels.flatMap(label => ['--filter', `label=${label}`]);
+}
+
+/** The Compose project a connection started, and which of its services the connection's end stops. */
+export interface ComposeMembership {
+  project: string;
+  /** The primary service. */
+  service: string;
+  scope: readonly string[];
 }
 
 /** What a window's connection tells the helper. */
@@ -24,6 +98,13 @@ export type ShutdownRequest =
       connectionId: string;
       identity: ContainerIdentity;
       engine: EngineCoordinates;
+      /** False for a connection whose end stops nothing, such as an attached window's; absent means it owns. */
+      owning?: false;
+    }
+  | {
+      type: 'compose';
+      connectionId: string;
+      compose: ComposeMembership;
     }
   | {
       type: 'container';
@@ -71,28 +152,49 @@ function environmentOf(
     : undefined;
 }
 
+/** The identity a member holds: a folder's, a volume's, or none. */
+function identityOf(value: unknown): ContainerIdentity | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const hostPath = textOf(value, 'hostPath');
+  const configFile = textOf(value, 'configFile');
+  if (hostPath !== undefined && configFile !== undefined) {
+    return {hostPath, configFile};
+  }
+  const containerName = textOf(value, 'containerName');
+  if (containerName !== undefined) {
+    return {containerName};
+  }
+  const volumeName = textOf(value, 'volumeName');
+  const folder = textOf(value, 'folder');
+  if (volumeName === undefined) {
+    return undefined;
+  }
+  if (folder !== undefined) {
+    return {volumeName, folder};
+  }
+  return configFile === undefined ? undefined : {volumeName, configFile};
+}
+
 /** The register request of `record`, or its problem. */
 function readRegister(
   record: Record<string, unknown>,
   connectionId: string,
 ): ReadRequest {
-  const {identity, engine} = record;
-  const hostPath = isRecord(identity)
-    ? textOf(identity, 'hostPath')
-    : undefined;
-  const configFile = isRecord(identity)
-    ? textOf(identity, 'configFile')
-    : undefined;
+  const {engine} = record;
+  const identity = identityOf(record.identity);
   const dockerPath = isRecord(engine)
     ? textOf(engine, 'dockerPath')
     : undefined;
   const environment = isRecord(engine)
     ? environmentOf(engine.environment)
     : undefined;
-  if (hostPath === undefined || configFile === undefined) {
+  if (identity === undefined) {
     return {
       kind: 'malformed',
-      problem: 'register needs the identity with a hostPath and a configFile',
+      problem:
+        'register needs the identity with a hostPath and a configFile, a volumeName and a folder, or a volumeName and a configFile',
     };
   }
   if (dockerPath === undefined || environment === undefined) {
@@ -102,13 +204,54 @@ function readRegister(
         'register needs the engine with a dockerPath and an environment of text',
     };
   }
+  if (record.owning !== undefined && typeof record.owning !== 'boolean') {
+    return {
+      kind: 'malformed',
+      problem: 'register needs owning to be a boolean',
+    };
+  }
   return {
     kind: 'request',
     request: {
       type: 'register',
       connectionId,
-      identity: {hostPath, configFile},
+      identity,
       engine: {dockerPath, environment},
+      ...(record.owning === false ? {owning: false as const} : {}),
+    },
+  };
+}
+
+/** The names a member lists, or undefined when it is not a list of non-empty text. */
+function namesOf(value: unknown): string[] | undefined {
+  return Array.isArray(value) &&
+    value.every(name => typeof name === 'string' && name !== '')
+    ? (value as string[])
+    : undefined;
+}
+
+/** The compose request of `record`, or its problem. */
+function readCompose(
+  record: Record<string, unknown>,
+  connectionId: string,
+): ReadRequest {
+  const member = isRecord(record.compose) ? record.compose : {};
+  const project = textOf(member, 'project');
+  const service = textOf(member, 'service');
+  const scope = namesOf(member.scope);
+  if (project === undefined || service === undefined || scope === undefined) {
+    return {
+      kind: 'malformed',
+      problem:
+        'compose needs a project, a service and a scope of service names',
+    };
+  }
+  return {
+    kind: 'request',
+    request: {
+      type: 'compose',
+      connectionId,
+      compose: {project, service, scope},
     },
   };
 }
@@ -144,6 +287,8 @@ export function readShutdownRequest(body: unknown): ReadRequest {
   switch (body.type) {
     case 'register':
       return readRegister(body, connectionId);
+    case 'compose':
+      return readCompose(body, connectionId);
     case 'container':
       return readContainer(body, connectionId);
     case 'leave':

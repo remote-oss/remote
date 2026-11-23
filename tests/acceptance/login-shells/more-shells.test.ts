@@ -148,24 +148,28 @@ describe('login shells: the shell the host reports, the other shells and the oth
   it('F-2704 AC-33 (reading-1608-title): ksh, csh and tcsh hosts connect with the exec server on and off, the window shows its folder and the host, and the log names the shell', async () => {
     const seen: Array<[string, string]> = [];
     const faces: string[] = [];
-    for (const execServer of [true, false]) {
-      await setting('remote.SSH.useExecServer', execServer);
-      for (const shell of ['ksh', 'csh', 'tcsh']) {
-        const user = `harness-${shell}`;
-        const window = `ms-ac33-${shell}`;
-        await freshServer(user);
-        const mark = connectionLog().length;
-        const face = await withWindow(user, window, () =>
-          windowFace(window, `SSH: ${user}`),
-        );
-        faces.push(`${face.title} ${face.indicator}`);
-        seen.push([
-          `${shell} ${String(execServer)}`,
-          logSince(mark).find(line => line.includes('login shell is')) ?? '',
-        ]);
+    try {
+      for (const execServer of [true, false]) {
+        await setting('remote.SSH.useExecServer', execServer);
+        for (const shell of ['ksh', 'csh', 'tcsh']) {
+          const user = `harness-${shell}`;
+          const window = `ms-ac33-${shell}`;
+          await freshServer(user);
+          const mark = connectionLog().length;
+          const face = await withWindow(user, window, () =>
+            windowFace(window, `SSH: ${user}`),
+          );
+          faces.push(`${face.title} ${face.indicator}`);
+          seen.push([
+            `${shell} ${String(execServer)}`,
+            logSince(mark).find(line => line.includes('login shell is')) ?? '',
+          ]);
+        }
       }
+    } finally {
+      // The setting goes back whatever the connects did: a row that timed out must not leave it for the rows after it.
+      await setting('remote.SSH.useExecServer', undefined);
     }
-    await setting('remote.SSH.useExecServer', undefined);
     // The host's csh is tcsh (Alpine links one to the other), and tcsh sets $SHELL to itself: its line names tcsh.
     deepStrictEqual(
       {seen, faces},

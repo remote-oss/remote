@@ -33,6 +33,8 @@ export interface PinnedEngine {
   host?: string;
   certPath?: string;
   tlsVerify?: string;
+  /** The registered name of the WSL distro whose engine the window uses; none for the local engine. */
+  wslDistro?: string;
 }
 
 const PINNED_KEYS: ReadonlyArray<[keyof PinnedEngine, string]> = [

@@ -22,7 +22,7 @@ import {
   standaloneCompose,
   standaloneLines,
   volumeNamesOf,
-} from './compose-support.ts';
+} from '../windows/compose-support.ts';
 
 const DOCKER_PATH = 'dev.containers.dockerPath';
 const COMPOSE_PATH = 'dev.containers.dockerComposePath';

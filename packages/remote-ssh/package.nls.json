@@ -18,6 +18,7 @@
   "commands.Settings.title": "Settings",
   "commands.Showlog.title": "Show Log",
   "setting.Allowlocalserverdownload.description": "If downloading the VS Code server fails on the host, this allows the extension to fall back to downloading on the client and transferring it to the host with scp.",
+  "setting.allowLocalServerDownload.deprecationMessage": "Deprecated, please use `#remote.SSH.localServerDownload#`",
   "setting.Bindhost.description": "Configures the host the VS Code server will bind to on the remote server. It defaults to IPv4 localhost and should only need modification in advanced cases.",
   "setting.Configfile.description": "The absolute file path to a custom SSH config file.",
   "setting.Connecttimeout.description": "Specifies the timeout in seconds used for the SSH command that connects to the remote.",
@@ -51,5 +52,6 @@
   "setting.Useexecserver.description": "Uses the a new bootstrapping mode when connecting to a server. Can be toggled off in the event of connection issues.",
   "setting.Useflock.description": "Whether to use `flock` for creating lockfiles on Linux remotes instead of `ln`. By default, we use `flock` on Linux remotes and `ln` on macOS.",
   "setting.Uselocalserver.description": "Enables a mode for connecting using a single connection shared between windows and across window reloads. This makes it faster to open new windows and reduces the number of times a password needs to be entered.",
-  "setting.Windowsremotes.description": "**Deprecated**: Enables experimental support for connecting to Windows remotes. Add the names of windows remotes to this list."
+  "setting.Windowsremotes.description": "**Deprecated**: Enables experimental support for connecting to Windows remotes. Add the names of windows remotes to this list.",
+  "setting.windowsRemotes.deprecationMessage": "Deprecated: Please use `#remote.SSH.remotePlatorm#` instead"
 }

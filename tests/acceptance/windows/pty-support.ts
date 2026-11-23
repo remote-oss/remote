@@ -12,6 +12,7 @@ import {
   openWindow,
   userSettings,
   variable,
+  waitFor,
 } from './harness.ts';
 import {freshHost} from './maintenance.ts';
 import {PLATFORMS} from './tunnel-support.ts';
@@ -94,6 +95,13 @@ export async function ptyConnect(
 ): Promise<PtyConnect> {
   await userSettings({...PLATFORMS, ...settings});
   await freshHost();
+  // The connection server of an earlier connect keeps its ssh for a grace after its window closed; a client of that
+  // connect is not one of this connect's.
+  await waitFor(
+    'the ssh clients of earlier connects to end',
+    () => Promise.resolve(runSshArguments().length === 0),
+    90_000,
+  );
   const mark = connectionLog().length;
   const commands = new Set<string>();
   const sessions = new Set<string>();
@@ -107,7 +115,8 @@ export async function ptyConnect(
   );
   const end = Date.now() + watchMilliseconds;
   while (Date.now() < end) {
-    for (const argv of runSshArguments()) {
+    // `ssh -G` only prints the host entry's options, for as long as it takes; it is no connection and has no session.
+    for (const argv of runSshArguments().filter(each => !each.includes('-G'))) {
       commands.add(argv.join(' '));
     }
     for (const session of await hostSessions()) {

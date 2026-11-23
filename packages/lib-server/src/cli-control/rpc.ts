@@ -4,7 +4,7 @@
  * malformed messages.
  */
 
-import {Decoder} from '@msgpack/msgpack';
+import {Decoder, encode} from '@msgpack/msgpack';
 
 /** What a reply carries: a result, or the error with its message. */
 export type Reply =
@@ -117,4 +117,52 @@ export function messageReader(
       wake.resume?.();
     },
   };
+}
+
+/** The notification that tells which stream ids a duplex request got, before the request's own reply. */
+export interface StreamsStarted {
+  requestId: number;
+  streamIds: number[];
+}
+
+/** The ids a `streams_started` notification carries, or nothing when its parameters do not have that shape. */
+export function streamsStartedOf(
+  params: Readonly<Record<string, unknown>>,
+): StreamsStarted | undefined {
+  const {for_request_id: requestId, stream_ids: streamIds} = params;
+  return typeof requestId === 'number' &&
+    Array.isArray(streamIds) &&
+    streamIds.every(streamId => typeof streamId === 'number')
+    ? {requestId, streamIds}
+    : undefined;
+}
+
+/** The bytes a `stream_data` notification carries, or nothing when its parameters do not have that shape. */
+export function streamDataOf(
+  params: Readonly<Record<string, unknown>>,
+): {stream: number; segment: Uint8Array} | undefined {
+  return typeof params.stream === 'number' &&
+    params.segment instanceof Uint8Array
+    ? {stream: params.stream, segment: params.segment}
+    : undefined;
+}
+
+/** The stream a `stream_ended` notification names, or nothing when its parameters do not have that shape. */
+export function streamEndedOf(
+  params: Readonly<Record<string, unknown>>,
+): number | undefined {
+  return typeof params.stream === 'number' ? params.stream : undefined;
+}
+
+/** The `stream_data` notification that sends `segment` into stream `stream`. */
+export function streamDataMessage(
+  stream: number,
+  segment: Uint8Array,
+): Uint8Array {
+  return encode({method: 'stream_data', params: {segment, stream}});
+}
+
+/** The `stream_ended` notification that ends our side of stream `stream`. */
+export function streamEndedMessage(stream: number): Uint8Array {
+  return encode({method: 'stream_ended', params: {stream}});
 }

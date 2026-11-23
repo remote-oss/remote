@@ -86,10 +86,10 @@
   "issue": 69,
   "repo": "remote-ssh",
   "kind": "feature",
-  "label": "spec:draft",
+  "label": "spec:reviewed",
   "title": "Mitigation picker: More Actions..., settings fixes and resources",
   "epic": "E26",
-  "acCount": 24,
+  "acCount": 23,
   "surfaces": {
    "commands": [
     "opensshremotes.openConfigFile",
@@ -173,10 +173,10 @@
   "issue": 70,
   "repo": "remote-ssh",
   "kind": "feature",
-  "label": "spec:draft",
+  "label": "spec:reviewed",
   "title": "Network-level connection errors",
   "epic": "E26",
-  "acCount": 27,
+  "acCount": 28,
   "surfaces": {
    "commands": [],
    "settings": [
@@ -258,7 +258,7 @@
   "label": "spec:draft",
   "title": "TCP forwarding disabled on the server",
   "epic": "E26",
-  "acCount": 22,
+  "acCount": 17,
   "surfaces": {
    "commands": [
     "opensshremotes.showLog"
@@ -496,10 +496,10 @@
   "issue": 74,
   "repo": "remote-ssh",
   "kind": "feature",
-  "label": "spec:needs-revision",
+  "label": "spec:reviewed",
   "title": "Windows SSH hosts",
   "epic": "E27",
-  "acCount": 18,
+  "acCount": 25,
   "surfaces": {
    "commands": [
     "opensshremotes.showDetails"
@@ -684,7 +684,7 @@
   "issue": 76,
   "repo": "remote-ssh",
   "kind": "feature",
-  "label": "spec:draft",
+  "label": "spec:reviewed",
   "title": "Minimal and non-glibc hosts: Alpine, BusyBox, no bash",
   "epic": "E27",
   "acCount": 34,

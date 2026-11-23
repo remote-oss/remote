@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {SessionHint} from '../../src/diagnostics/hint-store.ts';
+import type {ResolveOutcome} from '../../src/pipeline/connector.ts';
 import {
   outputLogLinks,
   rowsOf,
@@ -51,6 +52,7 @@ function scene(enabled = true) {
     shown: boolean[];
     disposed: boolean;
   }> = [];
+  const revealed: boolean[] = [];
   const ports: TroubleshootingPorts = {
     enabled: () => enabled,
     createTerminal: make => {
@@ -76,14 +78,22 @@ function scene(enabled = true) {
       };
     },
     texts: () => TEXTS,
+    revealLog: preserveFocus => {
+      revealed.push(preserveFocus);
+    },
     logger: createLogger(sink, {minimumLevel: () => 'debug'}),
   };
   const checking = troubleshootingOf(ports);
   return {
-    check: (hints: readonly SessionHint[], modal: boolean): void => {
-      checking.check(hints, modal);
+    check: (
+      hints: readonly SessionHint[],
+      modal: boolean,
+      outcome: ResolveOutcome = 'failed',
+    ): void => {
+      checking.check(hints, modal, outcome);
     },
     terminals,
+    revealed,
     logged: () => sink.lines.map(line => line.message),
   };
 }
@@ -115,6 +125,52 @@ describe('the session troubleshooting terminal (card connect-136, F-2605)', () =
     const {check, logged, terminals} = scene();
     check([ENVIRONMENT], true);
     deepStrictEqual([logged(), terminals.length], [[NO_HINTS_LINE], 0]);
+  });
+
+  it('#2537, F-2003 AC-8: a failure with no error hint reveals the log channel once, with the keyboard left where it is behind a dialog, and takes it when no dialog is shown', () => {
+    const behind = scene();
+    behind.check([ENVIRONMENT], true, 'failed');
+    const alone = scene();
+    alone.check([], false, 'failed');
+    deepStrictEqual(
+      [behind.revealed, alone.revealed, behind.terminals.length],
+      [[true], [false], 0],
+    );
+  });
+
+  it('#2537, F-2003 BR-3: a connection that worked or was cancelled, with no error hint, reveals nothing', () => {
+    const worked = scene();
+    worked.check([], true, 'succeeded');
+    const cancelled = scene();
+    cancelled.check([ENVIRONMENT], true, 'cancelled');
+    deepStrictEqual([worked.revealed, cancelled.revealed], [[], []]);
+  });
+
+  it('#2537: a failure with an error hint shows the terminal and does not reveal the log channel', () => {
+    const {check, revealed, terminals} = scene();
+    check([OFFLINE], true, 'failed');
+    deepStrictEqual([revealed, terminals.length], [[], 1]);
+  });
+
+  it('#2537, reading-2537-reveal-without-analysis: with the setting off a failure says so in the log and reveals the log channel, with or without an error hint, behind a dialog; a connection or a cancel reveals nothing', () => {
+    const failed = scene(false);
+    failed.check([], true, 'failed');
+    const failedWithHint = scene(false);
+    failedWithHint.check([OFFLINE], true, 'failed');
+    const worked = scene(false);
+    worked.check([], true, 'succeeded');
+    const cancelled = scene(false);
+    cancelled.check([OFFLINE], true, 'cancelled');
+    deepStrictEqual(
+      [
+        failed.revealed,
+        failed.logged(),
+        failedWithHint.revealed,
+        worked.revealed,
+        cancelled.revealed,
+      ],
+      [[true], [DISABLED_LINE], [true], [], []],
+    );
   });
 
   it('F-2605.AC-11, AC-26: with the setting off the log says so and no terminal opens', () => {
@@ -169,11 +225,96 @@ describe('the session troubleshooting terminal (card connect-136, F-2605)', () =
   });
 });
 
+describe('the rows of the table (card log-04)', () => {
+  it('a control character in a message, the details, a mitigation and a resource is written as its code point', () => {
+    deepStrictEqual(
+      rowsOf([
+        {
+          kind: 'error',
+          status: 'S',
+          message: "set to value 'a\u009bb'",
+          details: 'd\u0007',
+          mitigations: ['m\u009b'],
+          resources: ['r\u0007'],
+        },
+      ]),
+      [
+        {
+          status: 'S',
+          message: "set to value 'a\\u{9b}b' (d\\u{7})",
+          mitigations: ['m\\u{9b}'],
+          resources: ['r\\u{7}'],
+        },
+      ],
+    );
+  });
+});
+
 describe('the rows of the table (card connect-136)', () => {
   it('an error hint without lists has none in its row', () => {
     deepStrictEqual(
       rowsOf([{kind: 'error', status: 'Bare', message: 'prose'}]),
       [{status: 'Bare', message: 'prose', mitigations: [], resources: []}],
+    );
+  });
+});
+
+describe('the links of the table (F-2602 3.4)', () => {
+  it('the ranges of a stored hint go into its row, the mitigations’ parallel to the mitigations, and a hint without them has none', () => {
+    deepStrictEqual(
+      rowsOf([
+        {
+          kind: 'error',
+          status: 'S',
+          message: 'a key',
+          mitigations: ['x', 'Edit key'],
+          links: {
+            message: [{start: 2, length: 3}],
+            mitigations: [[], [{start: 5, length: 3}]],
+          },
+        },
+        {kind: 'error', status: 'Plain', message: 'prose', mitigations: ['y']},
+      ]).map(entry => entry.links),
+      [
+        {
+          message: [{start: 2, length: 3}],
+          mitigations: [[], [{start: 5, length: 3}]],
+        },
+        undefined,
+      ],
+    );
+  });
+
+  it('a hint whose links name only the mitigations, or fewer of them than it has, gives its other texts no range', () => {
+    deepStrictEqual(
+      rowsOf([
+        {
+          kind: 'error',
+          status: 'S',
+          message: 'a key',
+          mitigations: ['x', 'Edit key'],
+          links: {mitigations: [[{start: 0, length: 1}]]},
+        },
+      ]).map(entry => entry.links),
+      [{message: [], mitigations: [[{start: 0, length: 1}], []]}],
+    );
+  });
+
+  it('a range that a control character’s writing out would move is dropped, and the others stay', () => {
+    deepStrictEqual(
+      rowsOf([
+        {
+          kind: 'error',
+          status: 'S',
+          message: 'a\u0007 key',
+          mitigations: ['Edit key'],
+          links: {
+            message: [{start: 3, length: 3}],
+            mitigations: [[{start: 5, length: 3}]],
+          },
+        },
+      ]).map(entry => entry.links),
+      [{message: [], mitigations: [[{start: 5, length: 3}]]}],
     );
   });
 });
@@ -211,6 +352,22 @@ describe('the pseudoterminal of the table (card connect-136)', () => {
         true,
         'See verbose information in the \u001b[1;4mOutput Log...\u001b[0m',
       ],
+    );
+  });
+
+  it("a control character in a row is drawn as its code point after the terminal's own clear code", () => {
+    const {made, written} = makePty(
+      rowsOf([{kind: 'error', status: 'S', message: 'a\u009bb', details: 'd'}]),
+    );
+    made.open(60);
+    const text = written[0] ?? '';
+    deepStrictEqual(
+      [
+        text.startsWith('\u001b[2J'),
+        text.includes('a\\u{9b}b'),
+        text.includes('\u009b'),
+      ],
+      [true, true, false],
     );
   });
 

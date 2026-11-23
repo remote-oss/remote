@@ -6,7 +6,7 @@
  *
  * Every Docker object of a run carries the run's label, so the clean-up removes only what one run made: its
  * containers, forced, its network and its image tag. What is already gone is not an error, and the shared machine is
- * never pruned.
+ * never pruned. On a Windows client it also unregisters the WSL distros the run imported, which are named after it.
  */
 
 import {randomBytes, randomInt} from 'node:crypto';
@@ -14,6 +14,7 @@ import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {stopRunHelpers} from './acceptance-helper-stop.ts';
+import {sweepRunDistros} from './acceptance-wsl.ts';
 import {base32Of} from './one-time-code.ts';
 import {checked, type CommandRunner, runCommand} from './command-runner.ts';
 import {HOST_BASE_VARIANTS, type HostBase} from './host-variants.ts';
@@ -60,6 +61,25 @@ export function acceptanceRunId(
     return `${runId}-${attempt}-${jobId}`;
   }
   return `local-${String(processId)}`;
+}
+
+/**
+ * The folder the run's own folder is made in: `HARNESS_RUN_BASE` when it is set, else the machine's temporary folder,
+ * except on macOS, where the per-user one (`/var/folders/…/T`) is so long that the editor's main socket in the run's
+ * user data folder passes the 104 bytes of a Unix socket path (`listen EINVAL`), so `/tmp` there. A Docker engine in a
+ * VM that shares other folders than Docker Desktop's (colima shares the home folder and `/tmp/colima`, not `/tmp`)
+ * needs the variable, or every bind mount from the run's folder is empty in the container. The clean-up looks in the
+ * same folder.
+ */
+export function runFolderBase(
+  platform: NodeJS.Platform = process.platform,
+  environment: NodeJS.ProcessEnv = process.env,
+): string {
+  const chosen = environment.HARNESS_RUN_BASE;
+  if (chosen !== undefined && chosen !== '') {
+    return chosen;
+  }
+  return platform === 'darwin' ? '/tmp' : tmpdir();
 }
 
 /** The folder under tests/acceptance that each base of the SSH host builds from. */
@@ -366,6 +386,32 @@ export function mappedPort(dockerPortOutput: string): number {
 }
 
 /**
+ * The range of ports the host's own outgoing connections take their local port from: above every port a row names on the
+ * host (the ports a ports case holds are 45000 to 45004, and its largest range ends at 46010), so that no client socket of the
+ * host can hold a port a server or a holder is about to bind (#2563, #2683). The kernel's default, 32768 to 60999, has
+ * all of them inside it.
+ */
+export const HOST_EPHEMERAL_RANGE = '47000 60999';
+
+/** The file where Linux keeps the range of the ports it gives to outgoing connections. */
+const EPHEMERAL_RANGE_FILE = '/proc/sys/net/ipv4/ip_local_port_range';
+
+/**
+ * Whether `dockerArguments` put the container on the host's own network. The host's range is a setting of the
+ * container's network namespace: on the host's network it would be the runner's own, so no host container uses it.
+ */
+export function usesHostNetworking(
+  dockerArguments: readonly string[],
+): boolean {
+  return dockerArguments.some(
+    (argument, index) =>
+      /^--(?:network|net)=host$/u.test(argument) ||
+      (/^--(?:network|net)$/u.test(argument) &&
+        dockerArguments[index + 1] === 'host'),
+  );
+}
+
+/**
  * Builds the run's image of `base`, makes the run's key and password in `runFolder`, and runs the labelled container:
  * the one start of the host both acceptance harnesses share. The password reaches the container in an env file, never
  * in a command line. `extraArguments` go to `docker run` before the image, such as the `--env` of a host variant. A
@@ -379,6 +425,11 @@ export function startHostContainer(
   extraArguments: readonly string[] = [],
   base: HostBase = 'alpine',
 ): HostContainer {
+  if (usesHostNetworking(extraArguments)) {
+    throw new Error(
+      `the host container's arguments ask for the host's network, where its ephemeral port range would be the runner's own: ${extraArguments.join(' ')}`,
+    );
+  }
   checked(command, 'docker', [
     'build',
     '--load',
@@ -432,11 +483,27 @@ export function startHostContainer(
     environmentFile,
     '--cap-add',
     'NET_ADMIN',
+    '--sysctl',
+    `net.ipv4.ip_local_port_range=${HOST_EPHEMERAL_RANGE}`,
     '--publish',
     '127.0.0.1::22',
     ...extraArguments,
     hostImageOf(runId, base),
   ]).trim();
+  const rangeInside = checked(command, 'docker', [
+    'exec',
+    container,
+    'cat',
+    EPHEMERAL_RANGE_FILE,
+  ])
+    .trim()
+    .split(/\s+/u)
+    .join(' ');
+  if (rangeInside !== HOST_EPHEMERAL_RANGE) {
+    throw new Error(
+      `the host container's ephemeral port range is "${rangeInside}", not "${HOST_EPHEMERAL_RANGE}": the setting did not take, and a client socket of the host can hold a port a ports case needs`,
+    );
+  }
   const port = mappedPort(
     checked(command, 'docker', ['port', container, '22']),
   );
@@ -659,12 +726,24 @@ if (isMainModule(import.meta.url)) {
   const runId = acceptanceRunId(process.env, process.pid);
   try {
     // A helper that left a killed run's editor still runs: it is stopped before the editors and containers go.
-    stopRunHelpers(tmpdir(), runId);
+    stopRunHelpers(runFolderBase(), runId);
     cleanRun(runCommand, runId);
     // The Podman a `containers-podman` run drove, when the machine has a working one; its `vscode` volume stays.
     if (runCommand('podman', ['ps', '--quiet']).status === 0) {
       cleanPodmanRun(runCommand, runId, Number.POSITIVE_INFINITY);
     }
+  } catch (error) {
+    console.error(`acceptance: ${messageOf(error)}`);
+    process.exitCode = 1;
+  }
+  // The WSL distros a killed `wsl` run imported hold none of its Docker objects, so they go even when those did not.
+  try {
+    sweepRunDistros(
+      runCommand,
+      process.platform,
+      runId,
+      console.log.bind(console),
+    );
   } catch (error) {
     console.error(`acceptance: ${messageOf(error)}`);
     process.exitCode = 1;

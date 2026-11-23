@@ -546,6 +546,106 @@ describe('the rebuild prompt when the configuration changes (card containers-141
     );
   });
 
+  it('F-0303 AC-4, AC-6: the compose files are watched by their values, a change to either is named at the next activation, and all three names come in code unit order', async () => {
+    const configuration =
+      '{"dockerComposeFile":["docker-compose.yml","docker-compose.override.yml"],"service":"app"}';
+    const scene = sceneOf(
+      {
+        [CONFIG]: configuration,
+        [`${FOLDER}/docker-compose.yml`]: 'a: 1\n',
+        [`${FOLDER}/docker-compose.override.yml`]: 'b: 1\n',
+      },
+      {
+        'devcontainer.json': configHash(configuration),
+        'docker-compose.yml': fileHash('a: 1\n'),
+        'docker-compose.override.yml': fileHash('b: 1\n'),
+      },
+    );
+    await scene.watch.activate(FOUND);
+    scene.change(`${FOLDER}/docker-compose.yml`, 'a: 2\n');
+    scene.change(`${FOLDER}/docker-compose.override.yml`, 'b: 2\n');
+    await scene.advance(5000);
+    const live = scene.messages();
+    await scene.edit(configuration.replace('app', 'web'));
+    await scene.watch.activate(FOUND);
+    deepStrictEqual(
+      [live, scene.messages().slice(-1)],
+      [
+        [],
+        [
+          MESSAGE(
+            'devcontainer.json, docker-compose.override.yml, docker-compose.yml',
+          ),
+        ],
+      ],
+    );
+  });
+
+  it('F-0303 AC-26: a service’s Dockerfile is named by its path from the configuration’s folder at the next activation, and a compose file with a variable, an empty name or a non-list value watches nothing', async () => {
+    const configuration =
+      '{"dockerComposeFile":"docker-compose.yml","service":"app"}';
+    const dockerfile = '/w/.devcontainer/sub/Df.app';
+    const scene = sceneOf(
+      {
+        [CONFIG]: configuration,
+        [`${FOLDER}/docker-compose.yml`]: 'a: 1\n',
+        [dockerfile]: 'FROM a\n',
+      },
+      {
+        'devcontainer.json': configHash(configuration),
+        'docker-compose.yml': fileHash('a: 1\n'),
+        'sub/Df.app': fileHash('FROM a\n'),
+      },
+    );
+    const connection = {...FOUND, serviceDockerfile: dockerfile};
+    await scene.watch.activate(connection);
+    scene.change(dockerfile, 'FROM b\n');
+    await scene.advance(5000);
+    const live = scene.messages();
+    await scene.watch.activate(connection);
+    deepStrictEqual([live, scene.messages()], [[], [MESSAGE('sub/Df.app')]]);
+  });
+
+  it('F-0303 AC-27: a service Dockerfile that moved names the new file, the departing one and the compose file together', async () => {
+    const configuration =
+      '{"dockerComposeFile":"docker-compose.yml","service":"app"}';
+    const scene = sceneOf(
+      {
+        [CONFIG]: configuration,
+        [`${FOLDER}/docker-compose.yml`]: 'a: 1\n',
+        '/w/Df.root': 'FROM a\n',
+      },
+      {
+        'devcontainer.json': configHash(configuration),
+        'docker-compose.yml': fileHash('a: 1\n'),
+        'Df.app': fileHash('FROM a\n'),
+      },
+    );
+    await scene.watch.activate({...FOUND, serviceDockerfile: '/w/Df.root'});
+    deepStrictEqual(scene.messages(), [MESSAGE('../Df.root, Df.app')]);
+  });
+
+  it('F-0303 AC-26: a compose file named with a variable or with nothing is not watched, and neither is a value that is no name', async () => {
+    const scene = sceneOf(
+      {
+        [CONFIG]:
+          '{"dockerComposeFile":["${localEnv:X}.yml",""],"service":"app"}',
+      },
+      {
+        'devcontainer.json': configHash(
+          '{"dockerComposeFile":["${localEnv:X}.yml",""],"service":"app"}',
+        ),
+      },
+    );
+    const other = sceneOf(
+      {[CONFIG]: '{"dockerComposeFile":3}'},
+      {'devcontainer.json': configHash('{"dockerComposeFile":3}')},
+    );
+    await scene.watch.activate(FOUND);
+    await other.watch.activate(FOUND);
+    deepStrictEqual([scene.messages(), other.messages()], [[], []]);
+  });
+
   it('F-0303 AC-17: a Dockerfile outside the folder is told by its written path, in code unit order', async () => {
     const scene = sceneOf(
       {[CONFIG]: '{"build":{"dockerfile":"../OutsideDockerfile"}}'},

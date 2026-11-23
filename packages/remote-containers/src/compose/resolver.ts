@@ -15,6 +15,7 @@ import {
   type ComposeModel,
   type ComposeModelPorts,
   composeModelOf,
+  serviceDockerfileOf,
 } from './model.ts';
 import {projectNameOf} from './project-name.ts';
 import {projectSourcesOf} from './project-sources.ts';
@@ -62,6 +63,8 @@ export type ComposeResolution =
       service: string;
       scope: readonly string[];
       model: ComposeModel;
+      /** The Dockerfile the primary service builds from, absolute; none for an image service. */
+      serviceDockerfile: string | undefined;
       /** The program of the second route, which the CLI is told with `--docker-compose-path`; none on the plugin. */
       composeFile: string | undefined;
       /** Variables added to the environment of the CLI's `up` only: the build of a service reads a file the CLI writes. */
@@ -87,9 +90,11 @@ export function composeResolverOf(
       return {kind: 'none'};
     }
     const configFolder = path.dirname(request.configFile);
-    const files = (
-      composeFileNamesOf(configuration.dockerComposeFile) ?? []
-    ).map(name => path.resolve(configFolder, name));
+    // eslint-disable-next-line @typescript-eslint/non-nullable-type-assertion-style -- the isComposeConfiguration above leaves only configurations that name their compose files
+    const composeFiles = composeFileNamesOf(
+      configuration.dockerComposeFile,
+    ) as string[];
+    const files = composeFiles.map(name => path.resolve(configFolder, name));
     const service = configuration.service as string;
     const route = await ports.route(
       request.workspaceFolder,
@@ -143,6 +148,7 @@ export function composeResolverOf(
         modelServices: [...read.model.services.keys()],
       }),
       model: read.model,
+      serviceDockerfile: serviceDockerfileOf(read.model, service, configFolder),
       composeFile: route.kind === 'standalone' ? route.file : undefined,
       upEnvironment:
         ports.environment[ENTITLEMENT_VARIABLE] === undefined

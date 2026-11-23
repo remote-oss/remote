@@ -27,7 +27,12 @@ import type {AgentLinkPlan} from '../environment/agent-link.ts';
 import type {ForwardingPlans} from '../environment/forwarding.ts';
 import type {PortRange, TunnelPath} from 'lib-forwarding';
 import type {HostChannel, PlatformHint} from 'lib-host';
-import type {ConnectionNotice, FailureHint, SharedRecord} from 'lib-ssh';
+import type {
+  ConnectionNotice,
+  FailureHint,
+  SessionCheck,
+  SharedRecord,
+} from 'lib-ssh';
 import type {FailureDetail} from './failure.ts';
 import type {RemotePlatform} from './platform.ts';
 
@@ -49,6 +54,12 @@ export interface ConnectInput {
   windowId: string;
   /** The window's folder or workspace, or none. */
   windowWorkspace: string | undefined;
+}
+
+/** The client install lock of a connect's alias, held. */
+export interface ClientLockHold {
+  /** Ends the hold, which removes the lock file; a second call does nothing. */
+  release(): void;
 }
 
 /** A step that did not work: the failure and whatever the step knows to tell around it. */
@@ -95,6 +106,11 @@ export interface ConnectionLease {
   storedRecord: SharedRecord | undefined;
   /** Leaves what a later window needs to reuse the server; true when the connection took it. */
   storeSharedRecord(record: SharedRecord): Promise<boolean>;
+  /**
+   * Asks the connection whether its session still answers, when the window's transport was lost: a session that does
+   * not is ended. A connection with no helper to ask, the terminal mode's own session, is `unchecked`.
+   */
+  checkSession(): Promise<SessionCheck>;
   /** Gives the lease back, or ends the direct session; called once, after a failure or when the window ends. */
   release(): void;
   /** Hears the notices of the login; the returned function stops it. */
@@ -122,6 +138,17 @@ export interface TunnelOpening {
 
 /** The steps of one connect, each over the real thing in the extension and over a fake in a test. */
 export interface ConnectSteps {
+  /**
+   * Moves the legacy `remote.SSH.defaultExtensionsIfInstalledLocally` of the user's settings into the editor's key; the
+   * pipeline starts it at every resolve of a window, a reconnection included, before anything else, and does not wait for it: a
+   * settings write of a window that is still resolving can wait for the resolve. It never fails.
+   */
+  migrateLegacySettings(): Promise<void>;
+  /**
+   * Warns, once at the start of every attempt of a window, that the manual bootstrap is on and the exec server is off;
+   * nothing in another mode. It does not wait for the warning.
+   */
+  warnOfDownloadMode(): void;
   /** The SSH configuration files in effect, read and parsed before anything runs. */
   checkConfigFile(input: ConnectInput): StepResult<undefined>;
   /** The settings that decide how the server starts, checked before anything runs; a window's connect alone runs it. */
@@ -166,6 +193,15 @@ export interface ConnectSteps {
     input: ConnectInput,
     cancellation: AbortSignal,
   ): Promise<StepResult<ConnectionTerms>>;
+  /**
+   * Takes the alias's client install lock, waiting while another window of the editor holds it; `onWaiting` is called
+   * when the wait begins. The connect holds it until its install phase is over.
+   */
+  holdClientLock(
+    input: ConnectInput,
+    onWaiting: () => void,
+    cancellation: AbortSignal,
+  ): Promise<StepResult<ClientLockHold>>;
   /**
    * Takes a lease from the connection server, or opens a direct session when it is off, and waits for the login.
    * The waits that are the machine's are bounded inside the client; the wait for the user's answers has no limit.
@@ -271,12 +307,16 @@ export interface ConnectSteps {
   newSecret(): string;
   /** Shows the failure of a connect that had already given the window its connection. */
   presentLateFailure(failed: Failed): void;
-  /** Kills the host's servers or uninstalls them, over the lease's session; the server stays untouched on any failure. */
+  /**
+   * Kills the host's servers, uninstalls them, or prunes the older installs, over the lease's session; the server stays
+   * untouched on any failure.
+   */
   maintain(
     input: ConnectInput,
     lease: ConnectionLease,
-    action: 'kill' | 'uninstall',
+    action: 'kill' | 'uninstall' | 'cleanup',
     cancellation: AbortSignal,
+    host?: ProbedHost,
   ): Promise<MaintenanceOutcome>;
   /** Installs the default extensions on a server that was already running; a failure never fails the connect. */
   installExtensions(

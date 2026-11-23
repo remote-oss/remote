@@ -255,6 +255,21 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
     deepStrictEqual(await running, {kind: 'ran', result: undefined, status: 0});
   });
 
+  it('coverage-117: a stdin that throws on write is no longer delivered, and the run goes on', async () => {
+    const fake = fakeSystem();
+    const {running, writer} = capturingRun(fake, markerLine(false));
+    await new Promise(resolve => setImmediate(resolve));
+    fake.stdin.write = () => {
+      throw new Error('the pipe closed');
+    };
+    writer()?.('yes\r\n');
+    fake.exit(0);
+    deepStrictEqual(
+      [await running, fake.stdinWrote],
+      [{kind: 'ran', result: undefined, status: 0}, []],
+    );
+  });
+
   it('ADR-0011: the marker line sets echoed, and is not told as a CLI line', async () => {
     const fake = fakeSystem();
     const {running, presentations, lines} = capturingRun(

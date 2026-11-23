@@ -130,7 +130,7 @@ describe('a host that refuses forwarding on the first connect (card coverage-81,
     deepStrictEqual(linesOf('r14', 'failureDialog'), []);
   });
 
-  it('F-2410 AC-13, AC-14, AC-27 (ruling-299-socket-reuse): Retry asks for the platform again and ends in the same dialog, three attempts leave one socket of the server and no platform stored, and More Actions... opens the pick of actions', async () => {
+  it('F-2410 AC-13, AC-14 (ruling-299-socket-reuse): Retry asks for the platform again and ends in the same dialog, three attempts leave one socket of the server and no platform stored, and More Actions... opens the pick of actions', async () => {
     await closeWindow('r14');
     await userSettings({
       'remote.SSH.remoteServerListenOnSocket': true,

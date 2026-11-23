@@ -10,6 +10,7 @@ import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   notifications,
   pressEscape,
+  groupedQuickPickRows,
   quickPickFacts,
   quickPickRows,
   statusItem,
@@ -108,7 +109,7 @@ describe('F-0401 the reopen command (card containers-40)', function () {
       await removeContainers(folder);
     }
   });
-  it('F-0101 AC-21 (c74-indicator-menu): the remote indicator’s pick in a dev container window has its placeholder, its first item, Rebuild Container, focused', async () => {
+  it("F-0101 AC-21 (c74-indicator-menu-part): the remote indicator’s pick in a dev container window has its placeholder, the items of its Dev Containers section in the criterion's order, and its first item focused", async () => {
     const folder = devContainerFolder('c74-indicator', {name: 'Indicator'});
     const name = await openFolderWindow(folder);
     try {
@@ -119,11 +120,33 @@ describe('F-0401 the reopen command (card containers-40)', function () {
       await new Promise(resolve => setTimeout(resolve, 3000));
       const facts = await quickPickFacts(name);
       const rows = await quickPickRows(name);
+      const groups = await groupedQuickPickRows(name);
       await pressEscape(name);
       await closeWindow(name);
+      // The group label is drawn inside the row of its group's first item.
+      const section: string[] = [];
+      let inSection = false;
+      for (const each of groups) {
+        if (each.separator) {
+          inSection = each.separator === 'Dev Containers';
+        }
+        if (inSection) {
+          section.push(each.label);
+        }
+      }
       deepStrictEqual(
-        [facts?.placeholder, rows[0]?.label, rows[0]?.focused],
-        ['Select an option to open a Remote Window', 'Rebuild Container', true],
+        [facts?.placeholder, section, rows[0]?.label, rows[0]?.focused],
+        [
+          'Select an option to open a Remote Window',
+          [
+            'Attach to Running Container...',
+            'Configure Container Features...',
+            'Rebuild Container',
+            'Reopen Folder Locally',
+          ],
+          'Attach to Running Container...',
+          true,
+        ],
       );
     } finally {
       await removeContainers(folder);

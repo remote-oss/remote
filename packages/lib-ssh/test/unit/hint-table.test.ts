@@ -6,6 +6,9 @@ import {
   wrappedText,
 } from '../../src/diagnostics/hint-table.ts';
 
+/** The sequences that start and end bold, underlined text. */
+const STYLE = new RegExp(`${String.fromCharCode(27)}\\[(?:1;4|0)m`, 'gu');
+
 const OFFLINE: HintTableRow = {
   status: 'OfflineError',
   message: 'Error: OfflineError (The connection timed out)',
@@ -48,6 +51,143 @@ describe('the table of the session troubleshooting terminal (card connect-136, F
       '║                            │                             │ • Restart the SSH server    │                             ║',
       '╚════════════════════════════╧═════════════════════════════╧═════════════════════════════╧═════════════════════════════╝',
     ]);
+  });
+
+  it('F-2602 BR-9: an error with mitigations and no resources has no Resources column, and the two flexible columns share the rest equally', () => {
+    deepStrictEqual(
+      hintTable(
+        [
+          {
+            status: 'CreateInstallDirFailed',
+            message: 'The install directory could not be created',
+            mitigations: [
+              'Remove or edit setting remote.SSH.serverInstallPath',
+              'Ensure that the parent directory exists',
+            ],
+            resources: [],
+          },
+        ],
+        100,
+      ),
+      [
+        '╔════════════════════════╤════════════════════════════════════╤════════════════════════════════════╗',
+        '║         Status         │ Message                            │ Mitigations                        ║',
+        '╟────────────────────────┼────────────────────────────────────┼────────────────────────────────────╢',
+        '║ CreateInstallDirFailed │ The install directory could not be │ • Remove or edit setting           ║',
+        '║                        │ created                            │   remote.SSH.serverInstallPath     ║',
+        '║                        │                                    │ • Ensure that the parent directory ║',
+        '║                        │                                    │   exists                           ║',
+        '╚════════════════════════╧════════════════════════════════════╧════════════════════════════════════╝',
+      ],
+    );
+  });
+
+  it('F-2602 BR-9: an error with resources and no mitigations has no Mitigations column', () => {
+    deepStrictEqual(
+      hintTable(
+        [
+          {
+            status: 'CreateInstallDirFailed',
+            message: 'The install directory could not be created',
+            mitigations: [],
+            resources: ['https://docs.example/remote'],
+          },
+        ],
+        100,
+      ),
+      [
+        '╔════════════════════════╤════════════════════════════════════╤════════════════════════════════════╗',
+        '║         Status         │ Message                            │ Resources                          ║',
+        '╟────────────────────────┼────────────────────────────────────┼────────────────────────────────────╢',
+        '║ CreateInstallDirFailed │ The install directory could not be │ • https://docs.example/remote      ║',
+        '║                        │ created                            │                                    ║',
+        '╚════════════════════════╧════════════════════════════════════╧════════════════════════════════════╝',
+      ],
+    );
+  });
+
+  it('F-2602 BR-9: a column appears when any row has content for it, though the row that has it is not the first', () => {
+    const header = hintTable(
+      [OFFLINE, {...OFFLINE, mitigations: ['Try again later']}],
+      100,
+    )[1];
+    deepStrictEqual(
+      header?.includes('Mitigations') === true && !header.includes('Resources'),
+      true,
+    );
+  });
+
+  it('F-2602 3.4: a range of a mitigation is drawn bold and underlined, the width of the line unchanged, and a table without ranges has no style', () => {
+    const plain: HintTableRow = {
+      status: 'S',
+      message: 'm',
+      mitigations: ['Remove or edit setting remote.SSH.serverInstallPath'],
+      resources: [],
+    };
+    const linked = hintTable(
+      [{...plain, links: {mitigations: [[{start: 23, length: 28}]]}}],
+      100,
+    );
+    deepStrictEqual(
+      [
+        linked.slice(3, 5),
+        hintTable([plain], 100).some(line => line.includes('\u001b')),
+        linked.map(line => line.replaceAll(STYLE, '').length),
+      ],
+      [
+        [
+          '║ S      │ m                                          │ • Remove or edit setting                   ║',
+          '║        │                                            │   \u001b[1;4mremote.SSH.serverInstallPath\u001b[0m             ║',
+        ],
+        false,
+        Array.from({length: 6}, () => 100),
+      ],
+    );
+  });
+
+  it('F-2602 3.4: a link in the message that wraps over lines is closed at the end of each line and opened again on the next', () => {
+    deepStrictEqual(
+      hintTable(
+        [
+          {
+            status: 'S',
+            message: 'See key remote.SSH.serverInstallPath here',
+            mitigations: [],
+            resources: [],
+            links: {message: [{start: 8, length: 28}]},
+          },
+        ],
+        40,
+      ).slice(3, 7),
+      [
+        '║ S      │ See key                     ║',
+        '║        │ \u001b[1;4mremote.SSH.\u001b[0m                 ║',
+        '║        │ \u001b[1;4mserverInstallPath\u001b[0m           ║',
+        '║        │ here                        ║',
+      ],
+    );
+  });
+
+  it('F-2602 3.4: a link that is one word longer than its column is broken inside the word, each piece drawn on its own', () => {
+    deepStrictEqual(
+      hintTable(
+        [
+          {
+            status: 'S',
+            message: 'abcdefghijklmnopqrstuvwxyz',
+            mitigations: [],
+            resources: [],
+            links: {message: [{start: 0, length: 26}]},
+          },
+        ],
+        24,
+      ).slice(3, 6),
+      [
+        '║ S      │ \u001b[1;4mabcdefghijk\u001b[0m ║',
+        '║        │ \u001b[1;4mlmnopqrstuv\u001b[0m ║',
+        '║        │ \u001b[1;4mwxyz\u001b[0m        ║',
+      ],
+    );
   });
 
   it('F-2605.AC-5: the three flexible columns are equally wide', () => {

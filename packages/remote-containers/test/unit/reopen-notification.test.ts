@@ -47,14 +47,20 @@ interface Scene {
   global: RecordingMemento;
   workspace: RecordingMemento;
   window: ReopenNotificationPorts['window'];
-  configuration: 'none' | 'folder' | 'stored';
+  configuration: 'none' | 'folder' | 'external';
   /** The kind of a root that differs from `configuration`, by path. */
-  rootKinds: Record<string, 'none' | 'folder' | 'stored'>;
+  rootKinds: Record<string, 'none' | 'folder' | 'external'>;
+  /** Whether each lookup was allowed to look outside the folder, in the order asked. */
+  askedExternal: boolean[];
   /** What each `show` answers, in order. */
   answers: Array<string | undefined>;
   shown: Array<[string, readonly string[]]>;
   reopened: number;
   asked: string[];
+  /** The remote a folder can be cloned from, when the host offers a clone; none for a Linux host. */
+  cloning?: {remote: string | undefined};
+  cloned: string[];
+  remoteAsked: string[];
   sink: MemorySink;
 }
 
@@ -69,10 +75,13 @@ function sceneOf(): Scene {
     },
     configuration: 'folder',
     rootKinds: {},
+    askedExternal: [],
     answers: [],
     shown: [],
     reopened: 0,
     asked: [],
+    cloned: [],
+    remoteAsked: [],
     sink: new MemorySink(),
   };
 }
@@ -87,9 +96,28 @@ async function offered(
       window: scene.window,
       global: scene.global,
       workspace: scene.workspace,
-      configurationKind: folder => {
+      ...(scene.cloning === undefined
+        ? {}
+        : {
+            cloning: {
+              remoteOf: folder => {
+                scene.remoteAsked.push(folder);
+                return Promise.resolve(scene.cloning?.remote);
+              },
+              start: remote => {
+                scene.cloned.push(remote);
+                return Promise.resolve();
+              },
+            },
+          }),
+      configurationKind: (folder, external) => {
         scene.asked.push(folder);
-        return Promise.resolve(scene.rootKinds[folder] ?? scene.configuration);
+        scene.askedExternal.push(external);
+        const kind = scene.rootKinds[folder] ?? scene.configuration;
+        // A lookup that may not look outside the folder finds no external configuration.
+        return Promise.resolve(
+          kind === 'external' && !external ? 'none' : kind,
+        );
       },
       show: (message, buttons) => {
         scene.shown.push([message, buttons]);
@@ -124,6 +152,53 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
     deepStrictEqual(scene.shown, [[S426, [REOPEN, SUPPRESS]]]);
   });
 
+  it('F-0708 6.4: a Git folder with a remote on a host that is not Linux has the clone sentence and the Clone in Volume button, and the button starts the clone of that remote', async () => {
+    const scene = sceneOf();
+    scene.cloning = {remote: 'https://example.com/a/b.git'};
+    scene.answers = ['Clone in Volume'];
+    await offered(scene);
+    deepStrictEqual(
+      [scene.shown, scene.remoteAsked, scene.cloned, scene.reopened],
+      [
+        [
+          [
+            `${S426} Or: Clone repository in Docker volume for [better I/O performance](https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md#mount-performance-and-container-volumes).`,
+            [REOPEN, 'Clone in Volume', SUPPRESS],
+          ],
+        ],
+        ['/w/p'],
+        ['https://example.com/a/b.git'],
+        0,
+      ],
+    );
+  });
+
+  it('F-0708 6.4: no remote, a Linux host, or a window with a workspace file shows the plain notification and asks for no remote where it must not', async () => {
+    const withoutRemote = sceneOf();
+    withoutRemote.cloning = {remote: undefined};
+    await offered(withoutRemote);
+    const linux = sceneOf();
+    await offered(linux);
+    const saved = sceneOf();
+    saved.window = {...saved.window, workspace: 'saved'};
+    saved.cloning = {remote: 'https://example.com/a/b.git'};
+    await offered(saved);
+    deepStrictEqual(
+      [
+        withoutRemote.shown,
+        linux.shown,
+        saved.shown.map(each => each[1]),
+        saved.remoteAsked,
+      ],
+      [
+        [[S426, [REOPEN, SUPPRESS]]],
+        [[S426, [REOPEN, SUPPRESS]]],
+        [[REOPEN, SUPPRESS]],
+        [],
+      ],
+    );
+  });
+
   it('F-0302 AC-5: the user data variant shows S368 with the same buttons, without asking the folder for a configuration', async () => {
     const scene = sceneOf();
     scene.configuration = 'none';
@@ -136,7 +211,7 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
 
   it('F-0302 BR-4: a folder with a stored configuration shows the S368 variant, whether or not its own files hold one too', async () => {
     const scene = sceneOf();
-    scene.configuration = 'stored';
+    scene.configuration = 'external';
     await offered(scene);
     deepStrictEqual(
       [scene.shown, scene.asked],
@@ -357,12 +432,47 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
     ]);
   });
 
-  it('F-0402 BR-1: a saved workspace whose only configuration is a stored one shows S427 with S368', async () => {
-    const scene = workspaceScene('saved', 2);
+  it('F-0402 BR-1: a saved workspace of one folder whose only configuration is a stored or mirrored one shows S427 with S368, and its root is asked to look outside the folder', async () => {
+    const scene = workspaceScene('saved', 1);
     scene.configuration = 'none';
-    scene.rootKinds = {'/w/q': 'stored'};
+    scene.rootKinds = {'/w/p': 'external'};
     await offered(scene);
-    deepStrictEqual(scene.shown, [[S427_S368, [REOPEN, SUPPRESS]]]);
+    deepStrictEqual(
+      [scene.shown, scene.askedExternal],
+      [[[S427_S368, [REOPEN, SUPPRESS]]], [true]],
+    );
+  });
+
+  /** What a workspace of two folders shows and is asked when its second folder would have an external configuration. */
+  async function twoFoldersWithExternal(
+    workspace: 'saved' | 'untitled',
+  ): Promise<[unknown, boolean[]]> {
+    const scene = workspaceScene(workspace, 2);
+    scene.configuration = 'none';
+    scene.rootKinds = {'/w/q': 'external'};
+    await offered(scene);
+    return [scene.shown, scene.askedExternal];
+  }
+
+  it('F-0302 BR-12, AC-26: a saved workspace of two folders whose only configuration would be a stored or mirrored one shows nothing, and no root is asked to look outside its folder', async () => {
+    deepStrictEqual(await twoFoldersWithExternal('saved'), [
+      [],
+      [false, false],
+    ]);
+  });
+
+  it('F-0302 BR-12: an unsaved workspace of two folders is not asked to look outside its folders either', async () => {
+    deepStrictEqual(await twoFoldersWithExternal('untitled'), [
+      [],
+      [false, false],
+    ]);
+  });
+
+  it('F-0302 AC-3: a window with one folder is asked to look outside it, and an external configuration gives S368', async () => {
+    const scene = sceneOf();
+    scene.configuration = 'external';
+    await offered(scene);
+    deepStrictEqual(scene.askedExternal, [true]);
   });
 
   it('F-0301 6.5 step 4: a saved workspace with no root that has a configuration shows nothing, whatever sits beside its file', async () => {

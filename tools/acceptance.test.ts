@@ -27,8 +27,10 @@ import {
   bundleSuite,
   FRESH_RESOLVE_WAIT_MILLISECONDS,
   type Sleeper,
+  DOWNLOAD_PAUSES_MILLISECONDS,
   downloadWithRetry,
   privateAssetDownload,
+  retriedGhcrLayer,
   editorChoiceOf,
   chosenLaunches,
   selectionLine,
@@ -40,6 +42,9 @@ import {
   hostBaseVariables,
   runArgumentsOf,
   type CommandResult,
+  FAILURE_LOG_LINES,
+  HOST_STATE_COMMAND,
+  failureReport,
   failureText,
   FORWARD_ALIASES,
   harnessSshConfig,
@@ -50,19 +55,24 @@ import {
   installsOf,
   packagedExtensions,
   removeBundles,
-  RETRY_PAUSE_MILLISECONDS,
   runAcceptance,
   runCommand,
   runLaunches,
   runTestCli,
+  engineHostVariable,
   standInEngines,
+  archiveKindOf,
+  releaseAssetUrlOf,
+  tarArgsOf,
   unpackArchive,
   USAGE,
+  VSCODIUM_PLATFORMS,
   VSCODIUM_RELEASE,
   vscodiumConfiguration,
   vscodiumConfigurations,
+  vscodiumCliOf,
   vscodiumExecutableOf,
-  withOneRetry,
+  withRetries,
   markDownloadRequests,
   writeUserSettings,
 } from './acceptance.ts';
@@ -76,11 +86,19 @@ import {
   launchesOf,
   launchGroupOf,
   launchLabelled,
+  settingsOfLaunch,
   type Launch,
   type RunnerLaunch,
+  WINDOW_PORT_RANGE,
 } from './acceptance-launches.ts';
-import {workflowParts as partsOfWorkflow} from './acceptance-select.ts';
+import {
+  PARTS_TABLE,
+  type PartsTable,
+  partsOfTable,
+  suiteFilesIn,
+} from './acceptance-parts.ts';
 import type {RunRegistry} from './acceptance-registry.ts';
+import {runDistros, type RunWslDistros} from './acceptance-wsl.ts';
 import {STOP_PROGRAM} from './acceptance-helper-stop.ts';
 import {acceptanceRunId} from './acceptance-run.ts';
 import type {CommandRunner} from './command-runner.ts';
@@ -91,6 +109,16 @@ const CONTAINER = 'c0ffee';
 
 /** The host's address on the run network, which the `routed` alias names. */
 const ROUTED_ADDRESS = '172.18.0.2';
+
+/** The macOS build's command-line wrapper in its archive (`unzip -Z1` of the pinned darwin release asset). */
+const MACOS_CLI = path.join(
+  'VSCodium - Insiders.app',
+  'Contents',
+  'Resources',
+  'app',
+  'bin',
+  'codium-insiders',
+);
 
 /** Runs `body` with what it prints on `console.error` collected, and gives what it returned and those lines. */
 async function withErrorLines<Result>(
@@ -171,6 +199,10 @@ class FakeHarness implements HarnessDependencies {
         ]),
       );
     }
+    // A read-back is the run's check of a passphrase key or the loosened key, which OpenSSH refuses.
+    if (program === 'ssh-keygen' && programArguments[0] === '-y') {
+      return {status: 255, stdout: '', stderr: 'refused'};
+    }
     if (program === 'ssh-keygen' || program === 'env') {
       const keyFile = programArguments.at(-1) ?? '';
       this.runFolder = path.dirname(keyFile);
@@ -186,10 +218,17 @@ class FakeHarness implements HarnessDependencies {
         ? `${CONTAINER}\n`
         : programArguments[0] === 'port'
           ? '127.0.0.1:49153\n'
-          : programArguments[0] === 'inspect' &&
-              programArguments.some(argument => argument.includes('IPAddress'))
-            ? `${ROUTED_ADDRESS}\n`
-            : '';
+          : programArguments[0] === 'exec' &&
+              programArguments.includes(
+                '/proc/sys/net/ipv4/ip_local_port_range',
+              )
+            ? '47000\t60999\n'
+            : programArguments[0] === 'inspect' &&
+                programArguments.some(argument =>
+                  argument.includes('IPAddress'),
+                )
+              ? `${ROUTED_ADDRESS}\n`
+              : '';
     return {status: 0, stdout, stderr: ''};
   };
 
@@ -229,6 +268,32 @@ class FakeHarness implements HarnessDependencies {
     });
   };
 
+  readonly prepareWslDistros = (
+    runId: string,
+    runFolder: string,
+  ): Promise<RunWslDistros> => {
+    this.calls.push(
+      `wsl distros prepared ${runId} ${path.basename(runFolder)}`,
+    );
+    return Promise.resolve({
+      distros: runDistros(runId),
+      unregister: () => {
+        this.calls.push('wsl distros unregistered');
+        return Promise.resolve();
+      },
+    });
+  };
+
+  readonly windowsHostBlock = (runFolder: string): Promise<string> => {
+    this.calls.push(`windows host block ${path.basename(runFolder)}`);
+    return Promise.resolve('\nHost winhost\n  HostName 127.0.0.1\n');
+  };
+
+  readonly pinnedSshClient = (): string => {
+    this.calls.push('pinned ssh client built');
+    return '/cache/remote-oss/openssh-10.6p2-9ae44872090c/bin/ssh';
+  };
+
   readonly prepareTemplates = (
     root: string,
     runFolder: string,
@@ -248,16 +313,21 @@ class FakeHarness implements HarnessDependencies {
   /** Whether each start of the download host was asked for the CLI archives. */
   readonly cliAsked: boolean[] = [];
 
+  /** Whether each start of the download host was asked for a stand-in CLI archive. */
+  readonly standInAsked: boolean[] = [];
+
   readonly startDownloads = (
     ...asked: [
       root?: string,
       runFolder?: string,
       earlier?: boolean,
       cli?: boolean,
+      standIn?: boolean,
     ]
   ): Promise<RunDownloads> => {
     this.earlierAsked.push(asked[2] ?? false);
     this.cliAsked.push(asked[3] ?? false);
+    this.standInAsked.push(asked[4] ?? false);
     this.calls.push('downloads started');
     return Promise.resolve({
       variables: {
@@ -433,6 +503,27 @@ const FAILURE = {
   dialog: 'Could not establish connection to "refused".',
 };
 
+/** The labels of the run's configurations, in order: every runner launch of the fixture's table. */
+const CONFIGURATION_LABELS = [
+  'local',
+  'remote',
+  'reconnect',
+  'agent',
+  'agent-off',
+  'x11',
+  'x11-noxauth',
+  'failure-refused',
+  'terminal',
+  'socket-prime',
+  'socket',
+  'slow',
+  'remote-ubuntu',
+  'client-unset',
+  'ports-probe',
+  'install-probe',
+  'platform-probe',
+];
+
 /** The labels a run launches with the fixture's cases, in order: the ports cases, then containers-view last. */
 const LAUNCH_ORDER = [
   'local',
@@ -461,24 +552,46 @@ const LAUNCH_ORDER = [
   'agent-notmp',
   'default-ports',
   'ssh-core',
+  'ssh-newclient',
+  'ssh-newclient-pickers',
+  'ssh-agents',
+  'ssh-askpass',
+  'ssh-askpass-env',
+  'ssh-askpass-space',
+  'ssh-killed-12',
+  'ssh-killed-13',
+  'ssh-killed-14',
+  'ssh-locks',
+  'ssh-downloaders',
   'ssh-containers',
   'no-proposals',
+  'wsl-linux',
+  'wsl-linux-web',
+  'wsl-linux-standdown',
   'explorer',
   'explorer-alone',
   'explorer-trust',
+  'explorer-trust-pickers',
   'explorer-home',
   'explorer-rows',
   'explorer-folders',
   'explorer-no-proposals',
   'add-host',
   'explorer-standdown',
+  'explorer-stand-in',
   'trust',
   'trust-terminal',
   'web-ui',
   'web-ui-trust',
   ...['containers-a', 'containers-b', 'containers-standdown'],
   'containers-no-proposals',
-  ...['containers-trust', 'containers-nodocker', 'containers-volume'],
+  ...[
+    'containers-trust',
+    'containers-nodocker',
+    'containers-volume',
+    'containers-volume-trust',
+    'containers-config',
+  ],
   'containers-explorer',
   ...['containers-ports', 'containers-features', 'containers-shutdown'],
   ...['containers-index-broken', 'containers-index-down'],
@@ -486,6 +599,9 @@ const LAUNCH_ORDER = [
   'containers-context',
   'containers-env-host',
   'containers-env-ctx',
+  'containers-ssh-engine',
+  'containers-ssh-env-host',
+  'containers-ssh-noclient',
   'extensionpack',
   'extensionpack-german',
   'extensionpack-partial',
@@ -506,13 +622,21 @@ const CLIENT_CASE = {
 };
 
 /** The labels of the launches `selected` chooses from `launches`, or the error text alone when it names an unknown one. */
-/** The repository's `ci.yml`, and the launch selections of its scheduled VSCodium split. */
+/** The repository's `ci.yml`, and the launch selections of the VSCodium suite's parts. */
 function workflowParts(): {workflow: string; parts: string[]} {
   const workflow = readFileSync(
     path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
     'utf8',
   );
-  return {workflow, parts: partsOfWorkflow(workflow)};
+  const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
+  return {
+    workflow,
+    parts: partsOfTable(
+      launchesOf(REPOSITORY_ROOT),
+      table,
+      suiteFilesIn(REPOSITORY_ROOT),
+    ).map(part => part.launches),
+  };
 }
 
 function chosenLabels(
@@ -538,6 +662,14 @@ describe('acceptance', () => {
     workspace.write(
       'packages/remote-explorer/package.json',
       JSON.stringify({engines: {vscode: '^1.139.0'}}),
+    );
+    workspace.write(
+      'packages/remote-wsl/package.json',
+      JSON.stringify({engines: {vscode: '^1.125.0'}}),
+    );
+    workspace.write(
+      'tests/acceptance/fixtures/stand-ins/remote-oss.remote-ssh/package.json',
+      JSON.stringify({publisher: 'remote-oss', name: 'remote-ssh'}),
     );
     workspace.write(
       'tests/acceptance/suite-failure/cases.json',
@@ -624,6 +756,56 @@ describe('acceptance', () => {
         '  UserKnownHostsFile /run/known_hosts',
       ].join('\n'),
     );
+  });
+
+  it('tooling-118: on Windows every path of the ssh_config has forward slashes, and no alias has a ControlMaster', () => {
+    const config = harnessSshConfig(
+      49153,
+      'C:\\Users\\runner\\acceptance-1',
+      '\\\\.\\pipe\\openssh-ssh-agent',
+      ROUTED_ADDRESS,
+      'C:\\Users\\runner\\acceptance-1',
+      'win32',
+    );
+    const lines = config.split('\n');
+    deepStrictEqual(
+      [
+        lines.filter(line => line.includes('\\')),
+        lines.filter(line => /Control(Master|Path|Persist)/.test(line)),
+        lines.find(line => line.includes('IdentityFile')),
+        lines.find(
+          line =>
+            line.includes('changedkey') && line.includes('UserKnownHostsFile'),
+        ),
+        lines.find(line => line.includes('ForwardAgent')),
+      ],
+      [
+        [],
+        [],
+        '  IdentityFile C:/Users/runner/acceptance-1/id_ed25519',
+        '  UserKnownHostsFile C:/Users/runner/acceptance-1/known_hosts_changedkey',
+        '  ForwardAgent //./pipe/openssh-ssh-agent',
+      ],
+    );
+  });
+
+  it('tooling-118: elsewhere the ssh_config keeps its four ControlMaster aliases', () => {
+    const hosts = harnessSshConfig(
+      49153,
+      '/run',
+      '/run/agent.sock',
+      ROUTED_ADDRESS,
+      '/run',
+      'linux',
+    )
+      .split('\n')
+      .filter(line => line.startsWith('Host master'));
+    deepStrictEqual(hosts, [
+      'Host master',
+      'Host master-ask',
+      'Host master-yes',
+      'Host master-autoask',
+    ]);
   });
 
   it('coverage-13: Host 127.0.0.1 reaches the harness host by the address as typed', () => {
@@ -1076,13 +1258,14 @@ describe('acceptance', () => {
     );
   });
 
-  it('coverage-84: Host x11-untrusted forwards X11 without the trusted request', () => {
+  it('coverage-84: Host x11-untrusted forwards X11 and refuses the trusted request in so many words, since Debian’s OpenSSH makes ForwardX11 alone trusted', () => {
     strictEqual(
       accountBlock('x11-untrusted'),
       [
         ...sharedLines('x11-untrusted', 'harness'),
         ...KEY_ALIAS_LINES,
         '  ForwardX11 yes',
+        '  ForwardX11Trusted no',
       ].join('\n'),
     );
   });
@@ -1102,6 +1285,7 @@ describe('acceptance', () => {
           ...sharedLines('x11-noauth', 'harness'),
           ...KEY_ALIAS_LINES,
           '  ForwardX11 yes',
+          '  ForwardX11Trusted no',
           '  XAuthLocation /nonexistent/xauth',
         ].join('\n'),
       ].join('\n---\n'),
@@ -1157,6 +1341,15 @@ describe('acceptance', () => {
     strictEqual(
       accountBlock('mute'),
       [...sharedLines('mute', 'harness-mute'), ...KEY_ALIAS_LINES].join('\n'),
+    );
+  });
+
+  it('#2854: Host nofetch logs in to harness-nofetch with the run key', () => {
+    strictEqual(
+      accountBlock('nofetch'),
+      [...sharedLines('nofetch', 'harness-nofetch'), ...KEY_ALIAS_LINES].join(
+        '\n',
+      ),
     );
   });
 
@@ -1257,6 +1450,47 @@ describe('acceptance', () => {
       );
     });
   }
+
+  it('#2639: the settings of a launch whose window port range overlaps the machine’s ephemeral range are refused, with the launch named', () => {
+    throws(() => {
+      writeUserSettings(
+        workspace.root,
+        '/run/ssh_config',
+        {'remote.SSH.preferredLocalPortRange': '20000-20999'},
+        launchLabelled(launchesOf(REPOSITORY_ROOT), 'windows'),
+        '15000 60999',
+      );
+    }, /^Error: windows: the window port range 20000-20999 overlaps this machine's ephemeral port range 15000-60999/u);
+  });
+
+  it('#2639: the settings of every launch are written on a machine whose ephemeral range is the Linux default, those that keep a range of their own included', () => {
+    const failures: string[] = [];
+    const launches = launchesOf(REPOSITORY_ROOT);
+    for (const launch of launches) {
+      try {
+        writeUserSettings(
+          workspace.root,
+          '/run/ssh_config',
+          settingsOfLaunch(launch) ?? {},
+          launch,
+          '32768\t60999',
+        );
+      } catch (caught) {
+        failures.push(String(caught));
+      }
+    }
+    deepStrictEqual(
+      [
+        failures,
+        launches.some(
+          launch =>
+            settingsOfLaunch(launch)?.['remote.SSH.preferredLocalPortRange'] ===
+            '41060-41061',
+        ),
+      ],
+      [[], true],
+    );
+  });
 
   it("gives the editor's user settings the harness ssh_config as remote.SSH.configFile", () => {
     writeUserSettings(workspace.root, '/run/ssh_config');
@@ -1398,8 +1632,9 @@ describe('acceptance', () => {
   });
 
   describe('installsOf (card tooling-30)', () => {
-    it('tooling-30, containers-09, connect-84: the run installs once into its folder, once into each explorer and containers launch’s folder with its own extension, and once into each genuine launch’s folder', () => {
+    it('tooling-30, containers-09, connect-84: the run installs once into its folder, once into each WSL, explorer and containers launch’s folder with its own extension, and once into each genuine launch’s folder', () => {
       workspace.write('dist/remote-explorer-0.0.0.vsix', '');
+      workspace.write('dist/remote-wsl-0.0.0.vsix', '');
       workspace.write('dist/remote-containers-0.1.0.vsix', '');
       workspace.write('dist/vscode-remote-extensionpack-0.1.0.vsix', '');
       /** The install of a launch that has the containers extension and nothing else beside the run's. */
@@ -1428,16 +1663,29 @@ describe('acceptance', () => {
             client: 'vscodium',
           },
           containersOnly('ssh-containers'),
+          ...['wsl-linux', 'wsl-linux-web', 'wsl', 'wsl-linux-standdown'].map(
+            label => ({
+              folder: path.join('/run', `extensions-${label}`),
+              files: [
+                '/dist/remote-ssh.vsix',
+                '/run/window-agent.vsix',
+                path.join(workspace.root, 'dist', 'remote-wsl-0.0.0.vsix'),
+              ],
+              client: 'vscodium',
+            }),
+          ),
           ...[
             'explorer',
             'explorer-alone',
             'explorer-trust',
+            'explorer-trust-pickers',
             'explorer-home',
             'explorer-rows',
             'explorer-folders',
             'explorer-no-proposals',
             'add-host',
             'explorer-standdown',
+            'explorer-stand-in',
           ].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
             files: [
@@ -1455,6 +1703,8 @@ describe('acceptance', () => {
             'containers-trust',
             'containers-nodocker',
             'containers-volume',
+            'containers-volume-trust',
+            'containers-config',
           ].map(containersOnly),
           {
             folder: path.join('/run', 'extensions-containers-explorer'),
@@ -1548,6 +1798,9 @@ describe('acceptance', () => {
             'containers-context',
             'containers-env-host',
             'containers-env-ctx',
+            'containers-ssh-engine',
+            'containers-ssh-env-host',
+            'containers-ssh-noclient',
           ].map(containersOnly),
           ...['extensionpack', 'extensionpack-german'].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
@@ -1664,6 +1917,53 @@ describe('acceptance', () => {
         'local',
       ]);
       deepStrictEqual(harness.launched, ['local', 'remote']);
+    });
+
+    it('#2652: a run with windows-host asks for the winhost block once, for its ssh_config, and a run without asks for none', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['local']);
+      const without = harness.calls.filter(call =>
+        call.startsWith('windows host block'),
+      );
+      await runAcceptance(workspace.root, harness, 'vscodium', [
+        'windows-host',
+      ]);
+      deepStrictEqual(
+        [
+          without,
+          harness.calls.filter(call => call.startsWith('windows host block')),
+        ],
+        [[], [`windows host block ${path.basename(harness.runFolder)}`]],
+      );
+    });
+
+    it('#2600: a run whose chosen launches ask for no pinned OpenSSH client builds none and passes no HARNESS_SSH_CLIENT', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['ssh-core']);
+      deepStrictEqual(
+        [
+          harness.calls.filter(call => call === 'pinned ssh client built'),
+          harness.variables?.HARNESS_SSH_CLIENT,
+        ],
+        [[], undefined],
+      );
+    });
+
+    it('#2600: a run with ssh-newclient builds the pinned OpenSSH client once and passes its path as HARNESS_SSH_CLIENT', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', [
+        'ssh-core',
+        'ssh-newclient',
+      ]);
+      deepStrictEqual(
+        [
+          harness.calls.filter(call => call === 'pinned ssh client built'),
+          harness.variables?.HARNESS_SSH_CLIENT,
+          harness.launched,
+        ],
+        [
+          ['pinned ssh client built'],
+          '/cache/remote-oss/openssh-10.6p2-9ae44872090c/bin/ssh',
+          ['ssh-core', 'ssh-newclient'],
+        ],
+      );
     });
 
     it('containers-59: a run whose chosen launches ask for no registry starts none', async () => {
@@ -1906,6 +2206,7 @@ describe('acceptance', () => {
           'docker build',
           'ssh-keygen -q',
           'docker run',
+          'docker exec',
           'docker port',
           'docker network',
           'docker network',
@@ -2269,7 +2570,10 @@ describe('acceptance', () => {
   });
 
   describe('runLaunches', () => {
-    const BASE = {'remote.SSH.configFile': '/run/ssh_config'};
+    const BASE = {
+      'remote.SSH.configFile': '/run/ssh_config',
+      'remote.SSH.preferredLocalPortRange': WINDOW_PORT_RANGE,
+    };
     const TERMINAL: Launch = {
       label: 'terminal',
       runner: 'runner-remote',
@@ -2315,6 +2619,37 @@ describe('acceptance', () => {
       return {waits, sleep};
     }
 
+    /**
+     * Runs `launches` over `container` with `runLaunch` for each attempt and no host setup, base hosts or held ports,
+     * and adds each line the run reports to `reported`.
+     */
+    async function runReporting(
+      reported: string[],
+      launches: Array<Launch | undefined>,
+      container: string,
+      command: CommandRunner,
+      runLaunch: (
+        launch?: Launch,
+      ) => Promise<{exitCode: number; output: string}>,
+    ): Promise<void> {
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        launches,
+        command,
+        container,
+        sleep,
+        runLaunch,
+        () => Promise.resolve(),
+        {},
+        () => Promise.resolve({release: () => Promise.resolve()}),
+        line => {
+          reported.push(line);
+        },
+      );
+    }
+
     /** The user settings each launch found when it started, by label. */
     async function settingsSeen(
       ...launches: Launch[]
@@ -2340,23 +2675,14 @@ describe('acceptance', () => {
     it('qa-01: each launch is announced with its label before it runs, so a log splits at it', async () => {
       const reported: string[] = [];
       const {command} = recordingCommand();
-      const {sleep} = recordingSleeper();
-      await runLaunches(
-        workspace.root,
-        '/run/ssh_config',
+      await runReporting(
+        reported,
         [TERMINAL, REMOTE, undefined],
-        command,
         '',
-        sleep,
+        command,
         launch => {
           reported.push(`ran ${launch?.label ?? 'the one configuration'}`);
           return Promise.resolve({exitCode: 0, output: ''});
-        },
-        () => Promise.resolve(),
-        {},
-        () => Promise.resolve({release: () => Promise.resolve()}),
-        line => {
-          reported.push(line);
         },
       );
       deepStrictEqual(reported, [
@@ -2366,6 +2692,84 @@ describe('acceptance', () => {
         'ran remote',
         'ran the one configuration',
       ]);
+    });
+
+    it("tooling-190: a launch whose rows fail is followed by the tail of its extensions' log and its host's state; one that passes by nothing", async () => {
+      const reported: string[] = [];
+      const {calls, command} = recordingCommand();
+      writeFileSync(
+        path.join(workspace.root, 'remote-log.txt'),
+        'resolve: ssh exited 255\n',
+      );
+      await runReporting(
+        reported,
+        [TERMINAL, REMOTE],
+        'host-1',
+        command,
+        launch =>
+          Promise.resolve({
+            exitCode: launch?.label === 'remote' ? 1 : 0,
+            output: '',
+          }),
+      );
+      deepStrictEqual(
+        [
+          reported,
+          calls.filter(call => call.startsWith('docker exec host-1 sh')),
+        ],
+        [
+          [
+            'acceptance: launch terminal',
+            'acceptance: launch remote',
+            'acceptance: remote failed: the last 1 of the 1 lines of remote-log.txt',
+            '  resolve: ssh exited 255',
+            "acceptance: remote failed: its host's listeners, processes and server install folders",
+            "acceptance: remote failed: the last lines of its host's sshd log",
+          ],
+          [`docker exec host-1 sh -c ${HOST_STATE_COMMAND}`],
+        ],
+      );
+    });
+
+    it('tooling-190: the report keeps the last lines of a long log, says when no log was written or no host is known, and notes a host command that failed', () => {
+      writeFileSync(
+        path.join(workspace.root, 'long-log.txt'),
+        [...Array(FAILURE_LOG_LINES + 5).keys()]
+          .map(index => `line ${String(index)}`)
+          .join('\n'),
+      );
+      writeFileSync(
+        path.join(workspace.root, 'long-containers-log.txt'),
+        'built\n',
+      );
+      /** A host command that fails as a container that went away does. */
+      function failing(): ReturnType<CommandRunner> {
+        return {status: 1, stdout: '', stderr: 'no such container'};
+      }
+      const long = failureReport(workspace.root, 'long', 'gone', failing);
+      deepStrictEqual(
+        [
+          long[0],
+          long[1],
+          long.slice(FAILURE_LOG_LINES + 1, FAILURE_LOG_LINES + 6),
+          failureReport(workspace.root, 'none', undefined, failing),
+        ],
+        [
+          `acceptance: long failed: the last ${String(FAILURE_LOG_LINES)} of the ${String(FAILURE_LOG_LINES + 5)} lines of long-log.txt`,
+          '  line 5',
+          [
+            'acceptance: long failed: the last 1 of the 1 lines of long-containers-log.txt',
+            '  built',
+            "acceptance: long failed: its host's listeners, processes and server install folders",
+            '  (exit 1)',
+            '  no such container',
+          ],
+          [
+            'acceptance: none failed: its extensions wrote no log',
+            'acceptance: none failed: no host container to read',
+          ],
+        ],
+      );
     });
 
     const CONTAINERS: Launch = {
@@ -2540,6 +2944,7 @@ describe('acceptance', () => {
         settings: {'remote.SSH.configFile': '/elsewhere'},
       });
       deepStrictEqual(seen.get('remote'), {
+        ...BASE,
         'remote.SSH.configFile': '/elsewhere',
       });
     });
@@ -2886,24 +3291,44 @@ describe('acceptance', () => {
       deepStrictEqual(waits, [FRESH_RESOLVE_WAIT_MILLISECONDS]);
     });
 
-    it('coverage-13: a failing host setup fails the attempt with its command and its output', async () => {
+    /** Runs the ports launch on a host whose docker commands fail with `failure`, and gives the error of its setup. */
+    async function setupFailing(
+      failure: Pick<CommandResult, 'stdout' | 'stderr'>,
+    ): Promise<unknown> {
       function command(program: string): CommandResult {
         return program === 'docker'
-          ? {status: 1, stdout: '', stderr: 'setup broke'}
+          ? {status: 1, ...failure}
           : {status: 0, stdout: '', stderr: ''};
       }
       const {sleep} = recordingSleeper();
-      await rejects(
-        runLaunches(
-          workspace.root,
-          '/run/ssh_config',
-          [PORTS],
-          command,
-          'c0ffee',
-          sleep,
-          () => Promise.resolve({exitCode: 0, output: ''}),
-        ),
-        /host setup failed: pkill -f 'n\[c\] -lk -p'; true\nsetup broke/,
+      return runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [PORTS],
+        command,
+        'c0ffee',
+        sleep,
+        () => Promise.resolve({exitCode: 0, output: ''}),
+      ).then(
+        () => undefined,
+        (caught: unknown) => (caught as Error).message,
+      );
+    }
+
+    it('coverage-13: a failing host setup fails the attempt with its command and its output', async () => {
+      deepStrictEqual(
+        await setupFailing({stdout: '', stderr: 'setup broke'}),
+        "host setup failed: pkill -f 'n[c] -lk -p'; true\nsetup broke",
+      );
+    });
+
+    it('#2683: a host setup that fails names what it printed on its standard output too, before its standard error', async () => {
+      deepStrictEqual(
+        await setupFailing({
+          stdout: 'port 45002 is still in use',
+          stderr: 'netstat broke',
+        }),
+        "host setup failed: pkill -f 'n[c] -lk -p'; true\nport 45002 is still in use\nnetstat broke",
       );
     });
 
@@ -2986,62 +3411,75 @@ describe('acceptance', () => {
     });
   });
 
-  describe('withOneRetry', () => {
+  describe('withRetries (card tooling-179)', () => {
     it('returns the step result without sleeping or reporting when the step resolves', async () => {
       const recorder = new RetryRecorder();
       const {step} = scriptedStep(['ok']);
-      const result = await withOneRetry(step, recorder.sleep, recorder.report);
+      const result = await withRetries(step, recorder.sleep, recorder.report);
       deepStrictEqual(
         [result, recorder.sleeps, recorder.lines],
         ['ok', [], []],
       );
     });
 
-    it('returns the retry result when the first attempt rejects', async () => {
+    it('tooling-179: after three failures the fourth try returns, each retry after its pause of 5, 15 and 45 s, each failure reported', async () => {
       const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), 'ok']);
-      const result = await withOneRetry(step, recorder.sleep, recorder.report);
-      strictEqual(result, 'ok');
-    });
-
-    it('sleeps the retry pause before the one retry', async () => {
-      const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), 'ok']);
-      await withOneRetry(step, recorder.sleep, recorder.report);
-      deepStrictEqual(recorder.sleeps, [RETRY_PAUSE_MILLISECONDS]);
-    });
-
-    it('reports the failure and the pause in seconds before the one retry', async () => {
-      const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), 'ok']);
-      await withOneRetry(step, recorder.sleep, recorder.report);
-      deepStrictEqual(recorder.lines, [
-        'acceptance: busy; retrying once in 5 s',
+      const {step, called} = scriptedStep([
+        new Error('504'),
+        new Error('504'),
+        new Error('busy'),
+        'ok',
       ]);
-    });
-
-    it('rejects with the second error when the retry rejects too', async () => {
-      const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), new Error('down')]);
-      await rejects(
-        withOneRetry(step, recorder.sleep, recorder.report),
-        /down/,
+      const result = await withRetries(step, recorder.sleep, recorder.report);
+      deepStrictEqual(
+        [result, called(), recorder.sleeps, recorder.lines],
+        [
+          'ok',
+          4,
+          [...DOWNLOAD_PAUSES_MILLISECONDS],
+          [
+            'acceptance: 504; try 2 in 5 s',
+            'acceptance: 504; try 3 in 15 s',
+            'acceptance: busy; try 4 in 45 s',
+          ],
+        ],
       );
     });
 
-    it('runs the step once more after a rejection, and no more', async () => {
+    it("tooling-179: when every try fails it rejects with every try's error, and tries no more", async () => {
       const recorder = new RetryRecorder();
       const {step, called} = scriptedStep([
-        new Error('busy'),
-        new Error('busy'),
+        new Error('504'),
+        new Error('504'),
+        new Error('504'),
+        new Error('down'),
+        'never',
       ]);
-      let rejected = false;
+      let message = '';
       try {
-        await withOneRetry(step, recorder.sleep, recorder.report);
-      } catch {
-        rejected = true;
+        await withRetries(step, recorder.sleep, recorder.report);
+      } catch (error) {
+        message = error instanceof Error ? error.message : '';
       }
-      deepStrictEqual([called(), rejected], [2, true]);
+      deepStrictEqual(
+        [message, called()],
+        ['try 1: 504; try 2: 504; try 3: 504; try 4: down', 4],
+      );
+    });
+
+    it('takes its pauses from the caller: none is one try', async () => {
+      const recorder = new RetryRecorder();
+      const {step, called} = scriptedStep([new Error('busy'), 'ok']);
+      let message = '';
+      try {
+        await withRetries(step, recorder.sleep, recorder.report, []);
+      } catch (error) {
+        message = error instanceof Error ? error.message : '';
+      }
+      deepStrictEqual(
+        [message, called(), recorder.sleeps],
+        ['try 1: busy', 1, []],
+      );
     });
   });
 
@@ -3241,9 +3679,88 @@ describe('acceptance', () => {
           [false, true],
           [],
           [
-            'cli editor of codium-insiders: http://downloads:8080/cli/${os}-${arch}/cli-${os}-${arch}.tar.gz',
+            'cli editor of codium-insiders: http://downloads:8080/cli/${os}-${arch}/${commit}/cli-${os}-${arch}.tar.gz',
           ],
         ],
+      );
+    });
+
+    /** Makes the workspace's install cases one, `standin`, whose launch starts the CLI-source copy against a stand-in CLI. */
+    function writeStandInCase(): void {
+      workspace.write(
+        'tests/acceptance/suite-install/cases.json',
+        JSON.stringify({
+          cases: [
+            {
+              label: 'standin',
+              cite: 'F-2405 AC-8 (standin)',
+              cliStandIn: true,
+              settings: {},
+              outcome: 'any',
+            },
+          ],
+        }),
+      );
+    }
+
+    it('#2735: a run that chooses an install case with a stand-in CLI asks for the stand-in archives, not the pinned ones, and makes the CLI-source editor with the client’s loopback base, which the client can resolve', async () => {
+      writeStandInCase();
+      await runAcceptance(workspace.root, harness, 'vscodium', [
+        'install-standin',
+      ]);
+      deepStrictEqual(
+        [
+          harness.cliAsked,
+          harness.standInAsked,
+          harness.calls.filter(call => call.startsWith('cli editor')),
+        ],
+        [
+          [false],
+          [true],
+          [
+            'cli editor of codium-insiders: http://127.0.0.1:8080/cli/${os}-${arch}/${commit}/cli-${os}-${arch}.tar.gz',
+          ],
+        ],
+      );
+    });
+
+    it('#2735: a run that names cli-path and an install case with a stand-in CLI fails before anything starts, naming both', async () => {
+      writeStandInCase();
+      const {result, lines} = await withErrorLines(() =>
+        runAcceptance(workspace.root, harness, 'vscodium', [
+          'cli-path',
+          'install-standin',
+        ]),
+      );
+      deepStrictEqual(
+        [result, lines, harness.calls],
+        [
+          2,
+          [
+            'acceptance: the run names a launch with real CLI archives (cli-path) and one with a stand-in CLI (install-standin): the CLI-source copy has one template, so name them in separate runs',
+          ],
+          [],
+        ],
+      );
+    });
+
+    it('#2735: a run that chooses no stand-in case asks for no stand-in archive, and the launch of a stand-in case starts the CLI-source copy where the run made one', () => {
+      writeStandInCase();
+      function started(environment: Record<string, string>): string[] {
+        return vscodiumConfigurations(
+          workspace.root,
+          {...CONFIGURATION_ENVIRONMENT, ...environment},
+          EXECUTABLE,
+        )
+          .filter(configuration => configuration.label === 'install-standin')
+          .map(configuration => configuration.useInstallation.fromPath);
+      }
+      deepStrictEqual(
+        [
+          started({HARNESS_CLI_EDITOR_EXECUTABLE: '/run/cli-editor/codium'}),
+          started({}),
+        ],
+        [['/run/cli-editor/codium'], [EXECUTABLE]],
       );
     });
 
@@ -3612,11 +4129,11 @@ describe('acceptance', () => {
       );
     });
 
-    it('coverage-11, tooling-34: the run waits for the helper of the launch before to end: the grace before the slow launch, the secrets and agent-notmp launches and each host-case launch, 5 s before a client-search launch', async () => {
+    it('coverage-11, tooling-34: the run waits for the helper of the launch before to end: the grace before the agent-off and slow launches, the secrets and agent-notmp launches and each host-case launch, 5 s before a client-search launch', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
       deepStrictEqual(
         harness.sleeps,
-        [3000, 5000, 3000, 3000, 3000, 3000, 3000],
+        [3000, 3000, 5000, 3000, 3000, 3000, 3000, 3000],
       );
     });
 
@@ -3688,7 +4205,7 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        Array.from({length: 16}, () => EXECUTABLE),
+        Array.from({length: 17}, () => EXECUTABLE),
       );
     });
 
@@ -3699,7 +4216,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        Array.from({length: 16}, () => true),
+        Array.from({length: 17}, () => true),
       );
     });
 
@@ -3719,6 +4236,7 @@ describe('acceptance', () => {
           ['x11-noxauth', 'dist-forwarding/**/*.test.cjs'],
           ['failure-refused', 'dist-failure/**/*.test.cjs'],
           ['terminal', 'dist-terminal/**/*.test.cjs'],
+          ['socket-prime', 'dist-socket-prime/**/*.test.cjs'],
           ['socket', 'dist-socket/**/*.test.cjs'],
           ['slow', 'dist-slow/**/*.test.cjs'],
           ['remote-ubuntu', 'dist-remote/**/*.test.cjs'],
@@ -3937,7 +4455,7 @@ describe('acceptance', () => {
 
     it('D-85: the slow launch loads the slow extension from the host, by its remote address', () => {
       deepStrictEqual(
-        configurations()[10]?.launchArgs.filter(argument =>
+        configurations()[11]?.launchArgs.filter(argument =>
           argument.startsWith('--extensionDevelopmentPath='),
         ),
         [
@@ -3979,24 +4497,9 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.env.REMOTE_OSS_ACCEPTANCE_LOG,
         ),
-        [
-          'local',
-          'remote',
-          'reconnect',
-          'agent',
-          'agent-off',
-          'x11',
-          'x11-noxauth',
-          'failure-refused',
-          'terminal',
-          'socket',
-          'slow',
-          'remote-ubuntu',
-          'client-unset',
-          'ports-probe',
-          'install-probe',
-          'platform-probe',
-        ].map(label => path.join('/run', `${label}-log.txt`)),
+        CONFIGURATION_LABELS.map(label =>
+          path.join('/run', `${label}-log.txt`),
+        ),
       );
     });
 
@@ -4005,24 +4508,9 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.env.REMOTE_OSS_ACCEPTANCE_WINDOWS,
         ),
-        [
-          'local',
-          'remote',
-          'reconnect',
-          'agent',
-          'agent-off',
-          'x11',
-          'x11-noxauth',
-          'failure-refused',
-          'terminal',
-          'socket',
-          'slow',
-          'remote-ubuntu',
-          'client-unset',
-          'ports-probe',
-          'install-probe',
-          'platform-probe',
-        ].map(label => path.join('/run', label, 'agent', 'pids')),
+        CONFIGURATION_LABELS.map(label =>
+          path.join('/run', label, 'agent', 'pids'),
+        ),
       );
     });
 
@@ -4033,7 +4521,7 @@ describe('acceptance', () => {
           .map(
             configuration => [configuration.extensionDevelopmentPath].flat()[0],
           ),
-        Array.from({length: 15}, () =>
+        Array.from({length: 16}, () =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );
@@ -4158,24 +4646,165 @@ describe('acceptance', () => {
       ]);
     });
 
-    it('#253 Q14: a platform with no pinned build throws', async () => {
-      await rejects(
-        vscodiumExecutableOf(workspace.root, 'darwin', 'arm64', {
-          download: () => Promise.resolve(new Uint8Array()),
-          unpack: () => undefined,
-        }),
-        {message: 'no VSCodium build is pinned for darwin-arm64'},
+    it("#2350: each pinned build's command-line wrapper is where its release archive puts it", () => {
+      const folder = path.join(workspace.root, 'unpacked');
+      deepStrictEqual(
+        Object.fromEntries(
+          Object.entries(VSCODIUM_PLATFORMS).map(([key, build]) => [
+            key,
+            path.relative(
+              folder,
+              vscodiumCliOf(
+                path.join(folder, build.executable),
+                key.slice(0, key.lastIndexOf('-')) as NodeJS.Platform,
+              ),
+            ),
+          ]),
+        ),
+        {
+          'linux-x64': path.join('bin', 'codium-insiders'),
+          'linux-arm64': path.join('bin', 'codium-insiders'),
+          'darwin-x64': MACOS_CLI,
+          'darwin-arm64': MACOS_CLI,
+          'win32-x64': path.join('bin', 'codium-insiders.cmd'),
+        },
       );
     });
 
-    it('#253 Q14: a download that answers with an error status throws after its one retry', async () => {
+    it('#253 Q14: a platform with no pinned build throws', async () => {
+      await rejects(
+        vscodiumExecutableOf(workspace.root, 'win32', 'arm64', {
+          download: () => Promise.resolve(new Uint8Array()),
+          unpack: () => undefined,
+        }),
+        {message: 'no VSCodium build is pinned for win32-arm64'},
+      );
+    });
+
+    it('platform-01: every pinned platform gives its asset URL and its executable path', async () => {
+      for (const [key, build] of Object.entries(VSCODIUM_PLATFORMS)) {
+        const dash = key.lastIndexOf('-');
+        const platform = key.slice(0, dash);
+        const architecture = key.slice(dash + 1);
+        const archive = new Uint8Array([1, 2, 3]);
+        let url = '';
+        let unpacks = 0;
+        const executable = await vscodiumExecutableOf(
+          workspace.root,
+          platform,
+          architecture,
+          {
+            download: target => {
+              url = target;
+              return Promise.resolve(archive);
+            },
+            unpack: () => {
+              unpacks += 1;
+            },
+          },
+          {[key]: createHash('sha256').update(archive).digest('hex')},
+        );
+        deepStrictEqual(
+          [executable, url, unpacks],
+          [
+            path.join(
+              workspace.root,
+              '.vscode-test',
+              `vscodium-${VSCODIUM_RELEASE.tagName}-${key}`,
+              build.executable,
+            ),
+            releaseAssetUrlOf(build.asset),
+            1,
+          ],
+        );
+      }
+    });
+
+    it('platform-01: the archive kind comes from its first bytes', () => {
+      deepStrictEqual(
+        [
+          archiveKindOf(new Uint8Array([0x1f, 0x8b])),
+          archiveKindOf(new Uint8Array([0x50, 0x4b, 0x03, 0x04])),
+          archiveKindOf(new Uint8Array([0x50, 0x4b])),
+          archiveKindOf(new Uint8Array([0x1f])),
+          archiveKindOf(new Uint8Array([0x1f, 0x00])),
+        ],
+        ['tar.gz', 'zip', 'zip', 'zip', 'zip'],
+      );
+    });
+
+    it('platform-01: tar unpacks a zip with -xf and a gzipped tar with -xzf', () => {
+      deepStrictEqual(
+        [
+          tarArgsOf('zip', 'archive.zip', 'out'),
+          tarArgsOf('tar.gz', 'archive.tar.gz', 'out'),
+        ],
+        [
+          ['-xf', 'archive.zip', '-C', 'out'],
+          ['-xzf', 'archive.tar.gz', '-C', 'out'],
+        ],
+      );
+    });
+
+    it('#253 Q14, tooling-179: a download that answers with an error status throws after its four tries, with each one', async () => {
+      const failure = 'https://example.invalid/a: 404';
       await rejects(
         downloadWithRetry(
           'https://example.invalid/a',
           () => Promise.resolve(new Response('', {status: 404})),
           () => Promise.resolve(),
         ),
-        {message: 'https://example.invalid/a: 404'},
+        {
+          message: `try 1: ${failure}; try 2: ${failure}; try 3: ${failure}; try 4: ${failure}`,
+        },
+      );
+    });
+
+    it('#2927: a template layer whose token request is dropped once is read on the next try, after the first pause', async () => {
+      const pauses: number[] = [];
+      let calls = 0;
+      function fakeFetch(): Promise<Response> {
+        calls += 1;
+        // The first token request is dropped; the second answers with a token and the layer request with the layer.
+        if (calls === 1) {
+          return Promise.reject(
+            new TypeError('fetch failed', {
+              cause: new Error('read ECONNRESET'),
+            }),
+          );
+        }
+        return Promise.resolve(
+          calls === 2
+            ? Response.json({token: 'pull-token'})
+            : new Response(new Uint8Array([5, 6])),
+        );
+      }
+      const layer = await retriedGhcrLayer(fakeFetch, milliseconds => {
+        pauses.push(milliseconds);
+        return Promise.resolve();
+      })({name: 'tiny', version: '1.2.3', layerDigest: 'sha256:00'});
+      deepStrictEqual(
+        [layer, pauses, calls],
+        [new Uint8Array([5, 6]), [5000], 3],
+      );
+    });
+
+    it('#2927: a template layer that ghcr.io never gives fails after its four tries, each naming the address and the reason', async () => {
+      const failure =
+        'https://ghcr.io/token?scope=repository:devcontainers/templates/tiny:pull: fetch failed (read ECONNRESET)';
+      await rejects(
+        retriedGhcrLayer(
+          () =>
+            Promise.reject(
+              new TypeError('fetch failed', {
+                cause: new Error('read ECONNRESET'),
+              }),
+            ),
+          () => Promise.resolve(),
+        )({name: 'tiny', version: '1.2.3', layerDigest: 'sha256:00'}),
+        {
+          message: `try 1: ${failure}; try 2: ${failure}; try 3: ${failure}; try 4: ${failure}`,
+        },
       );
     });
 
@@ -4206,6 +4835,48 @@ describe('acceptance', () => {
           caught instanceof Error ? caught.message : String(caught),
       );
     }
+
+    /** A rejection as undici's `fetch` gives it for a request with no answer. */
+    function droppedRequest(): Promise<Response> {
+      return Promise.reject(
+        new TypeError('fetch failed', {cause: new Error('read ECONNRESET')}),
+      );
+    }
+
+    it('#2927: a download whose requests get no answer fails after its four tries, each naming the address and the reason', async () => {
+      const failure =
+        'https://example.invalid/a: fetch failed (read ECONNRESET)';
+      await rejects(
+        downloadWithRetry('https://example.invalid/a', droppedRequest, () =>
+          Promise.resolve(),
+        ),
+        {
+          message: `try 1: ${failure}; try 2: ${failure}; try 3: ${failure}; try 4: ${failure}`,
+        },
+      );
+    });
+
+    it("#2927: a private asset whose signed address gets no answer names the asset's address, never the signed one", async () => {
+      const failure = await assetFailureOf('secret', (address, init) =>
+        init === undefined
+          ? droppedRequest()
+          : Promise.resolve(
+              new Response(null, {
+                status: 302,
+                headers: {location: 'https://signed.example.invalid/x?sig=1'},
+              }),
+            ),
+      );
+      const each =
+        'https://api.example.invalid/assets/41 (its signed address): fetch failed (read ECONNRESET)';
+      deepStrictEqual(
+        [failure, failure.includes('signed.example.invalid')],
+        [
+          `try 1: ${each}; try 2: ${each}; try 3: ${each}; try 4: ${each}`,
+          false,
+        ],
+      );
+    });
 
     it('tooling-111: a private asset is asked for with the token, and its signed address is fetched without it', async () => {
       const asked: unknown[] = [];
@@ -4260,7 +4931,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('tooling-111: an asset the token may not read throws after its one retry, and a redirect with no address is an error', async () => {
+    it('tooling-111, tooling-179: an asset the token may not read throws after its four tries, and a redirect with no address is an error', async () => {
       const outcomes = await Promise.all(
         [
           new Response(null, {status: 404}),
@@ -4269,10 +4940,17 @@ describe('acceptance', () => {
           assetFailureOf('secret', () => Promise.resolve(answer.clone())),
         ),
       );
-      deepStrictEqual(outcomes, [
-        'https://api.example.invalid/assets/41: 404',
-        'https://api.example.invalid/assets/41: 302',
-      ]);
+      deepStrictEqual(
+        outcomes,
+        ['404', '302'].map(status =>
+          [1, 2, 3, 4]
+            .map(
+              tries =>
+                `try ${String(tries)}: https://api.example.invalid/assets/41: ${status}`,
+            )
+            .join('; '),
+        ),
+      );
     });
 
     it('tooling-111: with no token the download fails at once and names the variable', async () => {
@@ -4411,7 +5089,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('#1430: the scheduled split’s parts make every launch of `all` but the genuine group’s, and no launch in two parts', () => {
+    it('#1430, tooling-159: the parts make every launch of `all` but the genuine group’s', () => {
       const launches = launchesOf(REPOSITORY_ROOT);
       const {parts} = workflowParts();
       const made = parts.flatMap(part =>
@@ -4419,12 +5097,10 @@ describe('acceptance', () => {
       );
       const wanted = chosenLabels(launches, ['all', '!@genuine']);
       // a group also makes its named-only launches (containers-podman), which `all` leaves out
+      // a launch run as parts by its files is in each of them; acceptance-parts.test.ts checks each file once
       deepStrictEqual(
-        [
-          wanted.filter(label => !made.includes(label)),
-          made.length === new Set(made).size,
-        ],
-        [[], true],
+        wanted.filter(label => !made.includes(label)),
+        [],
       );
     });
 
@@ -4583,6 +5259,102 @@ describe('acceptance', () => {
       );
     });
 
+    it('tooling-168: socket makes its primer right before it, the default selection makes neither primer nor the primer alone, and !socket takes both out', () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      /** The labels a selection makes from the repository's table. */
+      function labels(selected: string[]): string[] {
+        return chosenLabels(launches, selected);
+      }
+      deepStrictEqual(
+        [
+          labels(['socket']),
+          labels(['socket-prime']),
+          labels(['terminal', 'socket']),
+          labels(['terminal', 'socket', '!socket']),
+          chosenLabels(launches, undefined).includes('socket-prime'),
+        ],
+        [
+          ['socket-prime', 'socket'],
+          ['socket-prime'],
+          ['terminal', 'socket-prime', 'socket'],
+          ['terminal'],
+          false,
+        ],
+      );
+    });
+
+    it('tooling-159: <label>:<file>+… makes the plain launch that runs those files with only them, in its own order', () => {
+      /** A suite run in two parts by its files, a suite run whole, and a runner launch. */
+      const table: Launch[] = [
+        {label: 'local', runner: 'runner', suite: 'suite-local'},
+        {
+          label: 'wide-a',
+          kind: 'plain',
+          suite: 'wide',
+          files: ['a.test.ts', 'b.test.ts'],
+          partOf: 'wide',
+        },
+        {
+          label: 'wide-b',
+          kind: 'plain',
+          suite: 'wide',
+          files: ['c.test.ts'],
+          partOf: 'wide',
+        },
+        {label: 'entire', kind: 'plain', suite: 'entire'},
+      ];
+      /** The label and files of each launch a selection makes, or its error text. */
+      function made(...selected: string[]): unknown {
+        const chosen = chosenLaunches(table, selected);
+        return typeof chosen === 'string'
+          ? chosen
+          : chosen.map(launch => [
+              launch.label,
+              launch.kind === 'plain' ? launch.files : undefined,
+            ]);
+      }
+      deepStrictEqual(
+        [
+          made('wide:c.test.ts+a.test.ts'),
+          made('wide-a:b.test.ts', 'wide-a:a.test.ts'),
+          made('entire:y.test.ts+x.test.ts', 'local'),
+          made('wide-a:a.test.ts', 'wide-a'),
+          made('wide-b:a.test.ts'),
+          made('local:one.test.ts'),
+          made('entire:../x.test.ts'),
+        ],
+        [
+          [
+            ['wide-a', ['a.test.ts']],
+            ['wide-b', ['c.test.ts']],
+          ],
+          [['wide-a', ['a.test.ts', 'b.test.ts']]],
+          [
+            ['local', undefined],
+            ['entire', ['x.test.ts', 'y.test.ts']],
+          ],
+          [['wide-a', ['a.test.ts', 'b.test.ts']]],
+          'unknown launch label(s): wide-b:a.test.ts; the known ones: local, wide-a, wide-b, entire; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+          'unknown launch label(s): local:one.test.ts; the known ones: local, wide-a, wide-b, entire; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+          'unknown launch label(s): entire:../x.test.ts; the known ones: local, wide-a, wide-b, entire; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+        ],
+      );
+    });
+
+    it("tooling-159: a part of the repository's containers launch is named by a file it lists", () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      const chosen = chosenLaunches(launches, ['containers:reuse.test.ts']);
+      deepStrictEqual(
+        typeof chosen === 'string'
+          ? chosen
+          : chosen.map(launch => [
+              launch.label,
+              launch.kind === 'plain' ? launch.files : undefined,
+            ]),
+        [['containers-b', ['reuse.test.ts']]],
+      );
+    });
+
     it('tooling-53: an unknown group fails like an unknown label, listing the groups', () => {
       deepStrictEqual(
         [
@@ -4652,6 +5424,7 @@ describe('acceptance', () => {
       workspace.write('tests/acceptance/suite-failure/window.test.ts', '');
       workspace.write('tests/acceptance/suite-terminal/window.test.ts', '');
       workspace.write('tests/acceptance/suite-socket/window.test.ts', '');
+      workspace.write('tests/acceptance/suite-socket-prime/window.test.ts', '');
       workspace.write('tests/acceptance/suite-slow/window.test.ts', '');
       workspace.write('tests/acceptance/suite-ports/window.test.ts', '');
       workspace.write('tests/acceptance/suite-platform/window.test.ts', '');
@@ -4756,6 +5529,7 @@ describe('acceptance', () => {
           'dist-reconnect',
           'dist-failure',
           'dist-terminal',
+          'dist-socket-prime',
           'dist-socket',
           'dist-slow',
           'dist-ports',
@@ -4763,7 +5537,19 @@ describe('acceptance', () => {
         ].map(folder =>
           existsSync(path.join(workspace.root, 'tests/acceptance', folder)),
         ),
-        [false, false, false, false, false, false, false, false, false, false],
+        [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+        ],
       );
     });
 
@@ -4803,6 +5589,7 @@ describe('acceptance', () => {
           'dist-reconnect',
           'dist-failure',
           'dist-terminal',
+          'dist-socket-prime',
           'dist-socket',
           'dist-slow',
           'dist-ports',
@@ -4817,7 +5604,7 @@ describe('acceptance', () => {
             ),
           ),
         ),
-        [true, true, true, true, true, true, true, true, true],
+        [true, true, true, true, true, true, true, true, true, true],
       );
     });
   });
@@ -4880,5 +5667,18 @@ describe('the harness of the windows suites, bundled for the editor', () => {
     } finally {
       rmSync(folder, {recursive: true, force: true});
     }
+  });
+});
+
+describe('the run’s own engine (card #2830)', () => {
+  it('#2830: the run names the DOCKER_HOST it started with, which a launch may replace for its editor, and none when it has none', () => {
+    deepStrictEqual(
+      [
+        engineHostVariable({DOCKER_HOST: 'tcp://127.0.0.1:2375'}),
+        engineHostVariable({DOCKER_HOST: ''}),
+        engineHostVariable({}),
+      ],
+      [{HARNESS_ENGINE_HOST: 'tcp://127.0.0.1:2375'}, {}, {}],
+    );
   });
 });

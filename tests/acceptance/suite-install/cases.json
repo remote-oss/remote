@@ -15,6 +15,15 @@
       }
     },
     {
+      "label": "install-present-prime",
+      "cite": "the primer of its case (install-present-prime)",
+      "primer": true,
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}"
+      },
+      "outcome": "connected"
+    },
+    {
       "label": "install-present",
       "cite": "F-2403 AC-7 (install-present)",
       "settings": {
@@ -25,7 +34,17 @@
       "noStages": ["Downloading VS Code Server", "Installing VS Code Server"],
       "requests": {
         "count": 0
-      }
+      },
+      "needs": "install-present-prime"
+    },
+    {
+      "label": "install-present-stopped-prime",
+      "cite": "the primer of its case (install-present-stopped-prime)",
+      "primer": true,
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}"
+      },
+      "outcome": "connected"
     },
     {
       "label": "install-present-stopped",
@@ -38,7 +57,8 @@
       "noStages": ["Downloading VS Code Server", "Installing VS Code Server"],
       "requests": {
         "count": 0
-      }
+      },
+      "needs": "install-present-stopped-prime"
     },
     {
       "label": "install-fresh-legacy",
@@ -50,6 +70,17 @@
       "outcome": "connected",
       "stages": ["Downloading VS Code Server", "Installing VS Code Server"],
       "noDownloadProgress": true
+    },
+    {
+      "label": "noexec-layout",
+      "cite": "F-2008 AC-9 (c2500-noexec-layout)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.useExecServer": false
+      },
+      "outcome": "connected",
+      "installedIn": "/home/harness/.vscodium-server-insiders",
+      "hostLacks": ["/home/harness/.vscodium-server-insiders/cli"]
     },
     {
       "label": "download-unreachable",
@@ -158,6 +189,18 @@
       "leftovers": "/home/harness/.vscodium-server-insiders"
     },
     {
+      "label": "install-repaired-prime",
+      "cite": "the primer of its case (install-repaired-prime)",
+      "primer": true,
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/junk/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "off"
+      },
+      "setup": ["rm -f /home/harness/.wgetrc"],
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\": Failed to install the VS Code Server."
+    },
+    {
       "label": "install-repaired",
       "cite": "F-2403 AC-22 (install-repaired)",
       "settings": {
@@ -165,7 +208,8 @@
       },
       "keepFiles": true,
       "outcome": "connected",
-      "installedIn": "/home/harness/.vscodium-server-insiders"
+      "installedIn": "/home/harness/.vscodium-server-insiders",
+      "needs": "install-repaired-prime"
     },
     {
       "label": "licence-update-service",
@@ -286,7 +330,11 @@
         "remote.SSH.localServerDownload": "auto"
       },
       "outcome": "dialog",
-      "dialog": "Could not establish connection to \"harness\": Failed to download VS Code Server (Server returned 404)."
+      "dialog": "Could not establish connection to \"harness\": Failed to download VS Code Server (Server returned 404).",
+      "requests": {
+        "path": "/missing-cors/",
+        "clientCount": 1
+      }
     },
     {
       "label": "local-fallback",
@@ -362,7 +410,7 @@
     },
     {
       "label": "local-legacy",
-      "cite": "F-2405 AC-26 (local-legacy)",
+      "cite": "F-2405 AC-8, AC-26 (local-legacy)",
       "settings": {
         "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}",
         "remote.SSH.useExecServer": false
@@ -376,18 +424,34 @@
       "installedIn": "/home/harness/.vscodium-server-insiders"
     },
     {
+      "label": "local-exec-cli",
+      "cite": "F-2405 AC-8 (local-exec-cli)",
+      "cliStandIn": true,
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "always"
+      },
+      "setup": ["rm -f /tmp/stand-in-cli-ran"],
+      "outcome": "any",
+      "cliIn": "/home/harness/.vscodium-server-insiders"
+    },
+    {
       "label": "local-404-nocors",
-      "cite": "F-2405 AC-29 (ruling-253-cors)",
+      "cite": "F-2405 AC-12 (local-404-nocors)",
       "settings": {
         "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/missing/${os}-${arch}/${commit}",
         "remote.SSH.localServerDownload": "auto"
       },
       "outcome": "dialog",
-      "dialog": "Could not establish connection to \"harness\": Failed to download VS Code Server (Server returned 404)."
+      "dialog": "Could not establish connection to \"harness\": Failed to download VS Code Server (Server returned 404).",
+      "requests": {
+        "path": "/missing/",
+        "clientCount": 1
+      }
     },
     {
       "label": "local-nocache-ok",
-      "cite": "F-2405 AC-17 (ruling-253-nocache)",
+      "cite": "F-2405 AC-17 (local-nocache-ok)",
       "settings": {
         "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}"
       },
@@ -397,7 +461,7 @@
     },
     {
       "label": "local-nocache-fail",
-      "cite": "F-2405 AC-17 (ruling-253-nocache)",
+      "cite": "F-2405 AC-17 (local-nocache-fail)",
       "settings": {
         "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/junk/${os}-${arch}/${commit}"
       },
@@ -491,6 +555,26 @@
         "hostThenClient": true
       },
       "installedIn": "/home/harness/.vscodium-server-insiders"
+    },
+    {
+      "label": "local-copy-fails",
+      "cite": "F-2405 AC-16 (local-copy-fails)",
+      "authority": "agentfwd-tmpdir",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "always"
+      },
+      "setup": [
+        "pkill -u harness-tmpdir -f '[v]scodium-server-insiders'; rm -rf /home/harness-tmpdir/.vscodium-server-insiders; chmod 500 /home/harness-tmpdir/tmp; true"
+      ],
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"agentfwd-tmpdir\": Failed to install the VS Code Server.",
+      "stages": [
+        "Downloading VS Code Server locally",
+        "Copying VS Code Server to host with scp"
+      ],
+      "noStages": ["Installing VS Code Server"],
+      "hostLacks": ["/home/harness-tmpdir/.vscodium-server-insiders/bin"]
     }
   ]
 }

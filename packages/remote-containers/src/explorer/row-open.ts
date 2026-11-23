@@ -14,6 +14,7 @@ import {openPathAllowed} from '../open/open-gate.ts';
 import type {ReopenPorts} from '../open/reopen-ports.ts';
 import {inspectArguments, listedContainersOf} from './listed-containers.ts';
 import {containerRowOf} from './row-actions.ts';
+import type {TargetRow} from './targets-model.ts';
 
 /** The titles of the two commands, which the log names. */
 const CURRENT_TITLE = 'Open in Container in Current Window';
@@ -24,6 +25,20 @@ const DEFAULT_CONFIGURATIONS = [
   '.devcontainer/devcontainer.json',
   '.devcontainer.json',
 ] as const;
+
+/** The row a command was given: a container's, or the folder row of a Compose dev container, which names its container. */
+function openRowOf(argument: unknown): TargetRow | undefined {
+  const container = containerRowOf(argument);
+  if (container !== undefined) {
+    return container;
+  }
+  const target = argument as Partial<TargetRow> | null;
+  return typeof target?.containerId === 'string' &&
+    typeof target.viewItem === 'string' &&
+    target.viewItem.split(' ').includes('folder')
+    ? (target as TargetRow)
+    : undefined;
+}
 
 /** What the row commands read and call, beside what Reopen in Container already uses. */
 export interface RowOpenPorts extends Pick<
@@ -95,7 +110,7 @@ export function rowOpenOf(ports: RowOpenPorts): RowOpen {
     argument: unknown,
     target: 'current' | 'new',
   ): Promise<void> {
-    const containerRow = containerRowOf(argument);
+    const containerRow = openRowOf(argument);
     const title = target === 'current' ? CURRENT_TITLE : NEW_TITLE;
     if (containerRow?.viewItem.split(' ').includes('openFolder') !== true) {
       return;
@@ -116,7 +131,7 @@ export function rowOpenOf(ports: RowOpenPorts): RowOpen {
     }
     const labels = await labelsOf(
       ports.engineFor(executable.file),
-      containerRow.id,
+      containerRow.containerId ?? containerRow.id,
     );
     const folder = labels === undefined ? undefined : localFolderOf(labels);
     const configFile =

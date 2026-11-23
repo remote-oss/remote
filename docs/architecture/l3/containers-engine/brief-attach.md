@@ -85,7 +85,7 @@ engine of `contracts.md` §2. Kubernetes (F-0604) is group 12. The Apple family 
 
 ## 4. The connect (C10's attached family, C12's container step)
 
-C10 gains the `attached-container` family. Its connect keeps steps 1, 2 and 4 to 6 of `contracts.md` §2 and replaces C7
+C10 gains the `attached-container` family. Its connect keeps steps 1, 2 and 4 to 10 of `contracts.md` §2 and replaces C7
 with C12's container step. That's the same split the volume path makes for its shared connect tail.
 
 1. **Find the container** with the payload's engine: `docker inspect` by name.
@@ -111,7 +111,8 @@ with C12's container step. That's the same split the volume path makes for its s
      - `set-up --container-id <id>`;
      - `--config <the applicable attach file>` when one exists;
      - `--docker-path`, `--log-level`, `--log-format json` and the terminal size;
-     - `--skip-non-blocking-commands` and `--include-merged-configuration`;
+     - `--skip-post-create` and `--include-merged-configuration` (brief-personalization §1: set-up does the patches
+       only, and no lifecycle command runs here);
      - the engine coordinate in its environment, as every C3 run gets it.
    - **What the CLI does itself:**
      - the `/etc/environment` and `/etc/profile` patches as root;
@@ -124,6 +125,9 @@ with C12's container step. That's the same split the volume path makes for its s
        bundled CLI, together with the folding.
    - **A failure** is S033's dialog with "Retry" (primary) | "Close Remote" | "More Actions..." (7.E4, F-0602 7.E5).
      - **Best effort:** a patch that fails is the CLI's best effort and doesn't end the attach (BR-13's order).
+   - **The order after it** (brief-personalization §1): the Alpine step (4), the server files of step 6, phase E, the
+     blocking run (`run-user-commands --container-id <id> --skip-non-blocking-commands`, with `--config` as above and
+     `--remote-env` per relay variable, under "Starting server"), then the server's start.
 4. **The Alpine step** (BR-13 (d)): as root, through C2's exec, read by exit status only (ADR-0010).
    - `ID=alpine` in `/etc/os-release` (a documented format);
    - then `apk info -e libstdc++`;
@@ -152,7 +156,8 @@ with C12's container step. That's the same split the volume path makes for its s
 10. **Connected** with `trusted: true`. F-0106 BR-13 forces trust for attached windows (AC-37, AC-43); core shows the
     "trusted by nature" lines itself.
 11. **The background stage:** C3's new `attachedUserCommandsArguments` runs `run-user-commands --container-id <id>`,
-    with `--config` as in step 3 and the same common flags, after the connect.
+    with `--config` as in step 3 and the same common flags, after the connect, twice as `contracts.md` §2 step 9 has
+    it: run 1 with `--stop-for-personalization`, phase P, then run 2 with no stop.
     - **No `--workspace-folder`:** the CLI's working directory stands in. The CLI reads `--config` through the same
       reader as `set-up`, with no name check, and finds the container by id. A unit row pins this against the bundled
       CLI.

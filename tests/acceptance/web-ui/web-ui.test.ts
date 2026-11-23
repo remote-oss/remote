@@ -1,6 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
 import {existsSync, readdirSync, readFileSync} from 'node:fs';
-import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
 import {
   closeWindow,
@@ -43,6 +42,7 @@ import {
   serverPortOf,
   setWebAccess,
 } from '../windows/web-ui-support.ts';
+import {readStateDatabase} from '../windows/state-database.ts';
 
 /** The label of the command in the Command Palette. */
 const COMMAND = 'Remote-SSH: Open Web UI';
@@ -126,15 +126,12 @@ function stateLength(): number | undefined {
   if (!existsSync(file)) {
     return undefined;
   }
-  const database = new DatabaseSync(file, {readOnly: true});
-  try {
+  return readStateDatabase(file, database => {
     const entry = database
       .prepare('SELECT value FROM ItemTable WHERE key = ?')
       .get('remote-oss.remote-ssh') as {value?: string} | undefined;
     return entry?.value?.length;
-  } finally {
-    database.close();
-  }
+  });
 }
 
 /** What running Open Web UI must leave as it is, on the client and on the host. */
@@ -169,6 +166,40 @@ async function storedOf() {
       .sort(),
     scratch: (await onHost('ls', '-A', '/tmp')).split('\n').sort(),
   };
+}
+
+/** What the editor and the server keep in the host's `/tmp` beside any command: the server's `code-<uuid>` folders and the git and IPC sockets of the windows. */
+const SERVER_MANAGED = /^(code-[0-9a-f-]{36}|vscode-[\w.-]+\.sock)$/;
+
+/**
+ * What differs between two snapshots of {@link storedOf}, by key: the entries a list gained or lost, and a value that
+ * changed. A name in `/tmp` that the editor or server manages is not counted, nor is one that went away there: a removal
+ * by another process is not a write of the command. Empty when nothing the command could write changed.
+ */
+function storedDifferences(
+  before: Awaited<ReturnType<typeof storedOf>>,
+  after: Awaited<ReturnType<typeof storedOf>>,
+): Record<string, unknown> {
+  const found: Record<string, unknown> = {};
+  for (const key of Object.keys(before) as Array<keyof typeof before>) {
+    const earlier = before[key];
+    const now = after[key];
+    if (Array.isArray(earlier) && Array.isArray(now)) {
+      const added = now.filter(
+        entry =>
+          !earlier.includes(entry) &&
+          !(key === 'scratch' && SERVER_MANAGED.test(entry)),
+      );
+      const removed =
+        key === 'scratch' ? [] : earlier.filter(entry => !now.includes(entry));
+      if (added.length > 0 || removed.length > 0) {
+        found[key] = {added, removed};
+      }
+    } else if (earlier !== now) {
+      found[key] = {earlier, now};
+    }
+  }
+  return found;
 }
 
 /** The launch's user data `User` folder. */
@@ -423,7 +454,7 @@ describe('Open Web UI (card coverage-48)', function () {
     const before = await storedOf();
     await paletteRun('wu1', 'Open Web UI');
     await new Promise(resolve => setTimeout(resolve, 3000));
-    deepStrictEqual(await storedOf(), before);
+    deepStrictEqual(storedDifferences(before, await storedOf()), {});
   });
 
   it('F-2509 AC-8, AC-13 (reconnecting): while the connection is lost it is not listed and running it opens nothing, and it is listed again once the connection is back', async () => {

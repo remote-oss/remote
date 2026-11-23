@@ -3,10 +3,12 @@ import {
   closeWindow,
   connectedWithin,
   editorProduct,
+  inspectedIn,
   inWindow,
   onHost,
   openWindow,
   reloadWindow,
+  settingIn,
   terminalNames,
   waitFor,
 } from '../windows/harness.ts';
@@ -66,6 +68,39 @@ async function groupsOf(folder: string): Promise<Array<[string, string]>> {
     30_000,
   );
   return quickPickGroups(folder);
+}
+
+/** The setting that names the profile a new terminal opens. */
+const DEFAULT_PROFILE = 'terminal.integrated.defaultProfile.linux';
+
+/**
+ * What tells a window that missed the emptying of the host's machine settings from one that never could read it: what the
+ * window reads and every scope of the setting it knows, what the host holds at the file, and whether the window reads
+ * the setting without zsh once the file is written with another content, and after how long.
+ */
+async function cleanupFacts(window: string, file: string): Promise<string> {
+  const onFile = await onHost(
+    'sh',
+    '-c',
+    `ls -l '${file}' 2>&1; cat '${file}' 2>&1`,
+  ).catch((failed: unknown) => String(failed));
+  const facts: Record<string, unknown> = {
+    value: await settingIn(window, DEFAULT_PROFILE),
+    inspected: await inspectedIn(window, DEFAULT_PROFILE),
+    onHost: onFile,
+  };
+  await onHost('sh', '-c', `printf '%s' '{"c2641.probe": true}' > '${file}'`);
+  const began = Date.now();
+  facts.readWithoutZshAfterRewriteMilliseconds = await waitFor(
+    `window ${window} to read ${DEFAULT_PROFILE} without zsh after the file was written again`,
+    async () => (await settingIn(window, DEFAULT_PROFILE)) !== 'zsh',
+    10_000,
+  ).then(
+    () => Date.now() - began,
+    () => 'not within 10 s',
+  );
+  await onHost('sh', '-c', `printf '%s' '{}' > '${file}'`);
+  return JSON.stringify(facts);
 }
 
 describe('the lists and the reload of an SSH window that uses its terminals (card connect-125)', function () {
@@ -236,9 +271,12 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
       const serverBefore = await serverProcessIds();
       await reloadWindow('c125-reload');
       await connectedWithin('c125-reload', 60_000);
+      // A revived terminal is listed before it is named, so the wait is for the names, not the count.
       await waitFor(
-        'the terminals to be revived',
-        async () => (await terminalNames('c125-reload')).length === 2,
+        'the terminals to be revived under their names',
+        async () =>
+          JSON.stringify(await terminalNames('c125-reload')) ===
+          JSON.stringify(before),
         60_000,
       );
       deepStrictEqual(
@@ -258,6 +296,7 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
       `mkdir -p "$(dirname '${file}')" && printf '%s' '{"terminal.integrated.defaultProfile.linux": "zsh"}' > '${file}'`,
     );
     await openWindow('harness', 'c125-zsh');
+    const failures: unknown[] = [];
     try {
       await inWindow('c125-zsh', 'workbench.action.terminal.new');
       await waitFor(
@@ -266,9 +305,32 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
         30_000,
       );
       deepStrictEqual(await terminalNames('c125-zsh'), ['zsh']);
-    } finally {
-      await closeWindow('c125-zsh').catch(() => undefined);
-      await onHost('rm', '-f', file);
+    } catch (error) {
+      failures.push(error);
+    }
+    // The file is emptied, not removed: the server missed a removal of it every second time in a measurement (card #2641;
+    // twelve rounds on a runner, the window kept reading zsh for 20 s), and read every write of it.
+    await onHost('sh', '-c', `printf '%s' '{}' > '${file}'`);
+    try {
+      // The server reads its machine settings as they change, not at once: the next terminal of the launch opens in the
+      // default shell only when the window reads the setting without zsh (a terminal of zsh in c80-shell, batch 7).
+      await waitFor(
+        `window c125-zsh to read ${DEFAULT_PROFILE} without zsh`,
+        async () => (await settingIn('c125-zsh', DEFAULT_PROFILE)) !== 'zsh',
+        30_000,
+      );
+    } catch (error) {
+      failures.push(
+        new Error(
+          `${error instanceof Error ? error.message : String(error)}; facts: ${await cleanupFacts('c125-zsh', file).catch((failed: unknown) => `not gathered: ${String(failed)}`)}`,
+          {cause: error},
+        ),
+      );
+    }
+    await closeWindow('c125-zsh').catch(() => undefined);
+    // The row's own error comes first; a wait that timed out after a passing row fails the row by itself.
+    if (failures.length > 0) {
+      throw failures[0];
     }
   });
 });

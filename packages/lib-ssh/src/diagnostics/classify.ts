@@ -3,14 +3,14 @@
  * hints kept for the session. Prompts and their answers never pass through here.
  */
 
-import type {DiagnosticStringId, FailureKind} from './rules.ts';
+import type {ConnectionMode, DiagnosticStringId, FailureKind} from './rules.ts';
 import {
   CONNECTION_CLOSED_TEXT,
   FAILING_CONNECTIONS_TOPIC,
   DEBUG1_PREFIX,
   FAILURE_PATTERNS,
   FORWARDING_SETTING,
-  NETWORK_RULES,
+  networkRules,
   PERMISSION_DENIED_START,
   SENTENCE_ENDINGS,
   SERVER_HOST_KEY_TEXT,
@@ -19,9 +19,6 @@ import {setupMarkerOf} from './setup-report.ts';
 
 /** What the `ssh` run was for. */
 export type ClassifyPurpose = 'connection' | 'tunnel' | 'oneShot' | 'copy';
-
-/** How the connection runs: through the shared local connection server, or in a terminal of its own. */
-export type ConnectionMode = 'shared' | 'terminal';
 
 /** A reason: a string of the extension's table, or a line of `ssh` shown as it is. */
 export type FailureReason = {id: DiagnosticStringId} | {text: string};
@@ -77,9 +74,11 @@ export const FORWARDING_PROHIBITED_HINT: FailureHint = {
 /**
  * Classifies the error lines of one run, in the order `ssh` wrote them. Only the lines before `Authenticated to` are
  * ssh's own diagnostics: a login's startup files run after it, and what they print is remote text. So every rule reads
- * that window, in its anchored form. The four rules for failures ssh reports after authentication (forwarding
- * prohibited or disabled, a broken pipe, a closed connection) also read the later lines, only when ssh itself exited
- * with 255. A run in which no authentication was seen has no window to cut: all its lines count.
+ * that window; in the shared server's stream the two timeout forms are the only ones not anchored, where the exact,
+ * case-sensitive timeout text counts wherever it stands in a line; in a terminal's stream only their anchored form
+ * counts. The four rules for failures ssh reports after authentication (forwarding prohibited or disabled, a broken
+ * pipe, a closed connection) also read the later lines, only when ssh itself exited with 255. A run in which no
+ * authentication was seen has no window to cut: all its lines count.
  */
 export function classify(
   errorLines: readonly string[],
@@ -122,7 +121,7 @@ export function classify(
   if (purpose === 'connection' && contains(FAILURE_PATTERNS.invalidHostName)) {
     return withHint('unreachable', 'InvalidHostName', {id: 'S079'});
   }
-  const network = NETWORK_RULES.find(rule => contains(rule.pattern));
+  const network = networkRules(mode).find(rule => contains(rule.pattern));
   if (network !== undefined) {
     return withHint(network.kind, 'OfflineError', {id: network.reason});
   }

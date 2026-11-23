@@ -8,13 +8,18 @@ import type {Logger} from 'lib-log';
 import type {CliBridge} from '../cli/cli-bridge.ts';
 import {namesContainerSource} from '../config/configuration-text.ts';
 import type {StdinPresentation} from '../cli/cli-host.ts';
-import type {CliTarget, FeatureSettings} from '../cli/cli-arguments.ts';
+import type {
+  CliTarget,
+  FeatureSettings,
+  RunUserCommandsOptions,
+} from '../cli/cli-arguments.ts';
 import type {CliEvent, CliFailure} from '../cli/cli-lines.ts';
 import type {
   ComposeResolution,
   ComposeResolveRequest,
 } from '../compose/resolver.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
+import type {ComposeMembership} from '../shutdown/protocol.ts';
 import {hasVscodeVolume, inspectedFacts} from './inspect-lines.ts';
 import {
   type MountSource,
@@ -63,6 +68,8 @@ export interface ContainerRequest {
   cacheVolume: boolean;
   /** The consistency of the workspace mount (`dev.containers.workspaceMountConsistency`), as written. */
   workspaceMountConsistency: string;
+  /** `dev.containers.gpuAvailability`, as written. */
+  gpuAvailability: string;
   /** Whether the Git worktree's common dir is mounted (`dev.containers.experimentalMountGitWorktreeCommonDir`). */
   mountGitWorktreeCommonDir: boolean;
   /** The Feature settings: the default Features and the lockfile. */
@@ -75,6 +82,8 @@ export interface ContainerRequest {
   runArgs: readonly unknown[];
   /** The `workspaceMount` of the configuration, as the CLI read it; none when it has none. */
   workspaceMount: unknown;
+  /** Told once the Compose project is identified, before any container is looked for or made; not called for an image. */
+  composeIdentified?: (membership: ComposeMembership) => void;
   /** Takes, once, the retry the failure dialog left for the paused container `containerId`; whether there was one. */
   pausedRetry: (containerId: string) => Promise<boolean>;
 }
@@ -88,6 +97,12 @@ export type ContainerOutcome =
       remoteWorkspaceFolder: string;
       volumeMounted: boolean;
       created: boolean;
+      /** The Dockerfile the primary service of a Compose project builds from, absolute; none otherwise. */
+      serviceDockerfile?: string;
+      /** What `up` read of the configuration, as `read-configuration` gives it; none for an outcome that did not come from `up`. */
+      configuration?: Record<string, unknown>;
+      /** What `up` read of the configuration merged with the container's metadata; none as for `configuration`. */
+      mergedConfiguration?: Record<string, unknown>;
     }
   | {kind: 'unusable'; containerId: string; status: string}
   | {kind: 'reservedMount'; property: string; target: string}
@@ -132,6 +147,32 @@ export interface ContainerLifecycle {
     onCliEvent: (event: CliEvent) => void,
     cancellation: AbortSignal,
   ): Promise<ContainerOutcome>;
+  /**
+   * Takes a running container that `prepare` did not make as the ready one, with the target its runs are told and where
+   * their events go.
+   */
+  adopt(
+    containerId: string,
+    target: CliTarget,
+    onCliEvent: (event: CliEvent) => void,
+  ): void;
+  /**
+   * Runs the blocking lifecycle commands of the container `prepare` made ready, up to the one `waitFor` names, with
+   * `remoteEnvironment` added; the failure carries the container for the failure's pick. With no ready container,
+   * nothing runs.
+   */
+  runBlocking(
+    remoteEnvironment: Readonly<Record<string, string>>,
+    cancellation: AbortSignal,
+  ): Promise<{kind: 'done'} | Exclude<ContainerOutcome, {kind: 'ready'}>>;
+  /**
+   * Starts the rest of the lifecycle commands in the background: up to the personalization stop, then `personalize`,
+   * then the rest. Nothing is started when no container is ready.
+   */
+  startBackground(
+    remoteEnvironment: Readonly<Record<string, string>>,
+    personalize: () => Promise<void>,
+  ): void;
   /** Ends the background lifecycle commands this lifecycle started. */
   stopBackground(): void;
 }
@@ -264,6 +305,13 @@ const POST_CREATE_CHANNEL = 'postCreate';
 /** The hook that runs on the host before the container exists; its failure has no terminal to end. */
 const INITIALIZE_COMMAND = 'initializeCommand';
 
+/** A container `prepare` made ready: the target `up` ran with, and where the events of its runs go. */
+interface ReadyContainer {
+  target: CliTarget;
+  containerId: string;
+  onCliEvent: (event: CliEvent) => void;
+}
+
 /** The lifecycle over an engine and the CLI. */
 export function containerLifecycleOf(dependencies: {
   engine: EngineHost;
@@ -292,6 +340,28 @@ export function containerLifecycleOf(dependencies: {
   let background: AbortController | undefined;
   let stage: 'idle' | 'running' | 'ended' = 'idle';
   let runStart = 0;
+  /** The container `prepare` made ready, the target `up` ran with, and where its events go. */
+  let ready: ReadyContainer | undefined;
+
+  /** One `run-user-commands` on the ready container `on`, where the background stage says, with `options`. */
+  function runCommands(
+    on: ReadyContainer,
+    options: RunUserCommandsOptions,
+    cancellation: AbortSignal,
+  ): ReturnType<CliBridge['runUserCommands']> {
+    return (backgroundStage?.cli ?? bridge).runUserCommands(
+      {
+        ...(backgroundStage?.targetOf(on.target) ?? on.target),
+        terminalSize: presenter.terminalSize(),
+      },
+      on.containerId,
+      on.onCliEvent,
+      cancellation,
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- the presenter's method holds no this
+      presenter.attachStdin,
+      options,
+    );
+  }
 
   /** Tells the presenter once that the run has ended. */
   function end(): void {
@@ -367,41 +437,75 @@ export function containerLifecycleOf(dependencies: {
     return hasVscodeVolume(answer.stdout);
   }
 
-  function startBackground(
-    target: CliTarget,
-    containerId: string,
-    onCliEvent: (event: CliEvent) => void,
+  /** Logs how a background run ended. */
+  function logBackground(
+    result: Awaited<ReturnType<CliBridge['runUserCommands']>>,
   ): void {
+    if (result.kind === 'done') {
+      logger.info('the lifecycle commands finished');
+    } else {
+      const hook = result.kind === 'lifecycleFailed' ? ` (${result.hook})` : '';
+      logger.warn(`the lifecycle commands failed: ${result.kind}${hook}`);
+    }
+  }
+
+  async function runBlocking(
+    remoteEnvironment: Readonly<Record<string, string>>,
+    cancellation: AbortSignal,
+  ): Promise<{kind: 'done'} | Exclude<ContainerOutcome, {kind: 'ready'}>> {
+    if (ready === undefined) {
+      logger.warn(
+        'the blocking lifecycle commands were skipped: no container is ready',
+      );
+      return {kind: 'done'};
+    }
+    const result = await runCommands(
+      ready,
+      {skipNonBlocking: true, remoteEnvironment},
+      cancellation,
+    );
+    if (result.kind === 'done') {
+      return result;
+    }
+    if (result.kind === 'lifecycleFailed') {
+      end();
+    }
+    return {...result, foundContainerId: ready.containerId};
+  }
+
+  function startBackground(
+    remoteEnvironment: Readonly<Record<string, string>>,
+    personalize: () => Promise<void>,
+  ): void {
+    const on = ready;
+    if (on === undefined) {
+      logger.warn(
+        'the background lifecycle commands were skipped: no container is ready',
+      );
+      return;
+    }
     background?.abort();
     const own = new AbortController();
     background = own;
     stage = 'running';
     presenter.backgroundStarted();
-    void (backgroundStage?.cli ?? bridge)
-      .runUserCommands(
-        {
-          ...(backgroundStage?.targetOf(target) ?? target),
-          terminalSize: presenter.terminalSize(),
-        },
-        containerId,
-        onCliEvent,
+    void (async () => {
+      const first = await runCommands(
+        on,
+        {stopForPersonalization: true, remoteEnvironment},
         own.signal,
-        // eslint-disable-next-line @typescript-eslint/unbound-method -- the presenter's method holds no this
-        presenter.attachStdin,
-      )
-      .then(result => {
-        backgroundStage?.ended();
-        if (background === own && !own.signal.aborted) {
-          end();
-        }
-        if (result.kind === 'done') {
-          logger.info('the lifecycle commands finished');
-        } else {
-          const hook =
-            result.kind === 'lifecycleFailed' ? ` (${result.hook})` : '';
-          logger.warn(`the lifecycle commands failed: ${result.kind}${hook}`);
-        }
-      });
+      );
+      let last = first;
+      if (first.kind === 'done' && !own.signal.aborted) {
+        await personalize();
+        last = await runCommands(on, {remoteEnvironment}, own.signal);
+      }
+      backgroundStage?.ended();
+      if (background === own && !own.signal.aborted) {
+        end();
+      }
+      logBackground(last);
+    })();
   }
 
   /** The queries that find the container of a connection: the primary service's of a Compose project, else the folder's. */
@@ -593,6 +697,13 @@ export function containerLifecycleOf(dependencies: {
     if (composeResolution.kind === 'failed') {
       return {kind: 'discoveryFailed', detail: composeResolution.detail};
     }
+    if (composeResolution.kind === 'ready') {
+      request.composeIdentified?.({
+        project: composeResolution.projectName,
+        service: composeResolution.service,
+        scope: composeResolution.scope,
+      });
+    }
     const reserved = request.cacheVolume
       ? reservedMount(mountSourcesOf(request, composeResolution))
       : undefined;
@@ -780,6 +891,7 @@ export function containerLifecycleOf(dependencies: {
         removeExistingContainer: rebuilding && !composeRebuild,
         buildNoCache: request.rebuild?.buildNoCache ?? false,
         workspaceMountConsistency: request.workspaceMountConsistency,
+        gpuAvailability: request.gpuAvailability,
       },
       relayEvent,
       cancellation,
@@ -821,7 +933,7 @@ export function containerLifecycleOf(dependencies: {
       );
     }
     const mounted = await volumeMounted(upResult.containerId, cancellation);
-    startBackground(target, upResult.containerId, relayEvent);
+    ready = {target, containerId: upResult.containerId, onCliEvent: relayEvent};
     onStep('containerReady');
     return {
       kind: 'ready',
@@ -832,11 +944,26 @@ export function containerLifecycleOf(dependencies: {
       created: !discovery.containers.some(
         container => container.id === upResult.containerId,
       ),
+      ...(composeResolution.kind === 'ready' &&
+      composeResolution.serviceDockerfile !== undefined
+        ? {serviceDockerfile: composeResolution.serviceDockerfile}
+        : {}),
+      ...(upResult.configuration === undefined
+        ? {}
+        : {configuration: upResult.configuration}),
+      ...(upResult.mergedConfiguration === undefined
+        ? {}
+        : {mergedConfiguration: upResult.mergedConfiguration}),
     };
   }
 
   return {
     prepare,
+    adopt: (containerId, target, onCliEvent) => {
+      ready = {target, containerId, onCliEvent};
+    },
+    runBlocking,
+    startBackground,
     stopBackground: () => {
       background?.abort();
       if (stage === 'running') {

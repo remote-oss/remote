@@ -12,6 +12,7 @@ import {
   payloadOf,
   pickedTarget,
 } from '../connect/connect-commands.ts';
+import {reasonText} from '../surfaces/failure-strings.ts';
 import {ownText} from '../surfaces/own-strings.ts';
 import type {NoticePort} from '../surfaces/notice.ts';
 import type {Translate} from '../surfaces/strings.ts';
@@ -35,8 +36,8 @@ export interface MaintenancePorts {
   ): Promise<MaintenanceRun>;
   /** The host and the connection mode of the window's held connection, or nothing when it holds none that is open. */
   heldHost(): {target: SshTarget; terminalMode: boolean} | undefined;
-  /** Ends the local connection server of the host string and forgets its stored details; silent when none runs. */
-  killLocalServer(hostString: string): PromiseLike<void>;
+  /** Ends the local connection server of the host string and forgets its stored details; also when none runs. */
+  killLocalServer(hostString: string): PromiseLike<'found' | 'none'>;
   /** Tells the window's resolver that the window is about to leave its remote, so its resolves end silently. */
   leaveWindow(): void;
   /** Takes back `leaveWindow()`, for a window that stays. */
@@ -48,7 +49,10 @@ export interface MaintenancePorts {
   logger: Logger;
 }
 
-/** The detail of the error an uninstall that could not run ends in; the editor shows it in its own frame. */
+/**
+ * The detail of the error an uninstall that could not run ends in when the run gives no reason of its own; the editor
+ * shows it in its own frame. A target that fails its name check gives the check's message instead.
+ */
 const UNINSTALL_FAILED = 'Failed to run command';
 
 /** The two handlers over `ports`. */
@@ -150,7 +154,11 @@ export function maintenanceHandlers(ports: MaintenancePorts): {
     if (outcome.result !== 'stepRan') {
       ports.logger.warn(`the uninstall failed: ${outcome.cause}`);
       if (outcome.result === 'connectionFailed') {
-        throw new Error(UNINSTALL_FAILED);
+        throw new Error(
+          (outcome.reason === undefined
+            ? undefined
+            : reasonText(outcome.reason, translate)) ?? UNINSTALL_FAILED,
+        );
       }
       return;
     }

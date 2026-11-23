@@ -23,6 +23,7 @@ import {
   PromptReader,
   type SessionRunner,
   connectionStart,
+  interpreterOfPlatform,
   sessionStartFor,
   setupMarkerOf,
   type SshRequest,
@@ -30,14 +31,25 @@ import {
   TerminalSessionRunner,
   type TerminalLogin,
   type FailureHint,
+  LocalCommandLog,
+  bootstrapEventOf,
 } from 'lib-ssh';
+import {sshStartedLine} from '../diagnostics/log-content.ts';
 import {goesOnAfterLoginTimeout} from './connection-request.ts';
 import {
   clientRefusal,
   CONNECT_WAIT_TIMEOUT,
   ofClassification,
+  UNANSWERED_QUESTION,
 } from './failure.ts';
-import {isForwardingLine, logSshLines} from './ssh-log.ts';
+import {
+  isForwardingLine,
+  beforeInteractiveSession,
+  isSshDebugLine,
+  logLocalCommandLines,
+  logSshLines,
+  withoutAnswer,
+} from './ssh-log.ts';
 import type {
   ConnectInput,
   ConnectionLease,
@@ -118,6 +130,7 @@ export function openTerminalConnectionStep(
       dependencies.terminalName(),
       revealed,
     );
+    dependencies.logger.info(sshStartedLine());
     return new Promise<StepResult<ConnectionLease>>(settle => {
       const lines: string[] = [];
       const waitSettings = dependencies.connectWait();
@@ -125,6 +138,11 @@ export function openTerminalConnectionStep(
       let handedOver = false;
       let authenticated = false;
       let finished = false;
+      // The terminal's lines from ssh's authentication to its entering the session are the `LocalCommand`'s, besides ssh's
+      // own and the echo of what is typed: the command runs in that time, and the first protocol line closes it as well.
+      let commandPhase: 'waiting' | 'open' | 'closed' = 'waiting';
+      const commandLog = new LocalCommandLog();
+      const typedLines = new Set<string>();
       const asking: {
         questions?: {onQuestion(text: string): void; dispose(): void};
       } = {};
@@ -175,7 +193,7 @@ export function openTerminalConnectionStep(
             asking.questions?.onQuestion(text);
           },
           onUnreachable: () => {
-            fail(CONNECT_WAIT_TIMEOUT);
+            fail(UNANSWERED_QUESTION);
           },
         },
       );
@@ -193,14 +211,20 @@ export function openTerminalConnectionStep(
         // The login shell's startup gets a wait of its own, as long as the bootstrap's bound; a session that goes on after
         // the bound waits for the script's start as well.
         wait.start(goesOn ? 2 : 1);
+        const {prelude} = connectionStart(
+          sessionStartFor(waitSettings, goesOn, terms.platform),
+          terms.remoteCommandInEffect,
+          terms.platform,
+        );
+        for (const typed of prelude.split('\n')) {
+          typedLines.add(typed.trim());
+        }
         const runner: TerminalSessionRunner = new TerminalSessionRunner({
           terminal,
           scheduler: dependencies.scheduler,
-          prelude: connectionStart(
-            sessionStartFor(waitSettings, goesOn),
-            terms.remoteCommandInEffect,
-          ).prelude,
+          prelude,
           newMarker: () => dependencies.newMarker(),
+          interpreter: interpreterOfPlatform(terms.platform),
           onBootstrap: event => {
             hearBootstrap(event, runner);
           },
@@ -211,6 +235,7 @@ export function openTerminalConnectionStep(
         event: BootstrapEvent,
         runner: TerminalSessionRunner,
       ): void {
+        commandPhase = 'closed';
         if (finished) {
           return;
         }
@@ -261,6 +286,7 @@ export function openTerminalConnectionStep(
               };
             },
             answer: () => Promise.resolve(false),
+            checkSession: () => Promise.resolve('unchecked'),
             refuse: () => Promise.resolve(false),
             release: disposeTerminal,
           },
@@ -292,10 +318,30 @@ export function openTerminalConnectionStep(
       let sshPhase = true;
       const sshOutput = new LineSplitter(line => {
         if (sshPhase || isForwardingLine(line)) {
-          logSshLines(dependencies.logger, [line], undefined);
+          logSshLines(dependencies.logger, [withoutAnswer(line)], undefined);
+        }
+        if (commandPhase === 'open') {
+          const front = beforeInteractiveSession(line);
+          if (front !== undefined) {
+            commandPhase = 'closed';
+          }
+          const own = front ?? line;
+          if (bootstrapEventOf(line) !== undefined && front === undefined) {
+            commandPhase = 'closed';
+          } else if (
+            !isSshDebugLine(own) &&
+            !isForwardingLine(own) &&
+            !typedLines.has(own.trim())
+          ) {
+            const logged = commandLog.hear(own.replace(/\r$/, '').trimEnd());
+            if (logged !== undefined) {
+              logLocalCommandLines(dependencies.logger, [logged], undefined);
+            }
+          }
         }
         if (sshPhase && setupMarkerOf(line) === 'authenticated') {
           sshPhase = false;
+          commandPhase = 'open';
         }
       });
       terminal.onOutput(text => {

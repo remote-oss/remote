@@ -21,6 +21,10 @@ function recordingRegistry(): {registry: ShutdownRegistry; calls: unknown[]} {
       calls.push(['register', leaseId, request.connectionId]);
       return {accepted: true};
     },
+    setCompose: request => {
+      calls.push(['compose', request.connectionId, request.compose.project]);
+      return {accepted: true};
+    },
     setContainer: request => {
       calls.push(['container', request.connectionId, request.action]);
       return {accepted: true};
@@ -84,6 +88,22 @@ describe('the shutdown handler (card containers-68)', () => {
     );
   });
 
+  it('F-0417 BR-4: a compose message reaches the registry with the project', async () => {
+    const {registry, calls} = recordingRegistry();
+    const reply = await createShutdownHandler(registry).onRequest(
+      {
+        type: 'compose',
+        connectionId: 'a',
+        compose: {project: 'proj', service: 'app', scope: ['app']},
+      },
+      CONTEXT,
+    );
+    deepStrictEqual(
+      [reply, calls],
+      [{accepted: true}, [['compose', 'a', 'proj']]],
+    );
+  });
+
   it('F-0417 BR-11: a malformed message is answered with its problem and reaches nothing', async () => {
     const {registry, calls} = recordingRegistry();
     const reply = await createShutdownHandler(registry).onRequest(
@@ -121,6 +141,7 @@ describe('the shutdown handler (card containers-68)', () => {
       kind: 'delayedCheckAfterLastLease',
       milliseconds: 10_000,
       action: 'drain',
+      actionBound: 12_000,
     });
   });
 });

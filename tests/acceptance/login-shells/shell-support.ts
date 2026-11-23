@@ -1,6 +1,7 @@
 import {
   closeWindow,
   connectedWithin,
+  connectionLog,
   inWindow,
   onHostAs,
   openWindow,
@@ -81,9 +82,18 @@ export async function withWindow<Result>(
   window: string,
   body: () => Promise<Result>,
 ): Promise<Result> {
+  const mark = connectionLog().length;
   await openWindow(user, window);
   try {
-    await connectedWithin(window, INSTALL_MILLISECONDS);
+    try {
+      await connectedWithin(window, INSTALL_MILLISECONDS);
+    } catch (caught) {
+      // The connection log of the window says how far the connect got.
+      throw new Error(
+        `${caught instanceof Error ? caught.message : String(caught)}; the log since the window opened: ${JSON.stringify(connectionLog().slice(mark).slice(-40))}`,
+        {cause: caught},
+      );
+    }
     return await body();
   } finally {
     await closeWindow(window);
@@ -207,4 +217,24 @@ export async function windowFace(
     indicator: read,
     toasts: (await connectSurface(window)).toasts,
   };
+}
+
+/** How long a new terminal's name is given to settle, in milliseconds: it is named after it opens. */
+const TERMINAL_NAME_MILLISECONDS = 15_000;
+
+/**
+ * The names of window `window`'s terminals once one of them is named exactly `shell`, or as they are when the wait for
+ * it ends: a new terminal is named after it opens, later on a slower machine, so a read right after it opens can miss it.
+ */
+export async function terminalsNamed(
+  window: string,
+  shell: string,
+): Promise<string[]> {
+  const deadline = Date.now() + TERMINAL_NAME_MILLISECONDS;
+  let names = await terminalNames(window);
+  while (!names.includes(shell) && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    names = await terminalNames(window);
+  }
+  return names;
 }

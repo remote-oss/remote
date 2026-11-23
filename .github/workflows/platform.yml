@@ -2,12 +2,18 @@
 # never on a pull request, so no fork's code reaches a hosted runner from here, and with no secret.
 #
 # - windows-2025: the Windows client. WSL2 gives the Linux side: an Ubuntu 24.04 distro whose Docker engine runs the
-#   SSH hosts and the dev containers, reached from Windows over WSL2's localhost forwarding (the Windows engine of the
-#   image runs Windows containers only). VSCodium answers on its debugging port there.
+#   SSH hosts and the dev containers (the Windows engine of the image runs Windows containers only). The launches
+#   reach that engine through tools/engine-stand-in.ts on 127.0.0.1, which forwards to the distro's own address and
+#   takes the client's drive paths as bind sources, as Docker Desktop's engine does, so the job's containers rows run
+#   against that stand-in for Docker Desktop (reading-2511-desktop-stand-in); the other steps reach it at the distro's
+#   address. The hosts' and containers' published ports are reached over WSL2's localhost forwarding.
+#   VSCodium answers on its debugging port there.
 # - macos-15-intel: the macOS client, with colima's Docker for linux/x86_64 (about 10 minutes to start).
 #
 # Each job runs `node tools/acceptance.ts --editor vscodium` for its launch list and leaves the run's summary in the job
-# summary. The run folder holds keys, so it is never uploaded.
+# summary. The run folder holds keys, so it is never uploaded. The Windows launches come in groups separated by `;`, and
+# each group is a job of its own (the schedule's containers launches each take hours there, and one job held all of them
+# past its 240 minutes: #2763).
 name: platform
 
 on:
@@ -16,9 +22,9 @@ on:
   workflow_dispatch:
     inputs:
       windows-launches:
-        description: The launches of the Windows job, joined by commas; none skips the job
+        description: The launches of the Windows jobs, joined by commas, in groups separated by semicolons with one job per group; none skips them
         type: string
-        default: containers-a,containers-b,containers-trust,local,remote
+        default: local,remote,wsl,windows-host;containers-a;containers-b;containers-trust
       macos-launches:
         description: The launches of the macOS job, joined by commas; none skips the job
         type: string
@@ -28,20 +34,40 @@ permissions:
   contents: read
 
 jobs:
-  windows:
+  # the Windows launch groups as a JSON list, one matrix job each
+  windows-groups:
     if: github.event_name == 'schedule' || inputs.windows-launches != 'none'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      groups: ${{ steps.groups.outputs.groups }}
+    steps:
+      - id: groups
+        env:
+          GROUPS_TEXT: ${{ inputs.windows-launches || 'local,remote,wsl,windows-host;containers-a;containers-b;containers-trust' }}
+        run: echo "groups=$(jq -cn --arg text "$GROUPS_TEXT" '$text | split(";") | map(gsub("\\s"; "")) | map(select(. != ""))')" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: windows-groups
     runs-on: windows-2025
     timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        launches: ${{ fromJSON(needs.windows-groups.outputs.groups) }}
     concurrency:
-      group: platform-windows-${{ github.ref }}
+      group: platform-windows-${{ github.ref }}-${{ matrix.launches }}
       cancel-in-progress: false
     defaults:
       run:
         shell: pwsh
     env:
-      LAUNCHES: ${{ inputs.windows-launches || 'containers-a,containers-b,containers-trust,local,remote' }}
+      LAUNCHES: ${{ matrix.launches }}
       WSL_UTF8: '1'
     steps:
+      # the host images and their scripts are built in the WSL engine from this checkout, so they keep the repository's
+      # LF line ends: a CRLF shell script would end the host's entrypoint at once
+      - run: git config --global core.autocrlf false
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -54,27 +80,133 @@ jobs:
         run: |
           wsl --install Ubuntu-24.04 --no-launch --web-download
           wsl -d Ubuntu-24.04 -u root -- sh -c 'apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io docker-buildx 2>&1 | tail -2'
-          # the packaged service (Ubuntu under WSL runs systemd), with a TCP listener on the distro's loopback only: the
-          # Docker API is unauthenticated and root there, and WSL2's localhost forwarding carries it to Windows' 127.0.0.1
-          wsl -d Ubuntu-24.04 -u root -- sh -c 'mkdir -p /etc/systemd/system/docker.service.d && printf "[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock\n" > /etc/systemd/system/docker.service.d/tcp.conf && systemctl daemon-reload && systemctl restart docker && systemctl is-active docker'
-          # a wsl.exe that stays, so the distro and its engine outlive this step
+          # a wsl.exe that stays, so the distro, its address and its engine outlive this step
           Start-Process wsl.exe -WindowStyle Hidden -ArgumentList '-d', 'Ubuntu-24.04', '--', 'sleep', 'infinity'
+          # the distro's own address on WSL's virtual switch, which only this runner reaches; anything but a private
+          # address ends the job, since the engine's API is unauthenticated and root
+          $engine = (wsl -d Ubuntu-24.04 --exec hostname -I).Trim().Split(' ')[0]
+          if ($engine -notmatch '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)') { "the distro's address $engine is not private"; exit 1 }
+          # in NAT mode only: mirrored mode shares the host's interfaces, so the address would no longer be host-only
+          $networking = (wsl -d Ubuntu-24.04 --exec wslinfo --networking-mode).Trim()
+          if ($networking -ne 'nat') { "WSL's networking mode is '$networking', not nat"; exit 1 }
+          # the packaged service (Ubuntu under WSL runs systemd), with a TCP listener on that address alone. The Windows
+          # CLI reaches it there directly: through WSL2's localhost forwarding a `docker run`'s attached output was lost
+          # while its exit status came through (#2505)
+          $unit = "[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://${engine}:2375 --containerd=/run/containerd/containerd.sock\n"
+          wsl -d Ubuntu-24.04 -u root -- sh -c "mkdir -p /etc/systemd/system/docker.service.d && printf '$unit' > /etc/systemd/system/docker.service.d/tcp.conf && systemctl daemon-reload && systemctl restart docker && systemctl is-active docker"
           $up = $false
           for ($i = 0; $i -lt 60 -and -not $up; $i++) {
             Start-Sleep 2
-            docker -H tcp://127.0.0.1:2375 version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}' 2>$null
+            docker -H "tcp://${engine}:2375" version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}' 2>$null
             $up = $LASTEXITCODE -eq 0
           }
           if (-not $up) { wsl -d Ubuntu-24.04 -u root -- sh -c 'systemctl status docker --no-pager | tail -15'; exit 1 }
-          "DOCKER_HOST=tcp://127.0.0.1:2375" >> $env:GITHUB_ENV
+          "DOCKER_HOST=tcp://${engine}:2375" >> $env:GITHUB_ENV
+      # the image's Docker CLI has no buildx plugin, and the harness builds its images with `docker build --load`
+      - name: Docker's buildx plugin for the Windows CLI
+        run: |
+          $plugins = Join-Path $env:USERPROFILE '.docker\cli-plugins'
+          New-Item -ItemType Directory -Force $plugins | Out-Null
+          $exe = Join-Path $plugins 'docker-buildx.exe'
+          Invoke-WebRequest 'https://github.com/docker/buildx/releases/download/v0.38.0/buildx-v0.38.0.windows-amd64.exe' -OutFile $exe
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne 'b39784aed5b3f9b24d1971bbcbad8c8206033fa63ed4fea82c9141728fe0ea26') { "docker-buildx.exe has sha256 $hash, not its pin"; exit 1 }
+          docker buildx version
       # the run's download host listens on the Windows side's WSL adapter, where the distro's containers reach it: inbound
       # to Node on that adapter only
       - name: The download host is reached from the WSL distro
         run: New-NetFirewallRule -DisplayName 'acceptance download host from WSL' -Direction Inbound -Program (Get-Command node).Source -InterfaceAlias 'vEthernet (WSL*)' -Action Allow | Out-Null
+      # The image's OpenSSH for Windows, whose agent is a service on a named pipe (disabled until a job starts it); the
+      # run's keys go into it and the run takes them out again.
+      - name: The OpenSSH client and its agent service
+        run: |
+          Get-Command ssh, ssh-keygen, ssh-agent, ssh-add, env -All -ErrorAction SilentlyContinue | Format-Table -AutoSize Name, Source
+          ssh -V
+          Set-Service ssh-agent -StartupType Manual
+          Start-Service ssh-agent
+          Get-Service ssh-agent | Format-Table -AutoSize Name, Status, StartType
+      # Windows' OpenSSH Server, for the windows-host launch: the image has it installed and running on its default
+      # configuration, so the step backs that up and serves 127.0.0.1 alone on a port of the run, with key authentication
+      # for the job's account (an administrator, whose key the server reads from administrators_authorized_keys) and
+      # Windows PowerShell as its shell. About 12 s on windows-2025. The step after the launches puts the
+      # image's configuration back.
+      - name: Windows' OpenSSH Server on 127.0.0.1, for the windows-host launch
+        if: contains(env.LAUNCHES, 'windows-host')
+        run: |
+          $ssh = 'C:\ProgramData\ssh'
+          $folder = Join-Path $env:RUNNER_TEMP 'winhost'
+          New-Item -ItemType Directory -Force $folder | Out-Null
+          if ((Get-WindowsCapability -Online -Name 'OpenSSH.Server*').State -ne 'Installed') { Add-WindowsCapability -Online -Name 'OpenSSH.Server~~~~0.0.1.0' | Out-Null }
+          # the first start makes the host keys and the default configuration, which the step keeps to put back
+          Start-Service sshd; Stop-Service sshd
+          Copy-Item (Join-Path $ssh 'sshd_config') (Join-Path $folder 'sshd_config.image')
+          $key = Join-Path $folder 'id_ed25519'
+          ssh-keygen -q -t ed25519 -N '' -f $key
+          $port = 2222
+          Set-Content -Path (Join-Path $ssh 'sshd_config') -Encoding ascii -Value @("Port $port", 'ListenAddress 127.0.0.1', 'PubkeyAuthentication yes', 'PasswordAuthentication no', 'AuthorizedKeysFile .ssh/authorized_keys', 'Subsystem sftp sftp-server.exe', 'Match Group administrators', '       AuthorizedKeysFile __PROGRAMDATA__/ssh/administrators_authorized_keys')
+          $authorized = Join-Path $ssh 'administrators_authorized_keys'
+          Get-Content "$key.pub" | Set-Content -Path $authorized -Encoding ascii
+          icacls $authorized /inheritance:r /grant 'Administrators:F' /grant 'SYSTEM:F' | Out-Null
+          New-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell -Value 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -PropertyType String -Force | Out-Null
+          Start-Service sshd
+          Get-NetTCPConnection -State Listen -LocalPort $port | Format-Table -AutoSize LocalAddress, LocalPort
+          "HARNESS_WINHOST_PORT=$port" >> $env:GITHUB_ENV
+          "HARNESS_WINHOST_USER=$env:USERNAME" >> $env:GITHUB_ENV
+          "HARNESS_WINHOST_IDENTITY=$key" >> $env:GITHUB_ENV
+      # Docker Desktop's engine takes a Windows client's drive paths as bind sources, and the distro's engine does not,
+      # so the launches reach it through a stand-in on 127.0.0.1 that rewrites them to the distro's /mnt paths and logs
+      # each rewrite (reading-2511-desktop-stand-in). A process started in one step is gone by the next, so the stand-in
+      # lives in this step, and the other steps use the engine's own address.
       - name: The launches
-        run: pnpm test:acceptance:vscodium --launches $env:LAUNCHES
+        run: |
+          $addressFile = Join-Path $env:RUNNER_TEMP 'engine-stand-in.address'
+          $standInLog = Join-Path $env:RUNNER_TEMP 'engine-stand-in.log'
+          $standIn = Start-Process node -PassThru -NoNewWindow -RedirectStandardOutput $standInLog -RedirectStandardError "$standInLog.err" -ArgumentList (Join-Path $env:GITHUB_WORKSPACE 'tools/engine-stand-in.ts'), '--engine', $env:DOCKER_HOST, '--address-file', $addressFile
+          # the file exists a moment before the address is in it, so the wait is for the address itself
+          $address = ''
+          # and ends early when the stand-in has exited without writing one
+          for ($i = 0; $i -lt 30 -and $address -notmatch '^tcp://127\.0\.0\.1:\d+$' -and -not $standIn.HasExited; $i++) {
+            Start-Sleep 1
+            $address = "$(Get-Content $addressFile -Raw -ErrorAction SilentlyContinue)".Trim()
+          }
+          if ($address -notmatch '^tcp://127\.0\.0\.1:\d+$') { "no stand-in address in $addressFile`: '$address' (the stand-in exited: $($standIn.HasExited))"; Get-Content $standInLog, "$standInLog.err" -ErrorAction SilentlyContinue; exit 1 }
+          $engine = $env:DOCKER_HOST
+          $env:DOCKER_HOST = $address
+          "the engine stand-in: $env:DOCKER_HOST, in front of $engine"
+          docker version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}'
+          if ($LASTEXITCODE -ne 0) { Get-Content $standInLog, "$standInLog.err" -ErrorAction SilentlyContinue; exit 1 }
+          pnpm test:acceptance:vscodium --launches $env:LAUNCHES
+          $launched = $LASTEXITCODE
+          Stop-Process -InputObject $standIn -ErrorAction SilentlyContinue
+          "the engine stand-in's log, every bind source it rewrote among it:"
+          Get-Content $standInLog, "$standInLog.err" -ErrorAction SilentlyContinue
+          $rewritten = @(Select-String -Path $standInLog -SimpleMatch ' -> ').Count
+          "The Windows launches ended with exit code ${launched}. Their containers rows reach the engine through tools/engine-stand-in.ts, a stand-in for Docker Desktop's engine endpoint (reading-2511-desktop-stand-in), which rewrote $rewritten bind sources to the distro's /mnt paths.`n" >> $env:GITHUB_STEP_SUMMARY
+          exit $launched
+      # The wsl launch unregisters the two distros it imported when it ends, pass or fail, and the clean-up those of a
+      # killed run; the names come from wsl.exe, in UTF-8 since WSL_UTF8 is set.
+      - name: The wsl launch's own distros are gone
+        if: always()
+        run: |
+          $left = @(wsl -l -q | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ -like 'acceptance-*' })
+          if ($left.Count -gt 0) { "the launches left WSL distros: $($left -join ', ')"; exit 1 }
+      # the image's own OpenSSH Server configuration back, after the windows-host launch
+      - name: Windows' OpenSSH Server is put back
+        if: always() && contains(env.LAUNCHES, 'windows-host')
+        run: |
+          $ssh = 'C:\ProgramData\ssh'
+          $kept = Join-Path $env:RUNNER_TEMP 'winhost\sshd_config.image'
+          Stop-Service sshd -ErrorAction SilentlyContinue
+          if (Test-Path $kept) { Copy-Item $kept (Join-Path $ssh 'sshd_config') -Force }
+          Remove-Item (Join-Path $ssh 'administrators_authorized_keys') -Force -ErrorAction SilentlyContinue
+          Remove-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell -ErrorAction SilentlyContinue
       - if: always()
         run: pnpm acceptance:clean
+      - name: No acceptance distro is left after the clean-up
+        if: always()
+        run: |
+          $left = @(wsl -l -q | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ -like 'acceptance-*' })
+          if ($left.Count -gt 0) { "the clean-up left WSL distros: $($left -join ', ')"; exit 1 }
 
   macos:
     if: github.event_name == 'schedule' || inputs.macos-launches != 'none'
@@ -85,6 +217,9 @@ jobs:
       cancel-in-progress: false
     env:
       LAUNCHES: ${{ inputs.macos-launches || 'containers-a,containers-b,containers-trust,local,remote' }}
+      # colima's VM shares the folders it mounts, and /tmp is not one of them: a bind mount from a run folder there is
+      # empty in the container (#2763). /tmp/colima is mounted and stays short enough for the editor's socket path.
+      HARNESS_RUN_BASE: /tmp/colima
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -98,8 +233,12 @@ jobs:
         run: |
           brew install colima docker docker-buildx >/dev/null
           mkdir -p ~/.docker && printf '{"cliPluginsExtraDirs": ["%s/lib/docker/cli-plugins"]}\n' "$(brew --prefix)" > ~/.docker/config.json
-          colima start --cpu 3 --memory 8
-          docker version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}'
+          mkdir -p /tmp/colima
+          colima start --cpu 3 --memory 8 --mount "$HOME:w" --mount /tmp/colima:w
+          # the launches that bring a Docker configuration of their own (containers-trust, containers-context) do not see
+          # colima's context and fall back to the default socket, which is colima's here as it is the engine's on Linux
+          sudo ln -sf "$HOME/.colima/default/docker.sock" /var/run/docker.sock
+          docker --context default version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}'
           docker buildx version
       - name: The launches
         run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"

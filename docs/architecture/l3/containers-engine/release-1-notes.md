@@ -11,11 +11,24 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     open in a window whose remote authority did not resolve (measured on VS Code 1.139.1 and VSCodium); the settings
     file opens there (athena on #737; spec question on remote-oss/remote-ssh#79).
 
+- **A window that attaches to a container asks the attach warning again when the user never picked that container.**
+  - F-0601 asks the warning once per profile. An `attached-container` authority can come from a link or an old recent
+    entry, so the registration of the attached families connects only to a target the attach command or a row action
+    recorded in the profile; any other target gets the warning whatever "Got It" said before. Confirming records it and
+    connects, Cancel or Escape connects nothing, and the window stays trusted (F-0106 BR-13). Athena on #2186
+    (`ruling-2186-attach-gate`), card containers-163.
+
 - **A Feature named in `features` and again in `dev.containers.defaultFeatures`, differing only in letter case, is installed once, with the configuration's options.**
   - F-0414 AC-28 and BR-14 have `features` win on the same id; the dev container CLI merges the two lists by their ids'
     text, so it would install both and let the defaults' options apply last. The extension leaves out of
     `--additional-features` every default whose id equals a key of `features` ignoring case (athena on #1204;
     remote-oss/remote-containers#59, card containers-93).
+
+- **The pod listing of "Attach to Running Kubernetes Container" ends after 180 seconds with the listing's error.**
+  - F-0604 7.E6 has the listing wait exactly as long as `kubectl` does (about 160 s against a black hole, and for ever
+    with a broken kubeconfig). Ours shows the "Select pod" picker busy at once, lets Escape cancel it, and ends the
+    wait at 180 s with the dialog "Error while attaching to Kubernetes container." (athena on #2110; ruling
+    `ruling-2110-kubectl-bound`, card containers-190). A `kubectl` that answers in time is never cut.
 
 - **The notification that offers to reopen a folder in a container appears at once and does not wait for Docker.**
   - F-0101 AC-20 has the offer wait for the Docker CLI's answer (observed after 12.3 to 12.6 s with a CLI that waits
@@ -73,6 +86,28 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   - Rows: `ruling-1971-workspace-check`.
   - F-0807 AC-62 and F-0404 7.E10 describe the reference's text; ruled on remote-oss/remote#1971 (spec question on
     remote-oss/remote-containers#132).
+
+- **Open Folder in Container... and Open Workspace in Container... don't show a host-requirements dialog for a
+  requirement that only the image's own label records.** Requirements written in the configuration file, or recorded
+  on the folder's existing container, still show before trust, as the reference does.
+  - F-0206 BR-17 has the whole check run before the target's trust dialog for these two commands. Reading the image's
+    label means asking the registries that the untrusted configuration names, and fetching its Features, before the
+    user has trusted it, and these two commands ask for trust only in the window they open (F-0106), so no point
+    before the reload is both safe and in time (athena on #2146 and #2152; ruling `ruling-2146-trust-first`; spec
+    question on remote-oss/remote-containers#133).
+
+- **The version lookups for Features in `devcontainer.json` run only in a trusted workspace.** In Restricted Mode the
+  file shows no version CodeLenses; the Feature hover, the completions and the deprecated-namespace warning still work.
+  - F-0810 PRE-2 has the lookup run whatever the trust state. A lookup asks the registries the file names, with the
+    user's stored credentials for them, so an untrusted file could make the editor contact hosts of its choosing
+    (athena on #2148; ruling `ruling-2148-lookup-trust`; spec question on remote-oss/remote-containers#133).
+
+- **"Set Label and Update devcontainer.json" refuses a configuration file that is a link to a file outside the
+  workspace, or that isn't a valid JSON object, when it would save it.** It shows an error naming the file, and
+  changes nothing.
+  - F-1103 saves the file it labels with no review step, so a repository could make it rewrite a file outside the
+    workspace through a link. The reference writes through the link (athena on #2148, after dike's review; ruling
+    `ruling-2148-write-guard`).
 
 ## Interim behaviour
 

@@ -1,0 +1,9 @@
+{
+  "publisher": "remote-oss",
+  "name": "remote-ssh",
+  "displayName": "Acceptance stand-in (not the reference)",
+  "main": "./extension.cjs",
+  "activationEvents": [
+    "*"
+  ]
+}

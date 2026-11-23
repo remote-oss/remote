@@ -3,8 +3,13 @@ import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import {
   isForwardingLine,
+  beforeInteractiveSession,
+  isSshDebugLine,
+  localCommandEntry,
+  logLocalCommandLines,
   logSshLines,
   sshLogEntries,
+  withoutAnswer,
 } from '../../src/pipeline/ssh-log.ts';
 
 const LINES = [
@@ -101,5 +106,117 @@ describe('ssh’s lines in the log (card connect-66)', () => {
       undefined,
     );
     deepStrictEqual(taken, ['1:first', '2:second']);
+  });
+
+  it('#2457, reading-2457-echo-line: a recognised prompt with the answer the terminal echoed after it shows the prompt and that the answer is not logged', () => {
+    deepStrictEqual(
+      [
+        'Are you sure you want to continue connecting (yes/no/[fingerprint])? yes',
+        'Verification code: 123456',
+        "Enter passphrase for key '/home/a/.ssh/id_ed25519': hunter2",
+        "alex@dev's password: hunter2",
+        'Password: hunter2',
+      ].map(withoutAnswer),
+      [
+        'Are you sure you want to continue connecting (yes/no/[fingerprint])? [answer not logged]',
+        'Verification code: [answer not logged]',
+        "Enter passphrase for key '/home/a/.ssh/id_ed25519': [answer not logged]",
+        "alex@dev's password: [answer not logged]",
+        'Password: [answer not logged]',
+      ],
+    );
+  });
+
+  it('#2457: a password prompt with no echo shows the same, and a line that holds no recognised prompt is as it is', () => {
+    deepStrictEqual(
+      [
+        "alex@dev's password: ",
+        'Authenticated to h ([127.0.0.1]:22) using "publickey".',
+        'Are you sure you want to continue connecting',
+        '',
+      ].map(withoutAnswer),
+      [
+        "alex@dev's password: [answer not logged]",
+        'Authenticated to h ([127.0.0.1]:22) using "publickey".',
+        'Are you sure you want to continue connecting',
+        '',
+      ],
+    );
+  });
+
+  it('#2457: only the start of a line is searched for a prompt: one inside the limit is found in a long line, one that ends past it is left as it is', () => {
+    const padding = 'x'.repeat(2000);
+    const prompt = 'Verification code:';
+    deepStrictEqual(
+      [
+        withoutAnswer(`${prompt} ${padding}`),
+        withoutAnswer(`${padding}${prompt} 123456`),
+        withoutAnswer(':'.repeat(5000)),
+      ],
+      [
+        `${prompt} [answer not logged]`,
+        `${padding}${prompt} 123456`,
+        ':'.repeat(5000),
+      ],
+    );
+  });
+});
+
+describe('a LocalCommand’s lines in the log (card #2598, F-2109 AC-12)', () => {
+  it('#2598: an entry is marked [local command], the carriage return of the terminal is dropped and the token is masked', () => {
+    deepStrictEqual(
+      [
+        localCommandEntry('out-marker\r', undefined),
+        localCommandEntry('the token is secret-token here', 'secret-token'),
+      ],
+      [
+        '[local command] out-marker',
+        '[local command] the token is aaaaaa-aaaaa here',
+      ],
+    );
+  });
+
+  it('#2598: the lines are logged at info, in order, and nothing else is told', () => {
+    const sink = new MemorySink();
+    logLocalCommandLines(
+      createLogger(sink, {minimumLevel: (): Level => 'info'}),
+      ['one', 'two'],
+      undefined,
+    );
+    deepStrictEqual(
+      sink.lines.map(line => [line.level, line.message]),
+      [
+        ['info', '[local command] one'],
+        ['info', '[local command] two'],
+      ],
+    );
+  });
+
+  it('#2598: ssh’s entering the session closes the time at the end of a line, with the words in front of it given, and no other line does', () => {
+    deepStrictEqual(
+      [
+        'debug1: Entering interactive session.',
+        'debug1: Entering interactive session.\r',
+        'last words debug1: Entering interactive session.\r',
+        'debug1: Entering interactive session',
+        'Entering interactive session.',
+        'debug1: Entering interactive session. and more',
+      ].map(beforeInteractiveSession),
+      ['', '', 'last words ', undefined, undefined, undefined],
+    );
+  });
+
+  it('#2598: ssh’s debug1, debug2 and debug3 lines are its own, and a line that only holds the word is not', () => {
+    deepStrictEqual(
+      [
+        'debug1: x',
+        'debug2: x',
+        'debug3: x',
+        'debug4: x',
+        'a debug1: x',
+        'debug1:x',
+      ].map(isSshDebugLine),
+      [true, true, true, false, false, false],
+    );
   });
 });

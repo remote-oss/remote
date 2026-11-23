@@ -56,7 +56,7 @@ class FakeLease implements LoginLease {
 /** What the editor was asked to show, and how to answer it. */
 interface Shown {
   kind: 'pick' | 'input';
-  request: PickRequest | {placeholder: string};
+  request: PickRequest | {placeholder: string; message?: string};
   finish: (value: string | undefined) => void;
   signal: AbortSignal;
 }
@@ -78,7 +78,7 @@ class FakeEditor implements PromptEditor {
   }
 
   maskedInput(
-    request: {placeholder: string},
+    request: {placeholder: string; message?: string},
     cancellation: AbortSignal,
   ): Promise<string | undefined> {
     return this.open('input', request, cancellation);
@@ -232,6 +232,178 @@ describe('the prompt surface: a masked input (F-2306, F-2307)', () => {
     context.editor.last().finish(undefined);
     await settled();
     deepStrictEqual([context.lease.refused, context.lease.answers], [[3], []]);
+  });
+});
+
+/** What the password question shows when it is asked again after the answer `typed` and the lines `lines` of ssh. */
+async function askedAgain(
+  lines: readonly string[],
+  asked = PASSWORD_TEXT,
+): Promise<unknown> {
+  const context = setup();
+  await question(context, 1, PASSWORD_TEXT);
+  context.editor.last().finish('wrong');
+  await settled();
+  context.lease.send({type: 'sshLines', lines: [...lines]});
+  await question(context, 2, asked);
+  return context.editor.last().request;
+}
+
+describe('the prompt surface: a question asked again (F-2306 6.2 step 2, F-2310 6.2 step 3)', () => {
+  it('F-2306 AC-7: a password asked again after ssh said it was refused shows ssh’s line as its message', async () => {
+    deepStrictEqual(
+      await askedAgain(['Permission denied, please try again.']),
+      {
+        placeholder: '<Enter password for user@box>',
+        message: 'Permission denied, please try again.',
+      },
+    );
+  });
+
+  it('F-2306 AC-7: the message is the last line that is not a debug line, whatever debug lines come after it', async () => {
+    deepStrictEqual(
+      await askedAgain([
+        'Warning: something older',
+        'Permission denied, please try again.',
+        'debug1: Authentications that can continue: password',
+        'debug2: we sent a password packet',
+        'debug3: send packet: type 50',
+      ]),
+      {
+        placeholder: '<Enter password for user@box>',
+        message: 'Permission denied, please try again.',
+      },
+    );
+  });
+
+  it('F-2306 AC-7: a line that ends in a carriage return is shown without it, and an empty line is no message', async () => {
+    deepStrictEqual(
+      await askedAgain(['Permission denied, please try again.\r', '', '\r']),
+      {
+        placeholder: '<Enter password for user@box>',
+        message: 'Permission denied, please try again.',
+      },
+    );
+  });
+
+  it('F-2306 AC-7: a $( in the line is escaped, so the input box draws no icon from text of the host', async () => {
+    deepStrictEqual(await askedAgain(['Denied $(key) by $(account)']), {
+      placeholder: '<Enter password for user@box>',
+      message: 'Denied \\$(key) by \\$(account)',
+    });
+  });
+
+  it('F-2306 AC-7: the control characters of the line are dropped, C0, DEL and C1 alike', async () => {
+    deepStrictEqual(
+      await askedAgain(['\u001b[31mDenied\u0007 \u009bnow\u007f\tagain\u0000']),
+      {
+        placeholder: '<Enter password for user@box>',
+        message: '[31mDenied nowagain',
+      },
+    );
+  });
+
+  it('F-2306 AC-7: a line of controls alone says nothing, and the line before it stays the message', async () => {
+    deepStrictEqual(
+      await askedAgain([
+        'Permission denied, please try again.',
+        '\u001b\u0007',
+      ]),
+      {
+        placeholder: '<Enter password for user@box>',
+        message: 'Permission denied, please try again.',
+      },
+    );
+  });
+
+  it('F-2310 AC-35: with only debug lines since the answer the question has no message', async () => {
+    deepStrictEqual(
+      await askedAgain([
+        'debug1: Authentications that can continue: keyboard-interactive',
+      ]),
+      {placeholder: '<Enter password for user@box>'},
+    );
+  });
+
+  it('F-2310 AC-35: with no line at all since the answer the question has no message', async () => {
+    deepStrictEqual(await askedAgain([]), {
+      placeholder: '<Enter password for user@box>',
+    });
+  });
+
+  it('F-2306 AC-1: a question with another placeholder than the one answered has no message', async () => {
+    deepStrictEqual(
+      await askedAgain(
+        ['Permission denied, please try again.'],
+        'Verification code:',
+      ),
+      {placeholder: 'Enter verification code'},
+    );
+  });
+
+  it('F-2306 AC-1: the first question has no message, whatever ssh said before it', async () => {
+    const context = setup();
+    context.lease.send({
+      type: 'sshLines',
+      lines: ['Permission denied, please try again.'],
+    });
+    await question(context, 1, PASSWORD_TEXT);
+    deepStrictEqual(context.editor.last().request, {
+      placeholder: '<Enter password for user@box>',
+    });
+  });
+
+  it('F-2306 AC-7: a question the user cancelled was not answered, so the next one has no message', async () => {
+    const context = setup();
+    await question(context, 1, PASSWORD_TEXT);
+    context.editor.last().finish(undefined);
+    await settled();
+    context.lease.send({
+      type: 'sshLines',
+      lines: ['Permission denied, please try again.'],
+    });
+    await question(context, 2, PASSWORD_TEXT);
+    deepStrictEqual(context.editor.last().request, {
+      placeholder: '<Enter password for user@box>',
+    });
+  });
+
+  it('F-2306 AC-7: lines from before the answer say nothing of the next question', async () => {
+    const context = setup();
+    context.lease.send({
+      type: 'sshLines',
+      lines: ['Permission denied, please try again.'],
+    });
+    await question(context, 1, PASSWORD_TEXT);
+    context.editor.last().finish('wrong');
+    await settled();
+    await question(context, 2, PASSWORD_TEXT);
+    deepStrictEqual(context.editor.last().request, {
+      placeholder: '<Enter password for user@box>',
+    });
+  });
+
+  it('F-2306 AC-7: the message of the third ask is the line since the second answer, not the first', async () => {
+    const context = setup();
+    await question(context, 1, PASSWORD_TEXT);
+    context.editor.last().finish('first');
+    await settled();
+    context.lease.send({
+      type: 'sshLines',
+      lines: ['Permission denied, please try again.'],
+    });
+    await question(context, 2, PASSWORD_TEXT);
+    context.editor.last().finish('second');
+    await settled();
+    context.lease.send({
+      type: 'sshLines',
+      lines: ['Too many authentication failures'],
+    });
+    await question(context, 3, PASSWORD_TEXT);
+    deepStrictEqual(context.editor.last().request, {
+      placeholder: '<Enter password for user@box>',
+      message: 'Too many authentication failures',
+    });
   });
 });
 

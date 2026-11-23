@@ -183,8 +183,25 @@ describe('the window tunnel through the relay', () => {
     const {open, dialer} = relay(['work'], 'fail');
     deepStrictEqual(
       [await open(), dialer.dialed],
-      [{kind: 'listenFailed', detail: 'port 50000 is in use'}, []],
+      [
+        {
+          kind: 'listenFailed',
+          detail: 'port 50000 is in use',
+          code: undefined,
+        },
+        [],
+      ],
     );
+  });
+
+  it('carries the system error code of a failed listen', async () => {
+    const {open, local} = relay(['work'], 'fail');
+    local.listenFailureCode = 'EADDRINUSE';
+    deepStrictEqual(await open(), {
+      kind: 'listenFailed',
+      detail: 'port 50000 is in use',
+      code: 'EADDRINUSE',
+    });
   });
 
   it('dials the target for each connection to the window port and passes the bytes both ways', async () => {
@@ -641,6 +658,7 @@ describe('the window tunnel after it is closed, and when listening fails oddly',
     deepStrictEqual(outcome, {
       kind: 'listenFailed',
       detail: 'refused by policy',
+      code: undefined,
     });
   });
 });

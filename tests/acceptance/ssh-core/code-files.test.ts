@@ -5,7 +5,6 @@ import {
   editorProduct,
   inWindow,
   onHost,
-  openWindow,
   waitFor,
   windowEvents,
   windowState,
@@ -17,12 +16,7 @@ import {
   typeInTerminal,
   windowTitle,
 } from '../windows/renderer.ts';
-
-/** Opens a window on the host in a new folder `folder` with a terminal in it. */
-async function windowWithTerminal(folder: string): Promise<void> {
-  await openWindow('harness', folder);
-  await inWindow(folder, 'workbench.action.terminal.new');
-}
+import {windowWithTerminal} from '../windows/terminal-support.ts';
 
 /** Waits until the terminal of `window` has printed a line that satisfies `wanted`, and gives the lines. */
 async function linesUntil(
@@ -121,8 +115,11 @@ describe('the code command opens host files in the window (card coverage-80)', f
         'c80-stdin',
         `echo piped | ${command} - ; echo DONE_$?\n`,
       );
-      const lines = await linesUntil('c80-stdin', each =>
-        each.some(line => /^DONE_\d/.test(line)),
+      const lines = await linesUntil(
+        'c80-stdin',
+        each =>
+          each.some(line => /^DONE_\d/.test(line)) &&
+          each.some(line => line.startsWith('Reading from stdin via: /')),
       );
       deepStrictEqual(
         [

@@ -12,6 +12,7 @@ export {
   createLogger,
   type Sink,
 } from './logger.ts';
+export {escapeControls} from './escape-controls.ts';
 export {redact} from './redaction.ts';
 export {logOncePerSession, resetOncePerSession} from './once.ts';
 export {

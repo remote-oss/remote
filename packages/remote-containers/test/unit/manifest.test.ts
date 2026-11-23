@@ -7,6 +7,8 @@ import {deepStrictEqual, partialDeepStrictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {views} from '../../src/identifiers.generated.ts';
+import {pseudoLocalize} from '../../../../tools/pseudo-locale.ts';
+import {englishEntry} from '../../../../tools/locale-tables.ts';
 
 const PACKAGE = path.join(import.meta.dirname, '..', '..');
 
@@ -71,12 +73,29 @@ const STANDING_DOWN = '!remote-containers:standingDown';
 
 /** The welcome texts of the view as 0.4 contributes them: the links to commands the package registers stay, and the other links are gone. */
 const WELCOME_TEXTS = {
-  'viewsWelcome.targetsContainers.needsDockerStartOrInstall':
-    'Get started with containers by installing Docker or by visiting the help view. [Refresh](command:remote-containers.explorerTargetsRefresh) after installation and startup.',
-  'viewsWelcome.targetsContainers.noContainersWithFolder':
-    "Get started with containers by running one of the Dev Containers commands. You can [reopen the current folder in a container](command:remote-containers.reopenInContainer), or open another folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
-  'viewsWelcome.targetsContainers.noContainersWithoutFolder':
-    "Get started with containers by running one of the Dev Containers commands. You can open an existing folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
+  'viewsWelcome.targetsContainers.needsDockerStartOrInstall': {
+    message:
+      'Get started with containers by installing Docker or by visiting the help view. [Refresh](command:remote-containers.explorerTargetsRefresh) after installation and startup.',
+    comment: ["{Locked='](command:remote-containers.explorerTargetsRefresh)'}"],
+  },
+  'viewsWelcome.targetsContainers.needsSSHCredentials': {
+    message:
+      '[Refresh](command:remote-containers.explorerTargetsRefresh) to provide SSH credentials.',
+    comment: ["{Locked='](command:remote-containers.explorerTargetsRefresh)'}"],
+  },
+  'viewsWelcome.targetsContainers.noContainersWithFolder': {
+    message:
+      "Get started with containers by running one of the Dev Containers commands. You can [reopen the current folder in a container](command:remote-containers.reopenInContainer), or open another folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
+    comment: [
+      "{Locked='](command:remote-containers.reopenInContainer)'}",
+      "{Locked='](command:remote-containers.openFolder)'}",
+    ],
+  },
+  'viewsWelcome.targetsContainers.noContainersWithoutFolder': {
+    message:
+      "Get started with containers by running one of the Dev Containers commands. You can open an existing folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
+    comment: ["{Locked='](command:remote-containers.openFolder)'}"],
+  },
 };
 
 /** The `when` of a row action: the view's rows that carry `token`, with `extra` between it and the stand-down clause. */
@@ -89,9 +108,9 @@ function reopenWhen(key: string): string {
   return `${key} && !hideConnectCommands && !remote-containers:standingDown`;
 }
 
-/** The row-menu form of it: the window's own dev container row first. */
+/** The row-menu form of it: the window's own dev container row first, and the folder row a Compose dev container has. */
 function reopenRowWhen(key: string): string {
-  return `view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && ${reopenWhen(key)}`;
+  return `view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )(dev|folder)( |$)/ && ${reopenWhen(key)}`;
 }
 
 /** The entries slice B adds to the row menu, in the manifest's order; every entry carries the clauses of its token and none is staged any more. */
@@ -144,8 +163,15 @@ const DETAILS_IMAGE_INSPECT = {
   when: 'view == detailsContainers && viewItem == image && !remote-containers:standingDown',
 };
 
+/** The inline information action of the hint row under a bind mount in the Details view. */
+const DETAILS_MOUNT_PERFORMANCE = {
+  command: 'remote-containers.openInformationAboutMountPerformance',
+  group: 'inline@1',
+  when: 'view == detailsContainers && viewItem == mountPerformance && !remote-containers:standingDown',
+};
+
 const TARGETS_TITLE_WHEN =
-  'view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown';
+  'view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:needsSSHCredentials && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown';
 
 const DETAILS_TITLE_WHEN =
   'view == detailsContainers && !remote-containers:standingDown';
@@ -198,6 +224,12 @@ const ENGLISH = {
   'commands.Rebuildwithoutcacheandreopenincontainer.title':
     'Rebuild Without Cache and Reopen in Container',
   'commands.Settings.title': 'Settings',
+  'setting.Executeinwsl.description':
+    'Controls whether CLI commands should always be executed in WSL. The default is to only execute in WSL for workspace folders in WSL. This setting has no effect on other platforms than Windows.',
+  'setting.Executeinwsldistro.markdownDescription':
+    'WSL distro to use when not reopening a WSL folder. The default is to use the default WSL distro (see `wsl -l`). This setting has no effect when `#dev.containers.executeInWSL#` is not enabled or on other platforms than Windows.',
+  'setting.Forwardwslservices.description':
+    'Controls whether services in WSL (SSH agent, GPG agent, X display, Wayland display) are forwarded into the container. This setting has no effect on other platforms than Windows.',
   'setting.Dockerpath.description':
     'Docker (or Podman or WSLc) executable name or path.',
   'setting.ServerDownloadBaseUrl.description':
@@ -231,6 +263,13 @@ const ENGLISH = {
     "Use 'dev.containers.workspaceMountConsistency' instead.",
   'setting.WorkspaceMountConsistency.markdownDeprecationMessage':
     'Use `#dev.containers.workspaceMountConsistency#` instead.',
+  'setting.GpuAvailability.description':
+    'Availability of GPUs when a dev container requires any.',
+  'setting.GpuAvailability.all':
+    'All GPUs are available. This expects the host to have a GPU.',
+  'setting.GpuAvailability.detect':
+    'Availability should be detected automatically.',
+  'setting.GpuAvailability.none': 'No GPUs are available.',
   'setting.MountGitWorktreeCommonDir.description':
     'Mount the Git worktree common dir for Git operations to work in the container. This requires the worktree to be created with relative paths (`git worktree add --relative-paths`).',
   'setting.DefaultFeatures.description':
@@ -318,6 +357,8 @@ describe('the manifest', () => {
       },
       activationEvents: [
         'onResolveRemoteAuthority:dev-container',
+        'onResolveRemoteAuthority:attached-container',
+        'onResolveRemoteAuthority:k8s-container',
         'onStartupFinished',
       ],
       enabledApiProposals: [
@@ -551,6 +592,7 @@ describe('the manifest', () => {
             ...REOPEN_ROW_ENTRIES,
             ...ROW_ACTION_ENTRIES,
             DETAILS_IMAGE_INSPECT,
+            DETAILS_MOUNT_PERFORMANCE,
           ],
           'statusBar/remoteIndicator': [
             {
@@ -625,6 +667,11 @@ describe('the manifest', () => {
             contents:
               '%viewsWelcome.targetsContainers.needsDockerStartOrInstall%',
             when: 'remote-containers:needsDockerStartOrInstall && !remote-containers:standingDown',
+          },
+          {
+            view: 'targetsContainers',
+            contents: '%viewsWelcome.targetsContainers.needsSSHCredentials%',
+            when: 'remote-containers:needsSSHCredentials && !remote-containers:standingDown',
           },
           {
             view: 'targetsContainers',
@@ -779,6 +826,47 @@ describe('the manifest', () => {
     );
   });
 
+  it('F-0206 3.2: the GPU availability setting is contributed with machine scope, the three values and the default detect, and its English texts are the spec’s', () => {
+    const properties = (
+      MANIFEST.contributes as {
+        configuration: {properties: Record<string, unknown>};
+      }
+    ).configuration.properties;
+    deepStrictEqual(
+      [
+        properties['dev.containers.gpuAvailability'],
+        (
+          [
+            'setting.GpuAvailability.description',
+            'setting.GpuAvailability.all',
+            'setting.GpuAvailability.detect',
+            'setting.GpuAvailability.none',
+          ] as const
+        ).map(key => ENGLISH[key]),
+      ],
+      [
+        {
+          type: 'string',
+          default: 'detect',
+          scope: 'machine',
+          enum: ['all', 'detect', 'none'],
+          enumDescriptions: [
+            '%setting.GpuAvailability.all%',
+            '%setting.GpuAvailability.detect%',
+            '%setting.GpuAvailability.none%',
+          ],
+          description: '%setting.GpuAvailability.description%',
+        },
+        [
+          'Availability of GPUs when a dev container requires any.',
+          'All GPUs are available. This expects the host to have a GPU.',
+          'Availability should be detected automatically.',
+          'No GPUs are available.',
+        ],
+      ],
+    );
+  });
+
   it('F-0414 3.2: the two Feature settings are contributed with their shapes, and their English texts are the reference’s', () => {
     const properties = (
       MANIFEST.contributes as {
@@ -799,14 +887,16 @@ describe('the manifest', () => {
     );
   });
 
-  it('containers-11 (athena on #892): the activation events are the resolve of the dev-container authority and the end of the startup', () => {
+  it('F-0501 3.x (athena on #2197): the activation events are the resolve of the dev-container, attached-container and k8s-container authorities and the end of the startup', () => {
     deepStrictEqual(MANIFEST.activationEvents, [
       'onResolveRemoteAuthority:dev-container',
+      'onResolveRemoteAuthority:attached-container',
+      'onResolveRemoteAuthority:k8s-container',
       'onStartupFinished',
     ]);
   });
 
-  it('containers-01, containers-30: the manifest has no browser entry or icon, and contributes the commands, their menus, the view with its welcome texts and the settings', () => {
+  it('containers-01, containers-30: the manifest has no browser entry or icon, and contributes the commands, their menus, the view with its welcome texts, the settings and the two edit-session entries', () => {
     deepStrictEqual(
       [
         'browser' in MANIFEST,
@@ -816,7 +906,14 @@ describe('the manifest', () => {
       [
         false,
         false,
-        ['commands', 'menus', 'views', 'viewsWelcome', 'configuration'],
+        [
+          'commands',
+          'menus',
+          'views',
+          'viewsWelcome',
+          'configuration',
+          'continueEditSession',
+        ],
       ],
     );
   });
@@ -842,6 +939,176 @@ describe('the manifest', () => {
         },
         'Reopen in Container',
         undefined,
+      ],
+    );
+  });
+
+  it('F-0601 BR-1, F-0906 AC-5: Attach to Running Container has its title and category, the one condition in the palette and in the remote indicator, in the actions group at place 2', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: Array<Record<string, unknown>>;
+      menus: Record<string, Array<Record<string, unknown>>>;
+    };
+    const command = 'remote-containers.attachToRunningContainer';
+    const when =
+      '!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown';
+    deepStrictEqual(
+      [
+        contributes.commands.find(entry => entry.command === command),
+        readJson('package.nls.json')['commands.attachToRunningContainer.title'],
+        contributes.menus.commandPalette?.find(
+          entry => entry.command === command,
+        ),
+        contributes.menus['statusBar/remoteIndicator']?.find(
+          entry => entry.command === command,
+        ),
+      ],
+      [
+        {
+          command,
+          title: '%commands.attachToRunningContainer.title%',
+          category: 'Dev Containers',
+        },
+        'Attach to Running Container...',
+        {command, when},
+        {command, group: 'remote_30_dev-container_2_actions@2', when},
+      ],
+    );
+  });
+
+  it('F-0604 AC-14, AC-15 (c190-manifest): Attach to Running Kubernetes Container has attach’s condition in the palette, and its explorer command is never in the palette and sits on the pod rows of the Kubernetes explorer', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: Array<Record<string, unknown>>;
+      menus: Record<string, Array<Record<string, unknown>>>;
+    };
+    const command = 'remote-containers.attachToK8sContainer';
+    const viewlet = 'remote-containers.attachToK8sContainerFromViewlet';
+    const attachWhen = contributes.menus.commandPalette?.find(
+      entry => entry.command === 'remote-containers.attachToRunningContainer',
+    )?.when;
+    deepStrictEqual(
+      [
+        contributes.commands.filter(entry =>
+          [command, viewlet].includes(String(entry.command)),
+        ),
+        [
+          readJson('package.nls.json')['commands.attachToK8sContainer.title'],
+          readJson('package.nls.json')[
+            'commands.attachToK8sContainerFromViewlet.title'
+          ],
+        ],
+        contributes.menus.commandPalette?.filter(entry =>
+          [command, viewlet].includes(String(entry.command)),
+        ),
+        contributes.menus['view/item/context']?.filter(
+          entry => entry.command === viewlet,
+        ),
+        String(attachWhen).includes('!hideConnectCommands'),
+      ],
+      [
+        [
+          {
+            command,
+            title: '%commands.attachToK8sContainer.title%',
+            category: 'Dev Containers',
+          },
+          {
+            command: viewlet,
+            title: '%commands.attachToK8sContainerFromViewlet.title%',
+            category: 'Dev Containers',
+          },
+        ],
+        [
+          'Attach to Running Kubernetes Container...',
+          'Attach Visual Studio Code',
+        ],
+        [
+          {command, when: attachWhen},
+          {command: viewlet, when: 'false'},
+        ],
+        [
+          {
+            command: viewlet,
+            group: '2@4',
+            when: '!hideConnectCommands && view == extension.vsKubernetesExplorer && viewItem =~ /vsKubernetes\\.resource\\.pod/i && !remote-containers:standingDown',
+          },
+        ],
+        true,
+      ],
+    );
+  });
+
+  it('F-0707 BR-1, BR-2, AC-3: the two edit-session commands have the same title, the category and the icon, a palette entry that hides each, and no keybinding', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: Array<Record<string, unknown>>;
+      menus: {commandPalette: Array<Record<string, unknown>>};
+      keybindings?: unknown;
+    };
+    const commandIds = [
+      'remote-containers.openRepositoryFromRemoteHubWithEditSession',
+      'remote-containers.openRepositoryFromGitWithEditSession',
+    ];
+    const keys = [
+      'commands.openRepositoryFromRemoteHubWithEditSession.title',
+      'commands.openRepositoryFromGitWithEditSession.title',
+    ];
+    deepStrictEqual(
+      [
+        commandIds.map(name =>
+          contributes.commands.find(each => each.command === name),
+        ),
+        keys.map(key => readJson('package.nls.json')[key]),
+        commandIds.map(name =>
+          contributes.menus.commandPalette.find(each => each.command === name),
+        ),
+        contributes.keybindings,
+      ],
+      [
+        keys.map((key, position) => ({
+          command: commandIds[position],
+          title: `%${key}%`,
+          category: 'Dev Containers',
+          icon: '$(repo-clone)',
+        })),
+        [
+          'Clone Repository in a Container Volume',
+          'Clone Repository in a Container Volume',
+        ],
+        commandIds.map(name => ({command: name, when: 'false'})),
+        undefined,
+      ],
+    );
+  });
+
+  it('F-0707 BR-3, BR-4, AC-1, AC-8: the two continueEditSession entries are declared with their groups, name and conditions, and no proposal for them is requested beyond the reference’s seven', () => {
+    const contributes = MANIFEST.contributes as {
+      continueEditSession: Array<Record<string, unknown>>;
+    };
+    function entry(name: string, when: string): Record<string, unknown> {
+      return {
+        command: `remote-containers.${name}`,
+        group: '0_local@2',
+        remoteGroup: 'remote_30_dev-container_2_actions@8',
+        qualifiedName: '%continueEditSession.qualifiedName%',
+        when,
+      };
+    }
+    deepStrictEqual(
+      [
+        contributes.continueEditSession,
+        readJson('package.nls.json')['continueEditSession.qualifiedName'],
+      ],
+      [
+        [
+          entry(
+            'openRepositoryFromRemoteHubWithEditSession',
+            '!isWeb && remoteHub:hasVirtualFolders && !remote-containers:standingDown',
+          ),
+          entry(
+            'openRepositoryFromGitWithEditSession',
+            'git.state == initialized && gitOpenRepositoryCount != 0 && remoteName =~ /(codespaces*.*|tunnel)/ && false && !remote-containers:standingDown',
+          ),
+        ],
+        'Continue Working in Container Volume',
       ],
     );
   });
@@ -911,12 +1178,44 @@ describe('the manifest', () => {
       }
     ).menus;
     return Object.fromEntries(
-      Object.entries(menus).map(([name, entries]) => [
-        name,
-        entries.filter(entry => commands.includes(entry.command)),
-      ]),
+      Object.entries(menus)
+        .filter(([name]) => name !== 'extension/context')
+        .map(([name, entries]) => [
+          name,
+          entries.filter(entry => commands.includes(entry.command)),
+        ]),
     );
   }
+
+  it('F-0809 AC-1, AC-2, AC-3, AC-34 (c207-manifest): Add to devcontainer.json is in the Extensions view menu of rows that are not built in, in a group of its own between Copy and Settings, and is hidden from the palette', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: Array<Record<string, unknown>>;
+      menus: Record<string, Array<Record<string, unknown>>>;
+    };
+    const command = 'remote-containers.addExtensionToConfig';
+    deepStrictEqual(
+      [
+        contributes.commands.find(entry => entry.command === command),
+        readJson('package.nls.json')['commands.addExtensionToConfig.title'],
+        contributes.menus.commandPalette?.find(
+          entry => entry.command === command,
+        ),
+        contributes.menus['extension/context'],
+      ],
+      [
+        {command, title: '%commands.addExtensionToConfig.title%'},
+        'Add to devcontainer.json',
+        {command, when: 'false'},
+        [
+          {
+            command,
+            group: '1_devcontainer@1',
+            when: '!isBuiltinExtension && !remote-containers:standingDown',
+          },
+        ],
+      ],
+    );
+  });
 
   it('F-0401 AC-5: the palette and the remote indicator list the command with the local clause of the reference, which has no workspace-trust term, so Restricted Mode lists it (PRE-7, AC-21)', () => {
     deepStrictEqual(menusOf(['remote-containers.reopenInContainer']), {
@@ -1097,9 +1396,9 @@ describe('the manifest', () => {
     const registered = VIEW_PARTS.commands.map(entry => entry.command);
     const linked = VIEW_PARTS.viewsWelcome.flatMap(welcome =>
       [
-        ...String(
+        ...englishEntry(
           readJson('package.nls.json')[welcome.contents.replaceAll('%', '')],
-        ).matchAll(/\]\(command:([^)]+)\)/g),
+        ).text.matchAll(/\]\(command:([^)]+)\)/g),
       ].map(match => String(match[1])),
     );
     deepStrictEqual(
@@ -1112,11 +1411,17 @@ describe('the manifest', () => {
         [],
         [
           'remote-containers.explorerTargetsRefresh',
+          'remote-containers.explorerTargetsRefresh',
           'remote-containers.openFolder',
           'remote-containers.openFolder',
           'remote-containers.reopenInContainer',
         ],
-        ['targetsContainers', 'targetsContainers', 'targetsContainers'],
+        [
+          'targetsContainers',
+          'targetsContainers',
+          'targetsContainers',
+          'targetsContainers',
+        ],
       ],
     );
   });
@@ -1133,7 +1438,7 @@ describe('the manifest', () => {
         clauses.every(clause => clause.endsWith(` && ${STANDING_DOWN}`)),
         JSON.stringify(VIEW_PARTS.views).includes('standingDown'),
       ],
-      [24, true, false],
+      [28, true, false],
     );
   });
 
@@ -1158,6 +1463,62 @@ describe('the manifest', () => {
     );
   });
 
+  it('F-0905 3.1, F-0901 AC-3, AC-12: Clean Up Dev Containers and Clean Up Dev Volumes are commands of the palette with the clear-all icon, and the Dev Containers view shows the first in its title between New and Refresh, with the clause of Refresh', () => {
+    const commandsOf = VIEW_PARTS.commands as Array<Record<string, unknown>>;
+    deepStrictEqual(
+      [
+        ['cleanUpDevContainers', 'pruneVolumes'].map(name =>
+          commandsOf.find(
+            entry => entry.command === `remote-containers.${name}`,
+          ),
+        ),
+        ['cleanUpDevContainers', 'pruneVolumes'].map(name =>
+          VIEW_PARTS.menus.commandPalette?.find(
+            entry => entry.command === `remote-containers.${name}`,
+          ),
+        ),
+        VIEW_PARTS.menus['view/title']?.slice(1, 2),
+        readJson('package.nls.json')['commands.cleanUpDevContainers.title'],
+        readJson('package.nls.json')['commands.pruneVolumes.title'],
+      ],
+      [
+        [
+          {
+            command: 'remote-containers.cleanUpDevContainers',
+            title: '%commands.cleanUpDevContainers.title%',
+            category: 'Dev Containers',
+            icon: '$(clear-all)',
+          },
+          {
+            command: 'remote-containers.pruneVolumes',
+            title: '%commands.pruneVolumes.title%',
+            category: 'Dev Containers',
+            icon: '$(clear-all)',
+          },
+        ],
+        [
+          {
+            command: 'remote-containers.cleanUpDevContainers',
+            when: '!remote-containers:standingDown',
+          },
+          {
+            command: 'remote-containers.pruneVolumes',
+            when: '!remote-containers:standingDown',
+          },
+        ],
+        [
+          {
+            command: 'remote-containers.cleanUpDevContainers',
+            group: 'navigation@2',
+            when: TARGETS_TITLE_WHEN,
+          },
+        ],
+        'Clean Up Dev Containers...',
+        'Clean Up Dev Volumes...',
+      ],
+    );
+  });
+
   it('F-0903 3.3: the Details view is in the remote container with the reference group, clause and remote names and no stand-down clause, its Refresh is out of the palette, and the toolbar has Rebuild then Refresh with the stand-down clause', () => {
     deepStrictEqual(
       [
@@ -1166,7 +1527,7 @@ describe('the manifest', () => {
         VIEW_PARTS.menus.commandPalette?.find(
           entry => entry.command === 'remote-containers.explorerDetailsRefresh',
         ),
-        VIEW_PARTS.menus['view/title']?.slice(1),
+        VIEW_PARTS.menus['view/title']?.slice(2),
         ENGLISH['views.detailsContainers.name'],
       ],
       [
@@ -1214,7 +1575,7 @@ describe('the manifest', () => {
   it('F-0902 3.1, 3.3: Start, Stop and Remove are out of the palette; the row menu and the inline bar carry the actions of the tokens in the groups of the reference, and the three commands of containers-104 stay shut with false', () => {
     deepStrictEqual(
       [
-        VIEW_PARTS.menus['view/item/context']?.slice(2, -1),
+        VIEW_PARTS.menus['view/item/context']?.slice(2, -3),
         VIEW_PARTS.commands
           .map(entry => entry.command)
           .filter(command =>
@@ -1299,9 +1660,48 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-1406.5: every locale of identifiers.json has a table and a runtime bundle with the English values', () => {
-    const locales = (readJson('identifiers.json').locales ?? []) as string[];
+  // The qps-ploc tables as the generator makes them: the English tables letter for letter, the locked strings
+  // of an object entry standing in its text.
+  function qpsPlocTables(): [Record<string, unknown>, Record<string, unknown>] {
+    const nlsTable = readJson('package.nls.json');
+    return [
+      Object.fromEntries(
+        Object.entries(nlsTable).map(([key, value]) => {
+          const entry = englishEntry(value);
+          return [key, pseudoLocalize(entry.text, entry.locked)];
+        }),
+      ),
+      Object.fromEntries(
+        Object.keys(readJson('l10n/bundle.l10n.json')).map(text => [
+          text,
+          pseudoLocalize(text),
+        ]),
+      ),
+    ];
+  }
+
+  it('F-1406.5: every locale of identifiers.json has a table and a runtime bundle with the English values, qps-ploc pseudo-localized when the package declares it', () => {
+    const identifiers = readJson('identifiers.json');
+    const locales = (identifiers.locales ?? []) as string[];
+    const nlsTable = readJson('package.nls.json');
+    const englishTexts = Object.fromEntries(
+      Object.entries(nlsTable).map(([key, value]) => [
+        key,
+        englishEntry(value).text,
+      ]),
+    );
     const bundle = Object.keys(readJson('l10n/bundle.l10n.json'));
+    function expected(
+      locale: string,
+    ): [Record<string, unknown>, Record<string, unknown>] {
+      if (locale !== 'qps-ploc' || identifiers.pseudoLocalized !== true) {
+        return [
+          englishTexts,
+          Object.fromEntries(bundle.map(text => [text, text])),
+        ];
+      }
+      return qpsPlocTables();
+    }
     deepStrictEqual(
       [
         locales.length > 0,
@@ -1310,13 +1710,33 @@ describe('the manifest', () => {
           readJson(`l10n/bundle.l10n.${locale}.json`),
         ]),
       ],
+      [true, locales.map(expected)],
+    );
+  });
+
+  it('F-0103 AC-3 (c2503-qps-letters): the qps-ploc tables are the English ones letter for letter, so a {0} placeholder and a command: link come through substituted', () => {
+    deepStrictEqual(
       [
-        true,
-        locales.map(() => [
-          readJson('package.nls.json'),
-          Object.fromEntries(bundle.map(text => [text, text])),
-        ]),
+        readJson('package.nls.qps-ploc.json'),
+        readJson('l10n/bundle.l10n.qps-ploc.json'),
       ],
+      qpsPlocTables(),
+    );
+  });
+
+  it('F-0103 AC-9 (c2503-qps-locked): a manifest value whose base entry locks a string keeps that string byte for byte in qps-ploc', () => {
+    const nlsTable = readJson('package.nls.json');
+    const ploc = readJson('package.nls.qps-ploc.json');
+    const locked: Array<[string, string]> = Object.entries(nlsTable).flatMap(
+      ([key, value]) =>
+        englishEntry(value).locked.map(kept => [key, kept] as [string, string]),
+    );
+    deepStrictEqual(
+      [
+        locked.length > 0,
+        locked.every(([key, kept]) => (ploc[key] as string).includes(kept)),
+      ],
+      [true, true],
     );
   });
 
@@ -1347,6 +1767,7 @@ describe('the manifest', () => {
           id: 'remote-containers:needsDockerStartOrInstall',
           setter: 'extension',
         },
+        {id: 'remote-containers:needsSSHCredentials', setter: 'extension'},
         {id: 'remote-containers:noContainersWithFolder', setter: 'extension'},
         {
           id: 'remote-containers:noContainersWithoutFolder',
@@ -1441,6 +1862,98 @@ describe('where Configure Container Features is offered (F-0807 AC-1 to AC-5)', 
     deepStrictEqual(
       [remoteNamesAllowedBy(entry?.when ?? ''), entry?.group],
       [['dev-container'], 'remote_30_dev-container_2_actions@4'],
+    );
+  });
+});
+
+describe('where Switch Container is offered (F-0407 AC-1)', () => {
+  const contributes = MANIFEST.contributes as {
+    commands: Array<{command: string; title: string; category: string}>;
+    menus: {
+      commandPalette: Array<{command: string; when: string}>;
+      'statusBar/remoteIndicator': Array<{command: string}>;
+    };
+  };
+  const COMMAND = 'remote-containers.switchContainer';
+
+  it('F-0407 AC-1: the palette offers it in a dev container window only, with the title and category of the command, and the remote indicator does not', () => {
+    const entry = contributes.menus.commandPalette.find(
+      each => each.command === COMMAND,
+    );
+    const pattern =
+      /remoteName =~ \/(.*?)\//.exec(entry?.when ?? '')?.[1] ?? '';
+    deepStrictEqual(
+      [
+        [
+          '',
+          'dev-container',
+          'wsl',
+          'ssh-remote',
+          'tunnel',
+          'attached-container',
+        ].filter(name => new RegExp(pattern).test(name)),
+        contributes.commands.find(each => each.command === COMMAND),
+        contributes.menus['statusBar/remoteIndicator'].some(
+          each => each.command === COMMAND,
+        ),
+      ],
+      [
+        ['dev-container'],
+        {
+          command: COMMAND,
+          title: '%commands.switchContainer.title%',
+          category: 'Dev Containers',
+        },
+        false,
+      ],
+    );
+  });
+});
+
+describe('the WSL settings (card containers-203, F-0207 AC-1, AC-2)', () => {
+  const properties = (
+    MANIFEST.contributes as {
+      configuration: {properties: Record<string, Record<string, unknown>>};
+    }
+  ).configuration.properties;
+  const wslKeys = Object.keys(properties).filter(key => key.includes('WSL'));
+
+  it('F-0207 AC-1: the three settings come in this order, each of application scope, with the texts the nls table holds', () => {
+    deepStrictEqual(
+      wslKeys.map(key => [
+        key,
+        properties[key]?.scope,
+        properties[key]?.description ?? properties[key]?.markdownDescription,
+      ]),
+      [
+        [
+          'dev.containers.executeInWSL',
+          'application',
+          '%setting.Executeinwsl.description%',
+        ],
+        [
+          'dev.containers.executeInWSLDistro',
+          'application',
+          '%setting.Executeinwsldistro.markdownDescription%',
+        ],
+        [
+          'dev.containers.forwardWSLServices',
+          'application',
+          '%setting.Forwardwslservices.description%',
+        ],
+      ],
+    );
+  });
+
+  it('F-0207 AC-2: executeInWSL is off, forwardWSLServices is on, and the distro declares no default so core reads it as empty', () => {
+    deepStrictEqual(
+      [
+        wslKeys.map(key => properties[key]?.type),
+        properties['dev.containers.executeInWSL']?.default,
+        properties['dev.containers.forwardWSLServices']?.default,
+        'default' in (properties['dev.containers.executeInWSLDistro'] ?? {}),
+      ],
+      [['boolean', 'string', 'boolean'], false, true, false],
     );
   });
 });

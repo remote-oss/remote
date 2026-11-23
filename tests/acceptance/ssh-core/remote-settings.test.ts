@@ -4,13 +4,20 @@ import {
   activeEditorTextOf,
   closeWindow,
   editorProduct,
+  connectedWithin,
   inWindow,
   onHost,
   openWindow,
+  reloadWindow,
   waitFor,
 } from '../windows/harness.ts';
 import {paletteItems, runFromPalette} from '../windows/palette.ts';
-import {pageText, settingsTabs} from '../windows/renderer.ts';
+import {
+  extensionsViewSections,
+  pageText,
+  settingsTabs,
+  titleActions,
+} from '../windows/renderer.ts';
 
 /** The host file of the remote settings, in the server folder the running client's product names. */
 function remoteSettingsFile(): string {
@@ -161,9 +168,11 @@ describe('the remote settings and the Extensions view in an SSH window (card cov
     }
   });
 
-  it('F-2508 AC-30 (ruling-1656-host-label): the host section’s action names the host by its label, Install Local Extensions in SSH: harness, and the section says No extensions found', async () => {
+  it('F-2508 AC-30 (ruling-1656-host-label): after a window reload the host section’s title action is Install Local Extensions in SSH: harness, named by the host’s label, and the section says No extensions found', async () => {
     await labelledWindow('c80-install-local');
     try {
+      await reloadWindow('c80-install-local');
+      await connectedWithin('c80-install-local', 120_000);
       await inWindow('c80-install-local', 'workbench.view.extensions');
       await waitFor(
         'the host section',
@@ -171,13 +180,37 @@ describe('the remote settings and the Extensions view in an SSH window (card cov
           /SSH: Harness - Installed\n\d+\nNo extensions found\./.test(
             await pageText('c80-install-local'),
           ),
-        30_000,
+        60_000,
+      );
+      const sections = (await extensionsViewSections('c80-install-local')).map(
+        section => section.title,
+      );
+      const hostSection =
+        sections.find(title => /^SSH: .* - Installed$/iu.test(title)) ?? '';
+      const everyAction = await Promise.all(
+        sections.map(async title => [
+          title,
+          await titleActions('c80-install-local', title),
+        ]),
       );
       deepStrictEqual(
-        (
-          await paletteItems('c80-install-local', 'Install Local Extensions')
-        ).filter(title => title.includes('Install Local Extensions')),
-        ["Remote: Install Local Extensions in 'SSH: harness'..."],
+        [
+          (await titleActions('c80-install-local', hostSection)).filter(title =>
+            title.includes('Install Local Extensions'),
+          ),
+          (await pageText('c80-install-local')).includes(
+            'No extensions found.',
+          ),
+          (
+            await paletteItems('c80-install-local', 'Install Local Extensions')
+          ).filter(title => title.includes('Install Local Extensions')),
+        ],
+        [
+          ["Install Local Extensions in 'SSH: harness'..."],
+          true,
+          ["Remote: Install Local Extensions in 'SSH: harness'..."],
+        ],
+        `the sections ${JSON.stringify(sections)} and their title actions ${JSON.stringify(everyAction)}`,
       );
     } finally {
       await closeWindow('c80-install-local').catch(() => undefined);

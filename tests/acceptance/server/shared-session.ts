@@ -4,6 +4,7 @@
  * `ssh` session.
  */
 
+import type {PlatformHint} from 'lib-host';
 import {mkdtempSync, rmSync} from 'node:fs';
 import {createServer} from 'node:net';
 import {tmpdir} from 'node:os';
@@ -21,6 +22,7 @@ import {
   nodeProcessSpawner,
   runConnectionHelper,
   SharedSessionChannel,
+  socksProbeOver,
   type SshRequest,
 } from 'lib-ssh';
 import type {RunningHost} from './host-fixture.ts';
@@ -75,10 +77,12 @@ export type SharedSessionAttempt =
 
 /**
  * Starts the helper of the host, takes a lease and waits for the login: the channel over its session when the login
- * succeeds, or the failure the window is told, with the lines the helper logged.
+ * succeeds, or the failure the window is told, with the lines the helper logged. The host's platform is unknown, as
+ * the default mode leaves every host but a Windows one, unless `platform` names it.
  */
 export async function attemptSharedSession(
   host: RunningHost,
+  platform: PlatformHint = 'unknown',
 ): Promise<SharedSessionAttempt> {
   const runtimeFolder = mkdtempSync(path.join(tmpdir(), 'shared-session-'));
   const files = new MemoryFilePort();
@@ -105,6 +109,7 @@ export async function attemptSharedSession(
             port: endpoints,
             clock: Date.now,
             scheduler: {setTimer},
+            socksProbe: socksProbeOver({setTimer}),
             files,
             launcherFiles: nodeLauncherFiles,
             newNonce,
@@ -150,6 +155,7 @@ export async function attemptSharedSession(
             displayHost: 'harness',
             externalAskpass: false,
             askpassFirstMessageMilliseconds: 5000,
+            hostPlatform: platform,
           },
         }),
       policy: {kind: 'graceAfterLastLease', milliseconds: GRACE_MILLISECONDS},
@@ -188,11 +194,15 @@ export async function attemptSharedSession(
   };
 }
 
-/** Starts the helper of the host, takes a lease, waits for the login, and gives the channel over its session. */
+/**
+ * Starts the helper of the host, takes a lease, waits for the login, and gives the channel over its session; the host's
+ * platform is unknown unless `platform` names it.
+ */
 export async function openSharedSession(
   host: RunningHost,
+  platform: PlatformHint = 'unknown',
 ): Promise<SharedSession> {
-  const attempt = await attemptSharedSession(host);
+  const attempt = await attemptSharedSession(host, platform);
   if (attempt.kind === 'failed') {
     await attempt.stop();
     throw new Error(`no connection: ${JSON.stringify(attempt.failure)}`);

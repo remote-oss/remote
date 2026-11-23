@@ -185,6 +185,12 @@ function inventory(): InventoryFixture {
   return fixture;
 }
 
+/** The English text of a manifest string: the table's text of a `%key%` reference, or the string itself. */
+function englishText(value: unknown): unknown {
+  const key = nlsKey(value);
+  return key === null ? value : englishTable()[key];
+}
+
 /** The fields of a setting schema the fidelity row compares, with a single-element type array unwrapped. */
 function settingFields(
   value: Record<string, unknown>,
@@ -207,8 +213,8 @@ function settingFields(
     tags: value.tags,
     items: value.items,
     additionalProperties: value.additionalProperties,
-    deprecationMessage: value.deprecationMessage,
-    markdownDeprecationMessage: value.markdownDeprecationMessage,
+    deprecationMessage: englishText(value.deprecationMessage),
+    markdownDeprecationMessage: englishText(value.markdownDeprecationMessage),
   };
 }
 
@@ -912,7 +918,7 @@ describe('the manifest rows of slices 1 and 2', () => {
         resolved(platform?.markdownDescription),
         (platform?.additionalProperties as {enum?: string[]} | undefined)?.enum,
         resolved(windows?.markdownDescription),
-        windows?.deprecationMessage,
+        resolved(windows?.deprecationMessage),
       ],
       [
         "A map of the remote hostname to the platform for that remote. The hostname may include a star '*' to wildcard match. Valid values: `linux`, `macOS`, `windows`. Note - this setting will soon be required when `#remote.SSH.useLocalServer#` is disabled, so it is currently being autopopulated for successful connections, but is not currently used.",
@@ -920,6 +926,61 @@ describe('the manifest rows of slices 1 and 2', () => {
         '**Deprecated**: Enables experimental support for connecting to Windows remotes. Add the names of windows remotes to this list.',
         'Deprecated: Please use `#remote.SSH.remotePlatorm#` instead',
       ],
+    );
+  });
+
+  /** The two deprecation messages: where each is in the manifest, and its English text, as the reference spells it. */
+  const DEPRECATION_MESSAGES = [
+    {
+      setting: 'remote.SSH.windowsRemotes',
+      field: 'deprecationMessage',
+      key: 'setting.windowsRemotes.deprecationMessage',
+      text: 'Deprecated: Please use `#remote.SSH.remotePlatorm#` instead',
+    },
+    {
+      setting: 'remote.SSH.allowLocalServerDownload',
+      field: 'markdownDeprecationMessage',
+      key: 'setting.allowLocalServerDownload.deprecationMessage',
+      text: 'Deprecated, please use `#remote.SSH.localServerDownload#`',
+    },
+  ] as const;
+
+  it('F-2002 AC-14 (card #2961, ruling-2880-windowsremotes-deprecation): the deprecation message of windowsRemotes is a key of the string table whose English text keeps the reference’s own misspelling remotePlatorm, letter for letter', () => {
+    const message = properties['remote.SSH.windowsRemotes']?.deprecationMessage;
+    deepStrictEqual(
+      [
+        message,
+        resolved(message),
+        strings['setting.windowsRemotes.deprecationMessage'],
+      ],
+      [
+        '%setting.windowsRemotes.deprecationMessage%',
+        'Deprecated: Please use `#remote.SSH.remotePlatorm#` instead',
+        'Deprecated: Please use `#remote.SSH.remotePlatorm#` instead',
+      ],
+    );
+  });
+
+  it('F-2002 AC-14, AC-6 (card #2961): each deprecation message is a key of the string table, and a non-English table gives no other text than the English, so the message falls back to it in every language', () => {
+    const rows = DEPRECATION_MESSAGES.map(each => {
+      const schema: Record<string, unknown> = properties[each.setting] ?? {};
+      const fallbacks = [...nlsTables()]
+        .filter(([file]) => file !== 'package.nls.json')
+        .map(([file, table]) => [
+          file,
+          (table[each.key] as string | undefined) ?? strings[each.key],
+        ]);
+      return [
+        schema[each.field],
+        strings[each.key],
+        fallbacks
+          .filter(([, text]) => text !== each.text)
+          .map(([file]) => file),
+      ];
+    });
+    deepStrictEqual(
+      rows,
+      DEPRECATION_MESSAGES.map(each => [`%${each.key}%`, each.text, []]),
     );
   });
 
@@ -1372,8 +1433,10 @@ describe('the manifest rows of slices 1 and 2', () => {
         // The value texts are literal in the manifest, not keys of the string table.
         values.map((value, index) => [value, texts[index]]),
         [...values].sort(),
-        properties['remote.SSH.allowLocalServerDownload']
-          ?.markdownDeprecationMessage,
+        resolved(
+          properties['remote.SSH.allowLocalServerDownload']
+            ?.markdownDeprecationMessage,
+        ),
       ],
       [
         'string',
@@ -1438,6 +1501,86 @@ describe('the manifest rows of slices 1 and 2', () => {
         ['remotePort'],
         'A list of ports to forward when the connection is established.',
       ],
+    );
+  });
+});
+
+describe('the manifest beside core’s agent hosts (card #2500, F-2008 AC-11, BR-1)', () => {
+  const CORE_COMMANDS =
+    /^(workbench\.action\.sessions\.|workbench\.action\.chat\.forgetSSHHostKey$|sessions\.remoteAgentHost\.add$)/;
+  const CORE_SETTINGS =
+    /^(chat\.remoteAgentHost|chat\.sshRemoteAgentHostCommand|chat\.agentHost\.)/;
+
+  it('F-2008 AC-11 (c2500-ids): no contributed command id is one of core’s agent-host ids and no configuration key is under core’s agent-host settings', () => {
+    const contributes = manifest().contributes;
+    deepStrictEqual(
+      {
+        commands: (contributes?.commands ?? [])
+          .map(entry => String(entry.command))
+          .filter(identifier => CORE_COMMANDS.test(identifier)),
+        settings: Object.keys(
+          contributes?.configuration?.properties ?? {},
+        ).filter(key => CORE_SETTINGS.test(key)),
+      },
+      {commands: [], settings: []},
+    );
+  });
+});
+
+describe('the setting of the external askpass (card #2596, F-2309 AC-1)', () => {
+  it('F-2309 AC-1 (c2596-setting): remote.SSH.externalSSH_ASKPASS is a boolean, false by default, of application scope with no tags, and its markdown description is the exact text of the specification', () => {
+    const property =
+      manifest().contributes?.configuration?.properties?.[
+        'remote.SSH.externalSSH_ASKPASS'
+      ];
+    const key = nlsKey(property?.markdownDescription);
+    deepStrictEqual(
+      {
+        type: property?.type,
+        default: property?.default,
+        scope: property?.scope,
+        tags: property?.tags,
+        plainDescription: property?.description,
+        markdown: key === null ? undefined : englishTable()[key],
+      },
+      {
+        type: 'boolean',
+        default: false,
+        scope: 'application',
+        tags: undefined,
+        plainDescription: undefined,
+        markdown:
+          "**Experimental:** In local server mode (enabled with `#remote.SSH.useLocalServer#`) Remote - SSH uses SSH_ASKPASS to set VS Code as the application to handle authentication requests; this makes prompts for input show up inside VS Code. However, if you have an external application to handle authentication, such as an YubiKey, you may want to set SSH_ASKPASS to your application instead. If you enable this setting then Remote - SSH won't override your existing SSH_ASKPASS value if one exists.",
+      },
+    );
+  });
+});
+
+describe('the setting of the reconnection grace time (card #2651, F-2413 AC-1)', () => {
+  it('F-2413 AC-1 (c2651-setting): remote.SSH.reconnectionGraceTime is a number or null, null by default, of application scope with a minimum of 1, and its markdown description is the exact text of the specification', () => {
+    const property = manifest().contributes?.configuration?.properties?.[
+      'remote.SSH.reconnectionGraceTime'
+    ] as
+      (Record<string, unknown> & {markdownDescription?: unknown}) | undefined;
+    const key = nlsKey(property?.markdownDescription);
+    deepStrictEqual(
+      {
+        type: property?.type,
+        default: property?.default,
+        scope: property?.scope,
+        minimum: property?.minimum,
+        plainDescription: property?.description,
+        markdown: key === null ? undefined : englishTable()[key],
+      },
+      {
+        type: ['number', 'null'],
+        default: null,
+        scope: 'application',
+        minimum: 1,
+        plainDescription: undefined,
+        markdown:
+          'The grace time in **seconds** to wait before terminating the remote server when the client disconnects. Leave empty to use VS Code defaults. The remote VS Code server must be restarted for this setting to take effect.  _Currently supports only linux remotes._',
+      },
     );
   });
 });

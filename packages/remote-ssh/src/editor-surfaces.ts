@@ -42,6 +42,8 @@ import {
 } from './surfaces/mitigation-picker.ts';
 import type {Logger} from 'lib-log';
 import {approvalsOf} from './preconnect/approvals.ts';
+import type {ConfirmationCopies} from './preconnect/confirmation-files.ts';
+import {timerDelay} from './state/confirmed-update.ts';
 import type {NoticePort} from './surfaces/notice.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import type {PromptEditor} from './surfaces/prompt-surface.ts';
@@ -106,6 +108,8 @@ export interface SurfaceContext {
   names: PresenterNames;
   /** The profile's own record of accepted terms, never synced. */
   acceptanceState: AcceptanceState;
+  /** The profile's copy of the pre-connection confirmations, files in its global storage that a reload keeps. */
+  confirmationCopies: ConfirmationCopies;
   /** The profile's record of the notices the user asked not to see again. */
   noticeState: AcceptanceState;
   /** The extension's global state, where the hints of a connect are kept. */
@@ -118,6 +122,8 @@ export interface SurfaceContext {
   environmentHints: () => readonly EnvironmentHint[];
   /** How many lines the window's log holds now: where a resolve's own text begins. */
   logMark: () => number;
+  /** Writes the editor version, the extension and the platform to the log, once per window. */
+  writeWindowStart: () => void;
   /** The text of the window's log from its `from`-th line on, which a record keeps when its resolve step ends. */
   logText: (from: number) => string;
   /** The window's log, where a notice that could not be shown is noted. */
@@ -193,6 +199,9 @@ export function editorSurfacesOf(
         [alias]: platform,
       });
     },
+    writeUserSetting: async (settingId: string, value: unknown) => {
+      await operations.writeUserSetting(settingId, value);
+    },
     notice: adapters.notice,
     noticeState: context.noticeState,
     parseUri: context.parseUri,
@@ -203,6 +212,8 @@ export function editorSurfacesOf(
       environmentHints: context.environmentHints,
       logMark: context.logMark,
       logText: context.logText,
+      delay: timerDelay,
+      logger: context.logger,
     }),
     troubleshooting: troubleshootingOf(context.troubleshooting),
     licenceModal: licenceModalOf(
@@ -212,7 +223,14 @@ export function editorSurfacesOf(
     ),
     acceptances,
     preconnectDialog: preconnectDialogOf(adapters.preconnectDialog, translate),
-    preconnectApprovals: approvalsOf(context.acceptanceState),
+    preconnectApprovals: approvalsOf(
+      context.acceptanceState,
+      context.confirmationCopies,
+      {
+        delay: timerDelay,
+        logger: context.logger,
+      },
+    ),
     presenter: failurePresenterOf(
       adapters.failureDialog,
       {
@@ -228,6 +246,7 @@ export function editorSurfacesOf(
     revealLog: () => {
       operations.revealLog();
     },
+    writeWindowStart: context.writeWindowStart,
     rejectBindHost: (alias, configured) => {
       adapters.notice
         .showError(

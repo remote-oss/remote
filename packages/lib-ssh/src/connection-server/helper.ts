@@ -19,7 +19,9 @@ import {
 import {buildInvocation, type SshRequest} from '../arguments/invocation.ts';
 import type {ProcessSpawner} from '../process/ports.ts';
 import {ConnectionHandler} from './handler.ts';
-import {connectionStart, sessionStartFor} from './session-bootstrap.ts';
+import type {SocksProbe} from './socks-probe.ts';
+import {sessionOpeningFor} from './session-bootstrap.ts';
+import type {PlatformHint} from 'lib-host';
 
 /** The start values a client gives the helper in `HelperParameters.options`. */
 export interface ConnectionHelperOptions {
@@ -43,6 +45,8 @@ export interface ConnectionHelperOptions {
   externalAskpass: boolean;
   /** How long an askpass connection may take to send its question, in milliseconds. */
   askpassFirstMessageMilliseconds: number;
+  /** The host's platform as the window decided it: `windows` starts the PowerShell loop, anything else the POSIX bootstrap. */
+  hostPlatform: PlatformHint;
 }
 
 /** The ports a helper runs on: the real ones in the helper process, fakes in tests. */
@@ -61,6 +65,8 @@ export interface ConnectionHelperEnvironment {
   editorEnvironment: Readonly<Record<string, string | undefined>>;
   helloLimitMilliseconds: number;
   logLine: (line: string) => void;
+  /** The probe of the session over its SOCKS forward. */
+  socksProbe: SocksProbe;
 }
 
 /** Serves until the policy or a stop ends the helper; its own record is removed whichever way it ends. */
@@ -92,9 +98,10 @@ export async function runConnectionHelper(
       fromHost: request.effective.connectTimeout !== undefined,
       unboundedWaitSeconds: options.unboundedWaitSeconds,
     };
-    const start = connectionStart(
-      sessionStartFor(waitSettings),
+    const start = sessionOpeningFor(
+      waitSettings,
       request.settings.remoteCommandInEffect,
+      options.hostPlatform,
     );
     const handler = new ConnectionHandler({
       invocation: buildInvocation({
@@ -104,7 +111,7 @@ export async function runConnectionHelper(
           : {remoteProgram: start.remoteProgram}),
         forwards: [{kind: 'dynamic', localPort: options.socksPort}],
       }),
-      sessionPrelude: start.prelude,
+      opening: start.opening,
       socksPort: options.socksPort,
       spawner: environment.spawner,
       askpassEnvironment: askpassEnvironment({
@@ -123,6 +130,7 @@ export async function runConnectionHelper(
       },
       newMarker: environment.newNonce,
       logLine: environment.logLine,
+      socksProbe: environment.socksProbe,
     });
     const askpassServer = await environment.port.listen(
       askpassSocket,
@@ -136,7 +144,8 @@ export async function runConnectionHelper(
         nonce: parameters.nonce,
         recordFile: options.recordFile,
         files: environment.files,
-        payload: parameters.payload,
+        // The helper's own pid goes to every window that joins it, with the payload its starter made.
+        payload: {...parameters.payload, helperProcessId: process.pid},
         policy: parameters.policy,
         handler,
         port: environment.port,

@@ -35,6 +35,13 @@ ruled that we never trust such text. The exec channel's stderr substring "is not
 2. **Output of a local program we run is read only in its documented form,** anchored:
    - a whole line, or a fixed **prefix** the program itself writes (`Error response from daemon:`, ssh's own `debug1:`
      lines, `Authenticated to`), never a substring anywhere in a line;
+   - one named exception, from the spec: F-2105 BR-10's two timeout texts, `Connection timed out` and
+     `Operation timed out`, exact case, may be matched **contained** in a line of ssh's own stderr, only before
+     `Authenticated to` (the window below), and only in local-server mode. ssh appends them to more than one
+     diagnostic (`connect to host …: Connection timed out`, `Connection timed out during banner exchange`).
+     In terminal mode the same stream also carries what a ProxyCommand or a question wrote, so only the anchored
+     `connect to host …:` form counts there (F-2308 7.E1, F-2310 7.E1: no reason). The match only picks the
+     failure's reason text, never trust or behaviour.
    - a structured form where the program offers one: the dev container CLI's JSON result line and `--log-format json`
      events (ADR-0009), and JSON from `docker inspect -f`;
    - matched as narrowly as that form allows;

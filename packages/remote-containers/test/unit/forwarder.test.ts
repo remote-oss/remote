@@ -5,15 +5,39 @@ interface Scene {
   opened: unknown[];
   errors: string[];
   warned: string[];
+  informed: string[];
+  /** The window's port attribute settings in effect. */
+  effective: Record<string, unknown>;
+  /** Tells the forwarder's listeners that the attribute settings changed. */
+  change(): void;
+  /** Runs the timers set so far. */
+  elapse(): void;
   forwarder: ReturnType<typeof forwarderOf>;
 }
 
-/** The forwarder over fakes; the ports in `refused` reject. */
-function sceneOf(refused: readonly number[] = []): Scene {
+/** The forwarder over fakes; the ports in `refused` reject, and with `unreadable` the window's settings throw. */
+function sceneOf(
+  refused: readonly number[] = [],
+  {unreadable = false}: {unreadable?: boolean} = {},
+): Scene {
+  const listeners = new Set<() => void>();
+  const timers = new Map<() => void, number>();
   const scene: Scene = {
     opened: [],
     errors: [],
     warned: [],
+    informed: [],
+    effective: {},
+    change: () => {
+      for (const listener of [...listeners]) {
+        listener();
+      }
+    },
+    elapse: () => {
+      for (const timer of [...timers.keys()]) {
+        timer();
+      }
+    },
     forwarder: undefined as never,
   };
   const tunnels: TunnelHost = {
@@ -33,10 +57,44 @@ function sceneOf(refused: readonly number[] = []): Scene {
       warn: message => {
         scene.warned.push(message);
       },
+      info: message => {
+        scene.informed.push(message);
+      },
     },
     translate: template => template,
+    attributes: {
+      effective: key => {
+        if (unreadable) {
+          throw new Error('no configuration');
+        }
+        return scene.effective[key];
+      },
+      onChanged: listener => {
+        listeners.add(listener);
+        return {
+          dispose: () => {
+            listeners.delete(listener);
+          },
+        };
+      },
+    },
+    scheduler: {
+      setTimer: (milliseconds, callback) => {
+        timers.set(callback, milliseconds);
+        return () => {
+          timers.delete(callback);
+        };
+      },
+    },
   });
   return scene;
+}
+
+/** Lets the promises that are ready settle. */
+async function settled(): Promise<void> {
+  await new Promise(resolve => {
+    setImmediate(resolve);
+  });
 }
 
 describe('the forwarder (card containers-72)', () => {
@@ -134,8 +192,14 @@ describe('the forwarder (card containers-72)', () => {
         warn: message => {
           warned.push(message);
         },
+        info: () => undefined,
       },
       translate: template => template,
+      attributes: {
+        effective: () => undefined,
+        onChanged: () => ({dispose: () => undefined}),
+      },
+      scheduler: {setTimer: () => () => undefined},
     });
     await forwarder.forward({
       forwardPorts: [3000],
@@ -145,6 +209,82 @@ describe('the forwarder (card containers-72)', () => {
     deepStrictEqual(warned, [
       'the forward of localhost:3000 was refused: plain',
     ]);
+  });
+
+  it('F-1101 BR-10, AC-35: the forwards open only once the written port attributes are in effect, and the notices come first', async () => {
+    const scene = sceneOf();
+    const written = {
+      'remote.portsAttributes': {'3000': {label: 'Web'}},
+      'remote.otherPortsAttributes': {label: 'Other'},
+    };
+    const forwarding = scene.forwarder.forward({
+      forwardPorts: [3000, 4000, '-5'],
+      portsAttributes: undefined,
+      otherPortsAttributes: undefined,
+      attributeSettings: written,
+    });
+    await settled();
+    const beforeSettings = [scene.errors.length, scene.opened.length];
+    scene.effective = {...written};
+    scene.change();
+    await forwarding;
+    deepStrictEqual(
+      [beforeSettings, scene.opened.length, scene.informed],
+      [[1, 0], 2, []],
+    );
+  });
+
+  it('F-1101 BR-10: the forwards open at once when the written attributes are already in effect', async () => {
+    const scene = sceneOf();
+    scene.effective = {'remote.portsAttributes': {'3000': {label: 'Web'}}};
+    await scene.forwarder.forward({
+      forwardPorts: [3000],
+      portsAttributes: undefined,
+      otherPortsAttributes: undefined,
+      attributeSettings: {'remote.portsAttributes': {'3000': {label: 'Web'}}},
+    });
+    deepStrictEqual(scene.opened.length, 1);
+  });
+
+  it('F-1101 BR-10: attributes that never arrive hold the forwards only until the bound, which is logged', async () => {
+    const scene = sceneOf();
+    const forwarding = scene.forwarder.forward({
+      forwardPorts: [3000],
+      portsAttributes: undefined,
+      otherPortsAttributes: undefined,
+      attributeSettings: {'remote.portsAttributes': {'3000': {label: 'Web'}}},
+    });
+    await settled();
+    scene.elapse();
+    await forwarding;
+    deepStrictEqual(
+      [scene.opened.length, scene.informed],
+      [
+        1,
+        [
+          'the declared forwards open before the port attributes are in effect in the window',
+        ],
+      ],
+    );
+  });
+
+  it('F-1101 BR-10: settings that cannot be read are logged and the forwards still open, without a rejection', async () => {
+    const scene = sceneOf([], {unreadable: true});
+    await scene.forwarder.forward({
+      forwardPorts: [3000],
+      portsAttributes: undefined,
+      otherPortsAttributes: undefined,
+      attributeSettings: {'remote.portsAttributes': {'3000': {label: 'Web'}}},
+    });
+    deepStrictEqual(
+      [scene.warned, scene.opened.length],
+      [
+        [
+          'the declared forwards open without waiting: the port attributes could not be read: no configuration',
+        ],
+        1,
+      ],
+    );
   });
 
   it('F-1101 AC-1: a connection that declares nothing opens nothing', async () => {

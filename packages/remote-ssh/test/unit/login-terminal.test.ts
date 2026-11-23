@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {idleGroupLeader} from 'lib-ssh/testing/idle-leader';
 import type * as vscode from 'vscode';
 import type {Invocation, TerminalEnd} from 'lib-ssh';
 import {loginTerminalsOf} from '../../src/surfaces/login-terminal.ts';
@@ -16,6 +17,7 @@ interface FakeTerminal {
   sentTexts: Array<[string, boolean]>;
   shown: boolean[];
   disposals: number;
+  processId: Promise<number | undefined>;
   sendText(text: string, addNewLine: boolean): void;
   show(preserveFocus: boolean): void;
   dispose(): void;
@@ -27,6 +29,7 @@ function fakeTerminal(): FakeTerminal {
     sentTexts: [],
     shown: [],
     disposals: 0,
+    processId: Promise.resolve(undefined),
     sendText: (text, addNewLine) => {
       terminal.sentTexts.push([text, addNewLine]);
     },
@@ -235,5 +238,17 @@ describe('loginTerminalsOf (card ssh-18 table)', () => {
     made.session.dispose();
     made.session.dispose();
     deepStrictEqual(made.terminal.disposals, 1);
+  });
+
+  it('#2664: disposing ends the process group of the terminal’s process', async function () {
+    if (process.platform === 'win32') {
+      this.skip();
+    }
+    const {leader, exited} = idleGroupLeader();
+    const made = opened();
+    made.terminal.processId = Promise.resolve(leader.pid);
+    made.session.dispose();
+    await exited;
+    deepStrictEqual(leader.signalCode, 'SIGTERM');
   });
 });

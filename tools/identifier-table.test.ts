@@ -194,6 +194,53 @@ describe('identifier-table', () => {
       );
     });
 
+    it('wsl-07: carries a coreAndExtension context key into the table', () => {
+      const [contextKeys] = tableKinds(
+        syntheticSources({
+          declared: {
+            contextKeys: [
+              {id: 'remote-x.installed', setter: 'coreAndExtension'},
+            ],
+          },
+        }),
+      );
+      deepStrictEqual(
+        contextKeys?.entries,
+        new Map([
+          ['installed', {id: 'remote-x.installed', setter: 'coreAndExtension'}],
+        ]),
+      );
+    });
+
+    it('#2494: carries the settingModule of a key beside its setter', () => {
+      const [contextKeys] = tableKinds(
+        syntheticSources({
+          declared: {
+            contextKeys: [
+              {
+                id: 'remote-x.installed',
+                setter: 'coreAndExtension',
+                settingModule: 'src/outer-context.ts',
+              },
+            ],
+          },
+        }),
+      );
+      deepStrictEqual(
+        contextKeys?.entries,
+        new Map([
+          [
+            'installed',
+            {
+              id: 'remote-x.installed',
+              setter: 'coreAndExtension',
+              settingModule: 'src/outer-context.ts',
+            },
+          ],
+        ]),
+      );
+    });
+
     it('adds the stand-down kind with the named key', () => {
       const kinds = tableKinds(
         syntheticSources({
@@ -265,6 +312,21 @@ describe('identifier-table', () => {
       deepStrictEqual(
         kinds.map(kind => kind.name),
         ['views', 'authorities', 'languages', 'internalCommands'],
+      );
+    });
+  });
+
+  describe('authorities', () => {
+    it('name an authority by its words, and one too short to name alone with the word authority after it, keeping its value', () => {
+      const source = tableSource(
+        syntheticSources({manifest: {authorities: ['ssh-remote', 'wsl']}}),
+      );
+      deepStrictEqual(
+        [
+          source?.includes('sshRemote: "ssh-remote"'),
+          source?.includes('wslAuthority: "wsl"'),
+        ],
+        [true, true],
       );
     });
   });

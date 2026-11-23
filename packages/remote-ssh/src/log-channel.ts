@@ -1,12 +1,14 @@
 /**
  * @fileoverview The extension's log: one output channel per window, created at activation, with the effective log
  * level, the editor version, the extension and the client platform as its first lines. Every line starts with the
- * local time. The level is read for each line, so a change in the settings applies to the next operation.
+ * local time. Control characters in a line are written as their code points, except line breaks and tabs. The level
+ * is read for each line, so a change in the settings applies to the next operation.
  */
 
 import {
   type ChannelPort,
   createLogger,
+  escapeControls,
   type Level,
   type Logger,
   type LogLine,
@@ -24,10 +26,12 @@ export interface LogEnvironment {
 /** The open log: its logger, the reveal of Show Log, and the end of the channel. */
 export interface LogChannel {
   readonly logger: Logger;
-  /** Shows the panel with the channel selected and the focus in it, as often as asked. */
-  reveal(): void;
+  /** Shows the panel with the channel selected and the focus in it, as often as asked; `preserveFocus` leaves the focus where it is. */
+  reveal(preserveFocus?: boolean): void;
   /** How many lines the channel has been given so far. */
   mark(): number;
+  /** Writes the editor version, the extension and the platform, once per window; a second call writes nothing. */
+  writeWindowStart(): void;
   /** The lines the channel was given from the `from`-th on (from the first by default), one to a line. */
   text(from?: number): string;
   dispose(): void;
@@ -75,23 +79,34 @@ export function openLogChannel(
   const logger = createLogger(
     {
       write: line => {
-        const text = formatted(line);
+        const text = escapeControls(formatted(line));
         written.push(text);
         channel.appendLine(text);
       },
     },
     {minimumLevel: readLevel, clock},
   );
+  let windowStarted = false;
   logger.info(`Log level: ${readLevel()}`);
-  logger.info(`Editor version: ${environment.editorVersion}`);
-  logger.info(`${environment.extensionName} ${environment.extensionVersion}`);
-  logger.info(`Client: ${environment.platform} ${environment.architecture}`);
   return {
     logger,
-    reveal: () => {
-      channel.show(false);
+    reveal: (preserveFocus = false) => {
+      channel.show(preserveFocus);
     },
     mark: () => written.length,
+    writeWindowStart: () => {
+      if (windowStarted) {
+        return;
+      }
+      windowStarted = true;
+      logger.info(`Editor version: ${environment.editorVersion}`);
+      logger.info(
+        `${environment.extensionName} ${environment.extensionVersion}`,
+      );
+      logger.info(
+        `Client: ${environment.platform} ${environment.architecture}`,
+      );
+    },
     text: (from = 0) => written.slice(from).join('\n'),
     dispose: () => {
       channel.dispose();

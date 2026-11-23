@@ -1,0 +1,336 @@
+/**
+ * @fileoverview acceptance-parts: the parts of a VSCodium run from the measured minutes.
+ */
+
+import {deepStrictEqual} from 'node:assert';
+import {readFileSync} from 'node:fs';
+import {type Launch, launchesOf} from './acceptance-launches.ts';
+import {
+  heldTogether,
+  limitOf,
+  PARTS_TABLE,
+  type PartsTable,
+  partsOfTable,
+  refreshedTable,
+  suiteFilesIn,
+  UNMEASURED_FILE_MINUTES,
+  UNMEASURED_LAUNCH_MINUTES,
+} from './acceptance-parts.ts';
+import {chosenLaunches} from './acceptance.ts';
+import {REPOSITORY_ROOT} from './repository.ts';
+
+/** A table of each kind: runner launches, a plain launch with files, a containers launch, and a genuine one. */
+const LAUNCHES: Launch[] = [
+  {label: 'local', runner: 'runner', suite: 'suite-local'},
+  {label: 'second', runner: 'runner-remote', suite: 'suite-second'},
+  {label: 'long', kind: 'plain', suite: 'long'},
+  {
+    label: 'boxes',
+    kind: 'plain',
+    suite: 'boxes',
+    withExtensions: ['remote-oss.remote-containers'],
+    files: ['b1.test.ts', 'b2.test.ts'],
+  },
+  {label: 'genuine', kind: 'plain', suite: 'genuine', client: 'vscode'},
+];
+
+/** The files of the fixture suites on no disk. */
+function suiteFiles(suite: string): string[] {
+  return suite === 'long'
+    ? ['l1.test.ts', 'l2.test.ts', 'l3.test.ts', 'l4.test.ts', 'new.test.ts']
+    : [];
+}
+
+/**
+ * The table's entries that no run can match: a label no launch has, or a file that its plain launch does not run. A
+ * split or a rename leaves one behind, its minutes then count for nothing, and the new files count as unmeasured. It
+ * is a row's helper, not the tool's, so that a change to it reaches no launch.
+ */
+function staleEntriesOf(
+  table: PartsTable,
+  launches: readonly Launch[],
+  suiteFiles: (suite: string) => string[],
+): string[] {
+  const byLabel = new Map(launches.map(launch => [launch.label, launch]));
+  return Object.entries(table.minutes).flatMap(([label, measured]) => {
+    const launch = byLabel.get(label);
+    if (launch === undefined) {
+      return [`${label}: no launch has this label`];
+    }
+    if (typeof measured !== 'object' || launch.kind !== 'plain') {
+      return [];
+    }
+    const files = new Set(launch.files ?? suiteFiles(launch.suite));
+    return Object.keys(measured)
+      .filter(file => !files.has(file))
+      .map(file => `${label}: ${file} is not a file of the launch`);
+  });
+}
+
+describe('acceptance-parts (card tooling-159)', () => {
+  it('tooling-159: the time limit is twice the minutes and ten more, at least thirty', () => {
+    deepStrictEqual([0, 9, 10, 14.2, 49.2].map(limitOf), [30, 30, 30, 39, 109]);
+  });
+
+  it('tooling-159: a launch over the target runs as its files in their order, cut at the target, an unmeasured file counted at its default; the entries are cut into parts in the table order, group by group, and genuine is left out', () => {
+    const table: PartsTable = {
+      targetMinutes: 15,
+      minutes: {
+        local: 9,
+        long: {
+          'l1.test.ts': 12,
+          'l2.test.ts': 10,
+          'l3.test.ts': 5,
+          'l4.test.ts': 4,
+        },
+        boxes: 20,
+        genuine: 3,
+      },
+    };
+    deepStrictEqual(partsOfTable(LAUNCHES, table, suiteFiles), [
+      {
+        name: 'ssh 1/4',
+        launches: 'local,second',
+        minutes: limitOf(9 + UNMEASURED_LAUNCH_MINUTES),
+      },
+      {name: 'ssh 2/4', launches: 'long:l1.test.ts', minutes: limitOf(12)},
+      {
+        name: 'ssh 3/4',
+        launches: 'long:l2.test.ts+l3.test.ts',
+        minutes: limitOf(15),
+      },
+      {
+        name: 'ssh 4/4',
+        launches: 'long:l4.test.ts+new.test.ts',
+        minutes: limitOf(4 + UNMEASURED_FILE_MINUTES),
+      },
+      {name: 'containers 1/1', launches: 'boxes', minutes: limitOf(20)},
+    ]);
+  });
+
+  it('tooling-159: a launch measured by file whose files fit the target, or a runner launch measured by file, runs whole', () => {
+    const table: PartsTable = {
+      targetMinutes: 15,
+      minutes: {
+        local: {'one.test.ts': 2, 'two.test.ts': 3},
+        long: {'l1.test.ts': 2},
+        boxes: {'b1.test.ts': 1, 'b2.test.ts': 1},
+      },
+    };
+    deepStrictEqual(partsOfTable(LAUNCHES, table, suiteFiles), [
+      {
+        name: 'ssh 1/2',
+        launches: 'local,second',
+        minutes: limitOf(5 + UNMEASURED_LAUNCH_MINUTES),
+      },
+      {
+        name: 'ssh 2/2',
+        launches: 'long',
+        minutes: limitOf(2 + 4 * UNMEASURED_FILE_MINUTES),
+      },
+      {name: 'containers 1/1', launches: 'boxes', minutes: 30},
+    ]);
+  });
+
+  it('tooling-159: launches the table keeps together share a part past the target, and the next one starts a part of its own', () => {
+    const launches: Launch[] = [
+      {label: 'pin-one', runner: 'runner', suite: 'suite-one'},
+      {label: 'pin-two', runner: 'runner', suite: 'suite-two'},
+      {label: 'loose', runner: 'runner', suite: 'suite-three'},
+    ];
+    deepStrictEqual(
+      partsOfTable(
+        launches,
+        {
+          targetMinutes: 15,
+          together: [['pin-one', 'pin-two']],
+          minutes: {'pin-one': 10, 'pin-two': 10, loose: 2},
+        },
+        suiteFiles,
+      ),
+      [
+        {name: 'ssh 1/2', launches: 'pin-one,pin-two', minutes: limitOf(20)},
+        {name: 'ssh 2/2', launches: 'loose', minutes: limitOf(2)},
+      ],
+    );
+  });
+
+  it('tooling-159, tooling-168, #2355: host cases pack by their minutes like any group, a primer stays with its case, and a launch of the CLI-source editor or with WSL distros is left out', () => {
+    const launches: Launch[] = [
+      {label: 'case-one', runner: 'runner-remote', suite: 'suite-ports'},
+      {label: 'case-two-prime', runner: 'runner-remote', suite: 'suite-ports'},
+      {label: 'case-two', runner: 'runner-remote', suite: 'suite-ports'},
+      {label: 'cli-copy', kind: 'plain', suite: 'cli-copy', cliSource: true},
+      {
+        label: 'distros',
+        runner: 'runner-remote',
+        suite: 'suite-ports',
+        wslDistros: true,
+      },
+    ];
+    deepStrictEqual(
+      partsOfTable(
+        launches,
+        {
+          targetMinutes: 15,
+          together: [['case-two-prime', 'case-two']],
+          minutes: {
+            'case-one': 14,
+            'case-two-prime': 5,
+            'case-two': 10,
+            'cli-copy': 1,
+            distros: 1,
+          },
+        },
+        suiteFiles,
+      ),
+      [
+        {name: 'hosts 1/2', launches: 'case-one', minutes: limitOf(14)},
+        {
+          name: 'hosts 2/2',
+          launches: 'case-two-prime,case-two',
+          minutes: limitOf(15),
+        },
+      ],
+    );
+  });
+
+  it('tooling-159, tooling-168: a launch the table keeps together with another runs only with others, and a host case no longer does', () => {
+    const held = heldTogether({
+      targetMinutes: 15,
+      together: [['local', 'second']],
+      minutes: {},
+    });
+    deepStrictEqual(
+      [
+        held({label: 'local', runner: 'runner', suite: 'suite-local'}),
+        held({
+          label: 'case-one',
+          runner: 'runner-remote',
+          suite: 'suite-ports',
+        }),
+        held({label: 'long', kind: 'plain', suite: 'long'}),
+      ],
+      [true, false, false],
+    );
+  });
+
+  it('tooling-159: a refresh reads file lines per launch, merged over the logs, and a launch without them from its stamps to the next launch or the end', () => {
+    const table: PartsTable = {
+      targetMinutes: 15,
+      minutes: {kept: 4, long: {'old.test.ts': 1, 'l1.test.ts': 9}},
+    };
+    const first = [
+      'job\tstep\t2026-11-05T01:00:00.000Z acceptance: launch local',
+      'job\tstep\t2026-11-05T01:03:00.000Z acceptance: launch long',
+      'job\tstep\t2026-11-05T01:20:00.000Z acceptance: file long/l1.test.ts 600.0',
+      'job\tstep\t2026-11-05T01:20:00.100Z [ELIFECYCLE] Command failed with exit code 1.',
+    ].join('\n');
+    const second = [
+      '2026-11-05T02:00:00.000Z acceptance: launch long',
+      'a line with no stamp',
+      '2026-11-05T02:10:00.000Z acceptance: file long/l2.test.ts 90.0',
+      '2026-11-05T02:10:01.000Z acceptance: launch remote',
+      '2026-11-05T02:11:31.000Z ##[group]Run pnpm acceptance:clean',
+    ].join('\n');
+    deepStrictEqual(refreshedTable(table, [first, second]), {
+      targetMinutes: 15,
+      minutes: {
+        kept: 4,
+        local: 3,
+        long: {'old.test.ts': 1, 'l1.test.ts': 10, 'l2.test.ts': 1.5},
+        remote: 1.5,
+      },
+    });
+  });
+
+  it('tooling-194: a table entry no run can match is named: a label no launch has, and a file its plain launch does not run', () => {
+    const table: PartsTable = {
+      targetMinutes: 15,
+      minutes: {
+        local: 9,
+        gone: 4,
+        long: {'l1.test.ts': 12, 'split.test.ts': 30},
+        boxes: {'b1.test.ts': 2, 'b3.test.ts': 1},
+      },
+    };
+    deepStrictEqual(staleEntriesOf(table, LAUNCHES, suiteFiles), [
+      'gone: no launch has this label',
+      'long: split.test.ts is not a file of the launch',
+      'boxes: b3.test.ts is not a file of the launch',
+    ]);
+  });
+
+  it("tooling-194: the repository's table names only labels its launches have and files they run", () => {
+    const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
+    deepStrictEqual(
+      staleEntriesOf(
+        table,
+        launchesOf(REPOSITORY_ROOT),
+        suiteFilesIn(REPOSITORY_ROOT),
+      ),
+      [],
+    );
+  });
+
+  it("#2643: the repository's table keeps remote with reconnect, whose suite reads the server remote kept, and its parts hold the two in one part", () => {
+    const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
+    const pair = ['remote', 'reconnect'];
+    const holding = partsOfTable(
+      launchesOf(REPOSITORY_ROOT),
+      table,
+      suiteFilesIn(REPOSITORY_ROOT),
+    )
+      .map(part =>
+        part.launches.split(',').filter(label => pair.includes(label)),
+      )
+      .filter(labels => labels.length > 0);
+    deepStrictEqual(
+      [
+        (table.together ?? []).some(labels =>
+          pair.every(label => labels.includes(label)),
+        ),
+        holding,
+      ],
+      [true, [pair]],
+    );
+  });
+
+  it("tooling-159, #2355: the repository's parts make every launch but the genuine ones, cli-path, wsl and windows-host, each test file of a split launch exactly once, the same parts each time", () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
+    const parts = partsOfTable(launches, table, suiteFilesIn(REPOSITORY_ROOT));
+    const filesOf = suiteFilesIn(REPOSITORY_ROOT);
+    /** Each launch a selection makes as its label, a plain one as each test file it runs. */
+    function units(selected: string[]): string[] {
+      const chosen = chosenLaunches(launches, selected);
+      return typeof chosen === 'string'
+        ? [chosen]
+        : chosen.flatMap(launch =>
+            launch.kind === 'plain'
+              ? (launch.files ?? filesOf(launch.suite)).map(
+                  file => `${launch.label}:${file}`,
+                )
+              : [launch.label],
+          );
+    }
+    const made = parts.flatMap(part => units(part.launches.split(',')));
+    const wanted = units([
+      '@ssh',
+      '@hosts',
+      '@explorer',
+      '@containers',
+      '!cli-path',
+      '!wsl',
+      '!windows-host',
+    ]);
+    deepStrictEqual(
+      [
+        [...made].sort(),
+        made.length === new Set(made).size,
+        partsOfTable(launches, table, suiteFilesIn(REPOSITORY_ROOT)),
+      ],
+      [[...wanted].sort(), true, parts],
+    );
+  });
+});

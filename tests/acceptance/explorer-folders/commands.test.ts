@@ -94,21 +94,27 @@ describe('the commands of the view out of their context (card coverage-102, part
   }
 
   it('F-5002 AC-6, AC-11, AC-16 (keys-plain): a key bound to each command with no argument changes no window, title, indicator, file or history row, shows no dialog, leaves the window usable and adds no state key of the extension', async () => {
-    const keysBefore = stateKeys();
+    const keysBefore = await stateKeys();
     const seen = await pressedOne('keys-plain', undefined);
     deepStrictEqual(
-      [seen.changed, seen.usable, seen.detects, stateKeys()],
+      [seen.changed, seen.usable, seen.detects, await stateKeys()],
       [[], true, true, keysBefore],
       JSON.stringify(seen.notices),
     );
   });
 
   it('F-5002 AC-7, AC-16 (keys-bogus): the same keys with the argument "bogus-f5002" and with {} change nothing', async () => {
-    const keysBefore = stateKeys();
+    const keysBefore = await stateKeys();
     const bogus = await pressedOne('keys-bogus', 'bogus-f5002');
     const empty = await pressedOne('keys-empty', {});
     deepStrictEqual(
-      [bogus.changed, empty.changed, bogus.usable, empty.usable, stateKeys()],
+      [
+        bogus.changed,
+        empty.changed,
+        bogus.usable,
+        empty.usable,
+        await stateKeys(),
+      ],
       [[], [], true, true, keysBefore],
     );
   });

@@ -409,6 +409,145 @@ describe('helper client', () => {
       deepStrictEqual([spawned.length, lease.startedByMe], [1, true]);
     });
 
+    it('#847: the stale path calls its hook, the record replaced, before the start', async () => {
+      files.files.set(RECORD_PATH, recordAt('/run/gone.sock'));
+      const seen: Array<[number, boolean]> = [];
+      const lease = leaseOf(
+        await drive(
+          acquire(
+            environment,
+            request({
+              onStaleReplaced: () => {
+                const record = parseRecord(files.files.get(RECORD_PATH) ?? '');
+                seen.push([
+                  spawned.length,
+                  record?.endpoint === '/run/gone.sock',
+                ]);
+              },
+            }),
+          ),
+        ),
+      );
+      deepStrictEqual(
+        [seen, spawned.length, lease.startedByMe],
+        [[[0, false]], 1, true],
+      );
+    });
+
+    it('#847: a join and a fresh claim call no hook', async () => {
+      let calls = 0;
+      const hook = {
+        onStaleReplaced: () => {
+          calls += 1;
+        },
+      };
+      await drive(acquire(environment, request(hook)));
+      await drive(acquire(environment, request(hook)));
+      deepStrictEqual([calls, spawned.length], [0, 1]);
+    });
+
+    it('#847: stop reports the record it looked up', async () => {
+      const withoutRecord = await stop(
+        environment,
+        '/registry',
+        'ssh.connection',
+        'user@host:22',
+      );
+      leaseOf(await drive(acquire(environment, request())));
+      const withRecord = await stop(
+        environment,
+        '/registry',
+        'ssh.connection',
+        'user@host:22',
+      );
+      deepStrictEqual([withoutRecord, withRecord], ['none', 'found']);
+    });
+
+    /** An endpoint of a helper that answers every hello with `ending`, and closes when `closeAfter` milliseconds passed, if it is a number. */
+    async function endingAt(
+      endpoint: string,
+      closeAfter: number | undefined,
+    ): Promise<void> {
+      await endpoints.listen(endpoint, connection => {
+        connection.onMessage(() => {
+          connection.send({type: 'ending'});
+          if (closeAfter !== undefined) {
+            clock.scheduler().setTimer(closeAfter, () => {
+              files.files.delete(RECORD_PATH);
+              connection.close();
+            });
+          }
+        });
+      });
+    }
+
+    it('contracts X1: an ending reply is no failure: acquire waits for the endpoint to close, then starts a fresh helper once', async () => {
+      await endingAt('/run/ending.sock', 100);
+      files.files.set(RECORD_PATH, recordAt('/run/ending.sock'));
+      const lease = leaseOf(await drive(acquire(environment, request())));
+      deepStrictEqual(
+        [spawned.length, lease.startedByMe, prepares],
+        [1, true, 1],
+      );
+    });
+
+    it('contracts X1: a helper that answers ending and does not close is waited for no longer than the hello limit', async () => {
+      await endingAt('/run/ending.sock', undefined);
+      files.files.set(RECORD_PATH, recordAt('/run/ending.sock'));
+      const lease = leaseOf(await drive(acquire(environment, request())));
+      deepStrictEqual([spawned.length, lease.startedByMe], [1, true]);
+    });
+
+    it('contracts X1: a second ending reply, from the helper a rival wrote during the replacement, is endpointUnreachable', async () => {
+      await endingAt('/run/ending.sock', undefined);
+      files.files.set(RECORD_PATH, recordAt('/run/gone.sock'));
+      rivalWritesOnRemove(recordAt('/run/ending.sock'));
+      deepStrictEqual(await drive(acquire(environment, request())), {
+        kind: 'failed',
+        failure: 'endpointUnreachable',
+      });
+    });
+
+    it('contracts X1: the hello names the replies the client understands', async () => {
+      const heard: unknown[] = [];
+      await endpoints.listen('/run/hello.sock', connection => {
+        connection.onMessage(message => {
+          heard.push(message);
+        });
+      });
+      files.files.set(RECORD_PATH, recordAt('/run/hello.sock'));
+      await drive(acquire(environment, request()));
+      deepStrictEqual(heard[0], {
+        type: 'hello',
+        nonce: 'old',
+        understands: ['ending'],
+      });
+    });
+
+    it("contracts X1: a refused hello waits for the close up to the hello limit plus the policy's action bound, then starts a fresh helper", async () => {
+      await endingAt('/run/ending.sock', 5000);
+      files.files.set(RECORD_PATH, recordAt('/run/ending.sock'));
+      const lease = leaseOf(
+        await drive(
+          acquire(
+            environment,
+            request({
+              policy: {
+                kind: 'delayedCheckAfterLastLease',
+                milliseconds: 10_000,
+                action: 'drain',
+                actionBound: 12_000,
+              },
+            }),
+          ),
+        ),
+      );
+      deepStrictEqual(
+        [spawned.length, lease.startedByMe, clock.now() >= 5000],
+        [1, true, true],
+      );
+    });
+
     it('replaces a corrupt record and starts a new helper', async () => {
       files.files.set(RECORD_PATH, '{broken');
       const lease = leaseOf(await drive(acquire(environment, request())));

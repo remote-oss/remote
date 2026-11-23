@@ -19,6 +19,10 @@ import {ENGINE_TEMPLATES, type Translate} from '../surfaces/engine-dialogs.ts';
 import {filled} from '../surfaces/filled.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
 import {
+  type HostRequirements,
+  requirementsOf,
+} from '../engine/host-requirements.ts';
+import {
   decodeConfiguration,
   dockerfileOf,
   hasContainerSource,
@@ -31,11 +35,13 @@ import {
   type ConfigFiles,
   discoverConfigurations,
 } from './discovery.ts';
-import {byAbsolutePath} from './stored-candidate.ts';
+import {joinedCandidates} from './candidates.ts';
 
 /** The English templates of the texts of the picker and its dialogs, by their string ids. */
 const CONFIG_TEMPLATES = {
   S303: 'Select a devcontainer.json file.',
+  S299: 'Select Configuration',
+  S001: '(Current)',
   S257: 'Open File',
   S181: "Failed to read Dev Container configuration '{0}' file.",
   S113: "Dev Container configuration '{0}' file is missing image information. You can add this manually or overwrite with a template.",
@@ -63,11 +69,12 @@ export type PickerAnswer =
 
 /** The editor surfaces the choice uses. */
 export interface ConfigSurfaces {
-  /** Shows the single-select picker: no title, `placeholder`, rows in order with one "Open File" button each. */
+  /** Shows the single-select picker: `title` when given, `placeholder`, rows in order with one "Open File" button each. */
   pick(
     rows: readonly PickerRow[],
     placeholder: string,
     openFileTooltip: string,
+    title?: string,
   ): Promise<PickerAnswer>;
   /** The engine dialogs' modal error and log reveal, reused as they are. */
   dialogs: Pick<EngineDialogPort, 'showError' | 'revealLog'>;
@@ -89,6 +96,8 @@ export interface ConfigurationPorts {
   compare: (left: string, right: string) => number;
   /** The configuration of the folder in the store of user data, when it has one; asked where the folder's own are. */
   stored?(folder: string): Promise<Candidate | undefined>;
+  /** The configurations the folder's remotes map to under the user's roots; none while the folder is untrusted. */
+  mirrored?(folder: string): Promise<Candidate[]>;
   /** Adds a configuration to the folder with the wizard, and shows what the command that adds one shows after it. */
   useTemplate(folder: string): PromiseLike<unknown>;
   translate: Translate;
@@ -121,11 +130,24 @@ export interface ConfigurationRequest {
    */
   configFile?: string;
   /**
+   * Whether the sources outside the folder are consulted. They are not for a multi-root workspace (BR-12); absent means
+   * they are.
+   */
+  external?: boolean;
+  /**
    * C2's first check, already running. Every surface and every answer of `chooseConfiguration` waits for it; when it
    * ends `stopped`, nothing more is shown and the answer is `stopped`. The work (discovery, reads, the CLI) doesn't
    * wait.
    */
   engineCheck: Promise<FirstCheckResult>;
+  /**
+   * Set by Switch Container: the picker has the title S299, the description of the configuration `current` (absolute)
+   * is followed by S001, and choosing `current` ends the choice with nothing read, unless `reconnectCurrent` is set (a
+   * window with no folder open, where every pick reconnects).
+   */
+  switching?: {current: string; reconnectCurrent: boolean};
+  /** Whether the read asks for the merged configuration, which the choice then reports the host requirements of. */
+  mergedRead?: boolean;
 }
 
 /** How choosing ended. */
@@ -137,6 +159,8 @@ export type ConfigurationChoice =
       workspaceFolder: string;
       /** The keys of the configuration's `features`, as written. */
       features: string[];
+      /** What the merged configuration asks of the daemon; present when the read was merged. */
+      hostRequirements?: HostRequirements;
     }
   /** The folder holds no configuration. */
   | {kind: 'noConfiguration'}
@@ -190,14 +214,12 @@ export async function chooseConfiguration(
     }
   }
 
-  /**
-   * The CLI's read of the candidate, started now. A rejection waits in the promise until it is awaited, so it is never
-   * unhandled meanwhile.
-   */
-  function startRead(
+  /** One CLI read of the candidate, merged with the Features and the image's label or not. */
+  function readOnce(
     candidate: Candidate,
+    includeMerged: boolean,
   ): Promise<ConfigurationResult | CliFailure> {
-    const reading = ports.cli.readConfiguration(
+    return ports.cli.readConfiguration(
       {
         workspaceFolder: folder,
         configFile: candidate.file,
@@ -214,7 +236,39 @@ export async function chooseConfiguration(
         logger.debug(event.kind === 'log' ? event.text : event.name);
       },
       request.cancellation,
+      undefined,
+      includeMerged,
     );
+  }
+
+  /**
+   * A merged read, and, when it fails where the image or a Feature can't be fetched, the plain one: the open goes on and
+   * the failure shows in the container window. A cancelled read has no fallback.
+   */
+  async function readMergedOrPlain(
+    candidate: Candidate,
+  ): Promise<ConfigurationResult | CliFailure> {
+    const merged = await readOnce(candidate, true);
+    if (merged.kind === 'configuration' || merged.kind === 'cancelled') {
+      return merged;
+    }
+    logger.warn(
+      `the merged configuration could not be read (${cliFailureText(merged)}); the configuration is read without it`,
+    );
+    return readOnce(candidate, false);
+  }
+
+  /**
+   * The CLI's read of the candidate, started now. A rejection waits in the promise until it is awaited, so it is never
+   * unhandled meanwhile.
+   */
+  function startRead(
+    candidate: Candidate,
+  ): Promise<ConfigurationResult | CliFailure> {
+    const reading =
+      request.mergedRead === true
+        ? readMergedOrPlain(candidate)
+        : readOnce(candidate, false);
     reading.catch(() => undefined);
     return reading;
   }
@@ -249,7 +303,10 @@ export async function chooseConfiguration(
             : parseConfiguration(decodeConfiguration(bytes));
         return {
           label: labelOf(candidate.place, parsed, translate),
-          description: candidate.relative,
+          description:
+            candidate.file === request.switching?.current
+              ? `${candidate.relative} ${textOf(translate, CONFIG_TEMPLATES.S001)}`
+              : candidate.relative,
         };
       }),
     );
@@ -260,6 +317,9 @@ export async function chooseConfiguration(
       rows,
       textOf(translate, CONFIG_TEMPLATES.S303),
       textOf(translate, CONFIG_TEMPLATES.S257),
+      request.switching === undefined
+        ? undefined
+        : textOf(translate, CONFIG_TEMPLATES.S299),
     );
     if (answer.kind === 'dismissed') {
       logger.info(textOf(translate, CONFIG_TEMPLATES.S049));
@@ -277,10 +337,14 @@ export async function chooseConfiguration(
     request.configFile === undefined
       ? await discoverConfigurations(folder, files, ports.compare)
       : [namedCandidate(folder, request.configFile)];
-  const stored =
-    request.configFile === undefined ? await ports.stored?.(folder) : undefined;
-  const candidates =
-    stored === undefined ? found : byAbsolutePath([...found, stored]);
+  const lookedUp =
+    request.configFile === undefined && request.external !== false;
+  const stored = lookedUp ? await ports.stored?.(folder) : undefined;
+  const mirrored = lookedUp ? ((await ports.mirrored?.(folder)) ?? []) : [];
+  const candidates = joinedCandidates(
+    found,
+    stored === undefined ? mirrored : [stored, ...mirrored],
+  );
   if (candidates.length === 0) {
     logger.info(`no dev container configuration in ${folder}`);
     if (!(await engineAllows())) {
@@ -291,6 +355,12 @@ export async function chooseConfiguration(
   const candidate =
     candidates.length === 1 ? candidates[0] : await picked(candidates);
   if (candidate === undefined) {
+    return (await engineAllows()) ? {kind: 'dismissed'} : stopped;
+  }
+  if (
+    request.switching?.current === candidate.file &&
+    !request.switching.reconnectCurrent
+  ) {
     return (await engineAllows()) ? {kind: 'dismissed'} : stopped;
   }
   const bytes = await files.read(candidate.file);
@@ -394,5 +464,12 @@ export async function chooseConfiguration(
     configFile: candidate.file,
     workspaceFolder: read.workspaceFolder,
     features: requestedFeaturesOf(read.configuration.features, undefined),
+    ...(read.mergedConfiguration === undefined
+      ? {}
+      : {
+          hostRequirements: requirementsOf(
+            read.mergedConfiguration.hostRequirements,
+          ),
+        }),
   };
 }

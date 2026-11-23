@@ -10,14 +10,16 @@ import type {
   CloneTrustAnswer,
 } from '../../src/volumes/clone-command.ts';
 import type {PrecheckOutcome} from '../../src/volumes/precheck.ts';
+import type {PickedRepository} from '../../src/volumes/source-pick.ts';
 import {volumeTargetOf} from '../../src/volumes/volume-payload.ts';
 
-/** How a scene's ports answer the clone command's shared steps. */
+/** How a scene's ports answer. */
 export interface CloneAnswers {
   accepted: boolean;
   trust: CloneTrustAnswer;
   engineReady: boolean;
-  typed: string | undefined;
+  /** The text typed, the GitHub row with what its picker gives, or a dismissed pick. */
+  typed: string | {github: PickedRepository | undefined} | undefined;
   precheck: PrecheckOutcome;
   currentRepository: string | undefined;
 }
@@ -59,10 +61,24 @@ export function cloneCommandPortsOf(
     },
     pickSource: () => {
       calls.push('pick');
-      return Promise.resolve(answers.typed);
+      const {typed} = answers;
+      return Promise.resolve(
+        typeof typed === 'object'
+          ? {kind: 'github' as const}
+          : typed === undefined
+            ? undefined
+            : {kind: 'typed' as const, text: typed},
+      );
     },
-    precheck: source => {
-      calls.push(`precheck ${source.urlToClone}`);
+    pickGithub: () => {
+      calls.push('github');
+      const {typed} = answers;
+      return Promise.resolve(
+        typeof typed === 'object' ? typed.github : undefined,
+      );
+    },
+    precheck: (source, origin) => {
+      calls.push(`precheck ${source.urlToClone} ${origin}`);
       return Promise.resolve(answers.precheck);
     },
     cannotAccess: repository => {

@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import type {MemorySink} from 'lib-log/testing/memory-sink';
+import type {SessionCheck} from 'lib-ssh';
 import type {
   ProbedHost,
   StartOutcome,
@@ -14,6 +15,7 @@ import {
 } from '../../src/pipeline/connect.ts';
 import type {
   ConnectionLease,
+  ConnectionTerms,
   ConnectSteps,
   StepFailure,
   StepResult,
@@ -41,6 +43,7 @@ import {
   WAITS,
   waitsOf,
 } from './pipeline.fixture.ts';
+import {LOCAL_LOCK_TIMEOUT} from '../../src/pipeline/failure.ts';
 
 describe('the connect pipeline, when it works', () => {
   it('runs the steps in the order of the contract, transferring a server that is not there', async () => {
@@ -61,10 +64,45 @@ describe('the connect pipeline, when it works', () => {
       'gate',
       'transfer',
       'start',
+      'cleanup',
       'openTunnel',
       'rememberPlatform',
       'applyDefaults',
     ]);
+  });
+
+  it('F-2502 5.0 step 3: the host is reported once, when the connection step opens and before the probe', async () => {
+    const {recording, options} = setup();
+    await connect(INPUT, steps(recording), {
+      ...options,
+      onHostReported: () => {
+        recording.calls.push('hostReported');
+      },
+    });
+    deepStrictEqual(
+      recording.calls.filter(call =>
+        ['openConnection', 'hostReported', 'probe'].includes(call),
+      ),
+      ['openConnection', 'hostReported', 'probe'],
+    );
+  });
+
+  it('F-2502 7.E1: a connection step that fails reports no host', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        openConnection: () =>
+          Promise.resolve({kind: 'failed', failure: {kind: 'cancelled'}}),
+      }),
+      {
+        ...options,
+        onHostReported: () => {
+          recording.calls.push('hostReported');
+        },
+      },
+    );
+    deepStrictEqual(recording.calls.includes('hostReported'), false);
   });
 
   it('F-2206 §9: the probed platform is logged after the probe', async () => {
@@ -76,6 +114,45 @@ describe('the connect pipeline, when it works', () => {
         .filter(message => message.startsWith('Host platform:')),
       ['Host platform: linux x64'],
     );
+  });
+
+  /** The `Platform:` lines of a connect whose terms name `platform` and whose probe reports `operatingSystem`. */
+  async function platformLines(
+    platform: ConnectionTerms['platform'],
+    operatingSystem: 'linux' | 'darwin' | 'win32',
+  ): Promise<string[]> {
+    const {recording, options, logSink} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        decideTerms: () =>
+          Promise.resolve({kind: 'done', value: {...TERMS, platform}}),
+        probe: () =>
+          Promise.resolve({
+            kind: 'probed',
+            host: {...HOST, operatingSystem},
+          }),
+      }),
+      options,
+    );
+    return logSink.lines
+      .map(line => line.message)
+      .filter(message => message.startsWith('Platform: '));
+  }
+
+  it('F-2206 5.1 step 2 (#1835): with the platform unknown the log names the probed platform in words, once', async () => {
+    deepStrictEqual(
+      [
+        await platformLines('unknown', 'linux'),
+        await platformLines('unknown', 'darwin'),
+        await platformLines('unknown', 'win32'),
+      ],
+      [['Platform: linux'], ['Platform: macOS'], ['Platform: windows']],
+    );
+  });
+
+  it('#1835: with the platform known from the settings there is no Platform line', async () => {
+    deepStrictEqual(await platformLines('linux', 'linux'), []);
   });
 
   /** The login shell lines a connect writes, with the probe's host given by `loginShell` or the fixture's. */
@@ -159,6 +236,112 @@ describe('the connect pipeline, when it works', () => {
         ['gate', 'transfer', 'start'].includes(call),
       ),
       ['gate', 'start'],
+    );
+  });
+
+  it('F-2003 BR-6 item 2: the settings listing follows the resolver line at every resolve, a reconnection included', async () => {
+    const first = setup();
+    first.options.settingLines = [
+      'remote.SSH.lockfilesInTmp = false',
+      'remote.SSH.useFlock = true',
+    ];
+    await connect(INPUT, steps(first.recording), first.options);
+    const again = setup();
+    again.options.settingLines = ['remote.SSH.useFlock = true'];
+    await connect(
+      {...INPUT, attempt: 2, isReconnection: true},
+      steps(again.recording),
+      again.options,
+    );
+    function lines(sink: typeof first.logSink): string[] {
+      return sink.lines.map(line => line.message).slice(0, 3);
+    }
+    deepStrictEqual(
+      [lines(first.logSink), lines(again.logSink)],
+      [
+        [
+          'Resolving ssh-remote+dev, attempt 1',
+          'remote.SSH.lockfilesInTmp = false',
+          'remote.SSH.useFlock = true',
+        ],
+        [
+          'Resolving ssh-remote+dev, attempt 2, reconnection',
+          'remote.SSH.useFlock = true',
+          'Host platform: linux x64',
+        ],
+      ],
+    );
+  });
+
+  it('F-2003 BR-5: the window start follows the settings listing at the resolve', async () => {
+    const {recording, options, logSink} = setup();
+    options.settingLines = ['remote.SSH.useFlock = true'];
+    options.writeWindowStart = () => {
+      options.logger.info('window start');
+    };
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(logSink.lines.map(line => line.message).slice(1, 3), [
+      'remote.SSH.useFlock = true',
+      'window start',
+    ]);
+  });
+
+  it('F-2506 BR-10: moves the legacy settings first at every resolve of a window, a reconnection included', async () => {
+    const {recording, options} = setup();
+    const moves: string[] = [];
+    await connect(
+      INPUT,
+      steps(recording, {
+        migrateLegacySettings: () => {
+          moves.push(`after ${recording.calls.join(',') || 'nothing'}`);
+          return Promise.resolve();
+        },
+      }),
+      options,
+    );
+    await connect(
+      {...INPUT, attempt: 2, isReconnection: true},
+      steps(recording, {
+        migrateLegacySettings: () => {
+          moves.push('again');
+          return Promise.resolve();
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(moves, ['after nothing', 'again']);
+  });
+
+  it('F-2506 BR-10: does not wait for the legacy settings move, and logs one that fails', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        migrateLegacySettings: () => never(),
+      }),
+      options,
+    );
+    const failing = setup();
+    await connect(
+      INPUT,
+      steps(failing.recording, {
+        migrateLegacySettings: () => Promise.reject(new Error('no settings')),
+      }),
+      failing.options,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result,
+        logSink.lines.some(line => line.message.includes('did not work')),
+        failing.logSink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('legacy settings move')),
+      ],
+      [
+        true,
+        false,
+        ['the legacy settings move did not work: Error: no settings'],
+      ],
     );
   });
 
@@ -324,6 +507,99 @@ describe('the connect pipeline, when it works', () => {
       {kind: 'settingUpTunnel'},
       {kind: 'waitingForForwarding'},
     ]);
+  });
+});
+
+describe('the connect pipeline, with the client install lock (card #2844, F-2408 BR-6, 7.E2)', () => {
+  it('BR-6: the lock is held from after the lookup, before the connection opens, until the server started', async () => {
+    const {recording, options} = setup();
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(recording.clientLock, [
+      'held after locateClient',
+      'released after start',
+    ]);
+  });
+
+  it('6.1 step 2: a wait for the lock shows "Waiting for other windows to connect" before the connection opens', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        holdClientLock: (input, onWaiting) => {
+          onWaiting();
+          return Promise.resolve({
+            kind: 'done',
+            value: {release: () => undefined},
+          });
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(recording.phases.slice(0, 3), [
+      {kind: 'initializing', quiet: true},
+      {kind: 'waitingForOtherWindow'},
+      {kind: 'opened'},
+    ]);
+  });
+
+  it("7.E2: a lock wait that runs out is the connect's failure, with the local startup lock's reason, and no connection opens", async () => {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        holdClientLock: () =>
+          Promise.resolve({kind: 'failed', failure: LOCAL_LOCK_TIMEOUT}),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      {
+        kind: 'kind' in result ? result.kind : 'connected',
+        reason: 'reason' in result ? result.reason : undefined,
+        opened: recording.calls.includes('openConnection'),
+      },
+      {kind: 'lockTimeout', reason: {id: 'localLockTimeout'}, opened: false},
+    );
+  });
+
+  it('BR-6: a connect that fails after it took the lock gives it back', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        openConnection: () => {
+          recording.calls.push('openConnection');
+          return Promise.resolve({
+            kind: 'failed',
+            failure: {kind: 'channelClosed'},
+          });
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(recording.clientLock, [
+      'held after locateClient',
+      'released after openConnection',
+    ]);
+  });
+});
+
+describe('the warning of the download mode (F-2406 BR-3, ruling-2878-manual-bootstrap)', () => {
+  it('BR-3: a window asks for the warning once at the start of every attempt', async () => {
+    const {recording, options} = setup();
+    let warnings = 0;
+    const counted = steps(recording, {
+      warnOfDownloadMode: () => {
+        warnings += 1;
+      },
+    });
+    await connect(INPUT, counted, options);
+    await connect(
+      {...INPUT, attempt: 2, isReconnection: true},
+      counted,
+      options,
+    );
+    deepStrictEqual(warnings, 2);
   });
 });
 
@@ -1366,14 +1642,98 @@ describe('the connect pipeline, what it keeps and gives back', () => {
     server: {...STARTED.server, reused: true},
   };
 
-  it('installs the default extensions on a server that was already running', async () => {
+  /** The recording of a connect whose start found the server already running. */
+  async function connectReusing(): Promise<
+    ReturnType<typeof setup>['recording']
+  > {
     const {recording, options} = setup();
     await connect(
       INPUT,
       steps(recording, {start: () => Promise.resolve(REUSED)}),
       options,
     );
-    deepStrictEqual(recording.calls.includes('installExtensions'), true);
+    return recording;
+  }
+
+  it('installs the default extensions on a server that was already running', async () => {
+    deepStrictEqual(
+      (await connectReusing()).calls.includes('installExtensions'),
+      true,
+    );
+  });
+
+  it('F-2413 6.4 step 1: the connect prunes the older installs once the server runs, before the tunnel opens', async () => {
+    const {recording, options} = setup();
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(
+      recording.calls.filter(call =>
+        ['start', 'cleanup', 'openTunnel'].includes(call),
+      ),
+      ['start', 'cleanup', 'openTunnel'],
+    );
+  });
+
+  it('F-2413.BR-9: the clean-up gets the probed host, so it takes the locks as the install did', async () => {
+    const {recording, options} = setup();
+    const hosts: Array<string | undefined> = [];
+    await connect(
+      INPUT,
+      steps(recording, {
+        maintain: (input, lease, action, cancellation, host) => {
+          hosts.push(host?.operatingSystem);
+          return Promise.resolve({kind: 'done'});
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(hosts, ['linux']);
+  });
+
+  it('F-2413 6.4 step 5: a connect that reuses the running server prunes too', async () => {
+    deepStrictEqual((await connectReusing()).calls.includes('cleanup'), true);
+  });
+
+  it('F-2413 6.4 step 8: a clean-up that cannot run is logged and the connect goes on', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        maintain: () => Promise.reject(new Error('the channel broke')),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result,
+        logSink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('clean-up')),
+      ],
+      [
+        true,
+        ['the clean-up of old installs did not work: Error: the channel broke'],
+      ],
+    );
+  });
+
+  it('F-2413 6.4: a clean-up that ends in another status than done is logged and the connect goes on', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        maintain: () => Promise.resolve({kind: 'noResultBlock'}),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result,
+        logSink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('clean-up')),
+      ],
+      [true, ['the clean-up of old installs ended with noResultBlock']],
+    );
   });
 
   it('leaves the default extensions alone on a server it started', async () => {
@@ -1554,6 +1914,53 @@ describe('the connect pipeline, what it keeps and gives back', () => {
         ],
       ],
     );
+  });
+
+  it('#2566: the log says whether the shared record was stored, declined by the connection, or not stored for a socket endpoint', async () => {
+    const lines: string[][] = [];
+    for (const behaviour of ['stored', 'declined', 'socket'] as const) {
+      const {recording, options, logSink} = setup();
+      await connect(
+        INPUT,
+        steps(recording, {
+          ...(behaviour === 'socket'
+            ? {
+                start: () =>
+                  Promise.resolve({
+                    ...STARTED,
+                    server: {
+                      ...STARTED.server,
+                      endpoint: {kind: 'socket', path: '/tmp/code-x'},
+                    },
+                  }),
+              }
+            : {}),
+          ...(behaviour === 'declined'
+            ? {
+                openConnection: () =>
+                  Promise.resolve({
+                    kind: 'done',
+                    value: {
+                      ...leaseOf(recording),
+                      storeSharedRecord: () => Promise.resolve(false),
+                    },
+                  }),
+              }
+            : {}),
+        }),
+        options,
+      );
+      lines.push(
+        logSink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('shared record')),
+      );
+    }
+    deepStrictEqual(lines, [
+      ['the shared record was stored'],
+      ['the shared record was declined by the connection'],
+      ["no shared record is stored: the server's endpoint is a socket"],
+    ]);
   });
 
   it('goes on when the shared record cannot be stored', async () => {
@@ -1746,6 +2153,8 @@ describe('the connect pipeline, the transport of a connection that worked', () =
     send: (notice: Parameters<NonNullable<Recording['notice']>>[0]) => void;
     endTunnel: (detail: string) => void;
     release: () => void;
+    checkSession: () => Promise<SessionCheck>;
+    recording: Recording;
     heard: TransportEvent[];
     stop: () => void;
     logSink: MemorySink;
@@ -1769,6 +2178,8 @@ describe('the connect pipeline, the transport of a connection that worked', () =
       release: () => {
         result.release();
       },
+      checkSession: () => result.checkSession(),
+      recording,
       heard,
       stop,
       logSink,
@@ -1780,6 +2191,15 @@ describe('the connect pipeline, the transport of a connection that worked', () =
     send({type: 'transportLost'});
     send({type: 'helperGone'});
     deepStrictEqual(heard, ['lost', 'closed']);
+  });
+
+  it('F-2505 AC-25: the connection asks its lease whether the session answers, and gives the answer', async () => {
+    const {checkSession, recording} = await connected();
+    recording.sessionCheck = 'ended';
+    deepStrictEqual(
+      [await checkSession(), recording.releasesAtCheck],
+      ['ended', [0]],
+    );
   });
 
   it('R1: the other notices of the lease are not transport events', async () => {

@@ -5,17 +5,22 @@
 
 import type {EndPolicy, MessageHandler} from 'lib-helper';
 import {readShutdownRequest} from './protocol.ts';
+import {REGISTER_ANSWER_MILLISECONDS} from './window-lease.ts';
 import {CHECK_MILLISECONDS, type ShutdownRegistry} from './registry.ts';
 
 /** The action of the helper's end policy: wait for every pending check and lookup. */
 export const DRAIN_ACTION = 'drain';
 
-/** How the helper ends: ten seconds after its last lease, once every pending check and lookup is done. */
-export const SHUTDOWN_END_POLICY: EndPolicy = {
+/**
+ * How the helper ends: ten seconds after its last lease, once every pending check and lookup is done. A window that is
+ * refused while it drains waits for the helper to close as long as a register may take to be answered.
+ */
+export const SHUTDOWN_END_POLICY = {
   kind: 'delayedCheckAfterLastLease',
   milliseconds: CHECK_MILLISECONDS,
   action: DRAIN_ACTION,
-};
+  actionBound: REGISTER_ANSWER_MILLISECONDS,
+} as const satisfies EndPolicy;
 
 /** The handler over `registry`. */
 export function createShutdownHandler(
@@ -30,6 +35,9 @@ export function createShutdownHandler(
       const {request} = read;
       if (request.type === 'register') {
         return Promise.resolve(registry.register(context.lease, request));
+      }
+      if (request.type === 'compose') {
+        return Promise.resolve(registry.setCompose(request));
       }
       if (request.type === 'container') {
         return Promise.resolve(registry.setContainer(request));

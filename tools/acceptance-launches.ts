@@ -37,6 +37,23 @@ interface LaunchCommon {
   /** Whether the run starts its registry for this launch; its address is HARNESS_REGISTRY. */
   registry?: true;
   /**
+   * Whether the run imports its own WSL distros for this launch, one at WSL 2 and one at WSL 1, beside the installed
+   * one; their names are HARNESS_WSL_DISTROS. Only a Windows client can, and another refuses the launch.
+   */
+  wslDistros?: true;
+  /**
+   * Whether the launch's windows open the run's Windows SSH host, the alias `winhost`: Windows' OpenSSH Server on
+   * 127.0.0.1, which the platform workflow's Windows job starts and passes as HARNESS_WINHOST_*. Only a Windows client
+   * has it, and another refuses the launch.
+   */
+  windowsHost?: true;
+  /**
+   * Whether the launch's Remote - SSH runs the pinned OpenSSH client (`tools/install-openssh`) through
+   * `remote.SSH.path`, which its settings name as `${HARNESS_SSH_CLIENT}`: the run builds the client once and passes its
+   * path as HARNESS_SSH_CLIENT, and a run that cannot build it refuses the launch.
+   */
+  sshClient?: 'pinned';
+  /**
    * Whether the run publishes its templates into its registry and serves its template index for this launch; it starts
    * the registry too. The index is REMOTE_OSS_TEMPLATE_INDEX, and the registry as the templates name it
    * HARNESS_TEMPLATE_REGISTRY.
@@ -44,6 +61,11 @@ interface LaunchCommon {
   templates?: true;
   /** Whether the run makes the launch only when `--launches` names it. */
   namedOnly?: true;
+  /**
+   * The name of the launch that this one is a part of, which runs the same suite in parts: a selection that names it
+   * makes every part, and `!<name>` takes every part out.
+   */
+  partOf?: string;
   /**
    * The engine the launch's extension drives instead of Docker: it sets `dev.containers.dockerPath`, and the run
    * prepares that engine's storage. The run's own infrastructure (the SSH host, the registry, the download host) stays
@@ -76,6 +98,12 @@ export interface RunnerLaunch extends LaunchCommon {
   kind?: undefined;
   /** The development extension the tests run in: `runner` (a local window) or `runner-remote` (a remote one). */
   runner: 'runner' | 'runner-remote';
+  /**
+   * Whether the launch starts the run's CLI-source copy of VSCodium (`tools/acceptance-cli-editor.ts`) and the download
+   * host serves a stand-in archive of the editor's CLI under `/cli/<platform>/`, made by the run, with no pin and no
+   * token: for a host case that only needs the client to fetch the CLI and the host to receive it.
+   */
+  cliStandIn?: true;
   /** The suite folder under tests/acceptance, bundled into `dist-<suite without "suite-">`. */
   suite: string;
   /** Whether the launch answers from its own script and record files (`<label>-script.json`, `<label>-record.jsonl`). */
@@ -110,11 +138,6 @@ export interface PlainLaunch extends LaunchCommon {
    */
   files?: readonly string[];
   /**
-   * The name of the launch that this one is a part of, which runs the same suite in parts: a selection that names it
-   * makes every part, and `!<name>` takes every part out.
-   */
-  partOf?: string;
-  /**
    * Extensions of `LAUNCH_EXTENSIONS`, by id, that this launch alone installs, with their proposed API: the launch
    * gets an extensions folder of its own, `<run>/extensions-<label>`, so the other launches never see them.
    */
@@ -130,6 +153,11 @@ export interface PlainLaunch extends LaunchCommon {
    * code and no contribution, carrying the id it stands for.
    */
   standIns?: readonly string[];
+  /**
+   * Ids of stand-ins with code: each is copied from `tests/acceptance/fixtures/stand-ins/<id>/` into this launch's own
+   * extensions folder before it starts, in place of an extension of the same id that the run installed.
+   */
+  codeStandIns?: readonly string[];
   /** The display language the editor starts in, as its `--locale` switch takes it. */
   locale?: string;
   /**
@@ -163,9 +191,53 @@ export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
   ['remote-oss.remote-explorer', 'remote-explorer'],
   ['remote-oss.remote-containers', 'remote-containers'],
   ['remote-oss.vscode-remote-extensionpack', 'vscode-remote-extensionpack'],
+  ['remote-oss.remote-wsl', 'remote-wsl'],
 ]);
 
 /** What a launch the renderer helpers read needs: the debugging port, and window titles they can find a window by. */
+/**
+ * The window's local ports for every launch of the `ssh` group but those of `WINDOW_PORT_DEFAULT_LAUNCHES` (#2585, #2586,
+ * #2616, #2639): below the client's ephemeral port range, which on Linux starts at 32768, so no outgoing connection of the
+ * client holds a port the search judges free by connecting. Without a range the search picks from 49152 up, inside it.
+ * The harness refuses a run on a machine whose ephemeral range overlaps it (`windowPortRangeProblem`).
+ */
+export const WINDOW_PORT_RANGE = '20000-20999';
+
+/** The lowest port of the client's ephemeral range on Linux by default: the ports a row names for the client to hold or search stay below it. */
+export const CLIENT_EPHEMERAL_LOWEST = 32_768;
+
+/** The setting that holds the window's port range. */
+export const WINDOW_PORT_RANGE_SETTING = 'remote.SSH.preferredLocalPortRange';
+
+/** The launches of the `ssh` group that keep the search's default window port, each with what needs it; a launch gets the range and its rows that need the default opt out for themselves, as `ssh-core`'s session-hints rows do. */
+export const WINDOW_PORT_DEFAULT_LAUNCHES: Readonly<Record<string, string>> = {
+  'ssh-agents':
+    "its rows read the settings with core's agent-host keys at their defaults",
+  'config-files':
+    'its rows compare the settings file the editor read with the one the launch was given',
+};
+
+/** What is wrong with the window port range `range` on a machine whose kernel's ephemeral range reads `ephemeral`, if anything. */
+export function windowPortRangeProblem(
+  range: string,
+  ephemeral: string,
+): string | undefined {
+  const [first, last] = range.split('-').map(Number);
+  const [lowest, highest] = ephemeral.trim().split(/\s+/u).map(Number);
+  if (
+    first === undefined ||
+    last === undefined ||
+    lowest === undefined ||
+    highest === undefined ||
+    [first, last, lowest, highest].some(Number.isNaN)
+  ) {
+    return `the window port range ${range} or the ephemeral range "${ephemeral.trim()}" cannot be read`;
+  }
+  return first <= highest && last >= lowest
+    ? `the window port range ${range} overlaps this machine's ephemeral port range ${String(lowest)}-${String(highest)}: an outgoing connection of the client can hold a port the search finds free, so the launch's rows would fail at random; set the range outside ${String(lowest)}-${String(highest)}`
+    : undefined;
+}
+
 const RENDERER_LAUNCH = {
   kind: 'plain',
   debuggingPort: true,
@@ -182,6 +254,8 @@ const EXPLORER_LAUNCH = {
   // The explorer appends each push its inbox receives from Remote - SSH to this file, which `companionCalls` reads.
   environment: {
     REMOTE_OSS_ACCEPTANCE_COMPANION_RECORD: '<run>/companion-record.jsonl',
+    // The file the stand-in companion reads, at each call, for how that call ends (`setStandInModes`).
+    REMOTE_OSS_ACCEPTANCE_STAND_IN_MODE: '<run>/stand-in-mode.json',
   },
 } as const;
 
@@ -207,6 +281,9 @@ export const ENGINE_HOST_ADDRESS = 'tcp://127.0.0.1:23760';
 /** The context that the editor of `containers-env-host` has as `DOCKER_CONTEXT`, which its rows make. */
 export const ENGINE_HOST_CONTEXT = 'c133-env-conflict';
 
+/** The address that the editor of `containers-ssh-env-host` has as `DOCKER_HOST`: the SSH Docker host its row publishes there. */
+export const SSH_ENGINE_HOST_ADDRESS = 'ssh://engine@127.0.0.1:23722';
+
 /** The context that the editor of `containers-env-ctx` has as `DOCKER_CONTEXT`, which its row makes. */
 export const ENGINE_CONTEXT_NAME = 'c133-env-dead';
 
@@ -219,6 +296,9 @@ const CONTAINERS_LAUNCH = {
     // The folder dialog is the in-window one, which the renderer helpers can type into.
     'files.simpleDialog.enable': true,
     'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+    // A new window opens no Welcome page of its own, which would replace the preview tab of a file a row reads, later on a
+    // slower machine.
+    'workbench.startupEditor': 'none',
   },
 } as const;
 
@@ -325,11 +405,31 @@ const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
 const SECRETS_ACCOUNTS_RESET =
   'printf "%s:%s\\n" harness-2fa "$HOST_PASSWORD" harness-expired "$HOST_PASSWORD" | chpasswd && chage -d 0 harness-expired';
 
+/**
+ * The command that ends the servers of the harness account and waits, up to ten seconds, until none is left, failing
+ * when one is: a connect that starts at once would otherwise find the old server's pid file and reuse its process.
+ */
+const END_SERVERS =
+  "pkill -f '/home/harness/[.]vscodium-server-insiders/bin/'; " +
+  'for i in $(seq 1 20); do ' +
+  "pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; " +
+  'sleep 0.5; done; exit 1';
+
+/**
+ * The host setup of a launch whose connect must start the server itself: the servers of the harness account are ended
+ * and gone, and the agent links of earlier launches removed, so the window's session is the one that starts the server.
+ */
+const NO_RUNNING_SERVER: readonly HostSetupEntry[] = [
+  {command: END_SERVERS},
+  {command: 'rm -f /tmp/vscode-ssh-auth-sock-*'},
+];
+
 /** The host setup of the agent-notmp launch: the ACL entry that keeps harness-notmp from creating links in /tmp, put back. */
 const AGENT_NOTMP_ACL = 'setfacl -m u:harness-notmp:r-x /tmp';
 
 /** The first part of the containers suite's test files: about half its time, from the start of the alphabet. */
 const CONTAINERS_A_FILES: readonly string[] = [
+  'attach-command.test.ts',
   'authoring-compose.test.ts',
   'authoring-container.test.ts',
   'authoring-feature-options.test.ts',
@@ -349,12 +449,15 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'compose-engine.test.ts',
   'compose-lifecycle.test.ts',
   'compose-names.test.ts',
+  'compose-view.test.ts',
   'compose-volume.test.ts',
+  'config-watch-compose.test.ts',
   'config-watch.test.ts',
   'configuration-errors.test.ts',
   'configuration-open.test.ts',
   'configuration-picker.test.ts',
   'configure-features-after.test.ts',
+  'configure-features-mirrored.test.ts',
   'configure-features-pick.test.ts',
   'configure-features-states.test.ts',
   'configure-features.test.ts',
@@ -364,11 +467,14 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'created-container.test.ts',
   'details.test.ts',
   'dev-port.test.ts',
+  'docker-availability.test.ts',
   'docker-context.test.ts',
   'dockerfile.test.ts',
+  'edit-session-dormant.test.ts',
   'extensions.test.ts',
   'gate.test.ts',
   'glibc-server.test.ts',
+  'host-requirements.test.ts',
   'image-build.test.ts',
   'initialize-input.test.ts',
   'launch.test.ts',
@@ -399,6 +505,7 @@ const CONTAINERS_B_FILES: readonly string[] = [
   'remote-environment.test.ts',
   'reopen-command.test.ts',
   'reopen-notification.test.ts',
+  'repository-configurations.test.ts',
   'resolve-reload.test.ts',
   'reuse-more.test.ts',
   'reuse-sweep.test.ts',
@@ -407,6 +514,7 @@ const CONTAINERS_B_FILES: readonly string[] = [
   'server-rows.test.ts',
   'setup-failure-actions.test.ts',
   'setup-failure-state.test.ts',
+  'switch-container.test.ts',
   'targets-menus.test.ts',
   'template-catalogue.test.ts',
   'transport-token.test.ts',
@@ -421,10 +529,15 @@ const CONTAINERS_B_FILES: readonly string[] = [
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
 
 /**
- * The launches that may set `remote.SSH.configFile` themselves, by label: none yet. Every other launch uses the run's
+ * The launches that may set `remote.SSH.configFile` themselves, by label: `ssh-agents` and the three `ssh-askpass` launches, whose rows name their own files. Every other launch uses the run's
  * ssh_config, which the harness hosts reach.
  */
-export const CONFIG_FILE_LAUNCHES: readonly string[] = [];
+export const CONFIG_FILE_LAUNCHES: readonly string[] = [
+  'ssh-agents',
+  'ssh-askpass',
+  'ssh-askpass-env',
+  'ssh-askpass-space',
+];
 
 /** The token for the run's folder, which a launch's settings and environment may name. */
 const RUN_FOLDER_TOKEN = '<run>';
@@ -470,7 +583,10 @@ export function withRunTokens<Value>(
   );
 }
 
-/** The harness variables a launch's settings and host setup may name, as `${<name>}`: the download host's bases, its port and its certificate file. */
+/**
+ * The harness variables a launch's settings and host setup may name, as `${<name>}`: the download host's bases (a WSL
+ * distro's too), its port and its certificate file, and the pinned OpenSSH client's path.
+ */
 const HARNESS_BASE_NAMES: readonly string[] = [
   'HARNESS_DOWNLOADS_HTTP',
   'HARNESS_DOWNLOADS_HTTPS',
@@ -478,6 +594,8 @@ const HARNESS_BASE_NAMES: readonly string[] = [
   'HARNESS_DOWNLOADS_LOCAL',
   'HARNESS_DOWNLOADS_PORT',
   'HARNESS_DOWNLOADS_CERTIFICATE',
+  'HARNESS_DOWNLOADS_DISTRO_BASE',
+  'HARNESS_SSH_CLIENT',
 ];
 
 /**
@@ -588,10 +706,21 @@ export interface HostCase {
   settingsTail?: string;
   /** The ports a non-product listener holds on the host before the connect. */
   holders?: number[];
+  /** The port the case expects the server to listen on: a number, or `random` for any port outside the ranges. */
+  port?: number | 'random';
   /** Keeps the previous launch's server, running, and its files on the host, so the case reuses them. */
   keepServer?: boolean;
   /** Keeps the previous launch's files on the host but stops its server. */
   keepFiles?: boolean;
+  /** The label of the primer case, listed right before this one, that makes the state this case keeps. */
+  needs?: string;
+  /**
+   * Whether this case only makes the state of the case that needs it: its launch is a part of that case's launch, and
+   * a run makes it only when the case is named.
+   */
+  primer?: true;
+  /** Whether the case's launch starts the CLI-source editor, with a stand-in CLI archive on the download host. */
+  cliStandIn?: true;
   /** Further commands the host's `sh` runs, in order, after the suite's own setup. */
   setup?: string[];
   /** The script the case's window answers from; the suite's dialog script when absent. */
@@ -666,6 +795,22 @@ export function hostCases(root: string, suite: string): HostCase[] {
     }
     labels.push(entry.label);
   }
+  cases.forEach((entry, position) => {
+    const primer = cases[position - 1];
+    if (
+      entry.needs !== undefined &&
+      !(primer?.primer === true && primer.label === entry.needs)
+    ) {
+      throw new Error(
+        `the ${suite} case "${entry.label}" needs "${entry.needs}", which must be the primer case listed right before it`,
+      );
+    }
+    if (entry.primer === true && cases[position + 1]?.needs !== entry.label) {
+      throw new Error(
+        `the ${suite} primer "${entry.label}" must be listed right before the case that needs it`,
+      );
+    }
+  });
   return cases;
 }
 
@@ -678,10 +823,45 @@ export function hostCaseLabel(
 }
 
 /**
+ * The command that waits, up to thirty seconds, until no socket of the host has `port` as its local port in a state
+ * that keeps a server from binding it (TIME_WAIT does not: a server sets SO_REUSEADDR), and, when one still does, prints
+ * the sockets that hold it and fails: a precondition of the case that the host does not meet is a fact of the host, not
+ * a red row (#2563).
+ */
+export function portFreeCommand(port: number): string {
+  const local = `netstat -tan | awk '$4 ~ /:${String(port)}$/ && $6 != "TIME_WAIT"'`;
+  return (
+    'for i in $(seq 1 120); do ' +
+    `${local} | grep -q . || exit 0; ` +
+    'sleep 0.25; done; ' +
+    `echo "port ${String(port)} is still in use on the host:"; ` +
+    `netstat -tanp | awk '$4 ~ /:${String(port)}$/'; exit 1`
+  );
+}
+
+/**
+ * The command that waits, up to five seconds, until a listener of the host has `port` on 127.0.0.1, and, when none has,
+ * prints the sockets that have `port` as their local port and the holders that run, and fails: a holder that could not
+ * bind its port leaves nothing else to read.
+ */
+export function holderListeningCommand(port: number): string {
+  return (
+    'for i in $(seq 1 20); do ' +
+    `netstat -ltn | grep -q ' 127.0.0.1:${String(port)} ' && exit 0; ` +
+    'sleep 0.25; done; ' +
+    `echo "nothing listens on 127.0.0.1:${String(port)} after 5 s; the sockets with that local port:"; ` +
+    `netstat -tanp | awk '$4 ~ /:${String(port)}$/'; ` +
+    'echo "the holders that run:"; ' +
+    "ps | grep '[n]c -lk'; exit 1"
+  );
+}
+
+/**
  * The host setup of a host case, in the order the run runs it: free the held ports; stop the server unless the case
  * keeps it; remove the suite's folders unless the case keeps the server or its files; hold the case's ports, each
- * waited on as it starts; then the case's own commands. The brackets keep `pkill` from matching the `sh -c` that runs
- * it.
+ * waited on to be free of other sockets as it starts (a client socket of the host that holds the port as its local port
+ * keeps the holder from binding it); then wait for each holder to listen; then the case's own commands. The brackets
+ * keep `pkill` from matching the `sh -c` that runs it.
  */
 export function hostSetupOf(
   hostCase: HostCase,
@@ -689,13 +869,7 @@ export function hostSetupOf(
 ): HostSetupEntry[] {
   const entries: HostSetupEntry[] = [{command: "pkill -f 'n[c] -lk -p'; true"}];
   if (hostCase.keepServer !== true) {
-    entries.push({
-      command:
-        "pkill -f '/home/harness/[.]vscodium-server-insiders/bin/'; " +
-        'for i in $(seq 1 20); do ' +
-        "pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; " +
-        'sleep 0.5; done; exit 1',
-    });
+    entries.push({command: END_SERVERS});
   }
   if (
     hostCase.keepServer !== true &&
@@ -705,19 +879,22 @@ export function hostSetupOf(
     entries.push({command: `rm -rf ${suite.removed.join(' ')}`});
   }
   const holders = hostCase.holders ?? [];
+  if (
+    typeof hostCase.port === 'number' &&
+    hostCase.keepServer !== true &&
+    !holders.includes(hostCase.port)
+  ) {
+    entries.push({command: portFreeCommand(hostCase.port)});
+  }
   for (const holder of holders) {
+    entries.push({command: portFreeCommand(holder)});
     entries.push({
       command: `nc -lk -p ${String(holder)} -s 127.0.0.1 -e /bin/true`,
       detach: true,
     });
   }
   for (const holder of holders) {
-    entries.push({
-      command:
-        'for i in $(seq 1 20); do ' +
-        `netstat -ltn | grep -q ' 127.0.0.1:${String(holder)} ' && exit 0; ` +
-        'sleep 0.25; done; exit 1',
-    });
+    entries.push({command: holderListeningCommand(holder)});
   }
   for (const command of hostCase.setup ?? []) {
     entries.push({command});
@@ -733,6 +910,7 @@ function forwardingLaunch(
   label: string,
   alias: string,
   settings?: Readonly<Record<string, unknown>>,
+  hostSetup?: readonly HostSetupEntry[],
 ): Launch {
   return {
     label,
@@ -741,6 +919,7 @@ function forwardingLaunch(
     folderUri: `vscode-remote://ssh-remote+${alias}/home/harness`,
     environment: {HARNESS_FORWARDING_CASE: label},
     ...(settings === undefined ? {} : {settings}),
+    ...(hostSetup === undefined ? {} : {hostSetup}),
   };
 }
 
@@ -751,7 +930,7 @@ function forwardingLaunch(
  * `agent-off` and `x11` run suite-forwarding on the aliases that forward the agent (the second with
  * `remote.SSH.enableAgentForwarding` false) and X11, on that same server; `x11-noxauth` runs it on the `x11fwd` alias of the Debian 12 host, which has no `xauth`; each failing connect runs suite-failure in a window on its alias, answered from its own script; `terminal` runs
  * suite-terminal with `remote.SSH.useLocalServer` off; `socket` runs suite-socket with
- * `remote.SSH.remoteServerListenOnSocket` on; `slow` runs suite-slow with an extension that takes 15 s to
+ * `remote.SSH.remoteServerListenOnSocket` on, after its primer `socket-prime`, a terminal-mode connect that leaves the port-kind server its AC-9 row is about (a part of `socket`, made only when `socket` is named); `slow` runs suite-slow with an extension that takes 15 s to
  * activate in the remote extension host, which the harness copies to the host first; each `client-…` launch runs
  * suite-client with a `remote.SSH.path` of its own and fake clients on the run's `PATH`; `windows` starts the editor plainly, with no
  * runner and no folder, and drives its windows through the window agent from a Node run; `no-proposals` does the
@@ -789,9 +968,12 @@ export function launchesOf(root: string): Launch[] {
       folderUri: REMOTE_FOLDER_URI,
     },
     forwardingLaunch('agent', 'agentfwd'),
-    forwardingLaunch('agent-off', 'agentfwd-off', {
-      'remote.SSH.enableAgentForwarding': false,
-    }),
+    forwardingLaunch(
+      'agent-off',
+      'agentfwd-off',
+      {'remote.SSH.enableAgentForwarding': false},
+      NO_RUNNING_SERVER,
+    ),
     forwardingLaunch('x11', 'x11fwd'),
     {...forwardingLaunch('x11-noxauth', 'x11fwd'), hostBase: 'debian-12'},
     ...failureCases(root).map((failure): Launch => ({
@@ -812,6 +994,20 @@ export function launchesOf(root: string): Launch[] {
       runner: 'runner-remote',
       suite: 'suite-terminal',
       folderUri: REMOTE_FOLDER_URI,
+      settings: {
+        'remote.SSH.useLocalServer': false,
+        'remote.SSH.remotePlatform': {harness: 'linux'},
+      },
+    },
+    {
+      // The terminal-mode connect that leaves the port-kind server the socket launch's row is about, run right before it:
+      // a selection that names `socket` makes both.
+      label: 'socket-prime',
+      runner: 'runner-remote',
+      suite: 'suite-socket-prime',
+      folderUri: REMOTE_FOLDER_URI,
+      namedOnly: true,
+      partOf: 'socket',
       settings: {
         'remote.SSH.useLocalServer': false,
         'remote.SSH.remotePlatform': {harness: 'linux'},
@@ -948,10 +1144,17 @@ export function launchesOf(root: string): Launch[] {
       },
     },
     // Its rows read the window's title and remote indicator, as the renderer helpers do.
-    {...RENDERER_LAUNCH, label: 'login-shells', suite: 'login-shells'},
     {
+      ...RENDERER_LAUNCH,
+      label: 'login-shells',
+      suite: 'login-shells',
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+      },
+    },
+    {
+      ...RENDERER_LAUNCH,
       label: 'preconnect',
-      kind: 'plain',
       suite: 'preconnect',
       // A variable of the editor's environment, which the script of a row reports it received.
       environment: {REMOTE_OSS_F2108_VARIABLE: 'f2108-<run>'},
@@ -1000,7 +1203,134 @@ export function launchesOf(root: string): Launch[] {
       },
     },
     // The core features of the editor in a window on the SSH host, read through the renderer.
-    {...RENDERER_LAUNCH, label: 'ssh-core', suite: 'ssh-core'},
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-core',
+      suite: 'ssh-core',
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        // A new window opens no Welcome page of its own, as in the containers launches: a row reads the window's editors
+        // and the page it draws, and the page's focus is not what a row means to test.
+        'workbench.startupEditor': 'none',
+      },
+    },
+    // The same with the pinned OpenSSH client as the user's `remote.SSH.path`, for the criteria about keywords newer than
+    // the runners' client; the rows run plain `ssh` through the same path.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-newclient',
+      suite: 'ssh-newclient',
+      sshClient: 'pinned',
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.SSH.path': '${HARNESS_SSH_CLIENT}',
+      },
+    },
+    // The same client with the extension's own pickers: the empty script makes Remote - SSH show its real quick picks, which
+    // the host-key row reads (its items and the focused one), and the rows of ssh-newclient need the script.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-newclient-pickers',
+      suite: 'ssh-newclient-pickers',
+      sshClient: 'pinned',
+      environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.SSH.path': '${HARNESS_SSH_CLIENT}',
+      },
+    },
+    // Remote - SSH beside the core editor's own SSH agent hosts: AI features start off, and core's agent-host keys sit in the
+    // settings at their defaults. The empty script makes Remote - SSH show its real pickers, in the run's own home.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-agents',
+      suite: 'ssh-agents',
+      settings: {
+        'window.title': '[${rootName}]${remoteName}',
+        'window.dialogStyle': 'custom',
+        'chat.disableAIFeatures': true,
+        'chat.remoteAgentHostsEnabled': true,
+        'chat.remoteAgentHosts': [],
+        'chat.sshRemoteAgentHostCommand': '',
+        'chat.agentHost.forwardSSHAgent': false,
+      },
+      environment: {
+        HOME: '<run>/home-agents',
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+      },
+    },
+    // The user's own SSH_ASKPASS program: the editor's environment names the run's stand-in askpass and puts the
+    // run's ssh recorder first on the PATH, and the extension's own inputs are real, so a row sees which of the two
+    // answered. The stand-ins are written into `<run>/askpass-bin` by the suite's `before` hook.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-askpass',
+      suite: 'ssh-askpass',
+      settings: {
+        'window.title': '[${rootName}]${remoteName}',
+        'window.dialogStyle': 'custom',
+      },
+      environment: {
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+        SSH_ASKPASS: '<run>/askpass-bin/answer',
+        PATH: '<run>/askpass-bin:<path>',
+      },
+    },
+    // The same stand-ins with the askpass variables the editor's own environment can hold otherwise: an empty
+    // `SSH_ASKPASS` and `SSH_ASKPASS_REQUIRE=never`, which the extension must not let reach a login of its own.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-askpass-env',
+      suite: 'ssh-askpass-env',
+      settings: {
+        'window.title': '[${rootName}]${remoteName}',
+        'window.dialogStyle': 'custom',
+      },
+      environment: {
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+        SSH_ASKPASS: '',
+        SSH_ASKPASS_REQUIRE: 'never',
+        PATH: '<run>/askpass-bin:<path>',
+      },
+    },
+    // The same again with an `SSH_ASKPASS` of a single space, which names no program.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-askpass-space',
+      suite: 'ssh-askpass-space',
+      settings: {
+        'window.title': '[${rootName}]${remoteName}',
+        'window.dialogStyle': 'custom',
+      },
+      environment: {
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+        SSH_ASKPASS: ' ',
+        PATH: '<run>/askpass-bin:<path>',
+      },
+    },
+    // A window on the SSH host whose editor is killed, one case per launch like `containers-killed-*`: the harness kills the
+    // launch's editor tree (the connection is not closed), and the row goes on against the host, with an editor of its own
+    // only where its case relaunches one. Each case names itself in `HARNESS_KILLED_CASE`.
+    ...['12', '13', '14'].map(killedCase => ({
+      ...RENDERER_LAUNCH,
+      label: `ssh-killed-${killedCase}`,
+      suite: 'ssh-killed',
+      environment: {HARNESS_KILLED_CASE: killedCase},
+    })),
+    // The host's lock files while a window installs from the run's slow download source: one plain launch, each row a window of
+    // its own on a fresh host, with the settings it needs written to the user settings.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-locks',
+      suite: 'ssh-locks',
+    },
+    // A host whose login PATH has neither curl nor wget, the account `nofetch`: one plain launch, each row a window of its
+    // own on that account.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-downloaders',
+      suite: 'ssh-downloaders',
+    },
     // Dev Containers beside Remote - SSH, in a window on the SSH host: the commands that edit a configuration where it lives.
     {
       ...RENDERER_LAUNCH,
@@ -1026,6 +1356,58 @@ export function launchesOf(root: string): Launch[] {
       cliSource: true,
       namedOnly: true,
     },
+    // WSL on Linux: its commands stay out of the way where WSL cannot run, in a desktop window, in the browser build
+    // the editor stands in for with `remote.extensionKind`, and beside the other WSL extension, where it stands down.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'wsl-linux',
+      suite: 'wsl',
+      files: ['activation.test.ts'],
+      withExtensions: ['remote-oss.remote-wsl'],
+    },
+    {
+      ...RENDERER_LAUNCH,
+      label: 'wsl-linux-web',
+      suite: 'wsl',
+      files: ['activation-web.test.ts'],
+      withExtensions: ['remote-oss.remote-wsl'],
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.extensionKind': {'remote-oss.remote-wsl': ['web']},
+      },
+    },
+    {
+      ...RENDERER_LAUNCH,
+      label: 'wsl',
+      suite: 'wsl',
+      files: ['distros.test.ts'],
+      withExtensions: ['remote-oss.remote-wsl'],
+      namedOnly: true,
+      wslDistros: true,
+    },
+    // A Windows SSH host: the platform workflow's Windows job runs Windows' OpenSSH Server on 127.0.0.1, and the
+    // launch's windows open it as `winhost`, its platform known so no pick is asked, or as `winhost-unknown`, with none.
+    // Pseudo-terminals are permitted for the launch, so no row writes a setting the editor may read late.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'windows-host',
+      suite: 'windows-host',
+      namedOnly: true,
+      windowsHost: true,
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.SSH.remotePlatform': {winhost: 'windows'},
+        'remote.SSH.permitPtyAllocation': true,
+      },
+    },
+    {
+      ...RENDERER_LAUNCH,
+      label: 'wsl-linux-standdown',
+      suite: 'wsl',
+      files: ['activation-standdown.test.ts'],
+      withExtensions: ['remote-oss.remote-wsl'],
+      standIns: ['ms-vscode-remote.remote-wsl'],
+    },
     {...EXPLORER_LAUNCH, label: 'explorer', suite: 'explorer'},
     {
       ...EXPLORER_LAUNCH,
@@ -1038,6 +1420,20 @@ export function launchesOf(root: string): Launch[] {
       label: 'explorer-trust',
       suite: 'explorer-trust',
       workspaceTrust: true,
+    },
+    {
+      ...EXPLORER_LAUNCH,
+      label: 'explorer-trust-pickers',
+      suite: 'explorer-trust-pickers',
+      workspaceTrust: true,
+      // Core's dialogs are drawn in the window, and the empty script makes Remote - SSH show its real pickers, in the
+      // run's own home.
+      settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
+      environment: {
+        ...EXPLORER_LAUNCH.environment,
+        HOME: '<run>/home',
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+      },
     },
     {
       ...EXPLORER_LAUNCH,
@@ -1090,6 +1486,15 @@ export function launchesOf(root: string): Launch[] {
       label: 'explorer-standdown',
       suite: 'explorer-standdown',
       standIns: ['ms-vscode.remote-explorer'],
+    },
+    {
+      ...EXPLORER_LAUNCH,
+      label: 'explorer-stand-in',
+      suite: 'explorer-stand-in',
+      // The companion is a stand-in with code that carries Remote - SSH's id, so the rows can make its calls fail.
+      codeStandIns: ['remote-oss.remote-ssh'],
+      // Core's dialogs are drawn in the window, where the renderer helpers read them.
+      settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
     },
     {
       ...TRUST_LAUNCH,
@@ -1198,6 +1603,37 @@ export function launchesOf(root: string): Launch[] {
       ...CONTAINERS_LAUNCH,
       label: 'containers-volume',
       suite: 'containers-volume',
+      files: [
+        'clone.test.ts',
+        'recovery.test.ts',
+        'uri-handler.test.ts',
+        'volume.test.ts',
+      ],
+    },
+    // Explore a Volume opens its window in Restricted Mode, which only a launch with workspace trust on shows; the other
+    // volume rows run with trust off, as a folder of theirs needs no trust question.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-volume-trust',
+      suite: 'containers-volume',
+      files: ['explore-volume.test.ts'],
+      workspaceTrust: true,
+      settings: {
+        ...CONTAINERS_LAUNCH.settings,
+        'security.workspace.trust.startupPrompt': 'never',
+      },
+    },
+    // The editor starts with two variables of its own, one set and one empty, which a configuration's references read.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-config',
+      suite: 'containers-config',
+      // The harness's echo relay is on only here, so the relay host runs only for this launch's connects.
+      environment: {
+        C112_SET: 'from-host',
+        C112_EMPTY: '',
+        REMOTE_OSS_ACCEPTANCE_RELAY_ECHO: '1',
+      },
     },
     {
       ...CONTAINERS_LAUNCH,
@@ -1310,6 +1746,40 @@ export function launchesOf(root: string): Launch[] {
         DOCKER_CONTEXT: ENGINE_CONTEXT_NAME,
       },
     },
+    // A Docker daemon reached over SSH (tooling-123): a Docker configuration of its own for the contexts its rows make,
+    // and the run's own `ssh` first on the editor's PATH, which reads the run's ssh_config and known hosts file, never the
+    // account's ~/.ssh. The rows start the host and write that `ssh` (tests/acceptance/windows/engine-fixture.ts).
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-ssh-engine',
+      suite: 'containers-ssh-engine',
+      environment: {
+        DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
+        PATH: `${RUN_FOLDER_TOKEN}/ssh-engine-bin:${RUN_PATH_TOKEN}`,
+      },
+    },
+    // The same with the SSH Docker host's address as the editor's DOCKER_HOST, which its row publishes there.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-ssh-env-host',
+      suite: 'containers-ssh-env-host',
+      environment: {
+        DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
+        DOCKER_HOST: SSH_ENGINE_HOST_ADDRESS,
+        PATH: `${RUN_FOLDER_TOKEN}/ssh-engine-bin:${RUN_PATH_TOKEN}`,
+      },
+    },
+    // The same with the editor's PATH holding `docker` alone and no `ssh`: the engine settings' PATH is ignored, so only
+    // the editor's own PATH can lack `ssh`.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-ssh-noclient',
+      suite: 'containers-ssh-noclient',
+      environment: {
+        DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
+        PATH: `${RUN_FOLDER_TOKEN}/docker-only-bin`,
+      },
+    },
     // The pack from its VSIX beside its two members, installed in that order, with no gallery to reach.
     {
       ...RENDERER_LAUNCH,
@@ -1358,7 +1828,7 @@ export function launchesOf(root: string): Launch[] {
       languagePack: language,
     })),
     ...HOST_CASE_SUITES.flatMap(suite =>
-      hostCases(root, suite.suite).map((hostCase): Launch => ({
+      hostCases(root, suite.suite).map((hostCase, position, cases): Launch => ({
         label: hostCaseLabel(suite, hostCase),
         runner: 'runner-remote',
         suite: suite.suite,
@@ -1370,6 +1840,13 @@ export function launchesOf(root: string): Launch[] {
           ? {}
           : {settingsTail: hostCase.settingsTail}),
         environment: {[suite.caseVariable]: hostCase.label},
+        ...(hostCase.primer === true
+          ? {
+              namedOnly: true,
+              partOf: hostCaseLabel(suite, cases[position + 1] ?? hostCase),
+            }
+          : {}),
+        ...(hostCase.cliStandIn === true ? {cliStandIn: true as const} : {}),
         ownScript: true,
         hostSetup: hostSetupOf(hostCase, suite),
       })),
@@ -1438,13 +1915,20 @@ export function launchGroupOf(launch: Launch): LaunchGroup {
     : 'ssh';
 }
 
-/** The user settings a launch gets: its own, and the engine's `dev.containers.dockerPath` when it names one. */
+/** The user settings a launch gets: its own, the window port range of a launch of the `ssh` group that is not an exception, and the engine's `dev.containers.dockerPath` when it names one. */
 export function settingsOfLaunch(
   launch: Launch,
 ): Readonly<Record<string, unknown>> | undefined {
+  const own = launch.settings;
+  const ranged =
+    launchGroupOf(launch) === 'ssh' &&
+    !(launch.label in WINDOW_PORT_DEFAULT_LAUNCHES) &&
+    own?.[WINDOW_PORT_RANGE_SETTING] === undefined
+      ? {...own, [WINDOW_PORT_RANGE_SETTING]: WINDOW_PORT_RANGE}
+      : own;
   return launch.engine === undefined
-    ? launch.settings
-    : {...launch.settings, 'dev.containers.dockerPath': launch.engine};
+    ? ranged
+    : {...ranged, 'dev.containers.dockerPath': launch.engine};
 }
 
 /** Whether a launch installs Dev Containers, whose rows need the run's dev container image; a launch that publishes its templates builds it too, because the run's `mini` template names it. */

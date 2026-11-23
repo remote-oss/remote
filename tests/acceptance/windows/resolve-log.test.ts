@@ -58,8 +58,10 @@ describe('the resolve and its ports in the log (card connect-65)', function () {
         'Resolving ssh-remote+harness, attempt 1',
       );
       const remote = firstStarting(lines, '[remote] ');
+      // The result of the server's start, the line that carries its port: the install's clean-up, which runs once the server
+      // is up, logs a result line of its own after the listening line, and that one is not the server's.
       const result = lines.findLastIndex(line =>
-        line.startsWith('Server result: '),
+        line.startsWith('Server result: Ok, port '),
       );
       const listening = firstStarting(
         lines,

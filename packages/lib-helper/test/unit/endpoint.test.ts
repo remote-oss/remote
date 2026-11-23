@@ -72,15 +72,23 @@ describe('endpoint path', () => {
 });
 
 describe('client messages', () => {
-  it('reads a hello, a request and a stop', () => {
+  it('reads a hello with the replies it names, a request and a stop', () => {
     deepStrictEqual(
       [
         readClientMessage({type: 'hello', nonce: 'n'}),
+        readClientMessage({
+          type: 'hello',
+          nonce: 'n',
+          understands: ['ending', 7],
+        }),
+        readClientMessage({type: 'hello', nonce: 'n', understands: 'ending'}),
         readClientMessage({type: 'request', requestId: 1, body: [1]}),
         readClientMessage({type: 'stop'}),
       ],
       [
-        {type: 'hello', nonce: 'n'},
+        {type: 'hello', nonce: 'n', understands: []},
+        {type: 'hello', nonce: 'n', understands: ['ending']},
+        {type: 'hello', nonce: 'n', understands: []},
         {type: 'request', requestId: 1, body: [1]},
         {type: 'stop'},
       ],

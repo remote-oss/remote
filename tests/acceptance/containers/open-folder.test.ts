@@ -9,6 +9,7 @@ import {
   reopenInContainer,
   variable,
   windowState,
+  writeUserSetting,
 } from '../windows/harness.ts';
 import {openFolderWindow, setUserSetting} from '../windows/folder-windows.ts';
 import {
@@ -140,7 +141,7 @@ describe('Open Folder in Container (card containers-17)', function () {
     const name = await openFolderWindow(connected);
     try {
       await reopenInContainer(name);
-      await setUserSetting('dev.containers.dockerPath', bogus);
+      await writeUserSetting('dev.containers.dockerPath', bogus, name, 30_000);
       void startOpenFolder(name);
       const dialog = await waitForDialog(name, 60_000);
       const whileOpen = {
@@ -153,7 +154,14 @@ describe('Open Folder in Container (card containers-17)', function () {
         remoteName: (await windowState(name)).remoteName,
         created: (await devContainersOf(other)).length,
       };
-      await setUserSetting('dev.containers.dockerPath', undefined);
+      // The command runs in the connected window, so it is that window that must read the setting as removed: the local
+      // one reads it sooner on a loaded runner, and the command would still find the missing program.
+      await writeUserSetting(
+        'dev.containers.dockerPath',
+        undefined,
+        name,
+        30_000,
+      );
       void startOpenFolder(name);
       await answerFolderDialog(name, other);
       await connectedToContainer('c74-removed-b');

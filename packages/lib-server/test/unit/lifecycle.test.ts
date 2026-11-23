@@ -1,5 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
-import {existsSync} from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {
   RecordingChannel,
@@ -113,6 +119,28 @@ describe('runStep (a step over the host channel)', () => {
     deepStrictEqual(
       result.kind === 'result' ? result.block.serverFacts : result.kind,
       {port: '1'},
+    );
+  });
+
+  it('F-2408 BR-4: a step given a session lock hands it to the channel with the run, and a step given none hands none', async () => {
+    const withLock = recording(block('Ok'));
+    await runStep(withLock, single('probe'), parametersFor(), {
+      cancellation: NEVER_CANCELLED,
+      sessionLock: {path: '/tmp/lock', action: 'open'},
+    });
+    const without = recording(block('Ok'));
+    await runStep(without, single('probe'), parametersFor(), {
+      cancellation: NEVER_CANCELLED,
+    });
+    function lockOf(channel: ReturnType<typeof recording>): unknown {
+      const call = channel.calls[0];
+      return call?.operation === 'runScript'
+        ? call.request.sessionLock
+        : 'no run';
+    }
+    deepStrictEqual(
+      [lockOf(withLock), lockOf(without)],
+      [{path: '/tmp/lock', action: 'open'}, undefined],
     );
   });
 
@@ -531,7 +559,7 @@ describe('probe (V2)', () => {
     );
   });
 
-  it('F-2401.BR-1: a host without tar lacks a prerequisite', async () => {
+  it('F-2402 BR-5: a host without tar is probed, with tar absent from its tools, and the unpack reports it', async () => {
     const outcome = await probe(
       recording(
         block(
@@ -545,8 +573,8 @@ describe('probe (V2)', () => {
       NEVER_CANCELLED,
     );
     deepStrictEqual(
-      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
-      {kind: 'prerequisiteMissing', missing: ['tar']},
+      outcome.kind === 'probed' ? outcome.host.tools : outcome.kind,
+      ['wget', 'flock'],
     );
   });
 
@@ -694,6 +722,80 @@ describe('the lifecycle over a real shell', () => {
   it('F-2413.BR-9: cleanup is done on a host with one install', async () => {
     runScript(host, single('install'), parametersFor());
     deepStrictEqual((await maintained(cleanup)).kind, 'done');
+  });
+
+  /** The commit id of old install number `index`, forty hexadecimal digits. */
+  function oldCommit(index: number): string {
+    return `${String(index).padStart(2, '0')}${'a'.repeat(38)}`;
+  }
+
+  /** Makes install `commit`, last modified `days` days ago, with its log and pid files unless `withoutLog`. */
+  function makeInstall(commit: string, days: number, withoutLog = false): void {
+    const data = path.join(host.home, '.server-data');
+    mkdirSync(path.join(data, 'bin', commit), {recursive: true});
+    if (!withoutLog) {
+      writeFileSync(path.join(data, `.${commit}.log`), 'log');
+    }
+    writeFileSync(path.join(data, `.${commit}.pid`), '99999');
+    const when = new Date(Date.now() - days * 86_400_000);
+    utimesSync(path.join(data, 'bin', commit), when, when);
+  }
+
+  /** What is left under the data folder: the installs of `bin/` and the dot files, sorted. */
+  function left(): {installs: string[]; dotFiles: string[]} {
+    const data = path.join(host.home, '.server-data');
+    function names(folder: string): string[] {
+      return existsSync(folder) ? readdirSync(folder).sort() : [];
+    }
+    return {
+      installs: names(path.join(data, 'bin')).map(name => name.slice(0, 2)),
+      dotFiles: names(data)
+        .filter(name => /^\.[0-9a-f]{40}\.(log|pid)$/.test(name))
+        .map(name => `${name.slice(1, 3)}${name.slice(-4)}`),
+    };
+  }
+
+  it('F-2413 6.4 steps 2 and 4: cleanup keeps the five newest installs, removes the older with their log and pid files, and keeps the current one', async () => {
+    runScript(host, single('install'), parametersFor());
+    for (let index = 1; index <= 8; index += 1) {
+      makeInstall(oldCommit(index), index);
+    }
+    await maintained(cleanup);
+    deepStrictEqual(left(), {
+      installs: ['01', '02', '03', '04', 'ab'],
+      dotFiles: [
+        '01.log',
+        '01.pid',
+        '02.log',
+        '02.pid',
+        '03.log',
+        '03.pid',
+        '04.log',
+        '04.pid',
+      ],
+    });
+  });
+
+  it('F-2413 6.4 step 3, POST-4: cleanup removes nothing when the current install is the oldest of six', async () => {
+    runScript(host, single('install'), parametersFor());
+    for (let index = 1; index <= 5; index += 1) {
+      makeInstall(oldCommit(index), index);
+    }
+    const current = path.join(installFolder(host));
+    const when = new Date(Date.now() - 30 * 86_400_000);
+    utimesSync(current, when, when);
+    await maintained(cleanup);
+    deepStrictEqual(left().installs, ['01', '02', '03', '04', '05', 'ab']);
+  });
+
+  it('F-2413 6.4 step 4: cleanup removes an install that has no log file', async () => {
+    runScript(host, single('install'), parametersFor());
+    makeInstall(oldCommit(1), 20, true);
+    for (let index = 2; index <= 8; index += 1) {
+      makeInstall(oldCommit(index), index);
+    }
+    await maintained(cleanup);
+    deepStrictEqual(left().installs, ['02', '03', '04', '05', 'ab']);
   });
 });
 

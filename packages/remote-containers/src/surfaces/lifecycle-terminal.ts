@@ -129,10 +129,8 @@ export function lifecyclePresenterOf(
           return;
         }
         for (const character of data) {
-          const code = character.codePointAt(0);
-          if (code === undefined) {
-            continue;
-          }
+          // Every key the run classifies is below the surrogate range, so the character's first code unit decides as its code point would.
+          const code = character.charCodeAt(0);
           if (own.inSequence) {
             // The rest of a key sequence, to its final byte.
             if (code >= 0x40 && code <= 0x7e) {

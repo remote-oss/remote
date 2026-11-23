@@ -40,6 +40,8 @@
   },
   "activationEvents": [
     "onResolveRemoteAuthority:dev-container",
+    "onResolveRemoteAuthority:attached-container",
+    "onResolveRemoteAuthority:k8s-container",
     "onStartupFinished"
   ],
   "enabledApiProposals": [
@@ -60,6 +62,11 @@
         "category": "Dev Containers"
       },
       {
+        "command": "remote-containers.switchContainer",
+        "title": "%commands.switchContainer.title%",
+        "category": "Dev Containers"
+      },
+      {
         "command": "remote-containers.openFolder",
         "title": "%commands.Openfolder.title%",
         "category": "Dev Containers"
@@ -73,6 +80,10 @@
         "command": "remote-containers.configureContainerFeatures",
         "title": "%commands.Configurecontainerfeatures.title%",
         "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.addExtensionToConfig",
+        "title": "%commands.addExtensionToConfig.title%"
       },
       {
         "command": "remote-containers.rebuildContainer",
@@ -197,9 +208,59 @@
         "category": "Dev Containers"
       },
       {
+        "command": "remote-containers.cleanUpDevContainers",
+        "title": "%commands.cleanUpDevContainers.title%",
+        "category": "Dev Containers",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "remote-containers.inspectVolume",
+        "title": "%commands.inspectVolume.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.pruneVolumes",
+        "title": "%commands.pruneVolumes.title%",
+        "category": "Dev Containers",
+        "icon": "$(clear-all)"
+      },
+      {
         "command": "remote-containers.openRepositoryInUniqueVolume",
         "title": "%commands.Openrepositoryinuniquevolume.title%",
         "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.openInformationAboutMountPerformance",
+        "title": "%commands.openInformationAboutMountPerformance.title%",
+        "category": "Dev Containers",
+        "icon": "$(info)"
+      },
+      {
+        "command": "remote-containers.attachToRunningContainer",
+        "title": "%commands.attachToRunningContainer.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.attachToK8sContainer",
+        "title": "%commands.attachToK8sContainer.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.attachToK8sContainerFromViewlet",
+        "title": "%commands.attachToK8sContainerFromViewlet.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.openRepositoryFromRemoteHubWithEditSession",
+        "title": "%commands.openRepositoryFromRemoteHubWithEditSession.title%",
+        "category": "Dev Containers",
+        "icon": "$(repo-clone)"
+      },
+      {
+        "command": "remote-containers.openRepositoryFromGitWithEditSession",
+        "title": "%commands.openRepositoryFromGitWithEditSession.title%",
+        "category": "Dev Containers",
+        "icon": "$(repo-clone)"
       },
       {
         "command": "remote-containers.openRepositoryInVolume",
@@ -218,12 +279,20 @@
           "when": "!hideConnectCommands && remoteName =~ /^(dev-container)?$/ && !remote-containers:standingDown"
         },
         {
+          "command": "remote-containers.switchContainer",
+          "when": "remoteName =~ /^dev-container$/ && !remote-containers:standingDown"
+        },
+        {
           "command": "remote-containers.createDevContainerFile",
           "when": "remoteName =~ /^(dev-container)?$/ && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.configureContainerFeatures",
           "when": "remoteName =~ /^(dev-container|wsl|ssh-remote|tunnel)?$/ && !virtualWorkspace && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.addExtensionToConfig",
+          "when": "false"
         },
         {
           "command": "remote-containers.rebuildContainer",
@@ -302,8 +371,44 @@
           "when": "!remote-containers:standingDown"
         },
         {
+          "command": "remote-containers.cleanUpDevContainers",
+          "when": "!remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.pruneVolumes",
+          "when": "!remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.inspectVolume",
+          "when": "!remote-containers:standingDown"
+        },
+        {
           "command": "remote-containers.openRepositoryInUniqueVolume",
           "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.openInformationAboutMountPerformance",
+          "when": "false"
+        },
+        {
+          "command": "remote-containers.attachToRunningContainer",
+          "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.attachToK8sContainer",
+          "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.attachToK8sContainerFromViewlet",
+          "when": "false"
+        },
+        {
+          "command": "remote-containers.openRepositoryFromRemoteHubWithEditSession",
+          "when": "false"
+        },
+        {
+          "command": "remote-containers.openRepositoryFromGitWithEditSession",
+          "when": "false"
         },
         {
           "command": "remote-containers.openRepositoryInVolume",
@@ -314,7 +419,12 @@
         {
           "command": "remote-containers.explorerTargetsRefresh",
           "group": "navigation@3",
-          "when": "view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown"
+          "when": "view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:needsSSHCredentials && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.cleanUpDevContainers",
+          "group": "navigation@2",
+          "when": "view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:needsSSHCredentials && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.rebuildContainer",
@@ -341,22 +451,22 @@
         {
           "command": "remote-containers.reopenLocally",
           "group": "1_folder@1",
-          "when": "view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && canReopenLocally && !hideConnectCommands && !remote-containers:standingDown"
+          "when": "view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )(dev|folder)( |$)/ && canReopenLocally && !hideConnectCommands && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.reopenInWSL",
           "group": "1_folder@1",
-          "when": "view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && canReopenInWSL && !hideConnectCommands && !remote-containers:standingDown"
+          "when": "view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )(dev|folder)( |$)/ && canReopenInWSL && !hideConnectCommands && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.reopenInSSH",
           "group": "1_folder@1",
-          "when": "view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && canReopenInSSH && !hideConnectCommands && !remote-containers:standingDown"
+          "when": "view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )(dev|folder)( |$)/ && canReopenInSSH && !hideConnectCommands && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.reopenInTunnel",
           "group": "1_folder@1",
-          "when": "view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && canReopenInTunnel && !hideConnectCommands && !remote-containers:standingDown"
+          "when": "view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )(dev|folder)( |$)/ && canReopenInTunnel && !hideConnectCommands && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.openFolderInContainerInCurrentWindow",
@@ -417,6 +527,16 @@
           "command": "remote-containers.inspectDockerResource",
           "group": "1_container@5",
           "when": "view == detailsContainers && viewItem == image && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.openInformationAboutMountPerformance",
+          "group": "inline@1",
+          "when": "view == detailsContainers && viewItem == mountPerformance && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.attachToK8sContainerFromViewlet",
+          "group": "2@4",
+          "when": "!hideConnectCommands && view == extension.vsKubernetesExplorer && viewItem =~ /vsKubernetes\\.resource\\.pod/i && !remote-containers:standingDown"
         }
       ],
       "statusBar/remoteIndicator": [
@@ -469,6 +589,18 @@
           "command": "remote-containers.openRepositoryInUniqueVolume",
           "group": "remote_30_dev-container_2_actions@5",
           "when": "!hideConnectCommands && (workspaceFolderCount == 0 && remoteName =~ /^(wsl|ssh-remote|tunnel)$/ || workspaceFolderCount == 0 && !remoteName && !virtualWorkspace || remoteName =~ /tunnel*.*/ && gitOpenRepositoryCount == 0) && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.attachToRunningContainer",
+          "group": "remote_30_dev-container_2_actions@2",
+          "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
+        }
+      ],
+      "extension/context": [
+        {
+          "command": "remote-containers.addExtensionToConfig",
+          "group": "1_devcontainer@1",
+          "when": "!isBuiltinExtension && !remote-containers:standingDown"
         }
       ]
     },
@@ -507,6 +639,11 @@
       },
       {
         "view": "targetsContainers",
+        "contents": "%viewsWelcome.targetsContainers.needsSSHCredentials%",
+        "when": "remote-containers:needsSSHCredentials && !remote-containers:standingDown"
+      },
+      {
+        "view": "targetsContainers",
         "contents": "%viewsWelcome.targetsContainers.noContainersWithFolder%",
         "when": "remote-containers:noContainersWithFolder && !remote-containers:standingDown"
       },
@@ -524,6 +661,12 @@
           "default": "docker",
           "scope": "application",
           "description": "%setting.Dockerpath.description%"
+        },
+        "dev.containers.optimisticallyLaunchDocker": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "%setting.Optimisticallylaunchdocker.description%"
         },
         "dev.containers.dockerComposePath": {
           "type": "string",
@@ -591,6 +734,22 @@
           "deprecationMessage": "%setting.WorkspaceMountConsistency.deprecationMessage%",
           "markdownDeprecationMessage": "%setting.WorkspaceMountConsistency.markdownDeprecationMessage%"
         },
+        "dev.containers.gpuAvailability": {
+          "type": "string",
+          "default": "detect",
+          "scope": "machine",
+          "enum": [
+            "all",
+            "detect",
+            "none"
+          ],
+          "enumDescriptions": [
+            "%setting.GpuAvailability.all%",
+            "%setting.GpuAvailability.detect%",
+            "%setting.GpuAvailability.none%"
+          ],
+          "description": "%setting.GpuAvailability.description%"
+        },
         "dev.containers.experimentalMountGitWorktreeCommonDir": {
           "type": "boolean",
           "default": false,
@@ -634,9 +793,42 @@
           "default": false,
           "scope": "application",
           "description": "%setting.BootstrapImagePull.description%"
+        },
+        "dev.containers.executeInWSL": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "%setting.Executeinwsl.description%"
+        },
+        "dev.containers.executeInWSLDistro": {
+          "type": "string",
+          "scope": "application",
+          "markdownDescription": "%setting.Executeinwsldistro.markdownDescription%"
+        },
+        "dev.containers.forwardWSLServices": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "%setting.Forwardwslservices.description%"
         }
       }
-    }
+    },
+    "continueEditSession": [
+      {
+        "command": "remote-containers.openRepositoryFromRemoteHubWithEditSession",
+        "group": "0_local@2",
+        "remoteGroup": "remote_30_dev-container_2_actions@8",
+        "qualifiedName": "%continueEditSession.qualifiedName%",
+        "when": "!isWeb && remoteHub:hasVirtualFolders && !remote-containers:standingDown"
+      },
+      {
+        "command": "remote-containers.openRepositoryFromGitWithEditSession",
+        "group": "0_local@2",
+        "remoteGroup": "remote_30_dev-container_2_actions@8",
+        "qualifiedName": "%continueEditSession.qualifiedName%",
+        "when": "git.state == initialized && gitOpenRepositoryCount != 0 && remoteName =~ /(codespaces*.*|tunnel)/ && false && !remote-containers:standingDown"
+      }
+    ]
   },
   "dependencies": {
     "@devcontainers/cli": "0.89.0",
@@ -650,6 +842,7 @@
     "lib-product": "workspace:*",
     "lib-server": "workspace:*",
     "lib-standdown": "workspace:*",
+    "lib-wsl": "workspace:*",
     "yaml": "2.9.1"
   }
 }

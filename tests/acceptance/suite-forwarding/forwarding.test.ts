@@ -123,14 +123,22 @@ const ROWS: Readonly<Record<string, () => void>> = {
   },
   'agent-off': () => {
     it('F-2311 AC-10: the setting false makes no link', async () => {
+      // The launch's host setup ends any running server first, so the window's own session started this one: its
+      // terminal has that session's forwarded socket path, and the extension made no link for it.
       const socket = await terminalWrites(
         'echo "$SSH_AUTH_SOCK"',
         'agent-off-sock.txt',
       );
       deepStrictEqual(
-        {socket, links: await hostLinks()},
-        {socket: '', links: []},
-        forwardingLines(),
+        {
+          links: await hostLinks(),
+          plan: forwardingLines().includes(
+            'agent forwarding: none (settingOff)',
+          ),
+          socketIsSessionSocket: /^\/tmp\/ssh-[^/]+\/agent\.\d+$/.test(socket),
+        },
+        {links: [], plan: true, socketIsSessionSocket: true},
+        `${socket}\n${forwardingLines()}`,
       );
     });
   },

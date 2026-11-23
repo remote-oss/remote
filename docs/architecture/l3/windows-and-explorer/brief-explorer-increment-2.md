@@ -276,7 +276,8 @@ criteria that the cards build, gets its final tag. `check-coverage` is green.
 1. After connecting to `harness` on a folder, then on a workspace file, the "harness" row expands to both, most
    recent first, in a second window after Refresh (F-5104 BR-1, BR-3; F-5902 AC-10).
 2. With `foldersSortOrder` set to "alphabetical" and Refresh, the rows sort by code unit. With
-   `collapseRecentFolders` on and Refresh, every host row starts collapsed (BR-5, BR-7).
+   `collapseRecentFolders` on, a window that starts after it collapses every host row, while Refresh keeps a row's
+   current expansion (BR-5; F-5104 BR-7 to BR-9; athena on #1809).
 3. "Connect in New Window" on a folder row opens that folder on `ssh-remote+harness` in a new window, and "Connect
    in Current Window" on the workspace row opens the workspace (BR-15).
 4. "Remove from Recent List" removes the row at once and, after a reload, it's still gone (BR-13; F-2503 BR-7).

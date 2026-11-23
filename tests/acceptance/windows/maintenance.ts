@@ -12,15 +12,18 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import {pressEscape} from './renderer.ts';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
   appendScript,
+  closeContained,
   closeWindow,
   connectedWithin,
   connectionLog,
   hostPassword,
   inWindow,
   isOpen,
+  leftoverPagesNote,
   noHelperWithin,
   onHost,
   onHostAs,
@@ -31,7 +34,9 @@ import {
   variable,
   waitFor,
   writeUserSetting,
+  windowEvents,
   windowNames,
+  windowState,
 } from './harness.ts';
 
 /** The question of the host pick. */
@@ -116,6 +121,26 @@ export async function serverProcesses(): Promise<number[]> {
 }
 
 /**
+ * The main processes of the servers on the host, the shell that starts one and its node process. A server that an earlier
+ * row left is counted too, since the window of a row attaches to it: they are the processes a Kill Current must leave.
+ * The children of a server (a window's extension host, a terminal host) come and go with the windows and are not counted.
+ */
+export async function serverMainProcesses(): Promise<number[]> {
+  // A status of 1 is no match; any other status of pgrep, a bad pattern or a failure, fails the call. The pattern is
+  // written so that the shell's own command line does not match it.
+  return (
+    await onHost(
+      'sh',
+      '-c',
+      `pgrep -u harness -f '${DATA_FOLDER}/.* [-]-start-server'; status=$?; [ $status -le 1 ] || exit $status`,
+    )
+  )
+    .split('\n')
+    .filter(line => line !== '')
+    .map(Number);
+}
+
+/**
  * Waits until none of the server processes `servers` runs on the host any more, for up to `milliseconds`; on a
  * timeout it fails naming the processes that still run, with their command lines.
  */
@@ -147,6 +172,93 @@ export function linesSince(mark: number, window: string): RecordLine[] {
     .filter(line => line.window === window);
 }
 
+/** The first line of `window` since `mark` that shows core resolving the authority of SSH host `host` again. */
+function resolvedAgainSince(
+  mark: number,
+  window: string,
+  host: string,
+): RecordLine | undefined {
+  return linesSince(mark, window).find(
+    line =>
+      line.surface === 'progress' &&
+      line.question === `Setting up SSH Host ${host}`,
+  );
+}
+
+/** How many of `lines` each window has. */
+function countsByWindow(lines: readonly RecordLine[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const line of lines) {
+    counts[line.window] = (counts[line.window] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** The length of the connection log at the moment each record mark was taken, by that mark. */
+const logMarks = new Map<number, number>();
+
+/** The line of the connection log that says core resolved `host` again after a connection was lost. */
+function reconnectionLine(host: string): RegExp {
+  return new RegExp(
+    `Resolving ssh-remote\\+${host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}, attempt \\d+, reconnection`,
+    'u',
+  );
+}
+
+/**
+ * Waits `milliseconds` for core's reconnection of `window` to host `host` after its server went, and gives the time it
+ * was seen. Core's resolve is seen in the record as the progress of "Setting up SSH Host", which opens only after half a
+ * second, and in the connection log as the line that names the reconnection attempt, which a quick resolve leaves alone:
+ * either is the evidence. When none comes it fails with what the window and the record showed, since a hosted run uploads
+ * neither.
+ */
+export async function waitForReconnection(
+  mark: number,
+  window: string,
+  host: string,
+  milliseconds: number,
+): Promise<number> {
+  const logMark = logMarks.get(mark) ?? Number.POSITIVE_INFINITY;
+  const pattern = reconnectionLine(host);
+  let seen = 0;
+  try {
+    await waitFor(
+      `${window} to be resolved again by core’s reconnection`,
+      () => {
+        const progress = resolvedAgainSince(mark, window, host);
+        const logged = connectionLog()
+          .slice(logMark)
+          .some(line => pattern.test(line));
+        if (progress === undefined && !logged) {
+          return false;
+        }
+        seen = progress?.time ?? Date.now();
+        return true;
+      },
+      milliseconds,
+    );
+    return seen;
+  } catch (error) {
+    const state = await windowState(window).catch(() => undefined);
+    throw new Error(
+      `${(error as Error).message}: ${JSON.stringify({
+        remoteName: state?.remoteName,
+        open: isOpen(window),
+        lines: linesSince(mark, window)
+          .slice(-12)
+          .map(line => [line.surface, line.question, line.answer]),
+        // Where the record's lines went, if not to this window: a count of them by window.
+        sinceMark: countsByWindow(recordLines().slice(mark)),
+        events: windowEvents(window)
+          .slice(-6)
+          .map(entry => entry.event),
+        connection: connectionLog().slice(-8),
+      })}`,
+      {cause: error},
+    );
+  }
+}
+
 /**
  * Runs `command` in window `window` with `answers` scripted for it, and gives the mark of the record it started
  * from. The script is lined up with the window's cursor first, so an entry an earlier command left unused can't
@@ -160,6 +272,7 @@ export async function runWith(
   alignScript(window);
   appendScript(answers.map(answer => ({...answer, window})));
   const mark = recordLines().length;
+  logMarks.set(mark, connectionLog().length);
   try {
     await inWindow(window, command);
   } catch (caught) {
@@ -233,15 +346,29 @@ export async function openLocalWindow(
 }
 
 /**
+ * Closes every window of the launch but `local` whose agent is still active, whichever row opened it: a window that a
+ * failed row left, and a window a row opened and never closed. A window that will not close must not fail the hook, and
+ * with it every row after: `closeContained` dismisses its dialog and, failing that, ends its extension host. A window
+ * whose agent has ended is not listed here, whatever its page does.
+ */
+export async function closeLeftoverWindows(): Promise<void> {
+  for (const name of windowNames()) {
+    if (name !== 'local' && isOpen(name)) {
+      await closeContained(name, pressEscape);
+    }
+  }
+  const left = await leftoverPagesNote();
+  if (left !== undefined) {
+    process.stderr.write(`after closing the leftover windows: ${left}\n`);
+  }
+}
+
+/**
  * Closes every window of the launch but `local` that is open, waits until no connection helper runs, and from then on
  * counts no server process that runs on the host now.
  */
 export async function closeAllButLocal(): Promise<void> {
-  for (const name of windowNames()) {
-    if (name !== 'local' && isOpen(name)) {
-      await closeWindow(name);
-    }
-  }
+  await closeLeftoverWindows();
   await noHelperWithin(60_000);
   leftBefore = await hostServerProcesses();
 }
@@ -381,6 +508,21 @@ export async function fishServerInstalled(name: string): Promise<void> {
   } finally {
     await closeWindow(name);
   }
+}
+
+/**
+ * Turns the local connection server off and stores the platform of `harness-fish`, or undoes both with `false`. A fish
+ * login shell runs none of a piped input before the input ends, so in the default mode it never answers the platform
+ * probe and its connect fails at the connect wait, as F-2206 AC-28 says, with or without an entry; in the non-local mode
+ * the entry decides the platform and no probe runs (F-2206 7.E5's own workaround). The rows of other features on fish
+ * connect so.
+ */
+export async function fishWithoutProbe(on = true): Promise<void> {
+  await setting('remote.SSH.useLocalServer', on ? false : undefined);
+  await setting(
+    'remote.SSH.remotePlatform',
+    on ? {'harness-fish': 'linux'} : undefined,
+  );
 }
 
 /** Whether a server of `harness-fish` runs on the host; the bracket keeps pgrep from matching its own command line. */

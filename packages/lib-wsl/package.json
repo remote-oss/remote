@@ -7,6 +7,13 @@
     ".": {
       "types": "./.tsc/src/index.d.ts",
       "default": "./src/index.ts"
+    },
+    "./testing/fake-wsl": {
+      "types": "./.tsc/src/testing/fake-wsl.d.ts",
+      "default": "./src/testing/fake-wsl.ts"
     }
+  },
+  "dependencies": {
+    "lib-host": "workspace:*"
   }
 }

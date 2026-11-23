@@ -39,6 +39,7 @@ import {
   waitForQuickPick,
 } from './renderer.ts';
 import {runTemplatesReady} from './run-templates.ts';
+import {editorFolderOf} from './editor-folder.ts';
 
 /** The command that adds a configuration. */
 export const COMMAND = 'remote-containers.createDevContainerFile';
@@ -184,7 +185,7 @@ async function removeContainersAt(folder: string): Promise<void> {
     '--all',
     '--quiet',
     '--filter',
-    `label=devcontainer.local_folder=${folder}`,
+    `label=devcontainer.local_folder=${editorFolderOf(folder)}`,
   ]);
   const found = stdout.split('\n').filter(line => line !== '');
   if (found.length > 0) {

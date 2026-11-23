@@ -45,6 +45,22 @@ export interface UpOptions {
   buildNoCache: boolean;
   /** The consistency of the workspace mount, as the setting has it; the CLI refuses a value it doesn't know. */
   workspaceMountConsistency: string;
+  /** `dev.containers.gpuAvailability` as the setting has it; the CLI refuses a value it doesn't know. */
+  gpuAvailability: string;
+}
+
+/** The size of the terminal a run's lifecycle commands show in, as arguments; none when the size is not known. */
+function terminalArguments(
+  size: {rows: number; columns: number} | undefined,
+): string[] {
+  return size === undefined
+    ? []
+    : [
+        '--terminal-rows',
+        String(size.rows),
+        '--terminal-columns',
+        String(size.columns),
+      ];
 }
 
 /** The arguments every subcommand starts with, up to the log format and the terminal size. */
@@ -77,14 +93,7 @@ function commonArguments(subcommand: string, target: CliTarget): string[] {
     target.logLevel,
     '--log-format',
     'json',
-    ...(target.terminalSize === undefined
-      ? []
-      : [
-          '--terminal-rows',
-          String(target.terminalSize.rows),
-          '--terminal-columns',
-          String(target.terminalSize.columns),
-        ]),
+    ...terminalArguments(target.terminalSize),
   ];
 }
 
@@ -98,14 +107,18 @@ function additionalFeatures(target: CliTarget): string[] {
       ];
 }
 
-/** Creates the container or finds it, runs the commands up to the one `waitFor` names, and gives its id. */
+/** Creates the container or finds it, runs no lifecycle command, and gives its id; the commands come after the server's files. */
 export function upArguments(target: CliTarget, options: UpOptions): string[] {
   return [
     ...commonArguments('up', target),
     ...target.mounts.flatMap(mount => ['--mount', mount]),
     ...additionalFeatures(target),
     ...(target.features.lockfile ? [] : ['--no-lockfile']),
-    '--skip-non-blocking-commands',
+    '--skip-post-create',
+    '--include-configuration',
+    '--include-merged-configuration',
+    '--gpu-availability',
+    options.gpuAvailability,
     '--workspace-mount-consistency',
     options.workspaceMountConsistency,
     ...(options.removeExistingContainer ? ['--remove-existing-container'] : []),
@@ -113,32 +126,87 @@ export function upArguments(target: CliTarget, options: UpOptions): string[] {
   ];
 }
 
-/** Runs the commands `up` left for the background stage in the container. */
+/** The dotfiles a run clones into the container, from the three machine settings. */
+interface DotfilesOptions {
+  repository: string;
+  installCommand?: string;
+  targetPath?: string;
+}
+
+/** Which of the lifecycle commands a `run-user-commands` runs, and what it hands them. */
+export interface RunUserCommandsOptions {
+  /** Runs the commands up to the one `waitFor` names, and no further. */
+  skipNonBlocking?: boolean;
+  /** Stops after `postCreateCommand` and the dotfiles, for the personalization that follows. */
+  stopForPersonalization?: boolean;
+  /** Variables the commands see, after the probed environment and before the configuration's `remoteEnv`. */
+  remoteEnvironment?: Readonly<Record<string, string>>;
+  dotfiles?: DotfilesOptions;
+}
+
+/** The dotfiles options, when a repository is set. */
+function dotfilesArguments(dotfiles: DotfilesOptions | undefined): string[] {
+  if (dotfiles === undefined || dotfiles.repository === '') {
+    return [];
+  }
+  return [
+    '--dotfiles-repository',
+    dotfiles.repository,
+    ...(dotfiles.installCommand === undefined
+      ? []
+      : ['--dotfiles-install-command', dotfiles.installCommand]),
+    ...(dotfiles.targetPath === undefined
+      ? []
+      : ['--dotfiles-target-path', dotfiles.targetPath]),
+  ];
+}
+
+/** The stages of a `run-user-commands`, the variables it hands the commands and the dotfiles. */
+function stageArguments(options: RunUserCommandsOptions): string[] {
+  return [
+    ...(options.skipNonBlocking === true
+      ? ['--skip-non-blocking-commands']
+      : []),
+    ...(options.stopForPersonalization === true
+      ? ['--stop-for-personalization']
+      : []),
+    ...Object.entries(options.remoteEnvironment ?? {}).flatMap(
+      ([name, value]) => ['--remote-env', `${name}=${value}`],
+    ),
+    ...dotfilesArguments(options.dotfiles),
+  ];
+}
+
+/** Runs lifecycle commands in the container: the blocking ones, or the rest in the background, as `options` say. */
 export function runUserCommandsArguments(
   target: CliTarget,
   containerId: string,
+  options: RunUserCommandsOptions = {},
 ): string[] {
   return [
     ...commonArguments('run-user-commands', target),
     '--container-id',
     containerId,
+    ...stageArguments(options),
   ];
 }
 
 /**
- * Reads the configuration. With a container id it is merged with the container's metadata; without one the merge would
- * read the image's metadata and pull the image, which the read before a reload must not do.
+ * Reads the configuration. With a container id it is merged with the container's metadata. `includeMerged` asks for the
+ * merged configuration, which the CLI builds from the Features and the image's label, read from the registry when the
+ * image is not local and never pulled (measured on 0.89.0); a read before trust asks for no merge, since that fetches what
+ * the configuration names.
  */
 export function readConfigurationArguments(
   target: CliTarget,
   containerId?: string,
+  includeMerged = containerId !== undefined,
 ): string[] {
   return [
     ...commonArguments('read-configuration', target),
     ...additionalFeatures(target),
-    ...(containerId === undefined
-      ? []
-      : ['--container-id', containerId, '--include-merged-configuration']),
+    ...(containerId === undefined ? [] : ['--container-id', containerId]),
+    ...(includeMerged ? ['--include-merged-configuration'] : []),
   ];
 }
 
@@ -210,4 +278,66 @@ export function applyTemplateArguments(request: TemplateRequest): string[] {
 /** Reads a template's metadata from its registry. */
 export function templateMetadataArguments(templateId: string): string[] {
   return ['templates', 'metadata', templateId, '--log-level', 'info'];
+}
+
+/** What the CLI is told about an attached container: no folder and no id labels, only the container and its attach file. */
+export interface AttachedCliTarget {
+  containerId: string;
+  /** The attach configuration file that applies, absolute; none when there is none. */
+  configFile?: string;
+  dockerPath: string;
+  logLevel: 'info' | 'debug' | 'trace';
+  /** The size of the terminal the run's lifecycle commands show in, whole rows and columns of at least one. */
+  terminalSize?: {rows: number; columns: number};
+  /** Where the CLI keeps its data (`--user-data-folder`). */
+  userDataFolder?: string;
+  /** Variables added to the editor's environment for the CLI's process, such as the engine coordinate. */
+  environment?: Readonly<Record<string, string>>;
+}
+
+/** The arguments an attached container's runs share, after the subcommand and the container. */
+function attachedCommonArguments(target: AttachedCliTarget): string[] {
+  return [
+    '--container-id',
+    target.containerId,
+    ...(target.configFile === undefined ? [] : ['--config', target.configFile]),
+    '--docker-path',
+    target.dockerPath,
+    ...(target.userDataFolder === undefined
+      ? []
+      : ['--user-data-folder', target.userDataFolder]),
+    '--log-level',
+    target.logLevel,
+    '--log-format',
+    'json',
+    ...terminalArguments(target.terminalSize),
+  ];
+}
+
+/**
+ * Sets up a running container the CLI did not create: it merges the container's metadata with the attach file, patches
+ * `/etc/environment` and `/etc/profile`, and gives the merged configuration.
+ */
+export function setUpArguments(target: AttachedCliTarget): string[] {
+  return [
+    'set-up',
+    ...attachedCommonArguments(target),
+    '--skip-non-blocking-commands',
+    '--include-merged-configuration',
+  ];
+}
+
+/**
+ * Runs lifecycle commands in an attached container: no folder is named, the container is found by its id, and the
+ * run's stages are chosen as for a dev container's.
+ */
+export function attachedUserCommandsArguments(
+  target: AttachedCliTarget,
+  options: RunUserCommandsOptions = {},
+): string[] {
+  return [
+    'run-user-commands',
+    ...attachedCommonArguments(target),
+    ...stageArguments(options),
+  ];
 }

@@ -24,8 +24,19 @@ import {
   startRunRegistry,
   SYSTEM_CLOCK,
 } from './acceptance-registry.ts';
+import {
+  MINIROOTFS,
+  prepareRunDistros,
+  type RunWslDistros,
+} from './acceptance-wsl.ts';
+import {pinnedSshClient} from './acceptance-ssh-client.ts';
 import {staleRefusal} from './acceptance-stale.ts';
-import {ghcrLayer, prepareRunTemplates} from './acceptance-templates.ts';
+import {
+  answerOf,
+  ghcrLayer,
+  type LayerFetch,
+  prepareRunTemplates,
+} from './acceptance-templates.ts';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {
@@ -37,7 +48,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import {hostname, tmpdir} from 'node:os';
+import {hostname} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 import path from 'node:path';
 import {
@@ -55,7 +66,12 @@ import {
   UPDATE_SERVICE_NAME,
   updateServicePinCommand,
 } from './acceptance-downloads.ts';
-import {CLI_TEMPLATE_PATH, cliSourceEditorOf} from './acceptance-cli-editor.ts';
+import {
+  CLI_TEMPLATE_PATH,
+  cliSourceEditorOf,
+  commitOfEditor,
+  standInNameProblem,
+} from './acceptance-cli-editor.ts';
 import {
   acceptanceRunId,
   buildDevContainerImage,
@@ -64,14 +80,21 @@ import {
   connectRunNetwork,
   loadImageIntoPodman,
   requirePodman,
+  runFolderBase,
   startHostContainer,
   sweepStaleRunObjects,
 } from './acceptance-run.ts';
 import {checked, type CommandRunner, runCommand} from './command-runner.ts';
+import {
+  endAfterGrace,
+  PREPARE_STEP_MILLISECONDS,
+  timedStep,
+} from './prepare-steps.ts';
 import {EDITOR_VERSION, GENUINE_VERSIONS} from './editor-floor.ts';
 import {type HostBase, HOST_BASE_VARIANTS} from './host-variants.ts';
 import {
   agentSocketPath,
+  sshConfigPath,
   changedKeyHostsFile,
   CHANGED_KEY_ALIAS,
   controlFolderOf,
@@ -108,6 +131,9 @@ import {
   hostCases,
   runnerLaunches,
   suitesOf,
+  WINDOW_PORT_RANGE,
+  WINDOW_PORT_RANGE_SETTING,
+  windowPortRangeProblem,
   withHarnessBases,
   withRunTokens,
 } from './acceptance-launches.ts';
@@ -127,12 +153,18 @@ import {
   userDataFolderOf,
   writeStandIns,
 } from './acceptance-plain.ts';
+import {knownRedsJudge} from './known-reds.ts';
+import {windowsHostBlock} from './acceptance-windows-host.ts';
 import {
   isMainModule,
   REPOSITORY_ROOT,
   resolveBinary,
   sortedEntries,
 } from './repository.ts';
+
+/** How many times the run folder's removal tries again on a Windows lock, and the wait between two tries. */
+const RUN_FOLDER_REMOVE_RETRIES = 10;
+const RUN_FOLDER_REMOVE_DELAY_MILLISECONDS = 500;
 
 /** The port mapping and the real runner, re-exported for the tests. */
 export {mappedPort} from './acceptance-run.ts';
@@ -163,14 +195,65 @@ export type EditorChoice = 'vscode' | 'vscodium';
 export const VSCODIUM_RELEASE = {
   tagName: '1.140.06829-insider',
   repository: 'VSCodium/vscodium-insiders',
-  /** The release asset's sha256, by `<os>-<arch>` of the client. */
+  /**
+   * The release assets' sha256, by `<os>-<arch>` of the client, as the digests of the assets of the tag's release on
+   * GitHub (gh api repos/VSCodium/vscodium-insiders/releases/tags/<tag>; the linux ones re-verified against the
+   * downloaded archives).
+   */
   sha256: {
     'linux-x64':
       '7d8779cb07f5dd66810a94a45855d0ffbe5c286ffddbb88f8ecdca6b63a6813f',
     'linux-arm64':
       'e0ad855b10ec0928f8f832bbf9d12536918b6ecb8cec4600431654ff27a72c37',
+    'darwin-x64':
+      'faa2b47908666e22e5a954fb779edbbe399de8c04778c3d57722734f882286f5',
+    'darwin-arm64':
+      '96ebfe8c654e42a359c60d2141200022dbd82d54842ae9091bd800f24345af8e',
+    'win32-x64':
+      '5fdd3aa13aa926d735fdf2102b07b0c520a7782ce5fcd06b632c99f2152b926a',
   },
 } as const;
+
+/** The release asset of one platform, and the editor's executable it unpacks into, inside the unpack folder. */
+export interface VscodiumBuild {
+  /** The release asset's file name at the pinned tag. */
+  asset: string;
+  /** The editor's executable, inside the unpack folder. */
+  executable: string;
+}
+
+/**
+ * The VSCodium builds the harness can start, by the client's `<os>-<arch>`: the tag's release asset for each, and the
+ * executable inside what it unpacks to. The macOS binary of the build is named after the product, measured in the
+ * bundle; the Windows executable is the build's `VSCodium - Insiders.exe`, measured in the release's central directory.
+ */
+export const VSCODIUM_PLATFORMS: Readonly<Record<string, VscodiumBuild>> = {
+  'linux-x64': {
+    asset: `VSCodium-linux-x64-${VSCODIUM_RELEASE.tagName}.tar.gz`,
+    executable: 'codium-insiders',
+  },
+  'linux-arm64': {
+    asset: `VSCodium-linux-arm64-${VSCODIUM_RELEASE.tagName}.tar.gz`,
+    executable: 'codium-insiders',
+  },
+  'darwin-x64': {
+    asset: `VSCodium-darwin-x64-${VSCODIUM_RELEASE.tagName}.zip`,
+    executable: 'VSCodium - Insiders.app/Contents/MacOS/VSCodium - Insiders',
+  },
+  'darwin-arm64': {
+    asset: `VSCodium-darwin-arm64-${VSCODIUM_RELEASE.tagName}.zip`,
+    executable: 'VSCodium - Insiders.app/Contents/MacOS/VSCodium - Insiders',
+  },
+  'win32-x64': {
+    asset: `VSCodium-win32-x64-${VSCODIUM_RELEASE.tagName}.zip`,
+    executable: 'VSCodium - Insiders.exe',
+  },
+};
+
+/** The download address of a release asset at the pinned tag. */
+export function releaseAssetUrlOf(asset: string): string {
+  return `https://github.com/${VSCODIUM_RELEASE.repository}/releases/download/${VSCODIUM_RELEASE.tagName}/${asset}`;
+}
 
 /** The packages whose VSIX files are installed into the editor under test, by their extension id. */
 const EXTENSIONS_UNDER_TEST = new Map([
@@ -208,6 +291,10 @@ export interface HarnessVariables {
   HARNESS_ENGINE_IMAGE?: string;
   /** The address (`host:port`) of the run's registry, when a chosen launch asks for one; VSCodium run only. */
   HARNESS_REGISTRY?: string;
+  /** The `wsl` launch's distros by role (installed, wsl2, wsl1) as JSON, when a chosen launch asks for them. */
+  HARNESS_WSL_DISTROS?: string;
+  /** The path of the pinned OpenSSH client's `ssh`, for a run with a launch that asks for it. */
+  HARNESS_SSH_CLIENT?: string;
   /** The run's registry as its templates' ids name it (`localhost:<port>`), when a chosen launch asks for templates. */
   HARNESS_TEMPLATE_REGISTRY?: string;
   /** The URL of the run's template index on the download host, when a chosen launch asks for templates; harness-only. */
@@ -230,10 +317,14 @@ export interface HarnessVariables {
   HARNESS_EDITOR: EditorChoice;
   /** The file the log channel's lines are appended to, in the run's folder. */
   REMOTE_OSS_ACCEPTANCE_LOG: string;
+  /** The `DOCKER_HOST` the run itself started with, which a launch may replace for its editor: the run's own engine. */
+  HARNESS_ENGINE_HOST?: string;
   /** The VSCodium executable, in the VSCodium run only. */
   HARNESS_VSCODIUM_EXECUTABLE?: string;
   /** The CLI-source copy of VSCodium (`tools/acceptance-cli-editor.ts`), only when a chosen launch starts it. */
   HARNESS_CLI_EDITOR_EXECUTABLE?: string;
+  /** The commit of the CLI-source copy's `product.json`, which a row compares with the one the client's CLI request names. */
+  HARNESS_CLIENT_COMMIT?: string;
   /** The version of the editor the tests run on: the recorded version, or the job's for a genuine launch. */
   HARNESS_EDITOR_VERSION: string;
   /** The VS Code executable of the genuine version, only when a chosen launch starts it. */
@@ -246,6 +337,8 @@ export interface HarnessVariables {
   HARNESS_DOWNLOADS_LICENSED?: string;
   HARNESS_DOWNLOADS_LOCAL?: string;
   HARNESS_DOWNLOADS_LOG?: string;
+  /** The base a WSL 2 distro reaches the host at over HTTP, on a Windows run only; a WSL 1 distro uses HARNESS_DOWNLOADS_LOCAL. */
+  HARNESS_DOWNLOADS_DISTRO_BASE?: string;
   /** The run's download host certificate file, and the address of the fixture Feature tarball it serves on the runner's `localhost`. */
   HARNESS_DOWNLOADS_CERTIFICATE?: string;
   HARNESS_FEATURE_TARBALL_URL?: string;
@@ -312,11 +405,21 @@ export interface HarnessDependencies {
     runFolder: string,
     earlier: boolean,
     cliArchives: boolean,
+    cliStandIn: boolean,
   ) => Promise<RunDownloads>;
   /** Starts the run's own ssh-agent on `socket`, with no askpass of its own; the VSCodium run only. */
   startAgent: (socket: string) => Started;
   /** Starts the run's registry for a launch that asks for one; the VSCodium run only. */
   startRegistry: (runId: string) => Promise<RunRegistry>;
+  /** Imports the run's own WSL distros for a launch that asks for them, on a Windows client only. */
+  prepareWslDistros: (
+    runId: string,
+    runFolder: string,
+  ) => Promise<RunWslDistros>;
+  /** The pinned OpenSSH client's path, built once (tools/install-openssh), for a launch with `sshClient: 'pinned'`. */
+  pinnedSshClient: () => string;
+  /** The `winhost` block of the run's ssh_config for the Windows SSH host of the platform workflow, on a Windows client only. */
+  windowsHostBlock: (runFolder: string) => Promise<string>;
   /** Publishes the run's templates into the registry at `address` and writes the run's index; the run's dev container image names its `mini` template; gives the templates' registry. */
   prepareTemplates: (
     root: string,
@@ -343,9 +446,31 @@ function masterAlias(
   return accountAlias(name, 'harness-pw', port, runFolder, [
     ...PASSWORD_LINES,
     `ControlMaster ${mode}`,
-    `ControlPath ${path.join(controlFolder, socket)}`,
+    `ControlPath ${path.posix.join(controlFolder, socket)}`,
     'ControlPersist 600',
   ]);
+}
+
+/** The run's ControlMaster aliases, each with its mode and the name of its socket. */
+const MASTER_ALIASES = [
+  ['master', 'auto', 'cm-%C'],
+  ['master-ask', 'ask', 'cm-ask-%C'],
+  ['master-yes', 'yes', 'cm-yes-%C'],
+  ['master-autoask', 'autoask', 'cm-autoask-%C'],
+] as const;
+
+/** The run's ControlMaster aliases, none on Windows, whose OpenSSH has no ControlMaster. */
+function masterAliases(
+  port: number,
+  runFolder: string,
+  controlFolder: string,
+  platform: NodeJS.Platform,
+): string[] {
+  return platform === 'win32'
+    ? []
+    : MASTER_ALIASES.flatMap(([name, mode, socket]) =>
+        masterAlias(name, mode, socket, port, runFolder, controlFolder),
+      );
 }
 
 /**
@@ -405,7 +530,8 @@ export function sshConfigOf(
  * and for one that may not create links in /tmp (the Ubuntu 26.04 host's); three for the
  * authority rows: `badkey` (a key the host does not accept), `blackhole` (an address that is never routed) and
  * `127.0.0.2` (the loopback name that reaches the host with a refused key, the port coming from the authority). The
- * sockets of the ControlMaster aliases are in `controlFolder`.
+ * sockets of the ControlMaster aliases are in `controlFolder`. On Windows (`platform`) its paths have forward slashes
+ * and it has no ControlMaster alias.
  */
 export function harnessSshConfig(
   port: number,
@@ -413,30 +539,33 @@ export function harnessSshConfig(
   agentSocket: string,
   routedAddress: string,
   controlFolder = runFolder,
+  platform: NodeJS.Platform = process.platform,
 ): string {
+  const folder = sshConfigPath(runFolder, platform);
+  const agent = sshConfigPath(agentSocket, platform);
   return [
     'Host harness',
     '  HostName 127.0.0.1',
     `  Port ${String(port)}`,
     '  User harness',
-    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_ed25519')}`,
     '  IdentitiesOnly yes',
     '  IdentityAgent none',
     '  StrictHostKeyChecking accept-new',
     '  BatchMode yes',
     '  ConnectTimeout 10',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts')}`,
     '',
     'Host 127.0.0.1',
     `  Port ${String(port)}`,
     '  User harness',
-    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_ed25519')}`,
     '  IdentitiesOnly yes',
     '  IdentityAgent none',
     '  StrictHostKeyChecking accept-new',
     '  BatchMode yes',
     '  ConnectTimeout 10',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts')}`,
     '',
     'Host refused',
     '  HostName 127.0.0.1',
@@ -451,22 +580,22 @@ export function harnessSshConfig(
     '  HostName 127.0.0.1',
     `  Port ${String(port)}`,
     '  User harness',
-    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_ed25519')}`,
     '  IdentitiesOnly yes',
     '  IdentityAgent none',
     '  StrictHostKeyChecking ask',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_stranger')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts_stranger')}`,
     '',
     'Host routed',
     `  HostName ${routedAddress}`,
     '  Port 22',
     '  User harness',
-    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_ed25519')}`,
     '  IdentitiesOnly yes',
     '  IdentityAgent none',
     '  StrictHostKeyChecking accept-new',
     '  BatchMode yes',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_routed')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts_routed')}`,
     '',
     // The harness account reached through the harness host as a jump host: the target is the host's own sshd, at the port it listens on inside.
     'Host jumped',
@@ -474,13 +603,13 @@ export function harnessSshConfig(
     '  Port 22',
     '  User harness',
     '  ProxyJump harness',
-    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_ed25519')}`,
     '  IdentitiesOnly yes',
     '  IdentityAgent none',
     '  StrictHostKeyChecking accept-new',
     '  BatchMode yes',
     '  ConnectTimeout 10',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_jumped')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts_jumped')}`,
     '',
     // The run's key against a known-hosts file that pins another key for the host: ssh finds the host key changed and,
     // as StrictHostKeyChecking is off, connects with password and keyboard-interactive login and every forward disabled.
@@ -488,23 +617,23 @@ export function harnessSshConfig(
     '  HostName 127.0.0.1',
     `  Port ${String(port)}`,
     '  User harness',
-    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_ed25519')}`,
     '  IdentitiesOnly yes',
     '  IdentityAgent none',
     `  HostKeyAlias ${CHANGED_KEY_ALIAS}`,
     '  StrictHostKeyChecking no',
     '  BatchMode yes',
     '  ConnectTimeout 10',
-    `  UserKnownHostsFile ${changedKeyHostsFile(runFolder)}`,
+    `  UserKnownHostsFile ${sshConfigPath(changedKeyHostsFile(runFolder), platform)}`,
     '',
-    ...accountAlias('password', 'harness-pw', port, runFolder, PASSWORD_LINES),
+    ...accountAlias('password', 'harness-pw', port, folder, PASSWORD_LINES),
     // The Ubuntu 26.04 host's keyboard-interactive accounts: a password and a one-time code, a forced change, and a
     // question the extension doesn't recognise before the password.
-    ...accountAlias('twofactor', 'harness-2fa', port, runFolder, KBD_LINES),
-    ...accountAlias('expired', 'harness-expired', port, runFolder, KBD_LINES),
-    ...accountAlias('ask-odd', 'harness-odd', port, runFolder, KBD_LINES),
+    ...accountAlias('twofactor', 'harness-2fa', port, folder, KBD_LINES),
+    ...accountAlias('expired', 'harness-expired', port, folder, KBD_LINES),
+    ...accountAlias('ask-odd', 'harness-odd', port, folder, KBD_LINES),
     // The password account with ssh's default of three password prompts, so that a wrong password is asked again.
-    ...accountAlias('password-retry', 'harness-pwonly', port, runFolder, [
+    ...accountAlias('password-retry', 'harness-pwonly', port, folder, [
       'PubkeyAuthentication no',
       'PreferredAuthentications password',
       'NumberOfPasswordPrompts 3',
@@ -516,12 +645,12 @@ export function harnessSshConfig(
     '  User harness-pw',
     '  IdentityAgent none',
     '  StrictHostKeyChecking accept-new',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_proxy-ask-terminal')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts_proxy-ask-terminal')}`,
     ...PASSWORD_LINES.map(line => `  ${line}`),
     `  ProxyCommand bash -c 'printf "Proceed? " >/dev/tty && read answer </dev/tty && exec 3<>/dev/tcp/127.0.0.1/${String(port)} && { cat <&3 & exec cat >&3; }'`,
     '',
     // The password account behind a ProxyCommand that asks on the terminal, which a window without one cannot answer.
-    ...accountAlias('proxy-ask', 'harness-pw', port, runFolder, [
+    ...accountAlias('proxy-ask', 'harness-pw', port, folder, [
       ...PASSWORD_LINES,
       `ProxyCommand setsid bash -c 'printf "Proceed? " >/dev/tty && read answer </dev/tty && exec 3<>/dev/tcp/127.0.0.1/${String(port)} && { cat <&3 & exec cat >&3; }'`,
     ]),
@@ -532,146 +661,102 @@ export function harnessSshConfig(
     '  IdentityAgent none',
     '  StrictHostKeyChecking ask',
     '  ConnectTimeout 10',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_password_ask')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts_password_ask')}`,
     ...PASSWORD_LINES.map(line => `  ${line}`),
     '',
     ...accountAlias(
       'noforward',
       'harness-nofwd',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
-    ...accountAlias('x11-forbidden', 'harness-nox11', port, runFolder, [
-      ...keyLines(runFolder),
+    ...accountAlias('x11-forbidden', 'harness-nox11', port, folder, [
+      ...keyLines(folder),
       'ForwardX11 yes',
     ]),
     ...accountAlias(
       'nosocket',
       'harness-nosock',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
-    ...accountAlias(
-      'noall',
-      'harness-noall',
-      port,
-      runFolder,
-      keyLines(runFolder),
-    ),
+    ...accountAlias('noall', 'harness-noall', port, folder, keyLines(folder)),
     ...FORWARD_ALIASES.flatMap(([alias, user, lines]) =>
-      accountAlias(alias, user, port, runFolder, [
-        ...keyLines(runFolder),
-        ...lines,
-      ]),
+      accountAlias(alias, user, port, folder, [...keyLines(folder), ...lines]),
     ),
+    ...accountAlias('mute', 'harness-mute', port, folder, keyLines(folder)),
+    ...accountAlias('i686', 'harness-i686', port, folder, keyLines(folder)),
     ...accountAlias(
-      'mute',
-      'harness-mute',
+      'nofetch',
+      'harness-nofetch',
       port,
-      runFolder,
-      keyLines(runFolder),
-    ),
-    ...accountAlias(
-      'i686',
-      'harness-i686',
-      port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
     ...accountAlias(
       'harness-fish',
       'harness-fish',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
     ...accountAlias(
       'harness-bash',
       'harness-bash',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
     ...accountAlias(
       'harness-zsh',
       'harness-zsh',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
     ...accountAlias(
       'harness-dash',
       'harness-dash',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
     ...accountAlias(
       'harness-ksh',
       'harness-ksh',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
     ...accountAlias(
       'harness-csh',
       'harness-csh',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
     ...accountAlias(
       'harness-tcsh',
       'harness-tcsh',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
-    ...accountAlias(
-      'readonly',
-      'harness-ro',
-      port,
-      runFolder,
-      keyLines(runFolder),
-    ),
-    ...masterAlias('master', 'auto', 'cm-%C', port, runFolder, controlFolder),
-    ...masterAlias(
-      'master-ask',
-      'ask',
-      'cm-ask-%C',
-      port,
-      runFolder,
-      controlFolder,
-    ),
-    ...masterAlias(
-      'master-yes',
-      'yes',
-      'cm-yes-%C',
-      port,
-      runFolder,
-      controlFolder,
-    ),
-    ...masterAlias(
-      'master-autoask',
-      'autoask',
-      'cm-autoask-%C',
-      port,
-      runFolder,
-      controlFolder,
-    ),
-    ...keyAlias('passkey', 'harness', port, runFolder, ['id_passphrase']),
+    ...accountAlias('readonly', 'harness-ro', port, folder, keyLines(folder)),
+    ...masterAliases(port, folder, controlFolder, platform),
+    ...keyAlias('passkey', 'harness', port, folder, ['id_passphrase']),
     // The same alias again under other names, so that a row finds no shared connection a row before it left.
     ...passkeyCopies().flatMap(alias =>
-      keyAlias(alias, 'harness', port, runFolder, ['id_passphrase']),
+      keyAlias(alias, 'harness', port, folder, ['id_passphrase']),
     ),
     // The passphrase key with each AddKeysToAgent value.
     ...keyAlias(
       'passkey-add-yes',
       'harness',
       port,
-      runFolder,
+      folder,
       ['id_passphrase'],
       ['AddKeysToAgent yes'],
     ),
@@ -679,7 +764,7 @@ export function harnessSshConfig(
       'passkey-ask-yes',
       'harness',
       port,
-      runFolder,
+      folder,
       ['id_passphrase'],
       ['AddKeysToAgent ask'],
     ),
@@ -687,7 +772,7 @@ export function harnessSshConfig(
       'passkey-ask-no',
       'harness',
       port,
-      runFolder,
+      folder,
       ['id_passphrase'],
       ['AddKeysToAgent ask'],
     ),
@@ -695,7 +780,7 @@ export function harnessSshConfig(
       'passkey-ask-escape',
       'harness',
       port,
-      runFolder,
+      folder,
       ['id_passphrase'],
       ['AddKeysToAgent ask'],
     ),
@@ -703,17 +788,17 @@ export function harnessSshConfig(
       'passkey-add-confirm',
       'harness',
       port,
-      runFolder,
+      folder,
       ['id_passphrase'],
       ['AddKeysToAgent confirm'],
     ),
     // No usable key, each in its own way.
-    ...keyAlias('nokey-missing', 'harness', port, runFolder, ['id_missing']),
+    ...keyAlias('nokey-missing', 'harness', port, folder, ['id_missing']),
     ...keyAlias(
       'nokey-none',
       'harness',
       port,
-      runFolder,
+      folder,
       [],
       ['IdentityFile none'],
     ),
@@ -721,16 +806,16 @@ export function harnessSshConfig(
       'nokey-nopubkey',
       'harness',
       port,
-      runFolder,
+      folder,
       ['id_second'],
       ['PubkeyAuthentication no'],
     ),
-    ...keyAlias('nokey-agent-only', 'harness', port, runFolder, [], []),
+    ...keyAlias('nokey-agent-only', 'harness', port, folder, [], []),
     ...keyAlias(
       'nokey-agent-none',
       'harness',
       port,
-      runFolder,
+      folder,
       [],
       ['IdentityAgent none'],
       false,
@@ -740,46 +825,44 @@ export function harnessSshConfig(
       'agent-other-file',
       'harness',
       port,
-      runFolder,
+      folder,
       ['id_unauthorised'],
       [],
       false,
     ),
     // The harness account with a key whose line on the host carries no-port-forwarding, though sshd allows forwarding.
-    ...keyAlias('noforward-key', 'harness', port, runFolder, ['id_noportfwd']),
+    ...keyAlias('noforward-key', 'harness', port, folder, ['id_noportfwd']),
     // The harness account with a RequestTTY of its own.
     ...['force', 'yes', 'no'].flatMap(request =>
       keyAlias(
         `pty-${request}`,
         'harness',
         port,
-        runFolder,
+        folder,
         ['id_ed25519'],
         ['BatchMode yes', 'IdentityAgent none', `RequestTTY ${request}`],
       ),
     ),
-    ...keyAlias('several-files', 'harness', port, runFolder, [
+    ...keyAlias('several-files', 'harness', port, folder, [
       'id_missing',
       'id_passphrase_stranger',
       'id_second',
     ]),
-    ...keyAlias('passkey-then-second', 'harness', port, runFolder, [
+    ...keyAlias('passkey-then-second', 'harness', port, folder, [
       'id_passphrase',
       'id_second',
     ]),
-    ...keyAlias('loosekey', 'harness', port, runFolder, ['id_loose']),
-    ...keyAlias('certonly', CERTIFIED_PRINCIPAL, port, runFolder, [
+    ...keyAlias('loosekey', 'harness', port, folder, ['id_loose']),
+    ...keyAlias('certonly', CERTIFIED_PRINCIPAL, port, folder, [
       'id_certified',
     ]),
-    ...keyAlias('certpass', CERTIFIED_PRINCIPAL, port, runFolder, [
-      'id_certpass',
-    ]),
+    ...keyAlias('certpass', CERTIFIED_PRINCIPAL, port, folder, ['id_certpass']),
     // The agent named by a variable of the editor's environment, set or not (no key file of its own).
     ...keyAlias(
       'agent-var-set',
       'harness',
       port,
-      runFolder,
+      folder,
       [],
       ['IdentityAgent $HARNESS_AGENT_SOCKET'],
       false,
@@ -788,12 +871,12 @@ export function harnessSshConfig(
       'agent-var-unset',
       'harness',
       port,
-      runFolder,
+      folder,
       [],
       ['IdentityAgent $HARNESS_NO_SUCH_VARIABLE'],
       false,
     ),
-    ...keyAlias('certonly-nocert', CERTIFIED_PRINCIPAL, port, runFolder, [
+    ...keyAlias('certonly-nocert', CERTIFIED_PRINCIPAL, port, folder, [
       'id_second',
     ]),
     // Two aliases, so the window with the setting off finds no connection, and no stored plan, of the other.
@@ -802,14 +885,14 @@ export function harnessSshConfig(
         alias,
         'harness',
         port,
-        runFolder,
-        [...keyLines(runFolder), `ForwardAgent ${agentSocket}`],
-        agentSocket,
+        folder,
+        [...keyLines(folder), `ForwardAgent ${agent}`],
+        agent,
       ),
     ),
     // ForwardAgent given as no, which forwards nothing, as unset does.
-    ...accountAlias('agentfwd-no', 'harness', port, runFolder, [
-      ...keyLines(runFolder),
+    ...accountAlias('agentfwd-no', 'harness', port, folder, [
+      ...keyLines(folder),
       'ForwardAgent no',
     ]),
     // The agent forwarded for an account whose login shell sets TMPDIR to a folder of its own (the Alpine host's), and
@@ -822,37 +905,40 @@ export function harnessSshConfig(
         alias ?? '',
         user ?? '',
         port,
-        runFolder,
-        [...keyLines(runFolder), `ForwardAgent ${agentSocket}`],
-        agentSocket,
+        folder,
+        [...keyLines(folder), `ForwardAgent ${agent}`],
+        agent,
       ),
     ),
-    ...accountAlias('x11fwd', 'harness', port, runFolder, [
-      ...keyLines(runFolder),
+    ...accountAlias('x11fwd', 'harness', port, folder, [
+      ...keyLines(folder),
       'ForwardX11 yes',
       'ForwardX11Trusted yes',
     ]),
-    // The same without the trusted request, so the server's X11 extensions are the untrusted client's.
-    ...accountAlias('x11-untrusted', 'harness', port, runFolder, [
-      ...keyLines(runFolder),
+    // The same without the trusted request, so the server's X11 extensions are the untrusted client's. The trusted
+    // request is refused in so many words: Debian's and Ubuntu's OpenSSH make `ForwardX11 yes` alone trusted.
+    ...accountAlias('x11-untrusted', 'harness', port, folder, [
+      ...keyLines(folder),
       'ForwardX11 yes',
+      'ForwardX11Trusted no',
     ]),
     // Untrusted forwarding whose cookie expires after a minute.
-    ...accountAlias('x11-timeout', 'harness', port, runFolder, [
-      ...keyLines(runFolder),
+    ...accountAlias('x11-timeout', 'harness', port, folder, [
+      ...keyLines(folder),
       'ForwardX11 yes',
       'ForwardX11Trusted no',
       'ForwardX11Timeout 60s',
     ]),
     // A client that cannot find its xauth, so ssh forwards nothing.
-    ...accountAlias('x11-noauth', 'harness', port, runFolder, [
-      ...keyLines(runFolder),
+    ...accountAlias('x11-noauth', 'harness', port, folder, [
+      ...keyLines(folder),
       'ForwardX11 yes',
+      'ForwardX11Trusted no',
       'XAuthLocation /nonexistent/xauth',
     ]),
     // ForwardX11 given only in a Match block that applies to the alias.
-    ...accountAlias('x11-match', 'harness', port, runFolder, [
-      ...keyLines(runFolder),
+    ...accountAlias('x11-match', 'harness', port, folder, [
+      ...keyLines(folder),
       'Match originalhost x11-match',
       'ForwardX11 yes',
       'ForwardX11Trusted yes',
@@ -861,11 +947,11 @@ export function harnessSshConfig(
     '  HostName 127.0.0.1',
     `  Port ${String(port)}`,
     '  User harness',
-    `  IdentityFile ${path.join(runFolder, 'id_unauthorised')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_unauthorised')}`,
     '  IdentitiesOnly yes',
     '  BatchMode yes',
     '  StrictHostKeyChecking accept-new',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts')}`,
     '',
     'Host blackhole',
     '  HostName 192.0.2.1',
@@ -875,9 +961,9 @@ export function harnessSshConfig(
     '  HostName 127.0.0.1',
     '  BatchMode yes',
     '  IdentitiesOnly yes',
-    `  IdentityFile ${path.join(runFolder, 'id_unauthorised')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_unauthorised')}`,
     '  StrictHostKeyChecking accept-new',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts')}`,
     '',
   ].join('\n');
 }
@@ -903,13 +989,13 @@ function keyAlias(
     `  User ${user}`,
     ...keyFiles.map(
       file =>
-        `  IdentityFile ${file.startsWith('/') ? file : path.join(runFolder, file)}`,
+        `  IdentityFile ${file.startsWith('/') ? file : path.posix.join(runFolder, file)}`,
     ),
     `  IdentitiesOnly ${identitiesOnly ? 'yes' : 'no'}`,
     ...further.map(line => `  ${line}`),
     '  StrictHostKeyChecking accept-new',
     '  ConnectTimeout 10',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,
+    `  UserKnownHostsFile ${path.posix.join(runFolder, 'known_hosts')}`,
     '',
   ];
 }
@@ -930,7 +1016,7 @@ const KBD_LINES = [
 /** The lines of an alias that logs in with the run's key and never prompts. */
 function keyLines(runFolder: string): string[] {
   return [
-    `IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    `IdentityFile ${path.posix.join(runFolder, 'id_ed25519')}`,
     'IdentitiesOnly yes',
     'BatchMode yes',
   ];
@@ -993,7 +1079,7 @@ function accountAlias(
     `  IdentityAgent ${identityAgent}`,
     '  StrictHostKeyChecking accept-new',
     '  ConnectTimeout 10',
-    `  UserKnownHostsFile ${path.join(runFolder, `known_hosts_${alias}`)}`,
+    `  UserKnownHostsFile ${path.posix.join(runFolder, `known_hosts_${alias}`)}`,
     ...further.map(line => `  ${line}`),
     '',
   ];
@@ -1019,6 +1105,22 @@ export function packagedExtensions(
     .map(entry => path.join(folder, entry.name));
 }
 
+/** The kernel's ephemeral port range as Linux prints it, read once per run; none where the machine has no such file. */
+let ephemeralRangeText: {value: string | undefined} | undefined = undefined;
+
+/** The text of `/proc/sys/net/ipv4/ip_local_port_range`, or undefined on a machine without it. */
+function kernelEphemeralRange(): string | undefined {
+  ephemeralRangeText ??= {
+    value: existsSync(EPHEMERAL_RANGE_FILE)
+      ? readFileSync(EPHEMERAL_RANGE_FILE, 'utf8')
+      : undefined,
+  };
+  return ephemeralRangeText.value;
+}
+
+/** The file where Linux keeps the range of the ports it gives to outgoing connections. */
+const EPHEMERAL_RANGE_FILE = '/proc/sys/net/ipv4/ip_local_port_range';
+
 /**
  * The editor's user settings of a launch, in its user-data folder: the extensions under test read the harness's
  * ssh_config, and `extra` is the launch's own settings. With a launch, the same bytes go to
@@ -1031,7 +1133,17 @@ export function writeUserSettings(
   configFile: string,
   extra: Readonly<Record<string, unknown>> = {},
   launch?: Launch,
+  ephemeral: string | undefined = kernelEphemeralRange(),
 ): void {
+  // Only the harness's own range is checked: a launch that sets a range of its own does it to test the setting.
+  const problem =
+    extra[WINDOW_PORT_RANGE_SETTING] === WINDOW_PORT_RANGE &&
+    ephemeral !== undefined
+      ? windowPortRangeProblem(WINDOW_PORT_RANGE, ephemeral)
+      : undefined;
+  if (problem !== undefined) {
+    throw new Error(`${launch?.label ?? 'the run'}: ${problem}`);
+  }
   const tail = launch?.settingsTail;
   const written = JSON.stringify(
     {'remote.SSH.configFile': configFile, ...extra},
@@ -1139,6 +1251,12 @@ async function prepare(
   genuineVersion: string,
 ): Promise<HarnessVariables> {
   const {command} = dependencies;
+  function step<Value>(
+    name: string,
+    work: () => Promise<Value> | Value,
+  ): Promise<Value> {
+    return timedStep(name, PREPARE_STEP_MILLISECONDS, work);
+  }
   const runId = acceptanceRunId(process.env, process.pid);
   const podman = chosen.some(launch => launch.engine === 'podman');
   if (podman) {
@@ -1146,11 +1264,14 @@ async function prepare(
   }
   const downloads =
     editor === 'vscodium'
-      ? await dependencies.startDownloads(
-          root,
-          runFolder,
-          chosen.some(launch => launch.earlierServerArchive === true),
-          chosen.some(startsCliEditor),
+      ? await step('the download servers', () =>
+          dependencies.startDownloads(
+            root,
+            runFolder,
+            chosen.some(launch => launch.earlierServerArchive === true),
+            chosen.some(startsPinnedCliEditor),
+            chosen.some(startsStandInCliEditor),
+          ),
         )
       : undefined;
   if (downloads !== undefined) {
@@ -1183,8 +1304,11 @@ async function prepare(
       controlFolderOf(runFolder),
     ),
   );
+  if (chosen.some(launch => launch.windowsHost === true)) {
+    appendFileSync(configFile, await dependencies.windowsHostBlock(runFolder));
+  }
   writeUserSettings(runFolder, configFile);
-  await waitForHost(dependencies, configFile);
+  await step('the host answering', () => waitForHost(dependencies, configFile));
   // A launch whose window connects to a host of another base gets that host beside the run's, one per base, with the
   // same key and password, the same download names and its own ssh_config.
   const baseHosts: Partial<Record<HostBase, string>> = {};
@@ -1217,11 +1341,17 @@ async function prepare(
         controlFolderOf(runFolder),
       ),
     );
-    await waitForHost(dependencies, baseConfig);
+    await step(`the ${base} host answering`, () =>
+      waitForHost(dependencies, baseConfig),
+    );
   }
-  await dependencies.bundleSuite(root);
+  await step('the suite bundle', () => dependencies.bundleSuite(root));
   const vscodium =
-    editor === 'vscodium' ? await dependencies.vscodiumExecutable() : undefined;
+    editor === 'vscodium'
+      ? await step('the VSCodium executable', () =>
+          dependencies.vscodiumExecutable(),
+        )
+      : undefined;
   const cliEditor =
     vscodium === undefined ||
     downloads === undefined ||
@@ -1230,14 +1360,27 @@ async function prepare(
       : dependencies.cliEditor(
           vscodium,
           runFolder,
-          `${downloads.variables.HARNESS_DOWNLOADS_HTTP ?? ''}${CLI_TEMPLATE_PATH}`,
+          `${cliBaseOf(downloads.variables, chosen)}${CLI_TEMPLATE_PATH}`,
         );
+  const nameProblem =
+    cliEditor === undefined || !chosen.some(startsStandInCliEditor)
+      ? undefined
+      : standInNameProblem(cliEditor);
+  if (nameProblem !== undefined) {
+    throw new Error(nameProblem);
+  }
+  const clientCommit =
+    cliEditor === undefined ? undefined : commitOfEditor(cliEditor);
   const vsixFiles = packagedExtensions(root);
   if (
     editor === 'vscodium' &&
     launchesOf(root).some(launch => launch.kind === 'plain')
   ) {
-    vsixFiles.push(await dependencies.windowAgentVsix(root, runFolder));
+    vsixFiles.push(
+      await step('the window agent package', () =>
+        dependencies.windowAgentVsix(root, runFolder),
+      ),
+    );
   }
   // Every launch of the table gets its installs, chosen or not, so every language pack file has to exist.
   for (const launch of editor === 'vscodium' ? launchesOf(root) : []) {
@@ -1248,7 +1391,9 @@ async function prepare(
   const vscode = chosen.some(
     launch => launch.kind === 'plain' && launch.client === 'vscode',
   )
-    ? await dependencies.vscodeExecutable(genuineVersion)
+    ? await step('the VS Code executable', () =>
+        dependencies.vscodeExecutable(genuineVersion),
+      )
     : undefined;
   const installs = installsOf(
     root,
@@ -1267,7 +1412,9 @@ async function prepare(
     const editorCommands = {
       vscodium:
         vscodium === undefined
-          ? await dependencies.editorCli()
+          ? await step('the editor command line', () =>
+              dependencies.editorCli(),
+            )
           : vscodiumCliOf(vscodium),
       vscode:
         vscode === undefined
@@ -1278,14 +1425,24 @@ async function prepare(
     const stateBefore = process.env.XDG_STATE_HOME;
     process.env.XDG_STATE_HOME = stateFolderOf(runFolder, 'install');
     try {
-      for (const {folder, files, client} of installs) {
-        checked(command, editorCommands[client], [
-          `--extensions-dir=${folder}`,
-          `--user-data-dir=${userDataFolderOf(runFolder)}`,
-          `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
-          ...files.flatMap(file => ['--install-extension', file]),
-        ]);
-      }
+      await step(
+        `installing the extensions into ${String(installs.length)} folders`,
+        () => {
+          for (const {folder, files, client} of installs) {
+            checked(
+              command,
+              editorCommands[client],
+              [
+                `--extensions-dir=${folder}`,
+                `--user-data-dir=${userDataFolderOf(runFolder)}`,
+                `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
+                ...files.flatMap(file => ['--install-extension', file]),
+              ],
+              PREPARE_STEP_MILLISECONDS,
+            );
+          }
+        },
+      );
     } finally {
       if (stateBefore === undefined) {
         delete process.env.XDG_STATE_HOME;
@@ -1299,8 +1456,11 @@ async function prepare(
     if (launch.kind === 'plain' && launch.languagePack !== undefined) {
       registerLanguagePack(runFolder, launch, launch.languagePack);
     }
-    if (launch.kind === 'plain' && launch.standIns !== undefined) {
-      writeStandIns(runFolder, launch, standInEngines(root, launch));
+    if (
+      launch.kind === 'plain' &&
+      (launch.standIns !== undefined || launch.codeStandIns !== undefined)
+    ) {
+      writeStandIns(runFolder, launch, standInEngines(root, launch), root);
     }
   }
   const devContainerImage = launches.some(needsDevContainerImage)
@@ -1309,18 +1469,31 @@ async function prepare(
   const registry = chosen.some(
     launch => launch.registry === true || launch.templates === true,
   )
-    ? await dependencies.startRegistry(runId)
+    ? await step('the registry', () => dependencies.startRegistry(runId))
     : undefined;
   if (registry !== undefined) {
     stops.push(() => registry.stop());
   }
+  const wslDistros = chosen.some(launch => launch.wslDistros === true)
+    ? await step('the WSL distributions', () =>
+        dependencies.prepareWslDistros(runId, runFolder),
+      )
+    : undefined;
+  if (wslDistros !== undefined) {
+    stops.push(() => wslDistros.unregister());
+  }
+  const sshClient = chosen.some(launch => launch.sshClient === 'pinned')
+    ? dependencies.pinnedSshClient()
+    : undefined;
   const templateRegistry =
     registry !== undefined && chosen.some(launch => launch.templates === true)
-      ? await dependencies.prepareTemplates(
-          root,
-          runFolder,
-          registry.address,
-          devContainerImage,
+      ? await step('the templates', () =>
+          dependencies.prepareTemplates(
+            root,
+            runFolder,
+            registry.address,
+            devContainerImage,
+          ),
         )
       : undefined;
   const templateIndex = downloads?.variables.HARNESS_DOWNLOADS_LOCAL;
@@ -1344,6 +1517,10 @@ async function prepare(
     ...(podman ? {HARNESS_ENGINE: 'podman' as const} : {}),
     ...(engineImage === undefined ? {} : {HARNESS_ENGINE_IMAGE: engineImage}),
     ...(registry === undefined ? {} : {HARNESS_REGISTRY: registry.address}),
+    ...(wslDistros === undefined
+      ? {}
+      : {HARNESS_WSL_DISTROS: JSON.stringify(wslDistros.distros)}),
+    ...(sshClient === undefined ? {} : {HARNESS_SSH_CLIENT: sshClient}),
     ...(templateRegistry === undefined || templateIndex === undefined
       ? {}
       : {
@@ -1359,10 +1536,14 @@ async function prepare(
     HARNESS_VSIX_FILES: vsixFiles.join(path.delimiter),
     HARNESS_EDITOR: editor,
     REMOTE_OSS_ACCEPTANCE_LOG: path.join(runFolder, 'log.txt'),
+    ...engineHostVariable(process.env),
     ...(vscodium === undefined ? {} : {HARNESS_VSCODIUM_EXECUTABLE: vscodium}),
     ...(cliEditor === undefined
       ? {}
       : {HARNESS_CLI_EDITOR_EXECUTABLE: cliEditor}),
+    ...(clientCommit === undefined
+      ? {}
+      : {HARNESS_CLIENT_COMMIT: clientCommit}),
     HARNESS_EDITOR_VERSION: EDITOR_VERSION,
     ...(vscode === undefined
       ? {}
@@ -1379,6 +1560,14 @@ async function prepare(
           HARNESS_PASSPHRASE_FILE: keys.passphraseFile,
         }),
   };
+}
+
+/** The variable that names the run's own engine, from the `DOCKER_HOST` the run started with; none when it has none. */
+export function engineHostVariable(environment: NodeJS.ProcessEnv): {
+  HARNESS_ENGINE_HOST?: string;
+} {
+  const host = environment.DOCKER_HOST;
+  return host === undefined || host === '' ? {} : {HARNESS_ENGINE_HOST: host};
 }
 
 /**
@@ -1457,9 +1646,12 @@ function runHostSetup(
       entry.command,
     ]);
     if (result.status !== 0) {
-      throw new Error(
-        `host setup failed: ${entry.command}\n${result.stderr.trim()}`,
-      );
+      // What the command printed on either stream: its own account of what it found, as portFreeCommand's is.
+      const output = [result.stdout, result.stderr]
+        .map(text => text.trim())
+        .filter(text => text !== '')
+        .join('\n');
+      throw new Error(`host setup failed: ${entry.command}\n${output}`);
     }
   }
 }
@@ -1469,7 +1661,7 @@ function runHostSetup(
  * each attempt of a VSCodium launch finds the run's base settings plus the launch's own, so none inherits another's.
  * A launch with host setup runs it on its own host before each attempt (the harness host, or the host of its
  * `hostBase` in `baseContainers`), and waits the helper's grace after the launch before it, so its resolve finds no
- * live helper of the run.
+ * live helper of the run. A launch whose rows fail is followed in the report by its failureReport.
  */
 export async function runLaunches(
   runFolder: string,
@@ -1487,6 +1679,7 @@ export async function runLaunches(
   },
   lock: LaunchLock = NO_LOCK,
   baseContainers: Readonly<Partial<Record<HostBase, string>>> = {},
+  judge: (exitCode: number, launch: Launch) => number = exitCode => exitCode,
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   // The harness host starts with the update service's name pinned to the download host.
@@ -1508,7 +1701,21 @@ export async function runLaunches(
       await lock.take();
     }
     try {
-      exitCodes.push(await runAttempts(launch));
+      const exitCode = await runAttempts(launch);
+      const judged = launch === undefined ? exitCode : judge(exitCode, launch);
+      exitCodes.push(judged);
+      if (judged !== 0 && launch !== undefined) {
+        for (const line of failureReport(
+          runFolder,
+          launch.label,
+          launch.hostBase === undefined
+            ? container
+            : baseContainers[launch.hostBase],
+          command,
+        )) {
+          report(line);
+        }
+      }
     } finally {
       if (locked) {
         lock.release();
@@ -1580,6 +1787,91 @@ export async function runLaunches(
 }
 
 /**
+ * What a failed launch reads of its host in one call: its listeners and processes, then the install folder of the
+ * server (`bin/<commit>`) of every account, each entry with the time it was last changed in seconds since the epoch next
+ * to the time now, so that a server that was removed and one that was never installed read differently, and how old the
+ * install in progress is.
+ */
+export const HOST_STATE_COMMAND =
+  'netstat -ltn 2>&1; ps -o pid,user,args 2>&1; echo "the servers\' install folders, seconds since the epoch now: $(date +%s)"; for folder in /home/*/.*server*/bin; do [ -d "$folder" ] && echo "$folder" && { ls -la --time-style=+%s "$folder" 2>&1 || ls -la "$folder" 2>&1; }; done; true';
+
+/** How many of the last lines of a failed launch's logs the run prints. */
+export const FAILURE_LOG_LINES = 150;
+
+/** The lines of `text` without an empty one at the end, of which the last FAILURE_LOG_LINES, each indented. */
+function tailOf(text: string): {lines: string[]; count: number} {
+  const all = text.split('\n').filter(line => line !== '');
+  return {
+    lines: all.slice(-FAILURE_LOG_LINES).map(line => `  ${line}`),
+    count: all.length,
+  };
+}
+
+/** The output of one command, its standard output and error, indented; what failed when it could not run. */
+function stateOf(
+  command: CommandRunner,
+  program: string,
+  programArguments: readonly string[],
+): string[] {
+  const result = command(program, programArguments);
+  const text = `${result.stdout}${result.stderr}`;
+  return [
+    ...(result.status === 0 ? [] : [`  (exit ${String(result.status)})`]),
+    ...tailOf(text).lines,
+  ];
+}
+
+/**
+ * What a launch whose rows failed leaves for the job's log, so that a connect the resolver gave up on can be read
+ * there: the last lines of the log its extensions wrote (the Remote - SSH channel, and the Dev Containers one when
+ * there is one), then its host's listeners, processes and server install folders and the last lines of the host's sshd log.
+ */
+export function failureReport(
+  runFolder: string,
+  label: string,
+  hostContainer: string | undefined,
+  command: CommandRunner,
+): string[] {
+  const files = launchFiles(runFolder, label);
+  const logs = [files.logFile, files.containersLogFile].flatMap(file => {
+    if (!existsSync(file)) {
+      return [];
+    }
+    const {lines, count} = tailOf(readFileSync(file, 'utf8'));
+    return [
+      `acceptance: ${label} failed: the last ${String(lines.length)} of the ${String(count)} lines of ${path.basename(file)}`,
+      ...lines,
+    ];
+  });
+  const host =
+    hostContainer === undefined || hostContainer === ''
+      ? [`acceptance: ${label} failed: no host container to read`]
+      : [
+          `acceptance: ${label} failed: its host's listeners, processes and server install folders`,
+          ...stateOf(command, 'docker', [
+            'exec',
+            hostContainer,
+            'sh',
+            '-c',
+            HOST_STATE_COMMAND,
+          ]),
+          `acceptance: ${label} failed: the last lines of its host's sshd log`,
+          ...stateOf(command, 'docker', [
+            'logs',
+            '--tail',
+            '30',
+            hostContainer,
+          ]),
+        ];
+  return [
+    ...(logs.length === 0
+      ? [`acceptance: ${label} failed: its extensions wrote no log`]
+      : logs),
+    ...host,
+  ];
+}
+
+/**
  * Notes, for a launch, how many requests the download host had logged when it began, in
  * `<run folder>/<label>-requests-start`, so that its rows read only the requests of their own case. A run without a
  * download host notes nothing.
@@ -1632,6 +1924,11 @@ export async function runAcceptance(
       return 0;
     }
   }
+  const conflict = cliTemplateConflict(chosen);
+  if (conflict !== undefined) {
+    console.error(`acceptance: ${conflict}`);
+    return 2;
+  }
   const genuine = genuineVersionIn(process.env);
   if (typeof genuine === 'object') {
     console.error(`acceptance: ${genuine.problem}`);
@@ -1654,7 +1951,9 @@ export async function runAcceptance(
   }
   const runId = acceptanceRunId(process.env, process.pid);
   // The run id in the name lets the clean-up find the editor of a run that was killed.
-  const runFolder = mkdtempSync(path.join(tmpdir(), `acceptance-${runId}-`));
+  const runFolder = mkdtempSync(
+    path.join(runFolderBase(), `acceptance-${runId}-`),
+  );
   const started: string[] = [];
   const stops: Array<() => Promise<void>> = [];
   const startedSeconds = Date.now() / 1000;
@@ -1757,6 +2056,7 @@ export async function runAcceptance(
           },
         ),
         baseContainersOf({...variables}),
+        knownRedsJudge(root, runFolder, process.env),
       )),
     );
     exitCode = exitCodes.find(code => code !== 0) ?? 0;
@@ -1792,7 +2092,14 @@ export async function runAcceptance(
         exitCode = exitCode === 0 ? 1 : exitCode;
       }
     }
-    rmSync(runFolder, {recursive: true, force: true});
+    // On a Windows client a file of the run folder can be held for a moment after its last user ends (a container's
+    // bind through WSL letting go), and rmSync then fails with EPERM or EBUSY at once unless it may try again.
+    rmSync(runFolder, {
+      recursive: true,
+      force: true,
+      maxRetries: RUN_FOLDER_REMOVE_RETRIES,
+      retryDelay: RUN_FOLDER_REMOVE_DELAY_MILLISECONDS,
+    });
     removeBundles(root);
   }
   return exitCode;
@@ -1906,7 +2213,14 @@ export function vscodiumConfiguration(
   };
   return {
     label: launch.label,
-    useInstallation: {fromPath: executable},
+    // A launch of a case with a stand-in CLI starts the run's CLI-source copy; the run makes the copy only when it chose
+    // such a launch, and the configuration of one it did not choose is never started.
+    useInstallation: {
+      fromPath:
+        launch.cliStandIn === true
+          ? (environment.HARNESS_CLI_EDITOR_EXECUTABLE ?? executable)
+          : executable,
+    },
     extensionDevelopmentPath:
       launch.extraExtensions === undefined
         ? runner
@@ -2039,9 +2353,9 @@ async function editorCli(): Promise<string> {
   );
 }
 
-/** The VS Code executable at the version under test, downloaded when it is missing, with one retry. */
+/** The VS Code executable at the version under test, downloaded when it is missing, with retries. */
 async function vscodeExecutable(version: string): Promise<string> {
-  return await withOneRetry(
+  return await withRetries(
     () => downloadAndUnzipVSCode(version),
     delay,
     console.log.bind(console),
@@ -2054,9 +2368,28 @@ export interface VscodiumTransfer {
   unpack: (archive: Uint8Array, folder: string) => void;
 }
 
-/** The command-line wrapper beside the VSCodium executable; the editor itself, started through it, does not run tests. */
-function vscodiumCliOf(executable: string): string {
-  return path.join(path.dirname(executable), 'bin', 'codium-insiders');
+/**
+ * Where a VSCodium build's command-line wrapper is, from its executable's folder, by the client's platform, as the
+ * pinned release's archives lay it out: `bin/codium-insiders` beside the executable on Linux, the batch file
+ * `bin\codium-insiders.cmd` on Windows (its extensionless sibling is a shell script), and the bundle's
+ * `Contents/Resources/app/bin` on macOS.
+ */
+const VSCODIUM_CLI_PATHS: Readonly<
+  Partial<Record<NodeJS.Platform, readonly string[]>>
+> = {
+  darwin: ['..', 'Resources', 'app', 'bin', 'codium-insiders'],
+  win32: ['bin', 'codium-insiders.cmd'],
+};
+
+/** The command-line wrapper of the VSCodium executable; the editor itself, started through it, does not run tests. */
+export function vscodiumCliOf(
+  executable: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  return path.join(
+    path.dirname(executable),
+    ...(VSCODIUM_CLI_PATHS[platform] ?? ['bin', 'codium-insiders']),
+  );
 }
 
 /**
@@ -2072,24 +2405,24 @@ export async function vscodiumExecutableOf(
   checksums: Readonly<Record<string, string>> = VSCODIUM_RELEASE.sha256,
 ): Promise<string> {
   const key = `${platform}-${architecture}`;
+  const build = VSCODIUM_PLATFORMS[key];
+  if (build === undefined) {
+    throw new Error(`no VSCodium build is pinned for ${key}`);
+  }
   const folder = path.join(
     root,
     '.vscode-test',
     `vscodium-${VSCODIUM_RELEASE.tagName}-${key}`,
   );
-  const executable = path.join(folder, 'codium-insiders');
+  const executable = path.join(folder, build.executable);
   if (existsSync(executable)) {
     return executable;
   }
   const expected = checksums[key];
   if (expected === undefined) {
-    throw new Error(
-      `no VSCodium build is pinned for ${platform}-${architecture}`,
-    );
+    throw new Error(`no VSCodium build is pinned for ${key}`);
   }
-  const archive = await transfer.download(
-    `https://github.com/${VSCODIUM_RELEASE.repository}/releases/download/${VSCODIUM_RELEASE.tagName}/VSCodium-${key}-${VSCODIUM_RELEASE.tagName}.tar.gz`,
-  );
+  const archive = await transfer.download(releaseAssetUrlOf(build.asset));
   if (createHash('sha256').update(archive).digest('hex') !== expected) {
     throw new Error('the VSCodium download does not match its checksum');
   }
@@ -2133,8 +2466,13 @@ export async function runWithRetry(
   return second.exitCode;
 }
 
-/** How long the harness waits before its one retry of a step that failed, in milliseconds. */
-export const RETRY_PAUSE_MILLISECONDS = 5000;
+/**
+ * The pauses, in milliseconds, before each retry of a download that failed: four tries in all, the pauses growing, so
+ * that a burst of the release network's errors (504s that last a minute) passes before the last try.
+ */
+export const DOWNLOAD_PAUSES_MILLISECONDS: readonly number[] = [
+  5000, 15_000, 45_000,
+];
 
 /**
  * The text of a failure for the harness's line: an Error's message; when that is empty, its cause's text; when it
@@ -2166,24 +2504,35 @@ export function failureText(caught: unknown): string {
 }
 
 /**
- * Runs `step`; when it throws, reports the failure through `report`, waits `RETRY_PAUSE_MILLISECONDS`, and runs
- * it once more. The second attempt's result or error is the outcome.
+ * Runs `step`; each time it throws while a pause of `pauses` is left, reports the failure through `report`, waits that
+ * pause and runs it again. When the last try throws too, it rejects with every try's error, in order (`errors` holds
+ * the ones before).
  */
-export async function withOneRetry<Value>(
+export async function withRetries<Value>(
   step: () => Promise<Value>,
   sleep: (milliseconds: number) => Promise<void>,
   report: (line: string) => void,
+  pauses: readonly number[] = DOWNLOAD_PAUSES_MILLISECONDS,
+  errors: readonly string[] = [],
 ): Promise<Value> {
   try {
     return await step();
   } catch (error) {
+    const failed = [...errors, failureText(error)];
+    const [pause, ...later] = pauses;
+    if (pause === undefined) {
+      throw new Error(
+        failed
+          .map((text, index) => `try ${String(index + 1)}: ${text}`)
+          .join('; '),
+        {cause: error},
+      );
+    }
     report(
-      `acceptance: ${failureText(error)}; retrying once in ${String(
-        RETRY_PAUSE_MILLISECONDS / 1000,
-      )} s`,
+      `acceptance: ${failureText(error)}; try ${String(failed.length + 1)} in ${String(pause / 1000)} s`,
     );
-    await sleep(RETRY_PAUSE_MILLISECONDS);
-    return await step();
+    await sleep(pause);
+    return await withRetries(step, sleep, report, later, failed);
   }
 }
 
@@ -2351,9 +2700,56 @@ export function runTestCli(
   );
 }
 
+/**
+ * Why a selection cannot run, when it names a launch with real CLI archives and a launch with a stand-in CLI: the
+ * CLI-source copy has one template, which the host's downloader and the client reach by different bases. Nothing when it
+ * names at most one of them.
+ */
+function cliTemplateConflict(chosen: readonly Launch[]): string | undefined {
+  const pinned = chosen.filter(startsPinnedCliEditor);
+  const standIn = chosen.filter(startsStandInCliEditor);
+  return pinned.length === 0 || standIn.length === 0
+    ? undefined
+    : `the run names a launch with real CLI archives (${pinned
+        .map(launch => launch.label)
+        .join(', ')}) and one with a stand-in CLI (${standIn
+        .map(launch => launch.label)
+        .join(
+          ', ',
+        )}): the CLI-source copy has one template, so name them in separate runs`;
+}
+
+/**
+ * The download host's base that the CLI-source copy's template names: the host's own (`downloads`), where a chosen
+ * launch (`cli-path`) has the host's downloader fetch real CLI archives, else the client's loopback, where the client
+ * itself downloads the stand-in archive of a chosen install case, since the client cannot resolve `downloads`. A run
+ * that chooses both is refused at its selection (`cliTemplateConflict`).
+ */
+function cliBaseOf(
+  variables: Readonly<Record<string, string | undefined>>,
+  chosen: readonly Launch[],
+): string {
+  return (
+    (chosen.some(startsPinnedCliEditor)
+      ? variables.HARNESS_DOWNLOADS_HTTP
+      : (variables.HARNESS_DOWNLOADS_LOCAL ??
+        variables.HARNESS_DOWNLOADS_HTTP)) ?? ''
+  );
+}
+
+/** Whether a launch starts the run's CLI-source copy of VSCodium, which needs the CLI archives' token. */
+export function startsPinnedCliEditor(launch: Launch): boolean {
+  return launch.kind === 'plain' && launch.cliSource === true;
+}
+
+/** Whether a launch starts the run's CLI-source copy of VSCodium, against a stand-in CLI archive that needs no token. */
+function startsStandInCliEditor(launch: Launch): boolean {
+  return launch.kind === undefined && launch.cliStandIn === true;
+}
+
 /** Whether a launch starts the run's CLI-source copy of VSCodium. */
 function startsCliEditor(launch: Launch): boolean {
-  return launch.kind === 'plain' && launch.cliSource === true;
+  return startsPinnedCliEditor(launch) || startsStandInCliEditor(launch);
 }
 
 /**
@@ -2377,7 +2773,14 @@ export function editorExecutableOf(
 /** What a run prints when its arguments are not understood. */
 export const USAGE =
   'usage: node tools/acceptance.ts [--editor vscode|vscodium [--launches all|none|<entry>,...]], an entry being a ' +
-  'label, all, @<group> or !<label>|!@<group>';
+  'label, all, @<group>, !<label>|!@<group> or <label>:<file>[+<file>...]';
+
+/**
+ * An entry that names some test files of a plain launch, `<label>:<file>[+<file>...]`: the launch runs those files
+ * alone, a pull request's part of one test-only change.
+ */
+const FILES_ENTRY =
+  /^([a-z][a-z0-9-]*):([\w.-]+\.test\.ts(?:\+[\w.-]+\.test\.ts)*)$/;
 
 /** The launches one entry of a selection names: a label, `all`, or `@<group>`; none for an unknown name. */
 function launchesNamed(
@@ -2395,18 +2798,33 @@ function launchesNamed(
   }
   // A launch run in parts is named by the launch it is a part of.
   const named = launches.filter(
-    launch =>
-      launch.label === name ||
-      (launch.kind === 'plain' && launch.partOf === name),
+    launch => launch.label === name || launch.partOf === name,
   );
   return named.length === 0 ? undefined : named;
 }
 
 /**
+ * The plain launches `label` names that run `file`: the launch of that label, or the parts of the launch of that name,
+ * whose own files list it, or that run every file of their suite.
+ */
+function launchesRunning(
+  launches: readonly Launch[],
+  label: string,
+  file: string,
+): Launch[] {
+  return (launchesNamed(launches, label) ?? []).filter(
+    launch =>
+      launch.kind === 'plain' &&
+      (launch.files === undefined || launch.files.includes(file)),
+  );
+}
+
+/**
  * The launches a run makes, in the run's order: every one that is not `namedOnly` when `selected` is undefined, else
  * what its entries name, each in turn. An entry is a label, `all`, or `@<group>` (every launch of the group, a
- * `namedOnly` one included), and `!` before one takes out what the entries before it put in. An entry that names
- * nothing known gives an error text naming the known labels and groups.
+ * `namedOnly` one included), and `!` before one takes out what the entries before it put in. `<label>:<file>+…` makes
+ * the plain launch that runs those files with only them, in its own order, unless an entry names the whole launch. An
+ * entry that names nothing known gives an error text naming the known labels and groups.
  */
 export function chosenLaunches(
   launches: readonly Launch[],
@@ -2416,8 +2834,28 @@ export function chosenLaunches(
     return launches.filter(launch => launch.namedOnly !== true);
   }
   const chosen = new Set<Launch>();
+  const someFiles = new Map<Launch, Set<string>>();
   const unknown: string[] = [];
   for (const entry of selected) {
+    const filesEntry = FILES_ENTRY.exec(entry);
+    if (filesEntry !== null) {
+      const [, label, names] = filesEntry;
+      const running = String(names)
+        .split('+')
+        .map(
+          file =>
+            [file, launchesRunning(launches, String(label), file)] as const,
+        );
+      if (running.some(([, found]) => found.length === 0)) {
+        unknown.push(entry);
+      }
+      for (const [file, found] of running) {
+        for (const launch of found) {
+          someFiles.set(launch, (someFiles.get(launch) ?? new Set()).add(file));
+        }
+      }
+      continue;
+    }
     const removing = entry.startsWith('!');
     const name = removing ? entry.slice(1) : entry;
     const named = launchesNamed(launches, name);
@@ -2438,7 +2876,20 @@ export function chosenLaunches(
     const groups = LAUNCH_GROUPS.map(group => `@${group}`);
     return `unknown launch label(s): ${unknown.join(', ')}; the known ones: ${known.join(', ')}; the groups: ${groups.join(', ')}`;
   }
-  return launches.filter(launch => chosen.has(launch));
+  return launches.flatMap((launch): Launch[] => {
+    const files = someFiles.get(launch);
+    if (chosen.has(launch) || files === undefined || launch.kind !== 'plain') {
+      return chosen.has(launch) ? [launch] : [];
+    }
+    return [
+      {
+        ...launch,
+        files: (launch.files ?? [...files].sort()).filter(file =>
+          files.has(file),
+        ),
+      },
+    ];
+  });
 }
 
 /** The line a selected run prints: the launches it makes, with their groups, and the ones it skips. */
@@ -2516,15 +2967,31 @@ export function editorChoiceOf(
     : undefined;
 }
 
-/** Downloads `url` into memory through `fetcher`, with one retry. */
+/**
+ * The layer of a mirrored template from `ghcr.io` through `fetcher`, with the downloads' retries: a request the network
+ * drops, or one ghcr.io refuses, is tried again after each of their pauses before the run's preparation fails (#2927).
+ */
+export function retriedGhcrLayer(
+  fetcher: typeof fetch = fetch,
+  pause: Sleeper = delay,
+): LayerFetch {
+  return template =>
+    withRetries(
+      () => ghcrLayer(template, fetcher),
+      pause,
+      console.log.bind(console),
+    );
+}
+
+/** Downloads `url` into memory through `fetcher`, with retries. */
 export async function downloadWithRetry(
   url: string,
   fetcher: typeof fetch = fetch,
   pause: Sleeper = delay,
 ): Promise<Uint8Array> {
-  return withOneRetry(
+  return withRetries(
     async () => {
-      const response = await fetcher(url);
+      const response = await answerOf(fetcher, url);
       if (!response.ok) {
         throw new Error(`${url}: ${String(response.status)}`);
       }
@@ -2539,7 +3006,7 @@ export async function downloadWithRetry(
 const REDIRECTS: readonly number[] = [301, 302, 303, 307, 308];
 
 /**
- * Downloads a private release asset from its API `address` with `token`, with one retry. The API answers with a
+ * Downloads a private release asset from its API `address` with `token`, with retries. The API answers with a
  * redirect to a signed address, which is fetched without the token. With no token, the download fails and names the
  * variable that holds it.
  */
@@ -2554,9 +3021,9 @@ export async function privateAssetDownload(
       `${address}: the CLI archives need REMOTE_OSS_CLI_ARCHIVES_TOKEN, a token that may read ${CLI_ARCHIVES_REPOSITORY}`,
     );
   }
-  return withOneRetry(
+  return withRetries(
     async () => {
-      const answer = await fetcher(address, {
+      const answer = await answerOf(fetcher, address, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/octet-stream',
@@ -2564,9 +3031,15 @@ export async function privateAssetDownload(
         redirect: 'manual',
       });
       const signed = answer.headers.get('location');
+      // The signed address carries its own credential in its query, so a failure names the asset's address.
       const response =
         REDIRECTS.includes(answer.status) && signed !== null
-          ? await fetcher(signed)
+          ? await answerOf(
+              fetcher,
+              signed,
+              undefined,
+              `${address} (its signed address)`,
+            )
           : answer;
       if (!response.ok) {
         throw new Error(`${address}: ${String(response.status)}`);
@@ -2578,12 +3051,34 @@ export async function privateAssetDownload(
   );
 }
 
-/** Unpacks a gzipped tar archive into `folder`. */
+/** The kind of a release archive, by its first bytes: a gzip's `1f 8b` mark, or a zip (which the checksum has already proven to be the release's). */
+export function archiveKindOf(archive: Uint8Array): 'zip' | 'tar.gz' {
+  return archive.length >= 2 && archive[0] === 0x1f && archive[1] === 0x8b
+    ? 'tar.gz'
+    : 'zip';
+}
+
+/** The `tar` arguments that unpack `archiveFile` into `folder`: `-xzf` for a gzipped tar, `-xf` for a zip, whose `tar` is bsdtar on the platforms the zip arrives on. */
+export function tarArgsOf(
+  kind: 'zip' | 'tar.gz',
+  archiveFile: string,
+  folder: string,
+): string[] {
+  return kind === 'zip'
+    ? ['-xf', archiveFile, '-C', folder]
+    : ['-xzf', archiveFile, '-C', folder];
+}
+
+/** Unpacks a release archive into `folder`, by its kind: a gzipped tar or a zip, the platform's `tar` reading both where a zip arrives. */
 export function unpackArchive(archive: Uint8Array, folder: string): void {
   mkdirSync(folder, {recursive: true});
-  const archiveFile = path.join(folder, 'archive.tar.gz');
+  const kind = archiveKindOf(archive);
+  const archiveFile = path.join(
+    folder,
+    kind === 'zip' ? 'archive.zip' : 'archive.tar.gz',
+  );
   writeFileSync(archiveFile, archive);
-  checked(runCommand, 'tar', ['-xzf', archiveFile, '-C', folder]);
+  checked(runCommand, 'tar', tarArgsOf(kind, archiveFile, folder));
   rmSync(archiveFile);
 }
 
@@ -2620,6 +3115,28 @@ if (isMainModule(import.meta.url)) {
         windowAgentVsix: packageWindowAgent,
         languagePackVsix: packageLanguagePack,
         startAgent: startRunAgent,
+        prepareWslDistros: (runId, runFolder) =>
+          prepareRunDistros(
+            runCommand,
+            process.platform,
+            runFolder,
+            runId,
+            MINIROOTFS,
+            url => downloadWithRetry(url),
+            console.error.bind(console),
+          ),
+        windowsHostBlock: runFolder =>
+          windowsHostBlock(
+            process.env,
+            process.platform,
+            path.join(runFolder, 'known_hosts'),
+          ),
+        pinnedSshClient: () =>
+          pinnedSshClient(
+            runCommand,
+            REPOSITORY_ROOT,
+            console.error.bind(console),
+          ),
         startRegistry: runId =>
           startRunRegistry(runCommand, SYSTEM_CLOCK, runId),
         prepareTemplates: (root, runFolder, address, devContainerImage) =>
@@ -2628,11 +3145,11 @@ if (isMainModule(import.meta.url)) {
             root,
             runFolder,
             address,
-            ghcrLayer,
+            retriedGhcrLayer(),
             undefined,
             devContainerImage,
           ),
-        startDownloads: (root, runFolder, earlier, cliArchives) =>
+        startDownloads: (root, runFolder, earlier, cliArchives, cliStandIn) =>
           startRunDownloads(
             runCommand,
             downloadWithRetry,
@@ -2651,6 +3168,8 @@ if (isMainModule(import.meta.url)) {
                     ),
                 }
               : undefined,
+            undefined,
+            cliStandIn,
           ),
         runPlain: (root, variables, launch) =>
           runPlainLaunch(
@@ -2677,5 +3196,7 @@ if (isMainModule(import.meta.url)) {
       parsed.editor,
       parsed.launches,
     );
+    // A step that outlived its limit leaves its work running, which would hold the process to the job's own limit.
+    endAfterGrace();
   }
 }

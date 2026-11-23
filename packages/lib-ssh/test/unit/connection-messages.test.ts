@@ -16,10 +16,15 @@ const RECORD: SharedRecord = {
 describe('connection requests (contracts §4 S9)', () => {
   it('reads the requests that carry nothing', () => {
     deepStrictEqual(
-      ['connect', 'sharedRecord', 'kill'].map(type =>
+      ['connect', 'sharedRecord', 'kill', 'checkSession'].map(type =>
         readConnectionRequest({type}),
       ),
-      [{type: 'connect'}, {type: 'sharedRecord'}, {type: 'kill'}],
+      [
+        {type: 'connect'},
+        {type: 'sharedRecord'},
+        {type: 'kill'},
+        {type: 'checkSession'},
+      ],
     );
   });
 
@@ -71,6 +76,23 @@ describe('connection requests (contracts §4 S9)', () => {
         undefined,
         undefined,
         {type: 'refused', reason: 'notOwner'},
+        undefined,
+      ],
+    );
+  });
+
+  it('F-2505 AC-25: reads the answer of a session check, and nothing from one without its flag', () => {
+    deepStrictEqual(
+      [
+        readConnectionReply({type: 'sessionChecked', alive: true}),
+        readConnectionReply({type: 'sessionChecked', alive: false}),
+        readConnectionReply({type: 'sessionChecked'}),
+        readConnectionReply({type: 'sessionChecked', alive: 'yes'}),
+      ],
+      [
+        {type: 'sessionChecked', alive: true},
+        {type: 'sessionChecked', alive: false},
+        undefined,
         undefined,
       ],
     );
@@ -185,6 +207,48 @@ describe('connection requests (contracts §4 S9)', () => {
     deepStrictEqual(
       bodies.map(body => readConnectionRequest(body)),
       bodies,
+    );
+  });
+
+  it('F-2408 BR-4: reads the session lock of a script, open or release, and none when there is none', () => {
+    const complete = {
+      type: 'runScript',
+      runId: 1,
+      script: 'x',
+      environment: {},
+      inputBase64: null,
+      deadlineMilliseconds: 1000,
+    };
+    const bodies = [
+      {...complete, sessionLock: {path: '/tmp/lock', action: 'open'}},
+      {...complete, sessionLock: {path: '/tmp/lock', action: 'release'}},
+      complete,
+    ];
+    deepStrictEqual(
+      bodies.map(body => readConnectionRequest(body)),
+      bodies,
+    );
+  });
+
+  it('F-2408 BR-4: reads nothing from a script request whose session lock has no path, another action, or is not an object', () => {
+    const complete = {
+      type: 'runScript',
+      runId: 1,
+      script: 'x',
+      environment: {},
+      inputBase64: null,
+      deadlineMilliseconds: 1000,
+    };
+    deepStrictEqual(
+      [
+        {path: '', action: 'open'},
+        {path: '/tmp/lock', action: 'take'},
+        {path: 5, action: 'open'},
+        {action: 'open'},
+        'open',
+        null,
+      ].map(sessionLock => readConnectionRequest({...complete, sessionLock})),
+      [undefined, undefined, undefined, undefined, undefined, undefined],
     );
   });
 

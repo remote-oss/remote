@@ -55,7 +55,11 @@ export interface ConfigWatchPorts {
 /** The watch of a window's configuration. */
 export interface ConfigWatch {
   /** A connection the window now holds: an activation (initial connect, reload or reconnect). */
-  activate(connection: {configFile: string; created: boolean}): Promise<void>;
+  activate(connection: {
+    configFile: string;
+    created: boolean;
+    serviceDockerfile?: string;
+  }): Promise<void>;
   /** The window holds no connection: no evaluation runs until the next activate. */
   pause(): void;
   dispose(): void;
@@ -64,6 +68,8 @@ export interface ConfigWatch {
 /** What one activation keeps. */
 interface Session {
   configFile: string;
+  /** The Dockerfile the primary service of a Compose configuration builds from. */
+  serviceDockerfile: string | undefined;
   /** The combinations of files already told in this activation. */
   shown: Set<string>;
   /** The fingerprints of the Dockerfiles, taken once per activation. */
@@ -110,6 +116,7 @@ export function configWatchOf(ports: ConfigWatchPorts): ConfigWatch {
     const watched = watchedFilesOf(
       parseConfiguration(decodeConfiguration(bytes)),
       active.configFile,
+      active.serviceDockerfile,
     );
     const current = new Map<string, string>();
     for (const [identifier, file] of watched) {
@@ -294,10 +301,11 @@ export function configWatchOf(ports: ConfigWatchPorts): ConfigWatch {
   }
 
   return {
-    activate({configFile, created}) {
+    activate({configFile, created, serviceDockerfile}) {
       end(session);
       const active: Session = {
         configFile,
+        serviceDockerfile,
         shown: new Set(),
         dockerfiles: new Map(),
         polled: undefined,

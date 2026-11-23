@@ -60,9 +60,12 @@ function packageFile(name: string): unknown {
   );
 }
 
+/** The commands that are contributed and registered only once the Dev Containers view has loaded, which needs the proposed API. */
+const DEFERRED = ['remote-containers.openInformationAboutMountPerformance'];
+
 /**
- * The commands Dev Containers registers: the ones it contributes, which stay registered without the proposed API
- * (brief ruling 9), and the runtime commands it registers without contributing.
+ * The commands Dev Containers registers at activation: the ones it contributes except the deferred ones, which stay
+ * registered without the proposed API (brief ruling 9), and the runtime commands it registers without contributing.
  */
 const REGISTERED = [
   ...(
@@ -71,7 +74,9 @@ const REGISTERED = [
         contributes?: {commands?: Array<{command: string}>};
       }
     ).contributes?.commands ?? []
-  ).map(entry => entry.command),
+  )
+    .map(entry => entry.command)
+    .filter(command => !DEFERRED.includes(command)),
   ...(
     packageFile('identifiers.json') as {runtimeCommands: Array<{id: string}>}
   ).runtimeCommands.map(entry => entry.id),

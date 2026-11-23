@@ -11,8 +11,10 @@ import {
   type HintTableRow,
   messageCellOf,
 } from 'lib-ssh';
-import type {Logger} from 'lib-log';
+import {escapeControls, type Logger} from 'lib-log';
+import type {ResolveOutcome} from '../pipeline/connector.ts';
 import type {SessionHint} from './hint-store.ts';
+import type {TextRange} from '../surfaces/strings.ts';
 import {DISABLED_LINE, NO_HINTS_LINE, summaryLines} from './session-summary.ts';
 
 /** The name of the terminal. */
@@ -112,29 +114,63 @@ export interface TroubleshootingPorts {
     make: (sink: TerminalSink) => TablePty,
   ): TroubleshootingTerminal;
   texts(): TroubleshootingTexts;
+  /** Shows the panel with the extension's log channel selected; `preserveFocus` leaves the keyboard where it is. */
+  revealLog(preserveFocus: boolean): void;
   logger: Logger;
 }
 
 /** The check over an attempt's error hints, and the one terminal it keeps. */
 export interface Troubleshooting {
-  /** Runs the check once for an attempt whose resolve step has ended. `modal` says a dialog will take the keyboard. */
-  check(hints: readonly SessionHint[], modal: boolean): void;
+  /**
+   * Runs the check once for an attempt whose resolve step has ended. `modal` says a dialog will take the keyboard.
+   * A connect that failed and has no troubleshooting table, because it has no error hint or because the setting is
+   * off, shows the log channel instead (reading-2537-reveal-without-analysis); one that worked or was cancelled shows
+   * neither.
+   */
+  check(
+    hints: readonly SessionHint[],
+    modal: boolean,
+    outcome: ResolveOutcome,
+  ): void;
+}
+
+/**
+ * The ranges that still sit where they did once `text` has its control characters written out: none when writing them
+ * out changed its length, since the ranges would then point elsewhere.
+ */
+function rangesAfterEscaping(
+  text: string,
+  ranges: readonly TextRange[] | undefined,
+): TextRange[] {
+  return escapeControls(text).length === text.length ? [...(ranges ?? [])] : [];
 }
 
 /** The rows of the table for the error hints among `hints`, in the order they were recorded. */
 export function rowsOf(hints: readonly SessionHint[]): HintTableRow[] {
-  return hints.flatMap(hint =>
-    hint.kind === 'error'
-      ? [
-          {
-            status: hint.status,
-            message: messageCellOf(hint.message, hint.details),
-            mitigations: hint.mitigations ?? [],
-            resources: hint.resources ?? [],
-          },
-        ]
-      : [],
-  );
+  return hints.flatMap(hint => {
+    if (hint.kind !== 'error') {
+      return [];
+    }
+    const mitigations = hint.mitigations ?? [];
+    return [
+      {
+        status: hint.status,
+        message: escapeControls(messageCellOf(hint.message, hint.details)),
+        mitigations: mitigations.map(escapeControls),
+        resources: (hint.resources ?? []).map(escapeControls),
+        ...(hint.links === undefined
+          ? {}
+          : {
+              links: {
+                message: rangesAfterEscaping(hint.message, hint.links.message),
+                mitigations: mitigations.map((text, index) =>
+                  rangesAfterEscaping(text, hint.links?.mitigations?.[index]),
+                ),
+              },
+            }),
+      },
+    ];
+  });
 }
 
 /** The check over `ports`. */
@@ -144,14 +180,20 @@ export function troubleshootingOf(
   const {logger} = ports;
   let current: TroubleshootingTerminal | undefined;
   return {
-    check: (hints, modal) => {
+    check: (hints, modal, outcome) => {
       const rows = rowsOf(hints);
       if (!ports.enabled()) {
         logger.info(DISABLED_LINE);
+        if (outcome === 'failed') {
+          ports.revealLog(modal);
+        }
         return;
       }
       if (rows.length === 0) {
         logger.info(NO_HINTS_LINE);
+        if (outcome === 'failed') {
+          ports.revealLog(modal);
+        }
         return;
       }
       summaryLines(rows).forEach(line => {

@@ -50,6 +50,9 @@ const TABLE = {
   },
 } satisfies ContainersTable<Record<string, CommandEntry>>;
 
+/** The command that is registered once the window asks for it. */
+const DEFERRED = {gamma: command('gamma')};
+
 const BANNER = {
   displayName: 'Dev Containers',
   extensionVersion: '0.1.0',
@@ -76,7 +79,7 @@ interface Options {
 }
 
 function surroundings(options: Options): {
-  inputs: ContainersActivationInputs<typeof TABLE.commands>;
+  inputs: ContainersActivationInputs<typeof TABLE.commands, typeof DEFERRED>;
   seen: Seen;
 } {
   const seen: Seen = {events: [], channelLines: [], revealed: []};
@@ -98,8 +101,12 @@ function surroundings(options: Options): {
       return Promise.resolve();
     },
   };
-  const inputs: ContainersActivationInputs<typeof TABLE.commands> = {
+  const inputs: ContainersActivationInputs<
+    typeof TABLE.commands,
+    typeof DEFERRED
+  > = {
     table: TABLE,
+    deferred: DEFERRED,
     standDownTexts: {warning: 'Another one runs', button: 'Show it'},
     standDown,
     alsoLogTo: {write: () => undefined},
@@ -170,6 +177,7 @@ function surroundings(options: Options): {
       return {
         alpha: {execute: () => undefined},
         beta: {execute: () => undefined},
+        gamma: {execute: () => undefined},
       };
     },
   };
@@ -438,6 +446,41 @@ describe('the activation', () => {
     deepStrictEqual(
       seen.channelLines.at(-1)?.endsWith('[info] from a handler'),
       true,
+    );
+  });
+
+  it('F-0708 BR-1, AC-4: the deferred command is not registered at activation; the first call registers it, a second registers nothing, and a dispose undoes both', async () => {
+    const {inputs, seen} = surroundings({otherRuns: false});
+    const result = await activateContainers(inputs);
+    function registered(): string[] {
+      return seen.events.filter(event => event.startsWith('register '));
+    }
+    const atActivation = registered();
+    if (result.kind === 'serving') {
+      result.registerDeferred();
+      result.registerDeferred();
+    }
+    const afterCalls = registered();
+    seen.events.length = 0;
+    if (result.kind === 'serving') {
+      result.dispose();
+    }
+    deepStrictEqual(
+      [atActivation, afterCalls, seen.events],
+      [
+        ['register remote-containers.alpha', 'register remote-containers.beta'],
+        [
+          'register remote-containers.alpha',
+          'register remote-containers.beta',
+          'register remote-containers.gamma',
+        ],
+        [
+          'unregister remote-containers.alpha',
+          'unregister remote-containers.beta',
+          'unregister remote-containers.gamma',
+          'channel disposed',
+        ],
+      ],
     );
   });
 

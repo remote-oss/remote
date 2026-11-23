@@ -38,11 +38,8 @@ const DOTFILE = '.devcontainer.json';
 const FOLDER = '.devcontainer';
 const FILE = 'devcontainer.json';
 
-/** The code-unit order of two names: the tie-break that makes the order total. */
+/** The code-unit order of two distinct names: the tie-break that makes the order total. */
 function byCodeUnits(left: string, right: string): number {
-  if (left === right) {
-    return 0;
-  }
   return left < right ? -1 : 1;
 }
 
@@ -87,11 +84,14 @@ export async function discoverConfigurations(
     .filter(entry => entry.kind === 'folder')
     .map(entry => entry.name)
     .sort((left, right) => compare(left, right) || byCodeUnits(left, right));
-  const listings = await Promise.all(
-    names.map(name => files.list(`${folder}/${FOLDER}/${name}`)),
+  const subfolders = await Promise.all(
+    names.map(
+      async name =>
+        [name, await files.list(`${folder}/${FOLDER}/${name}`)] as const,
+    ),
   );
-  names.forEach((name, index) => {
-    if (hasFile(listings[index] ?? [], FILE)) {
+  subfolders.forEach(([name, entries]) => {
+    if (hasFile(entries, FILE)) {
       found.push({
         file: `${folder}/${FOLDER}/${name}/${FILE}`,
         relative: `${FOLDER}/${name}/${FILE}`,

@@ -124,6 +124,12 @@ export async function removeContainersOf(
 /** The seconds after a close in which a container that the close stops is read to have stopped, with a margin of 3 s. */
 const STOP_WINDOW = {from: 10, until: 15} as const;
 
+/**
+ * The seconds after a close in which a Compose container that the close kills is read to have stopped: 11 to 17 after
+ * the close itself, and the reading starts up to two seconds after it, once the window is gone.
+ */
+export const COMPOSE_STOP_WINDOW = {from: 9, until: 17} as const;
+
 /** Whether every state read was running. */
 export function stayedRunning(outcome: Outcome): boolean {
   return outcome.states.every(
@@ -186,6 +192,33 @@ export async function helperProcesses(): Promise<string[]> {
   } catch {
     return [];
   }
+}
+
+/**
+ * What the helpers `processIds` are, read from `ps`, and how many more seconds they stay, up to `milliseconds`: said
+ * when a row finds one that should be gone.
+ */
+export async function helperDetails(
+  processIds: readonly string[],
+  milliseconds: number,
+): Promise<string> {
+  const listing = await execFileAsync('ps', [
+    '-o',
+    'pid,ppid,etimes,args',
+    '-p',
+    processIds.join(','),
+  ]).then(
+    ({stdout}) => stdout.trim(),
+    (caught: unknown) => String(caught),
+  );
+  const from = Date.now();
+  let remaining = await helperProcesses();
+  while (remaining.length > 0 && Date.now() - from < milliseconds) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    remaining = await helperProcesses();
+  }
+  const stayed = Math.round((Date.now() - from) / 1000);
+  return `${listing}; ${remaining.length === 0 ? `gone after ${String(stayed)} s more` : `still there ${String(stayed)} s more`}`;
 }
 
 /** The parent process id of `processId`, read from `/proc`; 0 for none. */

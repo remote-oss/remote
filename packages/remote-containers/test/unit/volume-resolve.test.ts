@@ -80,6 +80,8 @@ async function sceneOf(
     typed?: boolean;
     target?: DevContainerVolume;
     outcome?: ContainerOutcome;
+    /** What the user does when the clone has no configuration. */
+    added?: 'written' | 'left';
   } = {},
 ): Promise<SceneRecord> {
   const sink = new MemorySink();
@@ -121,6 +123,10 @@ async function sceneOf(
         return Promise.resolve();
       },
       onCloning: () => record.push('cloning'),
+      addConfiguration: (bootstrap, folder) => {
+        record.push(`add in ${bootstrap} ${folder}`);
+        return Promise.resolve(options.added ?? 'written');
+      },
       prepare: (bootstrap, request, configText) => {
         record.push(`prepare in ${bootstrap} with ${configText}`);
         requests.push(request);
@@ -195,6 +201,7 @@ describe('the resolve of a clone in a volume (card containers-151)', () => {
           'prepare in boot1 with {"image": "alpine"}',
         ],
         request: {
+          volumeName,
           folder: '/workspaces/r',
           configFile: '/workspaces/r/.devcontainer/devcontainer.json',
           idLabels: [
@@ -213,6 +220,7 @@ describe('the resolve of a clone in a volume (card containers-151)', () => {
           kind: 'prepared',
           outcome: READY,
           bootstrap: 'boot1',
+          volumeName,
           request: undefined,
           configText: '{"image": "alpine"}',
           shallow: false,
@@ -323,16 +331,48 @@ describe('the resolve of a clone in a volume (card containers-151)', () => {
     );
   });
 
-  it('a clone with no configuration removes the bootstrap and ends in S034', async () => {
-    const scene = await sceneOf({
-      script: short => (short.startsWith('test') ? exited(1) : undefined),
-    });
+  it('F-0701 6.1, 7.E4: a clone with no configuration asks for one; leaving ends silently, and a written one goes on to up', async () => {
+    let lookups = 0;
+    const [left, written, stillNone] = await Promise.all([
+      sceneOf({
+        added: 'left',
+        script: short => (short.startsWith('test') ? exited(1) : undefined),
+      }),
+      sceneOf({
+        script: short => {
+          if (!short.startsWith('test')) {
+            return undefined;
+          }
+          lookups += 1;
+          return lookups <= 2 ? exited(1) : undefined;
+        },
+      }),
+      sceneOf({
+        script: short => (short.startsWith('test') ? exited(1) : undefined),
+      }),
+    ]);
     deepStrictEqual(
-      [reasonOf(scene.resolution), scene.calls.at(-1), scene.logLines.at(-1)],
       [
+        left.resolution.kind === 'failed' && left.resolution.failure.kind,
+        left.resolution.kind === 'failed' && left.resolution.failure.silent,
+        left.calls.at(-1),
+        left.record.filter(entry => entry.startsWith('add')),
+        written.resolution.kind,
+        reasonOf(stillNone.resolution),
+        stillNone.calls.at(-1),
+        stillNone.logLines.includes(
+          'the clone holds no dev container configuration',
+        ),
+      ],
+      [
+        'volumeLeft',
+        true,
+        'rm --force',
+        ['add in boot1 /workspaces/r'],
+        'prepared',
         {id: 'S034'},
         'rm --force',
-        'the clone holds no dev container configuration',
+        true,
       ],
     );
   });
@@ -401,6 +441,28 @@ describe('the resolve of a clone in a volume (card containers-151)', () => {
         [0, 'failed'],
         [15, 'prepared'],
         [15, 'prepared'],
+      ],
+    );
+  });
+
+  it('a payload that says it explores a volume is refused before any engine call, whether its volume is missing or empty, so it never clones', async () => {
+    const explored = {...TARGET, inspectVolume: true};
+    const [missing, empty] = await Promise.all([
+      sceneOf({target: explored}),
+      sceneOf({
+        target: explored,
+        script: short => (short === 'volume inspect' ? exited(0) : undefined),
+      }),
+    ]);
+    deepStrictEqual(
+      [missing, empty].map(scene => [
+        scene.calls,
+        scene.record,
+        reasonOf(scene.resolution),
+      ]),
+      [
+        [[], [], {id: 'S034'}],
+        [[], [], {id: 'S034'}],
       ],
     );
   });

@@ -39,9 +39,13 @@ export type FailedKind =
   /** The in-effect SSH configuration files cannot be parsed; core's own notification names the problem. */
   | 'configFileUnparsable'
   | 'preconnectFailed'
-  /** Reserved for the client-side lock on the host; no step reports it yet. */
+  /** Another window of the editor held the alias's client install lock for the whole wait. */
   | 'lockTimeout'
   | 'retriesExhausted'
+  /** The host cannot serve an exec server: the setting is off, there is no command-line program for it, or it could not be set up. */
+  | 'execServerUnavailable'
+  /** A manual bootstrap could not start: no archive at its path, an archive the client cannot read, or a Windows host. */
+  | 'localBootstrap'
   | 'cancelled';
 
 /** The kind of a failure and the reason it gives, before the connect adds what it knows around it. */
@@ -97,17 +101,34 @@ function logged(
   };
 }
 
+/** The failure of a client install lock wait that ran out; the log names its summary code. */
+export const LOCAL_LOCK_TIMEOUT: FailureDetail = {
+  kind: 'lockTimeout',
+  reason: {id: 'localLockTimeout'},
+  logDetail:
+    'Timed out while waiting for the local startup lock (LocalLockTimeout)',
+};
+
 /** The reason of a server install that failed: the extension's own text. */
 const INSTALL_FAILED: FailureReason = {id: 'S075'};
 
+/** The reason of a host the server's requirements check refused: the extension's own text. */
+const PREREQUISITES_MISSING: FailureReason = {id: 'S144'};
+
+/** The reason of a host that could not create the install folder. */
+const INSTALL_FOLDER_FAILED: FailureReason = {id: 'S070'};
+
 /** The reason of a server download that failed: the extension's own text. */
 const DOWNLOAD_FAILED: FailureReason = {id: 'S043'};
+
+/** The reason of a host that has neither curl nor wget: the extension's own text, which names them. */
+const NO_DOWNLOADER: FailureReason = {id: 'S042'};
 
 /**
  * What a failed client download's reason names: `Failed to fetch` for the network, `Server returned <status>` for an
  * HTTP error status, the port's own text for a source that asks for credentials, and the file system's own text for the client's file.
  */
-function localDownloadValue(
+export function localDownloadValue(
   failure: Extract<TransferFailure, {kind: 'localDownload'}>,
 ): string {
   if (failure.cause === 'httpStatus') {
@@ -176,9 +197,13 @@ function ofStatus(
     return {kind, reason: DOWNLOAD_FAILED};
   }
   if (kind === 'serverInstall') {
+    const reason =
+      status === 'CreateInstallDirFailed'
+        ? INSTALL_FOLDER_FAILED
+        : INSTALL_FAILED;
     return writeFailure === undefined
-      ? {kind, reason: INSTALL_FAILED}
-      : logged(kind, writeDetail(writeFailure), INSTALL_FAILED);
+      ? {kind, reason}
+      : logged(kind, writeDetail(writeFailure), reason);
   }
   return {kind};
 }
@@ -205,11 +230,6 @@ export function ofProbe(failure: ProbeFailure): FailureDetail {
       return logged('unsupportedPlatform', `reported: ${failure.reported}`, {
         id: 'S146',
       });
-    case 'prerequisiteMissing':
-      return logged(
-        'prerequisiteMissing',
-        `missing: ${failure.missing.join(', ')}`,
-      );
     case 'probeFailed':
       return ofStatus(failure.status);
     case 'unreadableFacts':
@@ -233,6 +253,16 @@ export function ofAcquire(failure: AcquireFailure): FailureDetail {
 export const CONNECT_WAIT_TIMEOUT: FailureDetail = {
   kind: 'timeout',
   reason: {id: 'sshTimedOut'},
+};
+
+/**
+ * The failure of a login that asked a question the extension does not recognise, which nobody answered before the connect
+ * wait ended: the dialog names the host and gives no reason, and the log says why.
+ */
+export const UNANSWERED_QUESTION: FailureDetail = {
+  kind: 'unknown',
+  logDetail:
+    'a question the extension does not recognise was left unanswered until the connect wait ended',
 };
 
 /**
@@ -333,7 +363,11 @@ export function ofTransfer(
           {id: 'S146'},
         );
       }
-      return logged('serverDownload', failure.cause, DOWNLOAD_FAILED);
+      return logged(
+        'serverDownload',
+        failure.cause,
+        failure.cause === 'noDownloader' ? NO_DOWNLOADER : DOWNLOAD_FAILED,
+      );
     case 'localDownload':
       return logged('serverDownload', failure.detail, {
         id: 'S071',
@@ -361,8 +395,27 @@ export function ofTransfer(
       return ofStatus(failure.status, failure.writeFailure);
     case 'noResultBlock':
       return {kind: 'channelClosed'};
+    case 'localBootstrap':
+      return ofLocalBootstrap(failure);
     default:
       return ofChannel(failure.failure);
+  }
+}
+
+/** A manual bootstrap that could not start: the archive's path, the file system's own text, or the Windows refusal. */
+function ofLocalBootstrap(
+  failure: Extract<TransferFailure, {kind: 'localBootstrap'}>,
+): FailureDetail {
+  switch (failure.cause) {
+    case 'missing':
+      return logged('localBootstrap', `no archive at ${failure.path}`, {
+        id: 'S069',
+        values: [failure.path],
+      });
+    case 'unreadable':
+      return logged('localBootstrap', failure.detail, {text: failure.detail});
+    default:
+      return {kind: 'localBootstrap', reason: {id: 'S161'}};
   }
 }
 
@@ -404,6 +457,41 @@ function startReason(
     : undefined;
 }
 
+/** The refusal of an exec server when `remote.SSH.useExecServer` is off. */
+export const EXEC_SERVER_SETTING_OFF: FailureDetail = {
+  kind: 'execServerUnavailable',
+  reason: {
+    text: 'The exec server is off: the setting remote.SSH.useExecServer is false.',
+  },
+};
+
+/** The refusal of an exec server for a host that has no command-line program build. */
+export const EXEC_SERVER_NO_CLI: FailureDetail = {
+  kind: 'execServerUnavailable',
+  reason: {
+    text: 'The exec server is not available for this host: there is no command-line program for its platform.',
+  },
+};
+
+/** The refusal of an exec server while the window's connection to the host is lost. */
+export const EXEC_SERVER_LOST: FailureDetail = {
+  kind: 'execServerUnavailable',
+  reason: {
+    text: 'The exec server is not available: the connection to the host was lost.',
+  },
+};
+
+/** The refusal of an exec server whose command-line program could not be set up on the host; `cause` is for the log. */
+export function execServerNotSetUp(cause: string): FailureDetail {
+  return {
+    kind: 'execServerUnavailable',
+    reason: {
+      text: 'The exec server could not be set up on the host: its command-line program did not start.',
+    },
+    logDetail: cause,
+  };
+}
+
 /** The failure of the server start. */
 export function ofStart(
   failure: StartFailure,
@@ -421,7 +509,11 @@ export function ofStart(
     case 'unreadableServerFacts':
       return {kind: 'serverStart'};
     case 'prerequisitesMissing':
-      return logged('prerequisiteMissing', failure.detail);
+      return logged(
+        'prerequisiteMissing',
+        failure.detail,
+        PREREQUISITES_MISSING,
+      );
     case 'retriesExhausted':
       return ofExhausted(failure);
     case 'scriptFailed':
@@ -461,6 +553,8 @@ export const KIND_MAY_RECOVER: Readonly<Record<FailedKind, boolean>> = {
   preconnectFailed: false,
   lockTimeout: false,
   retriesExhausted: false,
+  execServerUnavailable: false,
+  localBootstrap: false,
   cancelled: false,
 };
 

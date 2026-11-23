@@ -1,6 +1,5 @@
 import {deepStrictEqual, ok} from 'node:assert';
 import {existsSync, readFileSync, rmSync} from 'node:fs';
-import path from 'node:path';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
   agentClear,
@@ -32,6 +31,7 @@ import {
   HOST_QUESTION,
   INSTALL_MILLISECONDS,
   linesSince,
+  waitForReconnection,
   openConnected,
   password,
   passwordAskHosts,
@@ -46,6 +46,7 @@ import {
   settingsText,
   typeHost,
 } from './maintenance.ts';
+import {userFilesText} from './key-bindings.ts';
 
 /** The message of the handler's error when an uninstall could not run. */
 const UNINSTALL_FAILED = 'Failed to run command';
@@ -114,20 +115,6 @@ async function removedWithin(file: string): Promise<void> {
   }
 }
 
-/** The bytes of the launch's keybindings file, or nothing when it doesn't exist. */
-function keybindingsText(): string | undefined {
-  const file = path.join(
-    variable('HARNESS_USER_DATA'),
-    'User/keybindings.json',
-  );
-  return existsSync(file) ? readFileSync(file, 'utf8') : undefined;
-}
-
-/** The user files a row must leave unchanged, as text. */
-function userFiles(): [string, string | undefined] {
-  return [settingsText(), keybindingsText()];
-}
-
 /** The `HostName` the run's `password` block names. */
 function passwordHostName(): string {
   const config = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8');
@@ -136,6 +123,67 @@ function passwordHostName(): string {
       config.slice(config.indexOf('Host password\n')),
     )?.[1] ?? ''
   );
+}
+
+/**
+ * The server processes once the list has stopped changing: the same list on two reads half a second apart, for up to
+ * 15 s. The windows closed before it leave their server-side extension hosts exiting for a moment, and a child the
+ * server starts late joins the list, so a snapshot taken at once can differ from the one 2 s later with nothing
+ * uninstalled (#2569).
+ */
+async function settledServerProcesses(): Promise<number[]> {
+  let last = await serverProcesses();
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const next = await serverProcesses();
+    if (JSON.stringify(next) === JSON.stringify(last)) {
+      break;
+    }
+    last = next;
+  }
+  snapshotListing = await hostListing();
+  return last;
+}
+
+/** The host's processes with their parent, age and command line, as `ps` lists them; none when it cannot be read. */
+async function hostListing(): Promise<string[]> {
+  try {
+    return (await onHost('ps', '-o', 'pid,ppid,etime,args')).split('\n');
+  } catch {
+    return [];
+  }
+}
+
+/** The host's processes as they were when the last settled snapshot was taken, which names a process that ended since. */
+let snapshotListing: string[] = [];
+
+/** The line of `listing` for process `processId`, or `gone` when it holds none. */
+function lineOf(listing: readonly string[], processId: number): string {
+  return (
+    listing
+      .find(line => line.trim().startsWith(`${String(processId)} `))
+      ?.trim() ?? 'gone'
+  );
+}
+
+/**
+ * What tells a server process that appeared after a snapshot (a child the server starts late) from one that ended
+ * (an extension host still exiting), for the failure of a row that compares two snapshots to name (#2569): each
+ * process that appeared, as the host lists it now, and each that ended, as it was listed with the snapshot, with its
+ * parent, age and command line. Nothing when the two are the same.
+ */
+async function processFacts(
+  before: readonly number[],
+  after: readonly number[],
+): Promise<string | undefined> {
+  const appeared = after.filter(processId => !before.includes(processId));
+  const ended = before.filter(processId => !after.includes(processId));
+  if (appeared.length === 0 && ended.length === 0) {
+    return undefined;
+  }
+  const now = await hostListing();
+  return `processes that appeared since the snapshot, listed now: ${JSON.stringify(appeared.map(processId => `${String(processId)} -> ${lineOf(now, processId)}`))}; processes that ended, listed with the snapshot: ${JSON.stringify(ended.map(processId => `${String(processId)} -> ${lineOf(snapshotListing, processId)}`))}`;
 }
 
 describe('Uninstall VS Code Server (card coverage-40)', function () {
@@ -203,9 +251,9 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
     const state = await windowState('local');
     const marker = `${DATA_FOLDER}/uninstall-marker`;
     await onHostAs('harness', 'touch', marker);
-    const before = userFiles();
+    const before = userFilesText();
     const mark = await uninstallWith('local', [pickHost('harness')]);
-    filesAround.push(['AC-4', before, userFiles()]);
+    filesAround.push(['AC-4', before, userFilesText()]);
     const removed = !(await existsOnHost(marker));
     await serversGoneWithin(servers, 10_000);
     deepStrictEqual(
@@ -285,9 +333,9 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
   });
 
   it('F-2412 AC-12: a refused host fails within 2 s with the handler’s error and no notice of ours', async () => {
-    const before = userFiles();
+    const before = userFilesText();
     const failed = await failedUninstall('local', [pickHost('refused')]);
-    filesAround.push(['AC-12', before, userFiles()]);
+    filesAround.push(['AC-12', before, userFilesText()]);
     deepStrictEqual(
       [
         failed.message.includes(UNINSTALL_FAILED),
@@ -330,16 +378,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
     await closeAllButLocal();
     await openConnected('u1', INSTALL_MILLISECONDS);
     const mark = await uninstallWith('local', [pickHost('harness')]);
-    await waitFor(
-      'u1 to be resolved again by core’s reconnection',
-      () =>
-        linesSince(mark, 'u1').some(
-          line =>
-            line.surface === 'progress' &&
-            line.question === 'Setting up SSH Host harness',
-        ),
-      40_000,
-    );
+    await waitForReconnection(mark, 'u1', 'harness', 40_000);
     await reloadWindow('u1');
     await connectedWithin('u1', INSTALL_MILLISECONDS);
   });
@@ -625,12 +664,12 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
 
     it('F-2412 AC-31, F-2206 AC-33: Escape at the platform pick ends the uninstall with nothing changed', async () => {
       await makeDataFolder();
-      const before = userFiles();
+      const before = userFilesText();
       const mark = await uninstallWith('local', [
         pickHost('harness'),
         platformAnswer('dismiss'),
       ]);
-      filesAround.push(['AC-31', before, userFiles()]);
+      filesAround.push(['AC-31', before, userFilesText()]);
       deepStrictEqual(
         [surfacesSince(mark, 'local'), await existsOnHost(DATA_FOLDER)],
         [['hostPick', 'platformPick'], true],
@@ -644,20 +683,22 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       await openConnected('u1', INSTALL_MILLISECONDS);
       // The pick is asked only for a host with no `remotePlatform` entry; the window above needed one.
       await setting('remote.SSH.remotePlatform', undefined);
-      const servers = await serverProcesses();
+      const servers = await settledServerProcesses();
       const mark = await uninstallWith('local', [
         pickHost('harness'),
         platformAnswer('windows'),
       ]);
       await new Promise(resolve => setTimeout(resolve, 2000));
+      const observed = await serverProcesses();
       deepStrictEqual(
         [
           servers.length > 0,
           surfacesSince(mark, 'local'),
-          await serverProcesses(),
+          observed,
           await existsOnHost(DATA_FOLDER),
         ],
         [true, ['hostPick', 'platformPick'], servers, true],
+        await processFacts(servers, observed),
       );
       await closeAllButLocal();
     });
@@ -680,16 +721,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       await perWindowMode(true);
       await openConnected('u1', INSTALL_MILLISECONDS);
       const mark = await uninstallWith('local', [pickHost('harness')]);
-      await waitFor(
-        'u1 to be resolved again by core’s reconnection',
-        () =>
-          linesSince(mark, 'u1').some(
-            line =>
-              line.surface === 'progress' &&
-              line.question === 'Setting up SSH Host harness',
-          ),
-        30_000,
-      );
+      await waitForReconnection(mark, 'u1', 'harness', 30_000);
       const reload = recordLines().length;
       await reloadWindow('u1');
       await connectedWithin('u1', INSTALL_MILLISECONDS);
@@ -708,7 +740,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
     it('F-2412 AC-25 (c43-unknown-key): with no local server, a host whose key is unknown is not uninstalled by the pick, writes no setting, and leaves the window usable', async () => {
       rmSync(passwordAskHosts(), {force: true});
       await onHostAs('harness-pw', 'mkdir', '-p', PASSWORD_DATA_FOLDER);
-      const before = userFiles();
+      const before = userFilesText();
       const mark = recordLines().length;
       await uninstallWith('local', [
         pickHost('password-ask'),
@@ -720,7 +752,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
         [
           surfacesSince(mark, 'local'),
           await existsOnHost(PASSWORD_DATA_FOLDER),
-          userFiles(),
+          userFilesText(),
           existsSync(passwordAskHosts()),
         ],
         [['hostPick', 'platformPick', 'pick'], true, before, false],

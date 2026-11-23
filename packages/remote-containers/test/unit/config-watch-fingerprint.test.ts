@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {createHash} from 'node:crypto';
+import path from 'node:path';
 import {
   ACKNOWLEDGMENT_KEY,
   readAcknowledgment,
@@ -219,16 +220,48 @@ describe('the files a configuration is watched with (card containers-141)', () =
     );
   });
 
-  it('F-0303 BR-2: an empty value, a value with a variable, a value that is not a string and a Compose file watch no Dockerfile', () => {
+  it('F-0303 BR-2: an empty value, a value with a variable and a value that is not a string watch no Dockerfile', () => {
     deepStrictEqual(
       [
         {dockerFile: ''},
         {dockerFile: '${localWorkspaceFolder}/D'},
         {dockerFile: 5},
-        {dockerComposeFile: 'compose.yml'},
         undefined,
       ].map(each => [...watchedFilesOf(each, FILE).keys()]),
-      Array.from({length: 5}, () => ['devcontainer.json']),
+      Array.from({length: 4}, () => ['devcontainer.json']),
+    );
+  });
+
+  it('F-0303 BR-2, AC-6: the compose files are watched by their values as written, and the service’s Dockerfile by its path from the configuration’s folder', () => {
+    deepStrictEqual(
+      [
+        {dockerComposeFile: 'compose.yml'},
+        {dockerComposeFile: ['a.yml', '../b.yml']},
+        {dockerComposeFile: ['', '${localEnv:X}.yml', 'c.yml']},
+        {dockerComposeFile: 3},
+      ].map(each => [...watchedFilesOf(each, FILE).keys()]),
+      [
+        ['devcontainer.json', 'compose.yml'],
+        ['devcontainer.json', 'a.yml', '../b.yml'],
+        ['devcontainer.json', 'c.yml'],
+        ['devcontainer.json'],
+      ],
+    );
+  });
+
+  it('F-0303 AC-26, AC-27: a service’s Dockerfile is named by its path from the configuration’s folder, inside it, beside it and above it', () => {
+    deepStrictEqual(
+      ['sub/Df.dev', 'Df.app', '../Df.root'].map(
+        name =>
+          [
+            ...watchedFilesOf(
+              {},
+              FILE,
+              path.resolve(path.dirname(FILE), name),
+            ).keys(),
+          ][1],
+      ),
+      ['sub/Df.dev', 'Df.app', '../Df.root'],
     );
   });
 });

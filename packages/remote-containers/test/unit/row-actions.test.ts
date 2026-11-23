@@ -318,6 +318,21 @@ describe('the row actions of the Dev Containers view (card containers-102)', () 
     );
   });
 
+  it('F-0902 AC-24: the lines come in the order of the paths the mounts are mounted at, whatever order the engine lists them in', async () => {
+    const volume = {Type: 'volume', Name: 'data', Destination: '/data'};
+    const folder = {Type: 'bind', Source: '/home/u/proj', Destination: '/mnt'};
+    deepStrictEqual(
+      [
+        await detailOf(mountsScript([volume, folder])),
+        await detailOf(mountsScript([folder, volume])),
+      ],
+      [
+        `${WORDS}\nThis is the last container using 'data'.\nThis is the last container using '/home/u/proj'.`,
+        `${WORDS}\nThis is the last container using 'data'.\nThis is the last container using '/home/u/proj'.`,
+      ],
+    );
+  });
+
   it('F-0902 AC-24: a mount another container uses adds no line, and the other mount still does', async () => {
     deepStrictEqual(
       await detailOf(

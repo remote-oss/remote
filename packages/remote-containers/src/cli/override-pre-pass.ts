@@ -33,7 +33,7 @@ const ANY_REFERENCE =
   /\$\{(?:localEnv|env):([^:}]+)(?::([^:}]*))?(?::[^}]*)?\}/g;
 
 /** The text of a string value with every reference resolved from the editor's environment, an unset one by its default. */
-function resolved(
+export function resolvedReferences(
   value: string,
   environment: Readonly<Record<string, string | undefined>>,
 ): string {
@@ -162,7 +162,7 @@ export function volumeOverrideText(
     workspace.workspaceFolder.lastIndexOf('/') + 1,
   );
   let text = rewrittenText(configText, configuration, value =>
-    resolved(value, editorEnvironment)
+    resolvedReferences(value, editorEnvironment)
       .replaceAll('${localWorkspaceFolderBasename}', basename)
       .replaceAll('${localWorkspaceFolder}', workspace.workspaceFolder),
   );

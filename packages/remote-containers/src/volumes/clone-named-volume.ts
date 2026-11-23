@@ -63,16 +63,8 @@ export async function cloneInNamedVolume(
   ports: NamedVolumeCommandPorts,
   cancellation: AbortSignal,
 ): Promise<void> {
-  const source = await givenSourceOf(ports);
+  const source = await givenSourceOf(ports, cancellation);
   if (source === undefined) {
-    return;
-  }
-  const checked = await ports.precheck(source, cancellation);
-  if (checked === 'cancelled') {
-    return;
-  }
-  if (checked === 'unreachable') {
-    await ports.cannotAccess(source.repositoryPath);
     return;
   }
   const picked = await ports.pickVolume(await ports.namedVolumes());

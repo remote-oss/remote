@@ -43,6 +43,10 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
    - URL, `owner/repo` (exactly two segments, BR-7), local path or SSH URL, trimmed (BR-15);
    - `/tree/<ref>`, `/commit/<sha>` and `/pull/<n>` parsed for github.com only (BR-2).
    - The GitHub picker uses core's `github` authentication provider (6.3).
+     - **The picker itself** is the built-in git-base API's `pickRemoteSource({providerName: 'GitHub', branch: true})`
+       (athena on #1973). It's looked up at use time, never in `extensionDependencies`, with our S067 as its title and
+       S068 as its placeholder. S295 and S245 are git-base's own labels.
+     - **Without git-base and a GitHub provider** the item isn't offered, with one log line.
 3. **The host-side pre-check (BR-5):** `git ls-remote` on the host, before any Docker object. Git's and ssh's
    credential and host-key prompts become quick inputs.
    - **The askpass relay is one, shared.** lib-ssh's `askpass/` (endpoint, launcher, messages) moves to **lib-helper** (athena's ruling, register 5c82020;
@@ -181,11 +185,13 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
   - `inspectInBasicDevContainer` on Dev Volumes rows (with F-0904, group 14);
   - the Container Tools hand-in (6.8).
 - **The picker:** S319 lists every volume, `vscode` included (BR-2), with dates in English (Q1).
-- **The container:** from one fixed definition of ours in `<temp>/inspect-volume/<version>/`, shared and editable
-  (BR-4).
+- **The container:** from one fixed definition of ours in `<the extension's global storage>/inspect-volume/<version>/`,
+  shared and editable (BR-4). It's not in `<temp>`: the definition is used as found, so it must not sit where another
+  local user could plant one (athena on #2126).
   - `remoteUser: root` (BR-8), the volume at `/volume`, the `vscode` volume at `/vscode`, and no Docker socket.
-  - Its base is `alpine:3.20` (Docker Hub). The reference pins Microsoft's base image (Q2), and we don't pull from
-    Microsoft's registry. If a content row needs something only that image has, the row stops and comes to me.
+  - Its base is the devcontainers `base-alpine` release v0.4.17 (Alpine 3.20), pinned by digest from its registry, as
+    F-0705 decision Q2 option (a) has it (`ruling-2263-explore-base`). The bootstrap and recovery images stay ours on
+    `alpine:3.20`.
 - **Reuse:** by the label pair `vsch.local.volume` + `devcontainer.config_file` (BR-5). Recovery containers take a
   different key (Q3, preferred), with group 7.
 - **The window:** the volume payload with only `volumeName` (and `inspectVolume`), opened in Restricted Mode, titled
@@ -195,8 +201,10 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
 ## 6. F-0707 and F-0708
 
 - **F-0707 is dormant by spec** (BR-7). The two commands and two `continueEditSession` entries are declared exactly
-  (BR-1 to BR-4, palette `when: false`), with no `contribEditSessions` proposal requested, so core drops them (7.E2).
-  No probing for Remote Repositories. Rows assert the dormancy.
+  (BR-1 to BR-4, palette `when: false`). `contribEditSessions` stays declared with the other six (F-0101 BR-8), and
+  one grant covers them all (F-0101 BR-9). So the entries are read, as the reference's are, and their dormancy rests on
+  their `when` clauses (BR-3, BR-4). Corrected on #2040 (athena). No probing for Remote Repositories. Rows assert the
+  dormancy.
 - **F-0708, C15:**
   - the "I/O performance" row (S199, S425) under each bind mount in Details, only when the Windows-side Docker CLI
     runs the engine (BR-4), so it's mostly platform-01's lines;

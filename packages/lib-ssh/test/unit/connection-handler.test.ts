@@ -1,4 +1,6 @@
 import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
+import {scriptedProbe, type ProbeScript} from './scripted-probe.ts';
+import type {SocksProbe} from '../../src/index.ts';
 import type {EndpointConnection, HelperControl, PlainData} from 'lib-helper';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeEndpointPort} from 'lib-helper/testing/fake-endpoint';
@@ -7,7 +9,12 @@ import {
   type ConnectionHandlerOptions,
 } from '../../src/index.ts';
 import {ScriptedSpawner, startError} from './fake-client-process.ts';
-import {authenticate} from './connection-fixture.ts';
+import {AUTHENTICATED, authenticate} from './connection-fixture.ts';
+import {
+  platformProbeInput,
+  probeHandOverLine,
+} from '../../src/connection-server/platform-probe.ts';
+import {LOCAL_COMMAND_DROPPED_LINE} from '../../src/connection-server/local-command-log.ts';
 
 const INVOCATION = {
   program: 'ssh',
@@ -49,15 +56,18 @@ describe('connection handler (contracts §4 S9)', () => {
   let logged: string[];
   let markers: number;
   let notices: PlainData[];
+  let probeScript: ProbeScript;
+  let probes: Array<Parameters<SocksProbe>[0]>;
 
   function create(changes: Partial<ConnectionHandlerOptions> = {}): void {
     handler = new ConnectionHandler({
       invocation: INVOCATION,
+      socksProbe: scriptedProbe(clock.scheduler(), probeScript, probes),
       socksPort: 41000,
       spawner: spawner.spawn,
       askpassEnvironment: {},
       editorEnvironment: {},
-      sessionPrelude: 'P\n',
+      opening: {kind: 'known', prelude: 'P\n', interpreter: 'posixShell'},
       waitSettings: {
         connectTimeoutSeconds: 10,
         fromHost: false,
@@ -92,6 +102,14 @@ describe('connection handler (contracts §4 S9)', () => {
     handler.attach(control);
   }
 
+  /** Two windows, the first connected through a session that is authenticated. */
+  async function connected(): Promise<void> {
+    handler.onLeasesChanged([1, 2]);
+    await send(1, {type: 'connect'});
+    authenticate(spawner.started[0]);
+    events.length = 0;
+  }
+
   function send(lease: number, body: PlainData): Promise<PlainData> {
     return handler.onRequest(body, {
       lease,
@@ -118,6 +136,8 @@ describe('connection handler (contracts §4 S9)', () => {
     logged = [];
     markers = 0;
     notices = [];
+    probeScript = {answers: true};
+    probes = [];
     create();
   });
 
@@ -211,6 +231,82 @@ describe('connection handler (contracts §4 S9)', () => {
       );
     });
 
+    it('#2598 (F-2109 AC-12): the standard output lines before the first protocol line are a LocalCommand’s, sent for the log alone; later lines are not, and the protocol is read as before', async () => {
+      await send(1, {type: 'connect'});
+      const client = spawner.started[0];
+      client?.error(
+        'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".\n',
+      );
+      client?.output('out-marker\n');
+      client?.output('\n');
+      client?.output('second line\n');
+      client?.output('LAYER1-READY\n');
+      client?.output('after the protocol\n');
+      deepStrictEqual(
+        [
+          events.filter(
+            event => (event as {type?: string}).type === 'localCommandLines',
+          ),
+          eventTypes().includes('connected'),
+        ],
+        [
+          [
+            {type: 'localCommandLines', lines: ['out-marker']},
+            {type: 'localCommandLines', lines: ['second line']},
+          ],
+          true,
+        ],
+      );
+    });
+
+    /** The lines logged as a LocalCommand's and whether the connection was read as made, after `pieces` of output. */
+    async function afterOutput(
+      pieces: string[],
+    ): Promise<[unknown[], boolean]> {
+      await send(1, {type: 'connect'});
+      const client = spawner.started[0];
+      for (const piece of pieces) {
+        client?.output(piece);
+      }
+      return [
+        events.filter(
+          event => (event as {type?: string}).type === 'localCommandLines',
+        ),
+        eventTypes().includes('connected'),
+      ];
+    }
+
+    it('#2603 (F-2109 AC-12): the bootstrap prints a line end before its marker, so the last words of a command that wrote none are a line of their own, logged, and the marker is read', async () => {
+      deepStrictEqual(await afterOutput(['out-marker', '\nLAYER1-READY\n']), [
+        [{type: 'localCommandLines', lines: ['out-marker']}],
+        true,
+      ]);
+    });
+
+    it('#2598 (F-2109 AC-12): a marker that shares its line with text, as a host whose bootstrap printed no line end in front of it would write it, is logged and not read as the protocol', async () => {
+      deepStrictEqual(await afterOutput(['out-marker', 'LAYER1-READY\n']), [
+        [{type: 'localCommandLines', lines: ['out-markerLAYER1-READY']}],
+        false,
+      ]);
+    });
+
+    it('#2598 (F-2109 AC-12): the output of a LocalCommand is cut at 100 lines, with one line saying so', async () => {
+      await send(1, {type: 'connect'});
+      const client = spawner.started[0];
+      for (let line = 1; line <= 105; line += 1) {
+        client?.output(`line ${String(line)}\n`);
+      }
+      const sent = events
+        .filter(
+          event => (event as {type?: string}).type === 'localCommandLines',
+        )
+        .flatMap(event => (event as {lines: string[]}).lines);
+      deepStrictEqual(
+        [sent.length, sent[99], sent[100]],
+        [101, 'line 100', LOCAL_COMMAND_DROPPED_LINE],
+      );
+    });
+
     it('F-2003 BR-8: a later ssh line reaches the windows once the connection is set up, in a batch of its own', async () => {
       await send(1, {type: 'connect'});
       authenticate(spawner.started[0]);
@@ -294,6 +390,293 @@ describe('connection handler (contracts §4 S9)', () => {
     });
   });
 
+  describe('a session whose host platform is unknown (#1835)', () => {
+    const SESSION_ENTERED = 'debug1: Entering interactive session.\n';
+    /** The connection's probe and hand-over line: its nonce is the first marker drawn. */
+    const PROBE = platformProbeInput('m1');
+    const HAND_OVER = probeHandOverLine('m1', 'POSIX-PROGRAM');
+    const OPENING = {
+      kind: 'detect',
+      posix: {program: 'POSIX-PROGRAM', prelude: 'P\n'},
+      windows: {line: 'WINDOWS-LINE\n'},
+    } as const;
+    const RUN_REQUEST = {
+      type: 'runScript',
+      runId: 7,
+      script: 'echo hello',
+      environment: {},
+      inputBase64: null,
+      deadlineMilliseconds: 1000,
+    } as const;
+
+    /** The owner's connect, up to ssh's report that the login is done. */
+    async function authenticated(): Promise<void> {
+      create({opening: OPENING});
+      handler.onLeasesChanged([1, 2]);
+      events.length = 0;
+      await send(1, {type: 'connect'});
+      spawner.started[0]?.error(AUTHENTICATED);
+      spawner.started[0]?.error(SESSION_ENTERED);
+      await settled();
+    }
+
+    /** The owner's connect, alone, up to ssh's report that the login is done and before it enters the session. */
+    async function loggedIn(): Promise<void> {
+      create({opening: OPENING});
+      handler.onLeasesChanged([1]);
+      events.length = 0;
+      await send(1, {type: 'connect'});
+      spawner.started[0]?.error(AUTHENTICATED);
+    }
+
+    /**
+     * What the opening wrote and the LocalCommand lines it told, once the owner's connect logged in, the host's output
+     * `pieces` came, and only then ssh's line of the session.
+     */
+    async function outputFirst(
+      pieces: readonly string[],
+    ): Promise<[string | undefined, PlainData[]]> {
+      await loggedIn();
+      for (const piece of pieces) {
+        spawner.started[0]?.output(piece);
+      }
+      spawner.started[0]?.error(SESSION_ENTERED);
+      await settled();
+      return [
+        written(),
+        events.filter(
+          event => (event as {type: string}).type === 'localCommandLines',
+        ),
+      ];
+    }
+
+    function written(): string | undefined {
+      return spawner.started[0]?.inputText();
+    }
+
+    it('#1835: the probe is written once ssh reports the login, and nothing before', async () => {
+      create({opening: OPENING});
+      handler.onLeasesChanged([1]);
+      await send(1, {type: 'connect'});
+      await settled();
+      const before = written();
+      spawner.started[0]?.error(AUTHENTICATED);
+      await settled();
+      deepStrictEqual([before, written()], ['', PROBE]);
+    });
+
+    it("#1835: Windows answers write the loop's line, the session frames its scripts for the PowerShell loop, and the record request tells windows", async () => {
+      await authenticated();
+      spawner.started[0]?.output(
+        'C:\\>echo REMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-PROBE-m1-Windows_NT\r\n\r\nREMOTE-OSS-PROBE-m1-DONE\r\n',
+      );
+      await settled();
+      const afterAnswers = written() ?? '';
+      spawner.started[0]?.output('\nLAYER1-READY\n');
+      void send(1, RUN_REQUEST);
+      await settled();
+      deepStrictEqual(
+        [
+          afterAnswers,
+          eventTypes(),
+          /^m2 [0-9]+ 0$/.test(
+            (written() ?? '').slice(afterAnswers.length).split('\n')[0] ?? '',
+          ),
+          await send(2, {type: 'sharedRecord'}),
+        ],
+        [
+          `${PROBE}WINDOWS-LINE\n`,
+          ['connected'],
+          true,
+          {type: 'sharedRecord', record: null, detectedPlatform: 'windows'},
+        ],
+      );
+    });
+
+    it('#1835: POSIX answers write the hand-over line, the prelude only once the shell has printed the hand-over, then POSIX runs', async () => {
+      await authenticated();
+      spawner.started[0]?.output(
+        'REMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-HOME-m1-/home/h\nREMOTE-OSS-PROBE-m1-DONE\n',
+      );
+      await settled();
+      const handing = written();
+      spawner.started[0]?.output('REMOTE-OSS-PROBE-m1-EXEC\n');
+      await settled();
+      const handed = written();
+      spawner.started[0]?.output('LAYER1-READY\n');
+      void send(1, RUN_REQUEST);
+      await settled();
+      deepStrictEqual(
+        [
+          handing,
+          handed,
+          (written() ?? '').slice(handed?.length).split('\n')[0],
+          await send(2, {type: 'sharedRecord'}),
+        ],
+        [
+          `${PROBE}${HAND_OVER}`,
+          `${PROBE}${HAND_OVER}P\n`,
+          "printf '%s%s\\n' 'm2:st' 'art'",
+          {type: 'sharedRecord', record: null, detectedPlatform: 'posix'},
+        ],
+      );
+    });
+
+    it('F-2408 BR-4: a run with a session lock reaches the session shell as the guarded open of descriptor 9, written before the run, and a release run as the release commands', async () => {
+      await authenticated();
+      spawner.started[0]?.output(
+        'REMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-HOME-m1-/home/h\nREMOTE-OSS-PROBE-m1-DONE\n',
+      );
+      await settled();
+      spawner.started[0]?.output('REMOTE-OSS-PROBE-m1-EXEC\n');
+      await settled();
+      const handed = written() ?? '';
+      spawner.started[0]?.output('LAYER1-READY\n');
+      void send(1, {
+        ...RUN_REQUEST,
+        sessionLock: {path: '/tmp/lock', action: 'open'},
+      });
+      await settled();
+      deepStrictEqual(
+        (written() ?? '').slice(handed.length).split('\n').slice(0, 2),
+        [
+          "[ -n \"${REMOTE_OSS_LOCK_HELD:-}\" ] || { ( exec 9>>'/tmp/lock' ) 2>/dev/null && exec 9>>'/tmp/lock'; }",
+          "printf '%s%s\\n' 'm2:st' 'art'",
+        ],
+      );
+    });
+
+    it("#1835: a hand-over line before the answers end writes no prelude, and the probe's lines are no LocalCommand's output", async () => {
+      await authenticated();
+      spawner.started[0]?.output(
+        'banner\nREMOTE-OSS-PROBE-m1-EXEC\nREMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-PROBE-m1-DONE\n',
+      );
+      await settled();
+      deepStrictEqual([written(), eventTypes()], [`${PROBE}${HAND_OVER}`, []]);
+    });
+
+    it("#2598 (F-2109 AC-12), #1835: what comes before ssh enters the session is a LocalCommand's output, and the host shell's lines after it are not", async () => {
+      await loggedIn();
+      spawner.started[0]?.output('out-marker\n');
+      spawner.started[0]?.error(SESSION_ENTERED);
+      spawner.started[0]?.output(
+        'Windows PowerShell\r\nREMOTE-OSS-HOME-m1-C:\\Users\\x\r\nREMOTE-OSS-PROBE-m1-DONE\r\n',
+      );
+      await settled();
+      deepStrictEqual(
+        events.filter(
+          event => (event as {type: string}).type === 'localCommandLines',
+        ),
+        [{type: 'localCommandLines', lines: ['out-marker']}],
+      );
+    });
+
+    it("#2598 (F-2109 AC-12), #1835: a LocalCommand's last words with no line end are its own line once ssh enters the session, not part of the host's first line", async () => {
+      await loggedIn();
+      spawner.started[0]?.output('out-marker-tail');
+      spawner.started[0]?.error(SESSION_ENTERED);
+      spawner.started[0]?.output(
+        'REMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-PROBE-m1-DONE\n',
+      );
+      await settled();
+      deepStrictEqual(
+        [
+          events.filter(
+            event => (event as {type: string}).type === 'localCommandLines',
+          ),
+          written(),
+        ],
+        [
+          [{type: 'localCommandLines', lines: ['out-marker-tail']}],
+          `${PROBE}${HAND_OVER}`,
+        ],
+      );
+    });
+
+    it('#1835: lines a startup file could print, with no nonce or another one, never count, and the answers of this connection do', async () => {
+      await authenticated();
+      spawner.started[0]?.output(
+        'REMOTE-OSS-PROBE-Windows_NT\nREMOTE-OSS-HOME-C:\\Users\\x\nREMOTE-OSS-PROBE-DONE\nREMOTE-OSS-PROBE-ffff-DONE\nREMOTE-OSS-PROBE-m1-EXEC\n',
+      );
+      await settled();
+      const forged = written();
+      spawner.started[0]?.output(
+        'REMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-PROBE-m1-DONE\n',
+      );
+      await settled();
+      deepStrictEqual([forged, written()], [PROBE, `${PROBE}${HAND_OVER}`]);
+    });
+
+    it("#1835: an answer of this connection's nonce that comes before ssh's line of the session shows the session was entered, and the answers are read", async () => {
+      deepStrictEqual(
+        await outputFirst([
+          'REMOTE-OSS-PROBE-m1-%OS%\nREMOTE-OSS-PROBE-m1-DONE\n',
+        ]),
+        [`${PROBE}${HAND_OVER}`, []],
+      );
+    });
+
+    it("#2598 (F-2109 AC-12), #1835: a LocalCommand's last words with no line end, then a cmd host's answers before ssh's line of the session, join only the probe's start line, and Windows is found", async () => {
+      deepStrictEqual(
+        await outputFirst([
+          'out-marker-tail',
+          'REMOTE-OSS-PROBE-m1-START\r\nREMOTE-OSS-PROBE-m1-Windows_NT\r\nREMOTE-OSS-PROBE-m1-DONE\r\n',
+        ]),
+        [
+          `${PROBE}WINDOWS-LINE\n`,
+          [
+            {
+              type: 'localCommandLines',
+              lines: ['out-marker-tailREMOTE-OSS-PROBE-m1-START'],
+            },
+          ],
+        ],
+      );
+    });
+
+    it('F-2704 AC-13, #1835: a login shell that ends during the opening, with its own status, fails the login as one that ended at its startup, and is logged', async () => {
+      await authenticated();
+      spawner.started[0]?.exit(3);
+      await settled();
+      const detail =
+        "the SSH session ended before the host reported its platform: the login shell's startup exited with status 3";
+      deepStrictEqual(
+        [events[0], logged],
+        [
+          {
+            type: 'loginFailed',
+            kind: 'unknown',
+            hints: [],
+            exitStatus: 3,
+            detail,
+          },
+          [detail],
+        ],
+      );
+    });
+
+    it("#1835: ssh's own failure, status 255, during the opening is no login shell's end", async () => {
+      await authenticated();
+      spawner.started[0]?.exit(255);
+      await settled();
+      deepStrictEqual(
+        [(events[0] as {detail?: string}).detail, logged],
+        [undefined, []],
+      );
+    });
+
+    it('#1835: a session that ends before the answers end fails the login as any other, and is written nothing more', async () => {
+      await authenticated();
+      spawner.started[0]?.output('REMOTE-OSS-PROBE-m1-%OS%\n');
+      spawner.started[0]?.exit(255);
+      await settled();
+      deepStrictEqual(
+        [written(), eventTypes()],
+        [PROBE, ['loginFailed', 'ownerChanged']],
+      );
+    });
+  });
+
   describe('a login that fails', () => {
     beforeEach(async () => {
       handler.onLeasesChanged([1, 2]);
@@ -364,6 +747,15 @@ describe('connection handler (contracts §4 S9)', () => {
           ],
           ['the login shell did not finish its startup within 5 s'],
         ],
+      );
+    });
+
+    it('#1835: with the platform known, a session that ends with its own status and no line of the bootstrap is no startup end: the bootstrap reports its own', async () => {
+      spawner.started[0]?.exit(1);
+      await settled();
+      deepStrictEqual(
+        [(events[0] as {detail?: string}).detail, logged],
+        [undefined, []],
       );
     });
 
@@ -852,13 +1244,6 @@ describe('connection handler (contracts §4 S9)', () => {
       deadlineMilliseconds: 1000,
     } as const;
 
-    async function connected(): Promise<void> {
-      handler.onLeasesChanged([1, 2]);
-      await send(1, {type: 'connect'});
-      authenticate(spawner.started[0]);
-      events.length = 0;
-    }
-
     it('are refused before the connection is set up', async () => {
       handler.onLeasesChanged([1]);
       deepStrictEqual(await send(1, RUN_REQUEST), {
@@ -874,7 +1259,7 @@ describe('connection handler (contracts §4 S9)', () => {
       await settled();
       deepStrictEqual(
         spawner.started[0]?.inputText(),
-        "P\nprintf '%s%s\\n' 'm1:st' 'art'\nsh -c 'echo hello' </dev/null\nprintf '%s%s %s\\n' 'm1:e' 'nd' \"$?\"\n",
+        "P\nprintf '%s%s\\n' 'm1:st' 'art'\nsh -c 'echo hello' 9>&- </dev/null\nprintf '%s%s %s\\n' 'm1:e' 'nd' \"$?\"\n",
       );
     });
 
@@ -956,6 +1341,110 @@ describe('connection handler (contracts §4 S9)', () => {
     });
   });
 
+  describe('checkSession (card #2751)', () => {
+    const CHECK = {type: 'checkSession'} as const;
+
+    it('F-2505 AC-25: finds no session to answer before the connection is set up, asks no probe and ends nothing', async () => {
+      handler.onLeasesChanged([1]);
+      deepStrictEqual(
+        [await send(1, CHECK), probes, wasKilled(), stops],
+        [{type: 'sessionChecked', alive: false}, [], false, 0],
+      );
+    });
+
+    it('F-2505 AC-25: asks the forward for a connect to the host’s own sshd within three seconds and writes nothing to the session', async () => {
+      await connected();
+      deepStrictEqual(
+        [
+          await send(1, CHECK),
+          probes,
+          (spawner.started[0]?.inputText() ?? '').includes('m1:st'),
+          wasKilled(),
+          events,
+        ],
+        [
+          {type: 'sessionChecked', alive: true},
+          [{socksPort: 41000, targetPort: 22, deadlineMilliseconds: 3000}],
+          false,
+          false,
+          [],
+        ],
+      );
+    });
+
+    it('F-2505 AC-25: a session that stays silent is ended after three seconds, every lease is told its transport is lost and the helper stays', async () => {
+      await connected();
+      probeScript.answers = false;
+      const reply = send(2, CHECK);
+      await settled();
+      clock.advance(3000);
+      deepStrictEqual(
+        [await reply, wasKilled(), eventTypes(), stops],
+        [
+          {type: 'sessionChecked', alive: false},
+          true,
+          ['transportLost', 'ownerChanged'],
+          0,
+        ],
+      );
+    });
+
+    it('F-2505 AC-25: lets the next connect start a fresh session on the same helper after the session ended', async () => {
+      await connected();
+      probeScript.answers = false;
+      const reply = send(1, CHECK);
+      await settled();
+      clock.advance(3000);
+      await reply;
+      deepStrictEqual(
+        [await send(1, {type: 'connect'}), spawner.started.length],
+        [{type: 'accepted'}, 2],
+      );
+    });
+
+    it('F-2505 AC-25: shares one probe among checks that come while it runs', async () => {
+      await connected();
+      probeScript.answers = false;
+      const first = send(1, CHECK);
+      const second = send(2, CHECK);
+      await settled();
+      clock.advance(3000);
+      deepStrictEqual(
+        [[await first, await second], probes.length],
+        [
+          [
+            {type: 'sessionChecked', alive: false},
+            {type: 'sessionChecked', alive: false},
+          ],
+          1,
+        ],
+      );
+    });
+
+    it('F-2505 AC-25: answers while another window’s run is on the session, since it does not wait for the run', async () => {
+      await connected();
+      const running = send(1, {
+        type: 'runScript',
+        runId: 7,
+        script: 'tar x',
+        environment: {},
+        inputBase64: null,
+        deadlineMilliseconds: 600000,
+      });
+      await settled();
+      const reply = await send(2, CHECK);
+      let ended = false;
+      void running.then(() => {
+        ended = true;
+      });
+      await settled();
+      deepStrictEqual(
+        [reply, ended],
+        [{type: 'sessionChecked', alive: true}, false],
+      );
+    });
+  });
+
   describe('close', () => {
     it('ends ssh without an event when the helper ends', async () => {
       handler.onLeasesChanged([1]);
@@ -977,6 +1466,7 @@ describe('connection handler (contracts §4 S9)', () => {
       deepStrictEqual(await send(1, {type: 'sharedRecord'}), {
         type: 'sharedRecord',
         record: null,
+        detectedPlatform: null,
       });
     });
 
@@ -996,7 +1486,10 @@ describe('connection handler (contracts §4 S9)', () => {
       const shared = await send(2, {type: 'sharedRecord'});
       deepStrictEqual(
         [stored, shared],
-        [{type: 'accepted'}, {type: 'sharedRecord', record: RECORD}],
+        [
+          {type: 'accepted'},
+          {type: 'sharedRecord', record: RECORD, detectedPlatform: null},
+        ],
       );
     });
   });

@@ -26,11 +26,15 @@ export const ENGINE_TEMPLATES = {
   S134: 'Docker Compose required',
   S135: 'Docker Compose returned an error.',
   S143: 'Docker returned an error.',
+  S056: "Cannot connect to Docker daemon using 'ssh'.",
+  S057: "Cannot connect to Docker daemon using 'ssh'. Make sure public/private keys are set up for connecting without keyboard interaction.",
   S146: 'Docker version 17.12.0 or later required.',
+  S197: 'Hostname must not start with a dash: {0}',
   S147: 'Documentation',
   S201: 'Ignore',
   S204: 'Install',
   S221: 'License',
+  S225: 'Make sure public/private keys are set up for connecting without keyboard interaction.',
   S226: 'Make sure the Docker daemon is running.',
   S324: 'Show Log',
   S380: "Try adding the user to the 'docker' group.",
@@ -87,6 +91,20 @@ export function dialogOf(
       buttons: [{label: text('S147'), action: 'openPermission'}],
     };
   }
+  if (outcome === 'sshDenied') {
+    return {
+      message: text('S056'),
+      detail: text('S225'),
+      buttons: [{label: text('S324'), action: 'showLog'}],
+    };
+  }
+  if (outcome === 'sshTooMany') {
+    return {
+      message: text('S057'),
+      detail: '',
+      buttons: [{label: text('S324'), action: 'showLog'}],
+    };
+  }
   if (outcome === 'engineError') {
     return {
       message: text('S143'),
@@ -108,6 +126,18 @@ export function dialogOf(
         ? licenceDetail
         : `${text('S079').replace('{0}', written)} ${licenceDetail}`,
     buttons: [install, licence],
+  };
+}
+
+/** The dialog for a Docker host over `ssh` whose host name starts with a dash, which `ssh` would take for an option. */
+export function dashHostDialogOf(
+  host: string,
+  translate: Translate,
+): EngineDialog {
+  return {
+    message: translate(ENGINE_TEMPLATES.S197).replace('{0}', host),
+    detail: '',
+    buttons: [{label: translate(ENGINE_TEMPLATES.S324), action: 'showLog'}],
   };
 }
 

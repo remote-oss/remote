@@ -22,10 +22,10 @@ import {openFolderWindow, openMemoryWindow} from '../windows/folder-windows.ts';
 import {runFromPalette} from '../windows/palette.ts';
 import {
   dialogOf,
-  notifications,
   outputChannelOf,
   pageText,
   quickPickOf,
+  toastsOnceSettled,
 } from '../windows/renderer.ts';
 
 /** How long the rows let a window settle, so that an activation that comes late would have come. */
@@ -136,7 +136,7 @@ describe('the activation of Remote - SSH in a local window (card coverage-95)', 
         active: await extensionActive(name, SSH_EXTENSION),
         channel: await outputChannelOf(name),
         dialog: await dialogOf(name),
-        notices: await notifications(name),
+        notices: await toastsOnceSettled(name),
         quickPick: await quickPickOf(name),
       },
       {
@@ -150,7 +150,7 @@ describe('the activation of Remote - SSH in a local window (card coverage-95)', 
     );
   });
 
-  it('F-2001 AC-22 (c95-virtual): in a virtual workspace the extension is enabled, Get Started with SSH is hidden and the other 12 local-window commands are listed', async () => {
+  it('F-2001 AC-22, F-2006 AC-12 (c95-virtual): in a virtual workspace the extension is enabled, Get Started with SSH is hidden and the other 12 local-window commands are listed', async () => {
     const virtual = await openMemoryWindow();
     try {
       await settled();
@@ -184,7 +184,7 @@ describe('the activation of Remote - SSH in a local window (card coverage-95)', 
         {
           before,
           events: sshActivations(own.logFile),
-          notices: await notifications(own.name),
+          notices: await toastsOnceSettled(own.name),
           dialog: await dialogOf(own.name),
           quickPick: await quickPickOf(own.name),
         },

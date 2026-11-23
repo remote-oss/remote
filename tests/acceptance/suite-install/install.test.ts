@@ -1,6 +1,6 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
 import * as vscode from 'vscode';
-import {onHost, recordLines} from '../suite/harness.ts';
+import {connectionLog, onHost, recordLines} from '../suite/harness.ts';
 import casesFile from './cases.json' with {type: 'json'};
 import {
   archiveCopiesLeft,
@@ -8,8 +8,12 @@ import {
   binEntries,
   downloadRequests,
   existsOnHost,
+  hostPlatform,
   installedCommits,
   isHostDownloader,
+  runVariable,
+  folderListing,
+  standInCliRanAs,
 } from './install.ts';
 
 /** The download host's requests a case expects: a count, all of one path, or only the client's. */
@@ -17,6 +21,8 @@ interface ExpectedRequests {
   count?: number;
   path?: string;
   clientOnly?: boolean;
+  /** How many requests the client itself made, whatever the host's downloader asked: one for a client that does not retry. */
+  clientCount?: number;
   /** The host's downloader asked first and failed, and the client's followed. */
   hostThenClient?: boolean;
 }
@@ -38,8 +44,12 @@ interface InstallCase {
   requests?: ExpectedRequests;
   licenceDetail?: string;
   noArchiveLeft?: boolean;
+  /** The server folder the CLI archive of an exec-mode install reaches under its commit-keyed name. */
+  cliIn?: string;
   /** File names, as `find -name` patterns, that nothing under the host's home and temporary folders may carry. */
   noHostFiles?: string[];
+  /** Whether the case only makes the state of the case that needs it, so its only row is its own connect. */
+  primer?: true;
 }
 
 /** The install case of this window, named by the variable the harness gave it. */
@@ -112,17 +122,19 @@ describe(`the install case "${installCase?.label ?? 'unknown'}" of the VSCodium 
       );
     });
 
-    it(`F-2403 AC-21: no text of the list appears (${label})`, () => {
-      const shown = [
-        dialogQuestion() ?? '',
-        ...recordLines('mitigationPick').flatMap(line => line.items ?? []),
-        ...recordLines('notice').map(line => line.question),
-      ];
-      deepStrictEqual(
-        UNSHOWN_TEXTS.filter(text => shown.some(each => each.includes(text))),
-        [],
-      );
-    });
+    if (installCase.primer !== true) {
+      it(`F-2403 AC-21: no text of the list appears (${label})`, () => {
+        const shown = [
+          dialogQuestion() ?? '',
+          ...recordLines('mitigationPick').flatMap(line => line.items ?? []),
+          ...recordLines('notice').map(line => line.question),
+        ];
+        deepStrictEqual(
+          UNSHOWN_TEXTS.filter(text => shown.some(each => each.includes(text))),
+          [],
+        );
+      });
+    }
   }
 
   if (
@@ -198,13 +210,62 @@ describe(`the install case "${installCase?.label ?? 'unknown'}" of the VSCodium 
             ? seen.length > 0 &&
               seen.every(each => !isHostDownloader(each.userAgent))
             : true,
+          requests.clientCount === undefined ||
+            seen.filter(each => !isHostDownloader(each.userAgent)).length ===
+              requests.clientCount,
           requests.hostThenClient === true
             ? seen.findIndex(each => isHostDownloader(each.userAgent)) === 0 &&
               seen.some(each => !isHostDownloader(each.userAgent))
             : true,
         ],
-        [seen.length, [], true, true],
+        [seen.length, [], true, true, true],
         `requests: ${JSON.stringify(seen)}`,
+      );
+    });
+  }
+
+  if (installCase?.cliIn !== undefined) {
+    const {cliIn} = installCase;
+    // The copy's template names the client's loopback and the case forces the local download, so the request is the
+    // client's own: the host's downloader, which cannot reach a loopback, makes none.
+    it(`${cite}: the client asked once for the CLI of the host's platform and of its own commit`, async () => {
+      const platform = await hostPlatform();
+      const seen = downloadRequests(label);
+      deepStrictEqual(
+        seen
+          .filter(
+            each =>
+              each.path.startsWith('/cli/') &&
+              !isHostDownloader(each.userAgent),
+          )
+          .map(each => each.path),
+        [
+          `/cli/${platform}/${runVariable('HARNESS_CLIENT_COMMIT')}/cli-${platform}.tar.gz`,
+        ],
+        `all the requests of the case: ${JSON.stringify(seen)}; the log lines that name the CLI: ${JSON.stringify(
+          connectionLog().filter(line => /\bCLI\b/i.test(line)),
+        )}`,
+      );
+    });
+
+    // The install removes the CLI's file when the CLI fails, so the stand-in writes the path it was run as: that path is
+    // the archive's file in the server folder, under the commit-keyed name, and it was run from there.
+    it(`${cite}: the CLI archive's file was run from the server folder of the host under its commit-keyed name`, async () => {
+      const commit = runVariable('HARNESS_CLIENT_COMMIT');
+      const ranAs = await standInCliRanAs();
+      deepStrictEqual(
+        [
+          ranAs.startsWith(`${cliIn}/`),
+          ranAs.slice(cliIn.length + 1).endsWith(`-${commit}`),
+          ranAs.slice(cliIn.length + 1).includes('/'),
+        ],
+        [true, true, false],
+        `the stand-in CLI was run as ${JSON.stringify(ranAs)}\nthe server folder:\n${await folderListing(cliIn)}\nthe log lines of the install, without the progress lines:\n${connectionLog()
+          .filter(
+            line => !/Downloading VS Code Server: |unpack \d+$/.test(line),
+          )
+          .slice(-40)
+          .join('\n')}`,
       );
     });
   }

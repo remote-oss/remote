@@ -13,7 +13,7 @@ import {
   windowState,
 } from '../windows/harness.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
-import {notificationCentre} from '../windows/renderer.ts';
+import {noticesOnceSettled} from '../windows/renderer.ts';
 import {
   closedAndWatched,
   connectedWindow,
@@ -58,7 +58,7 @@ describe('what a window close and a reopen do to a dev container (card coverage-
           built: containersLog()
             .slice(mark)
             .filter(line => /build|creating container/i.test(line)),
-          notices: (await notificationCentre(window)).filter(
+          notices: (await noticesOnceSettled(window)).filter(
             text => !text.startsWith('Setting up'),
           ),
           seconds: seconds < 60,
@@ -122,13 +122,20 @@ describe('what a window close and a reopen do to a dev container (card coverage-
       postAttachCommand: 'echo x >> marker-post-attach',
     });
     try {
-      const first = [
+      const markers = [
         'marker-initialize',
         'marker-create',
         'marker-post-create',
         'marker-post-start',
         'marker-post-attach',
-      ].map(file => linesOf(connected.folder, file).length);
+      ];
+      // The last two commands run after the window has connected, later on a slower machine.
+      await waitFor(
+        'every lifecycle command to have run once',
+        () => markers.every(file => linesOf(connected.folder, file).length > 0),
+        60_000,
+      );
+      const first = markers.map(file => linesOf(connected.folder, file).length);
       const outcome = await closedAndWatched(connected, 20);
       const window = await openFolderWindow(connected.folder);
       await reopenInContainer(window);

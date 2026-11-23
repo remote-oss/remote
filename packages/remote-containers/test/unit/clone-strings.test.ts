@@ -1,7 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {cloneText} from '../../src/volumes/clone-strings.ts';
 import {runHostProgram} from '../../src/volumes/host-program.ts';
-import {sourceRowsOf} from '../../src/volumes/source-pick.ts';
+import {pickedSourceOf, sourceRowsOf} from '../../src/volumes/source-pick.ts';
 
 /** A translation that marks the text it was given. */
 function marked(template: string): string {
@@ -16,17 +16,68 @@ describe('the texts and the source pick of Clone Repository in Container Volume 
     );
   });
 
-  it('F-0701 5.0 steps 3 and 4, BR-15: no row before any text, then the clone row with the text trimmed', () => {
+  it('F-0701 5.0 steps 3 and 4, AC-2, AC-3, BR-1, BR-15: the GitHub row under remote sources, then the clone row with the text trimmed above it', () => {
+    const github = {
+      kind: 'github',
+      label: '«Clone a repository from «GitHub» in a Container Volume»',
+      description: '',
+    };
     deepStrictEqual(
       [
-        sourceRowsOf('', marked),
-        sourceRowsOf('   ', marked),
-        sourceRowsOf('  o/r ', marked),
+        sourceRowsOf('', marked, 'local'),
+        sourceRowsOf('   ', marked, 'local'),
+        sourceRowsOf('  o/r ', marked, 'local'),
       ],
       [
+        [{kind: 'separator', label: '«remote sources»'}, github],
+        [{kind: 'separator', label: '«remote sources»'}, github],
+        [
+          {
+            kind: 'url',
+            label: '«Clone git repository from URL»',
+            description: 'o/r',
+          },
+          github,
+        ],
+      ],
+    );
+  });
+
+  it('F-0701 BR-8: from a remote window the GitHub row says GitHub alone, and without the GitHub source there is only the clone row', () => {
+    deepStrictEqual(
+      [
+        sourceRowsOf('', marked, 'remote'),
+        sourceRowsOf('', marked, 'none'),
+        sourceRowsOf('o/r', marked, 'none'),
+      ],
+      [
+        [
+          {kind: 'separator', label: '«remote sources»'},
+          {kind: 'github', label: '«GitHub»', description: ''},
+        ],
         [],
-        [],
-        [{label: '«Clone git repository from URL»', description: 'o/r'}],
+        [
+          {
+            kind: 'url',
+            label: '«Clone git repository from URL»',
+            description: 'o/r',
+          },
+        ],
+      ],
+    );
+  });
+
+  it('F-0701 6.3: a repository picked on GitHub is its address, or with a branch the branch’s URL', () => {
+    deepStrictEqual(
+      [
+        pickedSourceOf({url: 'https://github.com/o/r.git'}),
+        pickedSourceOf({url: 'https://github.com/o/r.git', branch: 'a/b'}),
+        pickedSourceOf({url: 'https://github.com/o/r/', branch: 'main'}),
+      ],
+      [
+        'https://github.com/o/r.git',
+        'https://github.com/o/r/tree/a/b',
+        'https://github.com/o/r/tree/main',
       ],
     );
   });

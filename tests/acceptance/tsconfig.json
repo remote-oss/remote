@@ -17,6 +17,7 @@
     "${configDir}/suite-install",
     "${configDir}/suite-terminal",
     "${configDir}/suite-socket",
+    "${configDir}/suite-socket-prime",
     "${configDir}/suite-client",
     "${configDir}/suite-slow",
     "${configDir}/slow-remote/src",

@@ -65,6 +65,12 @@ function stepWith(
     warned?: boolean;
     /** Whether ssh reported, in this connect, that the host's sshd prohibited a forward. */
     prohibited?: boolean;
+    /** How listening on the window's port ends: it works, or fails as a port in use does. */
+    listen?: 'work' | 'fail';
+    /** The ports another process takes before this connect's listen, with the code their listen fails with. */
+    taken?: {ports: readonly number[]; code: string};
+    /** The ports of the range, in order, that the search offers, skipping what the step asks it to skip. */
+    range?: {first: number; last: number};
   } = {},
 ): {
   open: () => ReturnType<ReturnType<typeof openTunnelStep>['openTunnel']>;
@@ -73,16 +79,19 @@ function stepWith(
   socksPorts: number[];
   sink: MemorySink;
   clock: FakeClock;
-  /** How often the step told the window that the host refuses the forwarding, and took the bound off. */
-  refused: number[];
   /** Tells the step that the connection's ssh ended. */
   loseConnection: () => void;
+  /** The ports the step asked the search to skip, one list per search. */
+  searches: number[][];
 } {
   const clock = new FakeClock();
-  const local = new FakeLocalPort();
+  const local =
+    options.taken === undefined
+      ? new FakeLocalPort(options.listen ?? 'work')
+      : new TakenLocalPort(options.taken.ports, options.taken.code);
+  const searches: number[][] = [];
   const dialer = new FakeDialer(options.dialScript ?? ['work']);
   const socksPorts: number[] = [];
-  const refused: number[] = [];
   const sink = new MemorySink();
   const port = 'port' in options ? options.port : 50000;
   const choice: PortChoice =
@@ -101,13 +110,22 @@ function stepWith(
       socksPorts.push(socksPort);
       return dialer;
     },
-    chooseLocalPort: () => Promise.resolve(choice),
+    chooseLocalPort: skipped => {
+      searches.push([...(skipped ?? [])]);
+      const {range} = options;
+      if (range === undefined) {
+        return Promise.resolve(choice);
+      }
+      for (let free = range.first; free <= range.last; free++) {
+        if (!(skipped?.has(free) ?? false)) {
+          return Promise.resolve({port: free});
+        }
+      }
+      return Promise.resolve({busyRange: range});
+    },
     environment: () => ENVIRONMENT,
     warnedForwardingDisabled: () => options.warned ?? false,
     prohibitedForwarding: () => options.prohibited ?? false,
-    forwardRefused: () => {
-      refused.push(1);
-    },
     ...TERMINAL_NOT_USED,
     logger: createLogger(sink, {minimumLevel: (): Level => 'info'}),
   });
@@ -150,11 +168,51 @@ function stepWith(
     socksPorts,
     sink,
     clock,
-    refused,
     loseConnection: () => {
       recording.notice?.({type: 'transportLost'});
     },
+    searches,
   };
+}
+
+/** The failure of a connect whose preferred range 41060-41061 has no free port, with the reason of its text. */
+const BUSY_RANGE_FAILURE = {
+  kind: 'failed',
+  failure: {
+    kind: 'unknown',
+    reason: {
+      id: 'S067',
+      values: [
+        {id: 'S073', values: [{id: 'S095', values: ['41060', '41061']}]},
+      ],
+    },
+  },
+};
+
+/** A loopback on which `ports` are already taken by another process: their listen fails with `code`. */
+class TakenLocalPort extends FakeLocalPort {
+  private readonly taken: ReadonlySet<number>;
+  private readonly code: string;
+
+  constructor(ports: readonly number[], code: string) {
+    super('work');
+    this.taken = new Set(ports);
+    this.code = code;
+  }
+
+  override listen(
+    ...given: Parameters<FakeLocalPort['listen']>
+  ): ReturnType<FakeLocalPort['listen']> {
+    const [port] = given;
+    if (this.taken.has(port)) {
+      const failure: NodeJS.ErrnoException = new Error(
+        `port ${String(port)} is in use`,
+      );
+      failure.code = this.code;
+      return Promise.reject(failure);
+    }
+    return super.listen(...given);
+  }
 }
 
 /** Lets the clock run past the wait of the relay, a turn of the event loop at a time. */
@@ -166,28 +224,22 @@ async function pastTheBound(clock: FakeClock): Promise<void> {
 }
 
 describe('the step that opens the window tunnel', () => {
-  it('F-2604 AC-6 (ruling-1985-forwarding-fails): a relay that closes every probe before its reply tells the window once and fails the connect as a refused forward, with the reason and the hint, before the bound', async () => {
-    const {open, clock, refused} = stepWith({
+  it('F-2604 AC-24 (ruling-1985-forwarding-fails): a relay that closes every probe before its reply fails the connect as a refused forward, with the reason and the hint, before the bound', async () => {
+    const {open, clock} = stepWith({
       dialScript: ['closedBeforeReply'],
       prohibited: true,
       limits: {...LIMITS, readyMilliseconds: 10_000, retryMilliseconds: 100},
     });
     const pending = open();
     await pastTheBound(clock);
-    deepStrictEqual(
-      [await pending, refused.length],
-      [
-        {
-          kind: 'failed',
-          failure: {
-            kind: 'forwardingDisabled',
-            reason: {id: 'forwardingRefused'},
-            hints: [FORWARDING_PROHIBITED_HINT],
-          },
-        },
-        1,
-      ],
-    );
+    deepStrictEqual(await pending, {
+      kind: 'failed',
+      failure: {
+        kind: 'forwardingDisabled',
+        reason: {id: 'forwardingRefused'},
+        hints: [FORWARDING_PROHIBITED_HINT],
+      },
+    });
   });
 
   it('F-2604 AC-19 (ruling-1985-forwarding-fails): a refused relay fails with S107 and its own hint when ssh warned of a changed host key, with the server’s reason and hint when ssh reported the forward administratively prohibited, and with the connection closed otherwise', async () => {
@@ -219,7 +271,13 @@ describe('the step that opens the window tunnel', () => {
     ]);
   });
 
-  /** The kind of the step's result, and how often it told the window, for a run that `dialScript` and `listening` steer. */
+  /** The failure kinds of a refused forward, of every cause. */
+  const REFUSAL_KINDS: readonly string[] = [
+    'forwardingDisabled',
+    'channelClosed',
+  ];
+
+  /** The kind of the step's result, and 1 when it failed as a refused forward, for a run that `dialScript` and `listening` steer. */
   async function refusalRun(
     options: Parameters<typeof stepWith>[0],
     beforeBound?: (context: ReturnType<typeof stepWith>) => Promise<void>,
@@ -239,7 +297,10 @@ describe('the step that opens the window tunnel', () => {
     await pastTheBound(context.clock);
     const state = {
       ended: result?.kind,
-      refused: context.refused.length,
+      refused:
+        result?.kind === 'failed' && REFUSAL_KINDS.includes(result.failure.kind)
+          ? 1
+          : 0,
       lines: context.sink.lines.map(line => line.message),
     };
     controller.abort();
@@ -335,11 +396,18 @@ describe('the step that opens the window tunnel', () => {
     deepStrictEqual([outcome.ended, outcome.refused], ['failed', 0]);
   });
 
-  it('connect-106: probes that fail in another way are the failure of an unready tunnel, with no notice', async () => {
-    const {open, clock, refused} = stepWith({dialScript: ['fail']});
+  it('connect-106: probes that fail in another way are the failure of an unready tunnel, not a refused forward', async () => {
+    const {open, clock} = stepWith({dialScript: ['fail']});
     const pending = open();
     await pastTheBound(clock);
-    deepStrictEqual([(await pending).kind, refused.length], ['failed', 0]);
+    deepStrictEqual(await pending, {
+      kind: 'failed',
+      failure: {
+        kind: 'unknown',
+        logDetail:
+          'the window tunnel did not open: no probe of its port worked before the bound',
+      },
+    });
   });
 
   it('connect-107: the step tells its caller that the tunnel stage began once the window’s port is chosen, and not when no port is free', async () => {
@@ -431,18 +499,7 @@ describe('the step that opens the window tunnel', () => {
     const result = await stepWith({
       busyRange: {first: 41060, last: 41061},
     }).open();
-    deepStrictEqual(result, {
-      kind: 'failed',
-      failure: {
-        kind: 'unknown',
-        reason: {
-          id: 'S067',
-          values: [
-            {id: 'S073', values: [{id: 'S095', values: ['41060', '41061']}]},
-          ],
-        },
-      },
-    });
+    deepStrictEqual(result, BUSY_RANGE_FAILURE);
   });
 
   it('F-2104 BR-10: a tunnel that never becomes ready fails without a reason', async () => {
@@ -454,7 +511,110 @@ describe('the step that opens the window tunnel', () => {
     }
     deepStrictEqual(await pending, {
       kind: 'failed',
-      failure: {kind: 'unknown'},
+      failure: {
+        kind: 'unknown',
+        logDetail:
+          'the window tunnel did not open: no probe of its port worked before the bound',
+      },
+    });
+  });
+
+  it('#2510: a window port that cannot be listened on fails with no reason for the dialog and the listen error for the log', async () => {
+    const {open} = stepWith({listen: 'fail'});
+    deepStrictEqual(await open(), {
+      kind: 'failed',
+      failure: {
+        kind: 'unknown',
+        logDetail:
+          'the window tunnel did not open: its local port could not be listened on: port 50000 is in use',
+      },
+    });
+  });
+
+  it('F-2501 AC-8, AC-25 (ruling-2731-listen-retry): a window port another window took before this listen is chosen again with that port skipped, and the tunnel opens on the next free one', async () => {
+    const {open, local, searches, sink} = stepWith({
+      taken: {ports: [20002], code: 'EADDRINUSE'},
+      range: {first: 20002, last: 20999},
+    });
+    const result = await open();
+    if (result.kind === 'done') {
+      result.value.close();
+    }
+    deepStrictEqual(
+      [
+        result.kind,
+        local.listened,
+        searches,
+        sink.lines
+          .map(line => line.message)
+          .filter(text => text.includes('taken before its listen')),
+      ],
+      [
+        'done',
+        [20003],
+        [[], [20002]],
+        [
+          'the window port 20002 was taken before its listen (EADDRINUSE): choosing another',
+        ],
+      ],
+    );
+  });
+
+  it('F-2104.AC-14 (ruling-2731-listen-retry): when every port of the range was taken before its listen, the connect fails with the busy range', async () => {
+    const result = await stepWith({
+      taken: {ports: [41060, 41061], code: 'EADDRINUSE'},
+      range: {first: 41060, last: 41061},
+    }).open();
+    deepStrictEqual(result, BUSY_RANGE_FAILURE);
+  });
+
+  it('F-2104 7.E3 (ruling-2731-listen-retry): a listen that fails for another reason than a port in use is not chosen again', async () => {
+    const {open, searches} = stepWith({
+      taken: {ports: [20002], code: 'EACCES'},
+      range: {first: 20002, last: 20999},
+    });
+    deepStrictEqual(
+      [await open(), searches],
+      [
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'unknown',
+            logDetail:
+              'the window tunnel did not open: its local port could not be listened on: port 20002 is in use (EACCES)',
+          },
+        },
+        [[]],
+      ],
+    );
+  });
+
+  it('ruling-2731-listen-retry: a port is chosen again at most twenty times, then the last listen failure ends the connect', async () => {
+    const takenPorts = Array.from(
+      {length: 30},
+      (unused, index) => 20000 + index,
+    );
+    const {open, searches} = stepWith({
+      taken: {ports: takenPorts, code: 'EADDRINUSE'},
+      range: {first: 20000, last: 20999},
+    });
+    const result = await open();
+    deepStrictEqual(
+      [result.kind, searches.length, searches.at(-1)?.length],
+      ['failed', 21, 20],
+    );
+  });
+
+  it('#2585: the error code of a failed listen is in the log line, after the listen error', async () => {
+    const {open, local} = stepWith({listen: 'fail'});
+    local.listenFailureCode = 'EADDRINUSE';
+    deepStrictEqual(await open(), {
+      kind: 'failed',
+      failure: {
+        kind: 'unknown',
+        logDetail:
+          'the window tunnel did not open: its local port could not be listened on: port 50000 is in use (EADDRINUSE)',
+      },
     });
   });
 

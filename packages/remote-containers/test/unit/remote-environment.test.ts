@@ -140,16 +140,20 @@ describe('the remote environment (card containers-45)', () => {
     );
   });
 
-  it('F-0416 BR-11a: remoteEnv wins over the probe, null stays null, and no probe leaves remoteEnv alone', () => {
+  it("F-0416 BR-11a, F-1003 BR-13: the relays' variables go over the probe and under remoteEnv; null stays null; no probe leaves the rest alone", () => {
     deepStrictEqual(
       [
         extensionHostEnvironmentOf(
-          {ALPHA: 'probe', BRAVO: 'probe'},
-          {ALPHA: 'remote', CHARLIE: null},
+          {ALPHA: 'probe', BRAVO: 'probe', DELTA: 'probe'},
+          {BRAVO: 'relay', DELTA: 'relay'},
+          {ALPHA: 'remote', CHARLIE: null, DELTA: 'remote'},
         ),
-        extensionHostEnvironmentOf(undefined, {CHARLIE: 'remote'}),
+        extensionHostEnvironmentOf(undefined, {}, {CHARLIE: 'remote'}),
       ],
-      [{ALPHA: 'remote', BRAVO: 'probe', CHARLIE: null}, {CHARLIE: 'remote'}],
+      [
+        {ALPHA: 'remote', BRAVO: 'relay', CHARLIE: null, DELTA: 'remote'},
+        {CHARLIE: 'remote'},
+      ],
     );
   });
 });

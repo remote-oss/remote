@@ -18,12 +18,14 @@ import {
   userSettings,
   waitFor,
 } from '../windows/harness.ts';
+import {cachedLabelAuthorities} from '../windows/global-state.ts';
 import {INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
 import {
   answerDialog,
   dialogOf,
   portsRows,
   primaryButtonOf,
+  indicatorDisconnects,
   statusItem,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -155,10 +157,27 @@ describe('the connect of a folder that is not trusted, with the server on a sock
     });
   }
 
-  it('F-2410 AC-31 (st31-timeout): with the trust request left open the indicator reads Disconnected behind it, and after Trust Folder & Continue the dialog of the connect that timed out comes, from which Retry connects with no trust dialog', async () => {
+  it('F-2410 AC-31 (st31-timeout): after a connect of the host that worked, with the trust request left open the indicator reads Disconnected with the host behind it, and after Trust Folder & Continue the dialog of the connect that timed out comes, from which Retry connects with no trust dialog', async () => {
+    // No connection is made while the trust request is open: the host in the indicator is core's cached label of an
+    // earlier connect of the same authority, so the row makes that connect itself.
+    const first = 'st31-first';
+    appendScript([
+      {
+        surface: 'platformPick',
+        match: 'platform',
+        answer: 'linux',
+        window: first,
+      },
+    ] satisfies AppendedEntry[]);
+    await openWindow('harness-zsh', first);
+    await waitForDialog(first, 120_000);
+    await answerDialog(first, 'Trust Folder & Continue');
+    await connectedWithin(first, INSTALL_MILLISECONDS);
+    await closeWindow(first);
+    const cached = cachedLabelAuthorities().includes('ssh-remote+harness-zsh');
+    // The connect that worked remembered the host's platform, so this window asks no platform pick.
     const window = 'st31';
     appendScript([
-      {surface: 'platformPick', match: 'platform', answer: 'linux', window},
       {
         surface: 'failureDialog',
         match: 'Could not establish connection',
@@ -166,7 +185,6 @@ describe('the connect of a folder that is not trusted, with the server on a sock
         window,
         after: 'st31-retry',
       },
-      {surface: 'platformPick', match: 'platform', answer: 'linux', window},
     ] satisfies AppendedEntry[]);
     await openWindow('harness-zsh', window);
     await waitForDialog(window, 120_000);
@@ -175,14 +193,16 @@ describe('the connect of a folder that is not trusted, with the server on a sock
       () => recordLines('failureDialog', window).length > 0,
       120_000,
     );
+    await indicatorDisconnects(window);
     const indicator = (await statusItem(window, 'status.host')).text;
     const timedOut = recordLines('failureDialog', window)[0]?.question;
     await answerDialog(window, 'Trust Folder & Continue');
     signal('st31-retry');
     await connectedWithin(window, INSTALL_MILLISECONDS);
     deepStrictEqual(
-      [indicator, timedOut, await dialogOf(window)],
+      [cached, indicator, timedOut, await dialogOf(window)],
       [
+        true,
         'Disconnected from SSH: harness-zsh',
         'Could not establish connection to "harness-zsh": Connecting with SSH timed out.',
         undefined,
@@ -215,6 +235,7 @@ describe('the connect of a folder that is not trusted, with the server on a sock
       () => recordLines('failureDialog', window).length > 0,
       120_000,
     );
+    await indicatorDisconnects(window);
     deepStrictEqual(
       [
         recordLines('failureDialog', window).map(line => line.question),

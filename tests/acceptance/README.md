@@ -90,7 +90,7 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
   harness writes before the launch. The tests check the record.
 
 - `terminal`: the same window with `remote.SSH.useLocalServer` off, which is terminal mode, with `suite-terminal/`.
-- `socket`: the same window with `remote.SSH.remoteServerListenOnSocket` on, so the server listens on a socket, with `suite-socket/`.
+- `socket`: the same window with `remote.SSH.remoteServerListenOnSocket` on, so the server listens on a socket, with `suite-socket/`. A selection that names it makes `socket-prime` right before it (a part of `socket`, named only): a terminal-mode connect, with `suite-socket-prime/`, that leaves the port-kind server the AC-9 row needs running.
 
 - `slow`: the same window with `suite-slow/` and a development extension of the workspace kind that takes 15 s to
   activate in the remote extension host (`slow-remote/`, which writes `/tmp/acceptance-slow-started` and
@@ -122,6 +122,15 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 - `default-ports`: a plain launch with the renderer helpers, whose settings forward one default port; `default-ports/*.test.ts` opens windows and reads the local end of a port, the window's tunnels (`tunnelsOf`, the agent's `acceptance.agent.tunnels` over `workspace.tunnels`), a setting's default in the window (`settingDefaultIn`) and core's notifications.
 
 - `ssh-core`: a plain launch with the renderer helpers and no setting of its own; `ssh-core/*.test.ts` opens windows on the SSH host and reads the core features of the editor in them (terminals first) through the renderer, F-2508's rows.
+- `ssh-killed-12`, `ssh-killed-13` and `ssh-killed-14`: the launch of `ssh-core` for the rows about the server's lifetime after the client's editor ended without closing the connection (F-2413 AC-12, 13, 14); they run the one suite `ssh-killed` and each names its case in `HARNESS_KILLED_CASE`, so that a launch runs one row, which kills the launch's editor tree after connecting a window and goes on against the host alone, as `containers-killed-*` do. The row of case 14 asks the harness for a new editor (`relaunchEditor`) to open the second window.
+- `ssh-locks`: the launch of `ssh-core` for the rows about the host's lock files while a window installs from the run's slow download source (F-2408 card B); each row is a window of its own on a fresh host, and the host is looked at once a second until the window has connected.
+- `ssh-downloaders`: the launch of `ssh-core` for the rows about a host whose login PATH has neither curl nor wget (F-2402): the account `harness-nofetch`, alias `nofetch`, has a login PATH of its own (`/opt/nofetch/bin`: every program of the host but `curl` and `wget`), and a copy of curl lies in `/opt/fetch-off`, on no account's PATH, for the rows that put it back.
+- `ssh-newclient`: the same as `ssh-core` with `remote.SSH.path` naming the pinned OpenSSH client, which `tools/install-openssh` builds once per runner (OpenSSH 10.6p2, checked against its sha256) and the run passes as HARNESS_SSH_CLIENT; `ssh-newclient/*.test.ts` holds F-2109's rows for keywords newer than the runners' own client, and each runs plain `ssh` through the same path. A run that cannot build the client refuses the launch.
+- `ssh-newclient-pickers`: the same as `ssh-newclient` (the pinned OpenSSH client through `remote.SSH.path`) with the empty script, which makes Remote - SSH show its real quick picks; `ssh-newclient-pickers/*.test.ts` read their items and the focused one through the renderer: the host-key question of a maintenance command in the wording of OpenSSH 10.2 (F-2412 AC-10).
+- `windows-host`: a plain launch with the renderer helpers on a Windows client only, in the platform workflow's Windows job, which starts Windows' OpenSSH Server on 127.0.0.1 with key authentication for the job's account and Windows PowerShell as its shell, and passes its port, user and key as HARNESS_WINHOST_*; the run's ssh_config gets the alias `winhost` for it and `remote.SSH.remotePlatform` names it `windows`; `windows-host/*.test.ts` reaches that host, by plain `ssh` through the run's ssh_config for now and by windows once the product bootstraps a Windows host. A run on another client, or without the server, refuses the launch.
+- `ssh-agents`: a plain launch with the renderer helpers, AI features off, core's four agent-host keys at their defaults and a home of the run's own (`<run>/home-agents`); `ssh-agents/*.test.ts` writes the SSH files of that home and shows Remote - SSH beside core's own SSH agent hosts from outside, F-2008's rows. It may set `remote.SSH.configFile` itself.
+
+- `ssh-askpass`: a plain launch with the renderer helpers, `SSH_ASKPASS` naming the run's own program (`<run>/askpass-bin/answer`, which answers from rules a row writes and records its calls) and the run's `ssh` stand-in first on `PATH`; `ssh-askpass/*.test.ts` opens windows on the password hosts and shows what the extension does with the user's askpass program, F-2309's rows. It may set `remote.SSH.configFile` itself.
 
 - `ssh-containers`: a plain launch with the renderer helpers, Dev Containers installed beside Remote - SSH, and the run's registry and templates; `ssh-containers/*.test.ts` opens windows on the SSH host and runs Dev Containers' commands in them, which edit a configuration where it lives (F-0807's rows). It is in the `containers` group.
 
@@ -132,6 +141,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 - `add-host`: an explorer launch (Remote Explorer installed, a debugging port) whose editor has `HOME=<run>/add-host-home`, so the user file that "Remote-SSH: Add New SSH Host..." writes is the run's own; `add-host/add-host.test.ts` answers the input, the file pick and the notice from the script, sets `remote.SSH.configFile` to `''`, and reads the written file, the window's tabs and the explorer's hosts view (F-2204's rows).
 
 - `explorer`, `explorer-alone`, `explorer-trust`, `explorer-home`, `explorer-rows`, `explorer-folders`, `explorer-no-proposals` and `explorer-standdown`: plain launches with Remote Explorer installed in an extensions folder of their own and a debugging port (see "Reading the window"); `explorer-alone` starts with Remote - SSH disabled, `explorer-trust` with workspace trust on, so a new folder window is in Restricted Mode, `explorer-home` with the run's own HOME (`<run>/home`), where its rows write the user's SSH configuration, with Remote - SSH's real pickers and core's dialogs drawn in the window, `explorer-rows` with the view's own rows (activation, the hosts of a file, Refresh and SSH windows) apart from `explorer`'s gate rows, whose Connect in Current Window reloads the launch's window, `explorer-folders` with the recent folders under the host rows (Remote - SSH's folder history as the view shows it; each row names its folders with a prefix of its own, because the history of a run outlives a row), core's dialogs drawn in the window and Remote - SSH's real pickers, `explorer-no-proposals` without the proposed API, and `explorer-standdown` with a stand-in carrying the reference Remote Explorer's id, so the explorer meets it at its first activation.
+
+- `explorer-stand-in`: an explorer launch whose Remote - SSH is a stand-in with code (`tests/acceptance/fixtures/stand-ins/remote-oss.remote-ssh/`, copied over the installed extension of that id). It registers the companion's commands, and a row sets how each call ends with `setStandInModes` (`windows/harness.ts`), which writes `<run>/stand-in-mode.json`; the stand-in reads the file at each call.
 
 - `trust` and `trust-terminal`: plain launches with workspace trust on and a debugging port, and no extension of their own (see "Trust" under "Launches"); `trust-terminal` turns `remote.SSH.useLocalServer` off and names the host's platform.
 
@@ -318,14 +329,16 @@ runners this way:
     node tools/acceptance.ts --editor vscodium --launches containers-a
     node tools/acceptance.ts --editor vscodium --launches containers-b
     node tools/acceptance.ts --editor vscodium --launches @containers,!containers
-    node tools/acceptance.ts --editor vscodium --launches @explorer,@hosts
+    node tools/acceptance.ts --editor vscodium --launches @explorer,!explorer-folders
+    node tools/acceptance.ts --editor vscodium --launches explorer-folders
+    node tools/acceptance.ts --editor vscodium --launches @hosts
 
 `@ssh,!terminal` is the ssh group without one launch.
 
 To add a launch: add a row to `launchesOf` and put its tests in the suite folder it names. A runner suite's folder goes
 in `tests/acceptance/tsconfig.json`'s `include`. A plain suite has a `tsconfig.json` of its own, which goes in the root
-`tsconfig.json`'s `references` and in `eslint.config.ts`'s `TYPESCRIPT_PROJECTS`. Either kind's test files go in the
-entries of `knip.jsonc`.
+`tsconfig.json`'s `references`; eslint finds it by itself, since typescript-eslint's project service lints each file
+with the `tsconfig.json` that includes it. Either kind's test files go in the entries of `knip.jsonc`.
 
 ### Ports cases
 
@@ -370,6 +383,25 @@ from both sides; the download host's `hostrefused` and `hostjunk` sources answer
 with junk and any other client with the archive. Before each launch the run notes how many requests the download host has logged, in
 `<run>/<label>-requests-start`, so `downloadRequests()` of `suite-install/install.ts` reads only the case's own. The
 host's downloaders send a `Wget` or `curl` user agent, and the editor's download doesn't.
+
+A case with `cliStandIn: true` (`local-exec-cli`, F-2405 AC-8's exec half) starts the run's CLI-source copy of VSCodium, whose
+`product.json` names `cliDownloadUrlTemplate` on the download host (`tools/acceptance-cli-editor.ts`), and the download host
+serves under `/cli/<os>-<arch>/<commit>/` a stand-in archive of the editor's CLI that the run makes: a gzipped tar of one
+script that fails, with no pin and no token, so the case runs in the gate. The copy's template names the client's loopback
+(`HARNESS_DOWNLOADS_LOCAL`) there, which the client resolves and the host's downloader cannot reach, and the case sets
+`remote.SSH.localServerDownload` to `always`, so the client itself fetches the archive. The case's rows check that the
+client asked once for the CLI of the host's platform and of the copy's commit (`HARNESS_CLIENT_COMMIT`), and that the
+archive's file was run from the server folder under its commit-keyed name: the stand-in writes the path it was run as to
+`/tmp/stand-in-cli-ran`, since the install removes the file of a CLI that fails; the file in the archive is named by the product's `applicationName`, which the install unpacks the CLI by, and a run whose editor names another is refused. The stand-in is no CLI, so
+the case's outcome is `any`. Where a run also
+names the `cli-path` launch, whose pins give real CLI archives for the host's downloader, the copy's template names the host's own base (`downloads`) and the host serves those archives for the platforms they cover.
+
+A case that keeps what an earlier connect left (`keepServer`, `keepFiles`) names a primer in `needs`: the case listed right
+before it with `primer: true`, whose connect makes that state. The primer's launch is `named only` and a part of the
+case's launch, so a selection that names the case runs the primer right before it, and none runs the primer alone; the
+primer's one row is its own connect, tagged with no criterion. The three pairs are `install-present`,
+`install-present-stopped` (a primer that installs and connects) and `install-repaired` (a primer whose install fails and
+leaves its files). Each pair passes on a fresh host, whatever ran before.
 
 A launch with host setup also waits the helper's grace before it starts: the helper of the previous launch outlives
 its window by `HELPER_GRACE_MILLISECONDS` of the extension, and a live one would be reused by the resolve without any
@@ -757,8 +789,8 @@ Besides `harness`, the host image has fifteen users, and the run's `ssh_config` 
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |
 | `noall` | `harness-noall` | the run's key; sshd refuses all forwarding (`DisableForwarding yes`) |
 | `noforward-key` | `harness` | a key of its own (`id_noportfwd`), given to the key accounts with `no-port-forwarding` on its `authorized_keys` line: sshd allows forwarding, and the key's sessions get none |
-| `x11-timeout`, `x11-noauth` | `harness` | `ForwardX11 yes` untrusted with `ForwardX11Timeout 60s`, or with an `XAuthLocation` that names no program (F-2312) |
-| `x11-untrusted`, `x11-match` | `harness` | the run's key with `ForwardX11 yes` alone, or `ForwardX11 yes` and `ForwardX11Trusted yes` given only in a `Match originalhost` block (F-2312) |
+| `x11-timeout`, `x11-noauth` | `harness` | `ForwardX11 yes` untrusted with `ForwardX11Timeout 60s`, or with an `XAuthLocation` that names no program, both refusing the trusted request (F-2312) |
+| `x11-untrusted`, `x11-match` | `harness` | the run's key with `ForwardX11 yes` and `ForwardX11Trusted no` (Debian's OpenSSH makes `ForwardX11 yes` alone trusted), or `ForwardX11 yes` and `ForwardX11Trusted yes` given only in a `Match originalhost` block (F-2312) |
 | `pty-force`, `pty-yes`, `pty-no` | `harness` | the run's key with `RequestTTY force`, `yes` or `no` in the entry (F-2106) |
 | `changedkey` | `harness` | the run's key against its own `known_hosts_changedkey`, which pins another key under `HostKeyAlias changedkey`, with `StrictHostKeyChecking no`: ssh finds the host key changed, connects, and disables password and keyboard-interactive login and every forward ("Port forwarding is disabled to avoid man-in-the-middle attacks.") |
 | `fwd-busy`, `fwd-busy-exit`, `fwd-static`, `fwd-gateway`, `fwd-remote`, `fwd-dynamic`, `fwd-open`, `fwd-noopen`, `fwd-clearall`, `fwd-exit`, `fwd-dynamic-exit` | `harness` | the run's key; each adds forwards to the client's configuration: `LocalForward 13020 127.0.0.1:8660` (`fwd-busy`, and `fwd-busy-exit` with `ExitOnForwardFailure yes`), `LocalForward 13010 127.0.0.1:8657` (`fwd-static`), `GatewayPorts yes` with `LocalForward 13001 127.0.0.1:8661` (`fwd-gateway`), `RemoteForward 19000 127.0.0.1:19101` (`fwd-remote`), `DynamicForward 11080` (`fwd-dynamic`) and a dynamic `RemoteForward` with `PermitRemoteOpen any` (`fwd-open`, port 19201) or `none` (`fwd-noopen`, port 19200), `ClearAllForwardings yes` (`fwd-clearall`), `ExitOnForwardFailure yes` alone (`fwd-exit`) and `DynamicForward 13030` with `ExitOnForwardFailure yes` (`fwd-dynamic-exit`) |

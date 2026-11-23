@@ -485,6 +485,26 @@ async function holdingLock(lock: string): Promise<ChildProcess> {
   return holder;
 }
 
+/** The facts `keys` of a run of `step` while another process holds the lock of `parameters`. */
+async function factsWhileLocked(
+  host: PowershellHost,
+  parameters: ScriptParameters,
+  step: ScriptStep,
+  keys: readonly string[],
+): Promise<unknown> {
+  const lock = lockFile(host, parameters);
+  mkdirSync(path.dirname(lock), {recursive: true});
+  const holder = await holdingLock(lock);
+  try {
+    return factsOf(
+      await runOnWhileServing(host, single(step), parameters),
+      keys,
+    );
+  } finally {
+    holder.kill();
+  }
+}
+
 /** Serves `body` at every address with `status`, and gives the server's address once it listens. */
 function serving(
   status: number,
@@ -709,19 +729,10 @@ describe('the PowerShell install, run under pwsh', function () {
   it('F-2408: a lock another install holds gives LockBusy, with the lock named', async () => {
     const host = powershellHost();
     const parameters = installFrom(serverArchive(host, 'bin/launcher'));
-    const lock = lockFile(host, parameters);
-    mkdirSync(path.dirname(lock), {recursive: true});
-    const holder = await holdingLock(lock);
-    try {
-      deepStrictEqual(
-        factsOf(await runOnWhileServing(host, single('install'), parameters), [
-          'server.lockPath',
-        ]),
-        {status: 'LockBusy', 'server.lockPath': lock},
-      );
-    } finally {
-      holder.kill();
-    }
+    deepStrictEqual(
+      await factsWhileLocked(host, parameters, 'install', ['server.lockPath']),
+      {status: 'LockBusy', 'server.lockPath': lockFile(host, parameters)},
+    );
   });
 
   it('F-2408: a lock that cannot be opened is a write failure, named', () => {
@@ -1316,15 +1327,27 @@ function isRunning(processId: number): boolean {
   }
 }
 
-/** Starts a copy of `sleep` from inside `folder`, so its program lies there, and gives its process id. */
-function sleeperIn(folder: string): number {
-  mkdirSync(folder, {recursive: true});
-  const program = path.join(folder, 'sleep');
+/**
+ * Starts a copy of `sleep` at `program` for 30 seconds, detached, and gives its process. The copy is run under the name
+ * `sleep`: a coreutils that is one multi-call program (uutils, as on Ubuntu 26.04) picks the utility by that name, and
+ * under the copy's own file name it would be none and exit at once. The process's program is still the copy.
+ */
+function sleepCopyAt(program: string): ChildProcess {
+  mkdirSync(path.dirname(program), {recursive: true});
   copyFileSync('/bin/sleep', program);
   chmodSync(program, 0o755);
-  const child = spawn(program, ['30'], {detached: true, stdio: 'ignore'});
+  const child = spawn(program, ['30'], {
+    argv0: 'sleep',
+    detached: true,
+    stdio: 'ignore',
+  });
   child.unref();
-  return child.pid ?? 0;
+  return child;
+}
+
+/** Starts a copy of `sleep` from inside `folder`, so its program lies there, and gives its process id. */
+function sleeperIn(folder: string): number {
+  return sleepCopyAt(path.join(folder, 'sleep')).pid ?? 0;
 }
 
 /** Waits until the process ends, for at most two seconds; gives whether it ended. */
@@ -1481,6 +1504,25 @@ describe('the PowerShell cleanup, run under pwsh', function () {
     );
   });
 
+  it('F-2413: keepNewest removes a leftover that was modified two hours ago, and one modified a minute ago stays, as does another folder', () => {
+    const host = powershellHost();
+    const parameters = {
+      ...parametersFor(),
+      cleanup: {kind: 'keepNewest' as const, count: 5},
+    };
+    const installs = installsAged(host, parameters, {
+      [parameters.commit]: 10,
+      [`${COMMIT_A}-1700000000000`]: 7200,
+      [`${COMMIT_B}-1700000000000`]: 60,
+      notes: 40,
+    });
+    runOn(host, single('cleanup'), parameters);
+    deepStrictEqual(
+      readdirSync(installs).sort(),
+      [`${COMMIT_B}-1700000000000`, 'notes', parameters.commit].sort(),
+    );
+  });
+
   it('F-2413: onlyCurrentRemoveLeftovers removes other commits and leftovers, and keeps the rest', () => {
     const host = powershellHost();
     const parameters = {
@@ -1621,6 +1663,35 @@ describe('the PowerShell CLI install, run under pwsh', function () {
         existsSync(path.join(host.home, parameters.dataFolderName, 'cli-bin')),
       ],
       [{status: 'UnpackFailed'}, false],
+    );
+  });
+
+  it('F-2408 BR-9 (ruling-2818-cli-no-host-lock): a lock another install holds does not stop the CLI install', async () => {
+    const host = powershellHost();
+    const parameters = cliParameters(host, {
+      archivePath: serverArchive(host, 'codium'),
+    });
+    deepStrictEqual(
+      await factsWhileLocked(host, parameters, 'installCli', []),
+      {status: 'Ok'},
+    );
+  });
+
+  it('ruling-2818-cli-no-host-lock: each run stages in its own folder and clears only that one', () => {
+    const host = powershellHost();
+    const parameters = cliParameters(host, {
+      archivePath: serverArchive(host, 'codium'),
+    });
+    const cliBin = path.join(host.home, parameters.dataFolderName, 'cli-bin');
+    mkdirSync(path.join(cliBin, `${parameters.commit}.1.1`), {
+      recursive: true,
+    });
+    deepStrictEqual(
+      [
+        factsOf(runOn(host, single('installCli'), parameters), []),
+        readdirSync(cliBin),
+      ],
+      [{status: 'Ok'}, [`${parameters.commit}.1.1`]],
     );
   });
 
@@ -1842,15 +1913,7 @@ describe('the PowerShell CLI stop, run under pwsh', function () {
   it('F-2403: the recorded CLI is ended while it is still the CLI, and nothing else is', async () => {
     const host = powershellHost();
     const base = cliParameters(host);
-    const cliFile = cliFileOf(host, base);
-    mkdirSync(path.dirname(cliFile), {recursive: true});
-    copyFileSync('/bin/sleep', cliFile);
-    chmodSync(cliFile, 0o755);
-    const cliProgram = spawn(cliFile, ['30'], {
-      detached: true,
-      stdio: 'ignore',
-    });
-    cliProgram.unref();
+    const cliProgram = sleepCopyAt(cliFileOf(host, base));
     const other = sleeperIn(path.join(host.root, 'other'));
     try {
       const outcomes = [cliProgram.pid ?? 0, other, 'x1'].map(processId =>
@@ -1903,6 +1966,23 @@ describe('the PowerShell bootstrap script, as text', () => {
           parametersFor(),
         ),
       /no prepare step/,
+    );
+  });
+
+  it('F-2701 AC-18: the start words go bare, so the batch launcher reads its first word, and a word that needs quotes is quoted', () => {
+    const parameters = parametersFor();
+    const line = scriptFor(single('start'), 'powershell', {
+      ...parameters,
+      start: {...parameters.start, extensions: ['pub.name@1.0.0']},
+    })
+      .split('\n')
+      .find(each => each.includes('$SERVER_ARGUMENTS = '));
+    deepStrictEqual(
+      [
+        line?.includes("@('--start-server', "),
+        line?.includes(`'--install-extension', '"pub.name@1.0.0"'`),
+      ],
+      [true, true],
     );
   });
 

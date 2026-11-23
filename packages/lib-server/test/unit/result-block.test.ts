@@ -28,7 +28,13 @@ function blockOf(name: string): ResultBlock {
   return result.block;
 }
 
-const EMPTY_BLOCK = {hostFacts: {}, serverFacts: {}, cliFacts: {}, timings: {}};
+const EMPTY_BLOCK = {
+  hostFacts: {},
+  serverFacts: {},
+  cliFacts: {},
+  installFacts: {},
+  timings: {},
+};
 
 describe('the streamed launching line (card server-26)', () => {
   it('server-26: parseResult ignores the streamed line outside the markers, and a block that holds the fact keeps it', () => {
@@ -98,9 +104,28 @@ describe('parseResult (card server-02 table)', () => {
         hostFacts: {os: 'linux', arch: 'x64'},
         serverFacts: {port: '41263'},
         cliFacts: {},
+        installFacts: {},
         timings: {download: 1532},
       },
     });
+  });
+
+  it('status=CommandMissing and an install.missing line -> installFacts {missing}', () => {
+    deepStrictEqual(
+      parseResult([
+        RESULT_BEGIN,
+        'status=CommandMissing',
+        'install.missing=gzip',
+        RESULT_END,
+      ]),
+      {
+        block: {
+          status: 'CommandMissing',
+          ...EMPTY_BLOCK,
+          installFacts: {missing: 'gzip'},
+        },
+      },
+    );
   });
 
   it('cli.path and cli.port lines -> cliFacts {path, port}', () => {
@@ -174,8 +199,9 @@ describe('parseResult (card server-02 table)', () => {
     'LinuxPrereqs',
     'NoBash',
     'ServerFailedToStart',
+    'CommandMissing',
   ]) {
-    it(`each of the eleven status words: status=${word} -> the matching status, unknownStatus undefined`, () => {
+    it(`each of the twelve status words: status=${word} -> the matching status, unknownStatus undefined`, () => {
       deepStrictEqual(
         parseResult([RESULT_BEGIN, `status=${word}`, RESULT_END]),
         {block: {status: word, ...EMPTY_BLOCK}},

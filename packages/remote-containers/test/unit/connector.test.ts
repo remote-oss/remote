@@ -1,3 +1,4 @@
+import {readShutdownRequest} from '../../src/shutdown/protocol.ts';
 import {deepStrictEqual} from 'node:assert';
 import {spawn} from 'node:child_process';
 import {existsSync, mkdtempSync, rmSync} from 'node:fs';
@@ -15,6 +16,8 @@ import {
   FOLDER,
   containerReadsFail,
   inputOf,
+  preparedAroundRegister,
+  leaveRebuildIntent,
   PAYLOAD,
   READY,
   sceneOf,
@@ -23,11 +26,9 @@ import {
   type Scene,
 } from './connector.fixture.ts';
 import {noEngineProgramOf} from '../../src/connect/connector.ts';
-import {
-  REBUILD_INTENTS_KEY,
-  storeRebuildIntent,
-} from '../../src/open/rebuild-intent.ts';
+import {REBUILD_INTENTS_KEY} from '../../src/open/rebuild-intent.ts';
 import type {CliEvent} from '../../src/cli/cli-lines.ts';
+import type {RelayKind} from '../../src/relays/relay-host.ts';
 import {storePausedRetry} from '../../src/state/paused-retry.ts';
 
 function tick(): Promise<unknown> {
@@ -467,6 +468,26 @@ describe('the container connector: the connect (card containers-08)', () => {
     ]);
   });
 
+  it('contracts §2 step 3: the mounts and the runArgs the first read of the configuration holds go to the preparation as they are', async () => {
+    const scene = sceneOf();
+    scene.configuration = {
+      kind: 'configuration',
+      configuration: {
+        name: 'Proj',
+        mounts: ['type=volume,source=data,target=/data'],
+        runArgs: ['--init'],
+      },
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+    await connected(scene);
+    deepStrictEqual(
+      [scene.prepared[0]?.mounts, scene.prepared[0]?.runArgs],
+      [['type=volume,source=data,target=/data'], ['--init']],
+    );
+  });
+
   it('F-0419 AC-20: a reserved mount ends the connect with the setup failure and the detail that names the property and the target', async () => {
     const scene = sceneOf();
     scene.outcome = {
@@ -504,25 +525,9 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
-  /** Leaves a no-cache rebuild intent for the payload, as the reload of a rebuild command does. */
-  async function withIntent(scene: Scene): Promise<void> {
-    await storeRebuildIntent(
-      {
-        get: () => scene.intentStore,
-        update: (key, value) => {
-          scene.intentStore = value;
-          return Promise.resolve();
-        },
-      },
-      PAYLOAD,
-      {buildNoCache: true},
-      0,
-    );
-  }
-
   it('contracts §3: the first attempt takes the intent and hands it to C7', async () => {
     const scene = sceneOf();
-    await withIntent(scene);
+    await leaveRebuildIntent(scene, PAYLOAD);
     await connected(scene);
     deepStrictEqual(
       [
@@ -536,9 +541,22 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
+  it('F-0202 AC-39: a second check that fails has taken the intent already, so a Retry after it reconnects without a rebuild', async () => {
+    const scene = sceneOf();
+    await leaveRebuildIntent(scene, PAYLOAD);
+    scene.version = {status: 1, stderr: 'Cannot connect to the Docker daemon'};
+    await scene.connector.connect(inputOf(PAYLOAD));
+    scene.version = {status: 0, stderr: ''};
+    await scene.connector.connect(inputOf(PAYLOAD, {attempt: 2}));
+    deepStrictEqual(
+      [scene.intentStore, scene.prepared.map(request => request.rebuild)],
+      [{}, [undefined]],
+    );
+  });
+
   it('F-0502: a reconnection never takes the intent', async () => {
     const scene = sceneOf();
-    await withIntent(scene);
+    await leaveRebuildIntent(scene, PAYLOAD);
     await scene.connector.connect(inputOf(PAYLOAD, {isReconnection: true}));
     deepStrictEqual(
       [
@@ -552,7 +570,7 @@ describe('the container connector: the connect (card containers-08)', () => {
 
   it('contracts §3: a later attempt never takes the intent', async () => {
     const scene = sceneOf();
-    await withIntent(scene);
+    await leaveRebuildIntent(scene, PAYLOAD);
     await scene.connector.connect(inputOf(PAYLOAD, {attempt: 2}));
     deepStrictEqual(scene.prepared[0]?.rebuild, undefined);
   });
@@ -746,7 +764,7 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(phases, ['initializing', 'startingServer']);
   });
 
-  it('containers-55: the percents of the server download reach the listeners as serverDownloadPercent phases', async () => {
+  it('containers-55: the percents of the server download reach the listeners as serverDownloadPercent phases, before the blocking commands start the server', async () => {
     const scene = sceneOf();
     scene.phasesOfServer = ['installing'];
     scene.percentsOfServer = [0, 40, 100];
@@ -759,6 +777,7 @@ describe('the container connector: the connect (card containers-08)', () => {
       {name: 'serverDownloadPercent', percent: 0},
       {name: 'serverDownloadPercent', percent: 40},
       {name: 'serverDownloadPercent', percent: 100},
+      {name: 'startingServer'},
     ]);
   });
 
@@ -854,6 +873,28 @@ describe('the container connector: the connect (card containers-08)', () => {
         environment: {DOCKER_HOST: 'unix:///run/docker.sock'},
       },
     });
+  });
+
+  it('F-0417 BR-4: the project the lifecycle identifies reaches the shutdown helper under the connection’s id', async () => {
+    const scene = sceneOf();
+    await scene.connector.connect(inputOf(devContainerPayloadOf(FOLDER)));
+    scene.prepared[0]?.composeIdentified?.({
+      project: 'proj',
+      service: 'app',
+      scope: ['app', 'db'],
+    });
+    const sent = scene.shutdownSent.at(-1);
+    deepStrictEqual(
+      [sent, readShutdownRequest(sent)],
+      [
+        {
+          type: 'compose',
+          connectionId: 'connection-1',
+          compose: {project: 'proj', service: 'app', scope: ['app', 'db']},
+        },
+        {kind: 'request', request: sent},
+      ],
+    );
   });
 
   it('F-0417 BR-13: a Docker context in the authority reaches the helper as DOCKER_CONTEXT, and no host is no variable', async () => {
@@ -1109,6 +1150,19 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
+  it('F-0206 BR-5, BR-16: the GPU availability is read at each connect and goes to the lifecycle as written, detect when unset', async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    scene.gpuAvailability = 'none';
+    await connected(scene);
+    scene.gpuAvailability = 'sometimes';
+    await connected(scene);
+    deepStrictEqual(
+      scene.prepared.map(request => request.gpuAvailability),
+      ['detect', 'none', 'sometimes'],
+    );
+  });
+
   it('F-0411 BR-7, BR-11: the settings are read at each connect, so a change between two connects takes effect', async () => {
     const scene = sceneOf();
     scene.workspaceMountConsistency = 'cached';
@@ -1193,6 +1247,140 @@ describe('the container connector: the connect (card containers-08)', () => {
         ['extensions to install in the new container: a.b, c.d'],
       ],
     );
+  });
+
+  it('F-0408 AC-14: a container whose outcome carries the configuration up read takes its merged part from it, with no read of its own', async () => {
+    const scene = sceneOf();
+    scene.defaultExtensions = ['c.d'];
+    scene.outcome = {
+      ...READY,
+      created: true,
+      configuration: {name: 'FromUp'},
+      mergedConfiguration: {customizations: {vscode: [{extensions: ['a.b']}]}},
+    };
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.configurationReads.filter(
+          read => read.containerId === READY.containerId,
+        ),
+        scene.serverRequests.map(request => request.defaultExtensions),
+      ],
+      [[], [['a.b', 'c.d']]],
+    );
+  });
+
+  describe('the blocking run of a container that was already running (F-0408 AC-14)', () => {
+    const LISTED = {
+      onCreateCommands: [],
+      updateContentCommands: ['npm ci'],
+    };
+    /** A scene whose container was already running, with `merged` as its merged configuration. */
+    function reusedScene(merged: Record<string, unknown>): Scene {
+      const scene = sceneOf();
+      scene.outcome = {
+        ...READY,
+        created: false,
+        configuration: {name: 'Proj'},
+        mergedConfiguration: merged,
+      };
+      return scene;
+    }
+    /** What the scene did about the blocking run: whether it ran, the markers' script runs, and the skip's log line. */
+    function aboutBlocking(scene: Scene): [boolean, number, string[]] {
+      return [
+        scene.lifecycleRuns.some(entry => entry.startsWith('blocking')),
+        scene.markerScripts.length,
+        messages(scene).filter(line =>
+          line.includes('blocking run is skipped'),
+        ),
+      ];
+    }
+
+    it('is skipped, with one log line, when the markers say the commands up to waitFor ran', async () => {
+      const scene = reusedScene(LISTED);
+      scene.markersRan = true;
+      await connected(scene);
+      deepStrictEqual(aboutBlocking(scene), [
+        false,
+        1,
+        [
+          'the commands up to updateContentCommand already ran in this container: the blocking run is skipped',
+        ],
+      ]);
+    });
+
+    it('is skipped without reading any marker when no command up to waitFor has an entry, and says up to which command', async () => {
+      const scene = reusedScene({waitFor: 'onCreateCommand', ...LISTED});
+      await connected(scene);
+      deepStrictEqual(aboutBlocking(scene), [
+        false,
+        0,
+        [
+          'the commands up to onCreateCommand already ran in this container: the blocking run is skipped',
+        ],
+      ]);
+    });
+
+    it('happens when a marker does not say the commands ran', async () => {
+      const scene = reusedScene(LISTED);
+      await connected(scene);
+      deepStrictEqual(aboutBlocking(scene), [true, 1, []]);
+    });
+
+    it('happens, with no marker read, for a container that was newly started', async () => {
+      const scene = sceneOf();
+      scene.outcome = {
+        ...READY,
+        created: true,
+        mergedConfiguration: LISTED,
+      };
+      scene.markersRan = true;
+      await connected(scene);
+      deepStrictEqual(aboutBlocking(scene), [true, 0, []]);
+    });
+
+    it('happens, with no marker read, for a waitFor that the markers are not read for, and for a configuration up did not give', async () => {
+      const outcomes: unknown[] = [];
+      for (const merged of [
+        {waitFor: 'postStartCommand', ...LISTED},
+        undefined,
+      ]) {
+        const scene = reusedScene(LISTED);
+        scene.outcome = {
+          ...READY,
+          created: false,
+          ...(merged === undefined ? {} : {mergedConfiguration: merged}),
+        };
+        scene.markersRan = true;
+        await connected(scene);
+        outcomes.push(aboutBlocking(scene));
+      }
+      deepStrictEqual(outcomes, [
+        [true, 0, []],
+        [true, 0, []],
+      ]);
+    });
+
+    it('happens when the engine does not give the creation time', async () => {
+      const outcomes: unknown[] = [];
+      for (const answer of [
+        'fails',
+        'not json',
+        '"2026-11-12T00:00:00Z"\nnot json',
+      ]) {
+        const scene = reusedScene(LISTED);
+        scene.markersRan = true;
+        scene.markerInspect = answer;
+        await connected(scene);
+        outcomes.push(aboutBlocking(scene));
+      }
+      deepStrictEqual(outcomes, [
+        [true, 0, []],
+        [true, 0, []],
+        [true, 0, []],
+      ]);
+    });
   });
 
   it('F-0505 AC-14: a reused container installs nothing, and says nothing of it', async () => {
@@ -1929,41 +2117,71 @@ describe('the container connector: cancelling (card containers-08)', () => {
     );
   });
 
+  /** What a held step lets go of once the connect is cancelled. */
+  interface Gate {
+    release?: () => void;
+  }
+
+  /** Starts a connect, lets it run for `ticks` turns, cancels it, lets the held step go and gives the connect's end. */
+  async function cancelledConnect(
+    scene: Scene,
+    gate: Gate,
+    ticks: number,
+  ): Promise<Connected | Failed> {
+    const connecting = scene.connector.connect(inputOf(PAYLOAD));
+    for (let turn = 0; turn < ticks; turn += 1) {
+      await tick();
+    }
+    scene.connector.cancel();
+    gate.release?.();
+    return connecting;
+  }
+
   it('contracts §2 cancel: a cancel while the server starts ends the connect as cancelled and opens no relay', async () => {
     const scene = sceneOf();
-    let release: (() => void) | undefined;
+    const gate: Gate = {};
     scene.server = () =>
       new Promise(resolve => {
-        release = () => {
+        gate.release = () => {
           resolve(STARTED_SERVER);
         };
       });
-    const connecting = scene.connector.connect(inputOf(PAYLOAD));
-    await tick();
-    await tick();
-    scene.connector.cancel();
-    release?.();
-    const result = await connecting;
+    const result = await cancelledConnect(scene, gate, 2);
     deepStrictEqual(
       [failedKind(result), scene.relayRequests.length],
       ['cancelled', 0],
     );
   });
 
+  it('contracts §2 cancel: a cancel while the environment probe runs ends the connect as cancelled and opens no relay', async () => {
+    const scene = sceneOf();
+    const gate: Gate = {};
+    scene.probe = process =>
+      new Promise(resolve => {
+        gate.release = () => {
+          process.exit(0);
+          resolve();
+        };
+      });
+    const result = await cancelledConnect(scene, gate, 8);
+    deepStrictEqual(
+      [
+        failedKind(result),
+        scene.probeScripts.length,
+        scene.relayRequests.length,
+      ],
+      ['cancelled', 1, 0],
+    );
+  });
+
   it('contracts §2 cancel: a cancel while the relay opens gives back the relay that opened, and the connect is cancelled', async () => {
     const scene = sceneOf();
-    let release: (() => void) | undefined;
+    const gate: Gate = {};
     scene.relayGate = () =>
       new Promise(resolve => {
-        release = resolve;
+        gate.release = resolve;
       });
-    const connecting = scene.connector.connect(inputOf(PAYLOAD));
-    for (let ticks = 0; ticks < 8; ticks += 1) {
-      await tick();
-    }
-    scene.connector.cancel();
-    release?.();
-    const result = await connecting;
+    const result = await cancelledConnect(scene, gate, 8);
     deepStrictEqual(
       [failedKind(result), scene.relays.map(relay => relay.closed)],
       ['cancelled', [1]],
@@ -2010,6 +2228,16 @@ describe('the container connector: cancelling (card containers-08)', () => {
         ['/work/proj/.devcontainer/devcontainer.json', true],
         ['/work/proj/.devcontainer/devcontainer.json', false],
       ],
+    );
+  });
+
+  it('F-0901 6.21 step 4: the held connection of a compose service built from a Dockerfile names that Dockerfile', async () => {
+    const scene = sceneOf();
+    scene.outcome = {...READY, serviceDockerfile: '/work/proj/Dockerfile'};
+    await connected(scene);
+    deepStrictEqual(
+      scene.connector.heldConnection()?.serviceDockerfile,
+      '/work/proj/Dockerfile',
     );
   });
 
@@ -2572,38 +2800,68 @@ describe('the container connector: the remote environment (card containers-45)',
     );
   });
 
-  it('F-0416 BR-11b: a probe that fails, exits 1, prints no end marker or never answers is dropped, once each, and the connect goes on', async () => {
+  it('brief-personalization §1 step 5 (#2086): the relay variables sit between the probe and remoteEnv in the extension host’s environment', async () => {
+    const scene = sceneOf();
+    scene.configuration = withMergedConfiguration({
+      remoteEnv: {ALPHA: 'remote'},
+    });
+    scene.relayHostStart = {
+      kind: 'started',
+      host: {
+        variables: {ALPHA: 'relay', BRAVO: 'relay', ECHO_SOCK: '/tmp/e.sock'},
+        dispose: () => undefined,
+      },
+    };
+    const result = await connected(scene);
+    deepStrictEqual(result.extensionHostEnv, {
+      ALPHA: 'remote',
+      BRAVO: 'relay',
+      ECHO_SOCK: '/tmp/e.sock',
+    });
+  });
+
+  it('F-0416 BR-11b: a probe that fails, exits 1, prints no end marker or never answers is dropped, once each with its reason, and the connect goes on', async () => {
     const results: unknown[] = [];
-    const probes: Array<Scene['probe']> = [
-      process => {
-        process.exit(undefined);
+    const probes: Array<{probe: Scene['probe']; expires: boolean}> = [
+      {
+        probe: process => {
+          process.exit(undefined);
+        },
+        expires: false,
       },
-      process => {
-        process.print('motd\n');
-        process.exit(1);
+      {
+        probe: process => {
+          process.print('motd\n');
+          process.exit(1);
+        },
+        expires: false,
       },
-      process => {
-        process.print('remote-oss-env-probe-begin\nA=probe\0');
-        process.exit(0);
+      {
+        probe: process => {
+          process.print('remote-oss-env-probe-begin\nA=probe\0');
+          process.exit(0);
+        },
+        expires: false,
       },
-      () => undefined,
+      {probe: () => undefined, expires: true},
     ];
-    for (const probe of probes) {
+    for (const {probe, expires} of probes) {
       const scene = sceneOf();
       scene.configuration = withMergedConfiguration(MERGED);
       scene.probe = probe;
-      const timeout = mock.method(AbortSignal, 'timeout', () =>
-        AbortSignal.abort(),
-      );
+      const timeout = expires
+        ? mock.method(AbortSignal, 'timeout', () => AbortSignal.abort())
+        : undefined;
       const result = await connected(scene);
-      timeout.mock.restore();
-      results.push([result.extensionHostEnv, dropLines(scene).length]);
+      timeout?.mock.restore();
+      results.push([result.extensionHostEnv, dropLines(scene)]);
     }
+    const remote = {ALPHA: 'remote', CHARLIE: null};
     deepStrictEqual(results, [
-      [{ALPHA: 'remote', CHARLIE: null}, 1],
-      [{ALPHA: 'remote', CHARLIE: null}, 1],
-      [{ALPHA: 'remote', CHARLIE: null}, 1],
-      [{ALPHA: 'remote', CHARLIE: null}, 1],
+      [remote, ['the environment probe was dropped: channelClosed']],
+      [remote, ['the environment probe was dropped: exit status 1']],
+      [remote, ['the environment probe was dropped: no end marker']],
+      [remote, ['the environment probe was dropped: cancelled']],
     ]);
   });
 
@@ -2669,6 +2927,12 @@ describe('the container connector: the remote environment (card containers-45)',
   });
 });
 
+describe('the container connector: the shutdown register before the lookup (card #2645)', () => {
+  it('F-0417 BR-5: a folder looks its container up only once the helper has answered its register', async () => {
+    deepStrictEqual(await preparedAroundRegister(sceneOf(), PAYLOAD), [0, 1]);
+  });
+});
+
 describe('the container connector: the declared ports (card containers-72)', () => {
   function configurationWith(
     mergedConfiguration: Record<string, unknown> | undefined,
@@ -2682,7 +2946,7 @@ describe('the container connector: the declared ports (card containers-72)', () 
     };
   }
 
-  it('F-1101 BR-1: the connection holds the forwardPorts, portsAttributes and otherPortsAttributes of the merged configuration', async () => {
+  it('F-1101 BR-1, BR-10: the connection holds the forwardPorts, portsAttributes and otherPortsAttributes of the merged configuration, and the attribute settings it wrote', async () => {
     const scene = sceneOf();
     scene.configuration = configurationWith({
       forwardPorts: [3000, 'side:4000'],
@@ -2694,6 +2958,10 @@ describe('the container connector: the declared ports (card containers-72)', () 
       forwardPorts: [3000, 'side:4000'],
       portsAttributes: {'3000': {label: 'web'}},
       otherPortsAttributes: {onAutoForward: 'silent'},
+      attributeSettings: {
+        'remote.portsAttributes': {'3000': {label: 'web'}},
+        'remote.otherPortsAttributes': {onAutoForward: 'silent'},
+      },
     });
   });
 
@@ -2719,6 +2987,7 @@ describe('the container connector: the declared ports (card containers-72)', () 
           forwardPorts: undefined,
           portsAttributes: undefined,
           otherPortsAttributes: undefined,
+          attributeSettings: {},
         },
       ],
     );
@@ -2758,18 +3027,63 @@ describe('the container connector: the appPort rows (card containers-74)', () =>
     deepStrictEqual((await connected(scene)).environmentTunnels, []);
   });
 
-  it('F-1101 BR-22, AC-23: an engine that is not local hands core none', async () => {
+  const COMPOSE_CONFIGURATION = {
+    dockerComposeFile: 'compose.yml',
+    service: 'app',
+    appPort: [8080],
+  };
+
+  it('F-1101 AC-27: a Compose configuration hands core a row for each port the container publishes, its host port shown on the loopback', async () => {
     const scene = sceneOf();
-    scene.configuration = configurationWith({appPort: [8080]});
+    scene.configuration = configurationWith(COMPOSE_CONFIGURATION);
+    scene.published = JSON.stringify({
+      '80/tcp': [
+        {HostIp: '0.0.0.0', HostPort: '8081'},
+        {HostIp: '::', HostPort: '8081'},
+      ],
+      '9000/tcp': null,
+    });
+    deepStrictEqual((await connected(scene)).environmentTunnels, [
+      {
+        remoteAddress: {host: '0.0.0.0', port: 80},
+        localAddress: '[::1]:8081',
+      },
+    ]);
+  });
+
+  it('F-1101 AC-19, AC-27: a Compose configuration whose ports cannot be read hands core none, and the appPort is ignored', async () => {
+    const answers = ['fails', 'not json', 'unreachable'];
+    const handed: unknown[] = [];
+    for (const answer of answers) {
+      const scene = sceneOf();
+      scene.configuration = configurationWith(COMPOSE_CONFIGURATION);
+      scene.published = answer;
+      handed.push((await connected(scene)).environmentTunnels);
+    }
+    deepStrictEqual(handed, [[], [], []]);
+  });
+
+  /** The tunnels a connect over a remote engine hands core, for the configuration the scene holds. */
+  async function remoteEngineTunnels(scene: Scene): Promise<unknown> {
     const connection = await scene.connector.connect(
       inputOf(devContainerPayloadOf({...FOLDER, host: 'tcp://10.0.0.5:2375'})),
     );
-    deepStrictEqual(
-      'environmentTunnels' in connection
-        ? connection.environmentTunnels
-        : connection,
-      [],
-    );
+    return 'environmentTunnels' in connection
+      ? connection.environmentTunnels
+      : connection;
+  }
+
+  it('F-1101 AC-27: an engine that is not local hands core no row of a Compose container either', async () => {
+    const scene = sceneOf();
+    scene.configuration = configurationWith(COMPOSE_CONFIGURATION);
+    scene.published = '{"80/tcp":[{"HostIp":"0.0.0.0","HostPort":"8081"}]}';
+    deepStrictEqual(await remoteEngineTunnels(scene), []);
+  });
+
+  it('F-1101 BR-22, AC-23: an engine that is not local hands core none', async () => {
+    const scene = sceneOf();
+    scene.configuration = configurationWith({appPort: [8080]});
+    deepStrictEqual(await remoteEngineTunnels(scene), []);
   });
 
   it('F-1101 BR-14: a configuration that cannot be read hands core none', async () => {
@@ -2817,6 +3131,120 @@ describe('the container connector: the extensions cache after the start (#1810)'
           ),
       ],
       [false, ['the extensions cache stopped: disk full']],
+    );
+  });
+
+  it('brief-personalization §1 steps 2 to 6: the server files, then phase E’s relay host, then the blocking commands with the relay variables, then the start; the background only once connected', async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    deepStrictEqual(scene.lifecycleRuns, [
+      'server files',
+      'relay host',
+      'blocking {}',
+      'server start',
+      'background {}',
+    ]);
+  });
+
+  it('F-0410 with brief-personalization §1 step 4: a failed blocking command ends the connect with the setup failure, and the server never starts', async () => {
+    const scene = sceneOf();
+    scene.blockingResult = {
+      kind: 'lifecycleFailed',
+      hook: 'onCreateCommand',
+      part: undefined,
+      message: 'exit 1',
+      containerId: 'c1',
+      foundContainerId: 'c1',
+    };
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [failedKind(result), scene.lifecycleRuns],
+      ['containerSetupFailed', ['server files', 'relay host', 'blocking {}']],
+    );
+  });
+
+  it('brief-personalization §1 step 3 (#2086): phase E starts the relay host for the connect’s kinds, as the remote user, on the server’s node and data folder', async () => {
+    const scene = sceneOf();
+    const echo: RelayKind = {
+      kind: 'echo',
+      variable: 'ECHO_SOCK',
+      connect: () => Promise.reject(new Error('unused')),
+    };
+    scene.relayKinds = [echo];
+    await connected(scene);
+    const request = scene.relayHostRequests[0];
+    deepStrictEqual(
+      [
+        request?.kinds,
+        request?.containerId,
+        request?.remoteUser,
+        request?.nodePath,
+        request?.dataFolder,
+      ],
+      [
+        [echo],
+        'c1c1c1c1c1c1c1c1',
+        'node',
+        '/home/node/.server/bin/abc/node',
+        '/home/node/.server',
+      ],
+    );
+  });
+
+  it('brief-personalization §1 steps 4 and 6 (#2086): the relay variables reach the blocking run and the background', async () => {
+    const scene = sceneOf();
+    scene.relayHostStart = {
+      kind: 'started',
+      host: {variables: {ECHO_SOCK: '/tmp/e.sock'}, dispose: () => undefined},
+    };
+    await connected(scene);
+    deepStrictEqual(scene.lifecycleRuns, [
+      'server files',
+      'relay host',
+      'blocking {"ECHO_SOCK":"/tmp/e.sock"}',
+      'server start',
+      'background {"ECHO_SOCK":"/tmp/e.sock"}',
+    ]);
+  });
+
+  it('brief-personalization §2 (#2086): a relay host that does not start is logged at warn, and the connect goes on with no relay variables', async () => {
+    const scene = sceneOf();
+    scene.relayHostStart = {kind: 'failed', detail: 'no node'};
+    const result = await connected(scene);
+    deepStrictEqual(
+      [
+        scene.sink.lines
+          .filter(line => line.level === 'warn')
+          .map(line => line.message),
+        scene.lifecycleRuns[2],
+        result.extensionHostEnv,
+      ],
+      [
+        ['the relay host did not start: no node'],
+        'blocking {}',
+        {ALPHA: 'probe', BRAVO: 'probe'},
+      ],
+    );
+  });
+
+  it('brief-personalization §2 (#2086): the relay host lives as long as the connection: a connect that fails after phase E ends it, a held one keeps it until it is given back', async () => {
+    const failing = sceneOf();
+    failing.blockingResult = {
+      kind: 'lifecycleFailed',
+      hook: 'onCreateCommand',
+      part: undefined,
+      message: 'exit 1',
+      containerId: 'c1',
+      foundContainerId: 'c1',
+    };
+    await failing.connector.connect(inputOf(PAYLOAD));
+    const held = sceneOf();
+    await connected(held);
+    const whileHeld = held.relayHostsEnded;
+    held.connector.cancel();
+    deepStrictEqual(
+      [failing.relayHostsEnded, whileHeld, held.relayHostsEnded],
+      [1, 0, 1],
     );
   });
 });

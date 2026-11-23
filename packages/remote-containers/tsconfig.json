@@ -28,6 +28,9 @@
     },
     {
       "path": "../lib-standdown"
+    },
+    {
+      "path": "../lib-wsl"
     }
   ]
 }

@@ -10,6 +10,7 @@ import {
   recordWindowName,
   windowNameOf,
 } from './window-name.ts';
+import {readSelection} from './terminal-selection.ts';
 
 /** How often the agent looks for a new command, in milliseconds. */
 const POLL_MILLISECONDS = 200;
@@ -190,13 +191,14 @@ function activeTabOf(
   return {uri: current.input.uri.toString(), preview: current.isPreview};
 }
 
-/** The editor commands that copy the active terminal's whole buffer to the clipboard, in order. */
-const COPY_STEPS = [
+/** The editor commands that select the active terminal's whole buffer, in order. */
+const SELECT_STEPS = [
   'workbench.action.terminal.focus',
   'workbench.action.terminal.selectAll',
-  'workbench.action.terminal.copySelection',
-  'workbench.action.terminal.clearSelection',
 ];
+
+/** The command that takes the selection away again. */
+const CLEAR_STEP = 'workbench.action.terminal.clearSelection';
 
 /** How long a copy step may take before the read gives up and names it. */
 const COPY_STEP_MILLISECONDS = 10_000;
@@ -239,7 +241,25 @@ export function activate(context: vscode.ExtensionContext): void {
   );
   const name = activationName(agentFolder);
   windowName = name;
-  report(agentFolder, name, {event: 'activated'});
+  report(agentFolder, name, {
+    event: 'activated',
+    logFolder: context.logUri.fsPath,
+  });
+  // The terminals the window opens and the one that becomes active, with their times, for the rows that read why a palette did not show.
+  context.subscriptions.push(
+    vscode.window.onDidOpenTerminal(terminal => {
+      report(agentFolder, name, {
+        event: 'terminalOpened',
+        terminal: terminal.name,
+      });
+    }),
+    vscode.window.onDidChangeActiveTerminal(terminal => {
+      report(agentFolder, name, {
+        event: 'activeTerminalChanged',
+        terminal: terminal?.name ?? null,
+      });
+    }),
+  );
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'acceptance.agent.openWindow',
@@ -334,6 +354,8 @@ export function activate(context: vscode.ExtensionContext): void {
           defaultValue: configuration.inspect(settingId)?.defaultValue ?? null,
           inUserScope:
             configuration.inspect(settingId)?.globalValue !== undefined,
+          userValue: configuration.inspect(settingId)?.globalValue ?? null,
+          inspected: configuration.inspect(settingId) ?? null,
         });
       },
     ),
@@ -420,6 +442,58 @@ export function activate(context: vscode.ExtensionContext): void {
         });
       },
     ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.execSpawn',
+      async (
+        command: string,
+        argumentList: string[],
+        environment: Record<string, string>,
+      ) => {
+        // The exec server is a proposed API the agent's manifest enables; the types of the proposal are not part of this project.
+        const workspace = vscode.workspace as unknown as {
+          getRemoteExecServer(authority: string): PromiseLike<
+            | {
+                spawn(
+                  command: string,
+                  argumentList: string[],
+                  options: {env: Record<string, string>},
+                ): PromiseLike<{
+                  stdout: {
+                    onDidReceiveMessage(
+                      listener: (chunk: Uint8Array) => void,
+                    ): unknown;
+                    onEnd: PromiseLike<void>;
+                  };
+                  onExit: PromiseLike<{status: number}>;
+                }>;
+              }
+            | undefined
+          >;
+        };
+        const authority = authorityOf(agentFolder, process.pid);
+        if (authority === null) {
+          throw new Error('the window has no remote authority');
+        }
+        const server = await workspace.getRemoteExecServer(authority);
+        if (server === undefined) {
+          throw new Error('the authority gave no exec server');
+        }
+        const spawned = await server.spawn(command, argumentList, {
+          env: environment,
+        });
+        const chunks: Buffer[] = [];
+        spawned.stdout.onDidReceiveMessage(chunk => {
+          chunks.push(Buffer.from(chunk));
+        });
+        const exit = await spawned.onExit;
+        await spawned.stdout.onEnd;
+        report(agentFolder, name, {
+          event: 'execSpawned',
+          text: Buffer.concat(chunks).toString('utf8'),
+          exitCode: exit.status,
+        });
+      },
+    ),
     vscode.commands.registerCommand('acceptance.agent.tunnels', async () => {
       // The tunnels are a proposed API the agent's manifest enables; the types of the proposal are not part of this project.
       const workspace = vscode.workspace as unknown as {
@@ -489,7 +563,7 @@ export function activate(context: vscode.ExtensionContext): void {
           });
           return;
         }
-        for (const step of COPY_STEPS) {
+        for (const step of SELECT_STEPS) {
           const finished = await settledWithin(
             vscode.commands.executeCommand(step),
             COPY_STEP_MILLISECONDS,
@@ -505,19 +579,19 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
           }
         }
-        let copied: string | undefined;
-        const read = await settledWithin(
-          Promise.resolve(vscode.env.clipboard.readText()).then(text => {
-            copied = text;
-          }),
+        // Reading the selection asks nothing of the clipboard, which the machine shares between windows, and makes no copy
+        // for core to complain about when nothing is selected.
+        const selection = readSelection(vscode.window.activeTerminal);
+        await settledWithin(
+          vscode.commands.executeCommand(CLEAR_STEP),
           COPY_STEP_MILLISECONDS,
         );
         report(agentFolder, name, {
           event: 'terminalBuffer',
-          text: read ? (copied ?? '') : null,
+          text: selection.kind === 'text' ? selection.text : null,
           terminals,
           active,
-          ...(read ? {} : {stuck: 'clipboard.readText'}),
+          ...(selection.kind === 'text' ? {} : {stuck: 'terminalSelection'}),
         });
       },
     ),
@@ -626,6 +700,14 @@ export function activate(context: vscode.ExtensionContext): void {
           event: 'environment',
           value: process.env[variableName] ?? null,
         });
+      },
+    ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.openLink',
+      async (given: string) => {
+        const text = given.replace('{scheme}', vscode.env.uriScheme);
+        report(agentFolder, name, {event: 'linkOpened', value: text});
+        await vscode.env.openExternal(vscode.Uri.parse(text));
       },
     ),
     vscode.commands.registerCommand(

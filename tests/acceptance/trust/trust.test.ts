@@ -1,14 +1,21 @@
 import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
 import {
   connectedWithin,
+  connectionLog,
   isTrusted,
   openWindow,
   recordLines,
   trustSettled,
+  windowEvents,
   windowState,
 } from '../windows/harness.ts';
 import {INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
-import {answerDialog, dialogOf, waitForDialog} from '../windows/renderer.ts';
+import {
+  answerDialog,
+  dialogOf,
+  pageText,
+  waitForDialog,
+} from '../windows/renderer.ts';
 
 /** The question core's startup prompt asks of a folder. */
 const FOLDER_QUESTION = 'Do you trust the authors of the files in this folder?';
@@ -19,13 +26,38 @@ const STARTUP_BUTTONS = [
   'Yes, I trust the authors',
 ];
 
+/** What `read` gives, or the text of what it threw, so that a read of a failure report never replaces the failure. */
+async function attempt(read: () => unknown): Promise<unknown> {
+  try {
+    return await read();
+  } catch (caught) {
+    return `the read failed: ${String(caught)}`;
+  }
+}
+
 describe('the trust launch (card tooling-33)', function () {
   this.timeout(300000);
 
   it('tooling-33: a remote folder opens untrusted, and core asks its startup question', async () => {
     await openWindow('harness', 's1');
     const trusted = await isTrusted('s1');
-    const shown = await waitForDialog('s1');
+    const shown = await waitForDialog('s1').catch(async (caught: unknown) => {
+      const held = {
+        trustedNow: await attempt(() => isTrusted('s1')),
+        state: await attempt(() => windowState('s1')),
+        events: await attempt(() =>
+          windowEvents('s1').map(
+            event => `${event.event}@${String(event.time)}`,
+          ),
+        ),
+        page: await attempt(async () => (await pageText('s1')).slice(0, 400)),
+        connectionLog: await attempt(() => connectionLog().slice(-12)),
+      };
+      throw new Error(
+        `${String(caught)}; trusted when opened ${String(trusted)}; ${JSON.stringify(held)}`,
+        {cause: caught},
+      );
+    });
     deepStrictEqual(
       [trusted, shown.message, shown.buttons],
       [false, FOLDER_QUESTION, STARTUP_BUTTONS],

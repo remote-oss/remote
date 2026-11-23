@@ -74,6 +74,10 @@ function inspectJson(containers: readonly FakeContainer[]): string {
 
 /** What a row steers, and what the fakes recorded. */
 interface Scene {
+  /** How many times the view said its data had loaded. */
+  loads: number;
+  /** Whether the Docker host in effect is an ssh host whose name starts with a dash. */
+  dashHost: boolean;
   commands: string[];
   /** What the view asked the clock for, and how many of those waits were stopped. */
   timers: Array<{milliseconds: number; callback: () => void}>;
@@ -112,6 +116,8 @@ interface Scene {
 
 function sceneOf(): Scene {
   return {
+    loads: 0,
+    dashHost: false,
     commands: [`${views.targetsContainers}.focus`],
     timers: [],
     stopped: 0,
@@ -177,6 +183,10 @@ function engineOf(scene: Scene, name: string): EngineHost {
 
 function portsOf(scene: Scene): TargetsViewPorts {
   const ports: Omit<TargetsViewPorts, 'events'> = {
+    loaded: () => {
+      scene.loads += 1;
+    },
+    dashHost: () => Promise.resolve(scene.dashHost),
     editor: {
       commandIds: () =>
         scene.commandFailure === undefined
@@ -440,6 +450,19 @@ describe('the Dev Containers view (card containers-30)', () => {
     );
   });
 
+  it('F-0708 BR-1: the view says its data has loaded once, after the first load, and not again on later loads', async () => {
+    const scene = sceneOf();
+    scene.containers = [containerOf(OTHER)];
+    const view = showTargetsWhenRegistered(portsOf(scene));
+    await settled();
+    const before = scene.loads;
+    await view.refresh();
+    const first = scene.loads;
+    await view.refresh();
+    view.dispose();
+    deepStrictEqual([before, first, scene.loads], [0, 1, 1]);
+  });
+
   it('F-0906 7.E1: disposing after the view is shown disposes it, and a Refresh before it is shown does nothing', async () => {
     const scene = sceneOf();
     scene.commands = [];
@@ -548,18 +571,41 @@ describe('the Dev Containers view (card containers-30)', () => {
       [
         scene.docker.setting?.processes.map(each => each.killed),
         await provider.getChildren(undefined),
-        scene.contexts.slice(-3),
+        scene.contexts.slice(-4),
       ],
       [
         [true],
         [],
         [
           ['remote-containers:needsDockerStartOrInstall', true],
+          ['remote-containers:needsSSHCredentials', false],
           ['remote-containers:noContainersWithFolder', false],
           ['remote-containers:noContainersWithoutFolder', false],
         ],
       ],
     );
+  });
+
+  it('F-0205 AC-12a, AC-10: with an ssh host that starts with a dash the view lists nothing, shows the Docker welcome and starts no Docker process', async () => {
+    const scene = sceneOf();
+    scene.dashHost = true;
+    const view = showTargetsWhenRegistered(portsOf(scene));
+    await settled();
+    await view.refresh();
+    deepStrictEqual(
+      [Object.keys(scene.docker), scene.runs, scene.contexts.slice(-4)],
+      [
+        [],
+        [],
+        [
+          ['remote-containers:needsDockerStartOrInstall', true],
+          ['remote-containers:needsSSHCredentials', false],
+          ['remote-containers:noContainersWithFolder', false],
+          ['remote-containers:noContainersWithoutFolder', false],
+        ],
+      ],
+    );
+    view.dispose();
   });
 
   it('F-0901 6.21: in a local window a dockerPath change to a program that starts restarts the events process on the new engine', async () => {
@@ -654,7 +700,7 @@ describe('the Dev Containers view (card containers-30)', () => {
         await provider.getChildren(undefined),
         scene.engineFiles,
         scene.runs,
-        scene.contexts.slice(-3),
+        scene.contexts.slice(-4),
       ],
       [
         [],
@@ -662,6 +708,7 @@ describe('the Dev Containers view (card containers-30)', () => {
         [],
         [
           ['remote-containers:needsDockerStartOrInstall', true],
+          ['remote-containers:needsSSHCredentials', false],
           ['remote-containers:noContainersWithFolder', false],
           ['remote-containers:noContainersWithoutFolder', false],
         ],
@@ -825,6 +872,18 @@ describe('the Dev Containers view (card containers-30)', () => {
     );
   });
 
+  it('F-0901 AC-37: the folder row of a Compose dev container has the codicon folder, and the package icon folder-active while it is the window’s own', () => {
+    deepStrictEqual(
+      (['folder', 'folderActive'] as const).map(
+        icon => specOf(rowOf({icon})).icon,
+      ),
+      [
+        {kind: 'theme', id: 'folder'},
+        {kind: 'resource', file: 'folder-active.svg'},
+      ],
+    );
+  });
+
   it('F-0906 AC-16, 7.E1: without the focus command no tree view is made and nothing is read', async () => {
     const scene = sceneOf();
     scene.commands = ['workbench.action.reloadWindow'];
@@ -935,21 +994,25 @@ describe('the Dev Containers view (card containers-30)', () => {
     deepStrictEqual(seen, [
       [
         ['remote-containers:needsDockerStartOrInstall', true],
+        ['remote-containers:needsSSHCredentials', false],
         ['remote-containers:noContainersWithFolder', false],
         ['remote-containers:noContainersWithoutFolder', false],
       ],
       [
         ['remote-containers:needsDockerStartOrInstall', false],
+        ['remote-containers:needsSSHCredentials', false],
         ['remote-containers:noContainersWithFolder', true],
         ['remote-containers:noContainersWithoutFolder', false],
       ],
       [
         ['remote-containers:needsDockerStartOrInstall', false],
+        ['remote-containers:needsSSHCredentials', false],
         ['remote-containers:noContainersWithFolder', false],
         ['remote-containers:noContainersWithoutFolder', true],
       ],
       [
         ['remote-containers:needsDockerStartOrInstall', false],
+        ['remote-containers:needsSSHCredentials', false],
         ['remote-containers:noContainersWithFolder', false],
         ['remote-containers:noContainersWithoutFolder', false],
       ],

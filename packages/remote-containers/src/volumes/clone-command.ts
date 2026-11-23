@@ -6,8 +6,13 @@
 
 import type {Logger} from 'lib-log';
 import type {PinnedEngine} from '../engine/effective-engine.ts';
-import {cloneSourceOf, type CloneSource} from './clone-source.ts';
+import {
+  type CloneOrigin,
+  cloneSourceOf,
+  type CloneSource,
+} from './clone-source.ts';
 import type {PrecheckOutcome} from './precheck.ts';
+import {type PickedRepository, pickedSourceOf} from './source-pick.ts';
 import {
   type DevContainerVolume,
   UNIQUE_VOLUME,
@@ -17,23 +22,31 @@ import {
 /** The user's answer to the trust confirmation. */
 export type CloneTrustAnswer = 'gotIt' | 'cancel' | 'learnMore';
 
+/** The clone's trust confirmation: what the profile accepted, the dialog, its record, and our page about it. */
+export interface CloneTrustPorts {
+  /** Whether the confirmation was accepted in this profile already. */
+  accepted(): boolean;
+  /** Shows the confirmation; Escape is `cancel`. */
+  confirm(): Promise<CloneTrustAnswer>;
+  remember(): Promise<void>;
+  /** Opens our page about cloning what you trust. */
+  learnMore(): void;
+}
+
 /** What the command needs of the editor and the engine. */
 export interface CloneCommandPorts {
-  trust: {
-    /** Whether the confirmation was accepted in this profile already. */
-    accepted(): boolean;
-    /** Shows the confirmation; Escape is `cancel`. */
-    confirm(): Promise<CloneTrustAnswer>;
-    remember(): Promise<void>;
-    /** Opens our page about cloning what you trust. */
-    learnMore(): void;
-  };
+  trust: CloneTrustPorts;
   /** The engine check, which shows its own dialog when the engine isn't ready. */
   engineReady(): Promise<boolean>;
-  /** The source the user gives: the text typed, or nothing when the pick was dismissed. */
-  pickSource(): Promise<string | undefined>;
+  /** The source the user gives: the text typed, the GitHub row, or nothing when the pick was dismissed. */
+  pickSource(): Promise<
+    {kind: 'typed'; text: string} | {kind: 'github'} | undefined
+  >;
+  /** Picks a repository on GitHub, and its branch, through the editor's own remote sources; nothing when left. */
+  pickGithub(): Promise<PickedRepository | undefined>;
   precheck(
     source: CloneSource,
+    origin: CloneOrigin,
     cancellation: AbortSignal,
   ): Promise<PrecheckOutcome>;
   /** The modal error that names the repository that can't be read. */
@@ -85,63 +98,125 @@ export function volumeWindowUriOf(target: DevContainerVolume): string {
 }
 
 /** Whether the confirmation lets the clone go on, asking it the first time in the profile. */
-async function trusted(ports: CloneCommandPorts): Promise<boolean> {
-  if (ports.trust.accepted()) {
+export async function cloneConsented(trust: CloneTrustPorts): Promise<boolean> {
+  if (trust.accepted()) {
     return true;
   }
-  const answer = await ports.trust.confirm();
+  const answer = await trust.confirm();
   if (answer === 'learnMore') {
-    ports.trust.learnMore();
+    trust.learnMore();
   }
   if (answer !== 'gotIt') {
     return false;
   }
-  await ports.trust.remember();
+  await trust.remember();
   return true;
 }
 
-/** The steps both clone commands share, up to the pre-check: the trust confirmation, the engine check, the source the user gives, and the modal for a source that can't be read: the source, or nothing when the command stops. */
-export async function givenSourceOf(
+/** The source text the user gives: typed, or the repository picked on GitHub; nothing when either pick was left. */
+async function sourceTextOf(
   ports: CloneCommandPorts,
-): Promise<CloneSource | undefined> {
-  if (!(await trusted(ports)) || !(await ports.engineReady())) {
-    return undefined;
+): Promise<string | undefined> {
+  const picked = await ports.pickSource();
+  if (picked?.kind !== 'github') {
+    return picked?.text;
   }
-  const typed = await ports.pickSource();
-  if (typed === undefined) {
-    return undefined;
-  }
-  const source = cloneSourceOf(typed, 'typed');
-  if ('refused' in source) {
-    ports.logger.info(`the source was refused: ${source.refused}`);
-    await ports.cannotAccess(typed.trim());
-    return undefined;
-  }
-  return source;
+  const repository = await ports.pickGithub();
+  return repository === undefined ? undefined : pickedSourceOf(repository);
 }
 
-/** Runs the command once, up to the reload; every way it ends before then leaves the window as it was. */
-export async function cloneInUniqueVolume(
+/**
+ * The source `given` names once it is refused or found unreachable, each shown with S052, or found to be the window's
+ * own repository; undefined in all three cases, and when the check was cancelled.
+ */
+async function reachableSource(
   ports: CloneCommandPorts,
+  given: string,
+  origin: CloneOrigin,
   cancellation: AbortSignal,
-): Promise<void> {
-  const source = await givenSourceOf(ports);
-  if (source === undefined) {
-    return;
+): Promise<CloneSource | undefined> {
+  const source = cloneSourceOf(given, origin);
+  if ('refused' in source) {
+    ports.logger.info(`the source was refused: ${source.refused}`);
+    await ports.cannotAccess(given.trim());
+    return undefined;
   }
   if (ports.currentRepository() === source.repositoryPath) {
     ports.logger.info('the window is the clone of this repository already');
-    return;
+    return undefined;
   }
-  const checked = await ports.precheck(source, cancellation);
-  if (checked === 'cancelled') {
-    return;
-  }
+  const checked = await ports.precheck(source, origin, cancellation);
   if (checked === 'unreachable') {
     await ports.cannotAccess(source.repositoryPath);
+  }
+  return checked === 'reachable' ? source : undefined;
+}
+
+/** Whether the clone may go on: the confirmation is given and the engine is ready. */
+async function ready(ports: CloneCommandPorts): Promise<boolean> {
+  return (await cloneConsented(ports.trust)) && (await ports.engineReady());
+}
+
+/** The steps both clone commands share, up to the volume: the consent, the engine check, the source the user gives and its check. */
+export async function givenSourceOf(
+  ports: CloneCommandPorts,
+  cancellation: AbortSignal,
+): Promise<CloneSource | undefined> {
+  if (!(await ready(ports))) {
+    return undefined;
+  }
+  const given = await sourceTextOf(ports);
+  return given === undefined
+    ? undefined
+    : reachableSource(ports, given, 'typed', cancellation);
+}
+
+/**
+ * Runs the command once, up to the reload; every way it ends before then leaves the window as it was. A `link` is a
+ * source the extension was handed, such as the remote of a repository: it is read as a link, not as the user's own
+ * input, and nothing is asked for it.
+ */
+export async function cloneInUniqueVolume(
+  ports: CloneCommandPorts,
+  cancellation: AbortSignal,
+  link?: string,
+): Promise<void> {
+  if (!(await ready(ports))) {
+    return;
+  }
+  const origin: CloneOrigin = link === undefined ? 'typed' : 'link';
+  const given = link ?? (await sourceTextOf(ports));
+  if (given === undefined) {
+    return;
+  }
+  const source = await reachableSource(ports, given, origin, cancellation);
+  if (source === undefined) {
     return;
   }
   const target = uniqueVolumeTargetOf(source, ports.engine());
-  await ports.recordTyped(volumePayloadOf(target));
+  if (origin === 'typed') {
+    await ports.recordTyped(volumePayloadOf(target));
+  }
   await ports.reload(volumeWindowUriOf(target));
+}
+
+/**
+ * Clones the repository an "Open in Dev Containers" link names, up to the reload. The engine and the repository are
+ * checked before the confirmation, so a link that can't be cloned shows S052 alone; nothing is picked or recorded.
+ */
+export async function cloneFromLink(
+  ports: CloneCommandPorts,
+  link: string,
+  cancellation: AbortSignal,
+): Promise<void> {
+  if (!(await ports.engineReady())) {
+    return;
+  }
+  const source = await reachableSource(ports, link, 'link', cancellation);
+  if (source === undefined || !(await cloneConsented(ports.trust))) {
+    return;
+  }
+  await ports.reload(
+    volumeWindowUriOf(uniqueVolumeTargetOf(source, ports.engine())),
+  );
 }

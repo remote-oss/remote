@@ -6,13 +6,14 @@
 
 import {EDITOR_ENGINE} from './editor-floor.ts';
 
-/** The extensions release 1 and 0.2 ship, by `${publisher}.${name}`. */
+/** The extensions release 1 and 0.2 ship, and WSL, by `${publisher}.${name}`. */
 export const SHIPPED_EXTENSION_IDS: readonly string[] = [
   'remote-oss.remote-containers',
   'remote-oss.remote-ssh',
   'remote-oss.remote-ssh-edit',
   'remote-oss.remote-explorer',
   'remote-oss.vscode-remote-extensionpack',
+  'remote-oss.remote-wsl',
 ];
 
 /**
@@ -21,6 +22,11 @@ export const SHIPPED_EXTENSION_IDS: readonly string[] = [
  * its own entry.
  */
 export const BUNDLED_DEPENDENCY_FOLDERS = ['dist/devcontainers-cli/'];
+
+/** The extension ids whose VSIX must not hold the English base table: the locale bundles ship, the base stays in the repository (tooling-41). */
+export const BASE_BUNDLE_LEFT_OUT: readonly string[] = [
+  'remote-oss.remote-containers',
+];
 
 /** The manifest fields the rules read. */
 export interface VsixManifest {
@@ -117,6 +123,14 @@ export function vsixProblems(
         `packages/${folder}: the icon ${manifest.icon} is not a PNG`,
       );
     }
+  }
+  if (
+    BASE_BUNDLE_LEFT_OUT.includes(extensionId) &&
+    files.includes('l10n/bundle.l10n.json')
+  ) {
+    problems.push(
+      `packages/${folder}: ${extensionId} ships l10n/bundle.l10n.json, the English base table; only its locale bundles ship`,
+    );
   }
   return problems;
 }

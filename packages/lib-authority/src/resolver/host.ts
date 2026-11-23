@@ -32,7 +32,14 @@ export type PhaseName =
   /** The resolve's first visible stage, which has no text: the progress opens with the title alone. */
   | 'opened'
   | 'runningPreconnectScript'
-  | 'serverDownloadPercent';
+  | 'serverDownloadPercent'
+  /** The probe that starts the distro before its server is installed. */
+  | 'startingSubsystem'
+  /** Unpacking the server archive; the stage carries `percent`. */
+  | 'unpackingPercent'
+  /** Downloading the server archive in the distro; the stage carries `percent`. */
+  | 'downloadingInDistro'
+  | 'unpackingServer';
 
 /** The latest the progress opens after a resolve starts. */
 const PROGRESS_FALLBACK_MILLISECONDS = 1500;
@@ -48,6 +55,13 @@ export interface ConnectPhase {
   details?: boolean;
   /** Sets the text the progress shows without opening it; a stage that is not quiet opens it. */
   quiet?: true;
+  /**
+   * The bar's position from 0 to 100 that the connector names, for a family with `barFromConnector`: only the connector
+   * knows whether this connect downloaded.
+   */
+  barPosition?: number;
+  /** The title the progress opens with, for a family with `titleFromConnector`. */
+  progressTitle?: string;
 }
 
 /** What the connector is asked to connect to. */
@@ -61,14 +75,33 @@ export interface ConnectInput {
   windowId: string;
   /** The window's folder or workspace, if it has one. */
   windowWorkspace: string | undefined;
+  /**
+   * The outer authority's exec server that the editor handed this resolve, for an authority nested in another; absent
+   * when it handed none. It is for this attempt alone: the host keeps none between attempts.
+   */
+  execServer?: ExecServerHandle;
 }
 
 /** What ended a connect: the user's Cancel on the progress notification, or the window's resolver being disposed. */
 export type CancelSource = 'progress' | 'dispose';
 
+/**
+ * An exec server as the editor takes it from a resolver. Its shape is the editor's (the proposed `resolvers` API), which
+ * this package needs no types of, so the host holds it as an object and the editor adapter gives it its type.
+ */
+export type ExecServerHandle = object;
+
 /** What an extension supplies: its own way to connect, and the events it reports on the way. */
 export interface Connector {
   connect(input: ConnectInput): Promise<Connected | Failed>;
+  /**
+   * The exec server of the window, for an authority the editor asks for one: the window's own connection serves it, or
+   * a connect made for it alone when the window has none (a window nested in this authority). An extension that serves
+   * no exec server leaves it off.
+   */
+  execServer?(
+    input: ConnectInput,
+  ): Promise<{execServer: ExecServerHandle} | Failed>;
   /** Ends prompts and processes. The host calls it only when the window is torn down, or on the user's Cancel. */
   cancel(source?: CancelSource): void;
   /** Shows the detail of the connect, as the log. */
@@ -84,6 +117,8 @@ export type PresenterOutcome = 'handled' | 'reload' | 'closeRemote';
 /** What an extension supplies to tell the user of a failure. */
 export interface FailurePresenter {
   present(failed: Failed): Promise<PresenterOutcome>;
+  /** The text the failure's dialog shows, which a failure that is told some other way carries as its message. */
+  textOf?(failed: Failed): string;
 }
 
 /** What the editor takes of a resolved connection. */
@@ -100,8 +135,16 @@ export interface ResolvedConnection {
 export interface EditorResolver {
   resolve(
     authority: string,
-    context: {resolveAttempt: number},
+    context: {resolveAttempt: number; execServer?: ExecServerHandle},
   ): Promise<ResolvedConnection>;
+  /**
+   * The exec server of an authority that is a midpoint of a nested one, or that an extension asks for with
+   * `getRemoteExecServer`; the editor asks again on every resolve attempt and every use, and keeps none.
+   */
+  resolveExecServer?: (
+    authority: string,
+    context: {resolveAttempt: number; execServer?: ExecServerHandle},
+  ) => Promise<ExecServerHandle>;
   /** The local path a URI of this window stands for, for a family that maps one (windows contracts §3.2). */
   canonicalPath?: (
     authority: string,
@@ -168,8 +211,35 @@ export interface ResolverOptions {
   determinateStages?: boolean;
   /** The text of a stage, in the display language and the extension's wording. */
   titleOf(phase: ConnectPhase, target: DecodedTarget): string;
-  /** The title the progress starts with. */
+  /** The title the progress starts with; a family with `titleFromConnector` is never asked. */
   startTitle(target: DecodedTarget): string;
+  /**
+   * Whether an authority of this family that the registry calls malformed, a bad outer hop included, is answered with
+   * the editor's handled error and nothing more: no connector call, no stage, no progress and no presenter. An authority
+   * of another family stays unhandled.
+   */
+  malformedHandled?: boolean;
+  /**
+   * Whether a stage whose text is empty is reported as an empty message, so that the progress shows its title alone. A
+   * family that leaves it off adds no report for such a stage.
+   */
+  emptyStageClearsText?: boolean;
+  /**
+   * Whether the bar is the connector's: each report carries the increment from the bar shown so far to the stage's `barPosition`
+   * (never a negative one), and a stage without `barPosition` adds none, so the bar is indefinite until the first. It replaces
+   * `determinateStages`.
+   */
+  barFromConnector?: boolean;
+  /**
+   * Whether the progress takes its title from the connector: it opens only once a stage has carried a `progressTitle`,
+   * at the later of the delay and that stage, and keeps that title. A connect that ends first opens none.
+   */
+  titleFromConnector?: boolean;
+  /**
+   * Whether a failure for the presenter is presented before the connect's progress is released, so that the progress
+   * stays open behind the dialog and closes after the answer.
+   */
+  presentInsideProgress?: boolean;
   /**
    * How long after a resolve starts the progress opens, whatever the phases: a phase before it is remembered and the
    * progress opens at the delay with the latest title, and a connect that ends first opens none. A family that leaves it
@@ -202,8 +272,6 @@ export interface ResolverHandle {
     {decodedTarget: DecodedTarget; state: ConnectionState} | undefined;
   /** How the last settled resolve of this window ended, from the tracker. */
   lastResolve(): LastResolve;
-  /** Calls `listener` once, with the decoded target, when the first resolve of this extension host starts; at once when it has started already. */
-  onFirstResolveStarted(listener: (target: DecodedTarget) => void): void;
   /** Calls `listener` once, when the first resolve of this extension host settles. */
   onFirstResolveSettled(listener: () => void): void;
   /** Calls `listener` after every resolve of this window settles, the first and each later one, in success or in failure. */
@@ -253,9 +321,6 @@ export interface Readiness {
 /** What the host remembers between two resolves of one window. */
 interface Memory {
   connectedBefore: boolean;
-  /** The first started target, so a listener added after the start is called at once. */
-  started: DecodedTarget | undefined;
-  startListeners: Array<(target: DecodedTarget) => void>;
   settled: boolean;
   listeners: Array<() => void>;
   settledListeners: Array<() => void>;
@@ -297,8 +362,6 @@ export async function registerResolver(
   const tracker = new ConnectionTracker();
   const memory: Memory = {
     connectedBefore: false,
-    started: undefined,
-    startListeners: [],
     settled: false,
     listeners: [],
     settledListeners: [],
@@ -371,18 +434,35 @@ export async function registerResolver(
     });
   }
 
-  async function connect(
+  async function connect<Result>(
     decoded: DecodedTarget,
-    input: ConnectInput,
-  ): Promise<Connected | Failed> {
+    work: () => Promise<Result>,
+  ): Promise<Result> {
     let shown:
       | {title: string; details: boolean; staged: boolean; stage: PhaseName}
       | undefined;
+    // The connector's bar: the highest position it named, and the sum of the increments reported so far.
+    let namedBar: number | undefined;
+    let barReported = 0;
+    // The title the first stage that carried one gave, and whether the progress is due, for `titleFromConnector`.
+    let progressTitle: string | undefined;
+    let progressDue = false;
     let report: ProgressUpdate | undefined;
     // The share of the bar added since the last report, and the download percent already counted.
     let unreported = 0;
     let downloaded = 0;
-    function incrementOf(): number | undefined {
+    function barIncrement(stageBar: number | undefined): number | undefined {
+      if (stageBar === undefined) {
+        return undefined;
+      }
+      const increment = Math.max(0, stageBar - barReported);
+      barReported += increment;
+      return increment;
+    }
+    function incrementOf(stageBar?: number): number | undefined {
+      if (options.barFromConnector === true) {
+        return barIncrement(stageBar);
+      }
       if (!options.determinateStages || shown?.staged !== true) {
         return undefined;
       }
@@ -399,8 +479,16 @@ export async function registerResolver(
     const settled = new Promise<void>(resolve => {
       releases.push(resolve);
     });
+    /** Whether a stage is reported: one with text, or an empty one for a family that clears the text with it. */
+    function reportable(title: string): boolean {
+      return title !== '' || options.emptyStageClearsText === true;
+    }
     function open(): void {
-      if (opened) {
+      progressDue = true;
+      if (
+        opened ||
+        (options.titleFromConnector === true && progressTitle === undefined)
+      ) {
         return;
       }
       opened = true;
@@ -408,7 +496,7 @@ export async function registerResolver(
       progressDone = editor.progress
         .withProgress(
           {
-            title: options.startTitle(decoded),
+            title: progressTitle ?? options.startTitle(decoded),
             cancellable: options.cancellable,
             onCancel: () => {
               connector.cancel('progress');
@@ -419,10 +507,16 @@ export async function registerResolver(
           },
           async update => {
             report = update;
-            // A stage with no message adds no step: an empty message would blank the text the progress shows.
-            if (shown !== undefined && shown.title !== '') {
+            // A stage with no message adds no step, unless the family clears the text with it: an empty message would
+            // blank the text the progress shows.
+            if (shown !== undefined && reportable(shown.title)) {
               reported = {title: shown.title, details: shown.details};
-              update(shown.title, shown.details, incrementOf(), shown.stage);
+              update(
+                shown.title,
+                shown.details,
+                incrementOf(namedBar),
+                shown.stage,
+              );
             }
             await settled;
           },
@@ -444,15 +538,25 @@ export async function registerResolver(
         staged: title !== '',
         stage: phase.name,
       };
+      if (phase.barPosition !== undefined) {
+        namedBar = Math.max(namedBar ?? 0, phase.barPosition);
+      }
+      const titledNow =
+        options.titleFromConnector === true &&
+        progressTitle === undefined &&
+        phase.progressTitle !== undefined;
+      if (titledNow) {
+        progressTitle = phase.progressTitle;
+      }
       if (phase.name === 'serverDownloadPercent') {
         const percent = phase.percent ?? 0;
         unreported += Math.max(0, percent - downloaded);
         downloaded = Math.max(downloaded, percent);
       }
       if (report !== undefined) {
-        const increment = incrementOf();
+        const increment = incrementOf(phase.barPosition);
         if (
-          shown.title !== '' &&
+          reportable(shown.title) &&
           (reported?.title !== shown.title ||
             reported.details !== shown.details ||
             increment !== undefined)
@@ -461,14 +565,15 @@ export async function registerResolver(
           report(shown.title, shown.details, increment, shown.stage);
         }
       } else if (
-        phase.quiet !== true &&
-        options.progressDelayMilliseconds === undefined
+        (phase.quiet !== true &&
+          options.progressDelayMilliseconds === undefined) ||
+        (titledNow && progressDue)
       ) {
         open();
       }
     });
     try {
-      return await connector.connect(input);
+      return await work();
     } finally {
       stop();
       stopTimer();
@@ -481,61 +586,125 @@ export async function registerResolver(
     }
   }
 
-  async function resolveOne(
-    authority: string,
-    context: {resolveAttempt: number},
-  ): Promise<ResolvedConnection> {
+  /** The decoded target of an authority this host serves, or the editor's error for one it does not or while it is leaving. */
+  function decodedFor(authority: string): DecodedTarget {
     const decoded = decodeAuthority(authority);
-    if ('malformed' in decoded || decoded.family !== options.family) {
+    if ('malformed' in decoded) {
+      throw editor.notAvailable(
+        undefined,
+        options.malformedHandled === true &&
+          decoded.malformed.family === options.family,
+      );
+    }
+    if (decoded.family !== options.family) {
       throw editor.notAvailable(undefined, false);
     }
     if (state.leaving) {
       throw editor.notAvailable(undefined, true);
     }
+    return decoded;
+  }
+
+  function inputOf(
+    decoded: DecodedTarget,
+    context: {resolveAttempt: number; execServer?: ExecServerHandle},
+    isReconnection: boolean,
+  ): ConnectInput {
+    return {
+      target: decoded.target,
+      rawHostString: decoded.rawHostString,
+      attempt: context.resolveAttempt,
+      isReconnection,
+      windowId: editor.windowId(),
+      windowWorkspace: editor.windowWorkspace(),
+      ...(context.execServer === undefined
+        ? {}
+        : {execServer: context.execServer}),
+    };
+  }
+
+  async function resolveExecServerOne(
+    authority: string,
+    context: {resolveAttempt: number; execServer?: ExecServerHandle},
+    serve: NonNullable<Connector['execServer']>,
+  ): Promise<ExecServerHandle> {
+    const decoded = decodedFor(authority);
+    let result: Awaited<ReturnType<typeof serve>>;
+    try {
+      result = await connect(decoded, () =>
+        serve(inputOf(decoded, context, memory.connectedBefore)),
+      );
+    } catch (caught) {
+      result = failureOfThrown(caught);
+    }
+    if ('execServer' in result) {
+      return result.execServer;
+    }
+    // The editor shows this error itself, or the extension that asked for the exec server tells the user: the failure's
+    // dialog is not shown here, but its text is the error's message.
+    throw editor.notAvailable(
+      options.presenter.textOf?.(result) ?? messageOf(result),
+      false,
+    );
+  }
+
+  async function resolveOne(
+    authority: string,
+    context: {resolveAttempt: number; execServer?: ExecServerHandle},
+  ): Promise<ResolvedConnection> {
+    const decoded = decodedFor(authority);
     const isReconnection = memory.connectedBefore;
     applyAndAnnounce({
       kind: 'resolveStarted',
       target: decoded,
       attempt: context.resolveAttempt,
     });
-    if (memory.started === undefined) {
-      memory.started = decoded;
-      for (const listener of memory.startListeners.splice(0)) {
-        listener(decoded);
+    async function failedWith(failed: Failed): Promise<Error> {
+      applyAndAnnounce({kind: 'resolveFailed'});
+      return errorFor(failed, isReconnection);
+    }
+    // For a family that presents inside the progress, the error is made while the progress is still open.
+    let presented: Error | undefined;
+    const result = await connect(decoded, async () => {
+      let answer: Connected | Failed;
+      try {
+        answer = await connector.connect(
+          inputOf(decoded, context, isReconnection),
+        );
+      } catch (caught) {
+        answer = failureOfThrown(caught);
       }
-    }
-    let result: Connected | Failed;
-    try {
-      result = await connect(decoded, {
-        target: decoded.target,
-        rawHostString: decoded.rawHostString,
-        attempt: context.resolveAttempt,
-        isReconnection,
-        windowId: editor.windowId(),
-        windowWorkspace: editor.windowWorkspace(),
-      });
-    } catch (caught) {
-      result = failureOfThrown(caught);
-    }
+      if (options.presentInsideProgress === true && !isConnected(answer)) {
+        presented = await failedWith(answer);
+      }
+      return answer;
+    });
     if (isConnected(result)) {
       memory.connectedBefore = true;
       applyAndAnnounce({kind: 'resolveSucceeded'});
       return connectionOf(result, options.allowsTrust);
     }
-    applyAndAnnounce({kind: 'resolveFailed'});
-    throw await errorFor(result, isReconnection);
+    throw presented ?? (await failedWith(result));
+  }
+
+  function queued<Result>(work: () => Promise<Result>): Promise<Result> {
+    const turn = state.queue.then(work);
+    state.queue = turn.then(
+      () => undefined,
+      () => undefined,
+    );
+    return turn;
   }
 
   const resolver: EditorResolver = {
-    resolve: (authority, context) => {
-      const turn = state.queue.then(() => resolveOne(authority, context));
-      state.queue = turn.then(
-        () => undefined,
-        () => undefined,
-      );
-      return turn;
-    },
+    resolve: (authority, context) =>
+      queued(() => resolveOne(authority, context)),
   };
+  const serveExecServer = connector.execServer?.bind(connector);
+  if (serveExecServer !== undefined) {
+    resolver.resolveExecServer = (authority, context) =>
+      queued(() => resolveExecServerOne(authority, context, serveExecServer));
+  }
   const {canonical} = options;
   if (canonical !== undefined) {
     resolver.canonicalPath = async (authority, path) => {
@@ -575,13 +744,6 @@ export async function registerResolver(
           : {decodedTarget: current.target, state: current.state};
       },
       lastResolve: () => tracker.lastResolve(),
-      onFirstResolveStarted: listener => {
-        if (memory.started !== undefined) {
-          listener(memory.started);
-        } else {
-          memory.startListeners.push(listener);
-        }
-      },
       onFirstResolveSettled: listener => {
         if (memory.settled) {
           listener();

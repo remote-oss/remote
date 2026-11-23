@@ -44,7 +44,11 @@ import {
   transfer,
   type TransferFailure,
 } from 'lib-server';
-import {installRelayScript, relayScriptPath} from '../exec/relay-script.ts';
+import {
+  folderExistsOver,
+  installRelayScript,
+  relayScriptPath,
+} from '../exec/relay-script.ts';
 import {
   type MachineSettings,
   writeMachineSettings,
@@ -104,6 +108,12 @@ export interface ServerStepDependencies {
   translate: Translate;
 }
 
+/** Where the server's files are, once installed: its own `node` and its data folder. */
+export interface ServerFiles {
+  nodePath: string;
+  dataFolder: string;
+}
+
 /** What one connect asks of the steps. */
 export interface ServerRequest {
   channel: HostChannel;
@@ -116,6 +126,13 @@ export interface ServerRequest {
   defaultExtensions: readonly string[];
   /** Whether this connect created the container, which is when a preview platform is told in the log. */
   created: boolean;
+  /** Whether the preview platform is told in the log whether or not this connect created the target. */
+  previewNoteAlways?: boolean;
+  /**
+   * Whether `defaultExtensions` apply only when the remote user's server data folder is not there yet, so that a
+   * container that is attached to is given them once for each user.
+   */
+  extensionsOncePerUser?: boolean;
   /** The server's port range from the configuration's `devPort`: `port-port` for a fixed port, empty for a dynamic one. */
   devPort: string;
   /** The settings to set in the container's machine settings before the server starts. */
@@ -123,6 +140,11 @@ export interface ServerRequest {
   onPhase(phase: 'installing' | 'startingServer'): void;
   /** The share of the server archive downloaded so far, from 0 to 100. */
   onDownloadPercent(percent: number): void;
+  /**
+   * Runs once the server's files are in place and before it starts: the early personalization and the blocking
+   * lifecycle commands. A failure it gives ends the steps with it.
+   */
+  beforeStart?: (server: ServerFiles) => Promise<Failed | undefined>;
   cancellation: AbortSignal;
 }
 
@@ -371,9 +393,6 @@ function probeFailure(
         failure.libc === 'musl' ? 'S031' : 'S359',
         failure.reported,
       );
-    case 'prerequisiteMissing':
-      logger.info(`the container lacks: ${failure.missing.join(', ')}`);
-      return serverFailed();
     case 'channelFailed':
       return failure.failure.kind === 'cancelled'
         ? cancelled()
@@ -441,7 +460,10 @@ export async function runServerSteps(
   }
   const platform = templatePlatformOf(discovered.host);
   const previewNote = previewNoteOf(platform);
-  if (request.created && previewNote !== undefined) {
+  if (
+    (request.created || request.previewNoteAlways === true) &&
+    previewNote !== undefined
+  ) {
     logger.info(
       filled(dependencies.translate, PREVIEW_TEMPLATES.previewNote, [
         previewNote,
@@ -472,6 +494,10 @@ export async function runServerSteps(
     host = withTree.host;
   }
   const dataFolder = `${host.home}/${serverDataFolderNameOrDefault(profile)}`;
+  const firstForUser =
+    request.extensionsOncePerUser !== true ||
+    !(await folderExistsOver(channel, dataFolder, cancellation));
+  const wantedExtensions = firstForUser ? request.defaultExtensions : [];
   const installed = await installRelayScript(channel, dataFolder, cancellation);
   if (installed.kind === 'failed') {
     logger.info(`the relay script was not installed: ${installed.detail}`);
@@ -641,7 +667,7 @@ export async function runServerSteps(
     logger,
   };
   const cacheRequest = {
-    extensions: request.defaultExtensions,
+    extensions: wantedExtensions,
     serviceUrl: typeof serviceUrl === 'string' ? serviceUrl : '',
     target: platformName,
     productVersion: profile.version,
@@ -654,10 +680,17 @@ export async function runServerSteps(
     queryMilliseconds: GALLERY_QUERY_MILLISECONDS,
   };
   const extensionPlan =
-    request.defaultExtensions.length === 0 || typeof serviceUrl !== 'string'
-      ? {installs: [...request.defaultExtensions], pending: []}
+    wantedExtensions.length === 0 || typeof serviceUrl !== 'string'
+      ? {installs: [...wantedExtensions], pending: []}
       : await planExtensions(cachePorts, {...cacheRequest, cancellation});
   const defaultExtensions = extensionPlan.installs;
+  const beforeStart = await request.beforeStart?.({
+    nodePath: `${nodeFolder}/node`,
+    dataFolder,
+  });
+  if (beforeStart !== undefined) {
+    return failedWith(beforeStart);
+  }
   const started = await startOrReuse(
     channel,
     parametersOf(dependencies, request, installTree, ''),

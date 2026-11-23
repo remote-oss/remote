@@ -12,8 +12,9 @@ import {
 } from '../../src/authority/payload.ts';
 import type {CliTarget} from '../../src/cli/cli-arguments.ts';
 import type {CliBridge} from '../../src/cli/cli-bridge.ts';
+import {markerInspectArguments} from '../../src/cli/cli-markers.ts';
 import type {BackgroundStage} from '../../src/lifecycle/container-lifecycle.ts';
-import type {CliEvent} from '../../src/cli/cli-lines.ts';
+import type {CliEvent, SetUpResult} from '../../src/cli/cli-lines.ts';
 import {
   type ContainerConnector,
   type ContainerConnectorDependencies,
@@ -40,6 +41,12 @@ import type {
   ContainerRequest,
   ContainerStep,
 } from '../../src/lifecycle/container-lifecycle.ts';
+import {storeRebuildIntent} from '../../src/open/rebuild-intent.ts';
+import type {
+  RelayHostRequest,
+  RelayHostStart,
+  RelayKind,
+} from '../../src/relays/relay-host.ts';
 import {fakeEngine, type ProcessScript, type SpawnPlan} from './fake-engine.ts';
 
 /** The extension's global storage folder of the fixture: nothing is ever created in it. */
@@ -152,12 +159,35 @@ export interface Scene {
     hostPort: number;
   }>;
   stopped: number;
+  /** The lifecycle's runs after `prepare`, in order: `blocking`, then `background`. */
+  lifecycleRuns: string[];
+  /** What the blocking run gives; done by default. */
+  blockingResult: Awaited<ReturnType<ContainerLifecycle['runBlocking']>>;
+  /** What the engine answers the inspect that reads the container's creation time and environment; `fails` for an error. */
+  markerInspect: string;
+  /** Whether the markers' root step finds every marker holding the creation time. */
+  markersRan: boolean;
+  /** The scripts the markers' root step was run with. */
+  markerScripts: string[];
+  /** The relay kinds the connector sets up; none by default. */
+  relayKinds: RelayKind[];
+  /** The relay host requests, and how starting one ends: started with no variables by default. */
+  relayHostRequests: RelayHostRequest[];
+  relayHostStart: RelayHostStart;
+  /** How many times a started relay host was ended. */
+  relayHostsEnded: number;
   revealed: number;
   /** What the shutdown helper was told, in order, and how many configuration reads had started at each message. */
   shutdownSent: ShutdownRequest[];
+  /** When the helper answers a register: at once, unless a row holds it. */
+  registerAnswer: () => Promise<void>;
+  /** What the connector's clock reads, in milliseconds. */
+  clockNow: number;
   readsAtShutdown: number[];
   /** What `docker inspect` prints of the container's metadata label; `fails` for an engine that does not answer. */
   metadata: string;
+  /** What `docker inspect` prints of the container's published ports; `fails` for an engine that does not answer. */
+  published: string;
   sink: MemorySink;
   /** The outcome of `prepare`; a function to hold it. */
   outcome: ContainerOutcome | (() => Promise<ContainerOutcome>);
@@ -183,6 +213,8 @@ export interface Scene {
   /** The user's values of the workspace mount's consistency, of its deprecated twin and of the worktree setting. */
   workspaceMountConsistency: unknown;
   legacyWorkspaceMountConsistency: unknown;
+  /** The value of `dev.containers.gpuAvailability`. */
+  gpuAvailability: unknown;
   mountGitWorktreeCommonDir: unknown;
   /** The user's values of the setting for the extensions of a new container, and of its deprecated twin. */
   defaultFeatures: unknown;
@@ -217,8 +249,21 @@ export interface Scene {
   volumeCalls: string[];
   /** Whether the volume dependencies say the payload's source was typed. */
   typedSource: boolean;
+  /** The volumes whose recovery the user asked for. */
+  recoveryPicks: string[];
+  /** Whether the profile gives the clone's trust confirmation. */
+  consentGiven: boolean;
   /** The background stages the lifecycles were made with, in order. */
   backgroundStages: Array<BackgroundStage | undefined>;
+  /** What the CLI's set-up gives, and the containers it was asked to set up. */
+  setUpResult: SetUpResult;
+  setUps: string[];
+  /** The ids the attached record holds, by payload. */
+  attachedIds: Record<string, string>;
+  /** The targets the user picked, how many times the attach warning was asked, and what it is answered. */
+  attachPicks: string[];
+  confirmations: number;
+  confirmAnswer: boolean;
 }
 
 /** What a probe that worked prints: noise, the markers and two variables. */
@@ -293,6 +338,15 @@ function volumeDependenciesOf(
       );
       return bridge;
     },
+    recoveryPicked: volumeName => scene.recoveryPicks.includes(volumeName),
+    recoveryConfigFile: volumeName =>
+      `/tmp/recovery/${volumeName}/.devcontainer.json`,
+    writeRecoveryFile: (file, text) => {
+      scene.volumeCalls.push(
+        `writeRecoveryFile ${file} ${String(text.length)}`,
+      );
+      return Promise.resolve();
+    },
     standIn: () => {
       scene.volumeCalls.push('standIn');
       return Promise.resolve({
@@ -303,8 +357,24 @@ function volumeDependenciesOf(
         },
       });
     },
+    exploreDefinition: () => {
+      scene.volumeCalls.push('exploreDefinition');
+      return Promise.resolve({
+        folder: '/t/inspect-volume/1',
+        configFile: '/t/inspect-volume/1/.devcontainer/devcontainer.json',
+        text: '{}',
+      });
+    },
     showShallow: repository => {
       scene.volumeCalls.push(`showShallow ${repository}`);
+    },
+    consent: () => {
+      scene.volumeCalls.push('consent');
+      return Promise.resolve(scene.consentGiven);
+    },
+    addConfiguration: (bootstrap, folder) => {
+      scene.volumeCalls.push(`addConfiguration ${bootstrap} ${folder}`);
+      return Promise.resolve('written');
     },
   };
 }
@@ -312,7 +382,7 @@ function volumeDependenciesOf(
 /** The connector over fakes, and the knobs that steer them. */
 export function sceneOf(
   overrides: Partial<Pick<Scene, 'dockerPath'>> = {},
-  options: {volumes?: boolean} = {},
+  options: {volumes?: boolean; attached?: boolean; pods?: EngineHost} = {},
 ): Scene {
   const sink = new MemorySink();
   const scene: Scene = {
@@ -334,10 +404,25 @@ export function sceneOf(
     relayRequests: [],
     relays: [],
     stopped: 0,
+    lifecycleRuns: [],
+    blockingResult: {kind: 'done'},
+    markerInspect: '"2026-11-12T00:00:00.5Z"\n["PATH=/bin"]',
+    markersRan: false,
+    markerScripts: [],
+    relayKinds: [],
+    relayHostRequests: [],
+    relayHostStart: {
+      kind: 'started',
+      host: {variables: {}, dispose: () => undefined},
+    },
+    relayHostsEnded: 0,
     revealed: 0,
     shutdownSent: [],
+    registerAnswer: () => Promise.resolve(),
+    clockNow: 0,
     readsAtShutdown: [],
     metadata: '',
+    published: 'null',
     sink,
     outcome: READY,
     steps: [],
@@ -357,6 +442,7 @@ export function sceneOf(
     cacheVolumeInspect: undefined,
     workspaceMountConsistency: undefined,
     legacyWorkspaceMountConsistency: undefined,
+    gpuAvailability: undefined,
     mountGitWorktreeCommonDir: undefined,
     defaultFeatures: undefined,
     lockfile: undefined,
@@ -382,7 +468,15 @@ export function sceneOf(
     bootstrapAnswer: () => undefined,
     volumeCalls: [],
     typedSource: true,
+    recoveryPicks: [],
+    consentGiven: true,
     backgroundStages: [],
+    setUpResult: {kind: 'setUp', mergedConfiguration: {}},
+    setUps: [],
+    attachedIds: {},
+    attachPicks: [],
+    confirmations: 0,
+    confirmAnswer: true,
     ...overrides,
   };
   const kills = fakeEngine(
@@ -394,6 +488,14 @@ export function sceneOf(
         await scene.probe(process);
         return;
       }
+      if (script.includes('markers:ran')) {
+        scene.markerScripts.push(script);
+        if (scene.markersRan) {
+          process.print('markers:ran\n');
+        }
+        process.exit(0);
+        return;
+      }
       scene.killScripts.push(script);
       process.exit(scene.killStatuses.shift() ?? 0);
     }),
@@ -402,6 +504,19 @@ export function sceneOf(
     const bootstrapAnswer = scene.bootstrapAnswer(argv);
     if (bootstrapAnswer !== undefined) {
       return bootstrapAnswer;
+    }
+    if (
+      argv[0] === 'inspect' &&
+      argv.includes(markerInspectArguments('')[4] ?? '')
+    ) {
+      return scene.markerInspect === 'fails'
+        ? {
+            kind: 'ran',
+            status: 1,
+            stdout: '',
+            stderr: 'Error: No such container',
+          }
+        : {kind: 'ran', status: 0, stdout: scene.markerInspect, stderr: ''};
     }
     if (argv[0] === 'version') {
       return {
@@ -420,6 +535,22 @@ export function sceneOf(
             stderr: 'Error: No such container',
           }
         : {kind: 'ran', status: 0, stdout: `${scene.metadata}\n`, stderr: ''};
+    }
+    if (
+      argv[0] === 'inspect' &&
+      argv[4] === '{{json .NetworkSettings.Ports}}'
+    ) {
+      if (scene.published === 'unreachable') {
+        return {kind: 'failed', detail: 'spawn docker ENOENT'};
+      }
+      return scene.published === 'fails'
+        ? {
+            kind: 'ran',
+            status: 1,
+            stdout: '',
+            stderr: 'Error: No such container',
+          }
+        : {kind: 'ran', status: 0, stdout: `${scene.published}\n`, stderr: ''};
     }
     const {answer} = scene.inspect;
     if (answer === 'unreachable') {
@@ -487,6 +618,14 @@ export function sceneOf(
         ? scene.configuration()
         : Promise.resolve(scene.configuration);
     },
+    setUp: target => {
+      scene.setUps.push(target.containerId);
+      return Promise.resolve(scene.setUpResult);
+    },
+    runAttachedUserCommands: () =>
+      Promise.reject(
+        new Error('the connector fixture runs through the lifecycle'),
+      ),
     applyTemplate: () =>
       Promise.reject(new Error('the connector never applies a template')),
     outdated: () =>
@@ -507,8 +646,34 @@ export function sceneOf(
         ? scene.outcome()
         : scene.outcome;
     },
+    adopt: containerId => {
+      scene.lifecycleRuns.push(`adopt ${containerId}`);
+    },
+    runBlocking: remoteEnvironment => {
+      scene.lifecycleRuns.push(`blocking ${JSON.stringify(remoteEnvironment)}`);
+      return Promise.resolve(scene.blockingResult);
+    },
+    startBackground: remoteEnvironment => {
+      scene.lifecycleRuns.push(
+        `background ${JSON.stringify(remoteEnvironment)}`,
+      );
+    },
     stopBackground: () => {
       scene.stopped += 1;
+    },
+  };
+  /** The profile's picks and the attach warning, which the scene records and answers. */
+  const gate = {
+    picks: {
+      includes: (key: string) => scene.attachPicks.includes(key),
+      record: (key: string) => {
+        scene.attachPicks.push(key);
+        return Promise.resolve();
+      },
+    },
+    confirm: () => {
+      scene.confirmations += 1;
+      return Promise.resolve(scene.confirmAnswer);
     },
   };
   let connections = 0;
@@ -526,7 +691,9 @@ export function sceneOf(
       send: request => {
         scene.shutdownSent.push(request);
         scene.readsAtShutdown.push(scene.configurationReads.length);
-        return Promise.resolve();
+        return request.type === 'register'
+          ? scene.registerAnswer()
+          : Promise.resolve();
       },
     },
     newConnectionId: () => {
@@ -545,8 +712,26 @@ export function sceneOf(
       scene.backgroundStages.push(stage);
       return lifecycle;
     },
+    ...(options.pods === undefined
+      ? {}
+      : {pods: {...gate, kubectl: options.pods}}),
     ...(options.volumes === true
       ? {volumes: volumeDependenciesOf(scene, bridge)}
+      : {}),
+    ...(options.attached === true
+      ? {
+          attached: {
+            ...gate,
+            record: {
+              read: payload => scene.attachedIds[payload],
+              write: (payload, containerId) => {
+                scene.attachedIds[payload] = containerId;
+                return Promise.resolve();
+              },
+            },
+            configFileOf: () => Promise.resolve(undefined),
+          },
+        }
       : {}),
     lifecyclePresenter: {
       output: () => undefined,
@@ -568,6 +753,7 @@ export function sceneOf(
         ),
       workspaceMountConsistency: scene.workspaceMountConsistency,
       legacyWorkspaceMountConsistency: scene.legacyWorkspaceMountConsistency,
+      gpuAvailability: scene.gpuAvailability,
       mountGitWorktreeCommonDir: scene.mountGitWorktreeCommonDir,
       defaultExtensions: scene.defaultExtensions,
       deprecatedDefaultExtensions: scene.deprecatedDefaultExtensions,
@@ -575,7 +761,7 @@ export function sceneOf(
     preflight: {
       logger: createLogger(sink, {minimumLevel: () => 'debug'}),
       searchPath: () => '/usr/bin',
-      clock: () => 0,
+      clock: () => scene.clockNow,
       setTimer: (milliseconds, callback) => {
         scene.timerDelays.push(milliseconds);
         scene.timers.push(callback);
@@ -648,14 +834,46 @@ export function sceneOf(
       scene.trustCalls.push(`reopenLocally ${hostPath}`);
       return Promise.resolve();
     },
+    relayKinds: () => scene.relayKinds,
+    startRelayHost: request => {
+      scene.relayHostRequests.push(request);
+      scene.lifecycleRuns.push('relay host');
+      const start = scene.relayHostStart;
+      return Promise.resolve(
+        start.kind === 'failed'
+          ? start
+          : {
+              kind: 'started',
+              host: {
+                variables: start.host.variables,
+                dispose: () => {
+                  scene.relayHostsEnded += 1;
+                },
+              },
+            },
+      );
+    },
     runServer: async request => {
       scene.serverRequests.push(request);
-      for (const phase of scene.phasesOfServer) {
-        request.onPhase(phase);
+      // As the steps do: the install phase before the files, the start's phase only when the server is launched.
+      if (scene.phasesOfServer.includes('installing')) {
+        request.onPhase('installing');
       }
       for (const percent of scene.percentsOfServer) {
         request.onDownloadPercent(percent);
       }
+      scene.lifecycleRuns.push('server files');
+      const beforeStart = await request.beforeStart?.({
+        nodePath: '/home/node/.server/bin/abc/node',
+        dataFolder: '/home/node/.server',
+      });
+      if (beforeStart !== undefined) {
+        return {kind: 'failed', failure: beforeStart};
+      }
+      if (scene.phasesOfServer.includes('startingServer')) {
+        request.onPhase('startingServer');
+      }
+      scene.lifecycleRuns.push('server start');
       return typeof scene.server === 'function' ? scene.server() : scene.server;
     },
     openRelay: async (request: RelayRequest) => {
@@ -699,4 +917,48 @@ export function sceneOf(
   };
   scene.connector = containerConnectorOf(dependencies);
   return scene;
+}
+
+/** Leaves a no-cache rebuild intent for the payload, as the reload of a rebuild command does. */
+export async function leaveRebuildIntent(
+  scene: Scene,
+  payload: string,
+): Promise<void> {
+  await storeRebuildIntent(
+    {
+      get: () => scene.intentStore,
+      update: (key, value) => {
+        scene.intentStore = value;
+        return Promise.resolve();
+      },
+    },
+    payload,
+    {buildNoCache: true},
+    0,
+  );
+}
+
+/**
+ * Connects `scene` to `payload` with the helper's answer to its register held, runs `beforeAnswer`, gives the answer,
+ * and gives how many containers were prepared before the answer came and once the connect was over.
+ */
+export async function preparedAroundRegister(
+  scene: Scene,
+  payload: string,
+  beforeAnswer: () => void = () => undefined,
+): Promise<[number, number]> {
+  const answer = {give: (): void => undefined};
+  scene.registerAnswer = () =>
+    new Promise<void>(resolve => {
+      answer.give = resolve;
+    });
+  const connecting = scene.connector.connect(inputOf(payload));
+  for (let turn = 0; turn < 20; turn += 1) {
+    await new Promise(setImmediate);
+  }
+  const before = scene.prepared.length;
+  beforeAnswer();
+  answer.give();
+  await connecting;
+  return [before, scene.prepared.length];
 }

@@ -32,6 +32,7 @@ import {
   type DownloadHost,
   downloadHostArguments,
   downloadVariables,
+  forwardSlashes,
   EARLIER_SERVER_ARCHIVE,
   DROP_HUNG_PATH,
   makeCertificate,
@@ -43,10 +44,15 @@ import {
   serverArchiveName,
   serverArchiveOf,
   startDownloadHost,
+  standInCliArchiveOf,
   startRunDownloads,
   updateServicePinCommand,
 } from './acceptance-downloads.ts';
-import {type CommandResult} from './command-runner.ts';
+import {
+  STAND_IN_CLI_NAME,
+  STAND_IN_CLI_SCRIPT,
+} from './acceptance-cli-editor.ts';
+import {type CommandResult, runCommand} from './command-runner.ts';
 
 /** What a request got: the status, the declared length, the body received, and whether the connection broke. */
 interface Received {
@@ -1115,18 +1121,101 @@ function temporaryRun(): {root: string; runFolder: string; cache: string} {
   return {root: path.join(base, 'root'), runFolder: base, cache};
 }
 
+/** The checksums an arm64 run pins for its two server archives, and the bytes the fake download answers for each. */
+function armServerArchives(): {
+  pinned: Record<string, string>;
+  answers: Record<string, string>;
+} {
+  return {
+    pinned: {
+      'alpine-arm64': createHash('sha256').update('alpine').digest('hex'),
+      'linux-arm64': createHash('sha256').update('glibc').digest('hex'),
+    },
+    answers: {
+      [serverArchiveName('alpine-arm64')]: 'alpine',
+      [serverArchiveName('linux-arm64')]: 'glibc',
+    },
+  };
+}
+
+/**
+ * What the host of an arm64 run given stand-in CLI archives, and `cliSource` for the pinned ones, serves under /cli/ for
+ * each of `platforms`: the text of the `code` file of a served tar, the body itself when it is no tar (a pinned archive,
+ * or a 404's); and the addresses the CLI download was asked for. The stand-in is made with the real tar; every other
+ * command answers as the gateway does.
+ */
+async function servedCliOf(
+  pins: Record<string, PinnedCliArchive> | undefined,
+  platforms: readonly string[],
+): Promise<{served: string[]; cliAsked: string[]}> {
+  const {root, runFolder} = temporaryRun();
+  const cliAsked: string[] = [];
+  try {
+    const {pinned, answers} = armServerArchives();
+    const downloads = await startRunDownloads(
+      (program, programArguments) =>
+        program === 'tar' && programArguments.includes(STAND_IN_CLI_NAME)
+          ? runCommand(program, programArguments)
+          : gateway(),
+      address =>
+        Promise.resolve(Buffer.from(answers[path.basename(address)] ?? '')),
+      root,
+      runFolder,
+      'arm64',
+      pinned,
+      undefined,
+      pins === undefined
+        ? undefined
+        : {
+            pins,
+            download: address => {
+              cliAsked.push(address);
+              return Promise.resolve(Buffer.from('cli'));
+            },
+          },
+      process.platform,
+      true,
+    );
+    const port = Number(
+      /:(\d+)$/.exec(downloads.variables.HARNESS_DOWNLOADS_LOCAL ?? '')?.[1],
+    );
+    const served = await Promise.all(
+      platforms.map(async platform => {
+        const body = await getFrom(
+          '127.0.0.1',
+          port,
+          `/cli/${platform}/0123/cli-${platform}.tar.gz`,
+        );
+        const unpacked = mkdtempSync(path.join(tmpdir(), 'stand-in-'));
+        try {
+          writeFileSync(path.join(unpacked, 'served.tar.gz'), body);
+          runCommand('tar', [
+            '-xzf',
+            path.join(unpacked, 'served.tar.gz'),
+            '-C',
+            unpacked,
+          ]);
+          return existsSync(path.join(unpacked, STAND_IN_CLI_NAME))
+            ? readFileSync(path.join(unpacked, STAND_IN_CLI_NAME), 'utf8')
+            : body.toString();
+        } finally {
+          rmSync(unpacked, {recursive: true, force: true});
+        }
+      }),
+    );
+    await downloads.stop();
+    return {served, cliAsked};
+  } finally {
+    rmSync(root, {recursive: true, force: true});
+    rmSync(runFolder, {recursive: true, force: true});
+  }
+}
+
 describe('the download host in the run', () => {
   it('tooling-111: a run given CLI pins serves the pinned platform under /cli/, and one given none downloads no CLI', async () => {
     const {root, runFolder} = temporaryRun();
     try {
-      const pinned = {
-        'alpine-arm64': createHash('sha256').update('alpine').digest('hex'),
-        'linux-arm64': createHash('sha256').update('glibc').digest('hex'),
-      };
-      const answers: Record<string, string> = {
-        [serverArchiveName('alpine-arm64')]: 'alpine',
-        [serverArchiveName('linux-arm64')]: 'glibc',
-      };
+      const {pinned, answers} = armServerArchives();
       const asked: string[] = [];
       function download(address: string): Promise<Uint8Array> {
         asked.push(path.basename(address));
@@ -1190,6 +1279,118 @@ describe('the download host in the run', () => {
           ],
           [],
         ],
+      );
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
+  it('#2735: a run given a stand-in CLI serves, under /cli/, a tar of the stand-in script for each platform with no pin, with no pin and no token asked for', async () => {
+    deepStrictEqual(
+      await servedCliOf(undefined, [
+        'linux-arm64',
+        'alpine-arm64',
+        'darwin-arm64',
+      ]),
+      {served: [STAND_IN_CLI_SCRIPT, STAND_IN_CLI_SCRIPT, ''], cliAsked: []},
+    );
+  });
+
+  it('#2735: a run given a stand-in CLI and the pin of one platform serves that platform the pinned archive and the others the stand-in', async () => {
+    deepStrictEqual(
+      await servedCliOf(
+        {
+          'linux-arm64': {
+            assetId: 42,
+            sha256: createHash('sha256').update('cli').digest('hex'),
+          },
+        },
+        ['linux-arm64', 'alpine-arm64'],
+      ),
+      {
+        served: ['cli', STAND_IN_CLI_SCRIPT],
+        cliAsked: [
+          'https://api.github.com/repos/remote-oss/cli-archives/releases/assets/42',
+        ],
+      },
+    );
+  });
+
+  it('#2735: the stand-in CLI archive of a platform is a gzipped tar of one executable script named after the product’s application, in the run folder', () => {
+    const {runFolder} = temporaryRun();
+    try {
+      const archive = standInCliArchiveOf(runCommand, runFolder, 'linux-x64');
+      const listed = runCommand('tar', ['-tzvf', archive]).stdout.trim();
+      deepStrictEqual(
+        [
+          archive.startsWith(runFolder),
+          path.basename(archive),
+          listed.split('\n').length,
+          listed.startsWith('-rwx'),
+          listed.endsWith(` ${STAND_IN_CLI_NAME}`),
+        ],
+        [true, 'cli-linux-x64.tar.gz', 1, true, true],
+      );
+    } finally {
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
+  it("tooling-200: on a Windows run the host also listens on the distro's gateway and names it in the distro bases; the x64 Alpine and glibc archives are served; a Linux run has no distro base", async () => {
+    const {root, runFolder, cache} = temporaryRun();
+    try {
+      writeFileSync(path.join(cache, serverArchiveName('alpine-x64')), 'musl');
+      writeFileSync(path.join(cache, serverArchiveName('linux-x64')), 'glibc');
+      const checksums = {
+        'alpine-x64': createHash('sha256').update('musl').digest('hex'),
+        'linux-x64': createHash('sha256').update('glibc').digest('hex'),
+      };
+      const windows = await startRunDownloads(
+        (): CommandResult => ({
+          status: 0,
+          stdout: 'default via 127.0.0.2 dev eth0\n',
+          stderr: '',
+        }),
+        () => Promise.reject(new Error('no download expected')),
+        root,
+        runFolder,
+        'x64',
+        checksums,
+        undefined,
+        undefined,
+        'win32',
+      );
+      const base = windows.variables.HARNESS_DOWNLOADS_DISTRO_BASE ?? '';
+      const port = Number(/:(\d+)$/.exec(base)?.[1]);
+      const bodies = await Promise.all(
+        ['/ok/linux-x64/abc', '/ok/alpine-x64/abc'].map(async pathName =>
+          (await getFrom('127.0.0.2', port, pathName)).toString(),
+        ),
+      );
+      await windows.stop();
+      const linux = await startRunDownloads(
+        (): CommandResult => ({status: 0, stdout: '127.0.0.2\n', stderr: ''}),
+        () => Promise.reject(new Error('no download expected')),
+        root,
+        runFolder,
+        'x64',
+        checksums,
+        undefined,
+        undefined,
+        'linux',
+      );
+      await linux.stop();
+      deepStrictEqual(
+        [
+          base === `http://127.0.0.2:${String(port)}`,
+          Object.keys(windows.variables).filter(name =>
+            name.includes('DISTRO'),
+          ),
+          bodies,
+          Object.keys(linux.variables).filter(name => name.includes('DISTRO')),
+        ],
+        [true, ['HARNESS_DOWNLOADS_DISTRO_BASE'], ['glibc', 'musl'], []],
       );
     } finally {
       rmSync(root, {recursive: true, force: true});
@@ -1374,6 +1575,37 @@ describe('the download host in the run', () => {
         HARNESS_DOWNLOADS_PORT: '8080',
         HARNESS_DOWNLOADS_TLS_LOG: '/run/downloads-tls.log',
       },
+    );
+  });
+
+  it('tooling-200: a distro address adds the HTTP and HTTPS bases a WSL distro reaches the host at, and no other variable changes', () => {
+    const without = downloadVariables(
+      {httpPort: 8080, httpsPort: 8443},
+      '/run/requests.log',
+      '/run/downloads-tls.log',
+      '/run/downloads/downloads-certificate.pem',
+    );
+    const withDistro = downloadVariables(
+      {httpPort: 8080, httpsPort: 8443},
+      '/run/requests.log',
+      '/run/downloads-tls.log',
+      '/run/downloads/downloads-certificate.pem',
+      undefined,
+      '172.29.32.1',
+    );
+    deepStrictEqual(withDistro, {
+      ...without,
+      HARNESS_DOWNLOADS_DISTRO_BASE: 'http://172.29.32.1:8080',
+    });
+  });
+
+  it('tooling-200: a Windows path is carried with forward slashes, and a path that has none is unchanged', () => {
+    deepStrictEqual(
+      [
+        forwardSlashes('D:\\a\\run\\downloads\\requests.log'),
+        forwardSlashes('/run/requests.log'),
+      ],
+      ['D:/a/run/downloads/requests.log', '/run/requests.log'],
     );
   });
 

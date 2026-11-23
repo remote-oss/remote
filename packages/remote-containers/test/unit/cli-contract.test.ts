@@ -81,6 +81,7 @@ describe('the contract rows of the CLI bridge (card containers-04)', () => {
         removeExistingContainer: false,
         buildNoCache: false,
         workspaceMountConsistency: 'cached',
+        gpuAvailability: 'detect',
       },
       () => undefined,
       new AbortController().signal,

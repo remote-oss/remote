@@ -5,6 +5,7 @@
 
 import {applyEdits, modify} from 'jsonc-parser';
 import {type HostChannel, posixQuote} from 'lib-host';
+import {writeHostFile} from '../exec/host-file.ts';
 
 /** The settings this extension writes into the container's machine settings, by key. */
 export type MachineSettings = Readonly<Record<string, unknown>>;
@@ -78,32 +79,20 @@ async function writeSettingsFile(
   text: string,
   cancellation: AbortSignal,
 ): Promise<MachineSettingsWrite> {
-  const part = posixQuote(`${file}.part`);
-  const outcome = await channel.runScript(
-    {
-      script: [
-        'set -e',
-        'umask 022',
-        `mkdir -p ${posixQuote(file.slice(0, file.lastIndexOf('/')))}`,
-        `cat > ${part}`,
-        `mv -f ${part} ${posixQuote(file)}`,
-      ].join('\n'),
-      interpreter: 'posixShell',
-      environment: {},
-      input: {kind: 'text', text},
-      cancellation,
-    },
-    () => undefined,
+  const written = await writeHostFile(
+    channel,
+    file,
+    text,
+    undefined,
+    cancellation,
   );
-  if (outcome.kind === 'failed') {
-    return {kind: 'failed', detail: outcome.failure.detail};
+  if (written.kind !== 'refused') {
+    return written;
   }
-  return outcome.status === 0
-    ? {kind: 'written'}
-    : {
-        kind: 'failed',
-        detail: `settings file not written (exit ${String(outcome.status)})`,
-      };
+  return {
+    kind: 'failed',
+    detail: `settings file not written (exit ${String(written.status)})`,
+  };
 }
 
 /**

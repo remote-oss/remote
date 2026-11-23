@@ -26,6 +26,7 @@ import {
   manifestWithoutMetadata,
   MIRROR_NAMESPACE,
   MIRRORED_TEMPLATES,
+  networkReason,
   orasArguments,
   ORAS_IMAGE,
   prepareRunTemplates,
@@ -272,6 +273,53 @@ describe('the run templates', () => {
       await rejects(
         ghcrLayer(TEMPLATE, fakeFetch),
         /ghcr\.io gave no layer for devcontainers\/templates\/tiny: 404/,
+      );
+    });
+  });
+
+  describe('a request to ghcr.io that gets no answer (card #2927)', () => {
+    /** A rejection as undici's `fetch` gives it: `fetch failed`, with the socket's error as its cause. */
+    function dropped(cause: Error): Promise<Response> {
+      return Promise.reject(new TypeError('fetch failed', {cause}));
+    }
+
+    it("#2927: the failure names the token request's address and the network's reason", async () => {
+      await rejects(
+        ghcrLayer(TEMPLATE, () => dropped(new Error('read ECONNRESET'))),
+        {
+          message: `https://ghcr.io/token?scope=repository:${MIRROR_NAMESPACE}/tiny:pull: fetch failed (read ECONNRESET)`,
+        },
+      );
+    });
+
+    it("#2927: a dropped layer request names the layer's address", async () => {
+      function fakeFetch(address: string | URL | Request): Promise<Response> {
+        return urlOf(address).includes('/token?')
+          ? Promise.resolve(Response.json({token: 'pull-token'}))
+          : dropped(new Error('connect ETIMEDOUT 140.82.112.33:443'));
+      }
+      await rejects(ghcrLayer(TEMPLATE, fakeFetch), {
+        message: `https://ghcr.io/v2/${MIRROR_NAMESPACE}/tiny/blobs/${TEMPLATE.layerDigest}: fetch failed (connect ETIMEDOUT 140.82.112.33:443)`,
+      });
+    });
+
+    it("#2927: the network's reason is the cause's code when its message is empty, its name with neither, and the message alone with no cause", () => {
+      const coded = Object.assign(new Error(''), {code: 'ECONNREFUSED'});
+      deepStrictEqual(
+        [
+          networkReason(new TypeError('fetch failed', {cause: coded})),
+          networkReason(
+            new TypeError('fetch failed', {cause: new RangeError('')}),
+          ),
+          networkReason(new TypeError('fetch failed')),
+          networkReason('dropped'),
+        ],
+        [
+          'fetch failed (ECONNREFUSED)',
+          'fetch failed (RangeError)',
+          'fetch failed',
+          'dropped',
+        ],
       );
     });
   });

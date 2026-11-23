@@ -1,6 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
 import {existsSync, mkdirSync, readdirSync, readFileSync} from 'node:fs';
-import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
 import {
   clearEarlierRows,
@@ -24,6 +23,7 @@ import {
   welcomeText,
 } from '../windows/renderer.ts';
 import {VIEW} from '../windows/dev-containers-view.ts';
+import {readStateDatabase} from '../windows/state-database.ts';
 
 /** The manifest of Dev Containers, whose default strings the card shows. */
 const PACKAGE = path.join(
@@ -62,18 +62,15 @@ function storedKeys(): string[] {
         )
       : []),
   ].filter(file => existsSync(file));
-  return files.flatMap(file => {
-    const database = new DatabaseSync(file, {readOnly: true});
-    try {
-      return (
+  return files.flatMap(file =>
+    readStateDatabase(file, database =>
+      (
         database.prepare('SELECT key FROM ItemTable').all() as Array<{
           key: string;
         }>
-      ).map(each => each.key);
-    } finally {
-      database.close();
-    }
-  });
+      ).map(each => each.key),
+    ),
+  );
 }
 
 describe('the Remote Explorer view’s own surfaces (card coverage-57)', function () {

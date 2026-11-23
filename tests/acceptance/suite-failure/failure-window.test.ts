@@ -1,4 +1,5 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
+import {homedir} from 'node:os';
 import * as vscode from 'vscode';
 import {
   launchScript,
@@ -8,6 +9,7 @@ import {
 } from '../suite-local/script.ts';
 import {connectionLog} from '../suite/harness.ts';
 import {requestsOfLaunch} from '../suite-install/install.ts';
+import {forbiddenAmong} from '../../../tools/forbidden-texts.ts';
 import casesFile from './cases.json' with {type: 'json'};
 
 /** One failing connect of the run, as tests/acceptance/suite-failure/cases.json lists it. */
@@ -17,6 +19,7 @@ interface FailureCase {
   /** The criteria the case's dialog text proves. */
   cite: string;
   script: ScriptEntry[];
+  /** The dialog's text; `${home}` stands for the home folder of the window's editor. */
   dialog: string;
   /** Settings merged over the run's base settings for the case's launch. */
   settings?: Record<string, unknown>;
@@ -64,7 +67,7 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
   it(`${failure?.cite ?? 'F-2601'}: the dialog names the alias, with the reason of the failure`, () => {
     strictEqual(
       record.find(line => line.surface === 'failureDialog')?.question,
-      failure?.dialog,
+      failure?.dialog.replaceAll('${home}', homedir()),
     );
   });
 
@@ -140,6 +143,19 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
       );
     });
   }
+
+  it('F-2602 AC-21: no dialog, pick or notice of the failure offers More Info or a search in settings', () => {
+    deepStrictEqual(
+      forbiddenAmong(
+        lines.flatMap(line => [
+          line.question,
+          ...(line.buttons ?? []),
+          ...(line.items ?? []),
+        ]),
+      ),
+      [],
+    );
+  });
 
   it('F-2601 AC-14: once the pick of actions is dismissed, nothing more is asked', async () => {
     await new Promise(resolve => setTimeout(resolve, 5000));

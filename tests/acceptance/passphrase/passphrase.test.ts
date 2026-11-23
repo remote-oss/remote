@@ -62,6 +62,28 @@ async function connectedWithPassphrase(
   return name;
 }
 
+/** Reads `read`, or says why it could not be read: a window that is gone must not hide what the others show. */
+async function readOrWhy<Shown>(read: () => Promise<Shown>): Promise<unknown> {
+  return read().catch((caught: unknown) => `unreadable: ${String(caught)}`);
+}
+
+/** What the window shows and what the connect logged after the first `mark` lines of the log, as a failure of the reconnect names them. */
+async function reconnectFacts(name: string, mark: number): Promise<string> {
+  return JSON.stringify(
+    {
+      indicator: await readOrWhy(
+        async () => (await connectSurface(name)).indicator,
+      ),
+      input: await readOrWhy(async () => (await inputBoxOf(name))?.placeholder),
+      dialog: await readOrWhy(async () => (await dialogOf(name))?.details),
+      toasts: await readOrWhy(() => notifications(name)),
+      connectLog: connectionLog().slice(mark),
+    },
+    null,
+    1,
+  );
+}
+
 /** The run's passphrase key file. */
 function passphraseKeyFile(): string {
   return `${variable('HARNESS_RUN_FOLDER')}/id_passphrase`;
@@ -335,7 +357,7 @@ describe('the passphrase input of a key (card coverage-96)', function () {
     }
   });
 
-  it('F-2307 AC-7 (ruling-1681-first-label): three wrong passphrases end in the Permission denied dialog, and the indicator of the authority that never connected names the host', async () => {
+  it('F-2307 AC-7 (c96-first-label): three wrong passphrases end in the Permission denied dialog, and the indicator of the authority that never connected reads Disconnected from SSH, without the host', async () => {
     const name = await openKeyWindow('passkey-12', 'c96-first-label');
     try {
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -350,7 +372,7 @@ describe('the passphrase input of a key (card coverage-96)', function () {
         },
         {
           dialog: refused('passkey-12'),
-          indicator: 'Disconnected from SSH: passkey-12',
+          indicator: 'Disconnected from SSH',
         },
       );
     } finally {
@@ -632,10 +654,17 @@ describe('the passphrase input of a key (card coverage-96)', function () {
     await setUserSetting('remote.SSH.maxReconnectionAttempts', 0);
     const name = await connectedWithPassphrase('passkey-17', 'c96-no-attempts');
     try {
+      const mark = connectionLog().length;
       await killSharedConnection(name, 'passkey-17');
       const input = await untilPassphraseInput(name);
       await answerInputBox(name, passphrase());
-      await untilConnected(name, 'passkey-17');
+      await untilConnected(name, 'passkey-17').catch(
+        async (caught: unknown) => {
+          throw new Error(
+            `${String(caught)}: ${await reconnectFacts(name, mark)}`,
+          );
+        },
+      );
       deepStrictEqual(input?.placeholder, PLACEHOLDER);
     } finally {
       await closeWindow(name).catch(() => undefined);

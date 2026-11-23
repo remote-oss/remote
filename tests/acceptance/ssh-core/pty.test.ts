@@ -47,21 +47,30 @@ describe('F-2106: pseudo-terminal allocation', function () {
   it('F-2106 AC-2 (c86-off-force): with the setting off, a RequestTTY force in the host entry allocates no terminal in the shared, the terminal and the second-ssh modes', async () => {
     await keepingSettings(async () => {
       const seen: Array<ReturnType<typeof summary>> = [];
+      const commands: string[] = [];
       for (const settings of [
         {},
         {'remote.SSH.useLocalServer': false},
         {'remote.SSH.useExecServer': false},
       ]) {
         await closeAllButLocal();
-        seen.push(
-          summary(await ptyConnect('c86-off-force', 'pty-force', settings)),
+        const connect = await ptyConnect(
+          'c86-off-force',
+          'pty-force',
+          settings,
         );
+        seen.push(summary(connect));
+        commands.push(connect.commands.join(' | '));
       }
-      deepStrictEqual(seen, [
-        [true, [true], ['notty']],
-        [true, [true], ['notty']],
-        [true, [true], ['notty']],
-      ]);
+      deepStrictEqual(
+        seen,
+        [
+          [true, [true], ['notty']],
+          [true, [true], ['notty']],
+          [true, [true], ['notty']],
+        ],
+        `the ssh commands seen: ${commands.join(' || ')}`,
+      );
     });
   });
 
@@ -77,16 +86,23 @@ describe('F-2106: pseudo-terminal allocation', function () {
   it('F-2106 AC-4 (c86-on-request): with the setting on, RequestTTY yes and RequestTTY no both leave the session without a terminal', async () => {
     await keepingSettings(async () => {
       const seen: Array<ReturnType<typeof summary>> = [];
+      const commands: string[][] = [];
       for (const alias of ['pty-yes', 'pty-no']) {
         await closeAllButLocal();
-        seen.push(
-          summary(await ptyConnect('c86-on-request', alias, {[PERMIT]: true})),
-        );
+        const found = await ptyConnect('c86-on-request', alias, {
+          [PERMIT]: true,
+        });
+        seen.push(summary(found));
+        commands.push(found.commands);
       }
-      deepStrictEqual(seen, [
-        [true, [false], ['notty']],
-        [true, [false], ['notty']],
-      ]);
+      deepStrictEqual(
+        seen,
+        [
+          [true, [false], ['notty']],
+          [true, [false], ['notty']],
+        ],
+        `the ssh argument lists seen: ${JSON.stringify(commands)}`,
+      );
     });
   });
 
@@ -222,10 +238,11 @@ describe('F-2106: pseudo-terminal allocation', function () {
     });
   });
 
-  it('F-2106 AC-14 (ruling-1606-no-tty-warning): with the setting on and no RequestTTY in the shared mode there is no -T, no warning, no terminal, and the window connects', async () => {
+  it("F-2106 AC-14 (c1835-unknown-warning): with the setting on, no RequestTTY and the platform unknown in the shared mode there is no -T, ssh's warning is an [ssh] line of the log as ssh wrote it, there is no terminal, and the window connects as a Linux host", async () => {
     await keepingSettings(async () => {
-      const found = await ptyConnect('c86-no-warning', 'harness', {
+      const found = await ptyConnect('c1835-unknown-warning', 'harness', {
         [PERMIT]: true,
+        'remote.SSH.remotePlatform': {},
       });
       deepStrictEqual(
         [
@@ -233,8 +250,17 @@ describe('F-2106: pseudo-terminal allocation', function () {
           found.commands.map(hasNoTty),
           found.sessions,
           found.logged.filter(line => line.includes('Pseudo-terminal')),
+          found.logged.filter(line => line.startsWith('Platform: ')),
         ],
-        [true, [false], ['notty'], []],
+        [
+          true,
+          [false],
+          ['notty'],
+          [
+            '[ssh] Pseudo-terminal will not be allocated because stdin is not a terminal.',
+          ],
+          ['Platform: linux'],
+        ],
       );
     });
   });
@@ -296,7 +322,7 @@ describe('F-2106: pseudo-terminal allocation', function () {
     });
   });
 
-  it('F-2106 AC-15 (reading-1779-forced-pty): with the setting on and RequestTTY force the window connects on a terminal of the host with no failure dialog', async () => {
+  it('F-2106 AC-7 (reading-1779-forced-pty): with the setting on and RequestTTY force the window connects on a terminal of the host with no failure dialog', async () => {
     await keepingSettings(async () => {
       const found = await ptyConnect('c86-force-dialog', 'pty-force', {
         [PERMIT]: true,
@@ -312,7 +338,7 @@ describe('F-2106: pseudo-terminal allocation', function () {
     });
   });
 
-  it('F-2106 AC-8 (reading-1779-forced-pty): a window on RequestTTY force reconnects by itself after its connection is killed, on a terminal of the host, with no Cannot reconnect dialog and no failure dialog', async () => {
+  it('F-2106 AC-7 (reading-1779-forced-pty): a window on RequestTTY force reconnects by itself after its connection is killed, on a terminal of the host, with no Cannot reconnect dialog and no failure dialog', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS, [PERMIT]: true});
       await freshHost();

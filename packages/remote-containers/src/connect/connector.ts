@@ -22,17 +22,36 @@ import {
   devContainerTargetOf,
   folderTargetOf,
 } from '../authority/payload.ts';
-import type {CliTarget} from '../cli/cli-arguments.ts';
+import type {AttachedCliTarget, CliTarget} from '../cli/cli-arguments.ts';
+import {attachedReadyTarget, attachedRunsBridge} from './attached-bridge.ts';
 import type {VolumeWorkspace} from '../cli/override-pre-pass.ts';
 import {
   bootstrapRemoveArguments,
   type BootstrapSettings,
 } from '../volumes/bootstrap.ts';
 import type {BuildContext} from '../volumes/bootstrap-start.ts';
+import {attachedContainerStep} from '../attach/connect-step.ts';
+import {attachPickKeyOf} from '../attach/pick-record.ts';
+import {type IdRecord, startAttachedContainer} from '../attach/find.ts';
+import {type AttachedTarget, attachedTargetOf} from '../attach/payload.ts';
+import type {ListedContainer} from '../explorer/listed-containers.ts';
+import {k8sExecCommands, k8sDialer} from '../attach/k8s-exec.ts';
+import {type K8sTarget, k8sTargetOf} from '../attach/k8s-payload.ts';
+import {k8sPickKeyOf} from '../attach/k8s-pick-record.ts';
+import {inspectedPod} from '../attach/k8s-state.ts';
 import {
   type DevContainerVolume,
   volumeTargetOf,
 } from '../volumes/volume-payload.ts';
+import {volumeInspectArguments} from '../volumes/clone-volume.ts';
+import {
+  EXPLORE_WORKSPACE_MOUNT,
+  type ExploreDefinition,
+  EXPLORE_VOLUME_VARIABLE,
+  exploredVolumeNameValid,
+  exploreIdLabels,
+} from '../volumes/explore-definition.ts';
+import {resolveRecovery} from '../volumes/recovery-resolve.ts';
 import {
   resolveVolume,
   type VolumeContainerRequest,
@@ -60,15 +79,19 @@ import {
   executableOf,
 } from '../engine/executable.ts';
 import {effectiveAction} from '../shutdown/effective-action.ts';
-import type {EngineCoordinates} from '../shutdown/protocol.ts';
+import type {
+  ContainerIdentity,
+  EngineCoordinates,
+} from '../shutdown/protocol.ts';
 import {
   metadataArguments,
   recordedMetadataOf,
 } from '../shutdown/recorded-metadata.ts';
+import {REGISTER_WAIT_MILLISECONDS} from '../shutdown/helper-request.ts';
 import type {ShutdownMessenger} from '../shutdown/window-lease.ts';
 import {sourceTypesValid} from '../config/source-types.ts';
 import {type PreflightDependencies, secondCheck} from '../engine/preflight.ts';
-import {execChannelOf} from '../exec/exec-channel.ts';
+import {execChannelOf, execChannelOver} from '../exec/exec-channel.ts';
 import {
   type BackgroundStage,
   type ContainerLifecycle,
@@ -104,6 +127,9 @@ import {
 } from './remote-environment.ts';
 import {
   cancelled,
+  attachFailed,
+  attachWarningRefused,
+  cloneConsentRefused,
   configurationInvalid,
   containerGone,
   commandFailed,
@@ -124,30 +150,61 @@ import {
   mountGitWorktreeCommonDirOf,
   workspaceMountConsistencyOf,
 } from './mount-settings.ts';
+import {gpuAvailabilityOf} from './gpu-availability.ts';
 import {featureSettingsOf} from './feature-settings.ts';
+import {
+  commandsRan,
+  markerInspectArguments,
+  markersNeeded,
+  parseMarkerInspect,
+} from '../cli/cli-markers.ts';
 import {
   type ContainerState,
   type ReconnectionOutcome,
   reconnectionOutcomeOf,
 } from './reconnection.ts';
 import type {
+  ServerFiles,
   ServerRequest,
   ServerResult,
   StartedContainerServer,
 } from './server-steps.ts';
+import type {
+  RelayHost,
+  RelayHostRequest,
+  RelayHostStart,
+  RelayKind,
+} from '../relays/relay-host.ts';
 import type {WindowIdentity} from './window-identity.ts';
 import {reasonOf} from './extension-cache.ts';
+import {isComposeConfiguration} from '../config/configuration-text.ts';
 import type {DeclaredPorts} from '../ports/declared-forwards.ts';
 import {
   appPortOf,
   engineIsLocal,
+  publishedForwards,
   staticForwards,
 } from '../ports/static-forwards.ts';
 
+/** The relay variables the lifecycle commands and the extension host get; the relays add theirs. */
+/** The relay host one connect started, if any: held while the connect runs, then by the connection. */
+interface RelayLease {
+  host?: RelayHost;
+}
+
+/** The variables of the relays a connect set up: none when it started no relay host. */
+function relayVariablesOf(
+  relays: RelayLease,
+): Readonly<Record<string, string>> {
+  return relays.host?.variables ?? {};
+}
 /** The CLI's levels for an info, a warning and an error event. */
 const CLI_INFO_LEVEL = 3;
 const CLI_WARNING_LEVEL = 4;
 const CLI_ERROR_LEVEL = 5;
+
+/** An answer to the register slower than this is logged: the helper held it for a stop of the container that was running. */
+const SLOW_REGISTER_MILLISECONDS = 1000;
 
 /** How many characters of a container's identifier the log shows. */
 const IDENTIFIER_LENGTH = 12;
@@ -174,12 +231,18 @@ export interface HeldConnection {
   configFile: string;
   /** Whether this connection created the container: a first build, a rebuild, or a build after it was removed. */
   created: boolean;
+  /** The Dockerfile the primary service of a Compose configuration builds from, absolute; none otherwise. */
+  serviceDockerfile?: string;
 }
 
 /** The connector, with the identity the window's label reads. */
 export interface ContainerConnector extends Connector {
   /** The container the window's last connect found and ended without a connection; nothing once a connect succeeds. */
   failedContainer(): FailedContainer | undefined;
+  /** The container the window's last attach found, running or not; nothing before one was found. */
+  attachedContainer(): ListedContainer | undefined;
+  /** Starts or unpauses the container the last attach found, through the engine it was found with; whether it did. */
+  startAttachedContainer(): Promise<boolean>;
   /** The identity of the connection the window holds; nothing before the first connect. */
   heldIdentity(): WindowIdentity | undefined;
   /**
@@ -230,12 +293,78 @@ export interface VolumeConnectDependencies {
   ): CliBridge;
   /** A fresh, empty folder on the host that the CLI is given as its workspace folder there. */
   standIn(): Promise<{folder: string; dispose(): Promise<void>}>;
+  /** The definition Explore a Volume opens a volume in, written when it is not there. */
+  exploreDefinition(): Promise<ExploreDefinition>;
+  /**
+   * The clone's trust confirmation of the profile: given already, or asked now; when refused, the window goes back to
+   * a local one.
+   */
+  consent(): Promise<boolean>;
+  /** Whether the user asked for the recovery of `volumeName`, in a failing clone of it. */
+  recoveryPicked(volumeName: string): boolean;
+  /** The file the synthetic configuration of the recovery container of `volumeName` lies in. */
+  recoveryConfigFile(volumeName: string): string;
+  /** Writes `text` to `file`, replacing it and making its folder. */
+  writeRecoveryFile(file: string, text: string): Promise<void>;
   /** Shows that only the latest commits of `repository` were cloned. */
   showShallow(repository: string): void;
+  /**
+   * Has the user add a configuration to the clone in `folder` of the bootstrap container `bootstrap`, through `engine`'s
+   * program; when the user leaves, the window goes back to a local one.
+   */
+  addConfiguration(
+    bootstrap: string,
+    folder: string,
+    engine: {host: EngineHost; dockerPath: string},
+  ): Promise<'written' | 'left'>;
+}
+
+/** The user's picks and the attach warning: a target that was not picked is connected only after the warning is confirmed. */
+interface PickGate {
+  /** The targets the user picked: the attach command records one before it opens its window. */
+  picks: {
+    includes: (key: string) => boolean;
+    record: (key: string) => Promise<void>;
+  };
+  /** The attach warning, asked whatever was answered before; whether the user confirmed. */
+  confirm: () => Promise<boolean>;
+}
+
+/** What a connect to an attached container needs beyond a folder's. */
+interface AttachedConnectDependencies extends PickGate {
+  /** The ids recorded at successful attaches. */
+  record: IdRecord;
+  /** The attach configuration file that applies to the container; none when there is none. */
+  configFileOf: (container: ListedContainer) => Promise<string | undefined>;
+}
+
+/** The settings the CLI's `up` takes: the workspace mount's consistency and the GPU availability, as the settings have them. */
+function engineSettingsOf(settings: {
+  workspaceMountConsistency: unknown;
+  legacyWorkspaceMountConsistency: unknown;
+  gpuAvailability: unknown;
+}): {workspaceMountConsistency: string; gpuAvailability: string} {
+  return {
+    workspaceMountConsistency: workspaceMountConsistencyOf(
+      settings.workspaceMountConsistency,
+      settings.legacyWorkspaceMountConsistency,
+    ),
+    gpuAvailability: gpuAvailabilityOf(settings.gpuAvailability),
+  };
+}
+
+/** What a connect to a Kubernetes pod needs beyond a folder's. */
+interface PodConnectDependencies extends PickGate {
+  /** `kubectl` as an engine with the login shell's environment. */
+  kubectl: EngineHost;
 }
 
 /** What the connector is made from. */
 export interface ContainerConnectorDependencies {
+  /** What an attach to a running container needs; without it, an attached payload is no authority the connector reads. */
+  attached?: AttachedConnectDependencies;
+  /** What an attach to a Kubernetes pod needs; without it, a pod payload is no authority the connector reads. */
+  pods?: PodConnectDependencies;
   /** What a clone in a volume needs; without it, a volume payload is no authority the connector reads. */
   volumes?: VolumeConnectDependencies;
   /** Whether a file or a folder exists on this machine. */
@@ -269,6 +398,8 @@ export interface ContainerConnectorDependencies {
     workspaceMountConsistency: unknown;
     /** The user's value of the deprecated `remote.containers.workspaceMountConsistency`, `undefined` when unset. */
     legacyWorkspaceMountConsistency: unknown;
+    /** The value of `dev.containers.gpuAvailability`, `undefined` when unset. */
+    gpuAvailability: unknown;
     /** The user's value of `dev.containers.experimentalMountGitWorktreeCommonDir`, `undefined` when unset. */
     mountGitWorktreeCommonDir: unknown;
     /** The user's value of `dev.containers.defaultFeatures`, `undefined` when unset. */
@@ -283,6 +414,10 @@ export interface ContainerConnectorDependencies {
   /** What the second check needs besides the engine and the program. */
   preflight: Omit<PreflightDependencies, 'engineFor' | 'dockerPath'>;
   editorEnvironment: Readonly<Record<string, string | undefined>>;
+  /** The relay kinds a connect sets up: none until a personalization asks for one, the harness's own when it's on. */
+  relayKinds(): readonly RelayKind[];
+  /** Starts a connection's relay host (`relays/relay-host.ts`). */
+  startRelayHost(request: RelayHostRequest): Promise<RelayHostStart>;
   /** The server's steps over the channel, which the lib-server composition provides. */
   runServer(
     request: ServerRequest,
@@ -375,6 +510,69 @@ interface Tools {
   bridge: CliBridge;
 }
 
+/** What the last part of a connect needs once there is a channel into the target, whatever kind of target it is. */
+interface ChannelTarget {
+  /** The authority's payload the connection is made for. */
+  payload: string;
+  /** The target's channel, running as the user the window works as. */
+  channel: HostChannel;
+  /** The channel as root, for the shared folders of a mounted volume; used only where `volumeMounted` is true. */
+  rootChannel: HostChannel;
+  remoteUser: string;
+  /** Whether the target mounts the `vscode` volume. */
+  volumeMounted: boolean;
+  /** Whether this connect created the target, which is when a preview platform is told in the log. */
+  created: boolean;
+  /** The extensions the server installs when it starts. */
+  defaultExtensions: readonly string[];
+  /** Whether the preview platform is told in the log whether or not this connect created the target. */
+  previewNoteAlways?: boolean;
+  /** Whether the extensions apply only when the remote user has no server data in the target yet. */
+  extensionsOncePerUser?: boolean;
+  /** The merged configuration that the probe, `remoteEnv`, the dev port and the ports read; none for a target with none. */
+  merged: Record<string, unknown> | undefined;
+  settings: ReturnType<ContainerConnectorDependencies['settings']>;
+  /** Whether the window is trusted by the connection itself. */
+  trusted: boolean;
+  /** The engine the window is pinned to, whose name the label shows. */
+  pinned: PinnedEngine;
+  /** The name the window's label shows. */
+  name: string | undefined;
+  /** Whether the window explores a volume, which its label says instead of a configuration's name. */
+  explored: boolean;
+  /** Where phase E runs the connection's relay host, as the remote user; none for a target `docker exec` can't reach. */
+  relayHost?: {engine: EngineHost; containerId: string};
+  /**
+   * Runs once the server's files are in place, phase E has run and before the server starts: the blocking commands, with
+   * the relay variables; a failure ends the connect.
+   */
+  beforeStart: (
+    relays: Readonly<Record<string, string>>,
+  ) => Promise<Failed | undefined>;
+  /** Opens the relay of the server's port; `onConnectionClosed` is told each time a relayed connection ends. */
+  openRelay: (
+    server: StartedContainerServer,
+    onConnectionClosed: () => void,
+  ) => ReturnType<ContainerConnectorDependencies['openRelay']>;
+  /** Reads the state of the target. */
+  inspect: (cancellation: AbortSignal) => Promise<Inspected>;
+  /** The forwards the window declares, once the relay is open. */
+  tunnels: () => Promise<Connected['environmentTunnels']>;
+  /** What the connection the window holds keeps of the target. */
+  target: Pick<
+    Held,
+    | 'hostPath'
+    | 'remoteWorkspaceFolder'
+    | 'containerId'
+    | 'engine'
+    | 'configFile'
+    | 'created'
+    | 'serviceDockerfile'
+  >;
+  /** Runs once the connection is held: the background lifecycle commands, with the relay variables. */
+  afterConnect: (relays: Readonly<Record<string, string>>) => void;
+}
+
 /** The connection the window holds. */
 interface Held {
   /** The authority's payload the connection was made for. */
@@ -386,10 +584,13 @@ interface Held {
   containerId: string;
   startedAt: string;
   engine: EngineHost;
+  /** Reads the state of the target the connection holds: a container's, or a pod's. */
+  inspect: (cancellation: AbortSignal) => Promise<Inspected>;
   /** The local path of the configuration file the connection was made for. */
   configFile: string;
   /** Whether the connect that made the connection created the container. */
   created: boolean;
+  serviceDockerfile: string | undefined;
   channel: HostChannel;
   server: StartedContainerServer;
   relay: OpenRelay;
@@ -439,6 +640,34 @@ async function inspectedState(
       : 'unreachable';
   } catch {
     return 'unreachable';
+  }
+}
+
+/** The ports the container publishes, as `docker inspect` holds them; none when they can't be read. */
+async function publishedPortsOf(
+  engine: EngineHost,
+  containerId: string,
+  cancellation: AbortSignal,
+): Promise<unknown> {
+  const outcome = await engine.run(
+    [
+      'inspect',
+      '--type',
+      'container',
+      '--format',
+      '{{json .NetworkSettings.Ports}}',
+      containerId,
+    ],
+    {kind: 'none'},
+    {cancellation},
+  );
+  if (outcome.kind !== 'ran' || outcome.status !== 0) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(outcome.stdout) as unknown;
+  } catch {
+    return undefined;
   }
 }
 
@@ -535,6 +764,10 @@ export function containerConnectorOf(
   let lifecycle: ContainerLifecycle | undefined;
   let held: Held | undefined;
   let failedContainer: FailedContainer | undefined;
+  /** The container the latest attach found, running or not. */
+  let attachedFound: ListedContainer | undefined;
+  /** The engine the latest attach found its container with. */
+  let attachedEngine: EngineHost | undefined;
   /**
    * The identity the latest attempt read from its configuration, kept once the attempt's container was ready; nothing
    * while the container isn't, and nothing once the next attempt begins.
@@ -542,6 +775,8 @@ export function containerConnectorOf(
   let attemptIdentity: WindowIdentity | undefined;
   /** The id the shutdown helper knows this window's connection by; nothing before the connect passed the trust gate. */
   let shutdownConnection: string | undefined;
+  /** The helper's answer to this window's register, which comes once any stop of its container already running ended. */
+  let shutdownRegistered: Promise<void> = Promise.resolve();
   let checking = false;
   /** The reconnection attempts of core that this connector, one per window session, has answered (S286). */
   let reconnectionAttempts = 0;
@@ -566,11 +801,7 @@ export function containerConnectorOf(
     }
     checking = true;
     try {
-      const state = await inspectedState(
-        connection.engine,
-        connection.containerId,
-        new AbortController().signal,
-      );
+      const state = await connection.inspect(new AbortController().signal);
       if (held !== connection || state === 'unreachable') {
         return;
       }
@@ -590,11 +821,7 @@ export function containerConnectorOf(
     connection: Held,
     cancellation: AbortSignal,
   ): Promise<Connected | Failed> {
-    const state = await inspectedState(
-      connection.engine,
-      connection.containerId,
-      cancellation,
-    );
+    const state = await connection.inspect(cancellation);
     if (state === 'unreachable') {
       logger.info(
         `reconnection: container ${shortId(connection.containerId)} is unreachable, no start, server not checked: transportLost`,
@@ -746,6 +973,40 @@ export function containerConnectorOf(
     return list;
   }
 
+  /**
+   * Takes the rebuild intent and then runs the resolve-time check of the engine. The intent is taken first, so a check
+   * that fails has dropped it and a Retry after it reconnects without a rebuild.
+   */
+  async function takenBeforeCheck(
+    input: ConnectInput,
+    engine: EngineHost,
+    settings: Tools['settings'],
+    base: string | undefined,
+    cancellation: AbortSignal,
+  ): Promise<{
+    rebuild: {buildNoCache: boolean} | undefined;
+    failure: Failed | undefined;
+  }> {
+    const rebuild = await takenRebuild(input);
+    phases.tell({name: 'initializing'});
+    const checked = await secondCheck(
+      {
+        ...dependencies.preflight,
+        engineFor: () => engine,
+        dockerPath: () => settings.dockerPath,
+      },
+      base,
+      cancellation,
+    );
+    return {
+      rebuild,
+      failure:
+        checked.kind === 'failed'
+          ? engineCheckFailed(checked.detail)
+          : undefined,
+    };
+  }
+
   /** The rebuild the window asked for before its reload, taken once on the first attempt of a connect. */
   async function takenRebuild(
     input: ConnectInput,
@@ -824,18 +1085,66 @@ export function containerConnectorOf(
     folder: DevContainerFolder,
     tools: Pick<Tools, 'configFile' | 'dockerPath'>,
   ): string {
+    return registerConnection(
+      {hostPath: folder.hostPath, configFile: tools.configFile},
+      engineCoordinatesOf(folder, tools),
+    );
+  }
+
+  /** Tells the shutdown helper about this window's connection to the container of `identity`, once. */
+  function registerConnection(
+    identity: ContainerIdentity,
+    engine: EngineCoordinates,
+    owning = true,
+  ): string {
     if (shutdownConnection !== undefined) {
       return shutdownConnection;
     }
     const connectionId = dependencies.newConnectionId();
     shutdownConnection = connectionId;
-    void dependencies.shutdown.send({
+    shutdownRegistered = dependencies.shutdown.send({
       type: 'register',
       connectionId,
-      identity: {hostPath: folder.hostPath, configFile: tools.configFile},
-      engine: engineCoordinatesOf(folder, tools),
+      identity,
+      engine,
+      ...(owning ? {} : {owning: false as const}),
     });
     return connectionId;
+  }
+
+  /**
+   * Waits for the helper's answer to this window's register before the container is looked up, so a container whose
+   * stop was already running is found stopped and started again, not reused while it goes down. A helper that does not
+   * answer within the time the acquire may take (a draining helper's close, a fresh start) and the stop's own time and a
+   * little more holds the connect no longer.
+   */
+  async function afterShutdownRegister(): Promise<void> {
+    const waiting = {stop: (): void => undefined};
+    const bound = new Promise<'bound'>(resolve => {
+      waiting.stop = dependencies.preflight.setTimer(
+        REGISTER_WAIT_MILLISECONDS,
+        () => {
+          resolve('bound');
+        },
+      );
+    });
+    const askedAt = dependencies.preflight.clock();
+    const ended = await Promise.race([
+      shutdownRegistered.then(() => 'answered' as const),
+      bound,
+    ]);
+    waiting.stop();
+    const waited = dependencies.preflight.clock() - askedAt;
+    if (ended === 'answered' && waited >= SLOW_REGISTER_MILLISECONDS) {
+      logger.info(
+        `the shutdown helper answered the register after ${(waited / 1000).toFixed(1)} s`,
+      );
+    }
+    if (ended === 'bound') {
+      logger.info(
+        'the shutdown helper did not answer the register in time; the container is looked up without its answer',
+      );
+    }
   }
 
   /**
@@ -1118,18 +1427,16 @@ export function containerConnectorOf(
       return trustDeclined();
     }
     const connectionId = registerWithShutdown(folder, tools);
-    phases.tell({name: 'initializing'});
-    const checked = await secondCheck(
-      {
-        ...dependencies.preflight,
-        engineFor: () => engine,
-        dockerPath: () => settings.dockerPath,
-      },
+    await afterShutdownRegister();
+    const {rebuild, failure} = await takenBeforeCheck(
+      input,
+      engine,
+      settings,
       folder.hostPath,
       cancellation,
     );
-    if (checked.kind === 'failed') {
-      return engineCheckFailed(checked.detail);
+    if (failure !== undefined) {
+      return failure;
     }
     // A read that failed with the engine answering is the CLI's own failure, unless its configuration is gone; one
     // that ran out of time is not.
@@ -1155,7 +1462,6 @@ export function containerConnectorOf(
       bridge,
       dependencies.lifecyclePresenter,
     );
-    const rebuild = await takenRebuild(input);
     const prepared = await lifecycle.prepare(
       {
         folder: folder.hostPath,
@@ -1164,10 +1470,7 @@ export function containerConnectorOf(
         logLevel: 'info',
         cacheVolume: settings.cacheVolume(),
         windowsClient: dependencies.clientPlatform === 'win32',
-        workspaceMountConsistency: workspaceMountConsistencyOf(
-          settings.workspaceMountConsistency,
-          settings.legacyWorkspaceMountConsistency,
-        ),
+        ...engineSettingsOf(settings),
         mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
           settings.mountGitWorktreeCommonDir,
         ),
@@ -1183,6 +1486,13 @@ export function containerConnectorOf(
           ? read.configuration.runArgs
           : [],
         workspaceMount: read?.configuration.workspaceMount,
+        composeIdentified: compose => {
+          void dependencies.shutdown.send({
+            type: 'compose',
+            connectionId,
+            compose,
+          });
+        },
         pausedRetry: takenPausedRetry,
         ...(rebuild === undefined
           ? {}
@@ -1247,6 +1557,70 @@ export function containerConnectorOf(
     configFile: string;
     /** Whether the window is trusted by the connection itself. */
     trusted: boolean;
+    /** Whether the window explores a volume, which its label says instead of a configuration's name. */
+    explored?: boolean;
+  }
+
+  /**
+   * The blocking lifecycle commands, with the relay variables, under "Starting server". A failure of the commands is the
+   * connect's, as `up`'s was.
+   */
+  async function blockingHooks(
+    relays: Readonly<Record<string, string>>,
+    cancellation: AbortSignal,
+    alreadyRan?: () => Promise<string | undefined>,
+  ): Promise<Failed | undefined> {
+    phases.tell({name: 'startingServer'});
+    const ranUpTo = await alreadyRan?.();
+    if (ranUpTo !== undefined) {
+      logger.info(
+        `the commands up to ${ranUpTo} already ran in this container: the blocking run is skipped`,
+      );
+      return undefined;
+    }
+    const blocking = await lifecycle?.runBlocking(relays, cancellation);
+    return blocking === undefined || blocking.kind === 'done'
+      ? undefined
+      : failureOf(blocking, []);
+  }
+
+  /**
+   * The `waitFor` the blocking commands of a container that was already running have run up to, by the CLI's own
+   * markers; nothing on any doubt, so that the blocking run happens.
+   */
+  async function blockingCommandsRan(
+    prepared: Extract<ContainerOutcome, {kind: 'ready'}>,
+    engine: EngineHost,
+    rootChannel: HostChannel,
+    cancellation: AbortSignal,
+  ): Promise<string | undefined> {
+    const names = markersNeeded(prepared.mergedConfiguration);
+    if (names === undefined) {
+      return undefined;
+    }
+    const waitFor = prepared.mergedConfiguration?.waitFor;
+    const ranUpTo =
+      typeof waitFor === 'string' ? waitFor : 'updateContentCommand';
+    if (names.length === 0) {
+      return ranUpTo;
+    }
+    const inspected = await engine.run(
+      markerInspectArguments(prepared.containerId),
+      {kind: 'none'},
+      {cancellation},
+    );
+    const facts =
+      inspected.kind === 'ran' && inspected.status === 0
+        ? parseMarkerInspect(inspected.stdout)
+        : undefined;
+    return facts !== undefined &&
+      (await commandsRan(
+        rootChannel,
+        {user: prepared.remoteUser, names, ...facts},
+        cancellation,
+      ))
+      ? ranUpTo
+      : undefined;
   }
 
   /** Reads the merged configuration, installs and starts the server, relays its port, and holds the connection. */
@@ -1270,12 +1644,20 @@ export function containerConnectorOf(
         cancellation,
       );
     }
-    const configuration = await bridge.readConfiguration(
-      context.cliTarget,
-      prepared.containerId,
-      logCliEvent,
-      cancellation,
-    );
+    // `up` read the configuration and its merge with the container's metadata; an outcome that did not come from it is read.
+    const configuration =
+      prepared.configuration === undefined
+        ? await bridge.readConfiguration(
+            context.cliTarget,
+            prepared.containerId,
+            logCliEvent,
+            cancellation,
+          )
+        : {
+            kind: 'configuration' as const,
+            configuration: prepared.configuration,
+            mergedConfiguration: prepared.mergedConfiguration,
+          };
     const merged =
       configuration.kind === 'configuration'
         ? configuration.mergedConfiguration
@@ -1292,23 +1674,168 @@ export function containerConnectorOf(
         `the configuration's name could not be read: ${cliFailureText(configuration)}`,
       );
     }
-    const channel = execChannelOf(
-      engine,
-      prepared.containerId,
-      prepared.remoteUser,
+    const rootChannel = execChannelOf(engine, prepared.containerId, 'root');
+    return connectChannel(
+      {
+        payload,
+        channel: execChannelOf(
+          engine,
+          prepared.containerId,
+          prepared.remoteUser,
+        ),
+        rootChannel,
+        remoteUser: prepared.remoteUser,
+        volumeMounted: prepared.volumeMounted,
+        created: prepared.created,
+        defaultExtensions,
+        merged,
+        settings,
+        trusted: context.trusted,
+        pinned: context.pinned,
+        name,
+        explored: context.explored === true,
+        relayHost: {engine, containerId: prepared.containerId},
+        beforeStart: relays =>
+          blockingHooks(
+            relays,
+            cancellation,
+            prepared.created
+              ? undefined
+              : () =>
+                  blockingCommandsRan(
+                    prepared,
+                    engine,
+                    rootChannel,
+                    cancellation,
+                  ),
+          ),
+        openRelay: (server, onConnectionClosed) =>
+          dependencies.openRelay({
+            engine,
+            containerId: prepared.containerId,
+            remoteUser: prepared.remoteUser,
+            nodePath: server.nodePath,
+            relayPath: server.relayPath,
+            containerPort: server.port,
+            onConnectionClosed,
+          }),
+        inspect: signal => inspectedState(engine, prepared.containerId, signal),
+        tunnels: async () => {
+          const local = engineIsLocal({
+            context: context.pinned.context,
+            dockerHost: context.pinned.host,
+          });
+          return configuration.kind === 'configuration' &&
+            isComposeConfiguration(configuration.configuration)
+            ? publishedForwards(
+                await publishedPortsOf(
+                  engine,
+                  prepared.containerId,
+                  cancellation,
+                ),
+                local,
+              )
+            : staticForwards(
+                configuration.kind === 'configuration'
+                  ? appPortOf(configuration.configuration)
+                  : undefined,
+                local,
+              );
+        },
+        target: {
+          hostPath: context.hostPath,
+          remoteWorkspaceFolder: prepared.remoteWorkspaceFolder,
+          containerId: prepared.containerId,
+          engine,
+          configFile: context.configFile,
+          created: prepared.created,
+          serviceDockerfile: prepared.serviceDockerfile,
+        },
+        afterConnect: relays => {
+          lifecycle?.startBackground(relays, () => Promise.resolve());
+        },
+      },
+      cancellation,
     );
+  }
+
+  /**
+   * Phase E: the connection's relay host, for the kinds this connect sets up. One that doesn't start is logged, and the
+   * connect goes on without its relays.
+   */
+  async function earlyPersonalization(
+    tail: ChannelTarget,
+    files: ServerFiles,
+    relays: RelayLease,
+    cancellation: AbortSignal,
+  ): Promise<void> {
+    if (tail.relayHost === undefined) {
+      return;
+    }
+    const started = await dependencies.startRelayHost({
+      ...tail.relayHost,
+      channel: tail.channel,
+      remoteUser: tail.remoteUser,
+      nodePath: files.nodePath,
+      dataFolder: files.dataFolder,
+      kinds: dependencies.relayKinds(),
+      cancellation,
+    });
+    if (started.kind === 'failed') {
+      logger.warn(`the relay host did not start: ${started.detail}`);
+      return;
+    }
+    relays.host = started.host;
+  }
+
+  /**
+   * The last part of every connect, once there is a channel into the target. A connect that doesn't end in a connection
+   * ends the relay host it started.
+   */
+  async function connectChannel(
+    tail: ChannelTarget,
+    cancellation: AbortSignal,
+  ): Promise<Connected | Failed> {
+    const relays: RelayLease = {};
+    const result = await connectWithRelays(tail, relays, cancellation);
+    if (!('connectionToken' in result)) {
+      relays.host?.dispose();
+    }
+    return result;
+  }
+
+  /** The server's files, phase E and the start, the environment, the relay of its port, and the connection the window holds. */
+  async function connectWithRelays(
+    tail: ChannelTarget,
+    relays: RelayLease,
+    cancellation: AbortSignal,
+  ): Promise<Connected | Failed> {
+    const {channel, merged, settings} = tail;
+    let startingServerTold = false;
     const server = await dependencies.runServer(
       {
         channel,
-        rootChannel: execChannelOf(engine, prepared.containerId, 'root'),
-        remoteUser: prepared.remoteUser,
-        volumeMounted: prepared.volumeMounted,
-        defaultExtensions,
+        rootChannel: tail.rootChannel,
+        remoteUser: tail.remoteUser,
+        volumeMounted: tail.volumeMounted,
+        defaultExtensions: tail.defaultExtensions,
+        ...(tail.previewNoteAlways === true ? {previewNoteAlways: true} : {}),
+        ...(tail.extensionsOncePerUser === true
+          ? {extensionsOncePerUser: true}
+          : {}),
         devPort: devPortOf(merged),
         machineSettings: portAttributeSettings(merged),
-        created: prepared.created,
+        created: tail.created,
+        beforeStart: async files => {
+          startingServerTold = true;
+          await earlyPersonalization(tail, files, relays, cancellation);
+          return tail.beforeStart(relayVariablesOf(relays));
+        },
         onPhase: phase => {
-          phases.tell({name: phase});
+          // The blocking commands run under "Starting server" already; the server's own start doesn't say it again.
+          if (phase !== 'startingServer' || !startingServerTold) {
+            phases.tell({name: phase});
+          }
         },
         onDownloadPercent: percent => {
           phases.tell({name: 'serverDownloadPercent', percent});
@@ -1342,73 +1869,56 @@ export function containerConnectorOf(
       return cancelled();
     }
     const owner: {connection?: Held} = {};
-    const relay = await dependencies.openRelay({
-      engine,
-      containerId: prepared.containerId,
-      remoteUser: prepared.remoteUser,
-      nodePath: server.nodePath,
-      relayPath: server.relayPath,
-      containerPort: server.port,
-      onConnectionClosed: () => {
-        const {connection} = owner;
-        if (connection !== undefined && held === connection) {
-          void checkAfterClose(connection);
-        }
-      },
+    const relay = await tail.openRelay(server, () => {
+      const {connection} = owner;
+      if (connection !== undefined && held === connection) {
+        void checkAfterClose(connection);
+      }
     });
     if (relay.kind === 'failed') {
       return relay.failure;
     }
-    const started = await inspectedState(
-      engine,
-      prepared.containerId,
-      cancellation,
-    );
+    const started = await tail.inspect(cancellation);
     if (isAborted(cancellation)) {
       // The window was torn down while the connect finished: give the relay back.
       relay.close();
       return cancelled();
     }
+    const tunnels = await tail.tunnels();
     const connected: Connected = {
       address: {host: '127.0.0.1', port: relay.hostPort},
       connectionToken: server.connectionToken,
       extensionHostEnv: extensionHostEnvironmentOf(
         probed,
+        relayVariablesOf(relays),
         remoteEnvironment.entries,
       ),
-      environmentTunnels: staticForwards(
-        configuration.kind === 'configuration'
-          ? appPortOf(configuration.configuration)
-          : undefined,
-        engineIsLocal({
-          context: context.pinned.context,
-          dockerHost: context.pinned.host,
-        }),
-      ),
-      trusted: context.trusted,
+      environmentTunnels: tunnels,
+      trusted: tail.trusted,
     };
     held = {
-      payload,
-      hostPath: context.hostPath,
-      remoteWorkspaceFolder: prepared.remoteWorkspaceFolder,
-      containerId: prepared.containerId,
+      payload: tail.payload,
+      ...tail.target,
       startedAt:
         started === 'missing' || started === 'unreachable'
           ? ''
           : started.startedAt,
-      engine,
-      configFile: context.configFile,
-      created: prepared.created,
+      inspect: tail.inspect,
       channel,
       server,
       relay,
-      identity: {name, context: engineLabelOf(context.pinned)},
+      identity: {
+        name: tail.name,
+        context: engineLabelOf(tail.pinned),
+        ...(tail.explored ? {explored: true} : {}),
+      },
       connected,
       lifetime: new AbortController(),
       ports: {
         forwardPorts: merged?.forwardPorts,
         portsAttributes: merged?.portsAttributes,
         otherPortsAttributes: merged?.otherPortsAttributes,
+        attributeSettings: portAttributeSettings(merged),
       },
     };
     const connection = held;
@@ -1423,6 +1933,14 @@ export function containerConnectorOf(
         lost.tell();
       }
     });
+    connection.lifetime.signal.addEventListener(
+      'abort',
+      () => {
+        relays.host?.dispose();
+      },
+      {once: true},
+    );
+    tail.afterConnect(relayVariablesOf(relays));
     return connected;
   }
 
@@ -1444,10 +1962,7 @@ export function containerConnectorOf(
       dockerPath: 'docker',
       logLevel: 'info',
       cacheVolume: settings.cacheVolume(),
-      workspaceMountConsistency: workspaceMountConsistencyOf(
-        settings.workspaceMountConsistency,
-        settings.legacyWorkspaceMountConsistency,
-      ),
+      ...engineSettingsOf(settings),
       mountGitWorktreeCommonDir: false,
       features: featureSettingsOf(
         settings.defaultFeatures,
@@ -1460,6 +1975,169 @@ export function containerConnectorOf(
       workspaceMount: undefined,
       pausedRetry: takenPausedRetry,
       ...(rebuild === undefined ? {} : {rebuild}),
+    };
+  }
+
+  /**
+   * Connects an explored volume: the host CLI opens the one definition of ours with the volume added by the variable of
+   * this run, and the window is untrusted. There is no bootstrap, no clone and no stand-in; the container is found
+   * again by the volume and the definition's configuration, and left stopped, never removed, when the window ends.
+   */
+  async function connectExplored(
+    what: {
+      volumes: VolumeConnectDependencies;
+      payload: string;
+      target: DevContainerVolume;
+      settings: Tools['settings'];
+      engine: EngineHost;
+      dockerFile: string;
+    },
+    launch: {
+      environment: Readonly<Record<string, string>>;
+      cliEnvironment: Readonly<Record<string, string | undefined>>;
+      rebuild: {buildNoCache: boolean} | undefined;
+      cancellation: AbortSignal;
+    },
+  ): Promise<Connected | Failed> {
+    const {volumes, payload, target, settings, engine, dockerFile} = what;
+    const {environment, cliEnvironment, rebuild, cancellation} = launch;
+    if (!exploredVolumeNameValid(target.volumeName)) {
+      logger.info('the volume to explore has no name Docker accepts');
+      return containerSetupFailed();
+    }
+    const existing = await engine.run(
+      volumeInspectArguments(target.volumeName),
+      {kind: 'none'},
+      {cancellation},
+    );
+    logger.info(
+      existing.kind === 'ran' && existing.status === 0
+        ? `the volume ${target.volumeName} exists`
+        : `the volume ${target.volumeName} does not exist yet, so the mount creates it`,
+    );
+    const definition = await volumes.exploreDefinition();
+    const bridge = dependencies.cliFor({
+      ...cliEnvironment,
+      [EXPLORE_VOLUME_VARIABLE]: target.volumeName,
+    });
+    const idLabels = exploreIdLabels(target.volumeName, definition.configFile);
+    lifecycle = dependencies.lifecycleFor(
+      engine,
+      bridge,
+      dependencies.lifecyclePresenter,
+    );
+    const prepared = await lifecycle.prepare(
+      {
+        folder: definition.folder,
+        configFile: definition.configFile,
+        idLabels,
+        dockerPath: dockerFile,
+        logLevel: 'info',
+        // An explored volume always has the server's volume at /vscode, whatever `dev.containers.cacheVolume` says.
+        cacheVolume: true,
+        windowsClient: dependencies.clientPlatform === 'win32',
+        ...engineSettingsOf(settings),
+        mountGitWorktreeCommonDir: false,
+        features: featureSettingsOf(
+          settings.defaultFeatures,
+          settings.lockfile,
+          undefined,
+        ),
+        mounts: [],
+        runArgs: [],
+        workspaceMount: EXPLORE_WORKSPACE_MOUNT,
+        pausedRetry: takenPausedRetry,
+        ...(rebuild === undefined ? {} : {rebuild}),
+      },
+      logStep,
+      logCliEvent,
+      cancellation,
+    );
+    if (prepared.kind !== 'ready') {
+      return failureOf(prepared, []);
+    }
+    failedContainer = {containerId: prepared.containerId, paused: false};
+    return connectPrepared(
+      {
+        payload,
+        prepared,
+        engine,
+        bridge,
+        cliTarget: {
+          workspaceFolder: definition.folder,
+          configFile: definition.configFile,
+          dockerPath: dockerFile,
+          idLabels,
+          mountWorkspaceGitRoot: false,
+          mountGitWorktreeCommonDir: false,
+          features: featureSettingsOf(
+            settings.defaultFeatures,
+            settings.lockfile,
+          ),
+          mounts: [],
+          logLevel: 'info',
+        },
+        settings,
+        pinned: target,
+        shutdownAction: undefined,
+        connectionId: registerConnection(
+          {volumeName: target.volumeName, configFile: definition.configFile},
+          {dockerPath: dockerFile, environment},
+        ),
+        hostPath: '',
+        configFile: definition.configFile,
+        trusted: false,
+        explored: true,
+      },
+      cancellation,
+    );
+  }
+
+  /**
+   * The engine a clone or an attached container is pinned to, after the checks that come before any container is
+   * touched: the settings, the program, the pinned environment and the engine wearing it; or the failure.
+   */
+  async function pinnedEngineChecked(
+    target: PinnedEngine,
+    input: ConnectInput,
+    cancellation: AbortSignal,
+  ): Promise<
+    | Failed
+    | {
+        settings: ReturnType<typeof dependencies.settings>;
+        dockerFile: string;
+        environment: Readonly<Record<string, string>>;
+        engine: EngineHost;
+        rebuild: {buildNoCache: boolean} | undefined;
+      }
+  > {
+    const settings = dependencies.settings();
+    const executable = executableOf(settings.dockerPath, undefined);
+    if (executable.kind !== 'spawn') {
+      logger.info('dev.containers.dockerPath names no program');
+      return engineCheckFailed('S339');
+    }
+    const environment = environmentOfPinned(target);
+    const engine = withEnvironment(
+      dependencies.engineFor(executable.file),
+      () => environment,
+    );
+    const {rebuild, failure} = await takenBeforeCheck(
+      input,
+      engine,
+      settings,
+      undefined,
+      cancellation,
+    );
+    if (failure !== undefined) {
+      return failure;
+    }
+    return {
+      settings,
+      dockerFile: executable.file,
+      environment,
+      engine,
+      rebuild,
     };
   }
 
@@ -1477,39 +2155,29 @@ export function containerConnectorOf(
     const cancellation = controller.signal;
     failedContainer = undefined;
     attemptIdentity = undefined;
-    const settings = dependencies.settings();
-    const executable = executableOf(settings.dockerPath, undefined);
-    if (executable.kind !== 'spawn') {
-      logger.info('dev.containers.dockerPath names no program');
-      return engineCheckFailed('S339');
+    if (!target.inspectVolume && !(await volumes.consent())) {
+      logger.info("the clone's trust confirmation was refused");
+      return cloneConsentRefused();
     }
-    const environment = environmentOfPinned(target);
-    const engine = withEnvironment(
-      dependencies.engineFor(executable.file),
-      () => environment,
-    );
-    phases.tell({name: 'initializing'});
-    const checked = await secondCheck(
-      {
-        ...dependencies.preflight,
-        engineFor: () => engine,
-        dockerPath: () => settings.dockerPath,
-      },
-      undefined,
-      cancellation,
-    );
-    if (checked.kind === 'failed') {
-      return engineCheckFailed(checked.detail);
+    const prepared = await pinnedEngineChecked(target, input, cancellation);
+    if ('kind' in prepared) {
+      return prepared;
     }
+    const {settings, environment, engine, dockerFile, rebuild} = prepared;
     const cliEnvironment = {...dependencies.editorEnvironment, ...environment};
-    const dockerFile = executable.file;
-    const rebuild = await takenRebuild(input);
+    if (target.inspectVolume && target.recovery !== true) {
+      return connectExplored(
+        {volumes, payload, target, settings, engine, dockerFile},
+        {environment, cliEnvironment, rebuild, cancellation},
+      );
+    }
     const standIn = await volumes.standIn();
     /** The CLI on the host and its target, for the runs after `up`: the stand-in folder, the host's Docker program. */
     function hostPassOf(
       request: VolumeContainerRequest,
       configText: string,
     ): {bridge: CliBridge; target: CliTarget} {
+      const recovery = target.recovery === true;
       return {
         bridge: volumes.hostBridge(
           configText,
@@ -1518,10 +2186,12 @@ export function containerConnectorOf(
         ),
         target: {
           workspaceFolder: standIn.folder,
-          configFile: join(
-            standIn.folder,
-            request.configFile.slice(request.folder.length + 1),
-          ),
+          configFile: recovery
+            ? request.configFile
+            : join(
+                standIn.folder,
+                request.configFile.slice(request.folder.length + 1),
+              ),
           dockerPath: dockerFile,
           idLabels: request.idLabels,
           mountWorkspaceGitRoot: true,
@@ -1535,24 +2205,27 @@ export function containerConnectorOf(
         },
       };
     }
-    const resolution = await resolveVolume(
-      {
+    /**
+     * Prepares the dev container: `up` runs in the bootstrap container, or on the host when there is none. The
+     * connection counts for the shutdown helper from here, before the existing container is looked up, so an earlier
+     * window's check does not stop the container this connect is about to reuse.
+     */
+    async function prepareContainer(
+      bootstrap: string | undefined,
+      request: VolumeContainerRequest,
+      configText: string,
+    ): Promise<ContainerOutcome> {
+      registerConnection(
+        {volumeName: request.volumeName, folder: target.folder},
+        {dockerPath: dockerFile, environment},
+      );
+      await afterShutdownRegister();
+      const pass = hostPassOf(request, configText);
+      lifecycle = dependencies.lifecycleFor(
         engine,
-        options: {cancellation},
-        logger,
-        settings: () => volumes.bootstrapSettings(),
-        buildContext: () => volumes.buildContext(),
-        typed: typedPayload => volumes.typed(typedPayload),
-        clearTyped: typedPayload => volumes.clearTyped(typedPayload),
-        onCloning: () => {
-          logger.info('Cloning Repository');
-          phases.tell({name: 'cloningRepository'});
-        },
-        prepare: (bootstrap, request, configText) => {
-          const pass = hostPassOf(request, configText);
-          lifecycle = dependencies.lifecycleFor(
-            engine,
-            volumes.bootstrapBridge(
+        bootstrap === undefined
+          ? pass.bridge
+          : volumes.bootstrapBridge(
               bootstrap,
               request.workspace,
               cliEnvironment,
@@ -1561,27 +2234,64 @@ export function containerConnectorOf(
                 dockerPath: dockerFile,
               },
             ),
-            dependencies.lifecyclePresenter,
-            {
-              // eslint-disable-next-line id-length -- the stage's bridge is named cli, as the lifecycle's own
-              cli: pass.bridge,
-              targetOf: upTarget => ({...upTarget, ...pass.target}),
-              ended: () => {
-                void standIn.dispose();
-              },
-            },
-          );
-          return lifecycle.prepare(
-            volumeRequestOf(request, settings, rebuild),
-            logStep,
-            logCliEvent,
-            cancellation,
-          );
+        dependencies.lifecyclePresenter,
+        {
+          // eslint-disable-next-line id-length -- the stage's bridge is named cli, as the lifecycle's own
+          cli: pass.bridge,
+          targetOf: upTarget => ({...upTarget, ...pass.target}),
+          ended: () => {
+            void standIn.dispose();
+          },
         },
-      },
-      payload,
-      target,
-    );
+      );
+      return lifecycle.prepare(
+        volumeRequestOf(request, settings, rebuild),
+        logStep,
+        logCliEvent,
+        cancellation,
+      );
+    }
+    const stepPorts = {
+      engine,
+      options: {cancellation},
+      logger,
+      settings: () => volumes.bootstrapSettings(),
+      buildContext: () => volumes.buildContext(),
+    };
+    const resolution =
+      target.recovery === true
+        ? await resolveRecovery(
+            {
+              ...stepPorts,
+              picked: volumeName => volumes.recoveryPicked(volumeName),
+              configFileOf: volumeName =>
+                volumes.recoveryConfigFile(volumeName),
+              standInFolder: standIn.folder,
+              writeFile: (file, text) => volumes.writeRecoveryFile(file, text),
+              prepare: (request, configText) =>
+                prepareContainer(undefined, request, configText),
+            },
+            target,
+          )
+        : await resolveVolume(
+            {
+              ...stepPorts,
+              typed: typedPayload => volumes.typed(typedPayload),
+              clearTyped: typedPayload => volumes.clearTyped(typedPayload),
+              addConfiguration: (bootstrap, folder) =>
+                volumes.addConfiguration(bootstrap, folder, {
+                  host: engine,
+                  dockerPath: dockerFile,
+                }),
+              onCloning: () => {
+                logger.info('Cloning Repository');
+                phases.tell({name: 'cloningRepository'});
+              },
+              prepare: prepareContainer,
+            },
+            payload,
+            target,
+          );
     if (resolution.kind !== 'prepared') {
       await standIn.dispose();
       return resolution.kind === 'failed'
@@ -1589,6 +2299,10 @@ export function containerConnectorOf(
         : failureOf(resolution.outcome, []);
     }
     const pass = hostPassOf(resolution.request, resolution.configText);
+    const connectionId = registerConnection(
+      {volumeName: resolution.volumeName, folder: target.folder},
+      {dockerPath: dockerFile, environment},
+    );
     const connected = await connectPrepared(
       {
         payload,
@@ -1599,22 +2313,311 @@ export function containerConnectorOf(
         settings,
         pinned: target,
         shutdownAction: undefined,
-        connectionId: undefined,
+        connectionId,
         hostPath: '',
         configFile: resolution.request.configFile,
         trusted: !target.inspectVolume,
       },
       cancellation,
     );
-    void engine.run(
-      bootstrapRemoveArguments(resolution.bootstrap),
-      {kind: 'none'},
-      {cancellation: new AbortController().signal},
-    );
+    if (resolution.bootstrap !== undefined) {
+      void engine.run(
+        bootstrapRemoveArguments(resolution.bootstrap),
+        {kind: 'none'},
+        {cancellation: new AbortController().signal},
+      );
+    }
     if ('connectionToken' in connected && resolution.shallow) {
       volumes.showShallow(target.repositoryPath);
     }
     return connected;
+  }
+
+  /**
+   * The user an attached window works as: the merged `remoteUser`, else the container's own user. A user the container
+   * does not have, or one that cannot be told, is none.
+   */
+  async function attachedUserOf(
+    engine: EngineHost,
+    containerId: string,
+    merged: Record<string, unknown>,
+    cancellation: AbortSignal,
+  ): Promise<string | undefined> {
+    const written = merged.remoteUser;
+    let user = typeof written === 'string' && written !== '' ? written : '';
+    if (user === '') {
+      const asked = await engine.run(
+        ['exec', containerId, 'sh', '-c', 'id -un 2>/dev/null || id -u'],
+        {kind: 'none'},
+        {cancellation},
+      );
+      user =
+        asked.kind === 'ran' && asked.status === 0 ? asked.stdout.trim() : '';
+    }
+    if (user === '') {
+      return undefined;
+    }
+    const exists = await engine.run(
+      ['exec', '--user', 'root', containerId, 'id', '-u', '--', user],
+      {kind: 'none'},
+      {cancellation},
+    );
+    return exists.kind === 'ran' && exists.status === 0 ? user : undefined;
+  }
+
+  /**
+   * Connects an attached container: the pick gate, the engine checks, C12's container step, and then the connection
+   * every target ends in, as the container's own user and trusted; the id the container has is recorded once it holds.
+   */
+  async function connectAttached(
+    attached: AttachedConnectDependencies,
+    payload: string,
+    target: AttachedTarget,
+    controller: AbortController,
+    input: ConnectInput,
+  ): Promise<Connected | Failed> {
+    const cancellation = controller.signal;
+    failedContainer = undefined;
+    attemptIdentity = undefined;
+    attachedFound = undefined;
+    if (!(await pickConfirmed(attached, attachPickKeyOf(target)))) {
+      return attachWarningRefused();
+    }
+    const prepared = await pinnedEngineChecked(target, input, cancellation);
+    if ('kind' in prepared) {
+      return prepared;
+    }
+    const {environment, engine, dockerFile} = prepared;
+    const step = await attachedContainerStep(
+      {
+        engine,
+        bridge: dependencies.cliFor({
+          ...dependencies.editorEnvironment,
+          ...environment,
+        }),
+        record: attached.record,
+        configFileOf: attached.configFileOf,
+        cliTarget: {
+          dockerPath: dockerFile,
+          logLevel: 'info',
+          environment,
+        },
+        engineCoordinates: target,
+        logger,
+        onCliEvent: logCliEvent,
+      },
+      payload,
+      target,
+      cancellation,
+    );
+    if (step.kind === 'cancelled') {
+      return cancelled();
+    }
+    attachedFound = step.container;
+    attachedEngine = engine;
+    if (step.kind === 'failed') {
+      return step.failure;
+    }
+    const {container, mergedConfiguration: merged} = step;
+    const connectionId = registerConnection(
+      {containerName: container.name},
+      {dockerPath: dockerFile, environment},
+      false,
+    );
+    void dependencies.shutdown.send({
+      type: 'container',
+      connectionId,
+      containerId: container.id,
+      action: 'none',
+    });
+    const runsOn: AttachedCliTarget = {
+      containerId: container.id,
+      ...(step.configFile === undefined ? {} : {configFile: step.configFile}),
+      dockerPath: dockerFile,
+      logLevel: 'info',
+      environment,
+    };
+    const runsBridge = attachedRunsBridge(
+      dependencies.cliFor({...dependencies.editorEnvironment, ...environment}),
+      runsOn,
+    );
+    lifecycle = dependencies.lifecycleFor(
+      engine,
+      runsBridge,
+      dependencies.lifecyclePresenter,
+    );
+    lifecycle.adopt(container.id, attachedReadyTarget(runsOn), logCliEvent);
+    const remoteUser = await attachedUserOf(
+      engine,
+      container.id,
+      merged,
+      cancellation,
+    );
+    if (remoteUser === undefined) {
+      logger.info(`the remote user of ${container.name} was not found`);
+      return isAborted(cancellation) ? cancelled() : attachFailed();
+    }
+    const settings = dependencies.settings();
+    const connected = await connectChannel(
+      {
+        payload,
+        channel: execChannelOf(engine, container.id, remoteUser),
+        rootChannel: execChannelOf(engine, container.id, 'root'),
+        remoteUser,
+        volumeMounted: false,
+        created: false,
+        defaultExtensions: newContainerExtensions(merged, settings),
+        previewNoteAlways: true,
+        extensionsOncePerUser: true,
+        merged,
+        settings,
+        trusted: true,
+        pinned: target,
+        name: undefined,
+        explored: false,
+        relayHost: {engine, containerId: container.id},
+        beforeStart: relays => blockingHooks(relays, cancellation),
+        openRelay: (server, onConnectionClosed) =>
+          dependencies.openRelay({
+            engine,
+            containerId: container.id,
+            remoteUser,
+            nodePath: server.nodePath,
+            relayPath: server.relayPath,
+            containerPort: server.port,
+            onConnectionClosed,
+          }),
+        inspect: signal => inspectedState(engine, container.id, signal),
+        tunnels: () => Promise.resolve([]),
+        target: {
+          hostPath: '',
+          remoteWorkspaceFolder: '',
+          containerId: container.id,
+          engine,
+          configFile: step.configFile ?? '',
+          created: false,
+          serviceDockerfile: undefined,
+        },
+        afterConnect: relays => {
+          lifecycle?.startBackground(relays, () => Promise.resolve());
+        },
+      },
+      cancellation,
+    );
+    if ('connectionToken' in connected) {
+      await attached.record.write(payload, container.id);
+    }
+    return connected;
+  }
+
+  /**
+   * Whether the target named `key` may be connected: the user picked it, or confirmed the attach warning for it now,
+   * which records it. Nothing runs in the target before the answer.
+   */
+  async function pickConfirmed(gate: PickGate, key: string): Promise<boolean> {
+    if (gate.picks.includes(key)) {
+      return true;
+    }
+    if (!(await gate.confirm())) {
+      logger.info('the attach warning was not confirmed');
+      return false;
+    }
+    await gate.picks.record(key);
+    return true;
+  }
+
+  /** The user the pod's container runs as: its name, else its numeric id; none when it cannot be told. */
+  async function podUserOf(
+    channel: HostChannel,
+    cancellation: AbortSignal,
+  ): Promise<string | undefined> {
+    const lines: string[] = [];
+    const outcome = await channel.runScript(
+      {
+        script: 'id -un 2>/dev/null || id -u\n',
+        interpreter: 'posixShell',
+        environment: {},
+        input: {kind: 'text', text: ''},
+        cancellation,
+      },
+      line => lines.push(line),
+    );
+    const [user] = lines.map(line => line.trim()).filter(line => line !== '');
+    return outcome.kind === 'exited' && outcome.status === 0 ? user : undefined;
+  }
+
+  /**
+   * Connects a pod's container: the channel is `kubectl exec`, everything runs as the container's own user, nothing is
+   * merged or set up, and nothing is registered with the shutdown helper, since a pod is not ours to stop.
+   */
+  async function connectPod(
+    pods: PodConnectDependencies,
+    payload: string,
+    target: K8sTarget,
+    controller: AbortController,
+  ): Promise<Connected | Failed> {
+    const cancellation = controller.signal;
+    failedContainer = undefined;
+    attemptIdentity = undefined;
+    if (!(await pickConfirmed(pods, k8sPickKeyOf(target)))) {
+      return attachWarningRefused();
+    }
+    const settings = dependencies.settings();
+    phases.tell({name: 'initializing'});
+    const channel = execChannelOver(pods.kubectl, k8sExecCommands(target));
+    const remoteUser = await podUserOf(channel, cancellation);
+    if (remoteUser === undefined) {
+      logger.info(`the user of ${target.podname} could not be told`);
+      return isAborted(cancellation) ? cancelled() : containerSetupFailed();
+    }
+    const identity = k8sExecCommands(target).identity;
+    return connectChannel(
+      {
+        payload,
+        channel,
+        rootChannel: channel,
+        remoteUser,
+        volumeMounted: false,
+        created: false,
+        defaultExtensions: newContainerExtensions(undefined, settings),
+        merged: undefined,
+        settings,
+        trusted: true,
+        pinned: {},
+        name: undefined,
+        explored: false,
+        beforeStart: () => Promise.resolve(undefined),
+        openRelay: (server, onConnectionClosed) =>
+          dependencies.openRelay({
+            engine: pods.kubectl,
+            containerId: identity,
+            remoteUser,
+            nodePath: server.nodePath,
+            relayPath: server.relayPath,
+            containerPort: server.port,
+            dialer: k8sDialer(
+              pods.kubectl,
+              target,
+              server.nodePath,
+              server.relayPath,
+            ),
+            onConnectionClosed,
+          }),
+        inspect: signal => inspectedPod(pods.kubectl, target, signal),
+        tunnels: () => Promise.resolve([]),
+        target: {
+          hostPath: '',
+          remoteWorkspaceFolder: '',
+          containerId: identity,
+          engine: pods.kubectl,
+          configFile: '',
+          created: false,
+          serviceDockerfile: undefined,
+        },
+        afterConnect: () => undefined,
+      },
+      cancellation,
+    );
   }
 
   return {
@@ -1654,6 +2657,42 @@ export function containerConnectorOf(
           }
           return result;
         }
+        const attachedTarget =
+          dependencies.attached === undefined
+            ? undefined
+            : attachedTargetOf(target.payload);
+        if (
+          dependencies.attached !== undefined &&
+          attachedTarget !== undefined &&
+          !('malformed' in attachedTarget)
+        ) {
+          const result = await connectAttached(
+            dependencies.attached,
+            target.payload,
+            attachedTarget,
+            controller,
+            input,
+          );
+          if (!('connectionToken' in result)) {
+            await leaveShutdown();
+          }
+          return result;
+        }
+        if (dependencies.pods !== undefined) {
+          const podTarget = k8sTargetOf(target.payload);
+          if (!('malformed' in podTarget)) {
+            return await connectPod(
+              dependencies.pods,
+              target.payload,
+              podTarget,
+              controller,
+            );
+          }
+          if (podTarget.malformed === 'invalid') {
+            logger.info(`the pod's ${podTarget.member} is not a valid name`);
+            return malformedAuthority();
+          }
+        }
         if ('malformed' in stored) {
           return malformedAuthority();
         }
@@ -1689,6 +2728,15 @@ export function containerConnectorOf(
       dependencies.revealLog();
     },
     failedContainer: () => failedContainer,
+    attachedContainer: () => attachedFound,
+    startAttachedContainer: () =>
+      attachedFound === undefined || attachedEngine === undefined
+        ? Promise.resolve(false)
+        : startAttachedContainer(
+            attachedEngine,
+            attachedFound,
+            new AbortController().signal,
+          ),
     heldIdentity: () => held?.identity,
     attemptIdentity: () => attemptIdentity,
     heldPorts: () => held?.ports,
@@ -1702,6 +2750,9 @@ export function containerConnectorOf(
             engine: held.engine,
             configFile: held.configFile,
             created: held.created,
+            ...(held.serviceDockerfile === undefined
+              ? {}
+              : {serviceDockerfile: held.serviceDockerfile}),
           },
     announceShutdown: authority => {
       const decoded =

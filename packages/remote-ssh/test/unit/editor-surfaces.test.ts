@@ -33,6 +33,7 @@ function surfacesWith(
     noticeFails?: boolean;
   } = {},
 ): {surfaces: ReturnType<typeof editorSurfacesOf>; calls: Calls} {
+  const written = new Map<string, unknown>();
   const calls: Calls = {
     operations: [],
     writes: [],
@@ -100,6 +101,7 @@ function surfacesWith(
     troubleshooting: {
       enabled: () => true,
       createTerminal: () => ({show: () => undefined, dispose: () => undefined}),
+      revealLog: () => undefined,
       texts: () => ({
         heading: 'heading',
         leadIn: 'lead',
@@ -114,6 +116,7 @@ function surfacesWith(
     },
     environmentHints: () => [],
     logMark: () => 0,
+    writeWindowStart: () => undefined,
     logText: () => '',
     parseUri: () => undefined,
     help: {
@@ -134,12 +137,14 @@ function surfacesWith(
       displayName: 'Remote - SSH',
     },
     acceptanceState: {
-      get: key => changes.accepted?.[key],
+      get: key => written.get(key) ?? changes.accepted?.[key],
       update: (key, value) => {
         calls.stored.push([key, value]);
+        written.set(key, value);
         return Promise.resolve();
       },
     },
+    confirmationCopies: {read: () => undefined, write: () => Promise.resolve()},
     noticeState: {get: () => undefined, update: () => Promise.resolve()},
     logger: createLogger(calls.logged, {minimumLevel: () => 'info'}),
     applyTerminalEnvironment: () => undefined,
@@ -280,6 +285,22 @@ describe("the connect's surfaces over the editor", () => {
     await surfaces.writePlatform('devbox', 'linux');
     deepStrictEqual(calls.writes, [
       ['remote.SSH.remotePlatform', {buildbox: 'macOS', devbox: 'linux'}],
+    ]);
+  });
+
+  it("F-2506 6.3: a setting is written to the user's settings as given, and removed when it is undefined", async () => {
+    const {surfaces, calls} = surfacesWith();
+    await surfaces.writeUserSetting(
+      'remote.defaultExtensionsIfInstalledLocally',
+      ['a.b'],
+    );
+    await surfaces.writeUserSetting(
+      'remote.SSH.defaultExtensionsIfInstalledLocally',
+      undefined,
+    );
+    deepStrictEqual(calls.writes, [
+      ['remote.defaultExtensionsIfInstalledLocally', ['a.b']],
+      ['remote.SSH.defaultExtensionsIfInstalledLocally', undefined],
     ]);
   });
 

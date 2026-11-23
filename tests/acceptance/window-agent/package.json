@@ -31,7 +31,9 @@
     "onResolveRemoteAuthority:dev-container"
   ],
   "enabledApiProposals": [
-    "tunnels"
+    "tunnels",
+    "resolvers",
+    "terminalSelection"
   ],
   "main": "./extension.cjs"
 }

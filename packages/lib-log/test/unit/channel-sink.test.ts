@@ -54,6 +54,15 @@ describe('channel sink (card log-02 table)', () => {
     );
   });
 
+  it('a line whose message holds a C1 control -> appendLine of the format with the control written as its code point', () => {
+    const port = new FakeEditorPort();
+    const sink = createChannelSink(port, 'Remote - SSH');
+    sink.write({...LINE, message: 'h\u009b'});
+    deepStrictEqual(port.channels.at(0)?.appendedLines, [
+      defaultFormat({...LINE, message: 'h\\u{9b}'}),
+    ]);
+  });
+
   it("custom format returning 'X' -> appendLine('X')", () => {
     const port = new FakeEditorPort();
     const sink = createChannelSink(port, 'Remote - SSH', () => 'X');

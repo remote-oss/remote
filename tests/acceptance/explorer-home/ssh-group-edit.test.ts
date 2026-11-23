@@ -5,7 +5,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   pickShown,
@@ -17,6 +17,7 @@ import {
 import {hostLabels, listing, VIEW} from '../windows/explorer-rows.ts';
 import {
   closeWindow,
+  companionCalls,
   readUserSettings,
   restoreUserSettings,
   startInWindow,
@@ -35,6 +36,15 @@ import {
 
 const GEAR = 'Open SSH Config File';
 const GROUP = 'SSH';
+
+/** The companion's push that tells the explorer the hosts changed. */
+const HOSTS_CHANGED = 'remote-internal.sshHostsChanged';
+
+/** How long after a save the push has to reach the explorer. */
+const PUSH_MILLISECONDS = 1_000;
+
+/** How long a save of a file opened another way leaves the list as it was. */
+const UNCHANGED_MILLISECONDS = 10_000;
 
 /** How long a host added in the open editor has to show, and how long a change by another program is waited for. */
 const EDITOR_SAVE_MILLISECONDS = 5_000;
@@ -119,18 +129,29 @@ describe('the configuration file opened from the SSH group (card coverage-102, p
     }
   });
 
-  it('F-5102 AC-22 (editor-save): a host added in the opened editor and saved shows within 5 s with no Refresh; a change by another program shows after 15 s only through Refresh, additions and deletions both', async () => {
+  it('F-5101 AC-15, F-5102 AC-22, F-5902 AC-9, AC-36 (editor-save): (reading-1809-receiver-record) a host added in the opened editor and saved shows within 5 s with no Refresh, after one host-list push within 1 s of the save; a change by another program shows after 15 s only through Refresh, additions and deletions both', async () => {
     const file = sshFile('config', ['Host user-one']);
     const window = await viewWindow('edit-save');
     try {
       await listing(window, ['user-one', ...systemHosts()]);
       await openFromGear(window, file);
+      const pushed = companionCalls(HOSTS_CHANGED).length;
       await typeAndSave(window, 'Host typed-one\n');
+      const issued = Date.now();
+      // The save runs in the editor after this row issued it: the push is timed from the file's write, when the save
+      // completed (as the contract measures it), not from the moment the command was issued.
+      await waitFor(
+        `${file} to hold the typed host`,
+        () => readFileSync(file, 'utf8').includes('Host typed-one'),
+        30_000,
+      );
+      const saved = statSync(file).mtimeMs;
       const shown = await listsWithin(
         window,
         ['typed-one', 'user-one', ...systemHosts()],
         EDITOR_SAVE_MILLISECONDS,
       );
+      const pushes = companionCalls(HOSTS_CHANGED).slice(pushed);
       writeFileSync(file, 'Host typed-one\nHost external-one\n');
       await new Promise(resolve =>
         setTimeout(resolve, OTHER_PROGRAM_MILLISECONDS),
@@ -139,6 +160,8 @@ describe('the configuration file opened from the SSH group (card coverage-102, p
       await titleAction(window, VIEW, 'Refresh');
       deepStrictEqual(
         [
+          pushes.length,
+          (pushes[0]?.time ?? Infinity) - saved <= PUSH_MILLISECONDS,
           shown,
           unchanged,
           await listsWithin(
@@ -147,14 +170,41 @@ describe('the configuration file opened from the SSH group (card coverage-102, p
             10_000,
           ),
         ],
-        [true, ['typed-one', 'user-one', ...systemHosts()], true],
+        [1, true, true, ['typed-one', 'user-one', ...systemHosts()], true],
+        `the save was issued at ${String(issued)} and the file was written ${String(saved - issued)} ms after; the pushes came ${JSON.stringify(pushes.map(push => push.time - saved))} ms after the write`,
       );
     } finally {
       await closeWindow(window);
     }
   });
 
-  it('F-5102 AC-50 (closed-tab): after the tab was closed, the file opened another way and a host added there is listed after Refresh', async () => {
+  it('F-5101 AC-15 (named-file): a host added and saved in the file that remote.SSH.configFile names, opened from the gear, shows within 5 s with no Refresh', async () => {
+    const file = sshFile('named-config', ['Host user-one']);
+    await userSettings({'remote.SSH.configFile': file});
+    const window = await viewWindow('edit-named');
+    try {
+      await waitFor(
+        `window ${window} to list user-one`,
+        async () => (await hostLabels(window)).includes('user-one'),
+        30_000,
+      );
+      const before = await hostLabels(window);
+      await openFromGear(window, file);
+      await typeAndSave(window, 'Host typed-named\n');
+      deepStrictEqual(
+        await listsWithin(
+          window,
+          ['typed-named', ...before],
+          EDITOR_SAVE_MILLISECONDS,
+        ),
+        true,
+      );
+    } finally {
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5102 AC-50, F-5902 AC-36 (closed-tab): after the tab was closed, the file opened another way and a host added there leaves the list as it was for 10 s and is listed after Refresh', async () => {
     const file = sshFile('config', ['Host user-one']);
     const window = await viewWindow('edit-closed');
     try {
@@ -170,14 +220,19 @@ describe('the configuration file opened from the SSH group (card coverage-102, p
         30_000,
       );
       await typeAndSave(window, 'Host later-one\n');
+      await new Promise(resolve => setTimeout(resolve, UNCHANGED_MILLISECONDS));
+      const unchanged = await hostLabels(window);
       await titleAction(window, VIEW, 'Refresh');
       deepStrictEqual(
-        await listsWithin(
-          window,
-          ['later-one', 'user-one', ...systemHosts()],
-          10_000,
-        ),
-        true,
+        [
+          unchanged,
+          await listsWithin(
+            window,
+            ['later-one', 'user-one', ...systemHosts()],
+            10_000,
+          ),
+        ],
+        [['user-one', ...systemHosts()], true],
       );
     } finally {
       await closeWindow(window);

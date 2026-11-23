@@ -1,4 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
+import {FakeClock} from 'lib-helper/testing/fake-clock';
+import {createLogger} from 'lib-log';
+import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {RemotePlatform} from '../../src/pipeline/platform.ts';
 import {
   createTermsSteps,
@@ -35,10 +38,21 @@ interface Calls {
   order: string[];
 }
 
+/** How one try of the write ends in a fixture: it works, the editor refuses it, or it never settles. */
+type WriteBehaviour = 'works' | 'refused' | 'hangs';
+
 function stepsFor(
   changes: Partial<TermsSettings>,
   answer?: RemotePlatform,
-): {calls: Calls; steps: ReturnType<typeof createTermsSteps>} {
+  writes: readonly WriteBehaviour[] = [],
+): {
+  calls: Calls;
+  steps: ReturnType<typeof createTermsSteps>;
+  clock: FakeClock;
+  lines: () => string[];
+  /** Changes the settings the steps read from now on, as an edit made while a try of the write is pending. */
+  settle: (later: Partial<TermsSettings>) => void;
+} {
   const calls: Calls = {
     asked: [],
     variants: [],
@@ -46,10 +60,19 @@ function stepsFor(
     announced: [],
     order: [],
   };
+  const clock = new FakeClock();
+  const sink = new MemorySink();
+  const behaviours = [...writes];
+  let later: Partial<TermsSettings> = {};
   return {
     calls,
+    clock,
+    lines: () => sink.lines.map(line => line.message),
+    settle: change => {
+      later = change;
+    },
     steps: createTermsSteps({
-      settings: () => ({...SETTINGS, ...changes}),
+      settings: () => ({...SETTINGS, ...changes, ...later}),
       pickPlatform: (alias, variant) => {
         calls.asked.push(alias);
         calls.variants.push(variant);
@@ -62,10 +85,25 @@ function stepsFor(
       writePlatform: (alias, platform) => {
         calls.written.push([alias, platform]);
         calls.order.push('write');
-        return Promise.resolve();
+        const behaviour = behaviours.shift() ?? 'works';
+        if (behaviour === 'refused') {
+          return Promise.reject(new Error('the editor refused'));
+        }
+        return behaviour === 'hangs'
+          ? new Promise<void>(() => undefined)
+          : Promise.resolve();
       },
+      logger: createLogger(sink, {minimumLevel: () => 'trace'}),
+      scheduler: clock.scheduler(),
     }),
   };
+}
+
+/** Lets the promises that are due run. */
+async function settledPromises(): Promise<void> {
+  for (let round = 0; round < 20; round += 1) {
+    await Promise.resolve();
+  }
 }
 
 describe('the terms of a connection', () => {
@@ -160,6 +198,157 @@ describe('remembering the platform', () => {
     });
     await steps.rememberPlatform(INPUT, 'linux');
     deepStrictEqual(calls.announced, []);
+  });
+
+  it('#2573: the log tells each decision: written, kept because the entry holds it, kept because the local connection server is on', async () => {
+    const written = stepsFor({useLocalServer: false});
+    const held = stepsFor({
+      useLocalServer: false,
+      remotePlatform: {devbox: 'linux'},
+    });
+    const local = stepsFor({});
+    await written.steps.rememberPlatform(INPUT, 'darwin');
+    await held.steps.rememberPlatform(INPUT, 'linux');
+    await local.steps.rememberPlatform(INPUT, 'linux');
+    deepStrictEqual(
+      [written.lines(), held.lines(), local.lines()],
+      [
+        [
+          'the remotePlatform entry of devbox was none; the host reports macOS; writing it',
+        ],
+        [
+          'the remotePlatform entry of devbox was linux; the host reports linux; keeping it: the entry already holds it',
+        ],
+        [
+          'the remotePlatform entry of devbox was none; the host reports linux; keeping it: the local connection server is on',
+        ],
+      ],
+    );
+  });
+
+  it('#2573: an entry that holds no platform is told as none', async () => {
+    const {steps, lines} = stepsFor({
+      useLocalServer: false,
+      remotePlatform: {devbox: 'not a platform'},
+    });
+    await steps.rememberPlatform(INPUT, 'linux');
+    deepStrictEqual(lines(), [
+      'the remotePlatform entry of devbox was none; the host reports linux; writing it',
+    ]);
+  });
+
+  it('#2573: a write the editor refuses is tried once more after a second, and told on its second attempt', async () => {
+    const {steps, calls, clock, lines} = stepsFor(
+      {useLocalServer: false},
+      undefined,
+      ['refused', 'works'],
+    );
+    const pending = steps.rememberPlatform(INPUT, 'linux');
+    await settledPromises();
+    clock.advance(1000);
+    await pending;
+    deepStrictEqual(
+      [calls.written.length, lines().slice(1)],
+      [
+        2,
+        [
+          "the platform setting's write was refused: Error: the editor refused",
+          'the platform setting was written on the second attempt',
+        ],
+      ],
+    );
+  });
+
+  it('#2573: a write that does not settle in ten seconds is told, and tried once more', async () => {
+    const {steps, calls, clock, lines} = stepsFor(
+      {useLocalServer: false},
+      undefined,
+      ['hangs', 'works'],
+    );
+    const pending = steps.rememberPlatform(INPUT, 'linux');
+    await settledPromises();
+    clock.advance(9999);
+    await settledPromises();
+    const beforeBound = calls.written.length;
+    clock.advance(1);
+    await settledPromises();
+    clock.advance(1000);
+    await pending;
+    deepStrictEqual(
+      [beforeBound, calls.written.length, lines().slice(1)],
+      [
+        1,
+        2,
+        [
+          "the platform setting's write did not finish within 10 s",
+          'the platform setting was written on the second attempt',
+        ],
+      ],
+    );
+  });
+
+  it('#2573: a retry that fails too fails the step with its message, and there is no third try', async () => {
+    const {steps, calls, clock} = stepsFor({useLocalServer: false}, undefined, [
+      'refused',
+      'refused',
+      'works',
+    ]);
+    const outcome = steps.rememberPlatform(INPUT, 'linux').then(
+      () => 'resolved',
+      (caught: unknown) => String(caught),
+    );
+    await settledPromises();
+    clock.advance(1000);
+    const failed = await outcome;
+    clock.advance(60_000);
+    await settledPromises();
+    deepStrictEqual(
+      [failed, calls.written.length],
+      [
+        "Error: the platform setting's write was refused: Error: the editor refused",
+        2,
+      ],
+    );
+  });
+
+  it('#2573: a retry that does not settle fails the step with the bound, after one try more', async () => {
+    const {steps, calls, clock} = stepsFor({useLocalServer: false}, undefined, [
+      'refused',
+      'hangs',
+    ]);
+    const outcome = steps.rememberPlatform(INPUT, 'linux').then(
+      () => 'resolved',
+      (caught: unknown) => String(caught),
+    );
+    await settledPromises();
+    clock.advance(1000);
+    await settledPromises();
+    clock.advance(10_000);
+    const failed = await outcome;
+    deepStrictEqual(
+      [failed, calls.written.length],
+      ["Error: the platform setting's write did not finish within 10 s", 2],
+    );
+  });
+
+  it('#2573: when the settings read afresh hold the platform by the time of the retry, it is kept and not written again', async () => {
+    const {steps, calls, clock, lines, settle} = stepsFor(
+      {useLocalServer: false},
+      undefined,
+      ['refused'],
+    );
+    const pending = steps.rememberPlatform(INPUT, 'linux');
+    await settledPromises();
+    settle({remotePlatform: {devbox: 'linux'}});
+    clock.advance(1000);
+    await pending;
+    deepStrictEqual(
+      [calls.written.length, lines().at(-1)],
+      [
+        1,
+        'the remotePlatform entry of devbox now holds the reported platform; keeping it',
+      ],
+    );
   });
 
   it('F-2603 AC-19: the question of the platform before any setting says is asked with the ordinary variant', async () => {

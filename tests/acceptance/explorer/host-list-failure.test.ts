@@ -19,6 +19,7 @@ import {
 } from '../windows/harness.ts';
 import {notifications, titleAction} from '../windows/renderer.ts';
 import {rowsOf, rowsSettled, VIEW} from '../windows/explorer-rows.ts';
+import {reloadedWindow} from './reloaded-window.ts';
 
 /** The run-local configuration file the rows point `remote.SSH.configFile` at. */
 const FILE = path.join(variable('HARNESS_RUN_FOLDER'), 'hosts-35');
@@ -26,8 +27,6 @@ const FILE = path.join(variable('HARNESS_RUN_FOLDER'), 'hosts-35');
 /** The folder the unparsable-start window opens, which is also the window's name. */
 const START = 'hosts-start';
 
-/** The reloaded local window of the launch, which the gate rows leave in place. */
-const RELOADED = 'empty-2';
 const REFRESH = 'Refresh';
 
 /** Polls until the window's agent has activated, for up to a minute. */
@@ -44,18 +43,25 @@ async function windowActive(name: string): Promise<void> {
 describe('the host list when the configuration file can’t be read (card connect-83, #1170)', function () {
   this.timeout(180_000);
 
+  /** The reloaded local window of the launch, found or made before the rows. */
+  let reloaded = '';
+
+  before(async () => {
+    reloaded = await reloadedWindow();
+  });
+
   it('F-5102 AC-35 (unparsable-refresh): a refresh with the file now unparsable keeps the names last read from it, and no notification shows', async () => {
     writeFileSync(FILE, 'Host keep-a\nHost keep-b\n');
     const saved = readUserSettings();
     try {
       await userSettings({'remote.SSH.configFile': FILE});
-      await inWindow(RELOADED, 'remoteTargets.focus');
-      await titleAction(RELOADED, VIEW, REFRESH);
-      await rowsSettled(RELOADED, rowsOf(['keep-a', 'keep-b'], undefined));
+      await inWindow(reloaded, 'remoteTargets.focus');
+      await titleAction(reloaded, VIEW, REFRESH);
+      await rowsSettled(reloaded, rowsOf(['keep-a', 'keep-b'], undefined));
       writeFileSync(FILE, 'Host "unterminated\n');
-      await titleAction(RELOADED, VIEW, REFRESH);
-      await rowsSettled(RELOADED, rowsOf(['keep-a', 'keep-b'], undefined));
-      deepStrictEqual(await notifications(RELOADED), []);
+      await titleAction(reloaded, VIEW, REFRESH);
+      await rowsSettled(reloaded, rowsOf(['keep-a', 'keep-b'], undefined));
+      deepStrictEqual(await notifications(reloaded), []);
     } finally {
       restoreUserSettings(saved);
     }
@@ -69,7 +75,7 @@ describe('the host list when the configuration file can’t be read (card connec
       const folder = path.join(variable('HARNESS_RUN_FOLDER'), START);
       mkdirSync(folder, {recursive: true});
       await inWindow(
-        RELOADED,
+        reloaded,
         'acceptance.agent.openWindow',
         pathToFileURL(folder).href,
       );

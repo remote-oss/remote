@@ -4,6 +4,7 @@
  * shows anything; the caller turns the result into the notice or the error the command shows.
  */
 
+import type {FailureReason} from 'lib-authority';
 import type {SshTarget} from 'lib-ssh';
 import {connectTargetOf, payloadOf} from '../connect/connect-commands.ts';
 import type {ConnectInput, ConnectSteps} from '../pipeline/steps.ts';
@@ -17,6 +18,8 @@ export interface MaintenanceRun {
   result: StepResult | 'cancelled';
   /** What went wrong, for the log; empty when the step ran. */
   cause: string;
+  /** Why the target failed its name check, when that is what ended the run: the check's own message. */
+  reason?: FailureReason;
 }
 
 /** The steps a maintenance run takes from a connect. */
@@ -69,12 +72,35 @@ const UNINSTALL_CHECKS = ['validate'] as const;
 
 const STEP_RAN: MaintenanceRun = {result: 'stepRan', cause: ''};
 
-function failed(cause: string): MaintenanceRun {
-  return {result: 'connectionFailed', cause};
+function failed(cause: string, reason?: FailureReason): MaintenanceRun {
+  return {
+    result: 'connectionFailed',
+    cause,
+    ...(reason === undefined ? {} : {reason}),
+  };
 }
 
 function stepFailed(cause: string): MaintenanceRun {
   return {result: 'stepFailed', cause};
+}
+
+/** The status a POSIX shell ends with when it finds no program of the name it was given. */
+const COMMAND_NOT_FOUND = 127;
+
+/**
+ * Whether a login that ended before its session started is a Windows answer on a host with no PowerShell: the login
+ * shell found no `powershell` to run. The uninstall then ends as a step that did nothing, with no message, as it would
+ * on such a host after the Windows step ran.
+ */
+function windowsSessionMissing(
+  platform: string,
+  failure: {kind: string; sshExitStatus?: number | null},
+): boolean {
+  return (
+    platform === 'windows' &&
+    failure.kind === 'unknown' &&
+    failure.sshExitStatus === COMMAND_NOT_FOUND
+  );
 }
 
 /**
@@ -92,7 +118,10 @@ export async function runMaintenance(
   for (const check of checks) {
     const checked = steps[check](input);
     if (checked.kind === 'failed') {
-      return failed(`the target is not valid: ${checked.failure.kind}`);
+      return failed(
+        `the target is not valid: ${checked.failure.kind}`,
+        checked.failure.reason,
+      );
     }
   }
   const located = await steps.locateClient(input);
@@ -111,6 +140,12 @@ export async function runMaintenance(
   }
   const opened = await steps.openConnection(input, terms.value, cancellation);
   if (opened.kind === 'failed') {
+    if (
+      action === 'uninstall' &&
+      windowsSessionMissing(terms.value.platform, opened.failure)
+    ) {
+      return stepFailed('the host has no PowerShell for the Windows step');
+    }
     return failed(`the connection failed: ${opened.failure.kind}`);
   }
   const lease = opened.value;

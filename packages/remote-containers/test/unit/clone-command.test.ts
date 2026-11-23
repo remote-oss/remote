@@ -1,21 +1,33 @@
 import {deepStrictEqual} from 'node:assert';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import {cloneInUniqueVolume} from '../../src/volumes/clone-command.ts';
 import {
+  cloneFromLink,
+  cloneInUniqueVolume,
+} from '../../src/volumes/clone-command.ts';
+import {
+  type CloneAnswers,
   cloneCommandPortsOf,
   DEFAULT_CLONE_ANSWERS,
-  type CloneAnswers,
 } from './clone-ports.fixture.ts';
 
 /** Runs the command over ports that answer as `changes` says, and gives what it did, in order. */
-async function runWith(changes: Partial<CloneAnswers> = {}): Promise<string[]> {
+async function runWith(
+  changes: Partial<CloneAnswers> = {},
+  link?: string,
+  entry: 'command' | 'linkHandler' = 'command',
+): Promise<string[]> {
   const calls: string[] = [];
   const ports = cloneCommandPortsOf(
     {...DEFAULT_CLONE_ANSWERS, ...changes},
     calls,
     new MemorySink(),
   );
-  await cloneInUniqueVolume(ports, new AbortController().signal);
+  const cancellation = new AbortController().signal;
+  if (entry === 'linkHandler') {
+    await cloneFromLink(ports, String(link), cancellation);
+  } else {
+    await cloneInUniqueVolume(ports, cancellation, link);
+  }
   return calls;
 }
 
@@ -24,7 +36,7 @@ describe('Clone Repository in Container Volume, up to the reload (card container
     deepStrictEqual(await runWith(), [
       'engine',
       'pick',
-      'precheck https://github.com/o/r',
+      'precheck https://github.com/o/r typed',
       `typed ${JSON.stringify({
         kind: 'volume',
         repositoryPath: 'https://github.com/o/r/tree/main',
@@ -68,6 +80,14 @@ describe('Clone Repository in Container Volume, up to the reload (card container
     deepStrictEqual(await runWith({engineReady: false}), ['engine']);
   });
 
+  it('F-0205 AC-2a: the first confirmation comes first, then the engine check, and a check that stops shows no source pick', async () => {
+    deepStrictEqual(await runWith({accepted: false, engineReady: false}), [
+      'trust',
+      'remember',
+      'engine',
+    ]);
+  });
+
   it('a dismissed pick ends the attempt', async () => {
     deepStrictEqual(await runWith({typed: undefined}), ['engine', 'pick']);
   });
@@ -76,7 +96,7 @@ describe('Clone Repository in Container Volume, up to the reload (card container
     deepStrictEqual(await runWith({typed: ' o/r ', precheck: 'unreachable'}), [
       'engine',
       'pick',
-      'precheck https://github.com/o/r',
+      'precheck https://github.com/o/r typed',
       'cannotAccess https://github.com/o/r',
     ]);
   });
@@ -93,7 +113,7 @@ describe('Clone Repository in Container Volume, up to the reload (card container
     deepStrictEqual(await runWith({precheck: 'cancelled'}), [
       'engine',
       'pick',
-      'precheck https://github.com/o/r',
+      'precheck https://github.com/o/r typed',
     ]);
   });
 
@@ -101,6 +121,130 @@ describe('Clone Repository in Container Volume, up to the reload (card container
     deepStrictEqual(
       await runWith({currentRepository: 'https://github.com/o/r/tree/main'}),
       ['engine', 'pick'],
+    );
+  });
+
+  it('F-0708 6.4: a link skips the pick and the record of a typed source, is checked as a link, and reloads into the same kind of payload', async () => {
+    const calls = await runWith({}, 'https://github.com/o/r.git');
+    deepStrictEqual(
+      [
+        calls.slice(0, 2),
+        calls.some(call => call.startsWith('typed ')),
+        calls.some(call => call === 'pick'),
+        calls.at(-1)?.startsWith('reload r '),
+      ],
+      [
+        ['engine', 'precheck https://github.com/o/r.git link'],
+        false,
+        false,
+        true,
+      ],
+    );
+  });
+
+  it('F-0708 6.4: a link that the clone refuses ends with the repository named and nothing checked', async () => {
+    deepStrictEqual(await runWith({}, '/home/u/repo'), [
+      'engine',
+      'cannotAccess /home/u/repo',
+    ]);
+  });
+
+  it('F-0701 6.3: the GitHub row picks a repository and a branch, which clones as their branch URL; a GitHub pick left ends the attempt', async () => {
+    const [picked, bare, left] = await Promise.all([
+      runWith({
+        typed: {github: {url: 'https://github.com/o/r.git', branch: 'dev'}},
+      }),
+      runWith({typed: {github: {url: 'https://github.com/o/r.git'}}}),
+      runWith({typed: {github: undefined}}),
+    ]);
+    deepStrictEqual(
+      [picked.slice(0, 4), bare.slice(0, 4), left],
+      [
+        ['engine', 'pick', 'github', 'precheck https://github.com/o/r typed'],
+        [
+          'engine',
+          'pick',
+          'github',
+          'precheck https://github.com/o/r.git typed',
+        ],
+        ['engine', 'pick', 'github'],
+      ],
+    );
+  });
+});
+
+describe('an "Open in Dev Containers" link, up to the reload (card containers-154)', () => {
+  /** The link handler over a profile that never gave the warning, with `changes`. */
+  function linked(
+    link: string,
+    changes: Partial<CloneAnswers> = {},
+  ): Promise<string[]> {
+    return runWith({accepted: false, ...changes}, link, 'linkHandler');
+  }
+
+  it('F-0706 AC-5, BR-10: a reachable link is checked before the warning, then reloads with no pick and no typed record', async () => {
+    const calls = await linked('https://github.com/o/r.git');
+    deepStrictEqual(
+      [calls.slice(0, 4), calls.at(-1)?.startsWith('reload r '), calls.length],
+      [
+        [
+          'engine',
+          'precheck https://github.com/o/r.git link',
+          'trust',
+          'remember',
+        ],
+        true,
+        5,
+      ],
+    );
+  });
+
+  it('F-0706 AC-17: an unreachable link shows S052 with no warning', async () => {
+    deepStrictEqual(
+      await linked('https://github.com/o/r.git', {precheck: 'unreachable'}),
+      [
+        'engine',
+        'precheck https://github.com/o/r.git link',
+        'cannotAccess https://github.com/o/r.git',
+      ],
+    );
+  });
+
+  it('F-0706 AC-4, AC-10: a link the clone refuses shows S052 with the value as given, no check and no warning', async () => {
+    deepStrictEqual(await linked(' ftp://h/r '), [
+      'engine',
+      'cannotAccess ftp://h/r',
+    ]);
+  });
+
+  it('F-0706 AC-21: an owner/repo link is expanded before the check', async () => {
+    deepStrictEqual((await linked('o/r', {accepted: true})).slice(0, 2), [
+      'engine',
+      'precheck https://github.com/o/r link',
+    ]);
+  });
+
+  it('F-0706 AC-20: the link of the window’s own repository does nothing', async () => {
+    deepStrictEqual(
+      await linked('https://github.com/o/r', {
+        currentRepository: 'https://github.com/o/r',
+      }),
+      ['engine'],
+    );
+  });
+
+  it('an engine that isn’t ready, a cancelled check and a refused warning each end the attempt before the reload', async () => {
+    deepStrictEqual(
+      [
+        await linked('o/r', {engineReady: false}),
+        await linked('o/r', {precheck: 'cancelled'}),
+        await linked('o/r', {trust: 'cancel'}),
+      ],
+      [
+        ['engine'],
+        ['engine', 'precheck https://github.com/o/r link'],
+        ['engine', 'precheck https://github.com/o/r link', 'trust'],
+      ],
     );
   });
 });

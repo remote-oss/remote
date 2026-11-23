@@ -45,6 +45,9 @@ import {
 } from '../windows/config-watch-support.ts';
 import {storeRoot} from '../windows/authoring-support.ts';
 
+/** The text of the error dialog of a setup that fails (F-0410's). */
+const S034 = 'An error occurred setting up the container.';
+
 /** The Dockerfile of the rows: the run's dev container image, nothing more. */
 function dockerfileText(): string {
   return `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\n`;
@@ -96,7 +99,7 @@ describe('the rebuild prompt when the configuration changes (card coverage-106)'
         300_000,
       );
       await connectedToContainer(name, 300_000);
-      const sequence = indicators.stop();
+      const sequence = await indicators.stop();
       const [second = ''] = await devContainersOf(folder);
       const environment = await docker(
         'inspect',
@@ -592,7 +595,7 @@ describe('the rebuild prompt when the configuration changes (card coverage-106)'
     }
   });
 
-  it('F-0303 AC-13 (reading-1893-failed-rebuild): a rebuild that fails shows the setup error and leaves the stored fingerprints as they were; after the fix and Retry the connected window shows no notification (the old container is removed before the build, F-0405 BR-17, so the repeat of the notification after a reconnect cannot happen)', async () => {
+  it('F-0303 AC-13 (reading-1893-failed-rebuild): a rebuild that fails shows the F-0410 error dialog and leaves the stored hashes and the folder without a container; after the fix and Retry the window connects with no notification, and a reload shows none either', async () => {
     const folder = dockerfileFolder('c106-failed-rebuild');
     const dockerfile = path.join(folder, '.devcontainer', 'Dockerfile');
     const name = await connectedWindow(folder);
@@ -604,18 +607,36 @@ describe('the rebuild prompt when the configuration changes (card coverage-106)'
       appendFileSync(dockerfile, 'RUN false\n');
       await answerNotification(name, CHANGED_START, 'Rebuild');
       const dialog = await waitForDialog(name, 300_000);
-      const afterFailure = storedHashes(folder);
+      const afterFailure = {
+        hashes: storedHashes(folder),
+        containers: await devContainersOf(folder),
+      };
       writeFileSync(dockerfile, dockerfileText());
       await answerDialog(name, 'Retry');
       await connectedToContainer(name, 300_000);
+      const afterConnect = await noticesAfter(name, 10);
+      await reloadWindow(name);
+      await connectedToContainer(name, 300_000);
+      const afterReload = await noticesAfter(name, 10);
       deepStrictEqual(
         [
-          dialog.buttons.includes('Retry'),
+          [dialog.message, dialog.details, dialog.buttons],
           before !== undefined && Object.keys(before).length === 2,
           afterFailure,
-          await noticesAfter(name, 10),
+          afterConnect,
+          afterReload,
         ],
-        [true, true, before, []],
+        [
+          [
+            '',
+            S034,
+            ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
+          ],
+          true,
+          {hashes: before, containers: []},
+          [],
+          [],
+        ],
       );
     } finally {
       await closeWindow(name).catch(() => undefined);

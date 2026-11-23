@@ -29,6 +29,7 @@ import {runCommand} from '../../../tools/command-runner.ts';
 import {oneTimeCode} from '../../../tools/one-time-code.ts';
 import {filesHolding} from '../../../tools/secret-search.ts';
 import {processIdsOf} from '../../../tools/process-ids.ts';
+import {runWithinWait} from './state-database.ts';
 import {
   descendantRootOf,
   processStatOf,
@@ -41,6 +42,24 @@ import {
   signalFile,
   type AppendedEntry,
 } from '../../../tools/script-file.ts';
+import {commandEventLines} from './agent-events.ts';
+import {
+  holdingText,
+  unfinishedCommands,
+  windowFolderOf,
+} from './agent-standing.ts';
+import {explainedFailure, section} from './connect-failure.ts';
+import {editorFolderOf} from './editor-folder.ts';
+import {
+  type CloseAttempt,
+  closeUntilGone,
+  type DebugTarget,
+  listedPages,
+  leftoverNote,
+  pagesDescription,
+  REMEMBERED_PAGES,
+  waitUntilPageLeft,
+} from './page-list.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -66,11 +85,19 @@ export interface AgentEvent {
     | 'terminalNames'
     | 'untitledDocuments'
     | 'tunnels'
+    | 'execSpawned'
     | 'environment'
     | 'called'
-    | 'editorText';
+    | 'editorText'
+    | 'linkOpened'
+    | 'terminalOpened'
+    | 'activeTerminalChanged';
   time: number;
   id?: string;
+  /** The agent's own log folder in the window's extension host, as `activated` reports it. */
+  logFolder?: string;
+  /** The name of the terminal a `terminalOpened` or `activeTerminalChanged` event concerns; null when none is active. */
+  terminal?: string | null;
   message?: string;
   remoteName?: string | null;
   remoteAuthority?: string | null;
@@ -87,6 +114,10 @@ export interface AgentEvent {
   defaultValue?: unknown;
   /** Whether the user's settings hold a value for the setting, as `setting` reports it: a key holding `null` reads as no value, as an absent one does. */
   inUserScope?: boolean;
+  /** The value the user's settings hold for the setting, as `setting` reports it (not merged with the default, as `value` is for an object): null for none. */
+  userValue?: unknown;
+  /** The whole `inspect` of the setting, as `setting` reports it: the value of every scope the window knows. */
+  inspected?: unknown;
   /** Where a forwarded port is reachable on this machine, as the editor gave it. */
   localAddress?: string | {host: string; port: number};
   remotePort?: number;
@@ -171,6 +202,8 @@ export interface RecordLine {
   items?: string[];
   /** The label of the row that was focused when the pick opened; only the lines of a `platformPick` have it. */
   active?: string | undefined;
+  /** The message a masked input was shown with; only the lines of a `maskedInput` surface that had one have it. */
+  message?: string;
   time: number;
 }
 
@@ -207,13 +240,22 @@ export function engineCli(): string {
   return engine === undefined || engine === '' ? 'docker' : engine;
 }
 
-/** The lines of a JSON-lines file; a file not written yet is empty. */
+/**
+ * The lines of JSON-lines text that a newline has ended. A writer appends each line with its newline, and a read can
+ * meet a line it is still writing: that last part is left for the next read.
+ */
+export function completeLines<Line>(text: string): Line[] {
+  return text
+    .slice(0, text.lastIndexOf('\n') + 1)
+    .split('\n')
+    .filter(line => line !== '')
+    .map(line => JSON.parse(line) as Line);
+}
+
+/** The lines of a JSON-lines file that a newline has ended; a file not written yet is empty. */
 function linesOf<Line>(file: string): Line[] {
   return existsSync(file)
-    ? readFileSync(file, 'utf8')
-        .split('\n')
-        .filter(line => line !== '')
-        .map(line => JSON.parse(line) as Line)
+    ? completeLines<Line>(readFileSync(file, 'utf8'))
     : [];
 }
 
@@ -240,6 +282,16 @@ export function windowEvents(name: string): AgentEvent[] {
   return linesOf<AgentEvent>(agentFile(name, 'events'));
 }
 
+/** The lines for what window `name`'s agent reported about the commands sent to it from `since` (a time in milliseconds) on: at most a dozen progress events, each with its command's name. */
+export function commandEventsSince(name: string, since: number): string[] {
+  return commandEventLines(
+    windowEvents(name),
+    linesOf<{id: string; command?: string}>(agentFile(name, 'commands')),
+    since,
+    12,
+  );
+}
+
 /**
  * Writes the launch's script with `entries`, which the extensions read when they activate: a window that opens after
  * the write answers its questions from it. A window that activated before the write keeps the entries it read, so an
@@ -261,16 +313,25 @@ export function recordLines(surface?: string, window?: string): RecordLine[] {
   );
 }
 
-/** The lines of the log file named by `variableName`, without their time stamps; none before the first is written. */
-function logLinesOf(variableName: string): string[] {
+/** The lines of the log file named by `variableName` as written, with their time stamps; none before the first is written. */
+function stampedLogLinesOf(variableName: string): string[] {
   const file = variable(variableName);
   if (!existsSync(file)) {
     return [];
   }
   return readFileSync(file, 'utf8')
     .split('\n')
-    .filter(line => line !== '')
-    .map(line => line.slice(line.indexOf('] ') + 2));
+    .filter(line => line !== '');
+}
+
+/** `line` without its time stamp. */
+function withoutStamp(line: string): string {
+  return line.slice(line.indexOf('] ') + 2);
+}
+
+/** The lines of the log file named by `variableName`, without their time stamps; none before the first is written. */
+function logLinesOf(variableName: string): string[] {
+  return stampedLogLinesOf(variableName).map(withoutStamp);
 }
 
 /** The folder the launch's editor keeps its state in, its logs included: one session folder per start of the editor, with `main.log` below it. */
@@ -278,9 +339,23 @@ export function editorLogsFolder(): string {
   return variable('HARNESS_EDITOR_LOGS');
 }
 
-/** The lines of the log the launch's extensions write, without their time stamps; none before the first is written. */
-export function connectionLog(): string[] {
-  return logLinesOf('REMOTE_OSS_ACCEPTANCE_LOG');
+/** A line of the log's settings listing, `remote.SSH.<name> = <value>`: its words are the settings', which no row about anything else may match. */
+const SETTING_LINE =
+  /^remote\.SSH\.(?!path = |permitPtyAllocation = )[\w.]+ = /u;
+
+/**
+ * The lines of the log the launch's extensions write, without their time stamps, or with them when `withTimes` is set,
+ * for a failure to show the order and the gaps of a race; none before the first is written. The settings listing of each
+ * resolve is left out unless `withSettings` is set, so that a row's filter cannot match a setting's name or value.
+ */
+export function connectionLog({
+  withTimes = false,
+  withSettings = false,
+}: {withTimes?: boolean; withSettings?: boolean} = {}): string[] {
+  const kept = stampedLogLinesOf('REMOTE_OSS_ACCEPTANCE_LOG').filter(
+    line => withSettings || !SETTING_LINE.test(withoutStamp(line)),
+  );
+  return withTimes ? kept : kept.map(withoutStamp);
 }
 
 /** One push that Remote Explorer's inbox received from Remote - SSH, as the explorer records it. */
@@ -290,6 +365,20 @@ export interface CompanionCall {
   commandId: string;
   /** The envelope as the inbox read it. */
   envelope: Record<string, unknown>;
+}
+
+/**
+ * Sets how the calls to the stand-in companion end, by command id: each value is `{answer}`, `{reject}`, `{never}` or
+ * `{showErrorThenReject}`, as the stand-in reads them. It reads the file at each call, so no restart is needed; a call the
+ * modes do not name gets the answer of an empty companion. Only the `explorer-stand-in` launch has the stand-in.
+ */
+export function setStandInModes(
+  modes: Readonly<Record<string, unknown>>,
+): void {
+  writeFileSync(
+    variable('REMOTE_OSS_ACCEPTANCE_STAND_IN_MODE'),
+    JSON.stringify(modes),
+  );
 }
 
 /**
@@ -354,7 +443,11 @@ export function totpCode(moment = Date.now()): string {
 /** A place a secret search looks in: a client folder or file, a host folder (searched as root), or the host's log. */
 export type SecretPlace =
   | {client: string; accepted?: (file: string) => boolean}
-  | {host: string; excluded?: readonly string[]}
+  | {
+      host: string;
+      excluded?: readonly string[];
+      excludedFolders?: readonly string[];
+    }
   | {hostLog: true};
 
 /** One file a secret search found a value in: the place, and the file under it. Never the value. */
@@ -366,7 +459,8 @@ export interface SecretHit {
 /**
  * The files of `places` that hold any of `values`. A client place is read in Node, following no link; a host folder is
  * searched as root with `grep -rlF` (no hit is grep's status 1; another failure throws with grep's error), skipping
- * devices and pipes and the file names `excluded`; the host's log is both streams of `docker logs`.
+ * devices and pipes, the file names `excluded` and the folders named `excludedFolders`; the host's log is both
+ * streams of `docker logs`.
  */
 export function secretHits(
   values: readonly string[],
@@ -390,6 +484,7 @@ export function secretHits(
         '-D',
         'skip',
         ...(place.excluded ?? []).map(name => `--exclude=${name}`),
+        ...(place.excludedFolders ?? []).map(name => `--exclude-dir=${name}`),
         ...values.flatMap(value => ['-e', value]),
         '--',
         place.host,
@@ -654,7 +749,17 @@ export async function inWindow(
   }
   await waitUntil(
     () =>
-      `window ${name} to finish ${command} (events: ${JSON.stringify(windowEvents(name))})`,
+      `window ${name} to finish ${command} (${holdingText(
+        () =>
+          unfinishedCommands(
+            windowEvents(name),
+            linesOf<{id: string; command?: string}>(
+              agentFile(name, 'commands'),
+            ),
+            Date.now(),
+          ),
+        () => windowEvents(name).slice(-5),
+      )})`,
     () => concerning().some(each => each.event !== 'accepted'),
   );
   const failed = concerning().find(each => each.event === 'failed');
@@ -932,33 +1037,30 @@ export async function reloadingCommand(
 }
 
 /**
- * Restarts the launch's editor with `environment` added to its own (a `null` removes a variable) and reopens window `name` on what it showed, a
- * folder or a workspace file, remote or not: the editor opens the launch's own window, and this opens the target from
- * it. Resolves once window `name` has activated its agent again. Only a plain launch can: its harness answers, and a
+ * Asks the harness to restart the launch's editor with `environment` added to its own (a `null` removes a variable) and
+ * waits for its answer: the name of the launch's own window, which the restarted editor opens first. It needs no window of
+ * the old editor, so a row can ask after the editor was killed. Only a plain launch can: its harness answers, and a
  * launch of the runner fails here.
  */
-export async function relaunch(
-  name: string,
-  options: {environment: Readonly<Record<string, string | null>>},
-): Promise<void> {
+export async function relaunchEditor(
+  environment: Readonly<Record<string, string | null>>,
+  reason: string,
+): Promise<string> {
   const folder = process.env.REMOTE_OSS_ACCEPTANCE_RELAUNCH;
   if (folder === undefined || folder === '') {
     throw new Error('relaunch is for plain launches');
   }
-  const state = await windowState(name);
-  const target = state.workspaceFile ?? state.folders[0];
-  const before = countOf(name, 'activated');
   const requestId = `${String(Date.now())}-${String(process.pid)}`;
   const answerFile = path.join(folder, 'response.json');
   mkdirSync(folder, {recursive: true});
   rmSync(answerFile, {force: true});
   writeFileSync(
     path.join(folder, 'request.json'),
-    JSON.stringify({id: requestId, environment: options.environment}),
+    JSON.stringify({id: requestId, environment}),
   );
   let own = '';
   await waitFor(
-    `the harness to relaunch the editor for window ${name}`,
+    `the harness to relaunch the editor for ${reason}`,
     () => {
       if (!existsSync(answerFile)) {
         return false;
@@ -980,6 +1082,23 @@ export async function relaunch(
     },
     300_000,
   );
+  return own;
+}
+
+/**
+ * Restarts the launch's editor with `environment` added to its own (a `null` removes a variable) and reopens window `name` on what it showed, a
+ * folder or a workspace file, remote or not: the editor opens the launch's own window, and this opens the target from
+ * it. Resolves once window `name` has activated its agent again. Only a plain launch can: its harness answers, and a
+ * launch of the runner fails here.
+ */
+export async function relaunch(
+  name: string,
+  options: {environment: Readonly<Record<string, string | null>>},
+): Promise<void> {
+  const state = await windowState(name);
+  const target = state.workspaceFile ?? state.folders[0];
+  const before = countOf(name, 'activated');
+  const own = await relaunchEditor(options.environment, `window ${name}`);
   if (own !== name && target !== undefined) {
     await inWindow(own, 'acceptance.agent.openWindow', target);
   }
@@ -1007,15 +1126,42 @@ export async function reopenInContainer(
 /** How many lines of the Dev Containers log a connect that times out carries. */
 const CONNECT_LOG_LINES = 40;
 
-/** `message`, then a line break and the last {@link CONNECT_LOG_LINES} of `lines`; the message alone when there are none. */
+/** The line a Feature's install script ends with when it fails, as the build's output carries it. */
+const FEATURE_FAILED = /ERROR: Feature ".*" \(.*\) failed to install!/;
+
+/** How many lines before a Feature's failure line are kept with it. */
+const FEATURE_FAILURE_CONTEXT = 3;
+
+/**
+ * `message`, then a line break and the last {@link CONNECT_LOG_LINES} of `lines`; the message alone when there are none.
+ * A failed Feature install goes before that tail, with the lines that said why, when the tail does not hold all of
+ * them: the failure is older than the tail, or within its first lines so that the lines before it are not in it. The
+ * build's output is followed by more lines than the tail holds, and the failure is what a red needs.
+ */
 export function withLogTail(message: string, lines: readonly string[]): string {
   const tail = lines.slice(-CONNECT_LOG_LINES);
-  return tail.length === 0 ? message : `${message}\n${tail.join('\n')}`;
+  const tailStart = Math.max(lines.length - CONNECT_LOG_LINES, 0);
+  const failed = lines.findLastIndex(line => FEATURE_FAILED.test(line));
+  const contextStart = Math.max(failed - FEATURE_FAILURE_CONTEXT, 0);
+  const feature =
+    failed < 0 || contextStart >= tailStart
+      ? []
+      : lines.slice(contextStart, failed + 1);
+  if (tail.length === 0) {
+    return message;
+  }
+  return feature.length === 0
+    ? `${message}\n${tail.join('\n')}`
+    : `${message}\nthe Feature that failed to install:\n${feature.join('\n')}\nthe last ${String(CONNECT_LOG_LINES)} lines:\n${tail.join('\n')}`;
 }
+
+/** What the remote indicator reads while a window resolves its remote: core's text for the state before the connection is made. */
+export const RESOLVING_INDICATOR = 'Opening Remote...';
 
 /**
  * Resolves once window `name` is connected to its container: it reads its workspace folder through the container's file
- * system. When the wait times out, its error also carries the last lines of the Dev Containers log written since the wait
+ * system, and its remote indicator has left the resolving state, which it does after the folder is readable. When the
+ * wait times out, its error also carries the last lines of the Dev Containers log written since the wait
  * began, so that a hang shows the step it stopped at.
  */
 export async function connectedToContainer(
@@ -1029,7 +1175,14 @@ export async function connectedToContainer(
       async () => {
         try {
           await inWindow(name, 'acceptance.agent.statFolder');
-          return (await windowState(name)).remoteName === 'dev-container';
+          if ((await windowState(name)).remoteName !== 'dev-container') {
+            return false;
+          }
+          // The renderer module imports this one, so it is loaded when it is needed.
+          const {statusBarText} = await import('./renderer.ts');
+          // An item that is not drawn yet reads as an empty text, which is no connection either.
+          const indicator = await statusBarText(name, 'status.host');
+          return indicator !== '' && indicator !== RESOLVING_INDICATOR;
         } catch {
           return false;
         }
@@ -1129,7 +1282,7 @@ export async function devContainersOf(folder: string): Promise<string[]> {
     '--all',
     '--quiet',
     '--filter',
-    `label=devcontainer.local_folder=${folder}`,
+    `label=devcontainer.local_folder=${editorFolderOf(folder)}`,
     '--filter',
     `label=remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
   ]);
@@ -1152,6 +1305,7 @@ export const GLIBC_IMAGE =
 export interface EditorProduct {
   applicationName: string;
   commit: string;
+  dataFolderName: string;
   nameLong: string;
   quality: string;
   serverApplicationName: string;
@@ -1238,6 +1392,15 @@ function processIsGone(processId: number): boolean {
   }
 }
 
+/** The process and process group of the harness itself, which no kill may reach (tooling-67). */
+function harnessProcess(): {processId: number; group: number} {
+  return {
+    processId: process.pid,
+    group: processStatOf(process.pid, readFileSync('/proc/self/stat', 'utf8'))
+      .group,
+  };
+}
+
 /**
  * Kills window `name`'s processes at once (SIGKILL): its process group, its main process, or its whole
  * tree. The main process is the editor process the run started: the run is this test's own parent, so the
@@ -1252,11 +1415,7 @@ export async function killWindow(
 ): Promise<void> {
   const processId = windowProcessId(name);
   const tree = processTreeOf('/proc');
-  const own = {
-    processId: process.pid,
-    group: processStatOf(process.pid, readFileSync('/proc/self/stat', 'utf8'))
-      .group,
-  };
+  const own = harnessProcess();
   function refuse(
     target:
       | {kind: 'group'; group: number}
@@ -1302,17 +1461,63 @@ export async function killWindow(
   }
 }
 
+/** How long a closed window's page may stay in the editor's list after the window deactivated. */
+const PAGE_LEFT_MILLISECONDS = 30_000;
+
+/** The pages the editor lists now; none when the launch has no debugging port to read or it cannot be read. */
+async function pagesListedNow(): Promise<DebugTarget[] | undefined> {
+  try {
+    return await listedPages(variable('HARNESS_USER_DATA'));
+  } catch {
+    return undefined;
+  }
+}
+
+/** The ids of the pages that the last `leftoverPagesNote` told, so that a page that stays is told once and not at every teardown. */
+let toldLeftoverPages = '';
+
 /**
- * Closes window `name` and resolves once it's gone: its agent reports `deactivated`, or the extension host it recorded
- * has exited. Some closes never get the event (8 of 576 in a full containers launch, 2026-11-01): the extension host
- * ends before its agent writes it. A window whose extension host still runs after the wait fails, naming it.
+ * What the editor lists that no open window remembers, told when it differs from what was told last: the pages that a
+ * window left behind after its close or its row's failure stay in the list for the rest of the launch, and every later
+ * row has more pages to tell apart (#2936). Nothing when none is listed, when the list cannot be read, or when these were
+ * told already.
  */
-export async function closeWindow(
+export async function leftoverPagesNote(): Promise<string | undefined> {
+  const listed = await pagesListedNow();
+  if (listed === undefined) {
+    return undefined;
+  }
+  const next = leftoverNote(
+    listed,
+    REMEMBERED_PAGES,
+    isOpen,
+    toldLeftoverPages,
+  );
+  toldLeftoverPages = next.told;
+  return next.note;
+}
+
+/** How many times a close is sent while the window stays listed and open: the close, and one more. */
+const CLOSE_ATTEMPTS = 2;
+
+/** How long the close that is sent once more waits for the window to end. */
+const SECOND_CLOSE_MILLISECONDS = 30_000;
+
+/**
+ * One close of window `name`: the command, the wait for its agent's `deactivated` or its extension host's end, and the
+ * wait for the page it was last found by to leave the editor's list. A window whose extension host still runs after the
+ * wait fails, naming it.
+ */
+async function closeOnce(
   name: string,
-  milliseconds = WAIT_MILLISECONDS,
-): Promise<void> {
+  milliseconds: number,
+): Promise<CloseAttempt> {
   const before = countOf(name, 'deactivated');
   const extensionHost = liveProcessIdOf(name);
+  // The page the window was last found by: it must leave the list, whatever other windows do meanwhile.
+  const ownPage = REMEMBERED_PAGES.get(name);
+  const listedBefore =
+    ownPage === undefined ? undefined : await pagesListedNow();
   const commandId = send(name, 'workbench.action.closeWindow', []);
   try {
     await waitUntil(
@@ -1323,9 +1528,190 @@ export async function closeWindow(
         (extensionHost !== undefined && processIsGone(extensionHost)),
       milliseconds,
     );
+  } catch (caught) {
+    throw new Error(
+      `${caught instanceof Error ? caught.message : String(caught)}; ${closeStateOf(name, commandId)}`,
+      {cause: caught},
+    );
   } finally {
     withdrawUnaccepted(name, commandId);
   }
+  if (
+    ownPage === undefined ||
+    listedBefore?.some(page => page.id === ownPage) !== true
+  ) {
+    return {state: 'left'};
+  }
+  const waited = await waitUntilPageLeft(
+    name,
+    ownPage,
+    pagesListedNow,
+    PAGE_LEFT_MILLISECONDS,
+    pause => new Promise(resolve => setTimeout(resolve, pause)),
+  );
+  // A page that lingers is told by name, with the pages the editor listed at the close and after the wait and who
+  // remembers each, and the close goes on: it is not something a close, or the hook that runs it, can end, and a launch
+  // must not fail for it. The lists say whether the window's page stayed or the id was another window's (card #2909).
+  if (waited.state === 'stayed') {
+    process.stderr.write(
+      `closing window ${name}: ${waited.note}; the pages at the close: ${pagesDescription(listedBefore, REMEMBERED_PAGES, isOpen)}; after the wait: ${pagesDescription(waited.listed, REMEMBERED_PAGES, isOpen)}\n`,
+    );
+  }
+  return waited;
+}
+
+/**
+ * Closes window `name` and resolves once it's gone: its agent reports `deactivated`, or the extension host it recorded
+ * has exited, and the page it was last found by has left the editor's list, so that the next row does not find it beside
+ * its own. Some closes never get the event (8 of 576 in a full containers launch, 2026-11-01): the extension host ends
+ * before its agent writes it. A close that met the window's own reload (a window that reopens as the local folder
+ * deactivates and comes back on the same page) leaves the window open, and the deactivation withdraws the close: while the
+ * page stays and the window is open again, the close is sent once more. A page that still stays is told on stderr and the
+ * close ends; a window whose extension host still runs after the wait fails, naming it.
+ */
+export async function closeWindow(
+  name: string,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<void> {
+  let first = true;
+  const closed = await closeUntilGone(
+    async () => {
+      if (first) {
+        first = false;
+        return closeOnce(name, milliseconds);
+      }
+      process.stderr.write(
+        `closing window ${name}: its page stayed listed and the window is open again, so the close is sent once more\n`,
+      );
+      // The second close is the one that repairs a window the first left open: its own failure is told and does not fail
+      // a hook that could not have done more.
+      return closeOnce(
+        name,
+        Math.min(milliseconds, SECOND_CLOSE_MILLISECONDS),
+      ).catch((caught: unknown): CloseAttempt => ({
+        state: 'stayed',
+        note: `the close sent once more did not end the window: ${caught instanceof Error ? caught.message : String(caught)}`,
+        listed: [],
+      }));
+    },
+    () => isOpen(name),
+    CLOSE_ATTEMPTS,
+  );
+  if (closed.tried > 1 && closed.last.state === 'left') {
+    process.stderr.write(
+      `closing window ${name}: the page left after the close was sent ${String(closed.tried)} times\n`,
+    );
+  }
+}
+
+/**
+ * What a window that did not close shows of itself, for the failure to name (#2482): whether its agent accepted the
+ * close, the commands it accepted that have not ended, the last of its events, and each process that recorded itself
+ * as the window's with its state and parent. A host that outlives the close may be a stale one of an earlier start of
+ * the window, or the current one that never got the command; these tell the two apart.
+ */
+function closeStateOf(name: string, commandId: string): string {
+  try {
+    const now = Date.now();
+    const events = windowEvents(name);
+    const commands = linesOf<{id: string; command?: string}>(
+      agentFile(name, 'commands'),
+    );
+    function nameOf(commandIdentifier: string | undefined): string {
+      return (
+        commands.find(each => each.id === commandIdentifier)?.command ??
+        'a command'
+      );
+    }
+    const running = unfinishedCommands(events, commands, now);
+    const last = events
+      .slice(-5)
+      .map(
+        each =>
+          `${each.event}${each.id === undefined ? '' : ` ${nameOf(each.id)}`} ${String(Math.round((now - each.time) / 1000))} s ago`,
+      );
+    const pids = variable('REMOTE_OSS_ACCEPTANCE_WINDOWS');
+    const processes = readdirSync(pids)
+      .filter(file => readFileSync(path.join(pids, file), 'utf8') === name)
+      .map(file => {
+        const status = (() => {
+          try {
+            return readFileSync(`/proc/${file}/status`, 'utf8');
+          } catch {
+            return '';
+          }
+        })();
+        const state = /^State:\s*(.*)$/mu.exec(status)?.[1];
+        const parent = /^PPid:\s*(\d+)$/mu.exec(status)?.[1];
+        return state === undefined
+          ? `${file} gone`
+          : `${file} ${state} parent ${parent ?? 'unknown'}`;
+      });
+    return `the close was ${events.some(each => each.id === commandId && each.event === 'accepted') ? 'accepted' : 'not accepted'} by the window's agent; running commands: ${JSON.stringify(running)}; its last events: ${JSON.stringify(last)}; its recorded processes: ${JSON.stringify(processes)}`;
+  } catch (caught) {
+    return `the window's state could not be read: ${String(caught)}`;
+  }
+}
+
+/** How `closeContained` ended: the first close worked, a dismissed dialog and a second close did, or the host was ended. */
+export type ContainedClose = 'closed' | 'dismissed' | 'killed';
+
+/**
+ * Closes window `name` so that one that will not close cannot fail the rows after it. A close that times out is tried
+ * again after `dismiss` (Escape on a dialog the window shows); a second timeout ends the window's extension host, which
+ * is recorded as its deactivation, and a line on stderr names the window and why. Nothing here throws for a window that
+ * stays open; a window that is not open is left alone.
+ */
+export async function closeContained(
+  name: string,
+  dismiss: (window: string) => Promise<void>,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<ContainedClose> {
+  try {
+    await closeWindow(name, milliseconds);
+    return 'closed';
+  } catch (first) {
+    process.stderr.write(
+      `closing window ${name} failed (${String(first)}); dismissing its dialog and closing it again\n`,
+    );
+  }
+  await dismiss(name).catch(() => undefined);
+  try {
+    await closeWindow(name, milliseconds);
+    return 'dismissed';
+  } catch (second) {
+    process.stderr.write(
+      `closing window ${name} failed again (${String(second)}); ending its extension host\n`,
+    );
+  }
+  const host = liveProcessIdOf(name);
+  if (host !== undefined) {
+    // The same refusal as killWindow's: a host that is the harness itself or an ancestor of it is never killed.
+    const refused = refusedTargets(processTreeOf('/proc'), harnessProcess(), {
+      kind: 'processes',
+      processIds: [host],
+    });
+    if (refused.length > 0) {
+      throw new Error(`closeContained(${name}) refused: ${refused.join('; ')}`);
+    }
+    try {
+      process.kill(host, 'SIGKILL');
+    } catch {
+      // The host ended between the look and the signal, which is what is wanted.
+    }
+    await waitUntil(
+      () => `the extension host ${String(host)} of window ${name} to end`,
+      () => processIsGone(host),
+      WAIT_MILLISECONDS,
+    ).catch(() => undefined);
+  }
+  if (isOpen(name)) {
+    appendFileSync(
+      agentFile(name, 'events'),
+      `${JSON.stringify({event: 'deactivated', time: Date.now()})}\n`,
+    );
+  }
+  return 'killed';
 }
 
 /**
@@ -1343,6 +1729,11 @@ function withdrawUnaccepted(name: string, commandId: string): void {
       `${JSON.stringify({id: commandId, withdrawn: true})}\n`,
     );
   }
+}
+
+/** Moves window `name`'s focus to its editor group, away from an open quick input, as a click elsewhere in the window does. */
+export async function moveFocusAway(name: string): Promise<void> {
+  await inWindow(name, 'workbench.action.focusActiveEditorGroup');
 }
 
 /** The process id of window `name`'s live extension host, or undefined when it has none. */
@@ -1370,6 +1761,72 @@ async function reported(
   return windowEvents(name)
     .filter(each => each.event === event)
     .at(-1);
+}
+
+/**
+ * Has window `name` open the link `text`, as a link a user clicks does, `{scheme}` standing for the editor's own scheme,
+ * and gives the link's whole text once it is handed to the editor, without waiting for the editor's own confirmation.
+ */
+export async function openLink(name: string, text: string): Promise<string> {
+  const before = countOf(name, 'linkOpened');
+  await startInWindow(name, 'acceptance.agent.openLink', text);
+  await waitUntil(
+    `window ${name} to open its link`,
+    () => countOf(name, 'linkOpened') > before,
+  );
+  return String(
+    windowEvents(name)
+      .filter(each => each.event === 'linkOpened')
+      .at(-1)?.value,
+  );
+}
+
+/**
+ * Runs the editor's own executable with `words` and the launch's user-data folder, so that the arguments reach the
+ * running instance as the `code` of a user's shell would hand them over (`--remote`, `-r`, `-n`, `--goto`,
+ * `--folder-uri`). Gives the exit status and what the command printed.
+ */
+export async function editorCommandLine(
+  ...words: string[]
+): Promise<{status: number | null; output: string}> {
+  const environment = {...process.env};
+  delete environment.ELECTRON_RUN_AS_NODE;
+  try {
+    const {stdout, stderr} = await execFileAsync(
+      variable('HARNESS_EDITOR_EXECUTABLE'),
+      [`--user-data-dir=${variable('HARNESS_USER_DATA')}`, ...words],
+      {env: environment, timeout: 60_000},
+    );
+    return {status: 0, output: `${stdout}${stderr}`};
+  } catch (caught) {
+    const failed = caught as {
+      code?: number | string;
+      stdout?: string;
+      stderr?: string;
+    };
+    return {
+      status: typeof failed.code === 'number' ? failed.code : null,
+      output: `${failed.stdout ?? ''}${failed.stderr ?? ''}`,
+    };
+  }
+}
+
+/** What a process spawned through the exec server of window `name`'s authority printed, and its exit code. */
+export async function execSpawnedIn(
+  name: string,
+  command: string,
+  argumentList: string[],
+  environment: Record<string, string>,
+): Promise<{text: string; exitCode: number | null}> {
+  const event = await reported(
+    name,
+    'execSpawned',
+    'acceptance.agent.execSpawn',
+    command,
+    argumentList,
+    environment,
+  );
+  return {text: event?.text ?? '', exitCode: event?.exitCode ?? null};
 }
 
 /** The value of the environment variable `variableName` in the extension host of window `name`, or null when it has none. */
@@ -1690,9 +2147,24 @@ export async function waitFor(
   milliseconds: number,
 ): Promise<void> {
   const deadline = Date.now() + milliseconds;
-  while (!(await check())) {
+  for (;;) {
+    let notYet = '';
+    try {
+      if (await runWithinWait(check)) {
+        return;
+      }
+    } catch (caught) {
+      // A check that throws an error carrying `notYet` says it cannot tell yet (a read that found a writer in the middle of
+      // its write): that is the check not holding, not the wait ending.
+      if ((caught as {notYet?: unknown} | null)?.notYet !== true) {
+        throw caught;
+      }
+      notYet = (caught as Error).message;
+    }
     if (Date.now() > deadline) {
-      throw new Error(`timed out waiting for ${description}`);
+      throw new Error(
+        `timed out waiting for ${description}${notYet === '' ? '' : ` (the last check could not tell: ${notYet})`}`,
+      );
     }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
@@ -1714,8 +2186,17 @@ export function readUserSettings(): string | undefined {
   return existsSync(file) ? readFileSync(file, 'utf8') : undefined;
 }
 
+/** The user settings keys a row has written or restored over, which a settle waits on the window to read as the file holds them now. */
+const touchedKeys = new Set<string>();
+
 /** Puts the launch's user settings file back to the bytes `readUserSettings` gave, or removes it when it had none. */
 export function restoreUserSettings(bytes: string | undefined): void {
+  const before = readUserSettings();
+  if (before !== undefined) {
+    for (const key of Object.keys(JSON.parse(before) as object)) {
+      touchedKeys.add(key);
+    }
+  }
   if (bytes === undefined) {
     rmSync(userSettingsFile(), {force: true});
   } else {
@@ -1723,16 +2204,208 @@ export function restoreUserSettings(bytes: string | undefined): void {
   }
 }
 
-/** Rewrites the launch's user settings with `change` applied to them, which the editor picks up; then waits 1 s. */
+/** How a write of {@link userSettings} is confirmed: `window` (the default) waits until the local window reads each key as written; `file` is for a key shown to be unreadable there, and its comment says why: it shows only that a value is there, so it is for adding or removing a key, never for changing one that is already set. */
+export interface UserSettingsOptions {
+  readBack?: 'window' | 'file';
+}
+
+/**
+ * The window whose agent answers for the user's settings, which every window reads from the same file: `local` while
+ * it is open, and otherwise the first open window with no remote (the launch's reloaded local window has another name,
+ * and the old one's agent no longer answers), or any open window.
+ */
+function settingsWindow(): string {
+  if (isOpen('local')) {
+    return 'local';
+  }
+  const open = windowNames().filter(isOpen);
+  const withoutRemote = open.find(
+    name =>
+      windowEvents(name)
+        .filter(each => each.event === 'state')
+        .at(-1)?.remoteAuthority === null,
+  );
+  return withoutRemote ?? open[0] ?? 'local';
+}
+
+/** A value as text with the keys of its objects in order, so that two values compare as their JSON does whatever order they were written in. */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(',')}]`;
+  }
+  if (typeof value === 'object' && value !== null) {
+    return `{${Object.entries(value)
+      .sort(([first], [second]) => (first < second ? -1 : 1))
+      .map(([key, each]) => `${JSON.stringify(key)}:${canonicalJson(each)}`)
+      .join(',')}}`;
+  }
+  return value === undefined ? 'undefined' : JSON.stringify(value);
+}
+
+/**
+ * Waits, up to 30 s, until the local window reads the user setting `key` as written. With `window` (the default) that
+ * is its own value (as none for `undefined`), in canonical JSON; with `file`, for a key shown to be unreadable that way,
+ * only that the user's settings hold a value for it (or none for `undefined`) as the window reads them. The failure
+ * names the key, the value written and, for `window`, the value read.
+ */
+async function readBackOfSetting(
+  key: string,
+  value: unknown,
+  readBack: 'window' | 'file',
+): Promise<void> {
+  let read: unknown;
+  try {
+    await waitFor(
+      `the local window to read ${key} as ${canonicalJson(value)}${readBack === 'file' ? ' (in the user settings)' : ''}`,
+      async () => {
+        if (value === undefined || readBack === 'file') {
+          return (
+            (await userScopeHolds(settingsWindow(), key)) ===
+            (value !== undefined)
+          );
+        }
+        // The user's own value, not `get`'s: for an object setting with defaults the merged value never equals what was written.
+        read = await userValueIn(settingsWindow(), key);
+        return canonicalJson(read) === canonicalJson(value);
+      },
+      30_000,
+    );
+  } catch (caught) {
+    const facts =
+      readBack === 'window'
+        ? `; facts: ${await readBackFacts(key, value).catch((failed: unknown) => `not gathered: ${String(failed)}`)}`
+        : '';
+    throw new Error(
+      `${caught instanceof Error ? caught.message : 'the wait failed'}; the value written: ${canonicalJson(value)}${readBack === 'file' ? '' : `; the value read: ${canonicalJson(read)}`}${facts}`,
+      {cause: caught},
+    );
+  }
+}
+
+/** What `read` gives within `milliseconds`, or a text saying it gave nothing: a window that does not answer must not hold up the facts of a failure. */
+async function answeredWithin(
+  read: Promise<unknown>,
+  milliseconds: number,
+): Promise<unknown> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<string>(resolve => {
+    timer = setTimeout(() => {
+      resolve(`no answer in ${String(milliseconds)} ms`);
+    }, milliseconds);
+  });
+  try {
+    return await Promise.race([
+      read.catch((failed: unknown) => `failed: ${String(failed)}`),
+      late,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * What tells the readings of a timed-out read-back apart: the window that answered, what each open window reads as the
+ * user's value of `key` (a window other than the answering one that reads `value` means the choice of window), the
+ * settings file's own text, and whether the answering window reads `value` once the file is rewritten with the same
+ * bytes, and when (a window that then reads it had missed the file's change). The facts are gathered after the 30 s,
+ * bounded, so the failure comes at most about 40 s later.
+ */
+async function readBackFacts(key: string, value: unknown): Promise<string> {
+  const file = userSettingsFile();
+  const text = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
+  const answering = settingsWindow();
+  const windows: Record<string, unknown> = {};
+  for (const name of windowNames().filter(isOpen)) {
+    const state = windowEvents(name)
+      .filter(each => each.event === 'state')
+      .at(-1);
+    windows[name] = {
+      remoteAuthority: state?.remoteAuthority ?? null,
+      userValue: await answeredWithin(userValueIn(name, key), 5000),
+    };
+  }
+  let rewriteReadAfterMilliseconds: number | string = 'not within 10 s';
+  if (text !== undefined) {
+    writeFileSync(file, text);
+    const began = Date.now();
+    try {
+      await waitFor(
+        `${answering} to read ${key} after the file was rewritten`,
+        async () =>
+          canonicalJson(await userValueIn(answering, key)) ===
+          canonicalJson(value),
+        10_000,
+      );
+      rewriteReadAfterMilliseconds = Date.now() - began;
+    } catch {
+      // The text above says it did not read it.
+    }
+  }
+  return JSON.stringify({
+    answering,
+    windows,
+    file: text,
+    rewriteReadAfterMilliseconds,
+  });
+}
+
+/**
+ * Waits, up to 30 s a key, until the local window reads as its user value, for each key a row has written or restored
+ * over, what the file holds now (none for a key it lacks): the wait that follows a `restoreUserSettings`, whose rewrite
+ * the editor picks up later than the next command may run.
+ */
+async function settledOnFile(): Promise<void> {
+  const file = userSettingsFile();
+  const held = existsSync(file)
+    ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)
+    : {};
+  for (const key of touchedKeys) {
+    await readBackOfSetting(key, held[key], 'window');
+  }
+}
+
+/**
+ * Rewrites the launch's user settings with `change` applied to them, and waits until the local window reads each changed
+ * key back as written (30 s a key, 100 ms apart), instead of a sleep the editor may outlast on a loaded machine. A call
+ * made before the local window's agent has activated waits for it first, as a command to the window does. An empty
+ * `change` waits until the window reads the file as it is now, which is what a row that restored the settings needs.
+ */
 export async function userSettings(
   change: Readonly<Record<string, unknown>>,
+  options: UserSettingsOptions = {},
 ): Promise<void> {
   const file = userSettingsFile();
   const current = existsSync(file)
     ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)
     : {};
+  if (options.readBack === 'file') {
+    for (const [key, value] of Object.entries(change)) {
+      // Presence says nothing of a change from one value to another: the old one already holds.
+      if (
+        value !== undefined &&
+        key in current &&
+        canonicalJson(current[key]) !== canonicalJson(value)
+      ) {
+        throw new Error(
+          `userSettings with readBack 'file' cannot show that ${key} changed from ${canonicalJson(current[key])} to ${canonicalJson(value)}: it shows only that a value is there, so use the default read-back`,
+        );
+      }
+    }
+  }
   writeFileSync(file, JSON.stringify({...current, ...change}, null, 2));
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  for (const key of Object.keys(change)) {
+    touchedKeys.add(key);
+  }
+  await waitUntil('window local to activate its agent', () =>
+    windowEvents('local').some(each => each.event === 'activated'),
+  );
+  if (Object.keys(change).length === 0) {
+    await settledOnFile();
+    return;
+  }
+  for (const [key, value] of Object.entries(change)) {
+    await readBackOfSetting(key, value, options.readBack ?? 'window');
+  }
 }
 
 /** What window `name` found of its terminals when asked for the active one's buffer. */
@@ -1789,6 +2462,17 @@ export async function settingIn(
   )?.value;
 }
 
+/** The whole `inspect` of the setting `settingId` in window `name`: the value of every scope the window knows, null when it reports none. */
+export async function inspectedIn(
+  name: string,
+  settingId: string,
+): Promise<unknown> {
+  return (
+    (await reported(name, 'setting', 'acceptance.agent.setting', settingId))
+      ?.inspected ?? null
+  );
+}
+
 /** Whether the user's settings, as window `name` reads them, hold a value for the setting `settingId`; a key holding `null` reads as none, so the settings file is what tells it from a removed key. */
 export async function userScopeHolds(
   name: string,
@@ -1797,6 +2481,14 @@ export async function userScopeHolds(
   return (
     (await reported(name, 'setting', 'acceptance.agent.setting', settingId))
       ?.inUserScope === true
+  );
+}
+
+/** The value the user's settings hold for the setting `settingId`, as window `name` reads it: the user's own, not merged with the setting's default; null for none. */
+async function userValueIn(name: string, settingId: string): Promise<unknown> {
+  return (
+    (await reported(name, 'setting', 'acceptance.agent.setting', settingId))
+      ?.userValue ?? null
   );
 }
 
@@ -1810,24 +2502,38 @@ export async function writeUserSetting(
   window: string,
   milliseconds: number,
 ): Promise<void> {
-  if (value === undefined) {
-    await inWindow('local', 'acceptance.agent.removeSetting', settingId);
+  try {
+    if (value === undefined) {
+      await inWindow('local', 'acceptance.agent.removeSetting', settingId);
+      await waitFor(
+        `${window} to read ${settingId} removed`,
+        async () => !(await userScopeHolds(window, settingId)),
+        milliseconds,
+      );
+      return;
+    }
+    await inWindow('local', 'acceptance.agent.updateSetting', settingId, value);
     await waitFor(
-      `${window} to read ${settingId} removed`,
-      async () => !(await userScopeHolds(window, settingId)),
+      `${window} to read ${settingId} as ${JSON.stringify(value)}`,
+      async () =>
+        JSON.stringify(await settingIn(window, settingId)) ===
+          JSON.stringify(value) &&
+        (value === null || (await userScopeHolds(window, settingId))),
       milliseconds,
     );
-    return;
+  } catch (caught) {
+    // What the window reads and what the file holds when the wait ends tell a late read from a write that did not land.
+    const read = JSON.stringify(
+      await settingIn(window, settingId).catch(() => 'unreadable'),
+    );
+    const inUserScope = await userScopeHolds(window, settingId).catch(
+      () => 'unreadable',
+    );
+    throw new Error(
+      `${caught instanceof Error ? caught.message : String(caught)}; the window reads ${read}, in the user scope: ${String(inUserScope)}; the user settings file holds ${JSON.stringify(readUserSettings())}`,
+      {cause: caught},
+    );
   }
-  await inWindow('local', 'acceptance.agent.updateSetting', settingId, value);
-  await waitFor(
-    `${window} to read ${settingId} as ${JSON.stringify(value)}`,
-    async () =>
-      JSON.stringify(await settingIn(window, settingId)) ===
-        JSON.stringify(value) &&
-      (value === null || (await userScopeHolds(window, settingId))),
-    milliseconds,
-  );
 }
 
 /** The default window `name` has for the setting `settingId`, the one its Settings editor shows, or null for none. */
@@ -1909,13 +2615,75 @@ export async function connectedWithin(
       milliseconds,
     );
   } catch (caught) {
-    throw new Error(`${String(caught)}\n${await connectState()}`, {
-      cause: caught,
-    });
+    throw await explainedFailure(
+      caught,
+      async () => `${await connectState()}\n${ownConnectOf(name)}`,
+    );
   }
 }
 
-/** What the host and this machine hold when a window did not connect: the host's listeners and server processes, the last lines of its sshd's log, and this machine's listeners. */
+/** The newest Remote - SSH log below the extension host folder `folder`: a reload of the window starts a new one. */
+function newestSshLog(folder: string): string[] {
+  const logs = readdirSync(folder, {recursive: true, encoding: 'utf8'})
+    .filter(file => file.endsWith('-Remote - SSH.log'))
+    .map(file => path.join(folder, file))
+    .sort((left, right) => statSync(left).mtimeMs - statSync(right).mtimeMs);
+  const newest = logs.at(-1);
+  return newest === undefined
+    ? []
+    : readFileSync(newest, 'utf8')
+        .split('\n')
+        .filter(line => line !== '');
+}
+
+/** When window `name`'s agent activated and deactivated: an extension host that started again shows as a second activation. */
+export function agentLife(name: string): Array<{event: string; time: number}> {
+  return windowEvents(name)
+    .filter(each => each.event === 'activated' || each.event === 'deactivated')
+    .map(each => ({event: each.event, time: each.time}));
+}
+
+/** The lines of window `name`'s own renderer log, in the window's folder of the editor's logs, which its agent's log folder names. */
+export function rendererLines(name: string): string[] {
+  const logFolder = windowEvents(name)
+    .filter(each => each.event === 'activated')
+    .at(-1)?.logFolder;
+  const folder =
+    logFolder === undefined ? undefined : windowFolderOf(logFolder);
+  if (folder === undefined) {
+    throw new Error(
+      `the agent of ${name} gave no window folder of the editor's logs: ${String(logFolder)}`,
+    );
+  }
+  return readFileSync(path.join(folder, 'renderer.log'), 'utf8').split('\n');
+}
+
+/**
+ * What window `name` left of its own connect, which the launch's connection log mixes with the other windows' lines:
+ * the questions and the progress it recorded, with their times, and the last lines of its own Remote - SSH log.
+ */
+function ownConnectOf(name: string): string {
+  const recorded = section(`what ${name} recorded`, () =>
+    recordLines(undefined, name)
+      .slice(-20)
+      .map(
+        line =>
+          `[${new Date(line.time).toISOString().slice(11, 23)}] ${line.surface}: ${line.question} (${line.answer})`,
+      )
+      .join('\n'),
+  );
+  const sshLog = section(`the last lines of ${name}'s Remote - SSH log`, () => {
+    const logFolder = windowEvents(name)
+      .filter(each => each.event === 'activated')
+      .at(-1)?.logFolder;
+    return logFolder === undefined
+      ? '(no log folder: the window did not activate its agent)'
+      : newestSshLog(path.dirname(logFolder)).slice(-40).join('\n');
+  });
+  return `${recorded}\n${sshLog}`;
+}
+
+/** What the host and this machine hold when a window did not connect: the host's listeners and server processes, the last lines of its sshd's log, this machine's listeners, and the last lines of the launch's connection log with the time of each. */
 async function connectState(): Promise<string> {
   function read(
     what: Promise<{stdout: string; stderr: string}>,
@@ -1945,7 +2713,8 @@ async function connectState(): Promise<string> {
     ),
     read(execFileAsync('ss', ['-ltnp'])),
   ]);
-  return `the host's listeners and processes:\n${listening}\nthe last lines of the host's sshd log:\n${sshdLog}\nthis machine's listeners:\n${here}`;
+  const connect = connectionLog({withTimes: true}).slice(-40).join('\n');
+  return `the host's listeners and processes:\n${listening}\nthe last lines of the host's sshd log:\n${sshdLog}\nthis machine's listeners:\n${here}\nthe last lines of the launch's connection log:\n${connect}`;
 }
 
 /** Waits until no connection helper of the run runs, for up to `milliseconds`. */

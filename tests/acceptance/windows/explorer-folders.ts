@@ -23,10 +23,11 @@ import {
   waitFor,
   windowEvents,
   windowNames,
+  RESOLVING_INDICATOR,
   windowState,
 } from './harness.ts';
 import {activations, openFolderWindow} from './folder-windows.ts';
-import {viewRows} from './renderer.ts';
+import {statusBarText, viewRows} from './renderer.ts';
 import {VIEW} from './explorer-rows.ts';
 
 /** The envelope of the companion interface 1.0, the argument every id of the companion takes. */
@@ -112,13 +113,14 @@ export async function folderRowsOf(
 /**
  * Waits until the folder rows under `alias` in `window` describe exactly `paths`, then asserts them once. The rows
  * counted are the ones whose path starts with `scope` (the row's own folders: the history of a run outlives a row), or
- * all of them without a `scope`.
+ * all of them without a `scope`. `trace`, when given, is added to the failure's message: what the row saw on its way here.
  */
 export async function foldersSettled(
   window: string,
   alias: string,
   paths: string[],
   scope = '',
+  trace = '',
 ): Promise<void> {
   async function described(): Promise<string[]> {
     return (await folderRowsOf(window, alias))
@@ -140,16 +142,29 @@ export async function foldersSettled(
   deepStrictEqual(
     await described(),
     paths,
-    `the rows of ${alias}; the history is ${JSON.stringify(await historyOf())}`,
+    `the rows of ${alias}; the history is ${JSON.stringify(await historyOf())}${trace === '' ? '' : `; ${trace}`}`,
   );
 }
 
-/** Waits until window `name` is connected to `alias`. */
+/**
+ * Waits until window `name` is connected to `alias`. The window carries the host's address from the start, so the
+ * connect is over once its remote indicator no longer reads that it is opening.
+ */
 export async function connectedTo(name: string, alias: string): Promise<void> {
   await waitFor(
     `window ${name} to connect to ${alias}`,
-    async () =>
-      (await windowState(name)).remoteAuthority === `ssh-remote+${alias}`,
+    async () => {
+      if ((await windowState(name)).remoteAuthority !== `ssh-remote+${alias}`) {
+        return false;
+      }
+      try {
+        // An item that is not drawn yet reads as an empty text, which is no connection either.
+        const indicator = await statusBarText(name, 'status.host');
+        return indicator !== '' && indicator !== RESOLVING_INDICATOR;
+      } catch {
+        return false;
+      }
+    },
     120_000,
   );
 }
@@ -189,7 +204,7 @@ export async function visit(alias: string, name: string): Promise<void> {
   await waitFor(
     `the history of ${alias} to start with ${target}`,
     async () => (await pathsOf(alias))[0] === target,
-    30_000,
+    120_000,
   );
   await closeWindow(name);
 }

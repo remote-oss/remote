@@ -6,8 +6,11 @@ import {promisify} from 'node:util';
 import {
   closeWindow,
   connectedToContainer,
+  containersLog,
+  containersLogSince,
   devContainerFolder,
   devContainersOf,
+  environmentOf,
   inWindow,
   reloadWindow,
   relaunch,
@@ -15,11 +18,13 @@ import {
   terminalBuffer,
   variable,
   waitFor,
+  windowEvents,
 } from '../windows/harness.ts';
 import {
   dialogOf,
   notifications,
   terminalText,
+  toastsOnceSettled,
   typeInTerminal,
 } from '../windows/renderer.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
@@ -179,12 +184,48 @@ async function printed(
   return values;
 }
 
+/**
+ * What `read` gives, or the text of its failure, within `milliseconds`: a read made to explain a mismatch must not
+ * replace the mismatch with its own error, nor hold it back for ever.
+ */
+async function attempt<Value>(
+  read: () => Promise<Value>,
+  milliseconds = 10_000,
+): Promise<Value | string> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      read(),
+      new Promise<string>(resolve => {
+        timer = setTimeout(
+          resolve,
+          milliseconds,
+          `no answer within ${String(milliseconds)} ms`,
+        );
+      }),
+    ]);
+  } catch (caught) {
+    return `failed: ${String(caught)}`;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Runs the task `probe` of window `name` and gives the text it printed after `task:`. */
 async function taskOutput(name: string): Promise<string> {
   void inWindow(name, 'workbench.action.tasks.runTask', 'probe').catch(
     () => undefined,
   );
   return resultAfter(name, 'task');
+}
+
+/** The lines of a reconnect that say which path it took: the container's state, the blocking run, the timing and remoteEnv. */
+function reconnectPath(lines: readonly string[]): string[] {
+  return lines.filter(line =>
+    /already running|newly started|blocking run|Resolving Remote|Starting container|remoteEnv/.test(
+      line,
+    ),
+  );
 }
 
 describe('F-0416 the remote environment (card containers-42, group B)', function () {
@@ -299,19 +340,29 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       const containerId = await containerOf(folder);
       const names = ['MY_CONTAINER_VAR2', 'MY_REMOTE_VAR3'];
       const before = await printed(name, 'before', names);
+      const mark = containersLog().length;
       await relaunch(name, {environment: {F0416_LOCAL_VAR: 'changed-local'}});
       await connectedToContainer(name);
       const after = await printed(name, 'after', names);
       const plain = await execEnvOf(containerId, 'MY_CONTAINER_VAR2');
-      deepStrictEqual(
-        [before, after, plain, await devContainersOf(folder)],
-        [
-          ['hello-local', 'hello-local'],
-          ['hello-local', 'changed-local'],
-          'hello-local',
-          [containerId],
-        ],
-      );
+      const seen = [before, after, plain, await devContainersOf(folder)];
+      const expected = [
+        ['hello-local', 'hello-local'],
+        ['hello-local', 'changed-local'],
+        'hello-local',
+        [containerId],
+      ];
+      if (JSON.stringify(seen) !== JSON.stringify(expected)) {
+        const hostValues = [
+          await attempt(() => environmentOf(name, 'MY_CONTAINER_VAR2')),
+          await attempt(() => environmentOf(name, 'MY_REMOTE_VAR3')),
+        ];
+        const again = await attempt(() => printed(name, 'again', names));
+        console.log(
+          `x17 mismatch, the second reconnect's path:\n${reconnectPath(containersLogSince(mark)).join('\n')}\nthe whole log since the second relaunch:\n${containersLogSince(mark).join('\n')}\nthe window's last events: ${JSON.stringify(windowEvents(name).slice(-8))}\nthe remote extension host's values of the two variables: ${JSON.stringify(hostValues)}\na new terminal's values of them: ${JSON.stringify(again)}`,
+        );
+      }
+      deepStrictEqual(seen, expected);
       await closeWindow(name);
     } finally {
       // The rows after this one expect the variable unset in the editor.
@@ -642,8 +693,13 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       await typeInTerminal(name, `printf 'term:%s\\n' "\${NULL_VAR-unset}"\n`);
       const terminal = await resultAfter(name, 'term');
       const plain = await execEnvOf(containerId, 'NULL_VAR');
+      const shown = await terminalBuffer(name);
       await closeWindow(name);
-      deepStrictEqual([task, terminal, plain], ['unset', 'unset', 'x']);
+      deepStrictEqual(
+        [task, terminal, plain],
+        ['unset', 'unset', 'x'],
+        `the terminal of ${name} shows: ${JSON.stringify(shown)}`,
+      );
     } finally {
       await cleanUp(folder);
     }
@@ -661,7 +717,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       const name = await reopened(folder);
       const atConnect = {
         dialog: await dialogOf(name),
-        notices: await notifications(name),
+        notices: await toastsOnceSettled(name),
       };
       await inWindow(name, 'workbench.action.terminal.new');
       await waitFor(

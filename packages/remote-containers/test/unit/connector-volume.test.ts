@@ -1,8 +1,23 @@
 import {deepStrictEqual} from 'node:assert';
+import {REGISTER_WAIT_MILLISECONDS} from '../../src/shutdown/helper-request.ts';
 import type {CliTarget} from '../../src/cli/cli-arguments.ts';
 import type {EngineRunOutcome} from '../../src/engine/engine-host.ts';
 import {volumePayloadOf} from '../../src/volumes/volume-payload.ts';
-import {inputOf, type Scene, sceneOf} from './connector.fixture.ts';
+import {
+  inputOf,
+  preparedAroundRegister,
+  leaveRebuildIntent,
+  type Scene,
+  sceneOf,
+} from './connector.fixture.ts';
+
+const EXPLORED_PAYLOAD = volumePayloadOf({
+  kind: 'volume',
+  repositoryPath: '',
+  volumeName: 'data',
+  folder: 'volume',
+  inspectVolume: true,
+});
 
 const VOLUME_PAYLOAD = volumePayloadOf({
   kind: 'volume',
@@ -55,7 +70,7 @@ function linesOf(scene: Scene): string[] {
 }
 
 describe('the connector of a clone in a volume (card containers-151)', () => {
-  it('F-0701 5.0, ADR-0009: a typed source clones in the bootstrap, reads on the host CLI, connects trusted, and removes the bootstrap', async () => {
+  it('F-0701 5.0, ADR-0009: a typed source clones in the bootstrap, reads on the host CLI, connects trusted, registers its volume with the shutdown helper, and removes the bootstrap', async () => {
     const scene = volumeScene();
     const connected = await scene.connector.connect(inputOf(VOLUME_PAYLOAD));
     await new Promise(setImmediate);
@@ -91,11 +106,15 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
         ]),
         background: stage?.targetOf(upTarget).workspaceFolder,
         removed: linesOf(scene).includes('rm --force -- boot1'),
-        shutdown: scene.shutdownSent,
+        shutdown: JSON.stringify(scene.shutdownSent).replace(
+          /r-[0-9a-f]{64}/g,
+          'VOLUME',
+        ),
       },
       {
         trusted: true,
         calls: [
+          'consent',
           'standIn',
           'typed 7b227265',
           'buildContext',
@@ -122,12 +141,192 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
         ],
         background: '/tmp/stand-in',
         removed: true,
-        shutdown: [],
+        shutdown: JSON.stringify([
+          {
+            type: 'register',
+            connectionId: 'connection-1',
+            identity: {volumeName: 'VOLUME', folder: 'r'},
+            engine: {dockerPath: 'docker', environment: {}},
+          },
+          {
+            type: 'container',
+            connectionId: 'connection-1',
+            containerId: 'c1c1c1c1c1c1c1c1',
+            action: 'stop',
+          },
+        ]),
       },
     );
   });
 
-  it('F-0106 BR-13: a clone opens trusted, and an Inspect Volume window is not forced trusted', async () => {
+  it("F-0417 BR-5, F-0701 AC-14: the clone counts for the shutdown helper before its container is looked up, so an earlier window's check cannot stop the container it reuses", async () => {
+    const scene = volumeScene();
+    const ready = scene.outcome;
+    let atPrepare: string[] = [];
+    scene.outcome = () => {
+      atPrepare = scene.shutdownSent.map(request => request.type);
+      return Promise.resolve(typeof ready === 'function' ? ready() : ready);
+    };
+    await scene.connector.connect(inputOf(VOLUME_PAYLOAD));
+    await new Promise(setImmediate);
+    deepStrictEqual(
+      [
+        atPrepare,
+        scene.shutdownSent.filter(request => request.type === 'register')
+          .length,
+      ],
+      [['register'], 1],
+    );
+  });
+
+  it('F-0417 BR-5: the clone looks its container up only once the helper has answered its register, which comes after a stop already running', async () => {
+    deepStrictEqual(
+      await preparedAroundRegister(volumeScene(), VOLUME_PAYLOAD),
+      [0, 1],
+    );
+  });
+
+  it('F-0417 BR-5: an answer to the register that came after a stop held it is logged with its wait', async () => {
+    const scene = volumeScene();
+    await preparedAroundRegister(scene, VOLUME_PAYLOAD, () => {
+      scene.clockNow += 9300;
+    });
+    deepStrictEqual(
+      scene.sink.lines.some(line =>
+        line.message.includes(
+          'the shutdown helper answered the register after 9.3 s',
+        ),
+      ),
+      true,
+    );
+  });
+
+  it('F-0417 BR-5: a helper that never answers the register holds the clone for the bound only, and the log says so', async () => {
+    const scene = volumeScene();
+    scene.registerAnswer = () => new Promise<void>(() => undefined);
+    const connecting = scene.connector.connect(inputOf(VOLUME_PAYLOAD));
+    for (let turn = 0; turn < 20; turn += 1) {
+      await new Promise(setImmediate);
+    }
+    const waited = scene.timerDelays.includes(REGISTER_WAIT_MILLISECONDS);
+    for (const timer of scene.timers.splice(0)) {
+      timer();
+    }
+    await connecting;
+    deepStrictEqual(
+      [
+        waited,
+        scene.prepared.length,
+        scene.sink.lines.some(line =>
+          line.message.includes('did not answer the register in time'),
+        ),
+      ],
+      [true, 1, true],
+    );
+  });
+
+  it('F-0303 AC-14: a recovery window runs up on the host from the synthetic file, with no bootstrap and no clone, and follows core’s trust', async () => {
+    const recovery = volumePayloadOf({
+      kind: 'volume',
+      repositoryPath: 'https://github.com/o/r',
+      volumeName: 'r-volume',
+      folder: 'r',
+      inspectVolume: true,
+      recovery: true,
+    });
+    const scene = volumeScene(argv => {
+      if (argv[0] === 'build') {
+        return exited(0);
+      }
+      return argv[0] === 'volume' ? exited(0) : undefined;
+    });
+    scene.recoveryPicks.push('r-volume');
+    const connected = await scene.connector.connect(inputOf(recovery));
+    await new Promise(setImmediate);
+    deepStrictEqual(
+      {
+        trusted: 'trusted' in connected && connected.trusted,
+        prepared: scene.prepared.map(request => [
+          request.folder,
+          request.configFile,
+          request.idLabels,
+        ]),
+        read: scene.configurationReads.map(read => [
+          read.target.workspaceFolder,
+          read.target.configFile,
+        ]),
+        bridges: scene.volumeCalls.filter(call =>
+          call.startsWith('bootstrapBridge'),
+        ),
+        removed: linesOf(scene).some(line => line.startsWith('rm ')),
+      },
+      {
+        trusted: false,
+        prepared: [
+          [
+            '/tmp/stand-in',
+            '/tmp/recovery/r-volume/.devcontainer.json',
+            [
+              'vsch.local.volume=r-volume',
+              'devcontainer.config_file=/tmp/recovery/r-volume/.devcontainer.json',
+            ],
+          ],
+        ],
+        read: [['/tmp/stand-in', '/tmp/recovery/r-volume/.devcontainer.json']],
+        bridges: [],
+        removed: false,
+      },
+    );
+  });
+
+  it('F-0410 AC-14 (ruling-2162-recovery-gate): a recovery payload for a volume the user never asked to recover is refused, with no up, no container and no engine call', async () => {
+    const crafted = volumePayloadOf({
+      kind: 'volume',
+      repositoryPath: 'https://github.com/o/r',
+      volumeName: 'someone-elses-volume',
+      folder: 'r',
+      inspectVolume: true,
+      recovery: true,
+    });
+    const scene = volumeScene();
+    const result = await scene.connector.connect(inputOf(crafted));
+    deepStrictEqual(
+      {
+        connected: 'connectionToken' in result,
+        prepared: scene.prepared.length,
+        writes: scene.volumeCalls.filter(call =>
+          call.startsWith('writeRecoveryFile'),
+        ),
+        volumeOrImageCalls: linesOf(scene).filter(line =>
+          /^(volume|build|pull|run|create)/.test(line),
+        ),
+      },
+      {connected: false, prepared: 0, writes: [], volumeOrImageCalls: []},
+    );
+  });
+
+  it('F-0410 AC-16b (ruling-2162-recovery-gate): a picked recovery reconnects on a reload, and its payload is the same', async () => {
+    const recovery = volumePayloadOf({
+      kind: 'volume',
+      repositoryPath: 'https://github.com/o/r',
+      volumeName: 'r-volume',
+      folder: 'r',
+      inspectVolume: true,
+      recovery: true,
+    });
+    const scene = volumeScene(argv =>
+      ['build', 'volume'].includes(String(argv[0])) ? exited(0) : undefined,
+    );
+    scene.recoveryPicks.push('r-volume');
+    const first = await scene.connector.connect(inputOf(recovery));
+    const second = await scene.connector.connect(inputOf(recovery));
+    deepStrictEqual(
+      [first, second].map(result => 'connectionToken' in result),
+      [true, true],
+    );
+  });
+
+  it('F-0106 BR-13: a clone opens trusted, and a payload that explores a volume isn’t connected by a clone’s resolve at all', async () => {
     const inspected = volumePayloadOf({
       kind: 'volume',
       repositoryPath: 'https://github.com/o/r',
@@ -141,8 +340,212 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
       await volumeScene().connector.connect(inputOf(inspected)),
     ];
     deepStrictEqual(
-      results.map(result => 'trusted' in result && result.trusted),
-      [true, false],
+      results.map(result =>
+        'connectionToken' in result ? result.trusted : result.kind,
+      ),
+      [true, 'containerSetupFailed'],
+    );
+  });
+
+  it('F-0705 5.0, BR-5, BR-7 (card containers-155): an explored volume runs the host CLI over the shared definition with the volume in the variable of the run, asks no consent and makes no bootstrap or stand-in, connects untrusted, and registers its volume and the definition with the shutdown helper', async () => {
+    const scene = volumeScene();
+    const connected = await scene.connector.connect(
+      inputOf(
+        volumePayloadOf({
+          kind: 'volume',
+          repositoryPath: '',
+          volumeName: 'data',
+          folder: 'volume',
+          inspectVolume: true,
+        }),
+      ),
+    );
+    const definition = '/t/inspect-volume/1/.devcontainer/devcontainer.json';
+    deepStrictEqual(
+      {
+        trusted: 'trusted' in connected && connected.trusted,
+        calls: scene.volumeCalls,
+        prepared: scene.prepared.map(request => [
+          request.folder,
+          request.configFile,
+          request.idLabels,
+          request.workspaceMount,
+        ]),
+        variable: scene.cliEnvironments.at(-1)?.REMOTE_OSS_INSPECT_VOLUME,
+        shutdown: scene.shutdownSent.map(each =>
+          'identity' in each ? each.identity : each.type,
+        ),
+        label: scene.connector.heldIdentity()?.explored,
+        asked: linesOf(scene).filter(line => line.startsWith('volume inspect')),
+      },
+      {
+        trusted: false,
+        calls: ['exploreDefinition'],
+        prepared: [
+          [
+            '/t/inspect-volume/1',
+            definition,
+            [
+              'vsch.local.volume=data',
+              `devcontainer.config_file=${definition}`,
+            ],
+            'source=${localEnv:REMOTE_OSS_INSPECT_VOLUME},target=/volume,type=volume',
+          ],
+        ],
+        variable: 'data',
+        shutdown: [{volumeName: 'data', configFile: definition}, 'container'],
+        label: true,
+        asked: ['volume inspect --format {{.Name}} -- data'],
+      },
+    );
+  });
+
+  it('F-0705 5.0 (card containers-155): an explored volume that exists is said to exist, and one that does not is said to be created by the mount', async () => {
+    const present = volumeScene(
+      plainPass(argv =>
+        argv.join(' ').startsWith('volume inspect') ? exited(0) : undefined,
+      ),
+    );
+    const absent = volumeScene();
+    for (const scene of [present, absent]) {
+      await scene.connector.connect(inputOf(EXPLORED_PAYLOAD));
+    }
+    deepStrictEqual(
+      [present, absent].map(scene =>
+        scene.sink.lines
+          .map(line => line.message)
+          .filter(message => message.startsWith('the volume data')),
+      ),
+      [
+        ['the volume data exists'],
+        ['the volume data does not exist yet, so the mount creates it'],
+      ],
+    );
+  });
+
+  it('F-0502 (card containers-155): the rebuild an explored volume’s window asked for goes to its preparation, and the same holds for a clone’s', async () => {
+    const explored = volumeScene();
+    const cloned = volumeScene();
+    await leaveRebuildIntent(explored, EXPLORED_PAYLOAD);
+    await leaveRebuildIntent(cloned, VOLUME_PAYLOAD);
+    await explored.connector.connect(inputOf(EXPLORED_PAYLOAD));
+    await cloned.connector.connect(inputOf(VOLUME_PAYLOAD));
+    deepStrictEqual(
+      [explored, cloned].map(scene =>
+        scene.prepared.map(request => request.rebuild?.buildNoCache),
+      ),
+      [[true], [true]],
+    );
+  });
+
+  it('F-0705 5.0 (card containers-155): an explored volume whose container is not ready fails as a folder’s does', async () => {
+    const scene = volumeScene();
+    scene.outcome = {
+      kind: 'setupFailed',
+      message: 'm',
+      description: 'd',
+      containerId: undefined,
+    };
+    const failed = await scene.connector.connect(inputOf(EXPLORED_PAYLOAD));
+    deepStrictEqual('reason' in failed ? failed.reason : undefined, {
+      id: 'S034',
+    });
+  });
+
+  it('F-0705 AC-8b (card containers-155): an explored volume asks for the vscode volume whatever dev.containers.cacheVolume says', async () => {
+    const scene = volumeScene();
+    scene.cacheVolumeInspect = {globalValue: false};
+    await scene.connector.connect(
+      inputOf(
+        volumePayloadOf({
+          kind: 'volume',
+          repositoryPath: '',
+          volumeName: 'vscode',
+          folder: 'volume',
+          inspectVolume: true,
+        }),
+      ),
+    );
+    deepStrictEqual(
+      scene.prepared.map(request => request.cacheVolume),
+      [true],
+    );
+  });
+
+  it('F-0705 BR-2 (card containers-155): an explored volume with a name Docker refuses is refused before the definition is touched', async () => {
+    const scene = volumeScene();
+    const refused = await scene.connector.connect(
+      inputOf(
+        volumePayloadOf({
+          kind: 'volume',
+          repositoryPath: '',
+          volumeName: 'a,b',
+          folder: 'volume',
+          inspectVolume: true,
+        }),
+      ),
+    );
+    deepStrictEqual(
+      ['kind' in refused && refused.kind, scene.volumeCalls, scene.prepared],
+      ['containerSetupFailed', [], []],
+    );
+  });
+
+  it('F-0106 BR-13 (reading-1973-resolve-consent): a refused confirmation ends the resolve silently before any engine call; a crafted Inspect Volume payload isn’t asked, and never creates a volume, clones or starts anything', async () => {
+    const refused = volumeScene();
+    refused.consentGiven = false;
+    const failed = await refused.connector.connect(inputOf(VOLUME_PAYLOAD));
+    const inspected = volumeScene();
+    inspected.consentGiven = false;
+    await inspected.connector.connect(
+      inputOf(
+        volumePayloadOf({
+          kind: 'volume',
+          repositoryPath: 'https://github.com/o/r',
+          volumeName: '__UNIQUE__',
+          folder: 'r',
+          cloneInfo: {urlToClone: 'https://github.com/o/r'},
+          inspectVolume: true,
+        }),
+      ),
+    );
+    deepStrictEqual(
+      [
+        'kind' in failed && failed.kind,
+        'silent' in failed && failed.silent,
+        'userAlreadyNotified' in failed && failed.userAlreadyNotified,
+        refused.engineCalls.length,
+        refused.volumeCalls,
+        inspected.volumeCalls.includes('consent'),
+        linesOf(inspected).filter(
+          line =>
+            line.startsWith('volume create') ||
+            line.includes(' clone ') ||
+            line.startsWith('run '),
+        ),
+      ],
+      ['cloneConsentRefused', true, true, 0, ['consent'], false, []],
+    );
+  });
+
+  it('F-0701 6.1: a clone with no configuration asks for one through the bootstrap, then goes on', async () => {
+    let lookups = 0;
+    const scene = volumeScene(
+      plainPass(argv => {
+        if (!argv.includes('test')) {
+          return undefined;
+        }
+        lookups += 1;
+        return exited(lookups <= 2 ? 1 : 0);
+      }),
+    );
+    const connected = await scene.connector.connect(inputOf(VOLUME_PAYLOAD));
+    deepStrictEqual(
+      [
+        scene.volumeCalls.filter(call => call.startsWith('addConfiguration')),
+        'connectionToken' in connected,
+      ],
+      [['addConfiguration boot1 /workspaces/r'], true],
     );
   });
 
@@ -211,7 +614,7 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
         unnamed.volumeCalls,
         unchecked.volumeCalls,
       ],
-      [['engineCheckFailed', 'engineCheckFailed'], [], []],
+      [['engineCheckFailed', 'engineCheckFailed'], ['consent'], ['consent']],
     );
   });
 

@@ -11,6 +11,8 @@ import {recordingResolverEditor} from 'lib-authority/testing/recording-resolver-
 import type {CommandHost} from 'lib-identifiers';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
+import {k8sPayloadOf} from '../../src/attach/k8s-payload.ts';
+import {attachedPayloadOf} from '../../src/attach/payload.ts';
 import {devContainerPayloadOf} from '../../src/authority/payload.ts';
 import {
   containerSetupFailed,
@@ -60,8 +62,8 @@ async function registered(
     registerThrows?: boolean;
     /** What the profile's global state holds of the names it connected. */
     known?: Record<string, unknown>;
-    /** The state's update fails. */
-    updateFails?: boolean;
+    /** What the state's update rejects with. */
+    updateRejection?: unknown;
   } = {},
 ) {
   const warned: string[] = [];
@@ -83,8 +85,10 @@ async function registered(
   const commands = new Map<string, () => unknown>();
   const recording = recordingResolverEditor(events);
   const listeners: Array<(phase: ConnectPhase) => void> = [];
+  let connectCount = 0;
   const connector: ContainerConnector = {
     connect: () => {
+      connectCount += 1;
       for (const listener of listeners) {
         listener({name: 'installing'});
       }
@@ -102,6 +106,8 @@ async function registered(
     heldConnection: () => undefined,
     announceShutdown: () => undefined,
     leaveShutdown: () => Promise.resolve(),
+    attachedContainer: () => undefined,
+    startAttachedContainer: () => Promise.resolve(false),
     failedContainer: () => options.failedContainer,
     heldIdentity: () => identity,
     attemptIdentity: () => options.attemptIdentity,
@@ -159,8 +165,9 @@ async function registered(
       knownNames: {
         get: key => memento[key],
         update: (key, value) => {
-          if (options.updateFails === true) {
-            return Promise.reject(new Error('the state is read-only'));
+          if ('updateRejection' in options) {
+            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a row rejects with a text on purpose, as a port of the editor may
+            return Promise.reject(options.updateRejection);
           }
           memento[key] = value;
           return Promise.resolve();
@@ -227,9 +234,14 @@ async function registered(
     },
   ).catch((caught: unknown) => {
     thrown.push(caught instanceof Error ? caught.message : String(caught));
-    return {registration: 'proposalMissing' as const, dispose: () => undefined};
+    return {
+      registration: 'proposalMissing' as const,
+      lastResolve: () => 'none' as const,
+      dispose: () => undefined,
+    };
   });
   return {
+    connects: () => connectCount,
     thrown,
     result,
     events,
@@ -290,6 +302,44 @@ function suffixesOf(seen: Awaited<ReturnType<typeof registered>>): string[] {
 }
 
 describe('the registration of the container connector (card containers-08)', () => {
+  it('F-0601 AC-1 (c163-dev-container-decodes): the dev-container authority decodes only its own payloads: one that reads as an attached container is malformed, and the connector is never reached', async () => {
+    const attached = encodeAuthority({
+      family: 'dev-container',
+      target: {payload: attachedPayloadOf({containerName: '/x'})},
+      rawHostString: 'x',
+    });
+    const crafted = await registered();
+    await settledResolve(crafted, 1, attached);
+    const plain = await registered();
+    await settledResolve(plain, 1);
+    deepStrictEqual([crafted.connects(), plain.connects()], [0, 1]);
+  });
+
+  it('F-0604 AC-35 (c191-dev-container-pod): a pod payload on the dev-container authority is malformed too, valid or with a member that fails its name rule, and the connector is never reached', async () => {
+    const podTarget = {
+      context: 'kind-lab',
+      podname: 'web-1',
+      namespace: 'default',
+      name: 'app',
+      image: 'nginx',
+    };
+    const authorities = [
+      podTarget,
+      {...podTarget, namespace: '--context=other'},
+    ].map(target =>
+      encodeAuthority({
+        family: 'dev-container',
+        target: {payload: k8sPayloadOf(target)},
+        rawHostString: 'x',
+      }),
+    );
+    const crafted = await registered();
+    for (const authority of authorities) {
+      await settledResolve(crafted, 1, authority);
+    }
+    deepStrictEqual(crafted.connects(), 0);
+  });
+
   it('F-1101 AC-1, AC-22: every resolve that settles connected hands the connection’s ports to the forwarder', async () => {
     const ports = {
       forwardPorts: [3000],
@@ -352,6 +402,26 @@ describe('the registration of the container connector (card containers-08)', () 
     deepStrictEqual(
       [seen.result.registration, seen.events],
       ['registered', ['register dev-container']],
+    );
+  });
+
+  it('contracts §3.2: the registration says how the last resolve ended: none before one and without a resolver, then succeeded or failed', async () => {
+    const connected = await registered();
+    const before = connected.result.lastResolve();
+    await settledResolve(connected, 1);
+    const failing = await registered({
+      failure: containerSetupFailed(),
+      dialog: 'escape',
+    });
+    await settledResolve(failing, 1);
+    deepStrictEqual(
+      [
+        before,
+        connected.result.lastResolve(),
+        failing.result.lastResolve(),
+        (await registered({resolversGranted: false})).result.lastResolve(),
+      ],
+      ['none', 'succeeded', 'failed', 'none'],
     );
   });
 
@@ -596,7 +666,7 @@ describe('the registration of the container connector (card containers-08)', () 
     await settledResolve(recorded, 1, FOLDER_AUTHORITY);
     const readOnly = await registered({
       identity: {name: 'Proj', context: undefined},
-      updateFails: true,
+      updateRejection: new Error('the state is read-only'),
     });
     await settledResolve(readOnly, 1, FOLDER_AUTHORITY);
     await new Promise(resolve => setImmediate(resolve));
@@ -617,6 +687,18 @@ describe('the registration of the container connector (card containers-08)', () 
         ],
       ],
     );
+  });
+
+  it('F-0409 BR-9: a state that rejects with a text is logged by that text', async () => {
+    const seen = await registered({
+      identity: {name: 'Proj', context: undefined},
+      updateRejection: 'read-only state',
+    });
+    await settledResolve(seen, 1, FOLDER_AUTHORITY);
+    await new Promise(resolve => setImmediate(resolve));
+    deepStrictEqual(seen.warned, [
+      'the name of the connection could not be kept: read-only state',
+    ]);
   });
 
   it('F-0409 BR-9: a connection with no identity yet records the unnamed one', async () => {

@@ -145,6 +145,7 @@ describe('host channel over the shared ssh session: the lib-host contract', func
                 };
               },
             },
+            socksProbe: () => Promise.resolve(true),
             files,
             launcherFiles: {writeExecutable: () => Promise.resolve()},
             newNonce,
@@ -197,6 +198,7 @@ describe('host channel over the shared ssh session: the lib-host contract', func
               displayHost: 'harness',
               externalAskpass: false,
               askpassFirstMessageMilliseconds: 5000,
+              hostPlatform: 'linux',
             },
           }),
         policy: {kind: 'graceAfterLastLease', milliseconds: 50},

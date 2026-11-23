@@ -229,7 +229,7 @@
   "label": "spec:draft",
   "title": "Connection progress, phases and cancel",
   "epic": "E23",
-  "acCount": 34,
+  "acCount": 33,
   "surfaces": {
    "commands": [
     "opensshremotes.showDetails (runtime only, not contributed)"

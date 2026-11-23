@@ -152,6 +152,33 @@
       "path": "tests/acceptance/ssh-core"
     },
     {
+      "path": "tests/acceptance/ssh-newclient"
+    },
+    {
+      "path": "tests/acceptance/ssh-newclient-pickers"
+    },
+    {
+      "path": "tests/acceptance/ssh-agents"
+    },
+    {
+      "path": "tests/acceptance/ssh-askpass"
+    },
+    {
+      "path": "tests/acceptance/ssh-askpass-env"
+    },
+    {
+      "path": "tests/acceptance/ssh-askpass-space"
+    },
+    {
+      "path": "tests/acceptance/ssh-killed"
+    },
+    {
+      "path": "tests/acceptance/ssh-locks"
+    },
+    {
+      "path": "tests/acceptance/ssh-downloaders"
+    },
+    {
       "path": "tests/acceptance/ssh-containers"
     },
     {
@@ -164,10 +191,19 @@
       "path": "tests/acceptance/explorer"
     },
     {
+      "path": "tests/acceptance/wsl"
+    },
+    {
+      "path": "tests/acceptance/windows-host"
+    },
+    {
       "path": "tests/acceptance/explorer-alone"
     },
     {
       "path": "tests/acceptance/explorer-trust"
+    },
+    {
+      "path": "tests/acceptance/explorer-trust-pickers"
     },
     {
       "path": "tests/acceptance/explorer-home"
@@ -186,6 +222,9 @@
     },
     {
       "path": "tests/acceptance/explorer-standdown"
+    },
+    {
+      "path": "tests/acceptance/explorer-stand-in"
     },
     {
       "path": "tests/acceptance/trust"
@@ -239,10 +278,22 @@
       "path": "tests/acceptance/containers-env-ctx"
     },
     {
+      "path": "tests/acceptance/containers-ssh-engine"
+    },
+    {
+      "path": "tests/acceptance/containers-ssh-env-host"
+    },
+    {
+      "path": "tests/acceptance/containers-ssh-noclient"
+    },
+    {
       "path": "tests/acceptance/containers-index"
     },
     {
       "path": "tests/acceptance/containers-volume"
+    },
+    {
+      "path": "tests/acceptance/containers-config"
     },
     {
       "path": "tests/acceptance/containers-explorer"

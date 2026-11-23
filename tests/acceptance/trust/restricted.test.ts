@@ -18,7 +18,9 @@ import {
 describe('the answers to core’s trust question in an SSH window (card coverage-80)', function () {
   this.timeout(300_000);
 
-  // F-2308 AC-26's "Cancel" is this refusing answer: core's trust dialog has no cancel (proteus's ruling on #1602).
+  // F-2308 AC-26 asks for the refusal of either of core's two trust dialogs. In local-server mode the window asks for nothing
+  // that raises core's request (the one with "Manage", "Cancel" and "Trust Folder & Continue", which only a terminal-mode
+  // connect raises, F-2308 AC-24), so the dialog that appears is core's startup prompt, whose refusing button is the second.
   it('F-2508 AC-16, F-2308 AC-26 (c80-refuse): refusing trust leaves the window connected, in Restricted Mode, with no dialog left', async () => {
     await openWindow('harness', 'c80-refuse');
     try {

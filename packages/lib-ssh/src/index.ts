@@ -51,15 +51,19 @@ export {parseAddHostCommand} from './config/add-host.ts';
 export {lexConfiguration} from './config/lexer.ts';
 export type {LexResult} from './config/lexer.ts';
 export {writeHostBlock} from './config/writer.ts';
-export type {DiagnosticStringId, FailureKind} from './diagnostics/rules.ts';
+export type {
+  ConnectionMode,
+  DiagnosticStringId,
+  FailureKind,
+} from './diagnostics/rules.ts';
 export {
   CONNECTION_CLOSED_TEXT,
   FAILING_CONNECTIONS_TOPIC,
+  LINUX_PREREQUISITES_TOPIC,
 } from './diagnostics/rules.ts';
 export type {
   Classification,
   ClassifyPurpose,
-  ConnectionMode,
   FailureHint,
   FailureReason,
   FilledString,
@@ -109,7 +113,15 @@ export {
   connectWaitMilliseconds,
   type ConnectWaitSettings,
 } from './process/connect-wait.ts';
-export {nodeProcessSpawner} from './process/node-spawner.ts';
+export {
+  createNodeProcessSpawner,
+  nodeProcessSpawner,
+} from './process/node-spawner.ts';
+export {
+  endProcessGroup,
+  type GroupSystem,
+  reapProcessGroup,
+} from './process/process-group.ts';
 export type {
   ProcessHandle,
   ProcessSpawner,
@@ -146,6 +158,7 @@ export {
   sessionStart,
   sessionStartFor,
 } from './connection-server/session-bootstrap.ts';
+export {interpreterOfPlatform} from './connection-server/powershell-session.ts';
 export {
   firstSetupMarker,
   type SetupMarker,
@@ -164,6 +177,12 @@ export {
   type StoredDisplay,
 } from './connection-server/messages.ts';
 export {LoginOwnership} from './connection-server/ownership.ts';
+export {
+  type SocksProbe,
+  type SocksProbeRequest,
+  socksProbeOver,
+} from './connection-server/socks-probe.ts';
+export {LocalCommandLog} from './connection-server/local-command-log.ts';
 export {
   ConnectionHandler,
   type ConnectionHandlerOptions,
@@ -187,6 +206,7 @@ export {
   CONNECTION_NAMESPACE,
   type ConnectOutcome,
   killConnection,
+  type SessionCheck,
   type SessionRun,
   type SessionRunEnd,
   SharedConnection,

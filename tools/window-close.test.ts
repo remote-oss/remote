@@ -15,6 +15,13 @@ import path from 'node:path';
 /** The part of the windows harness these rows call, from its bundle (the tools' project can't import its sources). */
 interface Harness {
   closeWindow(name: string, milliseconds?: number): Promise<void>;
+  closeContained(
+    name: string,
+    dismiss: (window: string) => Promise<void>,
+    milliseconds?: number,
+  ): Promise<'closed' | 'dismissed' | 'killed'>;
+  isOpen(name: string): boolean;
+  connectionLog(options?: {withTimes?: boolean}): string[];
 }
 
 const NAME = 'w1';
@@ -101,10 +108,59 @@ describe('closeWindow (card tooling-84, #1505)', () => {
     await harness.closeWindow(NAME, 5_000);
   });
 
-  it('tooling-84: a window that neither deactivates nor exits fails after the wait, naming its extension host', async () => {
+  it('tooling-84, #2482: a window that neither deactivates nor exits fails after the wait, naming its extension host and what its agent shows', async () => {
     await rejects(harness.closeWindow(NAME, 1_000), {
-      message: `timed out waiting for window ${NAME} to deactivate: its extension host ${String(extensionHost.pid)} is still running`,
+      message: new RegExp(
+        `^timed out waiting for window ${NAME} to deactivate: its extension host ${String(extensionHost.pid)} is still running; the close was not accepted by the window's agent; running commands: \\[\\]; its last events: \\[\\]; its recorded processes: \\["${String(extensionHost.pid)} [A-Z] \\([a-z ]+\\) parent \\d+"\\]$`,
+        'u',
+      ),
     });
+  });
+
+  it('#2482: the failure names a command the agent accepted that has not ended, and the last events with their ages', async () => {
+    writeFileSync(
+      path.join(folder, `${NAME}.commands.jsonl`),
+      `${JSON.stringify({id: 'earlier', command: 'workbench.action.terminal.new'})}\n`,
+    );
+    writeFileSync(
+      path.join(folder, `${NAME}.events.jsonl`),
+      `${JSON.stringify({event: 'accepted', id: 'earlier', time: Date.now()})}\n`,
+    );
+    await rejects(harness.closeWindow(NAME, 1_000), {
+      message:
+        /the close was not accepted by the window's agent; running commands: \["workbench\.action\.terminal\.new accepted \d+ s ago"\]; its last events: \["accepted workbench\.action\.terminal\.new \d+ s ago"\]; /u,
+    });
+  });
+
+  it('#2490: the connection log read for a failure keeps the time of each line, and the one read for a row does not', () => {
+    const logFile = path.join(folder, 'connection.log');
+    writeFileSync(
+      logFile,
+      '[10:00:01.250] Resolving ssh-remote+harness, attempt 1\n\n[10:00:01.900] the connection helper exits with 0\n',
+    );
+    const previousLog = process.env.REMOTE_OSS_ACCEPTANCE_LOG;
+    process.env.REMOTE_OSS_ACCEPTANCE_LOG = logFile;
+    try {
+      deepStrictEqual(
+        [harness.connectionLog(), harness.connectionLog({withTimes: true})],
+        [
+          [
+            'Resolving ssh-remote+harness, attempt 1',
+            'the connection helper exits with 0',
+          ],
+          [
+            '[10:00:01.250] Resolving ssh-remote+harness, attempt 1',
+            '[10:00:01.900] the connection helper exits with 0',
+          ],
+        ],
+      );
+    } finally {
+      if (previousLog === undefined) {
+        delete process.env.REMOTE_OSS_ACCEPTANCE_LOG;
+      } else {
+        process.env.REMOTE_OSS_ACCEPTANCE_LOG = previousLog;
+      }
+    }
   });
 
   it('a close the window accepted stays as it is', async () => {
@@ -139,6 +195,60 @@ describe('closeWindow (card tooling-84, #1505)', () => {
     deepStrictEqual(
       [outcome, commandLines(folder).at(-1)?.withdrawn],
       ['timed out', true],
+    );
+  });
+
+  it('a close that works is the first outcome and dismisses nothing', async () => {
+    let dismissed = 0;
+    setTimeout(() => {
+      appendFileSync(
+        path.join(folder, `${NAME}.events.jsonl`),
+        `${JSON.stringify({event: 'deactivated'})}\n`,
+      );
+    }, 300);
+    const outcome = await harness.closeContained(
+      NAME,
+      () => {
+        dismissed += 1;
+        return Promise.resolve();
+      },
+      3_000,
+    );
+    deepStrictEqual([outcome, dismissed], ['closed', 0]);
+  });
+
+  it('a window that closes once its dialog is dismissed is closed by the second close', async () => {
+    const outcome = await harness.closeContained(
+      NAME,
+      () => {
+        extensionHost.kill('SIGKILL');
+        return Promise.resolve();
+      },
+      1_000,
+    );
+    strictEqual(outcome, 'dismissed');
+  });
+
+  it('a window that closes neither way has its extension host ended and is recorded as deactivated', async () => {
+    appendFileSync(
+      path.join(folder, `${NAME}.events.jsonl`),
+      `${JSON.stringify({event: 'activated'})}\n`,
+    );
+    const outcome = await harness.closeContained(
+      NAME,
+      () => Promise.resolve(),
+      500,
+    );
+    const events = readFileSync(
+      path.join(folder, `${NAME}.events.jsonl`),
+      'utf8',
+    )
+      .split('\n')
+      .filter(line => line !== '')
+      .map(line => (JSON.parse(line) as {event: string}).event);
+    deepStrictEqual(
+      [outcome, events.at(-1), harness.isOpen(NAME)],
+      ['killed', 'deactivated', false],
     );
   });
 });

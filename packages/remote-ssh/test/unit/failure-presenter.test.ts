@@ -120,6 +120,20 @@ describe('the failure presenter', () => {
     );
   });
 
+  it('F-2402 AC-1, AC-28: the reason of a host with no downloader is STR:S042 with exactly one final period', async () => {
+    deepStrictEqual(
+      await textFor({reason: {id: 'S042'}}),
+      'Could not establish connection to "box": Downloading VS Code Server failed - please install either curl or wget on the remote.',
+    );
+  });
+
+  it('F-2401 AC-3: the reason of a host that does not meet the prerequisites is STR:S144 with exactly one final period', async () => {
+    deepStrictEqual(
+      await textFor({reason: {id: 'S144'}}),
+      'Could not establish connection to "box": The remote host does not meet the prerequisites for running VS Code Server.',
+    );
+  });
+
   it('F-2601 S031: a reason that is an id is translated through the table', async () => {
     deepStrictEqual(
       await textFor({reason: {id: 'S027'}}),
@@ -358,5 +372,36 @@ describe('the failure presenter', () => {
     await closed.presenter.present(failedWith({kind: 'noServerSource'}));
     await settle();
     deepStrictEqual([cancel.seen.calls, closed.seen.calls], [[], []]);
+  });
+
+  it('brief-remote-ssh-engines §2: textOf gives the text the connection dialog shows, and shows no dialog', () => {
+    const {presenter, seen} = surroundings(() => Promise.resolve(undefined));
+    deepStrictEqual(
+      [
+        presenter.textOf?.(
+          failedWith({reason: {text: 'The exec server is off.'}}),
+        ),
+        seen.dialogs,
+      ],
+      ['Could not establish connection to "box": The exec server is off.', []],
+    );
+  });
+
+  it('brief-remote-ssh-engines §2: textOf of a failure with no reason names the host alone', () => {
+    const {presenter} = surroundings(() => Promise.resolve(undefined));
+    deepStrictEqual(
+      presenter.textOf?.(failedWith()),
+      'Could not establish connection to "box".',
+    );
+  });
+
+  it('brief-remote-ssh-engines §2: textOf of a missing server source gives the setting dialog’s text', () => {
+    const {presenter} = surroundings(() => Promise.resolve(undefined));
+    deepStrictEqual(
+      presenter
+        .textOf?.(failedWith({kind: 'noServerSource'}))
+        .includes('remote.SSH.serverDownloadUrlTemplate'),
+      true,
+    );
   });
 });

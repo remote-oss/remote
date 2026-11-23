@@ -2,15 +2,11 @@ import {execFile, execFileSync} from 'node:child_process';
 import {chmodSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
-import {
-  containersLog,
-  devContainerFolder,
-  reopenInContainer,
-  variable,
-  waitFor,
-} from '../windows/harness.ts';
-import {openFolderWindow} from '../windows/folder-windows.ts';
+import {containersLog, variable, waitFor} from '../windows/harness.ts';
+import {connectedWindow} from '../windows/folder-windows.ts';
 import {dialogOf, notificationCentre} from '../windows/renderer.ts';
+
+export {connectedWindow};
 
 const execFileAsync = promisify(execFile);
 
@@ -80,24 +76,6 @@ export async function untilNoServer(containerId: string): Promise<void> {
     async () => (await serverProcessesOf(containerId)).length === 0,
     30_000,
   );
-}
-
-/** Connects a window on a new folder named `label` with `configuration`, and gives the window, its container and the folder. */
-export async function connectedWindow(
-  label: string,
-  configuration: Readonly<Record<string, unknown>> = {},
-): Promise<{name: string; containerId: string; folder: string}> {
-  const folder = devContainerFolder(label, {name: label, ...configuration});
-  const name = await openFolderWindow(folder);
-  await reopenInContainer(name);
-  const containerId = await docker(
-    'ps',
-    '--all',
-    '--quiet',
-    '--filter',
-    `label=devcontainer.local_folder=${folder}`,
-  );
-  return {name, containerId, folder};
 }
 
 /** Polls `read` every 100 ms until it holds; a reading that fails because the window reloads counts as not holding. */

@@ -107,10 +107,12 @@ export {
 export {
   type Clock,
   type ClientLockOptions,
+  clientLockPath,
   type LockFilePort,
   lockIdFor,
   withClientLock,
 } from './locks/client-lock.ts';
+export {type NodeLockFiles, nodeLockFiles} from './locks/node-lock-files.ts';
 export {type HostLockStep, hostLockLoop} from './locks/host-lock-loop.ts';
 export type {
   ClientFilePort,
@@ -137,7 +139,6 @@ export {
 export {
   type CliInstallOutcome,
   type CliPlacement,
-  type CliStartDependencies,
   type CliStopOutcome,
   installCli,
   startCli,
@@ -174,4 +175,35 @@ export {
   openCliControl,
   type ServerLogLine,
 } from './cli-control/client.ts';
+export {
+  type CliConnection,
+  type CliDirectoryEntry,
+  type CliDone,
+  type CliEnvironment,
+  type CliExit,
+  type CliFileKind,
+  type CliFileStat,
+  type CliMethods,
+  type CliSpawned,
+  type CliSpawnParams,
+} from './cli-control/control-methods.ts';
+export {
+  EXEC_FILE_TYPE,
+  type ExecConnection,
+  type ExecDirectoryEntry,
+  type ExecDisposable,
+  type ExecEnvironment,
+  type ExecFileStat,
+  type ExecFileSystem,
+  type ExecProcessExit,
+  type ExecReadStream,
+  type ExecServer,
+  ExecServerFailure,
+  type ExecSpawnedCommand,
+  type ExecSpawnOptions,
+  type ExecWriteStream,
+  execServerOf,
+  type WatchedExecServer,
+  watchedExecServer,
+} from './cli-control/exec-server.ts';
 export {type S045Event, s045EventOf} from './cli-control/progress.ts';

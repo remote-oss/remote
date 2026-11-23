@@ -18,6 +18,7 @@ import {
 import type {LocalFiles} from '../process/node-files.ts';
 import {scriptText} from '../process/remote-program.ts';
 import type {SessionRun, SessionRunEnd} from './client.ts';
+import {interpreterOfPlatform} from './powershell-session.ts';
 
 /** The session a channel runs its scripts on. */
 export interface SessionRunner {
@@ -46,8 +47,9 @@ export interface SharedSessionChannelOptions {
 }
 
 /**
- * The most bytes one script can have: it travels as one argument of `sh -c`, and the system refuses an argument of
- * 128 KiB or more (E2BIG), which the session would not report on the output it carries.
+ * The most bytes one POSIX script can have: it travels as one argument of `sh -c`, and the system refuses an argument
+ * of 128 KiB or more (E2BIG), which the session would not report on the output it carries. A PowerShell script travels
+ * on the loop's standard input and has no such bound.
  */
 export const EXEC_ARGUMENT_LIMIT_BYTES = 128 * 1024;
 
@@ -85,10 +87,11 @@ export class SharedSessionChannel implements HostChannel {
     request: ScriptRequest,
     onLine: (line: string) => void,
   ): Promise<ScriptOutcome> {
-    if (request.interpreter === 'powershell') {
+    const session = interpreterOfPlatform(this.options.direct.platformHint());
+    if (request.interpreter !== session) {
       return failFrom(
         'spawnFailed',
-        'the shared session runs no powershell script yet',
+        `the session runs ${session} scripts, not ${request.interpreter}`,
       );
     }
     const script = scriptText(request);
@@ -99,7 +102,7 @@ export class SharedSessionChannel implements HostChannel {
       return failFrom('cancelled', 'cancelled before the run');
     }
     const scriptBytes = Buffer.byteLength(script.text, 'utf8');
-    if (scriptBytes >= EXEC_ARGUMENT_LIMIT_BYTES) {
+    if (session === 'posixShell' && scriptBytes >= EXEC_ARGUMENT_LIMIT_BYTES) {
       return failFrom(
         'spawnFailed',
         `the script is ${String(scriptBytes)} bytes, and the shared session runs a script of fewer than ${String(EXEC_ARGUMENT_LIMIT_BYTES)}`,
@@ -117,6 +120,9 @@ export class SharedSessionChannel implements HostChannel {
           environment: request.environment,
           inputBase64: input.base64,
           deadlineMilliseconds: this.options.runDeadlineMilliseconds,
+          ...(request.sessionLock === undefined
+            ? {}
+            : {sessionLock: request.sessionLock}),
         },
         line => {
           if (delivering) {

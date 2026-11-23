@@ -8,6 +8,7 @@ COMMIT='abc1230000000000000000000000000000000000'
 ARCHIVE_URL='https://example.invalid/server.tar.gz'
 ARCHIVE_PATH=''
 ARCHIVE_REMOVE='no'
+ARCHIVE_INTO_INSTALL='no'
 ARCHIVE_FORMAT='tar.gz'
 STAGING_SUFFIX='1700000000000'
 INSTALL_TREE=''
@@ -66,7 +67,7 @@ esac
 DATA_ROOT=${INSTALL_ROOT:-$HOME}
 DATA_DIR=$DATA_ROOT/$DATA_FOLDER
 INSTALL_DIR=$DATA_DIR/bin/$COMMIT
-CLI_STAGING=$DATA_DIR/cli-bin/$COMMIT
+CLI_STAGING=$DATA_DIR/cli-bin/$COMMIT.$STAGING_SUFFIX.$$
 CLI_FILE=$DATA_DIR/$CLI_NAME
 BOOT_PREFIX=$DATA_DIR/.$COMMIT
 [ -z "$INSTALL_TREE" ] || LOCK_IN_TEMPORARY=yes
@@ -114,7 +115,13 @@ stop_servers() {
     fi
     kill "$SERVER_PID" 2>/dev/null
   done
-  for PROC_DIR in /proc/[0-9]*; do
+  if find /proc -mindepth 0 -maxdepth 0 -path /proc -exec true {} + 2>/dev/null; then
+    SERVER_CANDIDATES=$(find /proc -mindepth 2 -maxdepth 2 -path '/proc/[0-9]*/cmdline' -exec grep -alsF -e "$DATA_DIR/bin/" -e "$DATA_DIR/cli/servers/" {} + 2>/dev/null)
+  else
+    SERVER_CANDIDATES=$(grep -alsF -e "$DATA_DIR/bin/" -e "$DATA_DIR/cli/servers/" /proc/[0-9]*/cmdline 2>/dev/null)
+  fi
+  for PROC_FILE in $SERVER_CANDIDATES; do
+    PROC_DIR=${PROC_FILE%/cmdline}
     SERVER_PID=${PROC_DIR#/proc/}
     [ "$SERVER_PID" != "$$" ] || continue
     is_server_tree_process "$SERVER_PID" "$DATA_DIR/bin/" ||

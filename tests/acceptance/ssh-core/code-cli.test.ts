@@ -9,6 +9,9 @@ import {
 } from '../windows/harness.ts';
 import {terminalText, typeInTerminal} from '../windows/renderer.ts';
 
+/** The echo of the terminal's own answer to a cursor-position query (`ESC[row;columnR`), which can land in the middle of a line. */
+const CURSOR_REPORT_ECHO = /\^\[\[\d+;\d+R/gu;
+
 /**
  * The lines the terminal of `window` printed for `command`: those between a line that is exactly the start marker and a
  * line that is exactly the end marker. The echo of the typed command is never one of them, whatever the terminal's width.
@@ -33,7 +36,10 @@ async function linesOf(
   const lines = (await terminalText(window)).split('\n');
   const start = lines.lastIndexOf(`START_${label}`);
   const end = lines.lastIndexOf(`END_${label}`);
-  return lines.slice(start + 1, end).filter(line => line !== '');
+  return lines
+    .slice(start + 1, end)
+    .map(line => line.replace(CURSOR_REPORT_ECHO, ''))
+    .filter(line => line !== '');
 }
 
 /** Opens a window on the host in a new folder `folder` with a terminal in it. */

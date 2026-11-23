@@ -14,8 +14,10 @@ import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   answerDialog,
   dialogOf,
+  editorTabs,
   pressEscape,
   notifications,
+  primaryButtonOf,
   statusBarText,
   waitForDialog,
   windowTitle,
@@ -27,7 +29,7 @@ import {
   derivedImagesOf,
   type ComposeFolderOptions,
   removeComposeContainers,
-} from './compose-support.ts';
+} from '../windows/compose-support.ts';
 
 /** The generic dialog of a setup that fails (F-0410's). */
 const GENERIC_DIALOG = 'An error occurred setting up the container.';
@@ -42,12 +44,14 @@ const S412 = 'Workspace folder not specified in devcontainer.json.';
 async function placeOf(name: string): Promise<{
   remote: string | null | undefined;
   editor: string | null | undefined;
+  preview: boolean | undefined;
   indicator: string;
 }> {
   const state = await windowState(name).catch(() => undefined);
   return {
     remote: state?.remoteName,
     editor: state?.activeTab?.uri,
+    preview: state?.activeTab?.preview,
     indicator: await statusBarText(name, 'status.host').catch(() => ''),
   };
 }
@@ -59,7 +63,7 @@ describe('the checks of a Compose configuration before and while it connects (ca
     await removeComposeContainers();
   });
 
-  it('F-0301 AC-20, AC-63, F-0411 AC-17, AC-39 (c143-workspace-folder): a Compose configuration with no workspaceFolder, or an empty one, shows S412 with Open devcontainer.json before anything is created; Cancel leaves the window as it was and the button opens the file as a preview', async () => {
+  it('F-0301 AC-20, AC-63, F-0411 AC-17, AC-39 (c143-workspace-folder): a Compose configuration with no workspaceFolder, or an empty one, shows S412 with its buttons, Open devcontainer.json primary, before anything is created and no connecting notification; Open opens the file as a preview with the window local, and on the second run Cancel opens no editor and leaves the window local with its ordinary title and no Disconnected status', async () => {
     const results: unknown[] = [];
     for (const [label, configuration] of [
       ['absent', {workspaceFolder: undefined}],
@@ -71,11 +75,11 @@ describe('the checks of a Compose configuration before and while it connects (ca
         configuration,
       });
       const name = await openFolderWindow(folder);
-      const before = await placeOf(name);
       const titleBefore = await windowTitle(name);
       const running = inWindow(name, 'remote-containers.reopenInContainer');
       running.catch(() => undefined);
       const dialog = await waitForDialog(name, 60_000);
+      const primary = await primaryButtonOf(name);
       const shown = [dialog.message, dialog.details].filter(
         line => line !== '',
       );
@@ -83,24 +87,32 @@ describe('the checks of a Compose configuration before and while it connects (ca
         text.includes('Connecting'),
       );
       const titleOpen = await windowTitle(name);
-      await answerDialog(name, 'Cancel');
+      await answerDialog(name, 'Open devcontainer.json');
       await running.catch(() => undefined);
-      const afterCancel = await placeOf(name);
+      const afterOpen = await placeOf(name);
+      const tabsOpen = await editorTabs(name);
       const again = inWindow(name, 'remote-containers.reopenInContainer');
       again.catch(() => undefined);
       await waitForDialog(name, 60_000);
-      await answerDialog(name, 'Open devcontainer.json');
+      await answerDialog(name, 'Cancel');
       await again.catch(() => undefined);
-      const afterOpen = await placeOf(name);
+      const afterCancel = await placeOf(name);
+      const tabsCancel = await editorTabs(name);
+      const titleAfterCancel = await windowTitle(name);
       results.push({
         label,
         shown,
         buttons: dialog.buttons,
+        primary,
         quiet: connecting,
-        titled: titleOpen === titleBefore,
-        unchanged: JSON.stringify(afterCancel) === JSON.stringify(before),
-        opened: afterOpen.editor?.endsWith('.devcontainer/devcontainer.json'),
+        titled: titleOpen === titleBefore && titleAfterCancel === titleBefore,
+        opened: tabsOpen,
+        unchanged: JSON.stringify(tabsCancel) === JSON.stringify(tabsOpen),
         remote: afterOpen.remote,
+        cancelledRemote: afterCancel.remote,
+        detached: afterCancel.indicator.includes(
+          'Disconnected from Dev Container',
+        ),
         containers: await composeContainersOfRun(),
       });
       await closeWindow(name);
@@ -111,11 +123,21 @@ describe('the checks of a Compose configuration before and while it connects (ca
         label,
         shown: [S412],
         buttons: ['Cancel', 'Open devcontainer.json'],
+        primary: 'Open devcontainer.json',
         quiet: [],
         titled: true,
+        opened: [
+          {
+            label: 'devcontainer',
+            active: true,
+            preview: true,
+            dirty: false,
+          },
+        ],
         unchanged: true,
-        opened: true,
         remote: null,
+        cancelledRemote: null,
+        detached: false,
         containers: [],
       })),
     );

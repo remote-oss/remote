@@ -6,6 +6,7 @@
 import {readdirSync, readFileSync, statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import * as path from 'node:path';
+import {STAND_IN_CLI_TRACE} from '../../../tools/acceptance-cli-editor.ts';
 import {onHost} from '../suite/harness.ts';
 
 /** One request the download host logged: its path and the user agent that sent it. */
@@ -15,7 +16,7 @@ export interface DownloadRequest {
 }
 
 /** A harness variable of the run; an error names it when the run does not set it. */
-function runVariable(name: string): string {
+export function runVariable(name: string): string {
   const value = process.env[name];
   if (value === undefined || value === '') {
     throw new Error(
@@ -139,4 +140,35 @@ export function archiveCopiesLeft(label: string, size: number): string[] {
     ...filesOfSize(tmpdir(), size, since),
     ...filesOfSize(runVariable('HARNESS_USER_DATA'), size, since),
   ];
+}
+
+/** The `<os>-<arch>` the download host's CLI path names for the run's host: `alpine` or `linux`, and its machine's architecture. */
+export async function hostPlatform(): Promise<string> {
+  const [system = '', machine = ''] = (
+    await onHost(
+      'sh',
+      '-c',
+      'if [ -e /etc/alpine-release ]; then echo alpine; else echo linux; fi; uname -m',
+    )
+  )
+    .split('\n')
+    .map(line => line.trim());
+  const architectures: Record<string, string> = {
+    x86_64: 'x64',
+    aarch64: 'arm64',
+    armv7l: 'armhf',
+  };
+  return `${system}-${architectures[machine] ?? machine}`;
+}
+
+/** The path the stand-in CLI was run as on the host, from the trace it writes; empty when it was never run. */
+export async function standInCliRanAs(): Promise<string> {
+  return (
+    await onHost('sh', '-c', `cat '${STAND_IN_CLI_TRACE}' 2>/dev/null; true`)
+  ).trim();
+}
+
+/** The entries of `folder` on the host with their sizes and times, for the message of a row that expected one in it. */
+export async function folderListing(folder: string): Promise<string> {
+  return (await onHost('sh', '-c', `ls -laR '${folder}' 2>&1; true`)).trim();
 }

@@ -132,4 +132,30 @@ describe('ensureTrusted', () => {
       },
     );
   });
+
+  it('F-0106 BR-6, STR:S124 to STR:S130: none of the unshown strings reaches the request, the setup notice or the log, whichever way the check ends', async () => {
+    const unshown = [
+      TRUST_TEMPLATES.S124,
+      TRUST_TEMPLATES.S125,
+      TRUST_TEMPLATES.S126,
+      TRUST_TEMPLATES.S127,
+      TRUST_TEMPLATES.S128,
+      TRUST_TEMPLATES.S129,
+      TRUST_TEMPLATES.S130,
+    ];
+    const shown: string[] = [];
+    for (const state of [
+      {trusted: true},
+      {request: 'trust'},
+      {request: 'decline'},
+      {request: 'reject', setup: 'rejects'},
+    ] as const) {
+      const outcome = await checked(state);
+      shown.push(...outcome.calls, ...outcome.lines);
+    }
+    deepStrictEqual(
+      shown.filter(text => unshown.some(each => text.includes(each))),
+      [],
+    );
+  });
 });

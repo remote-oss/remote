@@ -24,6 +24,15 @@ describe('setContextKey', () => {
     deepStrictEqual(calls, [['remote-x.connected', true]]);
   });
 
+  it('wsl-07: sets a key the editor and the extension both set', async () => {
+    await setContextKey(
+      host,
+      {id: 'remote-x.installed', setter: 'coreAndExtension'},
+      true,
+    );
+    deepStrictEqual(calls, [['remote-x.installed', true]]);
+  });
+
   it('fails for a key the editor sets (contracts 1.2 NotExtensionSet)', () => {
     throws(
       () =>

@@ -1,0 +1,155 @@
+[
+  {
+    "launch": "containers-a",
+    "file": "containers/open-folder-virtual.test.ts",
+    "title": "F-0403 AC-28 (c71-untitled): in an untitled workspace core asks whether to save the workspace configuration before the window changes; Cancel leaves the window and creates nothing, and Don’t Save reloads the same window into one container",
+    "card": 2432,
+    "owner": "themis",
+    "evidence": 42218054216,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/resolve-reload.test.ts",
+    "title": "F-0502 AC-13 (c43-oncreate-once): a container stopped and started again, then reconnected by a reload, does not run its onCreateCommand again",
+    "card": 2449,
+    "owner": "dike",
+    "evidence": 42476121959,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/resolve-reload.test.ts",
+    "title": "F-0502 AC-31 (c43-reload): Reload Window reuses the running server on the same port within 2 s, logs the container as already running, and reconnects under the same title and indicator",
+    "card": 2449,
+    "owner": "dike",
+    "evidence": 42476121959,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/user-env.test.ts",
+    "title": "F-0416 AC-27 (c74-task-probe): a shell task prints neither probe variable for none, only the interactive one for interactiveShell, only the login one for loginShell, and both by default",
+    "card": 2429,
+    "owner": "hestia",
+    "evidence": 42367771624,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/user-env.test.ts",
+    "title": "F-0416 AC-44 (c74-null-remote-env): a remoteEnv null unsets an image variable in a task and in the terminal, and a plain docker exec still has it",
+    "card": 2429,
+    "owner": "hestia",
+    "evidence": 42820396583,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "default-ports",
+    "file": "default-ports/port-source.test.ts",
+    "title": "F-2507 AC-43 (own-ports-process): with the user value process, nothing is forwarded for 60 s after a connect, a reload, and a close and reconnect",
+    "card": 2254,
+    "owner": "themis",
+    "evidence": 41922676078,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "ssh-core",
+    "file": "ssh-core/session-hints.test.ts",
+    "title": "F-2605 AC-17 (c135-record): a failed attempt keeps 25 environment hints in order, its error hint with a number, and the log hint",
+    "card": 2326,
+    "owner": "iris",
+    "evidence": 43225659271,
+    "added": "2026-11-12"
+  },
+  {
+    "launch": "default-ports",
+    "file": "default-ports/port-source.test.ts",
+    "title": "F-2507 AC-43 (own-ports-output): with the default source, nothing is forwarded for 60 s after a connect, a reload, and a close and reconnect",
+    "card": 2254,
+    "owner": "themis",
+    "evidence": 42367771624,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "explorer-folders",
+    "file": "explorer-folders/folders-4-many.test.ts",
+    "title": "F-2503 AC-21 (many-folders): 122 different folders opened one after another on one host are all listed, most recent first, none dropped",
+    "card": 2467,
+    "owner": "hestia",
+    "evidence": 43356589144,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "containers-a",
+    "file": "containers/authoring-where.test.ts",
+    "title": "F-0405 AC-32 (c101-no-source-rebuild-with): remote-containers.rebuildAndReopenInContainer on a configuration with no container source and a stopped container shows the modal warning, Cancel changes nothing and Use Template opens the template screen, and the container keeps its id and state",
+    "card": 2403,
+    "owner": "dike",
+    "evidence": 43356589144,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "ssh-core",
+    "file": "ssh-core/forwarding-disabled.test.ts",
+    "title": "F-2604 AC-15 (c85-reload): after a reload of the failed window with the local server running the refusal fails the connect again, and the log does not repeat the setting line",
+    "card": 2484,
+    "owner": "dike",
+    "evidence": 43429964938,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "windows",
+    "file": "windows/active-host.test.ts",
+    "title": "F-2303 AC-4, AC-5, AC-6, AC-7: from a connected window a new empty window opens on the same host, connects with no login and no question, and leaves the first alone",
+    "card": 2462,
+    "owner": "iris",
+    "evidence": 43429964938,
+    "added": "2026-11-13"
+  },
+  {
+    "launch": "ssh-core",
+    "file": "ssh-core/silent-flows.test.ts",
+    "title": "F-2508 AC-21 (c125-silent): after the terminal, the code command, the remote settings, a node program debugged to its end, a shell task and the Extensions view, the extension has shown no notification, logged no line, added nothing to the profile’s globalStorage, and registered no command or setting it lacked before",
+    "card": 2646,
+    "owner": "selene",
+    "evidence": 44289456794,
+    "added": "2026-11-18"
+  },
+  {
+    "launch": "terminal-login",
+    "file": "terminal-login/chat-absence.test.ts",
+    "title": "F-2606 AC-25: with remote.SSH.experimental.chat true, the clear command is listed, the dialog has no Copilot button, the chat input offers no row, and the settings file marks the key",
+    "card": 2424,
+    "owner": "iris",
+    "evidence": 42367771624,
+    "added": "2026-11-14"
+  },
+  {
+    "launch": "ssh-core",
+    "file": "ssh-core/reconnect-giveup.test.ts",
+    "title": "F-2505 AC-12 (c2663-third-wrong): the third wrong password at the reconnection’s input makes core show Cannot reconnect at once, with no further attempt",
+    "card": 2753,
+    "owner": "triton",
+    "evidence": 44541680836,
+    "added": "2026-11-19"
+  },
+  {
+    "launch": "windows",
+    "file": "windows/platform-pick.test.ts",
+    "title": "F-2206 AC-26 (c94-kill-current): Kill Current VS Code Server asks the platform in a connected window; after Escape the window stays connected with no notification, no dialog and no entry, and after Linux the kill completes with no entry",
+    "card": 2580,
+    "owner": "proteus",
+    "evidence": 44807795511,
+    "added": "2026-11-20"
+  },
+  {
+    "launch": "containers-b",
+    "file": "containers/reconnect-give-up.test.ts",
+    "title": "F-0502 AC-5 (c43-five-minutes): after 5 minutes with the container running and the server down, the countdown still counts and the indicator still reads Reconnecting; Reload Window connects a new server on a new port within 8 s",
+    "card": 2523,
+    "owner": "dike",
+    "evidence": 44859397697,
+    "added": "2026-11-21"
+  }
+]

@@ -36,6 +36,7 @@ import {
 const WELCOME_CONTEXT_KEYS: Readonly<Record<WelcomeKey, string>> = {
   needsDockerStartOrInstall:
     contextKeys.remoteContainersNeedsDockerStartOrInstall.id,
+  needsSSHCredentials: contextKeys.remoteContainersNeedsSSHCredentials.id,
   noContainersWithFolder: contextKeys.remoteContainersNoContainersWithFolder.id,
   noContainersWithoutFolder:
     contextKeys.remoteContainersNoContainersWithoutFolder.id,
@@ -53,6 +54,10 @@ function iconOf(icon: RowIcon): TreeIcon {
       return {kind: 'theme', id: 'vm-running'};
     case 'vm':
       return {kind: 'theme', id: 'vm'};
+    case 'folder':
+      return {kind: 'theme', id: 'folder'};
+    case 'folderActive':
+      return {kind: 'resource', file: 'folder-active.svg'};
     default:
       return {kind: 'theme', id: 'vm-outline'};
   }
@@ -100,6 +105,10 @@ interface TargetsEditor {
 /** Everything the view needs. */
 export interface TargetsViewPorts {
   editor: TargetsEditor;
+  /** Called once, after the first time the view's data has loaded. */
+  loaded(): void;
+  /** Whether the Docker host in effect is an `ssh://` one whose host name starts with a dash, which no process may be started for. */
+  dashHost?(): Promise<boolean>;
   /** The connection the window holds, from the connector. */
   held(): HeldConnection | undefined;
   /** `dev.containers.dockerPath` as the editor reports it now. */
@@ -220,6 +229,9 @@ export async function showTargets(
     if (engine === undefined) {
       return unreachable('no Docker program is named');
     }
+    if ((await ports.dashHost?.()) === true) {
+      return unreachable('the Docker host over ssh starts with a dash');
+    }
     const options = {cancellation: stopping.signal};
     const listed = await engine.run(LIST_ARGUMENTS, {kind: 'none'}, options);
     if (listed.kind !== 'ran' || listed.status !== 0) {
@@ -311,6 +323,9 @@ export async function showTargets(
     }
     const replaced = current !== undefined;
     current = next;
+    if (!replaced) {
+      ports.loaded();
+    }
     await Promise.all(
       Object.entries(WELCOME_CONTEXT_KEYS).map(([welcome, key]) =>
         editor.setContext(key, next.welcome === welcome),

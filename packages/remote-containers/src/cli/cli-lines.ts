@@ -7,9 +7,9 @@
 export type DaemonRefusal = 'invalidMount' | 'portAllocated';
 
 const INVALID_MOUNT =
-  /^(?:docker: )?Error response from daemon: invalid mount config for type "/u;
+  /^(?:docker: )?Error response from daemon: invalid mount config for type "bind": /u;
 const PORT_ALLOCATED =
-  /^(?:docker: )?Error response from daemon: .*: Bind for \S+ failed: port is already allocated$/u;
+  /^(?:docker: )?Error response from daemon: .*: (?:Bind for \S+ failed: port is already allocated|failed to bind host port for \S+: address already in use)$/u;
 
 /** The refusal one line of the Docker client says, or undefined; the line has no colour codes and no CR. */
 export function daemonRefusalOf(line: string): DaemonRefusal | undefined {
@@ -83,11 +83,19 @@ export type UpResult =
       remoteWorkspaceFolder: string;
       /** The Compose project the CLI used, for a Compose configuration. */
       composeProjectName?: string;
+      /** The substituted devcontainer.json, as `read-configuration` gives it; none when `up` gave none. */
+      configuration?: Record<string, unknown>;
+      /** The configuration merged with the container's metadata; none when `up` gave none. */
+      mergedConfiguration?: Record<string, unknown>;
     }
   | CliFailure;
 
 /** What `run-user-commands` gives. */
 export type RunUserCommandsResult = {kind: 'done'} | CliFailure;
+
+/** What `set-up` gives: the container's merged configuration. */
+export type SetUpResult =
+  {kind: 'setUp'; mergedConfiguration: Record<string, unknown>} | CliFailure;
 
 /** What `templates apply` gives. */
 export type ApplyTemplateResult =
@@ -334,8 +342,25 @@ export function readUpResult(
     remoteUser,
     remoteWorkspaceFolder,
     ...(composeProjectName === undefined ? {} : {composeProjectName}),
+    ...(isFields(fields.configuration)
+      ? {configuration: fields.configuration}
+      : {}),
+    ...(isFields(fields.mergedConfiguration)
+      ? {mergedConfiguration: fields.mergedConfiguration}
+      : {}),
   };
 }
+
+/**
+ * The results of `run-user-commands` that mean it did what it was asked: it ran every command (`done`), or stopped
+ * where `--skip-non-blocking-commands` (`skipNonBlocking`) or `--stop-for-personalization` (`stopForPersonalization`)
+ * says. `prebuild` is none of them: the extension never passes `--prebuild`.
+ */
+const FINISHED_RESULTS: ReadonlySet<string> = new Set([
+  'done',
+  'skipNonBlocking',
+  'stopForPersonalization',
+]);
 
 /** What `run-user-commands` gave. */
 export function readRunUserCommandsResult(
@@ -350,9 +375,28 @@ export function readRunUserCommandsResult(
   if (fields.outcome === 'error') {
     return errorOf(fields);
   }
-  return fields.result === 'done'
+  return typeof fields.result === 'string' &&
+    FINISHED_RESULTS.has(fields.result)
     ? {kind: 'done'}
     : {kind: 'malformedResult', field: 'result'};
+}
+
+/** What `set-up` gave, from its result line and the process's status. */
+export function readSetUpResult(
+  result: string | undefined,
+  status: number | null,
+): SetUpResult {
+  const parsed = parsedResult(result, status);
+  if ('failure' in parsed) {
+    return parsed.failure;
+  }
+  const {fields} = parsed;
+  if (fields.outcome === 'error') {
+    return errorOf(fields);
+  }
+  return isFields(fields.mergedConfiguration)
+    ? {kind: 'setUp', mergedConfiguration: fields.mergedConfiguration}
+    : {kind: 'malformedResult', field: 'mergedConfiguration'};
 }
 
 /**

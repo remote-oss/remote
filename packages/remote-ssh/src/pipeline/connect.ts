@@ -2,7 +2,7 @@
  * @fileoverview The connect pipeline (R1): the steps of one connect in their order, with the phase events the
  * window shows, a bound on every wait of the machine's that could otherwise hang, the cancellation between steps,
  * and the one place where a failure of any step becomes the failure the window gets. What the connect has made (the
- * lease on the connection, the window's tunnel) is given back on every failure, also when a step throws or finishes
+ * client install lock, the lease on the connection, the window's tunnel) is given back on every failure, also when a step throws or finishes
  * after it was given up on; on success it goes to the window. The waits for the user (the platform question, the
  * login's questions, the licence) have no limit of their own.
  */
@@ -10,9 +10,18 @@
 import type {Connected, Failed} from 'lib-authority';
 import {shouldApplyDefaults} from 'lib-forwarding';
 import type {Logger} from 'lib-log';
-import type {ProbedHost, StartedServer, TransferPhase} from 'lib-server';
+import type {SessionCheck} from 'lib-ssh';
+import type {
+  CliControl,
+  ProbedHost,
+  StartedServer,
+  TransferPhase,
+} from 'lib-server';
 import {
   CONNECT_WAIT_TIMEOUT,
+  EXEC_SERVER_NO_CLI,
+  EXEC_SERVER_SETTING_OFF,
+  execServerNotSetUp,
   type FailureContext,
   type FailureDetail,
   failedWith,
@@ -21,7 +30,7 @@ import {
   ofStart,
   ofTransfer,
 } from './failure.ts';
-import {connectOverCli} from '../cli/cli-connect.ts';
+import {connectOverCli, holdOverCli} from '../cli/cli-connect.ts';
 import type {ForwardingPlans} from '../environment/forwarding.ts';
 import {
   hostPlatformLine,
@@ -30,7 +39,9 @@ import {
   resolvedLine,
   resolverLine,
 } from '../diagnostics/log-content.ts';
+import {PLATFORM_OF_PROBE} from './platform.ts';
 import type {
+  ClientLockHold,
   ConnectInput,
   ConnectionLease,
   ConnectionTerms,
@@ -60,6 +71,11 @@ export type PhaseEvent =
 export interface ConnectOptions {
   cancellation: AbortSignal;
   onPhase: (event: PhaseEvent) => void;
+  /**
+   * Called each time the connection step opens: the host reported its platform, or the window joined a connection
+   * whose record holds it. Nothing before it means the host was reached.
+   */
+  onHostReported?: () => void;
   /** The value of `remote.SSH.maxReconnectionAttempts`, as the user wrote it. */
   maximumReconnectionAttempts: unknown;
   /** How long the pre-connection script may take, with its question to the user. */
@@ -69,6 +85,10 @@ export interface ConnectOptions {
   serve: {commit: string; quality: string};
   /** The value of `remote.SSH.useExecServer`, read when the connect starts. */
   useExecServer: boolean;
+  /** The lines of the settings listing, as the settings are when the connect starts. */
+  settingLines: readonly string[];
+  /** Writes the editor version, the extension and the platform to the log when the window has not yet. */
+  writeWindowStart: () => void;
 }
 
 /** How a bounded step ended when it did not give its value. */
@@ -146,19 +166,37 @@ export type TransportEvent = 'lost' | 'closed';
 /** A connect that worked: what the window gets, and the end of the connection when the window ends. */
 export interface Connection {
   connected: Connected;
+  /** The control connection of the command-line program the window's bridge rides on; none for a direct install. */
+  control?: CliControl;
   /** The TCP port the server listens on at the host's loopback. */
   serverPort: number;
   /** The window's agent link and display plans, which set its terminals' environment. */
   forwarding: ForwardingPlans;
+  /** Asks the connection whether its session still answers, which an attempt does when core starts a reconnection. */
+  checkSession(): Promise<SessionCheck>;
   /** Closes the tunnel and gives the lease on the connection back; the connector calls it when the window ends. */
   release(): void;
   /** Hears what happens to the connection's transport; the returned function stops it. */
   onTransport(listener: (event: TransportEvent) => void): () => void;
 }
 
+/** A connect that held the command-line program's control connection and no server, for an exec server. */
+export interface ControlConnection {
+  control: CliControl;
+  /** Closes the control connection and the tunnel, and gives the lease back. */
+  release(): void;
+  /** Hears the loss of the control connection; the returned function stops it. */
+  onTransport(listener: (event: TransportEvent) => void): () => void;
+}
+
+/** What a connect is for: the window's own server, or the control connection alone. */
+type Purpose = 'window' | 'control';
+
 /** What a connect has made so far, to give back when it fails; the tunnel is last, and it is the window's to close. */
 interface Held {
   lease?: ConnectionLease | undefined;
+  /** The alias's client install lock, from the start of the window's setup until its install phase is over. */
+  clientLock?: ClientLockHold | undefined;
 }
 
 /** The text of anything a step throws. */
@@ -191,14 +229,49 @@ const CHECKS = [
 ] as const;
 
 /** One connect: runs the steps in order and returns the connection, or the failure. */
-export async function connect(
+export function connect(
   input: ConnectInput,
   steps: ConnectSteps,
   options: ConnectOptions,
 ): Promise<Connection | Failed> {
+  return runConnect(input, steps, options, 'window');
+}
+
+/**
+ * One connect for an exec server: the same steps up to the command-line program's control connection, which it holds
+ * and returns. No server is started and no window tunnel is opened, and a host with no command-line program is refused
+ * with the reason rather than served by a direct install.
+ */
+export function connectControl(
+  input: ConnectInput,
+  steps: ConnectSteps,
+  options: ConnectOptions,
+): Promise<ControlConnection | Failed> {
+  return runConnect(input, steps, options, 'control');
+}
+
+function runConnect(
+  input: ConnectInput,
+  steps: ConnectSteps,
+  options: ConnectOptions,
+  purpose: 'window',
+): Promise<Connection | Failed>;
+function runConnect(
+  input: ConnectInput,
+  steps: ConnectSteps,
+  options: ConnectOptions,
+  purpose: 'control',
+): Promise<ControlConnection | Failed>;
+async function runConnect(
+  input: ConnectInput,
+  steps: ConnectSteps,
+  options: ConnectOptions,
+  purpose: Purpose,
+): Promise<Connection | ControlConnection | Failed> {
   const held: Held = {};
 
   function failure(step: StepFailure): Failed {
+    held.clientLock?.release();
     held.lease?.release();
     const context = contextOf(input, options, step);
     if (step.sshExitStatus !== undefined) {
@@ -218,8 +291,19 @@ export async function connect(
   options.logger.info(
     resolverLine(input.rawHostString, input.attempt, input.isReconnection),
   );
+  for (const line of options.settingLines) {
+    options.logger.info(line);
+  }
+  options.writeWindowStart();
   try {
-    const result = await runSteps(input, steps, options, held, failure);
+    const result = await runSteps(
+      input,
+      steps,
+      options,
+      held,
+      failure,
+      purpose,
+    );
     if ('connected' in result) {
       options.logger.info(
         resolvedLine(input.rawHostString, result.connected.address.port),
@@ -238,7 +322,8 @@ async function runSteps(
   options: ConnectOptions,
   held: Held,
   failure: (step: StepFailure) => Failed,
-): Promise<Connection | Failed> {
+  purpose: Purpose,
+): Promise<Connection | ControlConnection | Failed> {
   const {cancellation} = options;
 
   /** A bounded step that gives a result; a result that is not its value is the failure to return. */
@@ -288,6 +373,20 @@ async function runSteps(
     return cancellation.aborted ? failure({kind: 'cancelled'}) : undefined;
   }
 
+  /** Ends the install phase: the client lock goes, so that a window of the same alias waiting for it goes on. */
+  function installed(): void {
+    held.clientLock?.release();
+    held.clientLock = undefined;
+  }
+
+  if (purpose === 'window') {
+    // Not waited for and not tied to the cancellation: a settings write of a window that is still resolving can wait
+    // for the resolve, and waiting here held every connect at its first line (acceptance run 43793703309).
+    void quietly('the legacy settings move', () =>
+      steps.migrateLegacySettings(),
+    );
+    steps.warnOfDownloadMode();
+  }
   options.onPhase({kind: 'initializing', quiet: true});
   for (const check of CHECKS) {
     const invalid = steps[check](input);
@@ -332,6 +431,19 @@ async function runSteps(
     }
     waits = located.value;
   }
+  if (purpose === 'window') {
+    const clientLock = await steps.holdClientLock(
+      input,
+      () => {
+        options.onPhase({kind: 'waitingForOtherWindow'});
+      },
+      cancellation,
+    );
+    if (clientLock.kind === 'failed') {
+      return failure(clientLock.failure);
+    }
+    held.clientLock = clientLock.value;
+  }
   /**
    * Opens the connection and probes the host with `attemptTerms`: the step failure to return, a failed connect already
    * given back, or the lease and the host.
@@ -353,6 +465,7 @@ async function runSteps(
     }
     const opened = connection.value;
     held.lease = opened;
+    options.onHostReported?.();
     if (opened.storedRecord === undefined) {
       // Nothing stored and live to reuse (a first connect, a retry after a failure): the progress shows from here with
       // the title alone. A reuse stays quiet, so that a reload of a connected window shows no progress.
@@ -412,6 +525,9 @@ async function runSteps(
   const {lease, host} = attempt;
   const tunnelWaits = attempt.waits;
   options.logger.info(hostPlatformLine(host));
+  if (terms.value.platform === 'unknown') {
+    options.logger.info(`Platform: ${PLATFORM_OF_PROBE[host.operatingSystem]}`);
+  }
   const shellLine = loginShellLine(host);
   if (shellLine !== undefined) {
     options.logger.info(shellLine);
@@ -437,6 +553,35 @@ async function runSteps(
   if (gate.kind === 'cancelled') {
     return failure({kind: 'cancelled'});
   }
+  if (purpose === 'control') {
+    if (planned.plan.kind !== 'cli') {
+      return failure(
+        options.useExecServer ? EXEC_SERVER_NO_CLI : EXEC_SERVER_SETTING_OFF,
+      );
+    }
+    const holding = await holdOverCli({
+      input,
+      lease,
+      host,
+      plan: planned.plan,
+      steps,
+      logger: options.logger,
+      useExecServer: options.useExecServer,
+      cancellation,
+    });
+    if (holding.kind === 'held') {
+      const {control, release, onTransport} = holding;
+      return {control, release, onTransport};
+    }
+    return (
+      cancelled() ??
+      failure(
+        holding.kind === 'failed'
+          ? holding.failure
+          : execServerNotSetUp(holding.cause),
+      )
+    );
+  }
   if (planned.plan.kind === 'cli') {
     const overCli = await connectOverCli({
       input,
@@ -451,6 +596,7 @@ async function runSteps(
       cancellation,
     });
     if (overCli.kind === 'connected') {
+      installed();
       void quietly('the platform setting', () =>
         steps.rememberPlatform(input, host.operatingSystem),
       );
@@ -458,6 +604,7 @@ async function runSteps(
       steps.linkAgent(lease, forwarding.agentLink);
       return {
         connected: overCli.connected,
+        control: overCli.control,
         serverPort: 0,
         forwarding,
         release: () => {
@@ -521,6 +668,7 @@ async function runSteps(
       ofStart(started.failure, {useExecServer: options.useExecServer}),
     );
   }
+  installed();
   if (
     started.notices.some(notice => notice.kind === 'requirementsHelperMissing')
   ) {
@@ -531,6 +679,24 @@ async function runSteps(
   if (started.server.endpoint.kind === 'port') {
     options.logger.info(listeningLine(started.server.endpoint.port));
   }
+  // The direct install, which is the legacy mode and the exec server mode of an editor that names no CLI source, prunes
+  // the installs older than the five newest on every connect and reload, once this connect's server runs, taking the
+  // locks as the install did (the host's system decides the method); a connect over the CLI never gets here. A failure
+  // is only logged.
+  await quietly('the clean-up of old installs', async () => {
+    const outcome = await steps.maintain(
+      input,
+      lease,
+      'cleanup',
+      cancellation,
+      host,
+    );
+    if (outcome.kind !== 'done') {
+      options.logger.warn(
+        `the clean-up of old installs ended with ${outcome.kind}`,
+      );
+    }
+  });
   if (started.server.reused) {
     await quietly('the default extensions', () =>
       steps.installExtensions(input, lease, cancellation),
@@ -562,8 +728,8 @@ async function runSteps(
   }
   const {endpoint} = started.server;
   if (endpoint.kind === 'port') {
-    await quietly('the shared record', () =>
-      lease.storeSharedRecord({
+    await quietly('the shared record', async () => {
+      const stored = await lease.storeSharedRecord({
         remotePort: endpoint.port,
         operatingSystem: host.operatingSystem,
         architecture: host.architecture,
@@ -571,7 +737,14 @@ async function runSteps(
         connectionToken: started.server.connectionToken,
         agentLink: forwarding.agentLink,
         display: forwarding.display,
-      }),
+      });
+      options.logger.info(
+        `the shared record was ${stored ? 'stored' : 'declined by the connection'}`,
+      );
+    });
+  } else {
+    options.logger.info(
+      `no shared record is stored: the server's endpoint is a ${endpoint.kind}`,
     );
   }
   void quietly('the platform setting', () =>
@@ -588,6 +761,7 @@ async function runSteps(
     },
     serverPort: endpoint.kind === 'port' ? endpoint.port : 0,
     forwarding,
+    checkSession: () => lease.checkSession(),
     release: () => {
       tunnel.value.close();
       lease.release();

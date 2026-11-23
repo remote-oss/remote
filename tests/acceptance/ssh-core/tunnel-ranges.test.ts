@@ -13,7 +13,8 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
-import {notifications, statusItem} from '../windows/renderer.ts';
+import {runSshArguments} from '../windows/pty-support.ts';
+import {notifications, statusBarText, statusItem} from '../windows/renderer.ts';
 import {
   addedSince,
   connectedWith,
@@ -96,10 +97,10 @@ describe('the local port range of a window (card coverage-79)', function () {
 
   it('F-2104 AC-10 (c79-range-skip): with the first two ports of the range held and answering, the window port is the third and the SOCKS port lies outside the range', async () => {
     await keepingSettings(async () => {
-      const held = await holdPorts([41060, 41061], '127.0.0.1');
+      const held = await holdPorts([21060, 21061], '127.0.0.1');
       try {
         const connected = await connectedWith('c79-skip', 'harness', {
-          [SETTING]: '41060-41063',
+          [SETTING]: '21060-21063',
         });
         await closeWindow('c79-skip');
         const socks = connected.added
@@ -107,11 +108,11 @@ describe('the local port range of a window (card coverage-79)', function () {
           .map(each => each.port);
         deepStrictEqual(
           [
-            windowPorts(connected.added, 41060, 41063),
+            windowPorts(connected.added, 21060, 21063),
             socks.length,
-            socks.filter(port => port >= 41060 && port <= 41063),
+            socks.filter(port => port >= 21060 && port <= 21063),
           ],
-          [[41062], 1, []],
+          [[21062], 1, []],
         );
       } finally {
         await held.release();
@@ -122,36 +123,42 @@ describe('the local port range of a window (card coverage-79)', function () {
   it('F-2104 AC-11 (c79-range-single): the range N-N with N free gives the window port N', async () => {
     await keepingSettings(async () => {
       const connected = await connectedWith('c79-single', 'harness', {
-        [SETTING]: '41065-41065',
+        [SETTING]: '21065-21065',
       });
       await closeWindow('c79-single');
-      deepStrictEqual(windowPorts(connected.added, 41065, 41065), [41065]);
+      deepStrictEqual(windowPorts(connected.added, 21065, 21065), [21065]);
     });
   });
 
   it('F-2104 AC-12 (c79-range-families): a range whose only port is held on ::1 alone connects with the port bound on 127.0.0.1, and held on 0.0.0.0 it gives the dialog of a full range', async () => {
     await keepingSettings(async () => {
-      const loopback = await holdPorts([41067], '::1');
+      const loopback = await holdPorts([21067], '::1');
       let bound: number[] | undefined;
       try {
         const connected = await connectedWith('c79-six', 'harness', {
-          [SETTING]: '41067-41067',
+          [SETTING]: '21067-21067',
         });
-        bound = windowPorts(connected.added, 41067, 41067);
+        bound = windowPorts(connected.added, 21067, 21067);
         await closeWindow('c79-six');
       } finally {
         await loopback.release();
       }
-      const wildcard = await holdPorts([41068], '0.0.0.0');
+      const wildcard = await holdPorts([21068], '0.0.0.0');
       try {
-        await userSettings({[SETTING]: '41068-41068', ...PLATFORM});
+        await userSettings({[SETTING]: '21068-21068', ...PLATFORM});
+        // The shared connection of the first window keeps its ssh for a grace after the window closed; this connect is its own.
+        await waitFor(
+          'the ssh clients of the first connect to end',
+          () => Promise.resolve(runSshArguments().length === 0),
+          90_000,
+        );
         appendScript(dismissing('c79-wild', 'Close Remote'));
         await openWindow('harness', 'c79-wild');
         const dialogs = await dialogsOf('c79-wild', 1);
         await closeWindow('c79-wild');
         deepStrictEqual(
           [bound, dialogs],
-          [[41067], [busyDialog('41068-41068')]],
+          [[21067], [busyDialog('21068-21068')]],
         );
       } finally {
         await wildcard.release();
@@ -164,7 +171,7 @@ describe('the local port range of a window (card coverage-79)', function () {
     try {
       await keepingSettings(async () => {
         await connectedWith('c79-range-forward', 'harness', {
-          [SETTING]: '41040-41043',
+          [SETTING]: '21040-21043',
         });
         await inWindow(
           'c79-range-forward',
@@ -185,9 +192,9 @@ describe('the local port range of a window (card coverage-79)', function () {
 
   it('F-2104 AC-14, AC-17, AC-41, AC-42 (c79-range-dialog): a range with every port held gives the dialog with its three buttons; Retry with the range still full gives it again, its progress reading the host alone until then; More Actions shows the five actions and Escape leaves the indicator Disconnected from SSH: harness', async () => {
     await keepingSettings(async () => {
-      const held = await holdPorts([41070, 41071], '127.0.0.1');
+      const held = await holdPorts([21070, 21071], '127.0.0.1');
       try {
-        await userSettings({[SETTING]: '41070-41071', ...PLATFORM});
+        await userSettings({[SETTING]: '21070-21071', ...PLATFORM});
         const name = 'c79-full';
         appendScript([
           {
@@ -228,8 +235,8 @@ describe('the local port range of a window (card coverage-79)', function () {
           {
             retryProgress: [['Setting up SSH Host harness', undefined]],
             dialogs: [
-              [busyDialog('41070-41071'), BUTTONS],
-              [busyDialog('41070-41071'), BUTTONS],
+              [busyDialog('21070-21071'), BUTTONS],
+              [busyDialog('21070-21071'), BUTTONS],
             ],
             pick: [
               [
@@ -255,9 +262,9 @@ describe('the local port range of a window (card coverage-79)', function () {
 
   it('F-2104 AC-16 (c79-range-retry): after the ports are freed, Retry connects the same window on the first port of the range', async () => {
     await keepingSettings(async () => {
-      const held = await holdPorts([41075, 41076], '127.0.0.1');
+      const held = await holdPorts([21075, 21076], '127.0.0.1');
       try {
-        await userSettings({[SETTING]: '41075-41076', ...PLATFORM});
+        await userSettings({[SETTING]: '21075-21076', ...PLATFORM});
         const name = 'c79-retry';
         appendScript([
           {
@@ -276,13 +283,13 @@ describe('the local port range of a window (card coverage-79)', function () {
         await waitFor(
           'the connection on the first port',
           () =>
-            windowPorts(addedSince(before, listeners()), 41075, 41076).length >
+            windowPorts(addedSince(before, listeners()), 21075, 21076).length >
             0,
           120_000,
         );
         deepStrictEqual(
-          windowPorts(addedSince(before, listeners()), 41075, 41076),
-          [41075],
+          windowPorts(addedSince(before, listeners()), 21075, 21076),
+          [21075],
         );
         await closeWindow(name);
       } finally {
@@ -293,9 +300,9 @@ describe('the local port range of a window (card coverage-79)', function () {
 
   it('F-2104 AC-30 (c79-range-changed): the range changed in the settings while the dialog is open is the one Retry uses, with no restart', async () => {
     await keepingSettings(async () => {
-      const held = await holdPorts([41080, 41081], '127.0.0.1');
+      const held = await holdPorts([21080, 21081], '127.0.0.1');
       try {
-        await userSettings({[SETTING]: '41080-41081', ...PLATFORM});
+        await userSettings({[SETTING]: '21080-21081', ...PLATFORM});
         const name = 'c79-changed';
         appendScript([
           {
@@ -309,18 +316,18 @@ describe('the local port range of a window (card coverage-79)', function () {
         const before = listeners();
         await openWindow('harness', name);
         await dialogsOf(name, 1);
-        await userSettings({[SETTING]: '41082-41083'});
+        await userSettings({[SETTING]: '21082-21083'});
         signal('c79-changed-range');
         await waitFor(
           'the connection on the new range',
           () =>
-            windowPorts(addedSince(before, listeners()), 41080, 41083).length >
+            windowPorts(addedSince(before, listeners()), 21080, 21083).length >
             0,
           120_000,
         );
         deepStrictEqual(
-          windowPorts(addedSince(before, listeners()), 41080, 41083),
-          [41082],
+          windowPorts(addedSince(before, listeners()), 21080, 21083),
+          [21082],
         );
         await closeWindow(name);
       } finally {
@@ -331,10 +338,10 @@ describe('the local port range of a window (card coverage-79)', function () {
 
   it('F-2104 AC-15 (c79-range-terminal): with the local server off and a full range the install login happens, the dialog appears and no tunnel ssh process is started', async () => {
     await keepingSettings(async () => {
-      const held = await holdPorts([41085, 41086], '127.0.0.1');
+      const held = await holdPorts([21085, 21086], '127.0.0.1');
       try {
         await userSettings({
-          [SETTING]: '41085-41086',
+          [SETTING]: '21085-21086',
           'remote.SSH.useLocalServer': false,
           ...PLATFORM,
         });
@@ -346,7 +353,7 @@ describe('the local port range of a window (card coverage-79)', function () {
         await new Promise(resolve => setTimeout(resolve, 8000));
         const logins = await acceptedKeyLogins(since);
         await closeWindow(name);
-        deepStrictEqual([dialogs, logins], [[busyDialog('41085-41086')], 1]);
+        deepStrictEqual([dialogs, logins], [[busyDialog('21085-21086')], 1]);
       } finally {
         await held.release();
       }
@@ -355,7 +362,7 @@ describe('the local port range of a window (card coverage-79)', function () {
 
   it('F-2104 AC-18 (c79-range-ignored-part): a range that is not of the form first-last, or reversed, or outside the ports is ignored: no notification or dialog, a random port, and the log says so', async () => {
     const seen: Array<[string, number, string[], string[]]> = [];
-    for (const value of ['abc', '41090', '41091-41090', '70000-70010', '0-0']) {
+    for (const value of ['abc', '21090', '21091-21090', '70000-70010', '0-0']) {
       await closeAllButLocal();
       await keepingSettings(async () => {
         const name = 'c79-ignored';
@@ -374,8 +381,8 @@ describe('the local port range of a window (card coverage-79)', function () {
     }
     deepStrictEqual(seen, [
       ['abc', 0, [], ignored('badFormat')],
-      ['41090', 0, [], ignored('badFormat')],
-      ['41091-41090', 0, [], ignored('reversed')],
+      ['21090', 0, [], ignored('badFormat')],
+      ['21091-21090', 0, [], ignored('reversed')],
       ['70000-70010', 0, [], ignored('outOfBounds')],
       ['0-0', 0, [], ignored('outOfBounds')],
     ]);
@@ -399,6 +406,16 @@ describe('the local port range of a window (card coverage-79)', function () {
       await openWindow('harness', name);
       await dialogsOf(name, 1);
       const phases = recordLines('progress', name).map(line => line.question);
+      // The spec has the dialog and the indicator at the same moment and orders neither (F-2601 5.0 step 3, F-2003 6.4
+      // step 2), and the log reveal of a failed connect (#2537) lets core's indicator follow the dialog by about a
+      // quarter of a second (measured: 5 of 12 windows read "Opening Remote..." 50 to 80 ms after it, all read
+      // "Disconnected" by 320 ms), so the row waits up to a second for it (athena's ruling on #2537).
+      await waitFor(
+        'the remote indicator to read Disconnected',
+        async () =>
+          (await statusBarText(name, 'status.host')).startsWith('Disconnected'),
+        1000,
+      ).catch(() => undefined);
       const indicator = (await statusItem(name, 'status.host')).text;
       await closeWindow(name);
       deepStrictEqual(

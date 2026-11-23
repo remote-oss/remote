@@ -19,3 +19,13 @@ export function harnessUrlOf(
     ? own
     : published;
 }
+
+/** Whether the harness's adapter that `variable` names is on: only when the switch is on and `variable` is exactly `1`. */
+export function harnessAdapterOn(
+  environment: Readonly<Record<string, string | undefined>>,
+  variable: string,
+): boolean {
+  return (
+    environment[ACCEPTANCE_SWITCH] === '1' && environment[variable] === '1'
+  );
+}

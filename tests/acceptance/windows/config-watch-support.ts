@@ -5,12 +5,12 @@
 
 import {execFile} from 'node:child_process';
 import {existsSync, readdirSync, readFileSync, writeFileSync} from 'node:fs';
-import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {inWindow, reopenInContainer, variable, waitFor} from './harness.ts';
 import {openFolderWindow} from './folder-windows.ts';
 import {notificationCentre, statusBarText, toastFacts} from './renderer.ts';
+import {readStateDatabase} from './state-database.ts';
 
 /** The words of the notification for the files `names`. */
 export function changed(names: string): string {
@@ -135,8 +135,7 @@ export function storedHashes(
     ) {
       continue;
     }
-    const connection = new DatabaseSync(database, {readOnly: true});
-    try {
+    return readStateDatabase(database, connection => {
       const found = connection
         .prepare('SELECT value FROM ItemTable WHERE key = ?')
         .get(STATE_KEY) as {value: string} | undefined;
@@ -150,9 +149,7 @@ export function storedHashes(
         | {configurationState?: {contentHashes?: Record<string, string>}}
         | undefined;
       return stored?.configurationState?.contentHashes;
-    } finally {
-      connection.close();
-    }
+    });
   }
   return undefined;
 }
@@ -181,22 +178,36 @@ export async function toastWhen(
   return found;
 }
 
-/** Samples the remote indicator of window `name` until stopped, and gives the distinct texts it showed, in order. */
-export function sampledIndicator(name: string): {stop(): string[]} {
+/**
+ * Samples the remote indicator of window `name` until stopped, and gives the distinct texts it showed, in order. Stopping
+ * reads the indicator once more, so that the last text is the one it shows at that moment and not the one the last
+ * sample, up to 200 ms before, saw.
+ */
+export function sampledIndicator(name: string): {stop(): Promise<string[]>} {
   const texts: string[] = [];
+  let stopped = false;
+  function note(text: string): void {
+    if (text !== '' && texts.at(-1) !== text) {
+      texts.push(text);
+    }
+  }
   const timer = setInterval(() => {
+    // A sample still being read when the sampler stops is older than the last reading and is left out.
     statusBarText(name, 'status.host').then(
       text => {
-        if (text !== '' && texts.at(-1) !== text) {
-          texts.push(text);
+        if (!stopped) {
+          note(text);
         }
       },
       () => undefined,
     );
   }, 200);
   return {
-    stop: () => {
+    stop: async () => {
       clearInterval(timer);
+      const last = await statusBarText(name, 'status.host').catch(() => '');
+      stopped = true;
+      note(last);
       return texts;
     },
   };

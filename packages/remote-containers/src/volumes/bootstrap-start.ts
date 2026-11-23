@@ -58,7 +58,7 @@ async function ensureVolume(
 }
 
 /** Makes the image ready: our own built from a fresh context, or a custom one, pulled when its setting asks. */
-async function readyImage(
+export async function readyImage(
   ports: BootstrapStartPorts,
   settings: BootstrapSettings,
 ): Promise<

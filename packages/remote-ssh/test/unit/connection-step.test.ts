@@ -68,17 +68,33 @@ const WAITS = {probeMilliseconds: 7000, tunnelMilliseconds: 8000};
 /** A lease that answers requests from a script and lets a test send the helper's events. */
 class FakeLease {
   readonly leaseId = 1;
-  readonly payload = {
+  readonly payload: {
+    socksPort: number;
+    runFacts: string;
+    /** The helper's pid, once a row gives one; none otherwise. */
+    helperProcessId?: number;
+  } = {
     socksPort: 41000,
     runFacts: JSON.stringify(RUN_FACTS),
   };
+  /** Whether this window's claim started the helper; the join's rows turn it off. */
+  readonly startedByMe: boolean;
+  /** The ssh pid the connected event and the record's answer carry; none when unset. */
+  sshProcessId: number | undefined = undefined;
   released = 0;
   readonly asked: PlainData[] = [];
   /** What the helper answers to the first requests to connect, in order; it accepts after these. */
   connectReplies: PlainData[] = [];
   /** The record an earlier window left, which the helper gives back when asked; none when unset. */
   storedRecord: PlainData | undefined;
+  /** What the helper's opening found when the platform was unknown; null when it found nothing. */
+  detectedPlatform: string | null = null;
   private readonly listeners: Array<(event: unknown) => void> = [];
+
+  /** A lease, whose window started the helper when `startedByMe` holds. */
+  constructor(startedByMe = true) {
+    this.startedByMe = startedByMe;
+  }
 
   onEvent(listener: (event: unknown) => void): void {
     this.listeners.push(listener);
@@ -90,8 +106,18 @@ class FakeLease {
     const reply =
       type === 'connect'
         ? (this.connectReplies.shift() ?? {type: 'accepted'})
-        : type === 'sharedRecord' && this.storedRecord !== undefined
-          ? {type: 'sharedRecord', record: this.storedRecord}
+        : type === 'sharedRecord' &&
+            (this.storedRecord !== undefined ||
+              this.detectedPlatform !== null ||
+              this.sshProcessId !== undefined)
+          ? {
+              type: 'sharedRecord',
+              record: this.storedRecord ?? null,
+              detectedPlatform: this.detectedPlatform,
+              ...(this.sshProcessId === undefined
+                ? {}
+                : {sshProcessId: this.sshProcessId}),
+            }
           : {type: 'accepted'};
     return Promise.resolve({kind: 'reply', body: reply});
   }
@@ -141,8 +167,10 @@ function fixture(
     | 'cancelled' = 'acquired',
   channelFailureMessage?: string,
   level: Level = 'info',
+  staleReplaced = false,
+  startedByMe = true,
 ): Fixture {
-  const lease = new FakeLease();
+  const lease = new FakeLease(startedByMe);
   const requests: Array<ConnectionAcquireRequest<StepFailure>> = [];
   const adopted: RunFacts[] = [];
   const notices: ConnectionNotice[] = [];
@@ -158,6 +186,9 @@ function fixture(
     },
     acquire: request => {
       requests.push(request);
+      if (staleReplaced) {
+        request.onStaleReplaced?.();
+      }
       return Promise.resolve(
         acquired === 'acquired'
           ? {
@@ -195,6 +226,7 @@ function fixture(
               displayHost: 'harness',
               externalAskpass: false,
               askpassFirstMessageMilliseconds: 5000,
+              hostPlatform: 'unknown',
             },
           }),
         policy: {kind: 'graceAfterLastLease', milliseconds: 3000},
@@ -253,8 +285,9 @@ function fixture(
 async function loggedIn(
   storedRecord?: PlainData,
   terms?: ConnectionTerms,
+  level?: Level,
 ): Promise<Fixture & {outcome: Awaited<ReturnType<Fixture['connecting']>>}> {
-  const ready = fixture();
+  const ready = fixture('acquired', undefined, level);
   ready.lease.storedRecord = storedRecord;
   const pending = ready.connecting(undefined, undefined, terms);
   await settled();
@@ -283,6 +316,72 @@ describe('the connection step', () => {
   function sshLogged(ready: ReturnType<typeof fixture>): string[] {
     return ready.logged().filter(line => line.startsWith('[ssh] '));
   }
+
+  it('F-2102 §9: started, reused and stale are logged', async () => {
+    const claim = fixture('acquired', undefined, 'info', true);
+    claim.lease.payload.helperProcessId = 4242;
+    claim.lease.sshProcessId = 7331;
+    const claimPending = claim.connecting();
+    await settled();
+    claim.lease.emit({
+      type: 'connected',
+      socksPort: 41000,
+      sshProcessId: 7331,
+    });
+    await claimPending;
+
+    const join = fixture('acquired', undefined, 'info', false, false);
+    join.lease.payload.helperProcessId = 4242;
+    join.lease.sshProcessId = 7331;
+    join.lease.connectReplies = [{type: 'refused', reason: 'alreadyConnected'}];
+    await join.connecting();
+
+    function linesOf(ready: ReturnType<typeof fixture>): string[] {
+      return ready
+        .logged()
+        .filter(line => line.startsWith('Local connection server'));
+    }
+    deepStrictEqual(
+      [linesOf(claim), linesOf(join)],
+      [
+        [
+          'Local connection server record was stale and replaced',
+          'Local connection server started: pid 4242, ssh pid 7331',
+        ],
+        ['Local connection server reused: pid 4242, ssh pid 7331'],
+      ],
+    );
+  });
+
+  it('F-2102 §9: the starter logs no line when the helper holds no local connection server, even with an ssh pid', async () => {
+    const claim = fixture('acquired', undefined, 'info', false, true);
+    const claimPending = claim.connecting();
+    await settled();
+    claim.lease.emit({type: 'connected', socksPort: 41000, sshProcessId: 7331});
+    await claimPending;
+    deepStrictEqual(
+      claim.logged().filter(line => line.startsWith('Local connection server')),
+      [],
+    );
+  });
+
+  it('#2598 (F-2109 AC-12): the window logs a LocalCommand’s lines as the helper sends them, apart from ssh’s own, and not after the connection is given back', async () => {
+    const ready = fixture('acquired', undefined, 'info');
+    const pending = ready.connecting();
+    await settled();
+    ready.lease.emit({type: 'localCommandLines', lines: ['out-marker']});
+    ready.lease.emit({type: 'sshLines', lines: ['Warning: x']});
+    ready.lease.emit({type: 'connected', socksPort: 41000});
+    const connected = await pending;
+    if (connected.kind === 'done') {
+      connected.value.release();
+    }
+    ready.lease.emit({type: 'localCommandLines', lines: ['after the release']});
+    deepStrictEqual(
+      ready.logged().filter(line => /^\[(?:local command|ssh)\] /.test(line)),
+      ['[local command] out-marker', '[ssh] Warning: x'],
+    );
+  });
 
   it('F-2003 BR-6 item 6: the window logs each line once, in order', async () => {
     const ready = await hearing('trace', [['debug1: a', 'b'], ['c']]);
@@ -494,6 +593,41 @@ describe('the connection step', () => {
     );
   });
 
+  describe('F-2003 BR-9 item 2 (#2538): the stored record of the host is a line at trace', () => {
+    const RECORD = {
+      remotePort: 4321,
+      operatingSystem: 'linux',
+      architecture: 'x64',
+      temporaryFolder: '/tmp',
+      connectionToken: 'secret-token',
+    };
+
+    it('says at trace that the stored data has a record of the host and its operating system, and never its token', async () => {
+      const {logged} = await loggedIn(RECORD, undefined, 'trace');
+      deepStrictEqual(logged(), [
+        'Started ssh',
+        'the stored data has a record of host harness: linux',
+      ]);
+    });
+
+    it('says at trace that the stored data has no record when the helper holds none', async () => {
+      const {logged} = await loggedIn(undefined, undefined, 'trace');
+      deepStrictEqual(logged(), [
+        'Started ssh',
+        'the stored data has no record of host harness',
+      ]);
+    });
+
+    it('writes nothing about it at debug, with or without a record', async () => {
+      const withRecord = await loggedIn(RECORD, undefined, 'debug');
+      const without = await loggedIn(undefined, undefined, 'debug');
+      deepStrictEqual(
+        [withRecord.logged(), without.logged()],
+        [['Started ssh'], ['Started ssh']],
+      );
+    });
+  });
+
   describe('F-2206 AC-29: a connection another window set up is reused before the platform of the settings counts', () => {
     const WINDOWS_TERMS: ConnectionTerms = {...TERMS, platform: 'windows'};
 
@@ -530,6 +664,42 @@ describe('the connection step', () => {
     it('keeps the terms of the settings when the helper holds no record, so the entry decides after the server is gone', async () => {
       const {channelsFor} = await loggedIn(undefined, WINDOWS_TERMS);
       deepStrictEqual(channelsFor, [[true, WINDOWS_TERMS, 'harness']]);
+    });
+  });
+
+  describe('#1835: the platform the helper found when the settings left it unknown', () => {
+    const UNKNOWN_TERMS: ConnectionTerms = {...TERMS, platform: 'unknown'};
+
+    /** The channel terms of a connect whose helper found `detected`, with `terms`. */
+    async function channelTerms(
+      detected: string | null,
+      terms: ConnectionTerms,
+    ): Promise<unknown> {
+      const ready = fixture('acquired');
+      ready.lease.detectedPlatform = detected;
+      const pending = ready.connecting(undefined, undefined, terms);
+      await settled();
+      ready.lease.emit({type: 'connected', socksPort: 41000});
+      await pending;
+      return ready.channelsFor;
+    }
+
+    it('#1835: Windows found gives the channel the Windows platform', async () => {
+      deepStrictEqual(await channelTerms('windows', UNKNOWN_TERMS), [
+        [true, {...UNKNOWN_TERMS, platform: 'windows'}, 'harness'],
+      ]);
+    });
+
+    it('#1835: POSIX found keeps the unknown terms, which the server probe names later', async () => {
+      deepStrictEqual(await channelTerms('posix', UNKNOWN_TERMS), [
+        [true, UNKNOWN_TERMS, 'harness'],
+      ]);
+    });
+
+    it('#1835: a Windows answer leaves a known platform as it is', async () => {
+      deepStrictEqual(await channelTerms('windows', TERMS), [
+        [true, TERMS, 'harness'],
+      ]);
     });
   });
 
@@ -582,6 +752,33 @@ describe('the connection step', () => {
         text: "alex@harness's password: ",
       },
     ]);
+  });
+
+  it('F-2003 BR-6 item 5: a window that started the login writes Started ssh once', async () => {
+    const {logged} = await loggedIn();
+    deepStrictEqual(logged(), ['Started ssh']);
+  });
+
+  it('F-2003 BR-6 item 5: a login that falls to the window after its own start still writes the line once', async () => {
+    const ready = fixture();
+    const pending = ready.connecting();
+    await settled();
+    ready.lease.emit({type: 'loginOwned'});
+    ready.lease.emit({type: 'connected', socksPort: 41000});
+    await pending;
+    deepStrictEqual(ready.logged(), ['Started ssh']);
+  });
+
+  it('F-2003 BR-6 item 5: a window that joined a login already done writes none', async () => {
+    const ready = fixture();
+    ready.lease.connectReplies = [
+      {type: 'refused', reason: 'alreadyConnected'},
+    ];
+    const pending = ready.connecting();
+    await settled();
+    ready.lease.emit({type: 'connected', socksPort: 41000});
+    await pending;
+    deepStrictEqual(ready.logged(), []);
   });
 
   it('connect-14: takes the questions down once the login is done, before the lease is given back', async () => {
@@ -873,6 +1070,18 @@ describe('the connection step', () => {
     deepStrictEqual(
       [refused, lease.asked.at(-1)],
       [false, {type: 'refuse', promptId: 3}],
+    );
+  });
+
+  it('F-2505 AC-25: passes the check of the session to the connection, and a reply that is no check is unchecked', async () => {
+    const {lease, outcome} = await loggedIn();
+    if (outcome.kind !== 'done') {
+      throw new Error('the connect should be done');
+    }
+    const found = await outcome.value.checkSession();
+    deepStrictEqual(
+      [found, lease.asked.at(-1)],
+      ['unchecked', {type: 'checkSession'}],
     );
   });
 });

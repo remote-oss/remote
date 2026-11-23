@@ -3,6 +3,8 @@ import {
   type CliTarget,
   readConfigurationArguments,
   runUserCommandsArguments,
+  attachedUserCommandsArguments,
+  setUpArguments,
   upArguments,
   type UpOptions,
 } from '../../src/cli/cli-arguments.ts';
@@ -26,6 +28,7 @@ const PLAIN: UpOptions = {
   removeExistingContainer: false,
   buildNoCache: false,
   workspaceMountConsistency: 'cached',
+  gpuAvailability: 'detect',
 };
 
 const COMMON = [
@@ -50,7 +53,11 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
     deepStrictEqual(upArguments(TARGET, PLAIN), [
       'up',
       ...COMMON,
-      '--skip-non-blocking-commands',
+      '--skip-post-create',
+      '--include-configuration',
+      '--include-merged-configuration',
+      '--gpu-availability',
+      'detect',
       '--workspace-mount-consistency',
       'cached',
     ]);
@@ -111,9 +118,13 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
         ...PLAIN,
         removeExistingContainer: true,
         buildNoCache: true,
-      }).slice(-5),
+      }).slice(-9),
       [
-        '--skip-non-blocking-commands',
+        '--skip-post-create',
+        '--include-configuration',
+        '--include-merged-configuration',
+        '--gpu-availability',
+        'detect',
         '--workspace-mount-consistency',
         'cached',
         '--remove-existing-container',
@@ -179,6 +190,61 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
     );
   });
 
+  it('F-0601 BR-13: set-up names the container, the attach file when there is one, the common flags and the two skip and merge flags', () => {
+    const attached = {
+      containerId: 'abc',
+      dockerPath: 'docker',
+      logLevel: 'info' as const,
+    };
+    deepStrictEqual(
+      [
+        setUpArguments(attached),
+        setUpArguments({
+          ...attached,
+          configFile: '/store/nameConfigs/n.json',
+          terminalSize: {rows: 24, columns: 80},
+          userDataFolder: '/data',
+        }),
+      ],
+      [
+        [
+          'set-up',
+          '--container-id',
+          'abc',
+          '--docker-path',
+          'docker',
+          '--log-level',
+          'info',
+          '--log-format',
+          'json',
+          '--skip-non-blocking-commands',
+          '--include-merged-configuration',
+        ],
+        [
+          'set-up',
+          '--container-id',
+          'abc',
+          '--config',
+          '/store/nameConfigs/n.json',
+          '--docker-path',
+          'docker',
+          '--user-data-folder',
+          '/data',
+          '--log-level',
+          'info',
+          '--log-format',
+          'json',
+          '--terminal-rows',
+          '24',
+          '--terminal-columns',
+          '80',
+          '--skip-non-blocking-commands',
+          '--include-merged-configuration',
+        ],
+      ],
+    );
+  });
+
   it('C3: run-user-commands ends with the container id and has no skip flag', () => {
     const list = runUserCommandsArguments(TARGET, 'abc');
     deepStrictEqual(
@@ -197,6 +263,19 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
         ['info', '--log-format', 'json'],
         ['--container-id', 'abc', '--include-merged-configuration'],
       ],
+    );
+  });
+
+  it('F-0206 BR-13: read-configuration asks for the merged configuration with no container id when told to, and a container id alone can be read unmerged', () => {
+    const asked = readConfigurationArguments(TARGET, undefined, true);
+    const unmerged = readConfigurationArguments(TARGET, 'abc', false);
+    deepStrictEqual(
+      [
+        asked.at(-1),
+        unmerged.includes('--include-merged-configuration'),
+        unmerged.slice(-2),
+      ],
+      ['--include-merged-configuration', false, ['--container-id', 'abc']],
     );
   });
 
@@ -238,6 +317,23 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
         '--log-level',
         'info',
       ],
+    );
+  });
+
+  it('F-0206 BR-5, BR-16: the GPU availability is in up only, with its value as written', () => {
+    deepStrictEqual(
+      [
+        ...['all', 'none', 'sometimes'].map(gpuAvailability =>
+          upArguments(TARGET, {...PLAIN, gpuAvailability})
+            .join(' ')
+            .includes(`--gpu-availability ${gpuAvailability} `),
+        ),
+        runUserCommandsArguments(TARGET, 'abc').includes('--gpu-availability'),
+        readConfigurationArguments(TARGET, 'abc').includes(
+          '--gpu-availability',
+        ),
+      ],
+      [true, true, true, false, false],
     );
   });
 
@@ -341,7 +437,11 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
           ...COMMON,
           '--additional-features',
           json,
-          '--skip-non-blocking-commands',
+          '--skip-post-create',
+          '--include-configuration',
+          '--include-merged-configuration',
+          '--gpu-availability',
+          'detect',
           '--workspace-mount-consistency',
           'cached',
         ],
@@ -367,6 +467,102 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
         ),
       ],
       [false, true, false, false],
+    );
+  });
+
+  it('F-0415 with brief-personalization §1: run-user-commands takes the blocking stop, the personalization stop, each relay variable and the dotfiles, in that order, and none by default', () => {
+    const full = runUserCommandsArguments(TARGET, 'c1', {
+      skipNonBlocking: true,
+      stopForPersonalization: true,
+      remoteEnvironment: {SSH_AUTH_SOCK: '/tmp/a b.sock', DISPLAY: ':1'},
+      dotfiles: {
+        repository: 'https://example.com/dots',
+        installCommand: 'install.sh',
+        targetPath: '~/dots',
+      },
+    });
+    const bare = runUserCommandsArguments(TARGET, 'c1');
+    deepStrictEqual(
+      [
+        full.slice(full.indexOf('c1') + 1),
+        bare.slice(bare.indexOf('c1') + 1),
+        runUserCommandsArguments(TARGET, 'c1', {
+          dotfiles: {repository: ''},
+        }).slice(bare.length),
+        runUserCommandsArguments(TARGET, 'c1', {
+          dotfiles: {repository: 'r'},
+        }).slice(bare.length),
+      ],
+      [
+        [
+          '--skip-non-blocking-commands',
+          '--stop-for-personalization',
+          '--remote-env',
+          'SSH_AUTH_SOCK=/tmp/a b.sock',
+          '--remote-env',
+          'DISPLAY=:1',
+          '--dotfiles-repository',
+          'https://example.com/dots',
+          '--dotfiles-install-command',
+          'install.sh',
+          '--dotfiles-target-path',
+          '~/dots',
+        ],
+        [],
+        [],
+        ['--dotfiles-repository', 'r'],
+      ],
+    );
+  });
+
+  it('F-0602 AC-11 (c163-attached-run): run-user-commands for an attached container names the id and the common flags, no folder, and the stages as asked', () => {
+    const attached = {
+      containerId: 'abc',
+      dockerPath: 'docker',
+      logLevel: 'info' as const,
+    };
+    const common = [
+      '--container-id',
+      'abc',
+      '--docker-path',
+      'docker',
+      '--log-level',
+      'info',
+      '--log-format',
+      'json',
+    ];
+    deepStrictEqual(
+      [
+        attachedUserCommandsArguments(attached),
+        attachedUserCommandsArguments(
+          {...attached, configFile: '/store/n.json'},
+          {
+            skipNonBlocking: true,
+            remoteEnvironment: {NAMED: 'b'},
+            dotfiles: {repository: 'https://example.test/dots'},
+          },
+        ),
+        attachedUserCommandsArguments(attached, {
+          stopForPersonalization: true,
+        }),
+      ],
+      [
+        ['run-user-commands', ...common],
+        [
+          'run-user-commands',
+          '--container-id',
+          'abc',
+          '--config',
+          '/store/n.json',
+          ...common.slice(2),
+          '--skip-non-blocking-commands',
+          '--remote-env',
+          'NAMED=b',
+          '--dotfiles-repository',
+          'https://example.test/dots',
+        ],
+        ['run-user-commands', ...common, '--stop-for-personalization'],
+      ],
     );
   });
 });

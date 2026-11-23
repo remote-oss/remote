@@ -493,6 +493,9 @@ describe('F-0409 discovery and reuse, the remaining rows (card coverage-70)', fu
       );
       await closeWindow(name);
     } finally {
+      // The folder dialog the empty window's command opened stays open when the row stops before it answers it, and its
+      // command waits on it for as long as the window lives.
+      await pressEscape('local').catch(() => undefined);
       await removeContainers(folder);
     }
   });

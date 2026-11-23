@@ -8,8 +8,8 @@
  * exactly the keys of package.nls.json. When l10n/ exists, each locale has l10n/bundle.l10n.<locale>.json with
  * exactly the keys of the default bundle l10n/bundle.l10n.json; the folder holds nothing else. Every string the package's code
  * translates (see translated-strings.ts) is a key of the default bundle, and every key of the default bundle is
- * translated by the package's own code or by a workspace library in its dependency closure. Every text is a non-empty
- * string. The locales are identifiers.json's `locales`, or the locales of the tables present when it names none.
+ * translated by the package's own code or by a workspace library in its dependency closure. Every text is a
+ * non-empty string, or the `message` of its object form. The locales are identifiers.json's `locales`, or the locales of the tables present when it names none.
  */
 
 import {existsSync, readFileSync, readdirSync} from 'node:fs';
@@ -73,10 +73,29 @@ function readTable(
   }
 }
 
+/** The text of an entry of a string table: a string, or the `message` of its object form. */
+function textOf(entry: unknown): string | undefined {
+  if (typeof entry === 'string') {
+    return entry;
+  }
+  if (typeof entry === 'object' && entry !== null && !Array.isArray(entry)) {
+    const message = (entry as Record<string, unknown>).message;
+    if (typeof message === 'string') {
+      return message;
+    }
+  }
+  return undefined;
+}
+
 function emptyTextProblems(file: string, table: StringTable): FileProblem[] {
-  return [...table]
-    .filter(([, text]) => typeof text !== 'string' || text.trim() === '')
-    .map(([textKey]) => ({file, text: `key '${textKey}' has no text`}));
+  const problems: FileProblem[] = [];
+  for (const [textKey, entry] of table) {
+    const text = textOf(entry);
+    if (text === undefined || text.trim() === '') {
+      problems.push({file, text: `key '${textKey}' has no text`});
+    }
+  }
+  return problems;
 }
 
 function parityProblems(
@@ -168,7 +187,7 @@ function nlsProblems(
 }
 
 /** The source files of a package that ship: the TypeScript files under src, without tests, fixtures and test doubles. */
-function shippedSources(directory: string, relative = 'src'): string[] {
+export function shippedSources(directory: string, relative = 'src'): string[] {
   const folder = path.join(directory, relative);
   if (!existsSync(folder)) {
     return [];
@@ -205,7 +224,7 @@ function untranslatedProblems(
  * The package folders whose code runs in `folder`'s l10n context: the folder itself and every workspace library it
  * depends on, directly or through another library.
  */
-function closureFolders(root: string, folder: string): string[] {
+export function closureFolders(root: string, folder: string): string[] {
   const seen = new Set<string>([folder]);
   const queue = [folder];
   for (const current of queue) {

@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {closeWindow, onHost, openWindow} from '../windows/harness.ts';
+import {answering} from '../windows/forward-support.ts';
 import {greetingOf} from './greeting.ts';
 
 /** The port the host listener answers on, and the greeting it gives. */
@@ -33,7 +34,7 @@ describe('the default forwarded ports of a launch (card connect-40)', function (
     await onHost(
       'sh',
       '-c',
-      `nc -lk -p ${String(HOST_PORT)} -s 127.0.0.1 -e /bin/echo ${GREETING} >/dev/null 2>&1 &`,
+      `nc -lk -p ${String(HOST_PORT)} -s 127.0.0.1 -e ${answering(GREETING)} >/dev/null 2>&1 &`,
     );
   });
 

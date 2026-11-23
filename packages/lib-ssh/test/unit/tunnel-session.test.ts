@@ -183,11 +183,25 @@ describe('the tunnel session (card ssh-23)', () => {
     deepStrictEqual(gates, [{kind: 'forwarded'}]);
   });
 
-  it('F-2104 7.E10: the terminal ending before any success line ends the gate', async () => {
+  it('F-2104 7.E10, #2456: the terminal ending before any success line ends the gate with how it ended', async () => {
     const {terminal, gates} = opened();
     terminal.end(255);
     await settled();
-    deepStrictEqual(gates, [{kind: 'ended'}]);
+    deepStrictEqual(gates, [
+      {kind: 'ended', end: {code: 255, reason: 'process', hadOutput: false}},
+    ]);
+  });
+
+  it('#2456: the end the gate carries says that output arrived before it', async () => {
+    const {terminal, gates} = opened();
+    terminal.write(
+      'ssh: connect to host 127.0.0.1 port 22: Connection refused\n',
+    );
+    terminal.end(255, 'process');
+    await settled();
+    deepStrictEqual(gates, [
+      {kind: 'ended', end: {code: 255, reason: 'process', hadOutput: true}},
+    ]);
   });
 
   it('#299: the terminal ending after the success line leaves the gate forwarded', async () => {
@@ -250,7 +264,12 @@ describe('the tunnel session (card ssh-23)', () => {
     const {session, gates} = opened();
     session.stop();
     await settled();
-    deepStrictEqual(gates, [{kind: 'ended'}]);
+    deepStrictEqual(gates, [
+      {
+        kind: 'ended',
+        end: {code: undefined, reason: 'extension', hadOutput: false},
+      },
+    ]);
   });
 
   it('contracts: stop twice disposes the terminal once', () => {

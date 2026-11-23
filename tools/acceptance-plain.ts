@@ -5,12 +5,14 @@
  * agent's events and the host's state.
  */
 
+import {OUTCOME_VARIABLE, outcomeFileOf} from './known-reds.ts';
 import {spawn, spawnSync} from 'node:child_process';
 import {
   cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -22,6 +24,7 @@ import {
   withRunTokens,
   type Launch,
 } from './acceptance-launches.ts';
+import {productFileOf} from './acceptance-cli-editor.ts';
 import {resolveBinary} from './repository.ts';
 import {windowNameOf} from '../tests/acceptance/window-agent/src/window-name.ts';
 
@@ -80,47 +83,79 @@ interface ExtensionEntry {
 /** The version every stand-in has. */
 const STAND_IN_VERSION = '0.0.0';
 
+/** The folder of the code stand-ins' fixtures, below the repository's root. */
+const STAND_IN_FIXTURES = path.join(
+  'tests',
+  'acceptance',
+  'fixtures',
+  'stand-ins',
+);
+
 /**
- * Puts the stand-ins of a launch into its own extensions folder, after the run's installs: for each id, a folder with a
- * manifest only (no code, no contribution, nothing from the extension it stands for) and an entry in the folder's
- * `extensions.json`, copied from the first entry the editor's own install wrote, with the stand-in's identifier,
- * version and location. `engines` is the manifest's `engines.vscode`. The run's clean-up removes the run's folder, so
- * the stand-ins go with it.
+ * Puts the stand-ins of a launch into its own extensions folder, after the run's installs. A stand-in of `standIns` is a
+ * folder with a manifest only (no code, no contribution, nothing from the extension it stands for); one of
+ * `codeStandIns` is a copy of its fixture folder under `root`, which replaces an installed extension of the same id. Each
+ * has an entry in the folder's `extensions.json`, copied from the first entry the editor's own install wrote, with the
+ * stand-in's identifier, version and location. `engines` is the manifest's `engines.vscode`. The run's clean-up removes
+ * the run's folder, so the stand-ins go with it.
  */
 export function writeStandIns(
   runFolder: string,
   launch: Launch,
   engines: string,
+  root: string,
 ): void {
-  if (launch.kind !== 'plain' || launch.standIns === undefined) {
+  if (
+    launch.kind !== 'plain' ||
+    (launch.standIns === undefined && launch.codeStandIns === undefined)
+  ) {
     return;
   }
   const folder = extensionsFolderOf(runFolder, launch);
   const listFile = path.join(folder, 'extensions.json');
-  const entries = JSON.parse(
+  const installed = JSON.parse(
     readFileSync(listFile, 'utf8'),
   ) as ExtensionEntry[];
-  const template = entries[0];
+  const template = installed[0];
   if (template === undefined) {
     throw new Error(
       `${listFile} lists no extension to copy a stand-in's entry from`,
     );
   }
-  for (const extensionId of launch.standIns) {
+  const codeIds = launch.codeStandIns ?? [];
+  const entries = installed.filter(entry => {
+    const replaced = codeIds.includes(entry.identifier.id);
+    if (replaced) {
+      rmSync(path.join(folder, entry.relativeLocation), {
+        recursive: true,
+        force: true,
+      });
+    }
+    return !replaced;
+  });
+  for (const extensionId of [...(launch.standIns ?? []), ...codeIds]) {
     const [publisher = '', name = ''] = extensionId.split('.');
     const relativeLocation = `${extensionId}-${STAND_IN_VERSION}`;
     const location = path.join(folder, relativeLocation);
     mkdirSync(location, {recursive: true});
-    writeFileSync(
-      path.join(location, 'package.json'),
-      `${JSON.stringify(
-        {
+    const code = codeIds.includes(extensionId);
+    if (code) {
+      cpSync(path.join(root, STAND_IN_FIXTURES, extensionId), location, {
+        recursive: true,
+      });
+    }
+    const manifestFile = path.join(location, 'package.json');
+    const manifest = code
+      ? (JSON.parse(readFileSync(manifestFile, 'utf8')) as object)
+      : {
           publisher,
           name,
-          version: STAND_IN_VERSION,
-          engines: {vscode: engines},
           displayName: 'Acceptance stand-in (not the reference)',
-        },
+        };
+    writeFileSync(
+      manifestFile,
+      `${JSON.stringify(
+        {...manifest, version: STAND_IN_VERSION, engines: {vscode: engines}},
         null,
         2,
       )}\n`,
@@ -308,6 +343,57 @@ export function registerLanguagePack(
 }
 
 /**
+ * The launch's own argv.json, stood before its editor starts: the editor creates the file on its first run and
+ * rewrites it, neither atomically, when the crash-reporter keys are missing, and a launch that starts on a user-data
+ * folder its earlier, stopped editor left reads the file as it stands, which a write still in flight leaves invalid,
+ * and the launch's window shows the runtime-arguments notice for it. The keys stand in the file, written by temp and
+ * rename, so the editor finds them and rewrites nothing, and the file the launch starts on parses whatever it met. A
+ * row that edits the file of its own and relaunches the editor stands the seed back over its edit.
+ */
+export function preSeedArgv(runFolder: string, launch: Launch): void {
+  const folder = userDataFolderOf(runFolder, launch);
+  mkdirSync(folder, {recursive: true});
+  const target = path.join(folder, 'argv.json');
+  const pending = `${target}.${String(process.pid)}.tmp`;
+  writeFileSync(pending, ARGV_JSON);
+  renameSync(pending, target);
+}
+
+/**
+ * The pre-seeded argv.json: the crash-reporter keys the editor reads, the enable one at the value the editor itself
+ * holds, so its rewrite is a no-op, and nothing else the editor parses there.
+ */
+const ARGV_JSON =
+  '{\n\t"enable-crash-reporter": false,\n\t"crash-reporter-id": ""\n}\n';
+
+/**
+ * The argv.json file the editor of a launch reads in the home of the launch's own, which the launch's `HOME` is
+ * `home`: `$home/<dataFolderName>/argv.json`, the `dataFolderName` the editor at `executable` names in its
+ * `product.json`.
+ */
+export function homeArgvFileOf(executable: string, home: string): string {
+  const product = JSON.parse(
+    readFileSync(productFileOf(executable), 'utf8'),
+  ) as {dataFolderName: string};
+  return path.join(home, product.dataFolderName, 'argv.json');
+}
+
+/**
+ * Stands `ARGV_JSON` in the home-based argv.json file of a launch, before its editor starts and before each of its
+ * relaunches: the editor creates the file on its first run and rewrites it, neither atomically, when the
+ * crash-reporter keys are missing, and a read of the file in flight shows the runtime-arguments notice in the
+ * launch's window. With the keys standing in the file, the editor's rewrite is a no-op, and the file the launch
+ * starts on parses whatever it met.
+ */
+export function preSeedHomeArgv(executable: string, home: string): void {
+  const target = homeArgvFileOf(executable, home);
+  mkdirSync(path.dirname(target), {recursive: true});
+  const pending = `${target}.${String(process.pid)}.tmp`;
+  writeFileSync(pending, ARGV_JSON);
+  renameSync(pending, target);
+}
+
+/**
  * Packages the fixture language pack for `language`, which carries no translation, from the language suite's fixtures
  * into a VSIX file in the run's folder. Returns the file.
  */
@@ -367,7 +453,10 @@ export function plainEditorOf(
   };
 }
 
-/** The Node mocha run of a launch with no runner: the test files of its suite folder it lists, else every one, without the repository's config. */
+/**
+ * The Node mocha run of a launch with no runner: the test files of its suite folder it lists, else every one, without the
+ * repository's config, reported by mocha's default reporter that also prints each file's time (tools/acceptance-file-times.ts).
+ */
 export function plainTestsOf(
   root: string,
   launch: Launch,
@@ -380,6 +469,8 @@ export function plainTestsOf(
       '--no-config',
       '--extension',
       'ts',
+      '--reporter',
+      path.join(root, 'tools', 'acceptance-file-times.ts'),
       ...(launch.kind === 'plain' && launch.files !== undefined
         ? launch.files
         : ['*.test.ts']
@@ -686,6 +777,8 @@ export async function runPlainLaunch(
       ? {HARNESS_EDITOR_VERSION: session.environment.HARNESS_GENUINE_VERSION}
       : {}),
     HARNESS_USER_DATA: userDataFolderOf(session.runFolder, launch),
+    // The file the launch's mocha writes its outcome to, which the pull request gate reads (tools/known-reds.ts).
+    [OUTCOME_VARIABLE]: outcomeFileOf(session.runFolder, launch.label),
     // The extensions folder the editor runs with, which a row reads by this name rather than by the launch's label.
     HARNESS_EXTENSIONS_FOLDER: extensionsFolderOf(session.runFolder, launch),
     REMOTE_OSS_ACCEPTANCE_RELAUNCH: relaunchFolderOf(
@@ -694,12 +787,26 @@ export async function runPlainLaunch(
     ),
     ...launchEnvironment,
   };
-  // A port file an earlier attempt left would name a port nobody listens on.
+  // A port file an earlier attempt left would name a port nobody listens on, and its outcome would be that attempt's.
   rmSync(debuggingPortFile(session.runFolder, launch), {force: true});
+  rmSync(outcomeFileOf(session.runFolder, launch.label), {force: true});
   const relaunchFolder = relaunchFolderOf(session.runFolder, launch.label);
   // A request an earlier attempt left would restart the editor for a row that is gone, so it counts as answered. The
   // folder itself is the row's to make and is not touched here: the run folder may be a path the harness cannot write.
   const handled = new Set<string>(staleRequestIds(relaunchFolder));
+  // The launch's own user-data folder, and, for a launch whose home is in the run's folder, the argv.json file the
+  // editor reads in that home: the editor's first run creates and rewrites that file, so it is stood before the
+  // start and before each relaunch, as the user-data one is.
+  function seedArgv(
+    environment: Readonly<Record<string, string | undefined>> | undefined,
+  ): void {
+    preSeedArgv(session.runFolder, launch);
+    const home = environment?.HOME;
+    if (home?.startsWith(session.runFolder + path.sep)) {
+      preSeedHomeArgv(session.executable, home);
+    }
+  }
+  seedArgv(launchEnvironment);
   const current = {
     editor: steps.start(
       plainEditorOf(session.executable, session.runFolder, launch, environment),
@@ -721,7 +828,7 @@ export async function runPlainLaunch(
           recursive: true,
           force: true,
         });
-        return plainEditorOf(session.executable, session.runFolder, launch, {
+        const relaunchEnvironment = {
           ...environment,
           ...Object.fromEntries(
             Object.entries(request.environment).map(([key, value]) => [
@@ -729,7 +836,14 @@ export async function runPlainLaunch(
               value ?? undefined,
             ]),
           ),
-        });
+        };
+        seedArgv(relaunchEnvironment);
+        return plainEditorOf(
+          session.executable,
+          session.runFolder,
+          launch,
+          relaunchEnvironment,
+        );
       },
       {
         start: steps.start,

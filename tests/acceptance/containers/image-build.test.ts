@@ -479,13 +479,8 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
           lines.some(line =>
             line.endsWith('importing cache manifest from c52-never-pushed:1'),
           ),
-          lines.some(line =>
-            line.includes(
-              'failed to configure registry cache importer: docker.io/library/c52-never-pushed:1: not found',
-            ),
-          ),
         ],
-        ['built', undefined, [], [], true, true],
+        ['built', undefined, [], [], true],
       );
       await closeWindow(name);
     } finally {

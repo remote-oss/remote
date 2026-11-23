@@ -11,6 +11,7 @@ import {
   type CopyOutcome,
   type CopyRequest,
   type HostChannel,
+  type ScriptInput,
   type ScriptOutcome,
   type ScriptRequest,
 } from '../host-channel.ts';
@@ -35,6 +36,24 @@ export type ContractScenario =
   | {kind: 'streamsUntilCancelled'; lines: readonly string[]}
   // The copy request's local file is one the host can, or cannot, read directly.
   | {kind: 'clientFile'; reachable: boolean};
+
+/** The input a harness stages for `scenario`: its own text, a local file `localFile`, or an empty text. */
+export function stagedInputOf(
+  scenario: ContractScenario,
+  localFile: string,
+): ScriptInput {
+  switch (scenario.kind) {
+    case 'digestsInput':
+      return scenario.input.kind === 'text'
+        ? scenario.input
+        : {kind: 'file', localFile};
+    case 'missingInputFile':
+    case 'streamsUntilCancelled':
+      return {kind: 'file', localFile};
+    default:
+      return {kind: 'text', text: ''};
+  }
+}
 
 /** A channel with the scenario in place, and the requests that play it out on this transport. */
 export interface StagedChannel {

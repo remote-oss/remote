@@ -11,6 +11,7 @@ import {
   INPUT,
   type Recording,
   steps,
+  TERMS,
 } from './pipeline.fixture.ts';
 
 const NEVER = new AbortController().signal;
@@ -68,6 +69,18 @@ describe('a maintenance run (F-2411, F-2412)', () => {
       [outcome.result, recording.calls],
       ['connectionFailed', []],
     );
+  });
+
+  it('F-2205 AC-18, AC-29 (f2205-reason): a target that fails its name check gives the check’s reason with the failed connection, and a failed step without one gives none', async () => {
+    const reason = {id: 'S119', values: ['-']};
+    const named = await perform('uninstall', {
+      validate: () => ({
+        kind: 'failed' as const,
+        failure: {kind: 'invalidSetting' as const, reason},
+      }),
+    });
+    const unnamed = await perform('uninstall', {validate: () => FAILED});
+    deepStrictEqual([named.reason, 'reason' in unnamed], [reason, false]);
   });
 
   it("F-2411 §10: a kill does not take the start settings' checks", async () => {
@@ -150,6 +163,44 @@ describe('a maintenance run (F-2411, F-2412)', () => {
       openConnection: () => Promise.resolve(FAILED),
     });
     strictEqual(outcome.result, 'connectionFailed');
+  });
+
+  /** The run of `action` whose terms say `platform` and whose login ended with `failure`. */
+  function endedLogin(
+    action: 'kill' | 'uninstall',
+    platform: 'windows' | 'linux',
+    failure: {kind: 'unknown' | 'timeout'; sshExitStatus?: number},
+  ) {
+    return perform(action, {
+      decideTerms: () =>
+        Promise.resolve({kind: 'done', value: {...TERMS, platform}}),
+      openConnection: () => Promise.resolve({kind: 'failed', failure}),
+    });
+  }
+
+  it('F-2412 AC-32 (reading-2676-wrong-windows-answer): an uninstall answered Windows whose login shell found no powershell is a failed step, with no message', async () => {
+    const outcome = await endedLogin('uninstall', 'windows', {
+      kind: 'unknown',
+      sshExitStatus: 127,
+    });
+    deepStrictEqual(outcome, {
+      result: 'stepFailed',
+      cause: 'the host has no PowerShell for the Windows step',
+    });
+  });
+
+  it('F-2412 AC-32 (reading-2676-wrong-windows-answer): the same end is a failed connection for a kill, for a Linux answer, for another status and for another failure', async () => {
+    const outcomes = await Promise.all([
+      endedLogin('kill', 'windows', {kind: 'unknown', sshExitStatus: 127}),
+      endedLogin('uninstall', 'linux', {kind: 'unknown', sshExitStatus: 127}),
+      endedLogin('uninstall', 'windows', {kind: 'unknown', sshExitStatus: 255}),
+      endedLogin('uninstall', 'windows', {kind: 'unknown'}),
+      endedLogin('uninstall', 'windows', {kind: 'timeout', sshExitStatus: 127}),
+    ]);
+    deepStrictEqual(
+      outcomes.map(outcome => outcome.result),
+      Array.from({length: 5}, () => 'connectionFailed'),
+    );
   });
 
   it('F-2411.7.E2: a login that failed has no lease to give back and runs no step', async () => {

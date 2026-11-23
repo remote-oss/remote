@@ -8,6 +8,7 @@ COMMIT='abc1230000000000000000000000000000000000'
 ARCHIVE_URL='https://example.invalid/server.tar.gz'
 ARCHIVE_PATH='/tmp/a b.tar.gz'
 ARCHIVE_REMOVE='yes'
+ARCHIVE_INTO_INSTALL='no'
 ARCHIVE_FORMAT='tar.gz'
 STAGING_SUFFIX='1700000000000'
 INSTALL_TREE='/srv/tree'
@@ -66,7 +67,7 @@ esac
 DATA_ROOT=${INSTALL_ROOT:-$HOME}
 DATA_DIR=$DATA_ROOT/$DATA_FOLDER
 INSTALL_DIR=$DATA_DIR/bin/$COMMIT
-CLI_STAGING=$DATA_DIR/cli-bin/$COMMIT
+CLI_STAGING=$DATA_DIR/cli-bin/$COMMIT.$STAGING_SUFFIX.$$
 CLI_FILE=$DATA_DIR/$CLI_NAME
 BOOT_PREFIX=$DATA_DIR/.$COMMIT
 [ -z "$INSTALL_TREE" ] || LOCK_IN_TEMPORARY=yes
@@ -105,6 +106,24 @@ lock_link() {
   [ ! -e "$LOCK_CANDIDATE.target" ] || return 1
   return 2
 }
+lock_descriptor() {
+  LOCK_TRIES=0
+  while [ "$LOCK_TRIES" -lt 3 ]; do
+    LOCK_TRIES=$((LOCK_TRIES + 1))
+    if LOCK_ERROR=$(flock -n 9 2>&1); then
+      LOCK_ERROR=''
+      [ "$LOCK_CANDIDATE" -ef /dev/fd/9 ] && return 0
+      LOCK_SESSION=
+      [ -d "${LOCK_CANDIDATE%/*}" ] || mkdir -p "${LOCK_CANDIDATE%/*}" 2>/dev/null
+      LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2
+      exec 9>>"$LOCK_CANDIDATE"
+    else
+      [ -z "$LOCK_ERROR" ] || return 2
+      return 1
+    fi
+  done
+  return 1
+}
 lock_take() {
   LOCK_CANDIDATE=$(lock_path "$1")
   LOCK_ERROR=''
@@ -115,14 +134,16 @@ lock_take() {
     fi
   fi
   if [ "$(lock_method)" = flock ]; then
-    LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2
-    exec 9>>"$LOCK_CANDIDATE"
-    if LOCK_ERROR=$(flock -n 9 2>&1); then
-      LOCK_ERROR=''
+    LOCK_SESSION=
+    if ( : >&9 ) 2>/dev/null && [ "$LOCK_CANDIDATE" -ef /dev/fd/9 ]; then
+      LOCK_SESSION=yes
     else
-      [ -z "$LOCK_ERROR" ] || return 2
-      return 1
+      [ -d "${LOCK_CANDIDATE%/*}" ] || mkdir -p "${LOCK_CANDIDATE%/*}" 2>/dev/null
+      LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2
+      exec 9>>"$LOCK_CANDIDATE"
     fi
+    lock_descriptor || return $?
+    [ -z "$LOCK_SESSION" ] || fact server.lockHeld yes
   else
     for LOCK_ATTEMPT in 1 2; do
       LOCK_ERROR=$( { true >>"$LOCK_CANDIDATE"; } 2>&1 ) || return 2
@@ -156,6 +177,28 @@ take_lock_or_finish() {
       write_failed "$LOCK_CANDIDATE" "$LOCK_ERROR"
       ;;
   esac
+}
+write_failed_start() {
+  fact server.lockPath "$START_LOCK"
+  fact server.lockInTemporary "$LOCK_IN_TEMPORARY"
+  write_failed "$START_LOCK" "$LOCK_ERROR"
+}
+take_start_lock_or_finish() {
+  if [ "$(lock_method)" != flock ]; then
+    take_lock_or_finish "$COMMIT"
+    return
+  fi
+  START_LOCK=$DATA_DIR/.$COMMIT.start.lock
+  LOCK_ERROR=$( ( exec 8>>"$START_LOCK" ) 2>&1 ) || write_failed_start
+  exec 8>>"$START_LOCK"
+  if LOCK_ERROR=$(flock -n 8 2>&1); then
+    LOCK_ERROR=''
+  elif [ -z "$LOCK_ERROR" ]; then
+    fact server.lockPath "$START_LOCK"
+    finish LockBusy
+  else
+    write_failed_start
+  fi
 }
 lock_release() {
   [ -n "${LOCK_HELD:-}" ] || return 0
@@ -227,13 +270,31 @@ extract_zip() {
   unzip -q "$1" -d "$2" </dev/null || return 1
   progress unpack 100
 }
+unpack_commands_present() {
+  have tar || { UNPACK_MISSING=tar; return 1; }
+  have gzip || { UNPACK_MISSING=gzip; return 1; }
+}
+leave_unpack_failed() {
+  if [ -n "${UNPACK_MISSING:-}" ]; then
+    fact install.missing "$UNPACK_MISSING"
+    leave CommandMissing
+  fi
+  leave UnpackFailed
+}
+finish_unpack_failed() {
+  if [ -n "${UNPACK_MISSING:-}" ]; then
+    fact install.missing "$UNPACK_MISSING"
+    finish CommandMissing
+  fi
+  finish UnpackFailed
+}
 unpack_into() {
   UNPACK_STAGE=$2.stage.$$
   rm -rf "$UNPACK_STAGE"
   mkdir -p "$UNPACK_STAGE" "$2" || return 1
   case $ARCHIVE_FORMAT in
     zip) extract_zip "$1" "$UNPACK_STAGE" || return 1 ;;
-    *) extract_tar "$1" "$UNPACK_STAGE" || return 1 ;;
+    *) unpack_commands_present && extract_tar "$1" "$UNPACK_STAGE" || return 1 ;;
   esac
   unpack_move_top "$UNPACK_STAGE" "$2"
 }
@@ -269,7 +330,6 @@ clear_staging() {
 STARTED_AT=$(now_seconds)
 [ -n "$DATA_ROOT" ] && [ -n "$CLI_NAME" ] || finish CreateInstallDirFailed
 MKDIR_ERROR=$(mkdir -p "$INSTALL_DIR" 2>&1) || write_failed "$INSTALL_DIR" "$MKDIR_ERROR"
-take_lock_or_finish "$COMMIT"
 if [ -x "$CLI_FILE" ]; then
   fact cli.path "$CLI_FILE"
   leave Ok
@@ -279,16 +339,25 @@ prepare_environment
 if [ -n "$ARCHIVE_PATH" ]; then
   ARCHIVE=$ARCHIVE_PATH
 else
-  have wget || have curl || leave NoDownloaderAvailable
+  have wget || have curl || { clear_staging; leave NoDownloaderAvailable; }
   ARCHIVE=$CLI_STAGING.archive.$$
   fetch_archive "$ARCHIVE_URL" "$ARCHIVE" || { rm -f "$ARCHIVE"; clear_staging; leave ServerDownloadFailed; }
 fi
 DOWNLOADED_AT=$(now_seconds)
 unpack_into "$ARCHIVE" "$CLI_STAGING" || UNPACK_FAILED=yes
 [ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"
-if [ -n "${UNPACK_FAILED:-}" ] || [ ! -f "$CLI_STAGING/$LAUNCHER" ]; then
+if [ -n "${UNPACK_FAILED:-}" ]; then
+  clear_staging
+  leave_unpack_failed
+fi
+if [ ! -f "$CLI_STAGING/$LAUNCHER" ]; then
   clear_staging
   leave UnpackFailed
+fi
+if [ -x "$CLI_FILE" ]; then
+  clear_staging
+  fact cli.path "$CLI_FILE"
+  leave Ok
 fi
 chmod +x "$CLI_STAGING/$LAUNCHER" && mv "$CLI_STAGING/$LAUNCHER" "$CLI_FILE" || { clear_staging; leave UnpackFailed; }
 clear_staging

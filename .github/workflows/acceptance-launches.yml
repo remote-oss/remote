@@ -1,8 +1,9 @@
-# The VSCodium acceptance launches a pull request's change selects (main's push selection), as one part on one
-# self-hosted X64 runner. Called by ci.yml's pull request job, which runs at most six of them in 60 minutes; with `full`
-# (the acceptance-full label, ci.yml or acceptance-full.yml) it runs the whole selection in 180 minutes. A larger
-# selection without `full` runs nothing and gets a notice naming its launches. The run's steps are those of ci.yml's
-# VSCodium job.
+# The VSCodium acceptance launches a pull request's change selects, as the parts of the select job's plan, each a job of
+# its own with its own time limit, run side by side. A change to test files only runs each changed file alone in the
+# launches that run it, and a smoke part beside them. Any other change, or `full` (the acceptance-full label, ci.yml or
+# acceptance-full.yml), runs every part of the VSCodium suite's table that makes a launch it reaches, about fifteen
+# minutes of rows each. The parts with a containers launch run on GitHub's runners, eight at once at most; the others
+# on the pool when it is set. The run's steps are those of ci.yml's VSCodium job.
 name: acceptance-launches
 
 on:
@@ -12,6 +13,10 @@ on:
         description: Whether the pull request carries the acceptance-full label
         type: boolean
         required: true
+    secrets:
+      REMOTE_OSS_CLI_ARCHIVES_TOKEN:
+        description: The token that reads the CLI archives' repository, for a part that starts the CLI-source editor
+        required: false
 
 permissions:
   contents: read
@@ -19,11 +24,14 @@ permissions:
 jobs:
   select:
     # a git diff and the launch table only
-    runs-on: ubuntu-24.04
+    runs-on: >-
+      ${{ vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON)) || 'ubuntu-24.04' }}
     timeout-minutes: 10
     outputs:
-      launches: ${{ steps.select.outputs.launches }}
-      minutes: ${{ steps.select.outputs.minutes }}
+      parts: ${{ steps.select.outputs.parts }}
+      containers-parts: ${{ steps.select.outputs.containers-parts }}
+      cli-parts: ${{ steps.select.outputs.cli-parts }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -42,20 +50,96 @@ jobs:
         run: |
           plan=$(node tools/acceptance-select.ts --base "$BASE" --head "$HEAD" --pull-request $([ "$FULL" = true ] && echo --full))
           echo "plan: $plan"
-          notice=$(printf '%s' "$plan" | jq -r '.notice // empty')
-          if [ -n "$notice" ]; then
-            echo "::notice title=VSCodium launches::$notice"
-            printf '%s\n' "**VSCodium launches:** $notice" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo "launches=$(printf '%s' "$plan" | jq -r '.launches')" >> "$GITHUB_OUTPUT"
-          echo "minutes=$(printf '%s' "$plan" | jq -r '.minutes')" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "**VSCodium parts:** $(printf '%s' "$plan" | jq -r '[.parts[].name] | join(", ") | if . == "" then "none" else . end')" >> "$GITHUB_STEP_SUMMARY"
+          # a part that starts the CLI-source editor goes to run-cli, which never takes the pool
+          parts=$(printf '%s' "$plan" | jq -c '.parts' | node tools/fetch-cli-archives.ts --mark-parts)
+          echo "parts=$(printf '%s' "$parts" | jq -c '[.[] | select((.cliArchives | not) and (.launches | contains("containers") | not)) | del(.cliArchives)]')" >> "$GITHUB_OUTPUT"
+          echo "containers-parts=$(printf '%s' "$parts" | jq -c '[.[] | select((.cliArchives | not) and (.launches | contains("containers"))) | del(.cliArchives)]')" >> "$GITHUB_OUTPUT"
+          echo "cli-parts=$(printf '%s' "$parts" | jq -c '[.[] | select(.cliArchives) | del(.cliArchives)]')" >> "$GITHUB_OUTPUT"
 
   run:
-    name: acceptance (vscodium, ${{ needs.select.outputs.launches }})
+    name: acceptance (vscodium, ${{ matrix.part.name }})
     needs: select
-    if: needs.select.outputs.launches != ''
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","X64"]', vars.CI_RUNS_ON)) || 'ubuntu-latest' }}
-    timeout-minutes: ${{ fromJSON(needs.select.outputs.minutes) }}
+    if: needs.select.outputs.parts != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ${{ fromJSON(needs.select.outputs.parts) }}
+    # the parts with no containers launch, on the organisation's pool when the repository variable CI_POOL_RUNS_ON names
+    # its label (with X64 and ephemeral, as ci.yml's VSCodium parts); otherwise on GitHub's ubuntu-24.04
+    runs-on: >-
+      ${{ vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON)) || 'ubuntu-24.04' }}
+    timeout-minutes: ${{ matrix.part.minutes }}
+    steps: &launch-steps
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # the containerd image store, the one Docker 29 uses by default and the image-build rows are written against, and a
+      # registry mirror for Docker Hub's images
+      - run: tools/docker-containerd-store
+      - run: pnpm acceptance:clean
+      - run: |
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - if: contains(matrix.part.launches, 'containers')
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h / | tail -1
+      - if: contains(matrix.part.launches, 'containers-podman')
+        run: tools/install-podman
+      # the pinned OpenSSH client of the ssh-newclient launch (tools/install-openssh), cached under its version and digest;
+      # the harness finds it built, and builds it itself when this step did not run
+      - if: contains(matrix.part.launches, 'ssh-newclient') || contains(matrix.part.launches, '@ssh')
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/remote-oss
+          key: openssh-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/install-openssh') }}
+      - if: contains(matrix.part.launches, 'ssh-newclient') || contains(matrix.part.launches, '@ssh')
+        run: tools/install-openssh
+      # the buildx plugin when the machine's Docker has none (the harness builds with `docker build --load`)
+      - run: tools/install-buildx
+      - run: tools/start-display
+      - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
+        env:
+          LAUNCHES: ${{ matrix.part.launches }}
+      - if: always()
+        run: pnpm acceptance:clean
+
+  # the parts with a containers launch, on GitHub's ubuntu-24.04, at most eight at once, so that one pull request's
+  # parts keep some of the organisation's 20 runners free for the others' legs, genuine and ci-gate
+  run-containers:
+    name: acceptance (vscodium, ${{ matrix.part.name }})
+    needs: select
+    if: needs.select.outputs.containers-parts != '[]'
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        part: ${{ fromJSON(needs.select.outputs.containers-parts) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ matrix.part.minutes }}
+    steps: *launch-steps
+
+  # The parts with a launch that starts the CLI-source editor, on GitHub's runners only: run's steps with the CLI
+  # archives' fetch before the acceptance step, which alone holds the token that reads the CLI archives' repository
+  # (no job that can take the pool reads a secret: athena on #2219). A unit row keeps its steps run's but for the fetch.
+  run-cli:
+    name: acceptance (vscodium, ${{ matrix.part.name }})
+    needs: select
+    if: needs.select.outputs.cli-parts != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ${{ fromJSON(needs.select.outputs.cli-parts) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ matrix.part.minutes }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -64,31 +148,41 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # the containerd image store, the one Docker 29 uses by default and the image-build rows are written against, and a
+      # registry mirror for Docker Hub's images
+      - run: tools/docker-containerd-store
       - run: pnpm acceptance:clean
       - run: |
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
           fi
-      # rootless Podman for the containers-podman launch, as ci.yml's VSCodium job sets it up
-      - if: contains(needs.select.outputs.launches, 'containers-podman')
+      - if: contains(matrix.part.launches, 'containers')
         run: |
-          command -v podman >/dev/null || sudo dnf install -y -q podman
-          sudo chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap
-          grep -q "^$(id -un):" /etc/subuid || sudo usermod --add-subuids 200000-265535 --add-subgids 200000-265535 "$(id -un)"
-          podman --version
-          if ! out=$(podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}' 2>&1); then
-            printf '%s\n' "$out"
-            printf '%s' "$out" | grep -q 'boot ID differs from cached boot ID' || exit 1
-            rm -rf "/tmp/storage-run-$(id -u)/containers" "/tmp/storage-run-$(id -u)/libpod/tmp"
-          fi
-          podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}'
-      - run: |
-          if command -v xvfb-run >/dev/null; then
-            xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm test:acceptance:vscodium --launches "$LAUNCHES"
-          else
-            DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium --launches "$LAUNCHES"
-          fi
+          df -h / | tail -1
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h / | tail -1
+      - if: contains(matrix.part.launches, 'containers-podman')
+        run: tools/install-podman
+      # the pinned OpenSSH client of the ssh-newclient launch (tools/install-openssh), cached under its version and digest;
+      # the harness finds it built, and builds it itself when this step did not run
+      - if: contains(matrix.part.launches, 'ssh-newclient') || contains(matrix.part.launches, '@ssh')
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/remote-oss
+          key: openssh-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/install-openssh') }}
+      - if: contains(matrix.part.launches, 'ssh-newclient') || contains(matrix.part.launches, '@ssh')
+        run: tools/install-openssh
+      # the buildx plugin when the machine's Docker has none (the harness builds with `docker build --load`)
+      - run: tools/install-buildx
+      - run: tools/start-display
+      # the pinned CLI archives into the run's download cache: this job's parts start the CLI-source editor, and only
+      # this step holds the token that reads the CLI archives' repository; the acceptance step finds them cached
+      - run: node tools/fetch-cli-archives.ts --launches "$LAUNCHES"
         env:
-          LAUNCHES: ${{ needs.select.outputs.launches }}
+          LAUNCHES: ${{ matrix.part.launches }}
+          REMOTE_OSS_CLI_ARCHIVES_TOKEN: ${{ secrets.REMOTE_OSS_CLI_ARCHIVES_TOKEN }}
+      - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
+        env:
+          LAUNCHES: ${{ matrix.part.launches }}
       - if: always()
         run: pnpm acceptance:clean

@@ -53,7 +53,7 @@ remote-ssh-edit       ->  lib-identifiers   (no log by F-4002 AC-14; no stand-do
 remote-explorer       ->  lib-identifiers, lib-standdown, lib-companion, lib-authority (gate only)   (no log by F-5901 §6; no product use)
 remote-server         ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-forwarding, lib-companion, lib-log
 remote-ssh            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-ssh, lib-server, lib-forwarding, lib-companion, lib-log
-remote-wsl            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-log
+remote-wsl            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-helper, lib-log
 remote-containers     ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-helper, lib-log  (+ lib-ssh if F-1302 lands the hop here)
 
 lib-ssh -> lib-host, lib-helper, lib-identifiers, lib-log        lib-server -> lib-host, lib-product, lib-log

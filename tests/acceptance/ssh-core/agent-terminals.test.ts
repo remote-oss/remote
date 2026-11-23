@@ -2,6 +2,8 @@
  * @fileoverview F-2311 AC-22 (card coverage-99): what a window's terminals do about the agent link when the window
  * comes back. A shell the pty host reattaches after a reload keeps the link it started with, and Relaunch Terminal
  * gives it the new one; a window closed and opened again starts new shells, which get the new link at once (BR-10).
+ * Core draws its mark on a terminal, or relaunches one that has had no input, only when the window's environment
+ * collection reaches it after the terminal was made, which depends on timing; the rows leave the mark to core (#1686).
  */
 
 import {deepStrictEqual} from 'node:assert';
@@ -25,7 +27,7 @@ import {
   printedAfter,
   windowWithTerminal,
 } from '../windows/terminal-support.ts';
-import {terminalTabWarnings} from '../windows/renderer.ts';
+import {markedTerminalTabs} from '../windows/renderer.ts';
 import {hostLinks, LINK_PATTERN} from '../windows/agent-links.ts';
 
 /** The alias that forwards the run's agent. */
@@ -48,7 +50,7 @@ describe('F-2311, the terminals of a window that comes back (card coverage-99)',
     await freshHost();
   });
 
-  it('F-2311 AC-22 (reading-1686-ac22-new-shell): a window closed and opened again on the same folder starts a new shell, which has the new window’s link at once, and nothing is marked', async () => {
+  it('F-2311 AC-22 (reading-1686-ac22-new-shell): a window closed and opened again on the same folder starts a new shell, which has the new window’s link at once', async () => {
     await agentAdd(keyFile(), {confirm: false});
     await freshHost();
     await onHost('sh', '-c', `rm -f ${LINK_PATTERN}`);
@@ -77,17 +79,16 @@ describe('F-2311, the terminals of a window that comes back (card coverage-99)',
         {
           links: links.length,
           now: await printedAfter('c99-new-shell', 'NEW', '$SSH_AUTH_SOCK'),
-          marked: await terminalTabWarnings('c99-new-shell'),
         },
-        {links: 2, now: second, marked: 0},
-        first,
+        {links: 2, now: second},
+        `first link ${first}; marked tabs: ${JSON.stringify(await markedTerminalTabs('c99-new-shell'))}`,
       );
     } finally {
       await closeWindow('c99-new-shell').catch(() => undefined);
     }
   });
 
-  it('F-2311 AC-22 (c99-reattached): after a reload with the local server running the reattached shell keeps the earlier link, and after Relaunch Terminal it has the new link and lists the keys', async () => {
+  it('F-2311 AC-22 (c99-reattached): after a reload with the local server running the reattached shell keeps the earlier link, and after Relaunch Terminal it has the new link and lists the keys', async function () {
     await agentAdd(keyFile(), {confirm: false});
     await freshHost();
     await onHost('sh', '-c', `rm -f ${LINK_PATTERN}`);
@@ -109,11 +110,17 @@ describe('F-2311, the terminals of a window that comes back (card coverage-99)',
       ).catch(() => undefined);
       const links = await linkPaths();
       const second = links.find(link => link !== first) ?? '';
+      const marks = await markedTerminalTabs('c99-reattached');
       const before = await printedAfter(
         'c99-reattached',
         'OLD',
         '$SSH_AUTH_SOCK',
       );
+      if (before === second) {
+        // Core relaunched the shell itself: the window's collection reached it before any input, so there is no
+        // reattached shell with the earlier link left to observe in this run.
+        this.skip();
+      }
       await inWindow('c99-reattached', 'workbench.action.terminal.relaunch');
       await new Promise(resolve => setTimeout(resolve, 5000));
       const after = await printedAfter(
@@ -136,6 +143,7 @@ describe('F-2311, the terminals of a window that comes back (card coverage-99)',
           after: second,
           keys: true,
         },
+        `marked tabs after the reload: ${JSON.stringify(marks)}`,
       );
     } finally {
       await closeWindow('c99-reattached').catch(() => undefined);

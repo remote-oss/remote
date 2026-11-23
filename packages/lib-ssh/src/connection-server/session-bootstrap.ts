@@ -9,9 +9,13 @@ import {
   type ConnectWaitSettings,
   connectWaitMilliseconds,
 } from '../process/connect-wait.ts';
-import {posixQuote} from 'lib-host';
+import {type Interpreter, type PlatformHint, posixQuote} from 'lib-host';
 import {TUNNEL_COMMAND} from '../arguments/invocation.ts';
 import {preludeProgram} from '../process/remote-program.ts';
+import {
+  interpreterOfPlatform,
+  powershellSessionStart,
+} from './powershell-session.ts';
 
 /** The fewest and the most seconds the login shell's startup may take. */
 const LAYER_ONE_SECONDS = {minimum: 1, maximum: 600} as const;
@@ -31,7 +35,8 @@ const TIMEOUT_EXIT = '    exit 124';
  * built to a file; a watchdog kills it after `LAYER1_SECONDS`. The session reaches `exec sh` unless the login shell
  * outlasts its bound or ends by itself without starting the command: it then prints one line, `LAYER1-TIMEOUT
  * <seconds>` or `LAYER1-EXITED <status>`, and ends, so the connect never goes on without the user's environment. Before
- * `exec sh` it prints `LAYER1-READY`: the connect is set up only when a reader has seen that line.
+ * `exec sh` it prints `LAYER1-READY`: the connect is set up only when a reader has seen that line. Each of the three is
+ * printed after a line end of its own, so that it is a line even when what came before wrote none.
  */
 const SESSION_BOOTSTRAP_LINES: readonly string[] = [
   'LAYER1_DIR=$(mktemp -d 2>/dev/null) || LAYER1_DIR=',
@@ -61,17 +66,17 @@ const SESSION_BOOTSTRAP_LINES: readonly string[] = [
   '    eval "$(cat "$LAYER1_DIR/env")"',
   '  elif [ -e "$LAYER1_DIR/timeout" ]; then',
   '    rm -rf "$LAYER1_DIR"',
-  '    printf \'LAYER1-TIMEOUT %s\\n\' "$LAYER1_SECONDS"',
+  '    printf \'\\nLAYER1-TIMEOUT %s\\n\' "$LAYER1_SECONDS"',
   TIMEOUT_EXIT,
   '  else',
   '    rm -rf "$LAYER1_DIR"',
-  '    printf \'LAYER1-EXITED %s\\n\' "$LAYER1_STATUS"',
+  '    printf \'\\nLAYER1-EXITED %s\\n\' "$LAYER1_STATUS"',
   '    exit 1',
   '  fi',
   'fi',
   '[ -n "$LAYER1_DIR" ] && rm -rf "$LAYER1_DIR"',
   'unset LAYER1_DIR LAYER1_PID LAYER1_WATCH LAYER1_STATUS LAYER1_SECONDS',
-  "printf 'LAYER1-READY\\n'",
+  "printf '\\nLAYER1-READY\\n'",
   'exec sh',
 ];
 
@@ -108,15 +113,20 @@ export function sessionStart(
 
 /**
  * The session start for a connect wait: the login shell may take as long as the connect wait itself, in whole seconds,
- * rounded up, at least 1 and at most the ceiling; a host's own 0 takes the ceiling the wait names.
+ * rounded up, at least 1 and at most the ceiling; a host's own 0 takes the ceiling the wait names. A host decided as
+ * Windows gets the PowerShell loop instead; every other platform gets the POSIX bootstrap.
  */
 export function sessionStartFor(
   settings: ConnectWaitSettings,
   goesOnAfterTimeout = false,
+  platform: PlatformHint = 'unknown',
 ): {
   remoteProgram: string;
   prelude: string;
 } {
+  if (platform === 'windows') {
+    return powershellSessionStart();
+  }
   const seconds = connectWaitMilliseconds(settings) / 1000;
   return sessionStart(
     Math.min(
@@ -129,19 +139,74 @@ export function sessionStartFor(
 
 /**
  * The start of the connection's session: `start` as it is, or, with the host's RemoteCommand in effect, no remote
- * program (ssh refuses one beside it) and the program as the first line of the prelude, `exec <program>`, which the
- * shell the RemoteCommand starts reads from standard input.
+ * program (ssh refuses one beside it) and the program as the first line of the prelude, which the shell the
+ * RemoteCommand starts reads from standard input: `exec <program>` on POSIX, the program's line alone on Windows,
+ * whose shells have no `exec`.
  */
 export function connectionStart(
   start: {remoteProgram: string; prelude: string},
   remoteCommandInEffect: boolean,
+  platform: PlatformHint = 'unknown',
 ): {remoteProgram: string | undefined; prelude: string} {
-  return remoteCommandInEffect
-    ? {
-        remoteProgram: undefined,
-        prelude: `exec ${start.remoteProgram}\n${start.prelude}`,
-      }
-    : start;
+  if (!remoteCommandInEffect) {
+    return start;
+  }
+  const line =
+    platform === 'windows'
+      ? start.remoteProgram
+      : `exec ${start.remoteProgram}`;
+  return {remoteProgram: undefined, prelude: `${line}\n${start.prelude}`};
+}
+
+/**
+ * How the connection's session opens. A known platform has its remote program, and its prelude written once ssh
+ * reports the login. An unknown one has no remote program: the host's own shell reads the platform probe, and the
+ * answers choose the line that goes on, the PowerShell loop's line on Windows, or on POSIX a line that prints the
+ * hand-over line and starts `program`, the bootstrap's reader, whose prelude is written only once that line is back, so
+ * that no shell that reads its input ahead can take it.
+ */
+export type SessionOpening =
+  | {kind: 'known'; prelude: string; interpreter: Interpreter}
+  | {
+      kind: 'detect';
+      posix: {program: string; prelude: string};
+      windows: {line: string};
+    };
+
+/**
+ * The remote program and the opening of the connection's session: a known platform's start as `connectionStart` gives
+ * it; with the platform unknown, no remote program and the opening that detects it, whether or not the host's
+ * RemoteCommand is in effect, since either way a shell reads the session's input.
+ */
+export function sessionOpeningFor(
+  settings: ConnectWaitSettings,
+  remoteCommandInEffect: boolean,
+  platform: PlatformHint,
+): {remoteProgram: string | undefined; opening: SessionOpening} {
+  if (platform !== 'unknown') {
+    const start = connectionStart(
+      sessionStartFor(settings, false, platform),
+      remoteCommandInEffect,
+      platform,
+    );
+    return {
+      remoteProgram: start.remoteProgram,
+      opening: {
+        kind: 'known',
+        prelude: start.prelude,
+        interpreter: interpreterOfPlatform(platform),
+      },
+    };
+  }
+  const posix = sessionStartFor(settings, false, 'unknown');
+  return {
+    remoteProgram: undefined,
+    opening: {
+      kind: 'detect',
+      posix: {program: posix.remoteProgram, prelude: posix.prelude},
+      windows: {line: `${powershellSessionStart().remoteProgram}\n`},
+    },
+  };
 }
 
 /**

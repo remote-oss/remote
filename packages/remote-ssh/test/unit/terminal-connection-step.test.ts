@@ -60,6 +60,13 @@ const MUX_SESSION =
 /** The failure of the extension's own connect wait (card connect-50). */
 const TIMED_OUT = {kind: 'timeout', reason: {id: 'sshTimedOut'}} as const;
 
+/** The failure of a question nobody recognises or answers before the connect wait ends: no reason of its own. */
+const UNANSWERED = {
+  kind: 'unknown',
+  logDetail:
+    'a question the extension does not recognise was left unanswered until the connect wait ended',
+} as const;
+
 function requestFor(socksPort: number | undefined): SshRequest {
   return {
     purpose: 'connection',
@@ -226,10 +233,37 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     ]);
   });
 
+  it('F-2003 BR-6 item 5: terminal mode writes Started ssh when the login terminal is created', async () => {
+    const made = fixture();
+    await started(made);
+    deepStrictEqual(made.logged(), ['Started ssh']);
+  });
+
+  it('#2457, reading-2457-echo-line: an answer typed at a recognised prompt of the install terminal is not in the log, shown or hidden, and the next line is', async () => {
+    for (const reveal of [true, false]) {
+      const made = fixture({level: 'trace', reveal});
+      const {result, terminal} = await started(made);
+      terminal.write(
+        'Are you sure you want to continue connecting (yes/no/[fingerprint])? yes\r\n',
+      );
+      terminal.write("alex@dev's password: \r\nWarning: Permanently added h\n");
+      terminal.write(AUTHENTICATED_ONLY);
+      terminal.write("printf 'LAYER1-READY\\n'\nexec sh\nLAYER1-READY\n");
+      await result;
+      deepStrictEqual(sshLogged(made), [
+        '[ssh] Are you sure you want to continue connecting (yes/no/[fingerprint])? [answer not logged]',
+        "[ssh] alex@dev's password: [answer not logged]",
+        '[ssh] Warning: Permanently added h',
+        '[ssh] Authenticated to dev ([10.0.0.1]:22) using "publickey".',
+      ]);
+    }
+  });
+
   it('F-2003 BR-8: after authentication terminal mode logs only ssh’s own channel and forward lines, from a mixed pty buffer, before and after the hand-over', async () => {
     const made = fixture({level: 'trace'});
     const {result, terminal} = await started(made);
     terminal.write(AUTHENTICATED_ONLY);
+    terminal.write('debug1: Entering interactive session.\n');
     terminal.write(
       "printf 'LAYER1-READY\\n'\nexec sh\nls -l\ntotal 4\nchannel 3: open failed: administratively prohibited: open failed\nconnect_to localhost port 8080: failed.\nWarning: remote port forwarding failed for listen port 9000\nLAYER1-READY\n",
     );
@@ -244,6 +278,82 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
       '[ssh] Warning: remote port forwarding failed for listen port 9000',
       '[ssh] channel 4: open failed: connect failed: Connection refused',
     ]);
+  });
+
+  /** The lines of a fixture's log that a LocalCommand's output made. */
+  function commandLogged(made: Fixture): string[] {
+    return made.logged().filter(line => line.startsWith('[local command] '));
+  }
+
+  it('#2598 (F-2109 AC-12): the lines between ssh’s authentication and its entering the session are the LocalCommand’s, besides ssh’s own debug, channel and blank lines, and the echo of what the product typed; later lines are not', async () => {
+    const made = fixture({level: 'trace'});
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    const typed = made.terminals.opened[0]?.sent.join('') ?? '';
+    terminal.write(typed.replaceAll('\n', '\r\n'));
+    terminal.write(
+      'out-marker\r\n\r\ndebug1: client_input_global_request\nchannel 2: open failed: x\nerr-marker\n',
+    );
+    terminal.write('debug1: Entering interactive session.\n');
+    terminal.write('a line of the shell\nLAYER1-READY\n');
+    await result;
+    deepStrictEqual(commandLogged(made), [
+      '[local command] out-marker',
+      '[local command] err-marker',
+    ]);
+  });
+
+  it('#2598 (F-2109 AC-12): the last words of a command that wrote no line end share their line with ssh’s entering the session, and are logged without it', async () => {
+    const made = fixture({level: 'trace'});
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    terminal.write(
+      'first\r\nlast words debug1: Entering interactive session.\r\n',
+    );
+    terminal.write('a line of the shell\nLAYER1-READY\n');
+    await result;
+    deepStrictEqual(commandLogged(made), [
+      '[local command] first',
+      '[local command] last words',
+    ]);
+  });
+
+  it('#2598 (F-2109 AC-12): the protocol’s first line closes the time too, when the closing line never comes', async () => {
+    const made = fixture({level: 'trace'});
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    terminal.write('out-marker\nLAYER1-READY\nlate line\n');
+    await result;
+    deepStrictEqual(commandLogged(made), ['[local command] out-marker']);
+  });
+
+  it('#2598 (F-2109 AC-12): the output is cut at 100 lines, with one line saying so', async () => {
+    const made = fixture({level: 'trace'});
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    for (let line = 1; line <= 105; line += 1) {
+      terminal.write(`line ${String(line)}\n`);
+    }
+    terminal.write('LAYER1-READY\n');
+    await result;
+    const logged = commandLogged(made);
+    deepStrictEqual(
+      [logged.length, logged[99], logged[100]],
+      [
+        101,
+        '[local command] line 100',
+        "[local command] more than 100 lines or 8 KiB of the command's output were dropped",
+      ],
+    );
+  });
+
+  it('#2598 (F-2109 AC-12): before the authentication nothing is a LocalCommand’s', async () => {
+    const made = fixture({level: 'trace'});
+    const {result, terminal} = await started(made);
+    terminal.write('out-marker\n');
+    terminal.write(AUTHENTICATED);
+    await result;
+    deepStrictEqual(commandLogged(made), []);
   });
 
   it('F-2003 BR-8: at debug terminal mode keeps the lines without debug1, and the failing login’s refusal is among them', async () => {
@@ -356,10 +466,10 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual([made.questions, made.questionsDisposed], [[], 0]);
   });
 
-  it('connect-108: with the login terminal shown a question nobody can reach after the handshake still times out', async () => {
+  it('connect-108, F-2308 AC-12: with the login terminal shown a question nobody can reach after the handshake ends the attempt with no reason', async () => {
     deepStrictEqual((await unreachable(true)).outcome, {
       kind: 'failed',
-      failure: TIMED_OUT,
+      failure: UNANSWERED,
     });
   });
 
@@ -455,10 +565,10 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     return which === 'still-open';
   }
 
-  it('F-2308 BR-5: a question nobody can reach after the handshake times out', async () => {
+  it('F-2308 BR-5, AC-12: a question nobody can reach after the handshake ends the attempt with no reason, not with the timed-out one', async () => {
     deepStrictEqual((await unreachable()).outcome, {
       kind: 'failed',
-      failure: TIMED_OUT,
+      failure: UNANSWERED,
     });
   });
 
@@ -484,7 +594,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual(await notSettled(result), true);
   });
 
-  it('athena on #385: a host 0 fails the open question at the ceiling', async () => {
+  it('athena on #385, F-2308 AC-12: a host 0 fails the open question at the ceiling, with no reason', async () => {
     const made = fixture({timeoutSeconds: 0, fromHost: true});
     const {result, terminal} = await started(made);
     terminal.write('debug1: SSH2_MSG_NEWKEYS received\n');
@@ -492,7 +602,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     made.clock.advance(600_000);
     deepStrictEqual(await result, {
       kind: 'failed',
-      failure: TIMED_OUT,
+      failure: UNANSWERED,
     });
   });
 
@@ -729,7 +839,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual(await result, {kind: 'failed', failure: TIMED_OUT});
   });
 
-  it("F-2105 7.E3: in terminal mode, the wait, the prompt reader and the bootstrap's timeout give the same reason", async () => {
+  it("F-2105 7.E3: in terminal mode, the wait and the bootstrap's timeout give the same reason, and a question nobody answers gives none (F-2308 AC-12)", async () => {
     const waited = fixture({timeoutSeconds: 10});
     const silent = await started(waited);
     waited.clock.advance(12_000);
@@ -742,7 +852,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
         (await unreachable()).outcome,
         await outlasted.result,
       ].map(outcome => (outcome.kind === 'failed' ? outcome.failure : outcome)),
-      [TIMED_OUT, TIMED_OUT, TIMED_OUT],
+      [TIMED_OUT, UNANSWERED, TIMED_OUT],
     );
   });
 
@@ -814,16 +924,20 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual(made.questions, []);
   });
 
-  it('contracts: a lease answers and refuses nothing, since no notice carries a question', async () => {
+  it('contracts: a lease answers and refuses nothing, since no notice carries a question, and has no helper to check (F-2505 AC-25)', async () => {
     const made = fixture();
     const {result, terminal} = await started(made);
     terminal.write(AUTHENTICATED);
     const outcome = await result;
     deepStrictEqual(
       outcome.kind === 'done'
-        ? [await outcome.value.answer(1, 'x'), await outcome.value.refuse(1)]
+        ? [
+            await outcome.value.answer(1, 'x'),
+            await outcome.value.refuse(1),
+            await outcome.value.checkSession(),
+          ]
         : outcome,
-      [false, false],
+      [false, false, 'unchecked'],
     );
   });
 

@@ -9,6 +9,7 @@ import {
   agentAdd,
   closeWindow,
   connectedWithin,
+  connectionLog,
   fingerprintOf,
   inWindow,
   onHostAs,
@@ -115,6 +116,7 @@ describe('F-2311, an account that may not create links in /tmp (card coverage-99
         '$SSH_AUTH_SOCK',
       );
       await onHostAs('root', 'setfacl', '-x', `u:${USER}`, '/tmp');
+      const logged = connectionLog().length;
       await reloadWindow('c99-notmp-back');
       await connectedWithin('c99-notmp-back', INSTALL_MILLISECONDS, USER);
       await waitFor(
@@ -122,6 +124,21 @@ describe('F-2311, an account that may not create links in /tmp (card coverage-99
         async () => (await hostLinks()).length > 0,
         30_000,
       ).catch(() => undefined);
+      // For the failure's message: the sockets and the sshd sessions of the account after the reload.
+      const live = await forwardedSockets();
+      const sessions = (
+        await onHostAs(
+          'root',
+          'sh',
+          '-c',
+          `ps -eo args | grep -c "sshd-session: ${USER}@" || true`,
+        ).catch(() => '?')
+      ).trim();
+      const reloadLines = connectionLog({withTimes: true})
+        .slice(logged)
+        .filter(line =>
+          /connect|forward|socket|link|helper|resolv|record/i.test(line),
+        );
       const links = await hostLinks();
       const target = (
         await onHostAs(USER, 'readlink', links[0]?.split(' ')[1] ?? '').catch(
@@ -144,7 +161,7 @@ describe('F-2311, an account that may not create links in /tmp (card coverage-99
           ),
         },
         {count: 1, newName: true, sameSocket: true, listsKey: true},
-        `${links.join(',')} -> ${target} (forwarded ${forwarded.join(',')})`,
+        `${links.join(',')} -> ${target} (forwarded before the reload ${forwarded.join(',')}, after it ${live.join(',')}; sshd sessions of the account after the reload: ${sessions}; the stored socket is the one forwarded before the reload; the reload's connect and forward lines with their times:\n${reloadLines.join('\n')})`,
       );
     } finally {
       await closeWindow('c99-notmp-back').catch(() => undefined);

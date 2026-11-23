@@ -140,15 +140,21 @@ const INSTALL_TREE_BODY: readonly string[] = [
   "Complete-Step 'ServerFailedToStart'",
 ];
 
+/** A word the C runtime and cmd both read as it is, with no quotes. */
+const BARE_WORD = /^[A-Za-z0-9_.,:/=+-]+$/;
+
 /**
- * The server's start words as one Windows command line, each word quoted as the C runtime splits it: Start-Process
- * joins its arguments with spaces and quotes nothing. A Windows host has no socket mode, so the server always listens
- * on a port.
+ * The server's start words as one Windows command line, each word as the C runtime splits it: Start-Process joins its
+ * arguments with spaces and quotes nothing. A word that needs no quotes goes bare, since the server's batch launcher
+ * reads its first word inside a quoted comparison that a quoted word breaks. A Windows host has no socket mode, so the
+ * server always listens on a port.
  */
 function argumentLine(start: StartParameters): string {
   const words = startWordsOf({...start, socketMode: false}).map(word =>
     'text' in word
-      ? powershellQuote(windowsArgument(word.text))
+      ? powershellQuote(
+          BARE_WORD.test(word.text) ? word.text : windowsArgument(word.text),
+        )
       : `(ConvertTo-WindowsArgument $${word.variable})`,
   );
   return `$SERVER_ARGUMENTS = @(${words.join(', ')}) -join ' '`;
@@ -233,7 +239,15 @@ function startBody(start: StartParameters): string[] {
     `  ${argumentLine(start)}`,
     `  Write-Line ${powershellQuote(LAUNCHING_LINE)}`,
     "  Add-Fact 'server.launching' 'yes'",
-    `  $Launch = @{FilePath = (${LAUNCHER_PATH}); ArgumentList = $SERVER_ARGUMENTS; PassThru = $true; RedirectStandardOutput = $LOG_FILE; RedirectStandardError = $ERROR_LOG_FILE}`,
+    `  $LaunchProgram = ${LAUNCHER_PATH}`,
+    '  $LaunchArguments = $SERVER_ARGUMENTS',
+    // A batch file is run by cmd, which strips the first and last quote of a line that starts with one; /s keeps every
+    // inner quote, so the launcher's path and each start word reach the batch file whole.
+    "  if ($LaunchProgram.EndsWith('.cmd')) {",
+    `    $LaunchArguments = '/d /s /c "' + (ConvertTo-WindowsArgument $LaunchProgram) + ' ' + $SERVER_ARGUMENTS + '"'`,
+    '    $LaunchProgram = $env:ComSpec',
+    '  }',
+    '  $Launch = @{FilePath = $LaunchProgram; ArgumentList = $LaunchArguments; PassThru = $true; RedirectStandardOutput = $LOG_FILE; RedirectStandardError = $ERROR_LOG_FILE}',
     '  try {',
     '    $ServerProcess = Start-Program $Launch',
     "    [System.IO.File]::WriteAllText($PID_FILE, [string]$ServerProcess.Id + ' ' + [string]$ServerProcess.StartTime.Ticks)",
@@ -322,7 +336,9 @@ const UNINSTALL_BODY: readonly string[] = [
 
 /**
  * Cleanup: the installs under `bin/`, newest first, removed by the policy's kind; the current commit is always kept,
- * and an install whose lock another step holds is left.
+ * and an install whose lock another step holds is left. Of the policy that keeps the newest, only the commits are ranked
+ * and kept, a leftover is removed only when it has not been modified for an hour (it may be an install in progress),
+ * and any other folder is left alone.
  */
 const CLEANUP_BODY: readonly string[] = [
   ...DATA_FOLDER_GUARD,
@@ -332,16 +348,25 @@ const CLEANUP_BODY: readonly string[] = [
   '}',
   '$Index = 0',
   'foreach ($Folder in @(Get-ChildItem -LiteralPath $BinFolder -Force | Sort-Object -Property LastWriteTime -Descending)) {',
-  '  $Index++',
   '  $Name = $Folder.Name',
+  '  $Kind = Get-FolderKind $Name',
+  "  if (($CLEANUP_KIND -eq 'keepNewest') -and ($Kind -eq 'commit')) {",
+  '    $Index++',
+  '  }',
   '  if ($Name -eq $COMMIT) {',
   '    continue',
   '  }',
-  '  $Kind = Get-FolderKind $Name',
   '  switch ($CLEANUP_KIND) {',
   "    'keepNewest' {",
-  '      if ($Index -gt [int]$KEEP_COUNT) {',
-  '        Remove-Install $Name',
+  "      if ($Kind -eq 'commit') {",
+  '        if ($Index -gt [int]$KEEP_COUNT) {',
+  '          Remove-Install $Name',
+  '        }',
+  "      } elseif ($Kind -eq 'leftover') {",
+  '        # A leftover is also a stepwise install in progress, which holds no lock: only an old one goes.',
+  '        if ($Folder.LastWriteTime -lt [DateTime]::Now.AddMinutes(-60)) {',
+  '          Remove-Install $Name',
+  '        }',
   '      }',
   '    }',
   "    'onlyCurrentRemoveLeftovers' {",
@@ -378,7 +403,6 @@ const INSTALL_CLI_BODY: readonly string[] = [
   '} catch {',
   '  Write-Failed $INSTALL_DIR (Get-FailureMessage $_)',
   '}',
-  'Enter-LockOrComplete $COMMIT',
   'if (Test-Path -LiteralPath $CLI_FILE -PathType Leaf) {',
   "  Add-Fact 'cli.path' $CLI_FILE",
   "  Exit-Step 'Ok'",
@@ -386,9 +410,7 @@ const INSTALL_CLI_BODY: readonly string[] = [
   'try {',
   '  New-Folder $CLI_STAGING',
   '} catch {',
-  '  $Message = Get-FailureMessage $_',
-  '  Exit-Lock',
-  '  Write-Failed $CLI_STAGING $Message',
+  '  Write-Failed $CLI_STAGING (Get-FailureMessage $_)',
   '}',
   'Initialize-Environment',
   "if ($ARCHIVE_PATH -ne '') {",
@@ -410,6 +432,11 @@ const INSTALL_CLI_BODY: readonly string[] = [
   'if (-not $Unpacked -or -not (Test-Path -LiteralPath $Staged -PathType Leaf)) {',
   '  Clear-Staging',
   "  Exit-Step 'UnpackFailed'",
+  '}',
+  'if (Test-Path -LiteralPath $CLI_FILE -PathType Leaf) {',
+  '  Clear-Staging',
+  "  Add-Fact 'cli.path' $CLI_FILE",
+  "  Exit-Step 'Ok'",
   '}',
   'try {',
   '  Move-Item -LiteralPath $Staged -Destination $CLI_FILE -Force -ErrorAction Stop',

@@ -73,7 +73,7 @@ describe('the commands of the view out of their context, in other windows (card 
   });
 
   it('F-5002 AC-14 (keys-kinds): a key bound to each command with no argument changes nothing in an empty window, an SSH window and a virtual workspace, and adds no state key of the extension', async () => {
-    const keysBefore = stateKeys();
+    const keysBefore = await stateKeys();
     const restore = await bindKeys(
       COMMANDS.map(([key, command]) => ({
         key: `ctrl+alt+${key}`,
@@ -85,23 +85,27 @@ describe('the commands of the view out of their context, in other windows (card 
       const kinds: Array<[string, () => Promise<string>]> = [
         [
           'empty',
-          () =>
-            nextEmptyWindow(() =>
+          async () => {
+            await rememberPage('local');
+            const created = await nextEmptyWindow(() =>
               inWindow('local', 'workbench.action.newWindow'),
-            ),
+            );
+            await rememberPage(created);
+            return created;
+          },
         ],
         [
           'ssh',
           async () => {
-            await openWindow(HOST, 'c5002-kinds-ssh');
-            await connectedTo('c5002-kinds-ssh', HOST);
+            await openWindow(HOST, 'c5002kinds-ssh');
+            await connectedTo('c5002kinds-ssh', HOST);
             await statusItemText(
-              'c5002-kinds-ssh',
+              'c5002kinds-ssh',
               'status.host',
               `SSH: ${HOST}`,
               180_000,
             );
-            return 'c5002-kinds-ssh';
+            return 'c5002kinds-ssh';
           },
         ],
         ['virtual', () => openMemoryWindow()],
@@ -130,7 +134,7 @@ describe('the commands of the view out of their context, in other windows (card 
       restore();
     }
     deepStrictEqual(
-      [seen, stateKeys()],
+      [seen, await stateKeys()],
       [
         ['empty', 'ssh', 'virtual'].map(kind => ({
           kind,
@@ -143,9 +147,11 @@ describe('the commands of the view out of their context, in other windows (card 
   });
 
   it('F-5002 AC-15 (non-row): add, Remove from Recent List and the two WSL commands called with a string and with {} search no extension, name no Microsoft extension, and show no dialog', async () => {
+    await rememberPage('local');
     const window = await nextEmptyWindow(() =>
       inWindow('local', 'workbench.action.newWindow'),
     );
+    await rememberPage(window);
     try {
       const before = await activeSideBar(window);
       const shown: unknown[] = [];
@@ -180,9 +186,11 @@ describe('the commands of the view out of their context, in other windows (card 
   });
 
   it('F-5002 AC-19 (execute-command): an extension that calls each of the 11 commands with executeCommand, with no argument and with a string, gets every call resolved, with no toast, no dialog and nothing changed', async () => {
+    await rememberPage('local');
     const window = await nextEmptyWindow(() =>
       inWindow('local', 'workbench.action.newWindow'),
     );
+    await rememberPage(window);
     try {
       const before = await settledSnapshot(window, false);
       const results: unknown[] = [];

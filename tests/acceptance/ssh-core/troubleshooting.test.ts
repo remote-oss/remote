@@ -15,11 +15,12 @@ import {
   readUserSettings,
   recordLines,
   restoreUserSettings,
+  terminalNames,
   userSettings,
   variable,
   waitFor,
 } from '../windows/harness.ts';
-import {hintRecords} from '../windows/hint-store.ts';
+import {hintRecords, waitForRecords} from '../windows/hint-store.ts';
 import {
   closeAllButLocal,
   dismissals,
@@ -27,72 +28,25 @@ import {
 } from '../windows/maintenance.ts';
 import {
   notifications,
-  terminalTabsOf,
+  outputChannelOf,
   terminalText,
   typeInTerminal,
 } from '../windows/renderer.ts';
+import {
+  cellsOf,
+  failedOn,
+  firstRowOf,
+  tableOf,
+  TERMINAL_MILLISECONDS,
+  troubleshootingTabs,
+} from '../windows/troubleshooting-support.ts';
 
-const NAME = 'Remote - SSH: Session Troubleshooting';
 const CLEAR = 'opensshremotes.clearAllSessionHints';
-
-/** How long the terminal has, after the failure dialog, to be among the terminals: about a second, and a margin. */
-const TERMINAL_MILLISECONDS = 5_000;
-
-/** Opens window `name` on `alias` and waits until its failure dialog was shown. */
-async function failedOn(alias: string, name: string): Promise<void> {
-  await openWindow(alias, name);
-  await waitFor(
-    `the failure dialog of ${name}`,
-    () => recordLines('failureDialog', name).length > 0,
-    INSTALL_MILLISECONDS,
-  );
-}
 
 /** Opens window `name` on `nowhere`, whose name never resolves, and waits until its failure dialog was shown. */
 async function failed(name: string): Promise<void> {
   appendScript(dismissals(name));
   await failedOn('nowhere', name);
-}
-
-/** Waits for the troubleshooting terminal of window `name`, and gives the lines of its table, whitespace as spaces. */
-async function tableOf(name: string): Promise<string[]> {
-  await waitFor(
-    'the troubleshooting terminal',
-    async () => (await troubleshootingTabs(name)).length > 0,
-    TERMINAL_MILLISECONDS,
-  );
-  return (await terminalText(name))
-    .replaceAll('\u00a0', ' ')
-    .split('\n')
-    .map(line => line.trimEnd())
-    .filter(line => /^[╔║╟╚]/u.test(line));
-}
-
-/** The cells of a table row, trimmed. */
-function cellsOf(line: string | undefined): string[] {
-  return (line ?? '')
-    .replace(/^║|║$/gu, '')
-    .split('│')
-    .map(cell => cell.trim());
-}
-
-/** The cells of the first data row of `table`, each with its wrapped lines joined by one space. */
-function firstRowOf(table: readonly string[]): string[] {
-  const end = table.findIndex(
-    (line, index) => index > 2 && /^[╟╚]/u.test(line),
-  );
-  const lines = table.slice(3, end).map(cellsOf);
-  return (lines[0] ?? []).map((unused, column) =>
-    lines
-      .map(cells => cells[column] ?? '')
-      .filter(cell => cell !== '')
-      .join(' '),
-  );
-}
-
-/** The terminals of window `name` that are the troubleshooting one. */
-async function troubleshootingTabs(name: string): Promise<string[]> {
-  return (await terminalTabsOf(name)).filter(label => label.includes(NAME));
 }
 
 describe('the session troubleshooting terminal (card connect-136)', function () {
@@ -205,13 +159,14 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
         async () => (await troubleshootingTabs('c136-c')).length > 0,
         TERMINAL_MILLISECONDS,
       );
-      await waitFor(
+      await waitForRecords(
         'the newest record with its log hint',
         () =>
           hintRecords()
             .at(-1)
             ?.hints.some(hint => hint.kind === 'log') ?? false,
-        60_000,
+        // The log hint is kept when the attempt has ended, which a slower runner takes longer to do.
+        180_000,
       );
       const before = JSON.stringify(hintRecords());
       await inWindow('c136-c', 'workbench.action.terminal.kill');
@@ -282,6 +237,34 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
         'remote.SSH.experimental.enhancedSessionLogs': undefined,
       });
       await closeWindow('c136-e').catch(() => undefined);
+    }
+  });
+
+  it("F-2003 AC-30 (c2784-off-panel): with enhancedSessionLogs off, a failure with detected issues shows the panel on the Output view's Remote - SSH channel and opens no troubleshooting terminal", async () => {
+    await inWindow('local', CLEAR);
+    await userSettings({'remote.SSH.experimental.enhancedSessionLogs': false});
+    await failed('c2784-off');
+    try {
+      await waitFor(
+        'the panel on the Remote - SSH output channel',
+        async () => (await outputChannelOf('c2784-off')) === 'Remote - SSH',
+        60_000,
+      );
+      deepStrictEqual(
+        [
+          await outputChannelOf('c2784-off'),
+          (await terminalNames('c2784-off')).filter(each =>
+            each.includes('Session Troubleshooting'),
+          ),
+          recordLines('failureDialog', 'c2784-off').length,
+        ],
+        ['Remote - SSH', [], 1],
+      );
+    } finally {
+      await userSettings({
+        'remote.SSH.experimental.enhancedSessionLogs': undefined,
+      });
+      await closeWindow('c2784-off').catch(() => undefined);
     }
   });
 

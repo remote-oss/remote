@@ -27,7 +27,7 @@ describe('the server licence of a genuine client with Dev Containers (card conta
     console.log(downloadLogsText());
   });
 
-  it('F-1402 AC-1 (licence-cancel): the first Reopen in Container in a fresh profile asks whether to accept the server’s licence terms, naming Dev Containers and the client, with the client’s terms address and Accept and Continue beside Cancel, before any request to the configured address; Cancel leaves no request, no server, the container stopped and the window disconnected', async () => {
+  it('F-1402 AC-1 (licence-cancel): the first Reopen in Container in a fresh profile asks whether to accept the server’s licence terms, naming Dev Containers and the client, with the client’s terms address and Accept and Continue beside Cancel, before any request to the configured address; Cancel leaves no request, no server, the container stopped and the window disconnected under the configuration’s name, which the attempt read before the dialog', async () => {
     const folder = devContainerFolder('c124-licence', {name: 'Licence Cancel'});
     const name = await openFolderWindow(folder);
     try {
@@ -70,8 +70,8 @@ describe('the server licence of a genuine client with Dev Containers (card conta
             container: 'exited',
             remoteName: 'dev-container',
             dialog: undefined,
-            title: '[c124-licence [Dev Container]]',
-            indicator: 'Disconnected from Dev Container',
+            title: '[c124-licence [Dev Container: Licence Cancel]]',
+            indicator: 'Disconnected from Dev Container: Licence Cancel',
           },
         },
       );

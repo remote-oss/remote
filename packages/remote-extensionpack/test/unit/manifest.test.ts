@@ -400,6 +400,34 @@ describe('the pack’s package (card pack-01)', () => {
     );
   });
 
+  it('F-9002 AC-7 (words): the readme says by display name that one Remote Development pack is to be used, not two, that the family’s extensions stay inactive with one warning each next to extensions with the same identifiers, and that a pack that lists another publisher’s extension ids installs those; the readme, the description and the keywords hold no other publisher’s name or extension id, no word of the reference’s origin, no affiliation or trademark notice and no claim to copy or replace Microsoft’s extensions', () => {
+    const everything = [
+      readme(),
+      tableOf().description,
+      manifestOf().keywords.join(' '),
+    ].join('\n');
+    deepStrictEqual(
+      [
+        flat(readme()).includes(
+          'Install one Remote Development pack, not two.',
+        ),
+        flat(readme()).includes(
+          'stand down next to extensions with those identifiers: they stay inactive, with one warning each',
+        ),
+        flat(readme()).includes(
+          "a pack that lists another publisher's extension ids installs those, not this family's",
+        ),
+        /Microsoft|ms-vscode|ms-azuretools|Visual Studio/i.test(everything),
+        /reimplementation|clean[- ]room/i.test(everything),
+        /trademark|®|™|affiliated|endorsed|official/i.test(everything),
+        /\b(copy|clone|replacement|substitute|fork) (of|for)\b/i.test(
+          everything,
+        ),
+      ],
+      [true, true, true, false, false, false, false],
+    );
+  });
+
   it('F-9002 AC-8, AC-23: the member list has exactly Dev Containers and Remote - SSH, each linking to its folder with a line of purpose, and WSL and Remote - Tunnels are named only as not part of this release', () => {
     const members = sectionOf('The members');
     const items = members

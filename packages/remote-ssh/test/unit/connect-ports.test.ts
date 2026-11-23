@@ -11,6 +11,7 @@ import {FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeEndpointPort} from 'lib-helper/testing/fake-endpoint';
 import {MemoryFilePort} from 'lib-helper/testing/memory-file-port';
+import {MemoryLockPort} from 'lib-server/testing/memory-lock-port';
 import {clientEnvironment} from 'lib-helper/testing/client-environment';
 import type {SettingHost, SettingInspection} from 'lib-identifiers';
 import {createLogger, type Level} from 'lib-log';
@@ -23,12 +24,14 @@ import {
   type ConnectMachine,
   type ConnectSurfaces,
   sshOverridePolicy,
+  skipping,
   wiringPortsOf,
 } from '../../src/connect-ports.ts';
 import {settings as SETTINGS} from '../../src/identifiers.generated.ts';
 import {
   type ConnectorDependencies,
   connectorOf,
+  type ResolveOutcome,
 } from '../../src/pipeline/connector.ts';
 import {
   connectionSettingsOf,
@@ -48,6 +51,7 @@ import {
   SSH_PROGRAM,
   spawnerOf,
 } from './locate.fixture.ts';
+import {HeldClientLocks} from '../../src/pipeline/client-lock-step.ts';
 import {INPUT, SILENT_PROMPTS, TERMS} from './pipeline.fixture.ts';
 import {PROFILE, surfacesOf} from './server-steps.fixture.ts';
 
@@ -107,6 +111,10 @@ function assemblyInputs(
       recorded.revealed += 1;
     },
   );
+  const lockFiles = new MemoryLockPort({
+    now: () => clock.now(),
+    wait: () => Promise.resolve(),
+  });
   const machine: ConnectMachine = {
     profile: PROFILE,
     platform: 'linux',
@@ -151,6 +159,10 @@ function assemblyInputs(
     download: {} as unknown as ConnectMachine['download'],
     scheduler: clock.scheduler(),
     clock: {now: () => clock.now(), wait: () => Promise.resolve()},
+    lockFiles,
+    clientLocks: new HeldClientLocks((path, modified) => {
+      void lockFiles.removeIfModified(path, modified);
+    }),
     local: new FakeLocalPort(),
     prober: changes.prober ?? new FakeProber({}),
     newTemporaryToken: () => 'token',
@@ -212,7 +224,7 @@ describe('the Kill Local Connection Server of the assembled connect (card connec
   /** The assembly over a helper client on a file port the test can read afterwards. */
   function killing(): {
     files: MemoryFilePort;
-    kill: (hostString: string) => Promise<void>;
+    kill: (hostString: string) => Promise<'found' | 'none'>;
   } {
     const files = new MemoryFilePort();
     const assembly = assemblyOverFiles(files);
@@ -456,7 +468,7 @@ describe("the assembled ports' settings", () => {
     );
   });
 
-  it('F-2405 AC-20, F-2404 BR-12: a refused host download and a rejected proxy value are kept as hints of their status', () => {
+  it('F-2405 AC-20, F-2404 BR-12: a refused host download, a rejected proxy value, an install folder setting that is rejected, an install folder that cannot be created and a failed client download are kept as hints of their status', () => {
     const {surfaces, machine, recorded} = assemblyInputs({});
     const kept: string[] = [];
     const ports = wiringPortsOf(
@@ -477,17 +489,36 @@ describe("the assembled ports' settings", () => {
     ports.server.onHostDownloadRefused('downloadFailed');
     ports.server.onHostDownloadRefused('noDownloader');
     ports.server.onProxyRejected({value: 'p', error: 'e'});
+    ports.server.onInstallFolderInvalid('~x');
+    ports.server.onInstallFolderRefused();
+    ports.server.onCommandMissing('tar');
+    ports.server.onPrerequisitesMissing();
+    ports.server.onLocalDownloadFailed('Failed to fetch');
+    ports.server.onLocalBootstrapFailed({cause: 'missing', path: '/x.tar.gz'});
+    ports.server.onLocalBootstrapFailed({
+      cause: 'unreadable',
+      detail: 'EACCES',
+    });
     deepStrictEqual(kept, [
       'ServerDownloadFailed',
       'NoDownloaderAvailable',
       'InvalidProxyUrl',
+      'InvalidCustomServerPath',
+      'CreateInstallDirFailed',
+      'CommandMissing',
+      'LinuxPrereqs',
+      'LocalDownloadFailed',
+      'LocalBootstrapFailed',
+      'LocalBootstrapFailed',
     ]);
   });
 
   it('connect-135: the end of a resolve step gives the failure’s hints to the recorder, and then ends the record', () => {
     const {surfaces, machine, recorded} = assemblyInputs({});
     const events: string[] = [];
-    let ended: ((hints: readonly FailureHint[]) => void) | undefined;
+    let ended:
+      | ((hints: readonly FailureHint[], outcome: ResolveOutcome) => void)
+      | undefined;
     connectAssemblyOf(
       {
         ...surfaces,
@@ -514,10 +545,11 @@ describe("the assembled ports' settings", () => {
         return connectorOf(dependencies);
       },
     );
-    ended?.([
-      {status: 'OfflineError', message: 'm', mitigations: [], resources: []},
-    ]);
-    ended?.([]);
+    ended?.(
+      [{status: 'OfflineError', message: 'm', mitigations: [], resources: []}],
+      'failed',
+    );
+    ended?.([], 'succeeded');
     deepStrictEqual(events, [
       'record OfflineError',
       'end',
@@ -1342,37 +1374,36 @@ describe("the assembled ports' platform notice", () => {
   });
 });
 
-describe("the assembled ports' refused forwarding notice (card connect-106)", () => {
-  it('F-2104 7.E4: the first refusal shows the error with a Show log link and no button, and the next ones show nothing', async () => {
+describe("the assembled ports' manual bootstrap (F-2406, ruling-2878-manual-bootstrap)", () => {
+  it("BR-3, BR-4: the warning is STR:S088 through the surfaces' notice, and the archive is read from the home's bootstrap folder", async () => {
     const {surfaces, machine, recorded} = assemblyInputs();
-    const shown: Array<[string, readonly string[]]> = [];
+    const warned: string[] = [];
     const ports = wiringPortsOf(
       {
         ...surfaces,
         notice: {
           showInformation: () => Promise.resolve(undefined),
-          showWarning: () => Promise.resolve(undefined),
-          showError: (message, buttons) => {
-            shown.push([message, buttons]);
+          showWarning: message => {
+            warned.push(message);
             return Promise.resolve(undefined);
           },
+          showError: () => Promise.resolve(undefined),
         },
       },
       machine,
       loggerOf(recorded),
     );
-    ports.tunnel.forwardRefused();
-    ports.tunnel.forwardRefused();
+    ports.warnManualBootstrap();
     await new Promise(resolve => setImmediate(resolve));
-    deepStrictEqual(shown, [
-      [
-        '<Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. ({0})>'.replace(
-          '{0}',
-          '[<Show log>](command:opensshremotes.showLog)',
-        ),
-        [],
-      ],
-    ]);
+    deepStrictEqual(
+      {warned, archive: ports.server.bootstrapArchive},
+      {
+        warned: [
+          "<Local download mode is configured as 'manual-bootstrap'. Exec server mode will be disabled.'>",
+        ],
+        archive: '/home/alex/vscode-remote-ssh-bootstrap/vscode-server.tar.gz',
+      },
+    );
   });
 });
 
@@ -1463,6 +1494,17 @@ describe('the logged channel of both connect modes (card connect-67)', () => {
         .map(line => line.message)
         .filter(message => message.startsWith('[remote] ')),
       ['[remote] a'],
+    );
+  });
+});
+
+describe('the window port search skipping the ports a connect failed to listen on (ruling-2731-listen-retry)', () => {
+  it('F-2104 6.2 step 3: a skipped port answers in use without a probe, and every other port is probed as before', async () => {
+    const prober = new FakeProber({20002: 'refused', 20003: 'refused'});
+    const skipped = skipping(prober, new Set([20002]));
+    deepStrictEqual(
+      [await skipped.probe(20002), await skipped.probe(20003), prober.probed],
+      ['open', 'refused', [20003]],
     );
   });
 });

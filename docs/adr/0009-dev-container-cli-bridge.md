@@ -39,7 +39,7 @@ The specs differ from the CLI's own behaviour in seven known places (dossier §4
    the VSIX. C3 spawns it with the editor's own Node: `process.execPath` with `ELECTRON_RUN_AS_NODE=1` on the
    package's entry script, `shell: false`, through the `CliHost` port (containers contracts §4). No other code imports
    it.
-   - **The container CLI host is the one exception** (amended 2026-11-03 with #1973, brief-volumes §7). For a clone
+   - **The container CLI host is the first exception** (amended 2026-11-03 with #1973, brief-volumes §7). For a clone
      in a volume, the CLI must run where the files are: inside the bootstrap container. There it runs on the
      bootstrap image's Node (Alpine's `nodejs`, 20, as the CLI needs), through `docker exec --interactive` into the
      bootstrap via C2's program. The image holds the same pinned CLI and our preload, copied from the VSIX at build.
@@ -47,6 +47,12 @@ The specs differ from the CLI's own behaviour in seven known places (dossier §4
        is on a command line. The editor's own environment doesn't go in: host values such as `PATH`, `TMPDIR` and
        `NODE_OPTIONS` don't hold inside the container.
      - An abort ends the Docker client. The CLI inside ends with the bootstrap, which the pipeline removes.
+   - **The remote engine hosts are the second exception** (amended 2026-11-04, brief-wsl-engine §2.3, which also records
+     brief-remote-ssh-engines §3.2's case). When the engine is an SSH host's or a WSL distro's, the CLI runs there, on
+     the editor server's `node` for that host's platform, installed by lib-server with no start (over the exec server's
+     channel, or lib-wsl's D4). The pinned CLI and our preload are copied once per version to
+     `<the server's data folder>/remote-oss-containers-cli/<version>/`. The spawn environment is that host's, and the
+     override file is written there with mode 0600 and deleted after the run.
 2. **How we bend it, in this order, and only this way:**
    1. **the CLI's own inputs:** the flags it already has (`--mount-workspace-git-root=false`, `--id-label`,
       `--docker-path`, …) and the environment it's spawned with;
@@ -55,14 +61,21 @@ The specs differ from the CLI's own behaviour in seven known places (dossier §4
 
    Each deviation goes through the first mechanism that reaches it, and C3's card records which (amended 2026-10-14
    on #764, measured on CLI 0.89.0):
-   - deviations 1 and 7 are the pre-pass, the only ones that need it (7 removes the top-level `image` from the
-     override; no flag of the CLI reaches it);
-   - deviation 2 needs no mechanism, because the CLI already makes `${containerEnv}` empty in `initializeCommand`;
-   - deviation 3 is the spawn environment, and for a clone in a volume the pre-pass: it resolves every
-     `${localEnv:…}` and `${env:…}` from the editor's environment on the host, because the container CLI host
-     passes none (F-0701 BR-14; an unset variable gets its default, as F-0701 Q5 prefers). The same pre-pass sets
-     `workspaceMount` to the volume at `/workspaces` and `workspaceFolder` to `/workspaces/<folder>`. The
-     configuration's own values are ignored, with a log line (F-0701 section 10);
+   - deviation 1 is the spawn environment (amended 2026-11-04, brief-configuration-and-menus §2, F-0304 AC-14): a
+     variable referenced in `${localEnv:…}` or `${env:…}` with a default, whose value is empty, is left out of the
+     CLI's environment, so the CLI's own lookup gives the default. The configuration's text, and so the image's
+     metadata label, stays as written;
+   - deviations 2 and 7 are the pre-pass, the only ones that need it:
+     - 2 writes `''`, or the written default, for every `${containerEnv:…}` in `initializeCommand` (amended
+       2026-11-04: the CLI leaves the reference in the text, which `dash` rejects; F-0304 AC-27);
+     - 7 removes the top-level `image` from the override; no flag of the CLI reaches it;
+   - deviation 3 is the spawn environment. For a clone in a volume, the container CLI host passes no editor
+     environment, so the variables the configuration references in `${localEnv:…}` and `${env:…}` pass by name, with
+     deviation 1's rule. A referenced variable that's unset, or empty with a default, on the host is unset in the
+     CLI's environment inside too (F-0701 BR-14; an unset variable gets its default, as F-0701 Q5 prefers; amended
+     2026-11-04, the pre-pass no longer resolves them in the text). That host's pre-pass sets `workspaceMount` to the
+     volume at `/workspaces` and `workspaceFolder` to `/workspaces/<folder>`. The configuration's own values are
+     ignored, with a log line (F-0701 section 10);
    - deviation 4 is post-processing;
    - deviation 5 is a flag;
    - deviation 6 waits for attach, which isn't in release 1.

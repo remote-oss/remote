@@ -1,6 +1,7 @@
-import {type ChannelFailureKind, type ScriptInput} from 'lib-host';
+import {type ChannelFailureKind} from 'lib-host';
 import {
   channelContractCases,
+  stagedInputOf,
   type ChannelHarness,
   type ContractScenario,
   type StagedChannel,
@@ -99,21 +100,6 @@ function scenarioScripts(
   }
 }
 
-const FILE_INPUT_SCENARIOS = new Set<string>([
-  'digestsInput',
-  'missingInputFile',
-  'streamsUntilCancelled',
-]);
-
-function inputFor(scenario: ContractScenario): ScriptInput {
-  if (scenario.kind === 'digestsInput' && scenario.input.kind === 'text') {
-    return scenario.input;
-  }
-  return FILE_INPUT_SCENARIOS.has(scenario.kind)
-    ? {kind: 'file', localFile: LOCAL_FILE}
-    : {kind: 'text', text: ''};
-}
-
 /** `content` cut into pieces of 100 bytes. */
 function pieces(content: Uint8Array): Uint8Array[] {
   const result: Uint8Array[] = [];
@@ -175,7 +161,7 @@ const SSH_HARNESS: ChannelHarness = {
         script: STAGED_SCRIPT,
         interpreter: 'posixShell',
         environment: {},
-        input: inputFor(scenario),
+        input: stagedInputOf(scenario, LOCAL_FILE),
       },
       copy: {localFile: LOCAL_FILE, remotePath: '/home/user/archive.tar.gz'},
     });

@@ -13,8 +13,9 @@ const RECORD = {
 const REPLIES: PlainData[] = [
   {type: 'accepted'},
   {type: 'refused', reason: 'notOwner'},
-  {type: 'sharedRecord', record: null},
-  {type: 'sharedRecord', record: RECORD},
+  {type: 'sharedRecord', record: null, detectedPlatform: null},
+  {type: 'sharedRecord', record: RECORD, detectedPlatform: 'windows'},
+  {type: 'sharedRecord', record: null, detectedPlatform: 'posix'},
   {type: 'answered', accepted: true},
   {type: 'scriptEnded', status: 3},
   {type: 'scriptFailed', reason: 'timeout', detail: 'no end in time'},
@@ -27,6 +28,7 @@ const EVENTS: PlainData[] = [
   {type: 'waitingForOtherWindow'},
   {type: 'connected', socksPort: 41000},
   {type: 'transportLost'},
+  {type: 'localCommandLines', lines: ['out-marker', 'second']},
   {type: 'scriptLine', runId: 4, line: 'hello'},
   {type: 'spawnFailed', cause: 'clientVanished', detail: 'spawn ssh ENOENT'},
   {type: 'loginFailed', kind: 'unknown', hints: []},
@@ -54,13 +56,18 @@ describe('connection replies and events (contracts §4 S9)', () => {
         {type: 'other'},
         {type: 'refused', reason: 'because'},
         {type: 'refused'},
-        {type: 'sharedRecord', record: {remotePort: 'x'}},
+        {
+          type: 'sharedRecord',
+          record: {remotePort: 'x'},
+          detectedPlatform: null,
+        },
+        {type: 'sharedRecord', record: null, detectedPlatform: 'macOS'},
         {type: 'answered', accepted: 'yes'},
         {type: 'scriptEnded', status: 'ok'},
         {type: 'scriptFailed', reason: 'because', detail: 'x'},
         {type: 'scriptFailed', reason: 'timeout'},
       ].map(body => readConnectionReply(body)),
-      Array.from({length: 10}, () => undefined),
+      Array.from({length: 11}, () => undefined),
     );
   });
 
@@ -68,6 +75,17 @@ describe('connection replies and events (contracts §4 S9)', () => {
     deepStrictEqual(
       EVENTS.map(body => readConnectionEvent(body)),
       EVENTS,
+    );
+  });
+
+  it('#2598: a localCommandLines event is read only when every line is a text', () => {
+    deepStrictEqual(
+      [
+        {type: 'localCommandLines', lines: 'one'},
+        {type: 'localCommandLines', lines: [1]},
+        {type: 'localCommandLines'},
+      ].map(body => readConnectionEvent(body)),
+      [undefined, undefined, undefined],
     );
   });
 

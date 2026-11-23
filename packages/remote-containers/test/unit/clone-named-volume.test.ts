@@ -100,7 +100,7 @@ describe('Clone Repository in Named Container Volume, up to the reload (card con
       calls: [
         'engine',
         'pick',
-        'precheck https://github.com/o/r',
+        'precheck https://github.com/o/r typed',
         'list ',
         'pick :create',
         'name data',
@@ -120,7 +120,7 @@ describe('Clone Repository in Named Container Volume, up to the reload (card con
       [
         'engine',
         'pick',
-        'precheck https://github.com/o/r',
+        'precheck https://github.com/o/r typed',
         'list data',
         'pick data:data',
         'folder r -> "r"',
@@ -136,7 +136,7 @@ describe('Clone Repository in Named Container Volume, up to the reload (card con
       calls: [
         'engine',
         'pick',
-        'precheck https://github.com/o/r',
+        'precheck https://github.com/o/r typed',
         'list ',
         'pick :create',
         'name data',
@@ -158,14 +158,14 @@ describe('Clone Repository in Named Container Volume, up to the reload (card con
         [
           'engine',
           'pick',
-          'precheck https://github.com/o/r',
+          'precheck https://github.com/o/r typed',
           'list ',
           'pick :escape',
         ],
         [
           'engine',
           'pick',
-          'precheck https://github.com/o/r',
+          'precheck https://github.com/o/r typed',
           'list ',
           'pick :create',
           'name escape',
@@ -173,7 +173,7 @@ describe('Clone Repository in Named Container Volume, up to the reload (card con
         [
           'engine',
           'pick',
-          'precheck https://github.com/o/r',
+          'precheck https://github.com/o/r typed',
           'list ',
           'pick :create',
           'name data',
@@ -188,7 +188,7 @@ describe('Clone Repository in Named Container Volume, up to the reload (card con
     deepStrictEqual((await runWith({folder: ''})).calls, [
       'engine',
       'pick',
-      'precheck https://github.com/o/r',
+      'precheck https://github.com/o/r typed',
       'list ',
       'pick :create',
       'name data',
@@ -212,7 +212,7 @@ describe('Clone Repository in Named Container Volume, up to the reload (card con
         calls: [
           'engine',
           'pick',
-          'precheck https://github.com/o/r',
+          'precheck https://github.com/o/r typed',
           'list data',
           'pick data:data',
           'folder r -> "r"',
@@ -227,7 +227,7 @@ describe('Clone Repository in Named Container Volume, up to the reload (card con
     deepStrictEqual((await runWith({precheck: 'unreachable'})).calls, [
       'engine',
       'pick',
-      'precheck https://github.com/o/r',
+      'precheck https://github.com/o/r typed',
       'cannotAccess https://github.com/o/r/tree/main',
     ]);
   });
@@ -240,7 +240,7 @@ describe('Clone Repository in Named Container Volume, up to the reload (card con
       ],
       [
         ['engine', 'pick', 'cannotAccess --upload-pack=x'],
-        ['engine', 'pick', 'precheck https://github.com/o/r'],
+        ['engine', 'pick', 'precheck https://github.com/o/r typed'],
       ],
     );
   });

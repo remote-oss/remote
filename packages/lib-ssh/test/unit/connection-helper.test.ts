@@ -1,4 +1,5 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
+import {scriptedProbe} from './scripted-probe.ts';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeEndpointPort} from 'lib-helper/testing/fake-endpoint';
 import {MemoryFilePort} from 'lib-helper/testing/memory-file-port';
@@ -10,6 +11,7 @@ import {
   type SshRequest,
 } from '../../src/index.ts';
 import {ScriptedSpawner} from './fake-client-process.ts';
+import {powershellSessionStart} from '../../src/connection-server/powershell-session.ts';
 import {authenticate} from './connection-fixture.ts';
 
 const ENDPOINT = '/run/rh-0123456789abcdef.sock';
@@ -87,6 +89,7 @@ describe('connection helper', () => {
       displayHost: 'h.invalid',
       externalAskpass: false,
       askpassFirstMessageMilliseconds: 5000,
+      hostPlatform: 'linux',
       ...changes,
     };
     return runConnectionHelper({
@@ -101,6 +104,7 @@ describe('connection helper', () => {
       port,
       clock: () => clock.now(),
       scheduler: clock.scheduler(),
+      socksProbe: scriptedProbe(clock.scheduler()),
       files,
       launcherFiles: {
         writeExecutable: (file, text) => {
@@ -207,6 +211,37 @@ describe('connection helper', () => {
     await ended;
   });
 
+  it('F-2102 §9: the welcome and connected carry the pids', async () => {
+    const ended = start(REQUEST);
+    const connection = await join();
+    connection.send({type: 'request', requestId: 1, body: {type: 'connect'}});
+    await settled();
+    const client = spawner.started[0];
+    if (client === undefined) {
+      throw new Error('no ssh was started');
+    }
+    client.processId = 7331;
+    authenticate(client);
+    await settled();
+    const welcome = received.find(
+      message => (message as {type?: string}).type === 'welcome',
+    );
+    const connected = received.find(
+      message =>
+        (message as {type?: string}).type === 'message' &&
+        (message as {body: {type: string}}).body.type === 'connected',
+    );
+    deepStrictEqual(
+      [
+        (welcome as {payload: Record<string, unknown>}).payload.helperProcessId,
+        (connected as {body: {sshProcessId?: number}}).body.sshProcessId,
+      ],
+      [process.pid, 7331],
+    );
+    connection.send({type: 'stop'});
+    await ended;
+  });
+
   async function lastArgumentFor(
     request: SshRequest,
     changes: Partial<ConnectionHelperOptions> = {},
@@ -237,6 +272,20 @@ describe('connection helper', () => {
         input?.startsWith('exec sh -c '),
       ],
       ['h.invalid', false, true],
+    );
+  });
+
+  it('F-2701 5.0 step 5: a host decided as Windows gets the PowerShell loop as its remote command', async () => {
+    deepStrictEqual(
+      await lastArgumentFor(REQUEST, {hostPlatform: 'windows'}),
+      powershellSessionStart().remoteProgram,
+    );
+  });
+
+  it('#1835: a host whose platform is unknown gets no remote command: its own shell reads the probe first', async () => {
+    deepStrictEqual(
+      await lastArgumentFor(REQUEST, {hostPlatform: 'unknown'}),
+      'h.invalid',
     );
   });
 
@@ -479,11 +528,13 @@ describe('connection helper', () => {
             displayHost: 'h.invalid',
             externalAskpass: false,
             askpassFirstMessageMilliseconds: 5000,
+            hostPlatform: 'linux',
           },
         },
         port,
         clock: () => clock.now(),
         scheduler: clock.scheduler(),
+        socksProbe: scriptedProbe(clock.scheduler()),
         files,
         launcherFiles: {
           writeExecutable: () =>

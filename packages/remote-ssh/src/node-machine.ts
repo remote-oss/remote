@@ -15,10 +15,12 @@ import {
   type HttpGet,
   nodeClientFiles,
   nodeCredentialsPort,
+  nodeLockFiles,
 } from 'lib-server';
 import {clientPlatformOf, nodeLocalFiles, nodeProcessSpawner} from 'lib-ssh';
 import {HELPER_CLIENT_WAITS} from './pipeline/bounds.ts';
 import type {ConnectMachine} from './connect-ports.ts';
+import {HeldClientLocks} from './pipeline/client-lock-step.ts';
 import {nodePreconnectFiles} from './preconnect/node-files.ts';
 
 /** What the extension knows of its own place: its folder, its storage, the editor's runtime and product. */
@@ -132,6 +134,10 @@ export function nodeMachineOf(
           setTimeout(resolve, milliseconds);
         }),
     },
+    lockFiles: nodeLockFiles,
+    clientLocks: new HeldClientLocks((path, modified) => {
+      nodeLockFiles.removeNow(path, modified);
+    }),
     local: nodeLocalPort(),
     prober: nodePortProber(),
     newTemporaryToken,

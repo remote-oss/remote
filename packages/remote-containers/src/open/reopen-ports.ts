@@ -15,6 +15,7 @@ import type {IntentMemento} from '../state/timed-store.ts';
 import type {TrustOutcome} from '../trust/trust-gate.ts';
 import type {PinnedEngine} from '../engine/effective-engine.ts';
 import type {AuthoringPort} from './author-first.ts';
+import type {HostRequirementsPorts} from './host-requirements-step.ts';
 import type {OpenGatePorts} from './open-gate.ts';
 import type {PreReloadProgressPorts} from './pre-reload-progress.ts';
 import type {WorkspaceFolderPorts} from './workspace-folders.ts';
@@ -73,6 +74,8 @@ export interface ReopenPorts extends AuthoringPort, WorkspaceFolderPorts {
   /** The time now, in milliseconds. */
   clock(): number;
   bridge: Pick<CliBridge, 'readConfiguration'>;
+  /** What the check of the daemon's host requirements needs. */
+  requirements: HostRequirementsPorts;
   /** The check of the Features against the control manifest, once a configuration is chosen. */
   problematic: ProblematicPorts;
   opener: OpenerHost;

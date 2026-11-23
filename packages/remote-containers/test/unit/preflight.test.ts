@@ -7,15 +7,21 @@ import type {
   EngineRunOutcome,
 } from '../../src/engine/engine-host.ts';
 import {
+  containerRequirements,
+  imageMissingReason,
   contextEndpoint,
   contextState,
   currentContext,
+  daemonFigures,
   type EngineDialogPort,
   firstCheck,
   type PreflightDependencies,
   secondCheck,
 } from '../../src/engine/preflight.ts';
-import {effectiveEngineKey} from '../../src/engine/engine-key.ts';
+import {
+  effectiveEngineKey,
+  endpointInEffect,
+} from '../../src/engine/engine-key.ts';
 import type {EngineSources} from '../../src/engine/effective-engine.ts';
 
 const NEVER_ABORTED = new AbortController().signal;
@@ -58,6 +64,8 @@ function sceneOf(
     values?: unknown[];
     choices?: Array<string | undefined>;
     environmentSecret?: string;
+    /** The endpoint in effect, when the scene has one. */
+    endpoint?: string;
   } = {},
 ): Scene {
   const sink = new MemorySink();
@@ -122,6 +130,9 @@ function sceneOf(
     clock: () => 0,
     logger: createLogger(sink, {minimumLevel: () => 'debug'}),
     searchPath: () => '/usr/bin:/bin',
+    ...(options.endpoint === undefined
+      ? {}
+      : {endpoint: () => Promise.resolve(options.endpoint)}),
   };
   Object.defineProperty(scene, 'lines', {
     get: () => sink.lines.map(line => `${line.level}: ${line.message}`),
@@ -423,6 +434,18 @@ describe('the first check', () => {
       'warn: dk was not found; PATH: /usr/bin:/bin',
     ]);
   });
+
+  it('coverage-117: a spawn that fails with no system code is logged as failed, with no path line', async () => {
+    const scene = sceneOf(
+      {'--version': {kind: 'failed', detail: 'spawn dk'}},
+      {values: ['dk']},
+    );
+    await firstCheck(scene.dependencies, undefined, NEVER_ABORTED);
+    deepStrictEqual(
+      [scene.lines, scene.dialogs],
+      [['debug: docker: --version → failed (0 ms)'], [ERROR_DIALOG]],
+    );
+  });
 });
 
 describe('the second check', () => {
@@ -467,6 +490,51 @@ describe('the second check', () => {
     );
   });
 
+  it('F-0202 AC-39: a daemon that is down starts Docker Desktop, and the repeated query passes with no dialog', async () => {
+    const answers: Record<string, Answer> = {
+      version: finished(
+        1,
+        '',
+        'failed to connect to the docker API at npipe:////./pipe/docker_engine',
+      ),
+    };
+    const scene = sceneOf(answers);
+    const started: string[] = [];
+    scene.dependencies.desktop = {
+      data: {
+        application: 'C:/Docker.exe',
+        start: {program: 'Docker.exe', parameters: []},
+        listing: {
+          program: 'tasklist',
+          parameters: [],
+          processName: 'Docker.exe',
+        },
+        recheckIntervalMilliseconds: 1,
+        rechecks: {
+          running: {kind: 'count', limit: 2},
+          started: {kind: 'count', limit: 2},
+        },
+      },
+      installed: () => Promise.resolve(true),
+      running: () => Promise.resolve(false),
+      start: () => {
+        started.push('start');
+        answers.version = finished(0);
+        return Promise.resolve();
+      },
+      wait: () => Promise.resolve(),
+      now: () => 0,
+    };
+    deepStrictEqual(
+      [
+        await secondCheck(scene.dependencies, undefined, NEVER_ABORTED),
+        started,
+        scene.dialogs,
+      ],
+      [{kind: 'passed'}, ['start'], []],
+    );
+  });
+
   it('F-0201 BR-1: a relative value with no base fails with S339 and runs nothing', async () => {
     const scene = sceneOf({}, {values: ['tools/dk']});
     deepStrictEqual(
@@ -475,6 +543,291 @@ describe('the second check', () => {
         scene.argvs,
       ],
       [{kind: 'failed', detail: 'S339'}, []],
+    );
+  });
+});
+
+describe('the first check, when Docker Desktop is started (card containers-200)', () => {
+  /** Start data for a host whose application is installed, with the given bound. */
+  function desktopOf(
+    started: () => void,
+    waits: number[],
+    options: {running?: boolean; limit?: number} = {},
+  ): NonNullable<PreflightDependencies['desktop']> {
+    return {
+      data: {
+        application: 'C:/Docker.exe',
+        start: {program: 'Docker.exe', parameters: []},
+        listing: {
+          program: 'tasklist',
+          parameters: [],
+          processName: 'Docker.exe',
+        },
+        recheckIntervalMilliseconds: 5,
+        rechecks: {
+          running: {kind: 'count', limit: options.limit ?? 2},
+          started: {kind: 'count', limit: options.limit ?? 2},
+        },
+      },
+      installed: () => Promise.resolve(true),
+      running: () => Promise.resolve(options.running ?? false),
+      start: () => {
+        started();
+        return Promise.resolve();
+      },
+      wait: milliseconds => {
+        waits.push(milliseconds);
+        return Promise.resolve();
+      },
+      now: () => 0,
+    };
+  }
+
+  const DOWN = finished(
+    1,
+    '',
+    'failed to connect to the docker API at npipe:////./pipe/docker_engine',
+  );
+
+  it('F-0202 AC-23, AC-24: a structured query that finds the daemon down starts Docker Desktop, and the re-check passes with no dialog', async () => {
+    const answers: Record<string, Answer> = {
+      ...PASSING,
+      [STRUCTURED.join(' ')]: DOWN,
+    };
+    const scene = sceneOf(answers);
+    const waits: number[] = [];
+    scene.dependencies.desktop = desktopOf(() => {
+      answers[STRUCTURED.join(' ')] = finished(0, GOOD_REPLY);
+    }, waits);
+    deepStrictEqual(
+      [
+        await firstCheck(scene.dependencies, undefined, NEVER_ABORTED),
+        waits,
+        scene.dialogs,
+      ],
+      ['proceed', [5], []],
+    );
+  });
+
+  it('F-0202 AC-24: a daemon that stays down after the re-checks shows the check’s own dialog once', async () => {
+    const scene = sceneOf({...PASSING, [STRUCTURED.join(' ')]: DOWN});
+    const waits: number[] = [];
+    let starts = 0;
+    scene.dependencies.desktop = desktopOf(
+      () => {
+        starts += 1;
+      },
+      waits,
+      {limit: 2},
+    );
+    deepStrictEqual(
+      [
+        await firstCheck(scene.dependencies, undefined, NEVER_ABORTED),
+        starts,
+        waits,
+        scene.dialogs.length,
+      ],
+      ['stopped', 1, [5, 5], 1],
+    );
+  });
+
+  it('F-0202 AC-44: a Docker Desktop that already runs is not started again', async () => {
+    const scene = sceneOf({...PASSING, [STRUCTURED.join(' ')]: DOWN});
+    let starts = 0;
+    scene.dependencies.desktop = desktopOf(
+      () => {
+        starts += 1;
+      },
+      [],
+      {running: true, limit: 1},
+    );
+    await firstCheck(scene.dependencies, undefined, NEVER_ABORTED);
+    deepStrictEqual(starts, 0);
+  });
+
+  it('F-0202 AC-32: a check cancelled during the re-checks ends stopped with no dialog', async () => {
+    const scene = sceneOf({...PASSING, [STRUCTURED.join(' ')]: DOWN});
+    const controller = new AbortController();
+    const desktop = desktopOf(() => undefined, []);
+    scene.dependencies.desktop = {
+      ...desktop,
+      wait: () => {
+        controller.abort();
+        return Promise.resolve();
+      },
+    };
+    deepStrictEqual(
+      [
+        await firstCheck(scene.dependencies, undefined, controller.signal),
+        scene.dialogs,
+      ],
+      ['stopped', []],
+    );
+  });
+});
+
+describe('the queries of the host requirements check (card containers-202)', () => {
+  const INFO = 'info --format {{json .}}';
+  const LISTED =
+    'ps -a -q --filter label=devcontainer.local_folder=/w/p --filter label=devcontainer.config_file=/w/p/.devcontainer/devcontainer.json';
+  const LABEL =
+    'inspect --format {{index .Config.Labels "devcontainer.metadata"}} abc123';
+  const IDENTITY = {
+    folder: '/w/p',
+    configFile: '/w/p/.devcontainer/devcontainer.json',
+  };
+
+  it('F-0206 BR-1, BR-2: the daemon’s figures are read from docker info, and none when it fails or prints no figures', async () => {
+    function figures(answer: EngineRunOutcome) {
+      return daemonFigures(
+        sceneOf({[INFO]: answer}).dependencies,
+        undefined,
+        NEVER_ABORTED,
+      );
+    }
+    deepStrictEqual(
+      [
+        await figures(
+          finished(0, '{"NCPU":8,"MemTotal":1000,"Runtimes":{"nvidia":{}}}'),
+        ),
+        await figures(finished(1, '', 'down')),
+        await figures(finished(0, 'not json')),
+      ],
+      [{cpus: 8, memory: 1000, nvidia: true}, undefined, undefined],
+    );
+  });
+
+  it('F-0206 BR-1: the figures of a docker that is not found are none, and nothing is run', async () => {
+    const scene = sceneOf({}, {values: ['tools/dk']});
+    deepStrictEqual(
+      [
+        await daemonFigures(scene.dependencies, undefined, NEVER_ABORTED),
+        scene.argvs,
+      ],
+      [undefined, []],
+    );
+  });
+
+  it('F-0206 BR-13: an image the engine does not hold gives the first line of the inspect’s message, and a local image or no docker gives none', async () => {
+    const INSPECT = 'image inspect --format {{.Id}} -- r/i:1';
+    function reason(answers: Record<string, EngineRunOutcome>) {
+      return imageMissingReason(
+        sceneOf(answers).dependencies,
+        undefined,
+        'r/i:1',
+        NEVER_ABORTED,
+      );
+    }
+    deepStrictEqual(
+      [
+        await reason({
+          [INSPECT]: finished(1, '', 'Error: No such image: r/i:1\nmore\n'),
+        }),
+        await reason({[INSPECT]: finished(1, '', '')}),
+        await reason({[INSPECT]: finished(0, 'sha256:abc\n')}),
+        await imageMissingReason(
+          sceneOf({}, {values: ['tools/dk']}).dependencies,
+          undefined,
+          'r/i:1',
+          NEVER_ABORTED,
+        ),
+      ],
+      ['Error: No such image: r/i:1', 'exit status 1', undefined, undefined],
+    );
+  });
+
+  it('F-0206 BR-13: an image that starts with a dash or holds an unsubstituted ${...} reaches the inspect as a name after the end of the options, and is reported as missing', async () => {
+    const dashed = sceneOf({
+      'image inspect --format {{.Id}} -- --all': finished(
+        1,
+        '',
+        'Error: No such image: --all\n',
+      ),
+    });
+    const variable = sceneOf({
+      'image inspect --format {{.Id}} -- ${localEnv:IMAGE}': finished(
+        1,
+        '',
+        'Error: No such image: ${localEnv:IMAGE}\n',
+      ),
+    });
+    deepStrictEqual(
+      [
+        await imageMissingReason(
+          dashed.dependencies,
+          undefined,
+          '--all',
+          NEVER_ABORTED,
+        ),
+        await imageMissingReason(
+          variable.dependencies,
+          undefined,
+          '${localEnv:IMAGE}',
+          NEVER_ABORTED,
+        ),
+        dashed.argvs,
+        variable.argvs,
+      ],
+      [
+        'Error: No such image: --all',
+        'Error: No such image: ${localEnv:IMAGE}',
+        [['image', 'inspect', '--format', '{{.Id}}', '--', '--all']],
+        [
+          [
+            'image',
+            'inspect',
+            '--format',
+            '{{.Id}}',
+            '--',
+            '${localEnv:IMAGE}',
+          ],
+        ],
+      ],
+    );
+  });
+
+  it('F-0206 BR-18, AC-36: the container made for the folder and the configuration gives the requirements its label records', async () => {
+    const scene = sceneOf({
+      [LISTED]: finished(0, 'abc123\n'),
+      [LABEL]: finished(
+        0,
+        '[{"hostRequirements":{"cpus":16}},{"id":"feature"}]\n',
+      ),
+    });
+    deepStrictEqual(
+      await containerRequirements(
+        scene.dependencies,
+        undefined,
+        IDENTITY,
+        NEVER_ABORTED,
+      ),
+      {cpus: 16, needsGpu: false},
+    );
+  });
+
+  it('F-0206 BR-18, AC-36: with no container, an empty label, a failing list or a failing inspect there are no requirements', async () => {
+    function requirements(answers: Record<string, EngineRunOutcome>) {
+      return containerRequirements(
+        sceneOf(answers).dependencies,
+        undefined,
+        IDENTITY,
+        NEVER_ABORTED,
+      );
+    }
+    deepStrictEqual(
+      [
+        await requirements({[LISTED]: finished(0, '\n')}),
+        await requirements({
+          [LISTED]: finished(0, 'abc123\n'),
+          [LABEL]: finished(0, '\n'),
+        }),
+        await requirements({[LISTED]: finished(1, '', 'down')}),
+        await requirements({
+          [LISTED]: finished(0, 'abc123\n'),
+          [LABEL]: finished(1, '', 'gone'),
+        }),
+      ],
+      [undefined, undefined, undefined, undefined],
     );
   });
 });
@@ -793,5 +1146,142 @@ describe('the key of the effective engine (card containers-142)', () => {
       ],
       [undefined, [], 'noContexts', true],
     );
+  });
+
+  describe('over an ssh Docker host (card containers-173)', () => {
+    const DENIED = finished(
+      1,
+      '',
+      'error during connect: stderr=user@box: Permission denied (publickey).',
+    );
+
+    it('F-0205 AC-12a, 7.E4: a host that starts with a dash shows the dialog with the host and runs no query', async () => {
+      const scene = sceneOf(PASSING, {
+        endpoint: 'ssh://user@-badhost:22',
+        choices: [undefined],
+      });
+      deepStrictEqual(
+        [
+          await firstCheck(scene.dependencies, undefined, NEVER_ABORTED),
+          scene.dialogs,
+          scene.argvs,
+        ],
+        [
+          'stopped',
+          [['Hostname must not start with a dash: -badhost', '', ['Show Log']]],
+          [],
+        ],
+      );
+    });
+
+    it('F-0205 AC-7, AC-8: a refused key shows the S056 dialog, and Show Log reveals the log', async () => {
+      const scene = sceneOf(
+        {'--version': DENIED},
+        {endpoint: 'ssh://user@box', choices: ['Show Log']},
+      );
+      deepStrictEqual(
+        [
+          await firstCheck(scene.dependencies, undefined, NEVER_ABORTED),
+          scene.dialogs,
+          scene.logRevealed,
+        ],
+        [
+          'stopped',
+          [
+            [
+              "Cannot connect to Docker daemon using 'ssh'.",
+              'Make sure public/private keys are set up for connecting without keyboard interaction.',
+              ['Show Log'],
+            ],
+          ],
+          1,
+        ],
+      );
+    });
+
+    it('F-0205 BR-8: nothing of a failure is remembered, so the next check asks the engine again', async () => {
+      const scene = sceneOf(
+        {'--version': DENIED},
+        {endpoint: 'ssh://user@box', choices: [undefined, undefined]},
+      );
+      await firstCheck(scene.dependencies, undefined, NEVER_ABORTED);
+      await firstCheck(scene.dependencies, undefined, NEVER_ABORTED);
+      deepStrictEqual(
+        [scene.argvs, scene.dialogs.length],
+        [[VERSION, VERSION], 2],
+      );
+    });
+
+    it('F-0205 BR-5: a Permission denied from an engine that is not over ssh keeps the permission dialog', async () => {
+      const scene = sceneOf(
+        {'--version': finished(1, '', 'permission denied')},
+        {endpoint: 'unix:///var/run/docker.sock', choices: [undefined]},
+      );
+      await firstCheck(scene.dependencies, undefined, NEVER_ABORTED);
+      deepStrictEqual(
+        scene.dialogs[0]?.[0],
+        "Current user does not have permission to run 'docker'.",
+      );
+    });
+  });
+
+  describe('the endpoint in effect (card containers-173)', () => {
+    it('F-0205 BR-17: a host setting is the endpoint, a context from the environment is that context’s, and the current context is the last resort', async () => {
+      function inspect(name: string): string {
+        return `context inspect ${name} --format {{json .Endpoints.docker.Host}}`;
+      }
+      const scene = sceneOf({
+        'context show': finished(0, 'box\n'),
+        [inspect('box')]: finished(0, '"ssh://user@box"'),
+        [inspect('fixed')]: finished(0, '"tcp://far:2376"'),
+      });
+      deepStrictEqual(
+        [
+          await endpointInEffect(
+            {...NO_SETTINGS, dockerHost: 'ssh://h'},
+            scene.dependencies,
+            undefined,
+            NEVER_ABORTED,
+          ),
+          await endpointInEffect(
+            {...NO_SETTINGS, processEnvironment: {DOCKER_CONTEXT: 'fixed'}},
+            scene.dependencies,
+            undefined,
+            NEVER_ABORTED,
+          ),
+          await endpointInEffect(
+            NO_SETTINGS,
+            scene.dependencies,
+            undefined,
+            NEVER_ABORTED,
+          ),
+        ],
+        ['ssh://h', 'tcp://far:2376', 'ssh://user@box'],
+      );
+    });
+
+    it('F-0205 BR-17: an engine without contexts, and one whose context cannot be read, have no endpoint', async () => {
+      const without = sceneOf({'context show': finished(125)});
+      const unreadable = sceneOf({
+        'context show': {kind: 'failed', detail: 'spawn ENOENT'},
+      });
+      deepStrictEqual(
+        [
+          await endpointInEffect(
+            NO_SETTINGS,
+            without.dependencies,
+            undefined,
+            NEVER_ABORTED,
+          ),
+          await endpointInEffect(
+            NO_SETTINGS,
+            unreadable.dependencies,
+            undefined,
+            NEVER_ABORTED,
+          ),
+        ],
+        [undefined, undefined],
+      );
+    });
   });
 });

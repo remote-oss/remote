@@ -9,6 +9,7 @@ import type {Logger} from 'lib-log';
 import type {DevContainerFolder, SerializedUri} from '../authority/payload.ts';
 import type {FailedContainer} from '../connect/failures.ts';
 import type {Translate} from './engine-dialogs.ts';
+import {chosenButton, type ErrorButton, pickedItem} from './choose.ts';
 import {failureDialogOf, quickPickOf} from './failure-dialog.ts';
 import {reasonText} from './failure-strings.ts';
 
@@ -24,6 +25,9 @@ export const CONTAINERS_REQUIREMENTS =
 export const CONTAINERS_INTRODUCTION =
   'https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md';
 
+/** The section of that page on mount performance and container volumes, which the information about mount performance opens. */
+export const MOUNT_PERFORMANCE_PAGE = `${CONTAINERS_INTRODUCTION}#mount-performance-and-container-volumes`;
+
 /** The labels of the buttons of the dialog for a window with no place to download the server from. */
 const SERVER_SOURCE_BUTTONS = {
   openSetting: 'Open Setting',
@@ -32,12 +36,6 @@ const SERVER_SOURCE_BUTTONS = {
 
 /** The setting whose address a missing server source asks the user to set. */
 const DOWNLOAD_SETTING = 'remote.serverDownloadBaseUrl';
-
-/** One button of the modal error: its label, and whether Escape chooses it. */
-export interface ErrorButton {
-  title: string;
-  isCloseAffordance?: boolean;
-}
 
 /** What the presenter shows and opens. */
 export interface RecoveryPorts {
@@ -68,6 +66,10 @@ export interface RecoveryPorts {
   /** Reopens the folder on this machine, in this window. */
   openLocally(folder: string): PromiseLike<unknown>;
   reloadWindow(): PromiseLike<unknown>;
+  /** Reloads this window into the recovery container of the volume it is a clone in. */
+  openRecoveryContainer(): PromiseLike<unknown>;
+  /** Closes the remote connection, leaving an empty local window, as core's own command does. */
+  closeRemote(): PromiseLike<unknown>;
   openRecent(): PromiseLike<unknown>;
   /** Leaves the retry for the paused container `containerId`, which the connect after the reload takes once. */
   storePausedRetry(containerId: string): PromiseLike<void>;
@@ -82,12 +84,16 @@ export interface RecoveryPorts {
   logger: Logger;
 }
 
-/** The presenter over `ports`; `target` and `failedContainer` are read each time something is shown. */
+/**
+ * The presenter over `ports`; `target`, `failedContainer` and whether the window is a clone in a volume are read each
+ * time something is shown.
+ */
 export function recoveryPresenterOf(
   ports: RecoveryPorts,
   target: () => DevContainerFolder | undefined,
   failedContainer: () => FailedContainer | undefined,
   translate: Translate,
+  volumeWindow: () => boolean,
 ): FailurePresenter {
   /** The log file of the attempt whose dialog shows now. */
   let attemptFile: string | undefined;
@@ -131,12 +137,9 @@ export function recoveryPresenterOf(
       failedContainer() !== undefined &&
         (folder === undefined || (await ports.fileExists(folder.configFile))),
       translate,
+      volumeWindow(),
     );
-    const chosen = await ports.pick(
-      pick.placeholder,
-      pick.items.map(item => item.label),
-    );
-    const item = pick.items.find(each => each.label === chosen);
+    const item = await pickedItem(ports, pick);
     if (item?.action === 'reload') {
       await ports.reloadWindow();
     } else if (item?.action === 'rebuild') {
@@ -145,6 +148,10 @@ export function recoveryPresenterOf(
       await editLocally(item.folder);
     } else if (item?.action === 'openRecent') {
       await ports.openRecent();
+    } else if (item?.action === 'recovery') {
+      await ports.openRecoveryContainer();
+    } else if (item?.action === 'openRepository') {
+      ports.logger.info('Open Repository opens nothing further');
     } else if (item?.action === 'openDocumentation') {
       await ports.openExternal(CONTAINERS_DOCUMENTATION);
       await showQuickPick();
@@ -178,23 +185,24 @@ export function recoveryPresenterOf(
           `the log of the attempt could not be written: ${caught instanceof Error ? caught.message : String(caught)}`,
         );
       }
-      const dialog = failureDialogOf(failed, folder, translate);
-      const chosen = await ports.showError(
+      const dialog = failureDialogOf(failed, folder, translate, volumeWindow());
+      // Escape chooses the close affordance, More Actions..., which the editor gives back as the choice.
+      const button = await chosenButton(
+        ports,
         dialog.message,
         dialog.detail,
-        dialog.buttons.map(button => ({
-          title: button.label,
-          ...(button.action === 'moreActions' ? {isCloseAffordance: true} : {}),
-        })),
+        dialog.buttons,
       );
-      // Escape chooses the close affordance, More Actions..., which the editor gives back as the choice.
-      const button = dialog.buttons.find(each => each.label === chosen);
       if (button?.action === 'retry') {
         await keepPausedRetry();
         return 'reload';
       }
       if (button?.action === 'editLocally') {
         await editLocally(button.folder);
+      } else if (button?.action === 'closeRemote') {
+        await ports.closeRemote();
+      } else if (button?.action === 'recovery') {
+        await ports.openRecoveryContainer();
       } else if (button?.action === 'learnMore') {
         await ports.openExternal(button.address ?? CONTAINERS_REQUIREMENTS);
         ports.disconnected();

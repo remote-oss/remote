@@ -347,9 +347,15 @@ describe('the extensions cache', () => {
               return Promise.resolve();
             },
             exists: file => Promise.resolve(existsSync(file)),
+            entryExists: file => Promise.resolve(existsSync(file)),
             size: () => Promise.resolve(0),
             sha256: file =>
               Promise.resolve(sha256Text(readFileSync(file, 'utf8'))),
+            stage: () =>
+              Promise.resolve({
+                kind: 'failed',
+                detail: 'nothing is staged here',
+              }),
             rename: (source, destination) => {
               renameSync(source, destination);
               return Promise.resolve({kind: 'renamed'});

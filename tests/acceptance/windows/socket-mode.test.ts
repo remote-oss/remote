@@ -159,8 +159,10 @@ describe('the server on a socket (card coverage-81)', function () {
     const processBefore = await socketServerPid();
     const socketsBefore = await listeningSockets();
     const since = new Date().toISOString();
+    const reloadMark = connectionLog().length;
     const start = Date.now();
     await reloadWindow('s4');
+    const reloaded = Date.now() - start;
     await connectedWithin('s4', 60_000);
     const elapsed = Date.now() - start;
     deepStrictEqual(
@@ -180,10 +182,19 @@ describe('the server on a socket (card coverage-81)', function () {
         oneSocket: 1,
         sameSockets: true,
       },
+      `the reload command returned after ${String(reloaded)} ms and the window was connected after ${String(elapsed)} ms, against the bound of 10000 ms; the log since the reload: ${JSON.stringify(
+        connectionLog()
+          .slice(reloadMark)
+          .filter(line =>
+            /Resolving|Authenticated|Server result|Remote server listening|Resolved ssh-remote|connect failed|settingUpTunnel/.test(
+              line,
+            ),
+          ),
+      )}`,
     );
   });
 
-  it('F-2410 AC-26 (ruling-299-socket-reuse): after the reload the earlier connect’s socket still listens and is still a file in /tmp, and nothing removed it', async () => {
+  it('F-2410 AC-8 (ruling-299-socket-reuse): after the reload the earlier connect’s socket still listens and is still a file in /tmp, and nothing removed it', async () => {
     const [socket] = await listeningSockets();
     await reloadWindow('s4');
     await connectedWithin('s4', 60_000);

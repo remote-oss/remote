@@ -1,13 +1,20 @@
 import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import {
-  pageAmong,
   pageTitleByName,
+  nextListKey,
+  walkToPosition,
+  type FocusedRow,
+  type ListKey,
   pageTitleFor,
   pagesForState,
   pagesOfRemoteness,
   pressUntilClosed,
+  withoutAdministratorMark,
+  retypingOf,
   type FolderDialogReading,
+  type FolderDialogWait,
 } from './renderer.ts';
+import {pageAmong} from './page-list.ts';
 
 describe('pageTitleByName', () => {
   it('containers-19: a folder window finds its page by its name, with or without the remote part of the title', () => {
@@ -23,6 +30,16 @@ describe('pageTitleByName', () => {
     );
   });
 
+  it('card #2635: a remote window whose label is not registered yet finds its page by its name before the authority', () => {
+    deepStrictEqual(
+      [
+        pageTitleByName('as1', ['[as1]ssh-remote+password', '[]']),
+        pageTitleByName('as1', ['[as10]ssh-remote+password', '[]']),
+      ],
+      ['[as1]ssh-remote+password', undefined],
+    );
+  });
+
   it('containers-19: the local window is the empty brackets', () => {
     strictEqual(pageTitleByName('local', ['[]SSH: harness', '[]']), '[]');
   });
@@ -34,6 +51,45 @@ describe('pageTitleByName', () => {
         pageTitleByName('local', ['[]', '[]']),
       ],
       [undefined, undefined],
+    );
+  });
+});
+
+describe('the titles of an elevated editor', () => {
+  const ELEVATED = [
+    '[c70-twice [Dev Container: c70-twice @ tcp://127.0.0.1:61168]] [Administrator]',
+    '[c70-no-docker] [Administrator]',
+    '[] [Administrator]',
+  ];
+
+  it('card #2829: the mark of an elevated editor is taken off every title, and only at its end', () => {
+    deepStrictEqual(
+      [
+        ...ELEVATED.map(withoutAdministratorMark),
+        withoutAdministratorMark('[an [Administrator] folder]'),
+      ],
+      [
+        '[c70-twice [Dev Container: c70-twice @ tcp://127.0.0.1:61168]]',
+        '[c70-no-docker]',
+        '[]',
+        '[an [Administrator] folder]',
+      ],
+    );
+  });
+
+  it('card #2829: on the titles of a Windows runner the local window is the empty brackets, and the folder windows find their pages by name', () => {
+    const titles = ELEVATED.map(withoutAdministratorMark);
+    deepStrictEqual(
+      [
+        pageTitleByName('local', titles),
+        pageTitleByName('c70-no-docker', titles),
+        pageTitleByName('c70-twice', titles),
+      ],
+      [
+        '[]',
+        '[c70-no-docker]',
+        '[c70-twice [Dev Container: c70-twice @ tcp://127.0.0.1:61168]]',
+      ],
     );
   });
 });
@@ -407,6 +463,165 @@ describe('pagesForState', () => {
         page => page.id,
       ),
       ['p1', 'p3'],
+    );
+  });
+});
+
+describe('nextListKey', () => {
+  it('tooling-122: the last row is reached by End, the first by Home from below the first, and a long distance by a page key', () => {
+    deepStrictEqual(
+      [
+        nextListKey(0, 2000, 2000, 20),
+        nextListKey(1500, 1, 2000, 20),
+        nextListKey(1, 1000, 2000, 20),
+        nextListKey(1500, 1000, 2000, 20),
+      ],
+      ['End', 'Home', 'PageDown', 'PageUp'],
+    );
+  });
+
+  it('tooling-122: the last few rows are reached by single steps, and from the group above the first row the first is one step down', () => {
+    deepStrictEqual(
+      [
+        nextListKey(985, 1000, 2000, 20),
+        nextListKey(1010, 1000, 2000, 20),
+        nextListKey(0, 1, 2000, 20),
+      ],
+      ['ArrowDown', 'ArrowUp', 'ArrowDown'],
+    );
+  });
+});
+
+describe('walkToPosition', () => {
+  function portsOf(next: (key: ListKey | undefined) => FocusedRow): {
+    presses: ListKey[];
+    ports: Parameters<typeof walkToPosition>[0];
+  } {
+    const presses: ListKey[] = [];
+    let last: ListKey | undefined;
+    return {
+      presses,
+      ports: {
+        read: () => Promise.resolve(next(last)),
+        press: key => {
+          last = key;
+          presses.push(key);
+          return Promise.resolve();
+        },
+        pause: () => Promise.resolve(),
+      },
+    };
+  }
+
+  it('tooling-122: a page whose focus never moves fails within the bound set on entering the set, not by running on', async () => {
+    const stuck = portsOf(() => ({
+      label: 'mt-5',
+      position: 5,
+      size: 2000,
+      level: 2,
+      rendered: 20,
+    }));
+    let message = '';
+    await walkToPosition(stuck.ports, 1000, 2).catch((caught: unknown) => {
+      message = String(caught);
+    });
+    deepStrictEqual(
+      [
+        stuck.presses.length <= Math.ceil(2000 / 20) + 20 + 1,
+        message.includes('did not reach position 1000'),
+        message.includes('"mt-5" at 5 of 2000'),
+      ],
+      [true, true, true],
+    );
+  });
+
+  it('tooling-122: a list that moves one row per key arrives, through the group row above the set', async () => {
+    let focused = 0;
+    const moving = portsOf(key => {
+      if (key === 'ArrowDown') {
+        focused += 1;
+      }
+      return focused === 0
+        ? {label: '', position: 0, size: 0, level: null, rendered: 20}
+        : focused === 1
+          ? {label: 'SSH', position: 1, size: 1, level: 1, rendered: 20}
+          : {
+              label: `mt-${String(focused - 1)}`,
+              position: focused - 1,
+              size: 2000,
+              level: 2,
+              rendered: 20,
+            };
+    });
+    deepStrictEqual(await walkToPosition(moving.ports, 2, 2), {
+      label: 'mt-2',
+      position: 2,
+      size: 2000,
+    });
+  });
+});
+
+describe('retypingOf (card #2756)', () => {
+  const PATH = '/home/harness/folder';
+
+  /** A reading of the dialog with `value` in its input and `rows` listed. */
+  function reading(value: string, rows: string[]): FolderDialogReading {
+    return {open: true, value, rows};
+  }
+
+  it('card #2756: an input that does not hold the typed path gets it typed again, and the wait for a list starts over', () => {
+    const wait: FolderDialogWait = {waitingSince: 100, slashed: false};
+    deepStrictEqual(
+      [retypingOf(PATH, reading('/home/harness/', ['..']), wait, 500), wait],
+      [{text: PATH}, {waitingSince: undefined, slashed: false}],
+    );
+  });
+
+  it('card #2756: the typed path with the folder’s own list is shown, with or without a closing slash in the input', () => {
+    deepStrictEqual(
+      [
+        retypingOf(PATH, reading(PATH, ['..', 'a']), {slashed: false}, 0),
+        retypingOf(PATH, reading(`${PATH}/`, ['..']), {slashed: true}, 0),
+      ],
+      ['shown', 'shown'],
+    );
+  });
+
+  it('card #2756: the typed path held for less than two seconds with the parent’s list is waited on, not typed again', () => {
+    const wait: FolderDialogWait = {slashed: false};
+    deepStrictEqual(
+      [
+        retypingOf(PATH, reading(PATH, ['a', 'b']), wait, 1000),
+        retypingOf(PATH, reading(PATH, ['a', 'b']), wait, 2999),
+        wait.waitingSince,
+      ],
+      [undefined, undefined, 1000],
+    );
+  });
+
+  it('card #2756: after two seconds it is typed again once, with a closing slash, and the input is then that path and no other', () => {
+    const wait: FolderDialogWait = {slashed: false};
+    const stalled = reading(PATH, ['a', 'b']);
+    deepStrictEqual(
+      [
+        retypingOf(PATH, stalled, wait, 1000),
+        retypingOf(PATH, stalled, wait, 3001),
+        retypingOf(PATH, stalled, wait, 9000),
+        wait.slashed,
+        retypingOf(PATH, reading(`${PATH}/`, ['..']), wait, 9100),
+      ],
+      [undefined, {text: `${PATH}/`}, undefined, true, 'shown'],
+    );
+  });
+
+  it('card #2756: a path typed with a closing slash already is never typed again with another', () => {
+    const wait: FolderDialogWait = {slashed: false};
+    deepStrictEqual(
+      [
+        retypingOf(`${PATH}/`, reading(`${PATH}/`, ['a']), wait, 0),
+        retypingOf(`${PATH}/`, reading(`${PATH}/`, ['a']), wait, 60_000),
+      ],
+      [undefined, undefined],
     );
   });
 });

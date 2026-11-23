@@ -60,6 +60,26 @@ export async function serverPort(): Promise<number> {
 }
 
 /**
+ * What the host's TCP sockets look like for a failure of the port row to name (#2563): every socket `netstat` lists on
+ * the host but the ssh daemon's, in any state, so that a port that was taken for a moment, by a server that was closing
+ * or by a socket in TIME_WAIT, shows even when it is free again.
+ */
+export async function portFacts(
+  expected: number | 'random',
+  listened: number,
+): Promise<string> {
+  try {
+    const sockets = (await onHost('netstat', '-tan'))
+      .split('\n')
+      .filter(line => line.startsWith('tcp') && !/:22\s/.test(line))
+      .slice(0, 40);
+    return `the case expected port ${String(expected)} and the server listened on ${String(listened)}; the host's TCP sockets now, but the ssh daemon's: ${JSON.stringify(sockets)}`;
+  } catch (caught) {
+    return `the case expected port ${String(expected)} and the server listened on ${String(listened)}; the host's sockets could not be read: ${String(caught)}`;
+  }
+}
+
+/**
  * The address the host listens on `port`: the address part of the local address of the `LISTEN` line that ends in
  * `:<port>`; `undefined` when there is none.
  */

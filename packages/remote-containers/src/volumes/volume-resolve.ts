@@ -13,6 +13,7 @@ import {
   checkoutFailed,
   cloneFailed,
   containerSetupFailed,
+  volumeLeft,
 } from '../connect/failures.ts';
 import type {ContainerOutcome} from '../lifecycle/container-lifecycle.ts';
 import {volumeIdLabels} from '../lifecycle/labels.ts';
@@ -24,7 +25,7 @@ import {
 import {type BuildContext, startBootstrap} from './bootstrap-start.ts';
 import {bootstrapFilesOf} from './bootstrap-files.ts';
 import {cloneSourceOf} from './clone-source.ts';
-import {cloneIntoVolume, VOLUME_ROOT} from './clone-steps.ts';
+import {cloneIntoVolume, configurationIn, VOLUME_ROOT} from './clone-steps.ts';
 import {namedVolumeLabelsOf, uniqueVolumeLabelsOf} from './clone-volume.ts';
 import {type EngineStepPorts, stepOf} from './engine-step.ts';
 import {type DevContainerVolume, UNIQUE_VOLUME} from './volume-payload.ts';
@@ -32,6 +33,8 @@ import {uniqueVolumeName} from './volume-name.ts';
 
 /** What `up` in the bootstrap is asked for. */
 export interface VolumeContainerRequest {
+  /** The volume the dev container mounts, which names the connection to the shutdown helper. */
+  volumeName: string;
   /** The folder in the volume, as the bootstrap and the dev container see it. */
   folder: string;
   configFile: string;
@@ -50,6 +53,14 @@ export interface VolumeResolvePorts extends EngineStepPorts {
   clearTyped(payload: string): Promise<void>;
   /** Told when the volume and the clone begin. */
   onCloning(): void;
+  /**
+   * Has the user add a configuration to the clone, whose folder is `folder` in the bootstrap container `bootstrap`:
+   * whether one was written, or the user left.
+   */
+  addConfiguration(
+    bootstrap: string,
+    folder: string,
+  ): Promise<'written' | 'left'>;
   /** Finds or creates the dev container, with the CLI in the bootstrap container `bootstrap`; `configText` is the file's. */
   prepare(
     bootstrap: string,
@@ -62,8 +73,10 @@ export interface VolumeResolvePorts extends EngineStepPorts {
 interface PreparedVolume {
   kind: 'prepared';
   outcome: Extract<ContainerOutcome, {kind: 'ready'}>;
-  /** The bootstrap container, still running: the caller removes it once connected. */
-  bootstrap: string;
+  /** The bootstrap container, still running: the caller removes it once connected. None for a recovery container. */
+  bootstrap: string | undefined;
+  /** The volume the clone is in. */
+  volumeName: string;
   request: VolumeContainerRequest;
   /** The configuration's text, for the CLI runs on the host once the bootstrap is gone. */
   configText: string;
@@ -82,7 +95,7 @@ export type VolumeResolution =
 const FOLDER_REFUSED = /[/\\\u0000-\u001f\u007f]/;
 
 /** Whether `folder` can be a folder under `/workspaces`: one plain name. */
-function plainFolder(folder: string): boolean {
+export function plainFolder(folder: string): boolean {
   return !['', '.', '..'].includes(folder) && !FOLDER_REFUSED.test(folder);
 }
 
@@ -107,12 +120,33 @@ async function removeBootstrap(
   }
 }
 
+/** The configuration the user adds to a clone that has none: its file relative to the folder, or why there is none. */
+async function addedConfiguration(
+  ports: VolumeResolvePorts,
+  bootstrap: string,
+  folder: string,
+): Promise<string | Failed> {
+  ports.logger.info('the clone holds no dev container configuration');
+  if ((await ports.addConfiguration(bootstrap, folder)) === 'left') {
+    return volumeLeft();
+  }
+  return (
+    (await configurationIn(ports, bootstrap, folder)) ?? containerSetupFailed()
+  );
+}
+
 /** Resolves the volume target `target` of `payload` up to a ready dev container, or why it can't be. */
 export async function resolveVolume(
   ports: VolumeResolvePorts,
   payload: string,
   target: DevContainerVolume,
 ): Promise<VolumeResolution> {
+  if (target.inspectVolume) {
+    ports.logger.info(
+      'an explored volume is never created, cloned into or set up by a clone’s resolve',
+    );
+    return {kind: 'failed', failure: containerSetupFailed()};
+  }
   const origin = ports.typed(payload) ? 'typed' : 'link';
   const source = cloneSourceOf(target.repositoryPath, origin);
   const unique = target.volumeName === UNIQUE_VOLUME;
@@ -151,21 +185,28 @@ export async function resolveVolume(
     origin,
     target.folder,
   );
-  if (cloned.kind !== 'ready' || cloned.configuration === undefined) {
+  if (cloned.kind !== 'ready') {
     await removeBootstrap(ports, bootstrap);
-    if (cloned.kind === 'cloneFailed') {
-      return {kind: 'failed', failure: cloneFailed(cloned.detail)};
-    }
-    if (cloned.kind === 'checkoutFailed') {
-      return {kind: 'failed', failure: checkoutFailed(source.urlToClone)};
-    }
-    ports.logger.info('the clone holds no dev container configuration');
-    return {kind: 'failed', failure: containerSetupFailed()};
+    return {
+      kind: 'failed',
+      failure:
+        cloned.kind === 'cloneFailed'
+          ? cloneFailed(cloned.detail)
+          : checkoutFailed(source.urlToClone),
+    };
   }
   await ports.clearTyped(payload);
   const folder = `${VOLUME_ROOT}/${target.folder}`;
-  const configFile = `${folder}/${cloned.configuration}`;
+  const configuration =
+    cloned.configuration ??
+    (await addedConfiguration(ports, bootstrap, folder));
+  if (typeof configuration !== 'string') {
+    await removeBootstrap(ports, bootstrap);
+    return {kind: 'failed', failure: configuration};
+  }
+  const configFile = `${folder}/${configuration}`;
   const request: VolumeContainerRequest = {
+    volumeName,
     folder,
     configFile,
     idLabels: volumeIdLabels({
@@ -191,6 +232,7 @@ export async function resolveVolume(
     kind: 'prepared',
     outcome,
     bootstrap,
+    volumeName,
     request,
     configText,
     shallow: cloned.cloned && !cloned.deepened,

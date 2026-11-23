@@ -1,21 +1,33 @@
 import {deepStrictEqual} from 'node:assert';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import {
-  clearHintsHandler,
-  type HintStoreState,
-} from '../../src/diagnostics/clear-hints-command.ts';
+import {clearHintsHandler} from '../../src/diagnostics/clear-hints-command.ts';
+import type {HintStore} from '../../src/diagnostics/hint-store.ts';
+import {confirmedKeyOf} from '../../src/state/confirmed-update.ts';
+
+const CLEAR_TIME = new Date('2026-11-02T00:00:09Z');
 
 /** A global state that records its writes, in order. */
-function stateOf(): {state: HintStoreState; calls: Array<[string, undefined]>} {
-  const calls: Array<[string, undefined]> = [];
+function stateOf(): {
+  key: ReturnType<typeof confirmedKeyOf<HintStore>>;
+  calls: Array<[string, HintStore]>;
+} {
+  const calls: Array<[string, HintStore]> = [];
+  const stored: {value?: HintStore} = {};
+  const logger = createLogger(new MemorySink(), {minimumLevel: () => 'error'});
   return {
-    state: {
-      update: (key, value) => {
-        calls.push([key, value]);
-        return Promise.resolve();
+    key: confirmedKeyOf<HintStore>(
+      {
+        get: () => stored.value,
+        update: (name, value) => {
+          calls.push([name, value]);
+          stored.value = value;
+          return Promise.resolve();
+        },
       },
-    },
+      'remote.ssh.hints',
+      {delay: () => Promise.resolve(), logger},
+    ),
     calls,
   };
 }
@@ -32,18 +44,20 @@ function logging(): {
   };
 }
 
+const CLEARED: HintStore = {records: [], clearedAt: '2026-11-02T00:00:09.000Z'};
+
 describe('the clear command (F-2605 6.6)', () => {
-  it("F-2605.AC-20: the store's key is the only update, deleted with undefined", async () => {
-    const {state, calls} = stateOf();
+  it('F-2605.AC-20, AC-22: the store’s key is the only update, an empty store that says when it was cleared', async () => {
+    const {key, calls} = stateOf();
     const {logger} = logging();
-    await clearHintsHandler(state, logger).execute();
-    deepStrictEqual(calls, [['remote.ssh.hints', undefined]]);
+    await clearHintsHandler(key, () => CLEAR_TIME, logger).execute();
+    deepStrictEqual(calls, [['remote.ssh.hints', CLEARED]]);
   });
 
   it('F-2605.AC-20: the log has the cleared line', async () => {
-    const {state} = stateOf();
+    const {key} = stateOf();
     const {sink, logger} = logging();
-    await clearHintsHandler(state, logger).execute();
+    await clearHintsHandler(key, () => CLEAR_TIME, logger).execute();
     deepStrictEqual(
       sink.lines.map(line => line.message),
       ['Cleared all session hints'],
@@ -51,12 +65,16 @@ describe('the clear command (F-2605 6.6)', () => {
   });
 
   it('F-2605.AC-21: an empty store runs the same update, and no error is reported', async () => {
-    const {state, calls} = stateOf();
+    const {key, calls} = stateOf();
     const {logger} = logging();
-    const outcome = await clearHintsHandler(state, logger).execute();
+    const outcome = await clearHintsHandler(
+      key,
+      () => CLEAR_TIME,
+      logger,
+    ).execute();
     deepStrictEqual(
       [outcome, calls],
-      [undefined, [['remote.ssh.hints', undefined]]],
+      [undefined, [['remote.ssh.hints', CLEARED]]],
     );
   });
 });

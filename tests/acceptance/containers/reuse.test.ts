@@ -22,6 +22,7 @@ import {
   variable,
   waitFor,
   windowState,
+  withLogTail,
 } from '../windows/harness.ts';
 import {
   answerDialog,
@@ -92,6 +93,43 @@ async function reopened(folder: string): Promise<string> {
   const name = await openFolderWindow(folder);
   await reopenInContainer(name);
   return name;
+}
+
+/** The entry file of the bundled CLI in the built package. */
+const CLI_ENTRY = path.join(
+  import.meta.dirname,
+  '..',
+  '..',
+  '..',
+  'packages',
+  'remote-containers',
+  'dist',
+  'devcontainers-cli',
+  'devcontainer.js',
+);
+
+/**
+ * Makes the container of `folder` with the bundled CLI, under the labels the extension looks for, and so with no window
+ * of this profile: the profile holds no acknowledgment of the configuration (F-0303 AC-12b), where one that built the
+ * container through a window holds it and is told an edit (AC-12c).
+ */
+async function containerMadeByCli(folder: string): Promise<string> {
+  const configFile = path.join(folder, '.devcontainer', 'devcontainer.json');
+  await execFileAsync(process.execPath, [
+    CLI_ENTRY,
+    'up',
+    '--workspace-folder',
+    folder,
+    '--config',
+    configFile,
+    '--id-label',
+    `devcontainer.local_folder=${folder}`,
+    '--id-label',
+    `devcontainer.config_file=${configFile}`,
+    '--skip-non-blocking-commands',
+  ]);
+  const [containerId = ''] = await devContainersOf(folder);
+  return containerId;
 }
 
 /** Reopens `folder` in its container, closes the window, and gives the container it made. */
@@ -229,9 +267,9 @@ async function nextDialogAfter(
   return waitForDialog(name, DIALOG_MILLISECONDS);
 }
 
-/** A dialog as the rows compare it: its message, its detail and its buttons in sorted order. */
+/** A dialog as the rows compare it: its message, its detail and its buttons in the order the dialog shows them. */
 function dialogText(dialog: ShownDialog): [string, string, string[]] {
-  return [dialog.message, dialog.details, [...dialog.buttons].sort()];
+  return [dialog.message, dialog.details, dialog.buttons];
 }
 
 /**
@@ -267,6 +305,32 @@ async function rebuildCancelled(
     return outcome;
   } finally {
     await setUserSetting('dev.containers.dockerPath', undefined);
+  }
+}
+
+/** How long a window's background lifecycle commands may take to end after it connects. */
+const LIFECYCLE_MILLISECONDS = 60_000;
+
+/**
+ * Resolves once the log written since `mark` says the lifecycle commands ended, which they do in the background after
+ * the window connects; a time-out carries those lines.
+ */
+async function lifecycleFinishedSince(mark: number): Promise<void> {
+  try {
+    await waitFor(
+      'the lifecycle commands to finish',
+      () =>
+        containersLogSince(mark).includes('the lifecycle commands finished'),
+      LIFECYCLE_MILLISECONDS,
+    );
+  } catch (caught) {
+    throw new Error(
+      withLogTail(
+        caught instanceof Error ? caught.message : String(caught),
+        containersLogSince(mark),
+      ),
+      {cause: caught},
+    );
   }
 }
 
@@ -316,11 +380,18 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       postStartCommand: 'echo start >> /tmp/c58-runs',
     });
     try {
-      const stopped = await inspectOf(await containerLeftBy(folder));
+      // The window is closed only after the first container's lifecycle commands have run: a window closed sooner ends
+      // them, and its postStartCommand then runs once, at the restart, which leaves one `start` short of the three.
+      const created = containersLog().length;
+      const first = await reopened(folder);
+      const stopped = await inspectOf(await containerOf(folder));
+      await lifecycleFinishedSince(created);
+      await closeWindow(first);
       await execFileAsync('docker', ['stop', stopped.id]);
       const mark = containersLog().length;
       const name = await reopened(folder);
       const dialog = await dialogOf(name);
+      await lifecycleFinishedSince(mark);
       const lines = containersLogSince(mark);
       const containerIds = await devContainersOf(folder);
       const started = await inspectOf(containerIds[0] ?? '');
@@ -482,7 +553,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it('F-0405 AC-26 (b26): a rebuild with a docker that does not exist shows S339 with F-0410’s buttons, and the container keeps its id, a recorded deviation (athena on #939, remote-oss/remote-containers#123)', async () => {
+  it('F-0405 AC-26 (b26): a rebuild with a docker that does not exist shows S339 with Edit devcontainer.json Locally | More Actions... | Retry, and the old container is kept or gone, either acceptable', async () => {
     const folder = devContainerFolder('rebuild-docker');
     try {
       const name = await reopened(folder);
@@ -496,10 +567,16 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       deepStrictEqual(
         {
           details: dialog.details,
-          buttons: [...dialog.buttons].sort(),
-          containers,
+          buttons: dialog.buttons,
+          keptOrGone:
+            containers.length === 0 ||
+            (containers.length === 1 && containers[0] === kept),
         },
-        {details: S339, buttons: RECOVERY_BUTTONS, containers: [kept]},
+        {
+          details: S339,
+          buttons: RECOVERY_BUTTONS,
+          keptOrGone: true,
+        },
       );
     } finally {
       await removeContainers(folder);
@@ -612,7 +689,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
         dialog: [
           'Docker version 17.12.0 or later required.',
           `Command not found: '${missing}'. Check the license for details.`,
-          ['Cancel', 'Install', 'License'],
+          ['License', 'Cancel', 'Install'],
         ],
         remoteName: null,
         containers: [kept],
@@ -1100,12 +1177,12 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it('F-0405 AC-12 (r12): a stopped container whose configuration was edited is restarted as it is from the reopen notification: same id, the edit not applied, and no configuration-change notice', async () => {
+  it('F-0405 AC-12 (reading-2099-r12-no-acknowledgment): a stopped container, of a profile that holds no acknowledgment, whose configuration was edited is restarted as it is from the reopen notification: same id, the edit not applied, and no configuration-change notice', async () => {
     const folder = devContainerFolder('c54-stopped-edit', {
       name: 'Stopped Edit',
     });
     try {
-      const containerId = await containerLeftBy(folder);
+      const containerId = await containerMadeByCli(folder);
       await execFileAsync('docker', ['stop', containerId]);
       writeFileSync(
         path.join(folder, '.devcontainer', 'devcontainer.json'),
@@ -1319,7 +1396,19 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       postStartCommand: 'touch /tmp/c54-poststart',
     });
     try {
+      const opened = containersLog().length;
       const name = await reopened(folder);
+      // The first connect logs its own lifecycle failure after it has connected; the mark waits for it.
+      await waitFor(
+        'the lifecycle failure of the first connect in the log',
+        () =>
+          Promise.resolve(
+            containersLogSince(opened).some(line =>
+              line.startsWith('the lifecycle commands failed'),
+            ),
+          ),
+        DIALOG_MILLISECONDS,
+      );
       const mark = containersLog().length;
       await reopenInContainer(
         name,

@@ -171,3 +171,51 @@ describe('the containers the Dev Containers view lists (card containers-29)', ()
     );
   });
 });
+
+describe('the bind mounts of a listed container (card containers-146)', () => {
+  it('F-0901 AC-37: the binds are the host and container folders of the bind mounts, and nothing for a volume or a mount that lacks one', () => {
+    const listed = listedContainersOf(
+      JSON.stringify([
+        element({
+          Mounts: [
+            {Type: 'volume', Name: 'v', Destination: '/vscode'},
+            {Type: 'bind', Source: '/h/p', Destination: '/workspaces/p'},
+            {Type: 'bind', Source: '/h/q'},
+            {Type: 'bind', Destination: '/x'},
+            null,
+          ],
+        }),
+        element({Mounts: 'x'}),
+        element(),
+      ]),
+    );
+    deepStrictEqual(
+      listed?.map(each => each.binds),
+      [[{source: '/h/p', destination: '/workspaces/p'}], [], []],
+    );
+  });
+});
+
+describe('the volume mounts of a listed container (card containers-168)', () => {
+  it('F-0905 BR-2: the volumes are the names of the volume mounts, and nothing for a bind or a mount that lacks a name', () => {
+    const listed = listedContainersOf(
+      JSON.stringify([
+        element({
+          Mounts: [
+            {Type: 'volume', Name: 'one', Destination: '/vscode'},
+            {Type: 'bind', Source: '/h/p', Destination: '/workspaces/p'},
+            {Type: 'volume', Destination: '/anonymous'},
+            {Type: 'volume', Name: 'two', Destination: '/workspaces'},
+            null,
+          ],
+        }),
+        element({Mounts: 'x'}),
+        element(),
+      ]),
+    );
+    deepStrictEqual(
+      listed?.map(each => each.volumes),
+      [['one', 'two'], [], []],
+    );
+  });
+});

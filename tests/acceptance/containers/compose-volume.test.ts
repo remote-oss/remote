@@ -11,7 +11,7 @@ import {
   openedCompose,
   removeComposeContainers,
   volumeNamesOf,
-} from './compose-support.ts';
+} from '../windows/compose-support.ts';
 
 /** What `docker inspect` says of one mount. */
 interface InspectedMount {

@@ -4,6 +4,7 @@ import {
   type CopyAnswer,
   type ScriptAnswer,
 } from 'lib-host/testing/recording-channel';
+import type {Failed} from 'lib-authority';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {OverrideValue, ProductProfile} from 'lib-product';
@@ -268,8 +269,11 @@ function dependenciesOf(
           ? !seen.removed.includes(file)
           : seen.renames.some(([, kept]) => kept === file),
       ),
+    entryExists: () => Promise.resolve(false),
     size: () => Promise.resolve(10),
     sha256: () => Promise.resolve('00'),
+    stage: () =>
+      Promise.resolve({kind: 'failed', detail: 'nothing is staged here'}),
     rename: (source, destination) => {
       seen.renames.push([source, destination]);
       return Promise.resolve({kind: 'renamed'});
@@ -333,8 +337,11 @@ async function runSteps(
     machineSettings?: Record<string, unknown>;
     devPort?: string;
     created?: boolean;
+    previewNoteAlways?: boolean;
+    extensionsOncePerUser?: boolean;
     cancellation?: AbortSignal;
     root?: RecordingChannel;
+    beforeStart?: ServerRequest['beforeStart'];
   } = {},
 ): Promise<{result: ServerResult; seen: Seen}> {
   const seen: Seen = {
@@ -354,6 +361,10 @@ async function runSteps(
     defaultExtensions: options.defaultExtensions ?? [],
     devPort: options.devPort ?? '',
     created: options.created ?? false,
+    ...(options.previewNoteAlways === true ? {previewNoteAlways: true} : {}),
+    ...(options.extensionsOncePerUser === true
+      ? {extensionsOncePerUser: true}
+      : {}),
     machineSettings: options.machineSettings ?? {},
     onPhase: phase => {
       seen.phases.push(phase);
@@ -362,6 +373,9 @@ async function runSteps(
       seen.percents.push(percent);
     },
     cancellation: options.cancellation ?? NEVER,
+    ...(options.beforeStart === undefined
+      ? {}
+      : {beforeStart: options.beforeStart}),
   };
   return {
     result: await runServerSteps(dependenciesOf(seen, options), request),
@@ -446,6 +460,55 @@ describe('the server steps of a connect (card containers-08)', () => {
         },
         ['installing', 'startingServer'],
       ],
+    );
+  });
+
+  it('brief-personalization §1 step 4: the hook before the start runs after the server files are in place, given the server’s node and data folder, and the server then starts', async () => {
+    const channel = channelOf();
+    const atHook: boolean[] = [];
+    const given: unknown[] = [];
+    const {result} = await runSteps(channel, {
+      beforeStart: files => {
+        given.push(files);
+        atHook.push(
+          channel.calls.some(call => call.operation === 'copyToHost'),
+          scriptsOf(channel).some(isStart),
+        );
+        return Promise.resolve(undefined);
+      },
+    });
+    deepStrictEqual(
+      [result.kind, atHook, scriptsOf(channel).some(isStart), given],
+      [
+        'started',
+        [true, false],
+        true,
+        [
+          {
+            nodePath: '/home/node/.fixture-server/bin/abc123/node',
+            dataFolder: '/home/node/.fixture-server',
+          },
+        ],
+      ],
+    );
+  });
+
+  it('brief-personalization §1 step 4: a failure the hook before the start returns ends the steps with it, and the server never starts', async () => {
+    const channel = channelOf();
+    const failure: Failed = {
+      kind: 'containerSetupFailed',
+      retryable: false,
+      silent: false,
+      userAlreadyNotified: false,
+      hints: [],
+      diagnostics: [],
+    };
+    const {result, seen} = await runSteps(channel, {
+      beforeStart: () => Promise.resolve(failure),
+    });
+    deepStrictEqual(
+      [result, seen.phases, scriptsOf(channel).some(isStart)],
+      [{kind: 'failed', failure}, ['installing'], false],
     );
   });
 
@@ -701,6 +764,50 @@ describe('the server steps of a connect (card containers-08)', () => {
     ]);
   });
 
+  it('F-0502 AC-17 (c163-preview-always): an attached container logs the preview line whether or not this connect created it, and still none for a glibc one on x64', async () => {
+    const musl = await runSteps(channelOf({libc: 'musl'}), {
+      previewNoteAlways: true,
+    });
+    const glibc = await runSteps(channelOf({libc: 'glibc'}), {
+      previewNoteAlways: true,
+    });
+    function lines(seen: Seen): string[] {
+      return seen.sink.lines
+        .map(line => line.message)
+        .filter(message => message.includes('is in preview'));
+    }
+    deepStrictEqual(
+      [lines(musl.seen), lines(glibc.seen)],
+      [['Support for Alpine Linux is in preview.'], []],
+    );
+  });
+
+  it('F-0602 BR-4, F-0505 AC-22 (c163-once-per-user): the default extensions reach the start for a user with no server data yet, and not for one that has it', async () => {
+    async function startWith(dataFolderExists: boolean): Promise<string> {
+      const channel = channelOf({
+        extra: [
+          answer(
+            script => script.startsWith('[ -e '),
+            [],
+            dataFolderExists ? 0 : 1,
+          ),
+        ],
+      });
+      await runSteps(channel, {
+        defaultExtensions: ['a.b'],
+        extensionsOncePerUser: true,
+      });
+      return scriptsOf(channel).find(isStart) ?? '';
+    }
+    deepStrictEqual(
+      [
+        (await startWith(false)).includes("'--install-extension' 'a.b'"),
+        (await startWith(true)).includes("'--install-extension' 'a.b'"),
+      ],
+      [true, false],
+    );
+  });
+
   it('F-0502 AC-17: a container that ran already, or a glibc one on x64, logs no preview line', async () => {
     deepStrictEqual(
       [await previewLines('musl', false), await previewLines('glibc', true)],
@@ -885,21 +992,11 @@ describe('the server steps of a connect (card containers-08)', () => {
     });
   });
 
-  it('F-0503 7.E1: a probe that finds a tool missing is serverFailed, and the log names the tool', async () => {
+  it('F-0503 7.E1: a probe that reports a failure of its own is serverFailed, and the log names the kind', async () => {
     const channel = new RecordingChannel({
       identity: 'c1',
       platformHint: 'linux',
-      scripts: [
-        answer(
-          isProbe,
-          blockOf(
-            'Ok',
-            ...hostFacts('glibc', undefined).map(fact =>
-              fact === 'host.tool.tar=yes' ? 'host.tool.tar=no' : fact,
-            ),
-          ),
-        ),
-      ],
+      scripts: [answer(isProbe, blockOf('NoBash'))],
     });
     const {result, seen} = await runSteps(channel);
     deepStrictEqual(
@@ -909,10 +1006,7 @@ describe('the server steps of a connect (card containers-08)', () => {
           .map(line => line.message)
           .filter(message => !message.startsWith('remote.serverDownload')),
       ],
-      [
-        'serverFailed',
-        ['the probe failed: prerequisiteMissing', 'the container lacks: tar'],
-      ],
+      ['serverFailed', ['the probe failed: probeFailed']],
     );
   });
 

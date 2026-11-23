@@ -1,5 +1,5 @@
 import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
-import type {RecordingChannel} from 'lib-host/testing/recording-channel';
+import {RecordingChannel} from 'lib-host/testing/recording-channel';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import {
@@ -8,8 +8,13 @@ import {
   type ServerStepDependencies,
 } from '../../src/pipeline/server-steps.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
-import {type ServerPolicyRecord, sshPolicyFor} from 'lib-server';
 import {
+  type ProbedHost,
+  type ServerPolicyRecord,
+  sshPolicyFor,
+} from 'lib-server';
+import {
+  BOOTSTRAP_ARCHIVE,
   channelAnswering,
   dependencies,
   HOST,
@@ -32,7 +37,15 @@ const INPUT: ConnectInput = {
 
 const NEVER_CANCELLED = new AbortController().signal;
 
-/** The failure the target check gives the validate step, for a row to compare. */
+/** The check message each target string id gives, in English, as the log names it. */
+const TARGET_MESSAGES = {
+  S119: 'SSH host name cannot begin with',
+  S120: 'SSH host name cannot include the character',
+  S121: 'SSH user name cannot begin with',
+  S122: 'SSH user name cannot include the character',
+} as const;
+
+/** The failure the target check gives the validate step, for a row to compare: the reason for the dialog and the check message for the log. */
 function targetFailure(
   stringId: 'S119' | 'S120' | 'S121' | 'S122',
   character: string,
@@ -42,6 +55,7 @@ function targetFailure(
     failure: {
       kind: 'invalidSetting',
       reason: {id: stringId, values: [character]},
+      logDetail: `${TARGET_MESSAGES[stringId]} ${character}`,
     },
   };
 }
@@ -771,6 +785,76 @@ describe('the server steps: transfer and start', () => {
     });
   });
 
+  async function transferOver(
+    channel: RecordingChannel,
+  ): Promise<ReturnType<ReturnType<typeof createServerSteps>['transfer']>> {
+    const steps = createServerSteps(dependencies());
+    const result = steps.plan(INPUT, HOST);
+    if (!('plan' in result) || result.plan.kind !== 'download') {
+      throw new Error('the plan should download');
+    }
+    return steps.transfer(
+      INPUT,
+      leaseOn(channel),
+      HOST,
+      result.plan,
+      () => undefined,
+      new AbortController().signal,
+    );
+  }
+
+  it('F-2408 BR-4: the install of a host with flock has the session shell hold the host lock, so its run carries the lock path the host named, and the session keeps it when the script took the lock', async () => {
+    const channel = channelAnswering(
+      lines(
+        'Ok',
+        'server.installDir=/home/alex/.fixture-server/bin/abc123',
+        'timing.install=5',
+        'server.lockHeld=yes',
+      ),
+      'flock',
+    );
+    await transferOver(channel);
+    deepStrictEqual(channel.sessionLocks(), [{path: '/lock', action: 'open'}]);
+  });
+
+  it('F-2402 AC-26: an install that found the server installed took no lock, so the session gives up what the shell made', async () => {
+    const channel = channelAnswering(
+      lines(
+        'Ok',
+        'server.installDir=/home/alex/.fixture-server/bin/abc123',
+        'timing.install=5',
+      ),
+      'flock',
+    );
+    await transferOver(channel);
+    deepStrictEqual(channel.sessionLocks(), [
+      {path: '/lock', action: 'open'},
+      {path: '/lock', action: 'release'},
+    ]);
+  });
+
+  it('F-2408 BR-4: an install that fails gives the session lock up', async () => {
+    const channel = channelAnswering(lines('CreateInstallDirFailed'), 'flock');
+    await transferOver(channel);
+    deepStrictEqual(channel.sessionLocks(), [
+      {path: '/lock', action: 'open'},
+      {path: '/lock', action: 'release'},
+    ]);
+  });
+
+  it('F-2408 BR-4: the start carries no session lock of its own: the install holds it', async () => {
+    const steps = createServerSteps(dependencies());
+    const channel = channelAnswering(STARTED, 'flock');
+    await steps.start(
+      INPUT,
+      leaseOn(channel),
+      HOST,
+      false,
+      new AbortController().signal,
+    );
+    deepStrictEqual(channel.sessionLocks(), []);
+  });
+
   it('F-3902 AC-13: starts the server with the licence flag only when the gate cleared it', async () => {
     const steps = createServerSteps(dependencies());
     const withFlag = channelAnswering(STARTED);
@@ -1184,6 +1268,7 @@ describe('the server steps: the default extensions', () => {
 async function transferWith(
   changes: Partial<ServerStepDependencies>,
   status: string,
+  ...facts: string[]
 ): Promise<void> {
   const steps = createServerSteps(dependencies(changes));
   const result = steps.plan(INPUT, HOST);
@@ -1192,7 +1277,7 @@ async function transferWith(
   }
   await steps.transfer(
     INPUT,
-    leaseOn(channelAnswering(lines(status))),
+    leaseOn(channelAnswering(lines(status, ...facts))),
     HOST,
     result.plan,
     () => undefined,
@@ -1260,6 +1345,156 @@ describe('the host download that is refused with local download off (card connec
   });
 });
 
+describe('the hint of an install folder setting the check rejects (card #2712)', () => {
+  /** What `onInstallFolderInvalid` heard when the check ran over the install folder `setting`. */
+  function heard(setting: string): string[] {
+    const values: string[] = [];
+    const steps = createServerSteps(
+      dependencies({
+        settings: settingsWith({serverInstallPath: {devbox: setting}}),
+        onInstallFolderInvalid: value => {
+          values.push(value);
+        },
+      }),
+    );
+    steps.checkInstallFolder(INPUT);
+    return values;
+  }
+
+  it('F-2407 AC-9: a value that is not a plain absolute path is told as written, and a path that is one is not', () => {
+    deepStrictEqual([heard('~x'), heard('/srv/vs')], [['~x'], []]);
+  });
+});
+
+describe('the hints of an install folder the host cannot create and a download the client cannot make (card #2708)', () => {
+  /** How many times `onInstallFolderRefused` was told when the host answered `status` to the transfer, and to the start. */
+  async function installFolderTold(
+    status: string,
+  ): Promise<{transfer: number; start: number}> {
+    const told = {transfer: 0, start: 0};
+    await transferWith(
+      {
+        download: {
+          download: () =>
+            Promise.resolve({kind: 'failed' as const, detail: 'offline'}),
+        },
+        onInstallFolderRefused: () => {
+          told.transfer += 1;
+        },
+      },
+      status,
+    );
+    const steps = createServerSteps(
+      dependencies({
+        onInstallFolderRefused: () => {
+          told.start += 1;
+        },
+      }),
+    );
+    await steps.start(
+      INPUT,
+      leaseOn(channelAnswering(lines(status))),
+      HOST,
+      false,
+      NEVER_CANCELLED,
+    );
+    return told;
+  }
+
+  it('F-2602 AC-14: a transfer and a start that end in CreateInstallDirFailed tell the install folder, each once', async () => {
+    deepStrictEqual(await installFolderTold('CreateInstallDirFailed'), {
+      transfer: 1,
+      start: 1,
+    });
+  });
+
+  it('F-2602 AC-14: another status of the script tells nothing', async () => {
+    deepStrictEqual(await installFolderTold('UnpackFailed'), {
+      transfer: 0,
+      start: 0,
+    });
+  });
+
+  it('F-2602 AC-17: a download the client cannot make tells its reason, and a download that works tells nothing', async () => {
+    const told: string[] = [];
+    await transferWith(
+      {
+        policy: sshPolicyFor('always'),
+        download: {
+          download: () =>
+            Promise.resolve({kind: 'failed' as const, detail: 'offline'}),
+        },
+        onLocalDownloadFailed: value => {
+          told.push(value);
+        },
+      },
+      'Ok',
+    );
+    deepStrictEqual(told, ['Failed to fetch']);
+  });
+});
+
+describe('the hint of an install that stopped for a program the host lacks (card #2856)', () => {
+  /** What `onCommandMissing` heard when the host answered `status` with `facts` to the transfer. */
+  async function heard(status: string, ...facts: string[]): Promise<string[]> {
+    const programs: string[] = [];
+    await transferWith(
+      {
+        policy: sshPolicyFor('off'),
+        onCommandMissing: program => {
+          programs.push(program);
+        },
+      },
+      status,
+      ...facts,
+    );
+    return programs;
+  }
+
+  it('F-2402 7.E3: a transfer that ends in CommandMissing tells the program the host named, once', async () => {
+    deepStrictEqual(
+      [
+        await heard('CommandMissing', 'install.missing=tar'),
+        await heard('CommandMissing', 'install.missing=gzip'),
+      ],
+      [['tar'], ['gzip']],
+    );
+  });
+
+  it('F-2402 7.E3: an unpack that failed for another reason tells no program', async () => {
+    deepStrictEqual(await heard('UnpackFailed'), []);
+  });
+});
+
+describe('the hint of a host the server’s requirements check refused (card #2879)', () => {
+  /** How many times `onPrerequisitesMissing` was told when the host answered `status` to the start. */
+  async function told(status: string): Promise<number> {
+    let count = 0;
+    const steps = createServerSteps(
+      dependencies({
+        onPrerequisitesMissing: () => {
+          count += 1;
+        },
+      }),
+    );
+    await steps.start(
+      INPUT,
+      leaseOn(channelAnswering(lines(status))),
+      HOST,
+      false,
+      NEVER_CANCELLED,
+    );
+    return count;
+  }
+
+  it('F-2401 7.E1: a start that ends in LinuxPrereqs tells the prerequisites, once, and another failure of the start tells nothing', async () => {
+    deepStrictEqual(
+      [await told('LinuxPrereqs'), await told('ServerFailedToStart')],
+      [1, 0],
+    );
+  });
+});
+
 describe('the stall bounds of the transfer (card connect-122)', () => {
   /** The stall bound the client download is asked with under `policy`. */
   async function downloadStallUnder(
@@ -1297,6 +1532,191 @@ describe('the stall bounds of the transfer (card connect-122)', () => {
         }),
       ],
       [12_345, 30_000],
+    );
+  });
+});
+
+describe('the manual bootstrap (F-2406, ruling-2878-manual-bootstrap)', () => {
+  /** A client whose bootstrap archive exists when `present`, and stages as `staged` says. */
+  function filesWith(
+    present: boolean,
+    staged:
+      {kind: 'staged'; archive: string} | {kind: 'failed'; detail: string},
+  ): ServerStepDependencies['files'] {
+    return {
+      remove: () => Promise.resolve(),
+      exists: () => Promise.resolve(false),
+      entryExists: file =>
+        Promise.resolve(present && file === BOOTSTRAP_ARCHIVE),
+      size: () => Promise.resolve(0),
+      sha256: () => Promise.resolve(''),
+      rename: () => Promise.resolve({kind: 'renamed'}),
+      stage: () => Promise.resolve(staged),
+    };
+  }
+
+  /** A transfer in the manual bootstrap on `host`, with what the steps told and logged and what the host ran. */
+  async function bootstrapRun(
+    host: ProbedHost,
+    files: ServerStepDependencies['files'],
+  ) {
+    const told: unknown[] = [];
+    const sink = new MemorySink();
+    const channel = new RecordingChannel({
+      identity: 'devbox',
+      platformHint: 'linux',
+      scripts: [
+        {
+          // The host names the lock's place to the install; it has no `flock`, so no session lock follows.
+          interpreter: 'posixShell',
+          matches: script => script.includes('lock-path='),
+          lines: ['lock-method=link', 'lock-path=/lock'],
+          ending: {kind: 'exit', status: 0},
+        },
+        {
+          interpreter: 'posixShell',
+          matches: script => !script.includes('lock-path='),
+          lines: lines('Ok', 'timing.install=5'),
+          ending: {kind: 'exit', status: 0},
+        },
+      ],
+      copies: [{matches: () => true, ending: {kind: 'copied'}}],
+    });
+    const steps = createServerSteps(
+      dependencies({
+        policy: sshPolicyFor('manualBootstrap'),
+        files,
+        logger: createLogger(sink, {minimumLevel: () => 'info'}),
+        onLocalBootstrapFailed: failure => {
+          told.push(failure);
+        },
+      }),
+    );
+    const result = steps.plan(INPUT, host);
+    if (!('plan' in result) || result.plan.kind !== 'download') {
+      throw new Error('the plan should download');
+    }
+    const outcome = await steps.transfer(
+      INPUT,
+      leaseOn(channel),
+      host,
+      result.plan,
+      () => undefined,
+      new AbortController().signal,
+    );
+    return {
+      outcome,
+      told,
+      warnings: sink.lines
+        .filter(line => line.level === 'warn')
+        .map(line => line.message),
+      channel,
+      plan: result.plan,
+    };
+  }
+
+  it('BR-2: the mode forces the direct install even where the editor names a CLI source, and nothing is downloaded on either side', () => {
+    const steps = createServerSteps(
+      dependencies({
+        policy: sshPolicyFor('manualBootstrap'),
+        profile: {
+          ...PROFILE,
+          cliDownloadUrlTemplate:
+            'https://example.invalid/cli-${os}-${arch}-${version}.tar.gz',
+        },
+      }),
+    );
+    const result = steps.plan(INPUT, HOST);
+    deepStrictEqual(
+      'plan' in result
+        ? [
+            result.plan.kind,
+            result.plan.kind === 'download' ? result.plan.where : '',
+            result.plan.kind === 'download' ? result.plan.clientFallback : '',
+          ]
+        : result,
+      ['download', 'client', false],
+    );
+  });
+
+  it('7.E1: no archive at its path tells the hint its path, and the log says where to put which download', async () => {
+    const bootstrapped = await bootstrapRun(
+      HOST,
+      filesWith(false, {kind: 'failed', detail: 'unused'}),
+    );
+    deepStrictEqual(
+      {
+        told: bootstrapped.told,
+        warnings: bootstrapped.warnings.filter(line =>
+          /^(To stage the server, download |and save it as )/.test(line),
+        ),
+      },
+      {
+        told: [
+          {kind: 'localBootstrap', cause: 'missing', path: BOOTSTRAP_ARCHIVE},
+        ],
+        warnings: [
+          `To stage the server, download ${bootstrapped.plan.address}`,
+          `and save it as ${BOOTSTRAP_ARCHIVE}`,
+        ],
+      },
+    );
+  });
+
+  it("7.E2: an archive that cannot be staged tells the hint the file system's text", async () => {
+    const bootstrapped = await bootstrapRun(
+      HOST,
+      filesWith(true, {kind: 'failed', detail: 'EACCES: permission denied'}),
+    );
+    deepStrictEqual(bootstrapped.told, [
+      {
+        kind: 'localBootstrap',
+        cause: 'unreadable',
+        detail: 'EACCES: permission denied',
+      },
+    ]);
+  });
+
+  it('5.0 steps 4–6: a staged archive is installed into the install folder', async () => {
+    const bootstrapped = await bootstrapRun(
+      HOST,
+      filesWith(true, {
+        kind: 'staged',
+        archive: '/tmp/vsc_server_1/vscode-server.tar.gz',
+      }),
+    );
+    deepStrictEqual(
+      [
+        bootstrapped.outcome.kind,
+        bootstrapped.channel.calls.some(
+          call =>
+            call.operation === 'runScript' &&
+            call.request.script.includes("ARCHIVE_INTO_INSTALL='yes'"),
+        ),
+      ],
+      ['transferred', true],
+    );
+  });
+
+  it('7.E7: a Windows host is refused with no transfer at all', async () => {
+    const bootstrapped = await bootstrapRun(
+      {...HOST, operatingSystem: 'win32'},
+      filesWith(true, {kind: 'failed', detail: 'unused'}),
+    );
+    deepStrictEqual(
+      {
+        outcome: bootstrapped.outcome,
+        told: bootstrapped.told,
+        calls: bootstrapped.channel.calls.length,
+      },
+      {
+        outcome: {
+          kind: 'failed',
+          failure: {kind: 'localBootstrap', cause: 'windowsHost'},
+        },
+        told: [],
+        calls: 0,
+      },
     );
   });
 });

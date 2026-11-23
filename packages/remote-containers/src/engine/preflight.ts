@@ -7,6 +7,7 @@ import type {Logger} from 'lib-log';
 import {
   BUTTON_LINKS,
   composeDialogOf,
+  dashHostDialogOf,
   dialogOf,
   type EngineButton,
   type EngineDialog,
@@ -14,13 +15,28 @@ import {
 } from '../surfaces/engine-dialogs.ts';
 import {
   firstCheckOutcomeOf,
+  type FirstCheckOutcome,
   type QueryResult,
   type SecondCheckOutcome,
   secondCheckOutcomeOf,
 } from './check-outcome.ts';
+import {
+  type CheckResult,
+  checkAndStart,
+  type DesktopPorts,
+} from './check-and-start.ts';
 import {type ComposeRoute, composeRouteOf} from './compose-route.ts';
 import {type Executable, executableOf} from './executable.ts';
 import type {EngineHost} from './engine-host.ts';
+import {type BoxCounter, pausableTimer} from './pausable-timer.ts';
+import {
+  type DaemonFigures,
+  daemonFiguresOf,
+  type HostRequirements,
+  requirementsOfLabel,
+} from './host-requirements.ts';
+import {idLabels} from '../lifecycle/labels.ts';
+import {dashHostOf, sshHostOf} from './ssh-endpoint.ts';
 import {apiCheckSkipped} from './version-reply.ts';
 
 /** The log line of a first check whose version reply names no server API version. */
@@ -56,6 +72,15 @@ export interface PreflightDependencies {
   logger: Logger;
   /** The PATH of the extension host, for the line that names where a program was looked for. */
   searchPath(): string;
+  /** The boxes an SSH endpoint's questions open; a query's timer waits while one is open. */
+  boxes?: BoxCounter;
+  /** The address the Docker CLI will talk to now (`endpointInEffect`); a check that has none reads every endpoint as local. */
+  endpoint?(
+    base: string | undefined,
+    cancellation: AbortSignal,
+  ): Promise<string | undefined>;
+  /** Starts Docker Desktop when the second check finds the daemon down; a host without it has none. */
+  desktop?: DesktopPorts;
 }
 
 /** How the first check ended for its caller: the window may go on, or it must not. */
@@ -77,9 +102,14 @@ async function query(
   cancellation: AbortSignal,
 ): Promise<QueryResult> {
   const timedOut = new AbortController();
-  const cancelTimer = dependencies.setTimer(QUERY_TIMEOUT_MILLISECONDS, () => {
-    timedOut.abort();
-  });
+  const cancelTimer = pausableTimer(
+    (milliseconds, callback) => dependencies.setTimer(milliseconds, callback),
+    QUERY_TIMEOUT_MILLISECONDS,
+    () => {
+      timedOut.abort();
+    },
+    dependencies.boxes,
+  );
   const started = dependencies.clock();
   const outcome = await dependencies
     .engineFor(executable.file)
@@ -145,6 +175,47 @@ async function shown(
   );
 }
 
+/** Runs `check` once, or, on a host that can start Docker Desktop, as the check of the check-and-start step. */
+async function checkedOrStarted(
+  desktop: DesktopPorts | undefined,
+  check: (signal: AbortSignal) => Promise<CheckResult>,
+  cancellation: AbortSignal,
+): Promise<void> {
+  if (desktop === undefined) {
+    await check(cancellation);
+  } else {
+    await checkAndStart({...desktop, check}, cancellation);
+  }
+}
+
+/** The first check's queries: the client version, then, if it ran, the structured version. */
+async function firstQueries(
+  dependencies: PreflightDependencies,
+  executable: Executable,
+  cancellation: AbortSignal,
+): Promise<QueryResult[]> {
+  if (executable.kind !== 'spawn') {
+    return [];
+  }
+  const first = await query(
+    dependencies,
+    executable,
+    ['--version'],
+    cancellation,
+  );
+  return succeeded(first)
+    ? [
+        first,
+        await query(
+          dependencies,
+          executable,
+          ['version', '--format', '{{json .}}'],
+          cancellation,
+        ),
+      ]
+    : [first];
+}
+
 /**
  * The first check, before a reload or a picker: the client version, then the structured version. It shows one modal
  * error dialog for any outcome but a pass and resolves `proceed` for a pass and for the dialog's "Ignore", `stopped`
@@ -156,30 +227,35 @@ export async function firstCheck(
   cancellation: AbortSignal,
 ): Promise<FirstCheckResult> {
   const executable = executableOf(dependencies.dockerPath(), base);
-  const queries: QueryResult[] = [];
-  if (executable.kind === 'spawn') {
-    const first = await query(
-      dependencies,
-      executable,
-      ['--version'],
-      cancellation,
+  const endpoint = await dependencies.endpoint?.(base, cancellation);
+  const dashHost = dashHostOf(endpoint);
+  if (dashHost !== undefined) {
+    dependencies.logger.warn(
+      `the Docker host over ssh starts with a dash: ${dashHost}`,
     );
-    queries.push(first);
-    if (succeeded(first)) {
-      queries.push(
-        await query(
-          dependencies,
-          executable,
-          ['version', '--format', '{{json .}}'],
-          cancellation,
-        ),
-      );
-    }
+    return shown(
+      dependencies,
+      dashHostDialogOf(dashHost, dependencies.translate),
+    );
   }
+  const viaSsh = endpoint !== undefined && sshHostOf(endpoint) !== undefined;
+  const seen: {queries: QueryResult[]; outcome: FirstCheckOutcome} = {
+    queries: [],
+    outcome: 'passed',
+  };
+  async function check(signal: AbortSignal): Promise<CheckResult> {
+    seen.queries = await firstQueries(dependencies, executable, signal);
+    seen.outcome = firstCheckOutcomeOf(executable, seen.queries, viaSsh);
+    const last = seen.queries.at(-1);
+    return seen.outcome === 'passed'
+      ? {passed: true}
+      : {passed: false, errorText: last?.kind === 'ran' ? last.stderr : ''};
+  }
+  await checkedOrStarted(dependencies.desktop, check, cancellation);
   if (cancellation.aborted) {
     return 'stopped';
   }
-  const structured = queries[1];
+  const structured = seen.queries[1];
   if (
     structured?.kind === 'ran' &&
     succeeded(structured) &&
@@ -187,11 +263,14 @@ export async function firstCheck(
   ) {
     dependencies.logger.info(API_CHECK_SKIPPED);
   }
-  const outcome = firstCheckOutcomeOf(executable, queries);
-  if (outcome === 'passed') {
+  if (seen.outcome === 'passed') {
     return 'proceed';
   }
-  const dialog = dialogOf(outcome, executable.written, dependencies.translate);
+  const dialog = dialogOf(
+    seen.outcome,
+    executable.written,
+    dependencies.translate,
+  );
   return shown(dependencies, dialog);
 }
 
@@ -208,10 +287,128 @@ export async function secondCheck(
   if (executable.kind === 'notFound') {
     return secondCheckOutcomeOf(executable, {kind: 'failed', detail: ''});
   }
-  return secondCheckOutcomeOf(
-    executable,
-    await query(dependencies, executable, ['version'], cancellation),
+  const program = executable;
+  let latest: SecondCheckOutcome = {kind: 'passed'};
+  async function check(signal: AbortSignal): Promise<CheckResult> {
+    const result = await query(dependencies, program, ['version'], signal);
+    latest = secondCheckOutcomeOf(executable, result);
+    return latest.kind === 'passed'
+      ? {passed: true}
+      : {passed: false, errorText: result.kind === 'ran' ? result.stderr : ''};
+  }
+  await checkedOrStarted(dependencies.desktop, check, cancellation);
+  return latest;
+}
+
+/** The result of one query, or none when docker was not found. */
+async function resultOf(
+  dependencies: PreflightDependencies,
+  base: string | undefined,
+  argv: readonly string[],
+  cancellation: AbortSignal,
+): Promise<QueryResult | undefined> {
+  const executable = executableOf(dependencies.dockerPath(), base);
+  return executable.kind === 'spawn'
+    ? query(dependencies, executable, argv, cancellation)
+    : undefined;
+}
+
+/** What a query printed, or none when docker was not found, did not finish in time, or exited with a status other than 0. */
+async function printed(
+  dependencies: PreflightDependencies,
+  base: string | undefined,
+  argv: readonly string[],
+  cancellation: AbortSignal,
+): Promise<string | undefined> {
+  const result = await resultOf(dependencies, base, argv, cancellation);
+  return result?.kind === 'ran' && succeeded(result)
+    ? result.stdout
+    : undefined;
+}
+
+/** What the daemon has, from `docker info`; none when it can't be read. */
+export async function daemonFigures(
+  dependencies: PreflightDependencies,
+  base: string | undefined,
+  cancellation: AbortSignal,
+): Promise<DaemonFigures | undefined> {
+  const text = await printed(
+    dependencies,
+    base,
+    ['info', '--format', '{{json .}}'],
+    cancellation,
   );
+  return text === undefined ? undefined : daemonFiguresOf(text);
+}
+
+/**
+ * Why `image` is not in the engine's local store: the first line of the failing inspect's message. None when the image
+ * is local, or when the engine could not be asked or did not answer in time. The name goes after `--`, so one that
+ * starts with a dash is a name and not an option; it is the configuration's own text, with no `${...}` substituted.
+ */
+export async function imageMissingReason(
+  dependencies: PreflightDependencies,
+  base: string | undefined,
+  image: string,
+  cancellation: AbortSignal,
+): Promise<string | undefined> {
+  const result = await resultOf(
+    dependencies,
+    base,
+    ['image', 'inspect', '--format', '{{.Id}}', '--', image],
+    cancellation,
+  );
+  if (result?.kind !== 'ran' || result.timedOut || result.status === 0) {
+    return undefined;
+  }
+  const [first = ''] = result.stderr.trim().split('\n');
+  return first === '' ? `exit status ${String(result.status)}` : first;
+}
+
+/**
+ * What the label of the container made for the folder and the configuration records of the daemon's requirements; none
+ * when there is no such container or the label can't be read.
+ */
+export async function containerRequirements(
+  dependencies: PreflightDependencies,
+  base: string | undefined,
+  identity: {folder: string; configFile: string},
+  cancellation: AbortSignal,
+): Promise<HostRequirements | undefined> {
+  const listed = await printed(
+    dependencies,
+    base,
+    [
+      'ps',
+      '-a',
+      '-q',
+      ...idLabels(identity.folder, identity.configFile).flatMap(label => [
+        '--filter',
+        `label=${label}`,
+      ]),
+    ],
+    cancellation,
+  );
+  const [containerId] = (listed ?? '')
+    .split('\n')
+    .filter(line => line.trim() !== '');
+  if (containerId === undefined) {
+    return undefined;
+  }
+  const label = await printed(
+    dependencies,
+    base,
+    [
+      'inspect',
+      '--format',
+      '{{index .Config.Labels "devcontainer.metadata"}}',
+      containerId.trim(),
+    ],
+    cancellation,
+  );
+  return label === undefined || label.trim() === ''
+    ? undefined
+    : requirementsOfLabel(label);
 }
 
 /** What `docker context show` says: the current context, that the engine has no contexts, or nothing usable. */
@@ -270,13 +467,9 @@ export async function contextEndpoint(
   name: string,
   cancellation: AbortSignal,
 ): Promise<string | undefined> {
-  const executable = executableOf(dependencies.dockerPath(), base);
-  if (executable.kind !== 'spawn') {
-    return undefined;
-  }
-  const result = await query(
+  const result = await resultOf(
     dependencies,
-    executable,
+    base,
     [
       'context',
       'inspect',
@@ -286,6 +479,9 @@ export async function contextEndpoint(
     ],
     cancellation,
   );
+  if (result === undefined) {
+    return undefined;
+  }
   if (!succeeded(result) || result.kind !== 'ran') {
     dependencies.logger.debug(
       `the Docker context's endpoint could not be read: ${exitText(result)}`,

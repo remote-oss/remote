@@ -7,6 +7,7 @@ $COMMIT = 'abc1230000000000000000000000000000000000'
 $ARCHIVE_URL = 'https://example.invalid/server.tar.gz'
 $ARCHIVE_PATH = ''
 $ARCHIVE_REMOVE = 'no'
+$ARCHIVE_INTO_INSTALL = 'no'
 $ARCHIVE_FORMAT = 'tar.gz'
 $STAGING_SUFFIX = '1700000000000'
 $INSTALL_TREE = ''
@@ -100,7 +101,7 @@ if ($INSTALL_ROOT -ne '') {
 }
 $DATA_DIR = [System.IO.Path]::Combine($DATA_ROOT, $DATA_FOLDER)
 $INSTALL_DIR = [System.IO.Path]::Combine($DATA_DIR, 'bin', $COMMIT)
-$CLI_STAGING = [System.IO.Path]::Combine($DATA_DIR, 'cli-bin', $COMMIT)
+$CLI_STAGING = [System.IO.Path]::Combine($DATA_DIR, 'cli-bin', $COMMIT + '.' + $STAGING_SUFFIX + '.' + $PID)
 $CLI_FILE = [System.IO.Path]::Combine($DATA_DIR, $CLI_NAME)
 $BOOT_PREFIX = [System.IO.Path]::Combine($DATA_DIR, '.' + $COMMIT)
 if ($INSTALL_TREE -ne '') {
@@ -300,10 +301,16 @@ if ($null -eq $ServerProcess) {
     Exit-Lock
     Write-Failed $TOKEN_FILE $Message
   }
-  $SERVER_ARGUMENTS = @('"--start-server"', '"--host"', '"127.0.0.1"', '"--port"', '"0"', '"--connection-token-file"', (ConvertTo-WindowsArgument $TOKEN_FILE), '"--telemetry-level"', '"off"', '"--enable-remote-auto-shutdown"') -join ' '
+  $SERVER_ARGUMENTS = @('--start-server', '--host', '127.0.0.1', '--port', '0', '--connection-token-file', (ConvertTo-WindowsArgument $TOKEN_FILE), '--telemetry-level', 'off', '--enable-remote-auto-shutdown') -join ' '
   Write-Line 'server.launching=yes'
   Add-Fact 'server.launching' 'yes'
-  $Launch = @{FilePath = ([System.IO.Path]::Combine($INSTALL_DIR, $LAUNCHER)); ArgumentList = $SERVER_ARGUMENTS; PassThru = $true; RedirectStandardOutput = $LOG_FILE; RedirectStandardError = $ERROR_LOG_FILE}
+  $LaunchProgram = [System.IO.Path]::Combine($INSTALL_DIR, $LAUNCHER)
+  $LaunchArguments = $SERVER_ARGUMENTS
+  if ($LaunchProgram.EndsWith('.cmd')) {
+    $LaunchArguments = '/d /s /c "' + (ConvertTo-WindowsArgument $LaunchProgram) + ' ' + $SERVER_ARGUMENTS + '"'
+    $LaunchProgram = $env:ComSpec
+  }
+  $Launch = @{FilePath = $LaunchProgram; ArgumentList = $LaunchArguments; PassThru = $true; RedirectStandardOutput = $LOG_FILE; RedirectStandardError = $ERROR_LOG_FILE}
   try {
     $ServerProcess = Start-Program $Launch
     [System.IO.File]::WriteAllText($PID_FILE, [string]$ServerProcess.Id + ' ' + [string]$ServerProcess.StartTime.Ticks)
