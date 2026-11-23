@@ -18,6 +18,7 @@ import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   appendScript,
   closeWindow,
+  connected,
   connectedWithin,
   hostAnswer,
   inWindow,
@@ -31,7 +32,6 @@ import {
   userSettings,
   variable,
   waitFor,
-  windowState,
 } from '../windows/harness.ts';
 import {INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
 
@@ -163,14 +163,13 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
           90_000,
         );
         await new Promise(resolve => setTimeout(resolve, 5000));
-        const state = await windowState(alias);
         deepStrictEqual(
           [
             recordLines('failureDialog', alias).map(line => line.question),
             knownLines(known),
-            state.remoteAuthority,
+            await connected(alias),
           ],
-          [[`Could not establish connection to "${alias}".`], [], null],
+          [[`Could not establish connection to "${alias}".`], [], false],
         );
       } finally {
         await closeWindow(alias).catch(() => undefined);
