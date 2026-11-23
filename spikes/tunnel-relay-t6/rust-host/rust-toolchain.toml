@@ -1,0 +1,4 @@
+# The toolchain the Rust host was built with locally (card #3050); cargo reads it, so the run builds with the same.
+[toolchain]
+channel = "1.100.0"
+profile = "minimal"
