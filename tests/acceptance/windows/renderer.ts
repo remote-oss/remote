@@ -3572,13 +3572,24 @@ export async function chooseQuickPickItem(
 
 /**
  * Chooses the row labelled `label` of the quick pick open in window `name` by the keys a user presses: the arrow keys
- * from the focused row to it, then Enter. Unlike {@link chooseQuickPickItem} it types no filter, so every row stays.
+ * from the focused row to it, then Enter. Unlike {@link chooseQuickPickItem} it types no filter, so every row stays. A
+ * pick that does not settle fails naming the pages, with the window that held the focus, for a palette that opened
+ * elsewhere or not at all.
  */
 export async function chooseQuickPickRow(
   name: string,
   label: string,
 ): Promise<void> {
-  await waitForQuickPick(name, 30_000);
+  try {
+    await waitForQuickPick(name, 30_000);
+  } catch (caught) {
+    const pages = await pageFocusFacts().catch((reading: unknown) => [
+      `unreadable: ${String(reading)}`,
+    ]);
+    throw new Error(`${String(caught)}; pages ${JSON.stringify(pages)}`, {
+      cause: caught,
+    });
+  }
   const address = await pageOf(name);
   for (let presses = 0; presses < 100; presses += 1) {
     const rows = await quickPickRows(name);
