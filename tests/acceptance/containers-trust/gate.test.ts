@@ -638,9 +638,9 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     const folder = devContainerFolder('open-wait', {name: 'Open Wait'});
     const from = await openFolderWindow(devContainerFolder('open-wait-from'));
     await openFolderFrom(from, folder);
-    await waitForDialog('open-wait');
+    const asked = await waitForDialog('open-wait');
     await answerDialog('open-wait', 'Cancel');
-    const declined = await waitForDialog('open-wait');
+    const declined = await dialogAfter('open-wait', asked.message);
     const declinedText = await dialogText('open-wait');
     await waitFor(
       'the window to be the local folder again, with no OK pressed',
