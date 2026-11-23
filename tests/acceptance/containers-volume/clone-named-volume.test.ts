@@ -972,7 +972,7 @@ describe('Clone Repository in Named Container Volume (card containers-152)', fun
     }
   });
 
-  it('F-0702 AC-19 (c152-no-config): a clone whose folder holds no devcontainer.json anywhere opens the shared Add Dev Container Configuration Files pick after the clone, and Escape there leaves the window local, with the volume and its labels kept and no container of it', async () => {
+  it('F-0702 AC-19 (c152-no-config): a clone whose folder holds no devcontainer.json anywhere opens the shared Add Dev Container Configuration Files pick after the clone, in the window already reloaded onto its dev container authority, with the volume and its labels kept and no container of it', async () => {
     const window = await openMemoryWindow();
     const seen: unknown[] = [];
     try {
@@ -996,12 +996,6 @@ describe('Clone Repository in Named Container Volume (card containers-152)', fun
         600_000,
       );
       seen.push(reloaded);
-      await pressEscape(reloaded);
-      await waitFor(
-        'the template pick to close',
-        async () => (await quickPickFacts(reloaded)) === undefined,
-        30_000,
-      );
       seen.push({
         remoteName: (await windowState(reloaded)).remoteName,
         labels: await volumeLabels('c152-nocfg'),
@@ -1014,7 +1008,7 @@ describe('Clone Repository in Named Container Volume (card containers-152)', fun
         'Hello-World',
         'Hello-World',
         {
-          remoteName: null,
+          remoteName: 'dev-container',
           labels: {
             'vsch.local.repository': BARE,
             'vsch.local.repository.unique': 'false',
