@@ -1,6 +1,6 @@
 # Brief: the tunnel relay (Remote - Tunnels, D-107)
 
-Status: draft for proteus's agreement. Sources: `[dev-tunnels]` = `microsoft/dev-tunnels` at `64048c1409ff`
+Status: agreed by proteus (§1–6 and §8; §7 after his correction). Sources: `[dev-tunnels]` = `microsoft/dev-tunnels` at `64048c1409ff`
 (ADR-0014), `rs/src`, with the TypeScript SDK `ts/src` where named; `[cli]` = VS Code OSS `cli/src` at 1.139.1, which
 pins that commit (`cli/Cargo.toml:36`). Every protocol fact below cites one of them. Decisions of the user: D-107
 and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-rules` (remote-oss/remote-server#22).
@@ -126,7 +126,7 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
 - **Connected clients per tunnel:** 10, then a refused client WebSocket upgrade (403).
 - **What `/userlimits` reports:** these limits, by name.
 
-## 7. The relay's language: TypeScript, after one spike (ADR-0015 with proteus)
+## 7. The relay's language: TypeScript (ADR-0015)
 
 **A correction, from proteus's read:** an earlier draft said no JavaScript SSH library offers the host leg's `none`
 exchange. `[dev-tunnels]`'s own TypeScript SDK depends on one, `@microsoft/dev-tunnels-ssh` (MIT, `ts/package.json:24-25`).
@@ -139,14 +139,13 @@ Its V1 host opens that leg with `new SshClientSession(new SshSessionConfiguratio
   - **What it needs:** ADR-0014 also admits `microsoft/dev-tunnels-ssh` (MIT, the SDK's own dependency) as a source and
     a dependency.
   - **ADR-0004 is unaffected:** the relay is a service, and no extension's SSH connection goes through it.
-- **The condition, measured before the first relay card:** one spike shows that the TypeScript server session
-  accepts both kinds of host and pipes a `client-ssh-session-stream` channel to a client. The two hosts are
-  `[dev-tunnels]`'s Rust host (`russh`, `none`: the path `[cli]` takes) and its TypeScript host.
-  - The claim that `russh`'s `none` and dev-tunnels-ssh's interoperate rests on both talking to Microsoft's service. It
-    is unverified until the spike shows it.
-  - If the spike fails, the fallback is Rust with `russh` (`[dev-tunnels] rs/Cargo.toml:22-23`). That costs a second
-    toolchain in CI: proteus's estimate is 5 to 10 minutes more on every gate that touches it.
-- **ADR-0015** records the choice and the spike's result. proteus writes its CI half for both options.
+- **Settled by the spike (ADR-0015, accepted 2026-11-23):** run 45110368187 (remote-oss/remote#3050) showed the
+  TypeScript server session completing the host leg, all `none`, with **both** `[dev-tunnels]`'s Rust host (`russh` with
+  `[cli]`'s patch: the path `[cli]` takes) and its TypeScript host. It also showed a 64 KiB payload from the TypeScript
+  client coming back byte for byte through a `client-ssh-session-stream` channel, for each host. So the Rust fallback
+  wasn't needed. It would also have needed `russh` (Apache-2.0) admitted, as ADR-0015 records.
+- **Carried into the relay cards:** dev-tunnels-ssh's `WebSocketStream` reuses the buffer it hands `send` for the next
+  packet, so the relay copies each buffer before sending it (ADR-0015 T.1).
 
 ## 8. Proof, and the cards this brief makes (cut by daedalus)
 
@@ -156,7 +155,7 @@ Its V1 host opens that leg with `new SshClientSession(new SshSessionConfiguratio
   no Rust enters the PR gates. It covers: every route in §2,
   the auth answers of §3, the tokens of §4, a host and a client through §5's legs, and each limit in §6.
 - **Cards, in order:**
-  1. The language spike (§7), then ADR-0015 (the relay's language and CI): athena with proteus.
+  1. ~~The language spike (§7), then ADR-0015~~: done (run 45110368187; ADR-0015 accepted, #3056).
   2. The relay skeleton: the HTTPS service, the store (one SQLite file) and the routes of §2 with the contract types.
   3. Sign-in, the allowlist and tokens (§3, §4).
   4. The WebSocket legs (§5).
