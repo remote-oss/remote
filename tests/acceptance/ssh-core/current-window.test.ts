@@ -2,17 +2,21 @@ import {deepStrictEqual} from 'node:assert';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
+  acceptedKeyLogins,
   appendScript,
+  connectionHelpers,
   connectedWithin,
   emptyWindows,
   hexOf,
   hostAnswer,
+  hostConnections,
   hostPort,
   inWindow,
   nextEmptyName,
   nextEmptyWindow,
   openWindow,
   recordLines,
+  sshdLog,
   userSettings,
   variable,
   waitFor,
@@ -24,7 +28,7 @@ import {
   openFolderWindow,
   openWorkspaceWindow,
 } from '../windows/folder-windows.ts';
-import {closeAllButLocal} from '../windows/maintenance.ts';
+import {closeAllButLocal, serverMainProcesses} from '../windows/maintenance.ts';
 import {PLATFORMS} from '../windows/tunnel-support.ts';
 
 /** The command that reloads the window it runs in onto a picked host. */
@@ -68,6 +72,13 @@ async function switched(
     120_000,
   );
   return next;
+}
+
+/** The pids of this machine's ssh processes toward the host. */
+async function sshOfHost(): Promise<number[]> {
+  return (await hostConnections())
+    .filter(each => each.program === 'ssh')
+    .map(each => each.processId);
 }
 
 describe('Connect Current Window to Host', function () {
@@ -400,5 +411,99 @@ describe('Connect Current Window to Host', function () {
       ],
       [1, false],
     );
+  });
+
+  it('F-2302 AC-9 (c3014-leave): the only window on a host switches to another; 10 s later no helper or ssh of the first host is left, and its server still runs', async () => {
+    await closeAllButLocal();
+    await userSettings({...PLATFORMS});
+    await waitFor(
+      'no helper left',
+      async () => (await connectionHelpers()).length === 0,
+      15_000,
+    );
+    await openWindow('harness', 'c3014-leave');
+    await connectedWithin('c3014-leave', 90_000);
+    const helpers = await connectionHelpers();
+    const sshPids = await sshOfHost();
+    const servers = await serverMainProcesses();
+    await switched('c3014-leave', {label: 'noforward'});
+    await new Promise(resolve => setTimeout(resolve, 10_000));
+    const after = await serverMainProcesses();
+    deepStrictEqual(
+      [
+        {
+          helpers: helpers.length,
+          sshPids: sshPids.length > 0,
+          servers: servers.length > 0,
+        },
+        (await connectionHelpers()).filter(each => helpers.includes(each)),
+        (await sshOfHost()).filter(each => sshPids.includes(each)),
+        servers.every(each => after.includes(each)),
+      ],
+      [{helpers: 1, sshPids: true, servers: true}, [], [], true],
+    );
+  });
+
+  it('F-2302 AC-33 (c3014-own): with the local server off, a switch ends the window’s ssh within 10 s, and picking the window’s own host ends its ssh and logs one new login', async () => {
+    try {
+      await closeAllButLocal();
+      await userSettings({
+        'remote.SSH.remotePlatform': {
+          ...PLATFORMS['remote.SSH.remotePlatform'],
+          '127.0.0.1': 'linux',
+        },
+        'remote.SSH.useLocalServer': false,
+      });
+      await openWindow('harness', 'c3014-own');
+      await connectedWithin('c3014-own', 90_000);
+      const first = await sshOfHost();
+      const next = await switched('c3014-own', {typed: '127.0.0.1'});
+      await connectedWithin(next, 90_000);
+      const goneFirst = await waitFor(
+        'the first ssh gone',
+        async () => (await sshOfHost()).every(each => !first.includes(each)),
+        10_000,
+      ).then(
+        () => true,
+        () => false,
+      );
+      const second = await sshOfHost();
+      const since = new Date().toISOString();
+      const again = await switched(next, {typed: '127.0.0.1'});
+      await connectedWithin(again, 90_000);
+      const goneSecond = await waitFor(
+        'the second ssh gone',
+        async () => (await sshOfHost()).every(each => !second.includes(each)),
+        10_000,
+      ).then(
+        () => true,
+        () => false,
+      );
+      deepStrictEqual(
+        {
+          first: first.length > 0,
+          goneFirst,
+          second: second.length > 0,
+          goneSecond,
+          disconnected: (await sshdLog(since)).some(line =>
+            line.includes('Disconnected from user harness'),
+          ),
+          logins: await acceptedKeyLogins(since),
+        },
+        {
+          first: true,
+          goneFirst: true,
+          second: true,
+          goneSecond: true,
+          disconnected: true,
+          logins: 1,
+        },
+      );
+    } finally {
+      await userSettings({
+        ...PLATFORMS,
+        'remote.SSH.useLocalServer': undefined,
+      });
+    }
   });
 });
