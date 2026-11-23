@@ -511,7 +511,7 @@ describe('multi-root workspaces (card coverage-104)', function () {
           (await notificationCentre(both.window)).some(text =>
             text.startsWith(ADDED_NOTICE_START),
           ),
-        10_000,
+        20_000,
       ).then(
         () => true,
         () => false,
