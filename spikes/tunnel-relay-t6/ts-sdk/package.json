@@ -1,0 +1,11 @@
+{
+  "name": "tunnel-relay-t6-ts-sdk",
+  "private": true,
+  "type": "module",
+  "description": "The T.6 spike's TypeScript host and client, on [dev-tunnels] ts/. CI builds those packages from 64048c1409ff and links them here; these versions are for a local run only.",
+  "dependencies": {
+    "@microsoft/dev-tunnels-connections": "1.3.82",
+    "@microsoft/dev-tunnels-contracts": "1.3.82",
+    "@microsoft/dev-tunnels-management": "1.3.82"
+  }
+}

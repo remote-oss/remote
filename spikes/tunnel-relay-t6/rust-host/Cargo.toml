@@ -1,0 +1,17 @@
+# The T.6 spike's Rust host: [dev-tunnels] rs/ at [cli]'s pin, with the russh patch [cli] applies, at the revision
+# [cli]'s Cargo.lock resolves (VS Code OSS cli/ at 1.139.1). A spike (card #3050): nothing merges.
+[package]
+name = "tunnel-relay-t6-rust-host"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+tunnels = { git = "https://github.com/microsoft/dev-tunnels", rev = "64048c1409ff56cb958b879de7ea069ec71edc8b", default-features = false, features = ["connections"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "native-tls"] }
+tokio = { version = "1.52", features = ["full"] }
+
+[patch.crates-io]
+russh = { git = "https://github.com/microsoft/vscode-russh", rev = "fd4f608a83753f9f3e137f95600faffede71cf65" }
+russh-cryptovec = { git = "https://github.com/microsoft/vscode-russh", rev = "fd4f608a83753f9f3e137f95600faffede71cf65" }
+russh-keys = { git = "https://github.com/microsoft/vscode-russh", rev = "fd4f608a83753f9f3e137f95600faffede71cf65" }

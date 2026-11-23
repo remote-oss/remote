@@ -1,0 +1,13 @@
+{
+  "name": "tunnel-relay-t6-relay",
+  "private": true,
+  "type": "module",
+  "description": "The T.6 spike's relay: dev-tunnels-ssh's none server on the host leg, a piped client leg (card #3050).",
+  "dependencies": {
+    "@microsoft/dev-tunnels-ssh": "3.12.29",
+    "ws": "8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "8.5.12"
+  }
+}
