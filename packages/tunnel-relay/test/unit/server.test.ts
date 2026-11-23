@@ -14,6 +14,9 @@ const CONFIG: RelayConfig = {
   keyFile: '',
   storeFile: ':memory:',
   clusterId: 'usw2',
+  githubApi: 'https://github.test',
+  allowlistFile: '',
+  tokenKeyFile: '',
 };
 
 /** A request as the server reads it: its method, address, headers and body text. */

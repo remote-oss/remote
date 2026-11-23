@@ -15,14 +15,14 @@ import type {Store, TunnelRecord} from './store.ts';
 export const API_VERSION = '2023-09-27-preview';
 
 /** A request of a GitHub account on the allowlist, by its numeric id. */
-export interface AccountCaller {
+interface AccountCaller {
   kind: 'account';
   id: number;
   login: string;
 }
 
 /** A request with a tunnel token: one tunnel, and what the token's scope grants on it. */
-export interface TunnelCaller {
+interface TunnelCaller {
   kind: 'tunnel';
   tunnelId: string;
   scope: TokenScope;

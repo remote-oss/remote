@@ -7,7 +7,7 @@
 import {createHmac, timingSafeEqual} from 'node:crypto';
 
 /** The scopes the relay issues tokens for (`rs/src/contracts/tunnel_access_scopes.rs`). */
-export const TOKEN_SCOPES = ['host', 'connect', 'manage:ports'] as const;
+const TOKEN_SCOPES = ['host', 'connect', 'manage:ports'] as const;
 
 /** A scope the relay issues tokens for. */
 export type TokenScope = (typeof TOKEN_SCOPES)[number];

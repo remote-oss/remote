@@ -18,6 +18,9 @@ const CONFIG: RelayConfig = {
   keyFile: '',
   storeFile: ':memory:',
   clusterId: 'usw2',
+  githubApi: 'https://github.test',
+  allowlistFile: '',
+  tokenKeyFile: '',
 };
 
 const OWNER: Caller = {kind: 'account', id: 7, login: 'owner'};
