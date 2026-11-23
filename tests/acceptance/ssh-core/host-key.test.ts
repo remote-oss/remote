@@ -380,6 +380,7 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
     const alias = 'c3021-retry-changed';
     const known = changedKnown(alias);
     await checking(alias, known, 'ask');
+    const settings = readUserSettings();
     const again = nextEmptyName();
     appendScript([
       {
@@ -399,11 +400,13 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
           first: failuresOf(alias),
           second: failuresOf(again),
           known: readFileSync(known, 'utf8') === before,
+          settingsKept: readUserSettings() === settings,
         },
         {
           first: [changedDialog(alias)],
           second: [changedDialog(alias)],
           known: true,
+          settingsKept: true,
         },
       );
     } finally {
@@ -417,6 +420,7 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
     const known = changedKnown(alias);
     const saved = readUserSettings();
     await checking(alias, known, 'ask', {'remote.SSH.useLocalServer': false});
+    const settings = readUserSettings();
     appendScript(refusals(alias));
     try {
       const before = readFileSync(known, 'utf8');
@@ -427,11 +431,13 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
           failures: failuresOf(alias),
           asked: picksOf(alias).length,
           known: readFileSync(known, 'utf8') === before,
+          settingsKept: readUserSettings() === settings,
         },
         {
           failures: [`Could not establish connection to "${alias}".`],
           asked: 0,
           known: true,
+          settingsKept: true,
         },
       );
     } finally {
@@ -443,6 +449,7 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
   it('F-2305 AC-34 (c3021-retry-pick): after a refused pick, Retry never accepts the key without Continue', async () => {
     const alias = 'c3021-retry-pick';
     const known = await asking(alias);
+    const settings = readUserSettings();
     const again = nextEmptyName();
     appendScript([
       {surface: 'pick', match: 'fingerprint', answer: 'no', window: alias},
@@ -459,10 +466,15 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
       await openWindow(alias, alias);
       await failureShown(again, 90_000);
       deepStrictEqual(
-        {known: knownLines(known), failures: failuresOf(again)},
+        {
+          known: knownLines(known),
+          failures: failuresOf(again),
+          settingsKept: readUserSettings() === settings,
+        },
         {
           known: [],
           failures: [`Could not establish connection to "${alias}".`],
+          settingsKept: true,
         },
       );
     } finally {
