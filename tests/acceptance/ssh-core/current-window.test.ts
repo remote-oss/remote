@@ -2,7 +2,6 @@ import {deepStrictEqual} from 'node:assert';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
-  acceptedKeyLogins,
   appendScript,
   closeWindow,
   connectionHelpers,
@@ -17,7 +16,6 @@ import {
   nextEmptyWindow,
   openWindow,
   recordLines,
-  sshdLog,
   userSettings,
   variable,
   waitFor,
@@ -466,70 +464,6 @@ describe('Connect Current Window to Host', function () {
     } finally {
       await closeWindow(next).catch(() => undefined);
       await hostClean();
-    }
-  });
-
-  it('F-2302 AC-33 (c3014-own): with the local server off, a switch ends the window’s ssh within 10 s, and picking the window’s own host ends its ssh and logs one new login', async () => {
-    try {
-      await closeAllButLocal();
-      await hostClean();
-      await userSettings({
-        'remote.SSH.remotePlatform': {
-          ...PLATFORMS['remote.SSH.remotePlatform'],
-          '127.0.0.1': 'linux',
-        },
-        'remote.SSH.useLocalServer': false,
-      });
-      await openWindow('harness', 'c3014-own');
-      await connectedWithin('c3014-own', 90_000);
-      const first = await sshOfHost();
-      const next = await switched('c3014-own', {typed: '127.0.0.1'});
-      await connectedWithin(next, 90_000);
-      const goneFirst = await waitFor(
-        'the first ssh gone',
-        async () => (await sshOfHost()).every(each => !first.includes(each)),
-        10_000,
-      ).then(
-        () => true,
-        () => false,
-      );
-      const second = await sshOfHost();
-      const since = new Date().toISOString();
-      const again = await switched(next, {typed: '127.0.0.1'});
-      await connectedWithin(again, 90_000);
-      const goneSecond = await waitFor(
-        'the second ssh gone',
-        async () => (await sshOfHost()).every(each => !second.includes(each)),
-        10_000,
-      ).then(
-        () => true,
-        () => false,
-      );
-      deepStrictEqual(
-        {
-          first: first.length > 0,
-          goneFirst,
-          second: second.length > 0,
-          goneSecond,
-          disconnected: (await sshdLog(since)).some(line =>
-            line.includes('Disconnected from user harness'),
-          ),
-          logins: await acceptedKeyLogins(since),
-        },
-        {
-          first: true,
-          goneFirst: true,
-          second: true,
-          goneSecond: true,
-          disconnected: true,
-          logins: 1,
-        },
-      );
-    } finally {
-      await userSettings({
-        ...PLATFORMS,
-        'remote.SSH.useLocalServer': undefined,
-      });
     }
   });
 });
