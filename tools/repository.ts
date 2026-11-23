@@ -29,6 +29,14 @@ export function expectedPackageName(folder: string): string {
 }
 
 /** Whether a package folder holds a library (`lib-*`) rather than an extension. */
+/** The services: workspace packages that run on their own, outside the editor (layout.md). */
+export const SERVICE_FOLDERS = ['tunnel-relay'] as const;
+
+/** Whether `folder` under packages/ is a service. */
+export function isServiceFolder(folder: string): boolean {
+  return (SERVICE_FOLDERS as readonly string[]).includes(folder);
+}
+
 export function isLibraryFolder(folder: string): boolean {
   return folder.startsWith('lib-');
 }

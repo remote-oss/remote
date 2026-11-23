@@ -30,7 +30,7 @@ import {
   type PartsTable,
   suiteFilesIn,
 } from './acceptance-parts.ts';
-import {isInside, isLibraryFolder} from './repository.ts';
+import {isInside, isLibraryFolder, isServiceFolder} from './repository.ts';
 
 /** The launch table's file, as a changed path names it. */
 export const LAUNCH_TABLE = 'tools/acceptance-launches.ts';
@@ -757,7 +757,7 @@ export function packageReach(
       )) {
         labels.add(label);
       }
-    } else if (!isLibraryFolder(name)) {
+    } else if (!isLibraryFolder(name) && !isServiceFolder(name)) {
       return undefined;
     }
     pending.push(...(graph.dependents.get(current) ?? []));
@@ -778,9 +778,11 @@ export function packageReach(
       }
     }
   }
-  return labels.size === 0
-    ? undefined
-    : labelsWhere(launches, launch => labels.has(launch.label));
+  if (labels.size === 0) {
+    // A service runs on its own, so no launch shows it; anything else that no launch shows reaches every launch.
+    return isServiceFolder(path.basename(folder)) ? [] : undefined;
+  }
+  return labelsWhere(launches, launch => labels.has(launch.label));
 }
 
 /**
