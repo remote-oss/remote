@@ -15,6 +15,12 @@ import {GithubIdentity} from '../../src/auth/github.ts';
 import {Tokens} from '../../src/auth/tokens.ts';
 import {TEST_CONFIG} from './settings.ts';
 
+/** The settings with each limit at two. */
+const TIGHT: RelayConfig = {
+  ...TEST_CONFIG,
+  limits: {tunnels: 2, ports: 2, clients: 2},
+};
+
 const OWNER: Caller = {kind: 'account', id: 7, login: 'owner'};
 const OTHER: Caller = {kind: 'account', id: 8, login: 'other'};
 
@@ -25,6 +31,7 @@ describe('the management routes of the relay', () => {
   let store: Store;
   let caller: Caller | Answer;
   let closedLegs: string[] = [];
+  let clientCounts = new Map<string, number>();
 
   function authenticate(): ReturnType<Authenticate> {
     return Promise.resolve(caller);
@@ -40,6 +47,9 @@ describe('the management routes of the relay', () => {
       legs: {
         closeTunnel(tunnelId) {
           closedLegs.push(tunnelId);
+        },
+        clientCount(tunnelId) {
+          return clientCounts.get(tunnelId) ?? 0;
         },
       },
     };
@@ -80,6 +90,7 @@ describe('the management routes of the relay', () => {
   beforeEach(() => {
     store = new Store(':memory:');
     caller = OWNER;
+    clientCounts = new Map();
   });
 
   afterEach(() => {
@@ -129,7 +140,7 @@ describe('the management routes of the relay', () => {
     it('answers 404 for a route outside the tunnels, the cluster recommendations among them', async () => {
       deepStrictEqual(
         [
-          detailOf(await send('GET', '/userlimits')),
+          detailOf(await send('GET', '/elsewhere')),
           detailOf(await send('GET', '/clusters/recommendations')),
           detailOf(await send('PUT', '/clusters')),
           detailOf(await send('GET', '/tunnels/a/ports/1/more')),
@@ -917,6 +928,145 @@ describe('the management routes of the relay', () => {
         [
           [404, 'There is no such route.'],
           [404, 'There is no such route.'],
+        ],
+      );
+    });
+  });
+  describe('the limits', () => {
+    it('refuses a tunnel past the account limit with 429 naming the limit, still takes updates, and takes a create again after a delete', async () => {
+      const config = TIGHT;
+      await send('PUT', '/tunnels/one', {body: {}, config});
+      await send('PUT', '/tunnels/two', {body: {}, config});
+      const refused = detailOf(
+        await send('PUT', '/tunnels/three', {body: {}, config}),
+      );
+      const updated = await send('PUT', '/tunnels/two', {
+        body: {description: 'kept'},
+        config,
+      });
+      caller = OTHER;
+      const otherAccount = await send('PUT', '/tunnels/four', {
+        body: {},
+        config,
+      });
+      caller = OWNER;
+      await send('DELETE', '/tunnels/one', {config});
+      const again = await send('PUT', '/tunnels/three', {body: {}, config});
+      deepStrictEqual(
+        [refused, updated.status, otherAccount.status, again.status],
+        [
+          [
+            429,
+            'The account already has 2 tunnels (TunnelsPerUserPerLocation).',
+          ],
+          200,
+          200,
+          200,
+        ],
+      );
+    });
+
+    it('refuses a port past the tunnel limit with 429, and still takes a change to a port it has', async () => {
+      const config = TIGHT;
+      await send('PUT', '/tunnels/one', {body: {}, config});
+      await send('PUT', '/tunnels/one/ports/80', {body: {}, config});
+      await send('PUT', '/tunnels/one/ports/81', {body: {}, config});
+      deepStrictEqual(
+        [
+          detailOf(
+            await send('PUT', '/tunnels/one/ports/82', {body: {}, config}),
+          ),
+          (
+            await send('PUT', '/tunnels/one/ports/81', {
+              body: {description: 'web'},
+              config,
+            })
+          ).status,
+          store.portsOf('one').length,
+        ],
+        [[429, 'This tunnel already has 2 ports.'], 200, 2],
+      );
+    });
+
+    it('counts the ports a tunnel body brings with those it has, and writes nothing when they are too many', async () => {
+      const config = TIGHT;
+      await send('PUT', '/tunnels/one', {
+        body: {ports: [{portNumber: 80}]},
+        config,
+      });
+      deepStrictEqual(
+        [
+          detailOf(
+            await send('PUT', '/tunnels/one', {
+              body: {ports: [{portNumber: 81}, {portNumber: 82}]},
+              config,
+            }),
+          ),
+          detailOf(
+            await send('PUT', '/tunnels/two', {
+              body: {
+                ports: [{portNumber: 1}, {portNumber: 2}, {portNumber: 3}],
+              },
+              config,
+            }),
+          ),
+          store.tunnelById('two'),
+          (
+            await send('PUT', '/tunnels/one', {
+              body: {ports: [{portNumber: 80}, {portNumber: 81}]},
+              config,
+            })
+          ).status,
+        ],
+        [
+          [429, 'This tunnel already has 2 ports.'],
+          [429, 'This tunnel already has 2 ports.'],
+          undefined,
+          200,
+        ],
+      );
+    });
+
+    it("answers /userlimits with each limit by name and the account's use, the most of any tunnel for the two per tunnel", async () => {
+      await send('PUT', '/tunnels/one', {
+        body: {ports: [{portNumber: 80}, {portNumber: 81}]},
+      });
+      await send('PUT', '/tunnels/two', {body: {ports: [{portNumber: 22}]}});
+      clientCounts = new Map([
+        ['one', 1],
+        ['two', 3],
+      ]);
+      deepStrictEqual(await send('GET', '/userlimits'), {
+        status: 200,
+        body: [
+          {name: 'TunnelsPerUserPerLocation', current: 2, limit: 10},
+          {name: 'PortsPerTunnel', current: 2, limit: 10},
+          {name: 'ClientsPerTunnel', current: 3, limit: 10},
+        ],
+      });
+    });
+
+    it('answers /userlimits with no use for an account without tunnels', async () => {
+      deepStrictEqual(
+        (
+          (await send('GET', '/userlimits')).body as Array<{current: number}>
+        ).map(status => status.current),
+        [0, 0, 0],
+      );
+    });
+
+    it('keeps /userlimits from tunnel tokens and other methods, and has nothing below it', async () => {
+      const asOwner = [
+        detailOf(await send('POST', '/userlimits')),
+        detailOf(await send('GET', '/userlimits/more')),
+      ];
+      caller = {kind: 'tunnel', tunnelId: 'one', scope: 'host'};
+      deepStrictEqual(
+        [...asOwner, detailOf(await send('GET', '/userlimits'))],
+        [
+          [403, 'This token does not grant that.'],
+          [404, 'There is no such route.'],
+          [403, 'This token does not grant that.'],
         ],
       );
     });

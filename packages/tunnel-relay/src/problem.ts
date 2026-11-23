@@ -35,6 +35,8 @@ function titleOf(status: number): string {
       return 'Conflict';
     case 413:
       return 'Payload Too Large';
+    case 429:
+      return 'Too Many Requests';
     default:
       return 'Error';
   }

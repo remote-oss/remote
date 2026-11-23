@@ -60,21 +60,25 @@ const NODE_TIMERS: Timers = {
 export class Legs implements TunnelLegs {
   private readonly authenticate: Authenticate;
   private readonly report: (failure: unknown) => void;
+  private readonly clientLimit: number;
   private readonly timers: Timers;
   private readonly hosts = new Map<string, HostSession>();
+  private readonly clients = new Map<string, number>();
   private readonly sockets = {
     host: socketsSpeaking(HOST_PROTOCOL),
     client: socketsSpeaking(CLIENT_PROTOCOL),
   };
 
-  /** Legs authorized by `authenticate`, kept alive on `timers`; a sign-in that fails goes to `report`. */
+  /** Legs authorized by `authenticate`, at most `clientLimit` clients per tunnel, kept alive on `timers`; a sign-in that fails goes to `report`. */
   constructor(
     authenticate: Authenticate,
     report: (failure: unknown) => void,
+    clientLimit: number,
     timers = NODE_TIMERS,
   ) {
     this.authenticate = authenticate;
     this.report = report;
+    this.clientLimit = clientLimit;
     this.timers = timers;
   }
 
@@ -148,10 +152,29 @@ export class Legs implements TunnelLegs {
       refuse(socket, problem(503, 'No host is connected to the tunnel.'));
       return;
     }
+    if (this.clientCount(tunnelId) >= this.clientLimit) {
+      refuse(
+        socket,
+        problem(
+          403,
+          `The tunnel already has ${String(this.clientLimit)} connected clients.`,
+        ),
+      );
+      return;
+    }
     this.sockets.client.handleUpgrade(request, socket, head, websocket => {
+      this.clients.set(tunnelId, this.clientCount(tunnelId) + 1);
+      websocket.on('close', () => {
+        this.clients.set(tunnelId, this.clientCount(tunnelId) - 1);
+      });
       this.watch(websocket);
       void clientLeg(websocket, host);
     });
+  }
+
+  /** How many clients tunnel `tunnelId` has connected. */
+  clientCount(tunnelId: string): number {
+    return this.clients.get(tunnelId) ?? 0;
   }
 
   /** Closes the legs of tunnel `tunnelId`, as its deletion does: its host's session, and so its clients' channels. */

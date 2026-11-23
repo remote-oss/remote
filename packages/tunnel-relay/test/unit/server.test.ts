@@ -84,6 +84,7 @@ describe('the HTTPS service of the relay', () => {
         error => {
           reported.push(error);
         },
+        10,
       ),
     };
   });

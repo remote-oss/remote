@@ -117,7 +117,7 @@ describe("the relay's WebSocket legs", () => {
   beforeEach(async () => {
     reported = [];
     timers = new FakeTimers();
-    legs = new Legs(authenticate, reportOf, timers);
+    legs = new Legs(authenticate, reportOf, 2, timers);
     server = createServer();
     server.on('upgrade', (request, socket, head: Buffer) => {
       void legs.upgrade(request, socket, head);
@@ -368,6 +368,30 @@ describe("the relay's WebSocket legs", () => {
       );
     });
 
+    it('refuses a client past the limit with 403, counting clients as they connect and leave', async () => {
+      await host('one');
+      const first = await client('one');
+      await client('one');
+      const counted = legs.clientCount('one');
+      const refused = await refusal(
+        '/relay/client/one',
+        [CLIENT],
+        'tunnel one connect',
+      );
+      first.websocket.close();
+      await until(() => legs.clientCount('one') === 1);
+      deepStrictEqual(
+        [
+          counted,
+          refused,
+          await refusal('/relay/client/one', [CLIENT], 'tunnel one connect'),
+          legs.clientCount('one'),
+          legs.clientCount('other'),
+        ],
+        [2, [403, 'The tunnel already has 2 connected clients.'], 'open', 2, 0],
+      );
+    });
+
     it('refuses a client with 503 while its tunnel has no host', async () => {
       await host('other');
       deepStrictEqual(
@@ -504,7 +528,7 @@ describe("the relay's WebSocket legs", () => {
 
   describe('the keep-alive', () => {
     it("runs on the node's timers unless it is given others", async () => {
-      legs = new Legs(authenticate, reportOf);
+      legs = new Legs(authenticate, reportOf, 2);
       const websocket = await opening(
         '/relay/host/one',
         [HOST],

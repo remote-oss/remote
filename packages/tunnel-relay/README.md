@@ -17,6 +17,7 @@ It runs on the repository's Node and is configured from its environment:
 | `RELAY_ALLOWLIST` | A file of the GitHub account ids it admits, one per line, `#` comments allowed; read again when it changes |
 | `RELAY_TOKEN_KEY` | A file of at least 32 random bytes, the key it signs its tunnel tokens with |
 | `RELAY_GITHUB_API` | The GitHub API that says who a token belongs to (`https://api.github.com` when unset) |
+| `RELAY_LIMIT_TUNNELS`, `RELAY_LIMIT_PORTS`, `RELAY_LIMIT_CLIENTS` | The tunnels an account may have, the ports a tunnel may have, and the clients a tunnel may have connected (10 each when unset) |
 
 Every request signs in with a GitHub account on the allowlist (`github <token>`), or with a tunnel token the relay
 issued (`tunnel <token>`), which reaches its own tunnel as far as its scope grants.
