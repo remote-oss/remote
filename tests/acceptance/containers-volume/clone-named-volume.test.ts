@@ -140,11 +140,15 @@ async function removeVolume(name: string): Promise<void> {
   );
 }
 
-/** Removes every container of `volume`. */
+/** Removes every container of `volume`: those its label names and those that mount it, as a window left on a pick keeps one. */
 async function removeContainers(volume: string): Promise<void> {
-  const containerIds = await containersWith(
+  const labelled = await containersWith(
     `vsch.local.repository.volume=${volume}`,
   );
+  const mounting = (await docker('ps', '-aq', '--filter', `volume=${volume}`))
+    .split('\n')
+    .filter(line => line !== '');
+  const containerIds = [...new Set([...labelled, ...mounting])];
   if (containerIds.length > 0) {
     await execFileAsync('docker', ['rm', '-f', ...containerIds]);
   }
