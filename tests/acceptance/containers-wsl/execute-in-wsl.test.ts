@@ -25,12 +25,23 @@ const DISTRO = 'Ubuntu-24.04';
 /** The words of the notification that a workspace folder's drive is not shared with the engine (S356). */
 const S356 = 'The drive of the workspace folder is not shared';
 
-/** Runs `docker` with the arguments inside the distro and gives what it printed, without its final newline. */
+/**
+ * The value of `devcontainer.local_folder` for a Windows folder: its path with a lower-case drive letter and the rest as
+ * it is (F-0405).
+ */
+function labelOf(folder: string): string {
+  return `${folder.slice(0, 1).toLowerCase()}${folder.slice(1)}`;
+}
+
+/**
+ * Runs `docker` with the arguments inside the distro and gives what it printed, without its final newline. The program
+ * is started directly, not through the distro's shell, which would take the backslashes of a Windows path for escapes.
+ */
 async function inDistro(...dockerArguments: string[]): Promise<string> {
   const {stdout} = await execFileAsync('wsl', [
     '-d',
     DISTRO,
-    '--',
+    '--exec',
     'docker',
     ...dockerArguments,
   ]);
@@ -62,7 +73,7 @@ describe('Dev Containers with its engine in a WSL distro (F-0411, card #3022)', 
             '-a',
             '-q',
             '--filter',
-            `label=devcontainer.local_folder=${folder}`,
+            `label=devcontainer.local_folder=${labelOf(folder)}`,
           ),
         },
         {
@@ -79,7 +90,7 @@ describe('Dev Containers with its engine in a WSL distro (F-0411, card #3022)', 
 
   it('F-0411 AC-25 (c3022-execute-in-wsl): with executeInWSL true, a Windows folder’s window reopens in its container, bound from /mnt/<drive>, labelled with the Windows path, and with no consistency or S356', async () => {
     const folder = devContainerFolder('c3022-wsl', {name: 'c3022-wsl'});
-    const label = `${folder.slice(0, 1).toLowerCase()}${folder.slice(1)}`;
+    const label = labelOf(folder);
     await setUserSetting('dev.containers.executeInWSL', true);
     await setUserSetting('dev.containers.executeInWSLDistro', DISTRO);
     let name: string | undefined;
