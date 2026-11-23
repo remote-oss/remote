@@ -203,6 +203,9 @@ export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
  */
 export const WINDOW_PORT_RANGE = '20000-20999';
 
+/** The lowest port of the client's ephemeral range on Linux by default: the ports a row names for the client to hold or search stay below it. */
+export const CLIENT_EPHEMERAL_LOWEST = 32_768;
+
 /** The setting that holds the window's port range. */
 export const WINDOW_PORT_RANGE_SETTING = 'remote.SSH.preferredLocalPortRange';
 

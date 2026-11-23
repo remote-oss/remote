@@ -2738,7 +2738,7 @@ function cliBaseOf(
 }
 
 /** Whether a launch starts the run's CLI-source copy of VSCodium, which needs the CLI archives' token. */
-function startsPinnedCliEditor(launch: Launch): boolean {
+export function startsPinnedCliEditor(launch: Launch): boolean {
   return launch.kind === 'plain' && launch.cliSource === true;
 }
 

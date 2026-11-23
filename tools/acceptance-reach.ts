@@ -817,6 +817,7 @@ export const MAIN_ONLY_LAUNCH_JOBS: ReadonlySet<string> = new Set([
   'vscodium-plan',
   'acceptance-vscodium',
   'acceptance-vscodium-containers',
+  'acceptance-vscodium-cli',
   'acceptance-genuine',
 ]);
 

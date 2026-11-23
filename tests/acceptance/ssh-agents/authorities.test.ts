@@ -16,6 +16,7 @@ import {
   userSettings,
   variable,
 } from '../windows/harness.ts';
+import {labelsWithin} from '../windows/labels-wait.ts';
 import {authorityHex} from './authority-hex.ts';
 import {
   answerDialog,
@@ -45,6 +46,15 @@ async function labelsOf(
   };
 }
 
+/** The labels of `window` once its indicator reads `indicatorText` and its title `titleText`, within the bound of `labels-wait.ts`. */
+function labelsShowing(
+  window: string,
+  indicatorText: string,
+  titleText: string,
+): Promise<{indicator: string; title: string; reads: string}> {
+  return labelsWithin(() => labelsOf(window), window, indicatorText, titleText);
+}
+
 /** The lines of `file`. */
 function linesOf(file: string): string[] {
   return readFileSync(file, 'utf8')
@@ -71,13 +81,18 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
     await openWindow(ALIAS, 'f2008-alias-window');
     try {
       await connectedWithin('f2008-alias-window', 90_000);
-      const shown = await labelsOf('f2008-alias-window');
+      const shown = await labelsShowing(
+        'f2008-alias-window',
+        `SSH: ${ALIAS}`,
+        `[SSH: ${ALIAS}]`,
+      );
       deepStrictEqual(
         {
           indicator: shown.indicator.includes(`SSH: ${ALIAS}`),
           title: shown.title.includes(`[SSH: ${ALIAS}]`),
         },
         {indicator: true, title: true},
+        `the labels of f2008-alias-window, the last reads: ${shown.reads}`,
       );
     } finally {
       await closeQuietly('f2008-alias-window');
@@ -92,13 +107,18 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
     );
     try {
       await connectedWithin('f2008-hex-alias', 90_000);
-      const shown = await labelsOf('f2008-hex-alias');
+      const shown = await labelsShowing(
+        'f2008-hex-alias',
+        'SSH: harness',
+        '[SSH: harness]',
+      );
       deepStrictEqual(
         {
           indicator: shown.indicator.includes('SSH: harness'),
           title: shown.title.includes('[SSH: harness]'),
         },
         {indicator: true, title: true},
+        `the labels of f2008-hex-alias, the last reads: ${shown.reads}`,
       );
     } finally {
       await closeQuietly('f2008-hex-alias');
@@ -129,7 +149,11 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
       }
       await chooseQuickPickRow('f2008-hex-address', accept);
       await connectedWithin('f2008-hex-address', 90_000);
-      const shown = await labelsOf('f2008-hex-address');
+      const shown = await labelsShowing(
+        'f2008-hex-address',
+        `SSH: ${label}`,
+        `[SSH: ${label}]`,
+      );
       const found = spawnSync(
         'ssh-keygen',
         [
@@ -164,6 +188,7 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
           stored,
         },
         {indicator: true, title: true, newLines: 1, found: 0, stored: []},
+        `the labels of f2008-hex-address, the last reads: ${shown.reads}`,
       );
     } finally {
       await closeQuietly('f2008-hex-address');

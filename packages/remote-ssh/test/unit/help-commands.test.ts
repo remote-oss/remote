@@ -116,6 +116,19 @@ function failureOf(manifest: HelpManifest): string {
 }
 
 describe('the help addresses of the manifest', () => {
+  it('F-2004 AC-8 (c2486-manifest): none of the help URLs is a Microsoft or aka.ms URL, and remoteName is ["ssh-remote"]', () => {
+    const help = manifestOfPackage().contributes?.remoteHelp ?? {};
+    const urls = Object.values(help).filter(value => typeof value === 'string');
+    deepStrictEqual(
+      [
+        urls.length > 0,
+        urls.every(url => !/aka\.ms|microsoft\.com/.test(url)),
+        help.remoteName,
+      ],
+      [true, true, ['ssh-remote']],
+    );
+  });
+
   it('include the three the commands open', () => {
     const links = helpLinksOf(manifestOfPackage());
     partialDeepStrictEqual(Object.keys(links).sort(), [
