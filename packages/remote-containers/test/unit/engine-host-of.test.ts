@@ -128,6 +128,25 @@ describe('the engine host of a command (card containers-203, F-0207 BR-18)', () 
   });
 });
 
+describe('the engine host of a Remote-SSH window (card #3080, F-0207 AC-28)', () => {
+  it('F-0207 AC-28 (the decision half): a Remote-SSH window on a Linux host with executeInWSL on and a distro that does not exist gets the local engine host, as with the defaults', () => {
+    const settings = {executeInWSL: true, executeInWSLDistro: 'no-such-distro'};
+    const window = {remoteName: 'ssh-remote', distro: undefined};
+    deepStrictEqual(
+      [
+        engineHostOf(window, '/home/me/app', settings, 'linux'),
+        engineHostOf(window, '/home/me/app', settings, 'win32'),
+        engineHostOf(window, '/home/me/app', SETTINGS_OFF, 'linux'),
+      ],
+      [
+        {kind: 'local', folder: '/home/me/app'},
+        {kind: 'local', folder: '/home/me/app'},
+        {kind: 'local', folder: '/home/me/app'},
+      ],
+    );
+  });
+});
+
 describe('the folder label of a container in a distro (card containers-203, F-0207 BR-19)', () => {
   it('F-0207 BR-19: executeInWSL keeps the Windows folder, and a folder of the distro, by a share or a wsl window, is the wsl.localhost form', () => {
     const choices = [

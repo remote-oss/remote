@@ -45,6 +45,7 @@
       "attach-command.test.ts": 1.7,
       "authoring-compose.test.ts": 0.7,
       "authoring-container.test.ts": 1.1,
+      "dotless-configuration.test.ts": 0.4,
       "authoring-feature-options.test.ts": 2.8,
       "authoring-features.test.ts": 1.7,
       "authoring-flows.test.ts": 0.8,
