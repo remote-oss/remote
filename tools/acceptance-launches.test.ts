@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   bundleFolderOf,
   clientCases,
+  CLIENT_EPHEMERAL_LOWEST,
   CONFIG_FILE_LAUNCHES,
   extensionsOf,
   failureCases,
@@ -1335,7 +1336,8 @@ describe('the launches of the VSCodium run', () => {
           .map(launch => launch.label.includes('ssh-newclient')),
       ],
       [
-        [2, 2],
+        // the cache and the install, in the shared steps and in the CLI job's copy of them
+        [4, 4],
         [true, true],
       ],
     );
@@ -1704,6 +1706,33 @@ describe('the ports cases', () => {
       .filter(port => port >= 40000);
     deepStrictEqual(
       [named.length > 0, named.filter(port => port >= lowest)],
+      [true, []],
+    );
+  });
+
+  it("#2453: every port the tunnel range rows name is above the launch's window ports and below the client's ephemeral range, so no outgoing connection of the client can hold one", () => {
+    const [, lastWindowPort = 0] = WINDOW_PORT_RANGE.split('-').map(Number);
+    const named = (
+      readFileSync(
+        path.join(
+          REPOSITORY_ROOT,
+          'tests',
+          'acceptance',
+          'ssh-core',
+          'tunnel-ranges.test.ts',
+        ),
+        'utf8',
+      ).match(/\b\d{5}\b/gu) ?? []
+    )
+      .map(Number)
+      .filter(port => port <= 65_535);
+    deepStrictEqual(
+      [
+        named.length > 0,
+        named.filter(
+          port => port >= CLIENT_EPHEMERAL_LOWEST || port <= lastWindowPort,
+        ),
+      ],
       [true, []],
     );
   });
@@ -2472,7 +2501,7 @@ describe('the platform cases (card coverage-12)', () => {
     const all = launchesOf(REPOSITORY_ROOT);
     deepStrictEqual(
       [
-        (first ?? 0) > 1023 && (last ?? 65535) < 32768,
+        (first ?? 0) > 1023 && (last ?? 65535) < CLIENT_EPHEMERAL_LOWEST,
         all
           .filter(
             launch =>
