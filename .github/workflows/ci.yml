@@ -58,6 +58,10 @@ on:
           coverage, slice 1 and server lifecycle, which a launch's proof does not need
         type: boolean
         default: false
+      tunnels-spike:
+        description: With launches-only, run the T.6 relay spike (card #3050) and nothing else
+        type: boolean
+        default: false
   # Once a night, at 04:43, main runs the genuine VS Code job and every part of the VSCodium suite at that commit, in
   # groups of their own that no merge replaces: the full run that names the commits since a part's last green.
   schedule:
@@ -685,6 +689,54 @@ jobs:
   # A fork's pull request runs no CI here (every job checks the head's repo), so the gate fails it rather than passing
   # on skipped jobs. It runs on a GitHub runner (allowed by the user, 2026-10-20): it only reads the needed jobs'
   # results, so it takes no self-hosted runner, and no step of a fork's run reaches one.
+  # The T.6 spike's run (card #3050, ADR-0015): our relay's dev-tunnels-ssh `none` server with the Rust host and the
+  # TypeScript host, and the TypeScript client through it. A dispatch with tunnels-spike and launches-only runs only
+  # this job. It reads no secret, and nothing on this branch merges.
+  tunnels-spike:
+    if: github.event_name == 'workflow_dispatch' && inputs.tunnels-spike
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: spikes/tunnel-relay-t6
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: The relay's and the SDK's packages
+        run: |
+          (cd relay && npm ci --no-audit --no-fund)
+          (cd ts-sdk && npm ci --no-audit --no-fund)
+      - name: The Rust host, a cold build, timed
+        working-directory: spikes/tunnel-relay-t6/rust-host
+        run: |
+          cargo --version
+          start=$(date +%s)
+          cargo build --release --locked
+          echo "tunnels-spike: the Rust host's cold build took $(( $(date +%s) - start )) s"
+      - name: The run's authority and the relay's certificate
+        run: |
+          getent hosts cp.localhost || echo '127.0.0.1 cp.localhost' | sudo tee -a /etc/hosts
+          folder=$(mktemp -d)
+          sh cert.sh "$folder" | tee "$folder/paths"
+          echo "TLS_CERT=$(sed -n 's/^TLS_CERT=//p' "$folder/paths")" >> "$GITHUB_ENV"
+          echo "TLS_KEY=$(sed -n 's/^TLS_KEY=//p' "$folder/paths")" >> "$GITHUB_ENV"
+      - name: The run
+        env:
+          RUST_HOST_BIN: ${{ github.workspace }}/spikes/tunnel-relay-t6/rust-host/target/release/tunnel-relay-t6-rust-host
+        run: |
+          set +e
+          start=$(date +%s)
+          sh run.sh
+          status=$?
+          echo "tunnels-spike: the run took $(( $(date +%s) - start )) s"
+          exit $status
+
   ci-gate:
     name: ci-gate
     needs:
