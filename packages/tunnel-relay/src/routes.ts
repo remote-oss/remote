@@ -62,12 +62,18 @@ export async function route(
     return problem(400, `The api-version must be ${API_VERSION}.`);
   }
   const parts = request.path.split('/').filter(part => part !== '');
-  if (parts[0] !== 'tunnels' || parts.length > 4) {
+  const clustersAsked = parts.length === 1 && parts[0] === 'clusters';
+  if ((parts[0] !== 'tunnels' || parts.length > 4) && !clustersAsked) {
     return problem(404, 'There is no such route.');
   }
   const caller = await context.authenticate(request.headers);
   if (!('id' in caller)) {
     return caller;
+  }
+  if (clustersAsked) {
+    return request.method === 'GET'
+      ? success([clusterOf(context.config)])
+      : problem(404, 'There is no such route.');
   }
   const [, tunnelPart, section, item] = parts.map(decodeURIComponent);
   if (tunnelPart === undefined) {
@@ -385,16 +391,32 @@ function portView(
   return {...port, tunnelId: tunnel.id, clusterId: config.clusterId};
 }
 
+/** The relay's host and port, the port left out when it is HTTPS's own. */
+function authorityOf(config: RelayConfig): string {
+  return config.port === 443
+    ? config.domain
+    : `${config.domain}:${String(config.port)}`;
+}
+
+/**
+ * The relay's one cluster as `ClusterDetails` (`[dev-tunnels] ts/src/contracts/clusterDetails.ts:11-26`), which the
+ * TypeScript SDK's `listClusters` reads (`ts/src/management/tunnelManagementHttpClient.ts:687-698`).
+ */
+function clusterOf(config: RelayConfig): Record<string, string> {
+  return {
+    clusterId: config.clusterId,
+    uri: `https://cp.${authorityOf(config)}`,
+    azureLocation: '',
+  };
+}
+
 /** An endpoint with the relay's addresses for its legs (brief section 5; `relay_tunnel_host.rs:396-428,450-467`). */
 function endpointView(
   tunnelId: string,
   endpoint: Record<string, unknown>,
   config: RelayConfig,
 ): Record<string, unknown> {
-  const authority =
-    config.port === 443
-      ? config.domain
-      : `${config.domain}:${String(config.port)}`;
+  const authority = authorityOf(config);
   return {
     ...endpoint,
     hostRelayUri: `wss://cp.${authority}/relay/host/${tunnelId}`,

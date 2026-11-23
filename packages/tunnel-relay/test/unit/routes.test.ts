@@ -89,15 +89,43 @@ describe('the management routes of the relay', () => {
       );
     });
 
-    it('answers 404 for a route outside the tunnels', async () => {
+    it('answers 404 for a route outside the tunnels, the cluster recommendations among them', async () => {
       deepStrictEqual(
         [
           detailOf(await send('GET', '/userlimits')),
+          detailOf(await send('GET', '/clusters/recommendations')),
+          detailOf(await send('PUT', '/clusters')),
           detailOf(await send('GET', '/tunnels/a/ports/1/more')),
         ],
+        Array(4).fill([404, 'There is no such route.']),
+      );
+    });
+
+    it('answers /clusters with its one cluster and the address of its service', async () => {
+      deepStrictEqual(
         [
-          [404, 'There is no such route.'],
-          [404, 'There is no such route.'],
+          await send('GET', '/clusters'),
+          (await send('GET', '/clusters', {config: {...CONFIG, port: 8443}}))
+            .body,
+        ],
+        [
+          {
+            status: 200,
+            body: [
+              {
+                clusterId: 'usw2',
+                uri: 'https://cp.relay.test',
+                azureLocation: '',
+              },
+            ],
+          },
+          [
+            {
+              clusterId: 'usw2',
+              uri: 'https://cp.relay.test:8443',
+              azureLocation: '',
+            },
+          ],
         ],
       );
     });
