@@ -22,13 +22,13 @@ export interface RelayConfig {
 export function configOf(
   environment: Readonly<Record<string, string | undefined>>,
 ): RelayConfig {
-  const valueOf = (name: string): string => {
+  function valueOf(name: string): string {
     const value = environment[name];
     if (value === undefined || value === '') {
       throw new Error(`${name} is not set`);
     }
     return value;
-  };
+  }
   const port = Number(valueOf('RELAY_PORT'));
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error('RELAY_PORT is not a port number');

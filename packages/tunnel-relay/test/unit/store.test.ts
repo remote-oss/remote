@@ -16,11 +16,11 @@ describe('the store of the relay', () => {
   });
 
   it('writes, reads and replaces a tunnel', () => {
-    store.putTunnel({id: 'one', owner: 7, name: 'web', fields: {a: 1}});
-    store.putTunnel({id: 'one', owner: 7, name: 'api', fields: {b: 2}});
+    store.putTunnel({id: 'one', owner: 7, name: 'web', fields: {alpha: 1}});
+    store.putTunnel({id: 'one', owner: 7, name: 'api', fields: {beta: 2}});
     deepStrictEqual(
       [store.tunnelById('one'), store.tunnelById('two')],
-      [{id: 'one', owner: 7, name: 'api', fields: {b: 2}}, undefined],
+      [{id: 'one', owner: 7, name: 'api', fields: {beta: 2}}, undefined],
     );
   });
 
@@ -34,18 +34,6 @@ describe('the store of the relay', () => {
         store.tunnelByName(7, ''),
       ],
       ['one', undefined, undefined],
-    );
-  });
-
-  it('a name is taken by another tunnel of the same owner only', () => {
-    store.putTunnel({id: 'one', owner: 7, name: 'web', fields: {}});
-    deepStrictEqual(
-      [
-        store.nameTaken(7, 'web', 'two'),
-        store.nameTaken(7, 'web', 'one'),
-        store.nameTaken(8, 'web', 'two'),
-      ],
-      [true, false, false],
     );
   });
 
@@ -126,15 +114,18 @@ describe('the store of the relay', () => {
     store.transaction(() => {
       store.putTunnel({id: 'kept', owner: 7, name: '', fields: {}});
     });
-    throws(() =>
+    let thrown = '';
+    try {
       store.transaction(() => {
         store.putTunnel({id: 'lost', owner: 7, name: '', fields: {}});
         throw new Error('stop');
-      }),
-    );
+      });
+    } catch (error) {
+      thrown = (error as Error).message;
+    }
     deepStrictEqual(
-      [store.tunnelById('kept')?.id, store.tunnelById('lost')],
-      ['kept', undefined],
+      [thrown, store.tunnelById('kept')?.id, store.tunnelById('lost')],
+      ['stop', 'kept', undefined],
     );
   });
 
@@ -143,14 +134,14 @@ describe('the store of the relay', () => {
     try {
       const file = path.join(folder, 'relay.db');
       const first = new Store(file);
-      first.putTunnel({id: 'one', owner: 7, name: 'web', fields: {a: 1}});
+      first.putTunnel({id: 'one', owner: 7, name: 'web', fields: {alpha: 1}});
       first.close();
       const second = new Store(file);
       deepStrictEqual(second.tunnelById('one'), {
         id: 'one',
         owner: 7,
         name: 'web',
-        fields: {a: 1},
+        fields: {alpha: 1},
       });
       second.close();
     } finally {

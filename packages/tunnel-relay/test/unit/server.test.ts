@@ -1,4 +1,4 @@
-import {deepStrictEqual, match} from 'node:assert';
+import {deepStrictEqual} from 'node:assert';
 import type {IncomingMessage, ServerResponse} from 'node:http';
 import {Readable} from 'node:stream';
 import type {RelayConfig} from '../../src/config.ts';
@@ -30,6 +30,11 @@ function incoming(
   }) as unknown as IncomingMessage;
 }
 
+/** Does nothing; the place of a callback not yet set. */
+function ignore(): void {
+  // Nothing to do.
+}
+
 /** A response that records what is written to it. */
 function recorder(): {
   response: ServerResponse;
@@ -43,7 +48,7 @@ function recorder(): {
   } = {
     headers: {},
   };
-  let finish = (): void => undefined;
+  let finish: () => void = ignore;
   const ended = new Promise<void>(resolve => {
     finish = resolve;
   });
@@ -151,9 +156,9 @@ describe('the HTTPS service of the relay', () => {
     write(json.response, {status: 404, body: {detail: 'x'}});
     const empty = recorder();
     write(empty.response, {status: 200});
-    match(json.written.headers['VsSaaS-Request-Id'] ?? '', /^[0-9a-f]{16}$/);
     deepStrictEqual(
       [
+        /^[0-9a-f]{16}$/.test(json.written.headers['VsSaaS-Request-Id'] ?? ''),
         json.written.status,
         json.written.headers['Content-Type'],
         json.written.body,
@@ -161,7 +166,15 @@ describe('the HTTPS service of the relay', () => {
         empty.written.headers['Content-Type'],
         empty.written.body,
       ],
-      [404, 'application/json', '{"detail":"x"}', 200, undefined, undefined],
+      [
+        true,
+        404,
+        'application/json',
+        '{"detail":"x"}',
+        200,
+        undefined,
+        undefined,
+      ],
     );
   });
 

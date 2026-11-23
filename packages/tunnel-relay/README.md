@@ -1,6 +1,6 @@
 # tunnel-relay
 
-The family's tunnel relay (D-107): a service, not an extension, that is wire-compatible with the dev tunnels service for
+The family's tunnel relay: a service, not an extension, that is wire-compatible with the dev tunnels service for
 the Remote - Tunnels client and the family's host agent. It serves the dev tunnels management API at `https://cp.<domain>`
 and the relay's two WebSocket legs. Its contract is `docs/architecture/l3/tunnels/brief-relay.md`; its protocol source is
 `[dev-tunnels]` (ADR-0014); its language and build are ADR-0015's.

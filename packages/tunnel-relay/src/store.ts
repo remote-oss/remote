@@ -16,14 +16,13 @@ export interface TunnelRecord {
 }
 
 /** A row of the store as SQLite gives it. */
-interface Row {
-  [column: string]: unknown;
-}
+type Row = Record<string, unknown>;
 
 /** The store over one SQLite file, or `:memory:`. */
 export class Store {
   private readonly database: DatabaseSync;
 
+  /** Opens the store in `file`, creating its tables when they are missing. */
   constructor(file: string) {
     this.database = new DatabaseSync(file);
     this.database.exec(`
@@ -73,28 +72,22 @@ export class Store {
       .run(record.id, record.owner, record.name, JSON.stringify(record.fields));
   }
 
-  /** The tunnel with id `id`, or none. */
-  tunnelById(id: string): TunnelRecord | undefined {
-    const row = this.database
+  /** The tunnel with id `tunnelId`, or none. */
+  tunnelById(tunnelId: string): TunnelRecord | undefined {
+    const found = this.database
       .prepare('SELECT * FROM tunnels WHERE id = ?')
-      .get(id) as Row | undefined;
-    return row === undefined ? undefined : tunnelOf(row);
+      .get(tunnelId) as Row | undefined;
+    return found === undefined ? undefined : tunnelOf(found);
   }
 
   /** The tunnel `owner` named `name` (in lower case), or none. */
   tunnelByName(owner: number, name: string): TunnelRecord | undefined {
-    const row = this.database
+    const found = this.database
       .prepare(
         "SELECT * FROM tunnels WHERE owner = ? AND name = ? AND name <> ''",
       )
       .get(owner, name) as Row | undefined;
-    return row === undefined ? undefined : tunnelOf(row);
-  }
-
-  /** Whether `owner` has another tunnel than `exceptId` named `name`. */
-  nameTaken(owner: number, name: string, exceptId: string): boolean {
-    const found = this.tunnelByName(owner, name);
-    return found !== undefined && found.id !== exceptId;
+    return found === undefined ? undefined : tunnelOf(found);
   }
 
   /** The tunnels of `owner`, by id. */
@@ -107,10 +100,10 @@ export class Store {
   }
 
   /** Deletes the tunnel with its ports and endpoints; whether there was one. */
-  deleteTunnel(id: string): boolean {
+  deleteTunnel(tunnelId: string): boolean {
     return (
       Number(
-        this.database.prepare('DELETE FROM tunnels WHERE id = ?').run(id)
+        this.database.prepare('DELETE FROM tunnels WHERE id = ?').run(tunnelId)
           .changes,
       ) > 0
     );
@@ -132,10 +125,10 @@ export class Store {
 
   /** Port `number` of tunnel `tunnel`, or none. */
   port(tunnel: string, number: number): Record<string, unknown> | undefined {
-    const row = this.database
+    const found = this.database
       .prepare('SELECT fields FROM ports WHERE tunnel = ? AND number = ?')
       .get(tunnel, number) as Row | undefined;
-    return row === undefined ? undefined : fieldsOf(row);
+    return found === undefined ? undefined : fieldsOf(found);
   }
 
   /** The ports of tunnel `tunnel`, by number. */
@@ -194,20 +187,23 @@ export class Store {
     );
   }
 
+  /** Closes the store's file. */
   close(): void {
     this.database.close();
   }
 }
 
-function tunnelOf(row: Row): TunnelRecord {
+/** A tunnel row as a record. */
+function tunnelOf(stored: Row): TunnelRecord {
   return {
-    id: String(row.id),
-    owner: Number(row.owner),
-    name: String(row.name),
-    fields: fieldsOf(row),
+    id: String(stored.id),
+    owner: Number(stored.owner),
+    name: String(stored.name),
+    fields: fieldsOf(stored),
   };
 }
 
-function fieldsOf(row: Row): Record<string, unknown> {
-  return JSON.parse(String(row.fields)) as Record<string, unknown>;
+/** The fields of a row, which the store keeps as JSON. */
+function fieldsOf(stored: Row): Record<string, unknown> {
+  return JSON.parse(String(stored.fields)) as Record<string, unknown>;
 }

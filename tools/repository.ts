@@ -29,16 +29,16 @@ export function expectedPackageName(folder: string): string {
 }
 
 /** Whether a package folder holds a library (`lib-*`) rather than an extension. */
+export function isLibraryFolder(folder: string): boolean {
+  return folder.startsWith('lib-');
+}
+
 /** The services: workspace packages that run on their own, outside the editor (layout.md). */
-export const SERVICE_FOLDERS = ['tunnel-relay'] as const;
+const SERVICE_FOLDERS: readonly string[] = ['tunnel-relay'];
 
 /** Whether `folder` under packages/ is a service. */
 export function isServiceFolder(folder: string): boolean {
-  return (SERVICE_FOLDERS as readonly string[]).includes(folder);
-}
-
-export function isLibraryFolder(folder: string): boolean {
-  return folder.startsWith('lib-');
+  return SERVICE_FOLDERS.includes(folder);
 }
 
 /** The entries of a directory, sorted by name so that every report has the same order on every platform. */

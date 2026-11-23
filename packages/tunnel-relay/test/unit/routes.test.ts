@@ -26,7 +26,9 @@ describe('the management routes of the relay', () => {
   let store: Store;
   let caller: Caller | Answer;
 
-  const authenticate: Authenticate = () => Promise.resolve(caller);
+  function authenticate(): ReturnType<Authenticate> {
+    return Promise.resolve(caller);
+  }
 
   function context(config: RelayConfig = CONFIG): RouteContext {
     return {store, config, authenticate};
@@ -364,19 +366,21 @@ describe('the management routes of the relay', () => {
   describe('the name check', () => {
     it("says whether a valid name is free among the caller's tunnels", async () => {
       await send('PUT', '/tunnels/one', {body: {name: 'web'}});
-      const check = async (name: string) =>
-        (await send('GET', `/tunnels/${name}:checkNameAvailability`)).body;
-      deepStrictEqual(
-        [
-          await check('web'),
-          await check('WEB'),
-          await check('api'),
-          await check('ab'),
-        ],
-        [false, false, true, false],
-      );
+      async function check(name: string): Promise<unknown> {
+        return (await send('GET', `/tunnels/${name}:checkNameAvailability`))
+          .body;
+      }
+      const owners = [
+        await check('web'),
+        await check('WEB'),
+        await check('api'),
+        await check('ab'),
+      ];
       caller = OTHER;
-      deepStrictEqual(await check('web'), true);
+      deepStrictEqual(
+        [owners, await check('web')],
+        [[false, false, true, false], true],
+      );
     });
 
     it('answers 404 for another method', async () => {

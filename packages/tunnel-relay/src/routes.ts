@@ -69,13 +69,13 @@ export async function route(
   if (!('id' in caller)) {
     return caller;
   }
-  const [, tunnelPart, sub, item] = parts.map(decodeURIComponent);
+  const [, tunnelPart, section, item] = parts.map(decodeURIComponent);
   if (tunnelPart === undefined) {
     return request.method === 'GET'
       ? listTunnels(request.query, caller, context)
       : problem(404, 'There is no such route.');
   }
-  if (tunnelPart.endsWith(CHECK_NAME) && sub === undefined) {
+  if (tunnelPart.endsWith(CHECK_NAME) && section === undefined) {
     return request.method === 'GET'
       ? success(
           nameAvailable(
@@ -86,17 +86,17 @@ export async function route(
         )
       : problem(404, 'There is no such route.');
   }
-  if (sub === undefined) {
+  if (section === undefined) {
     return tunnelRoute(request, tunnelPart.toLowerCase(), caller, context);
   }
   const tunnel = ownTunnel(tunnelPart.toLowerCase(), caller, context);
   if (tunnel === undefined) {
     return problem(404, 'There is no such tunnel.');
   }
-  if (sub === 'endpoints' && item !== undefined) {
+  if (section === 'endpoints' && item !== undefined) {
     return endpointRoute(request, tunnel, item, context);
   }
-  if (sub === 'ports') {
+  if (section === 'ports') {
     return portRoute(request, tunnel, item, context);
   }
   return problem(404, 'There is no such route.');
@@ -163,12 +163,12 @@ function listTunnels(
   });
 }
 
-async function tunnelRoute(
+function tunnelRoute(
   request: Request,
   idOrName: string,
   caller: Caller,
   context: RouteContext,
-): Promise<Answer> {
+): Answer {
   if (request.method === 'PUT') {
     return putTunnel(request, idOrName, caller, context);
   }
@@ -189,11 +189,11 @@ async function tunnelRoute(
 /** Creates the tunnel with the client's id, or updates the caller's own with merge semantics. */
 function putTunnel(
   request: Request,
-  id: string,
+  tunnelId: string,
   caller: Caller,
   context: RouteContext,
 ): Answer {
-  if (!isTunnelId(id)) {
+  if (!isTunnelId(tunnelId)) {
     return problem(400, 'The tunnel id is not valid.');
   }
   const body = objectOf(request.body);
@@ -205,7 +205,7 @@ function putTunnel(
     return invalid;
   }
   const {store} = context;
-  const existing = store.tunnelById(id);
+  const existing = store.tunnelById(tunnelId);
   if (existing !== undefined && existing.owner !== caller.id) {
     return problem(409, 'The tunnel id is taken.');
   }
@@ -218,15 +218,15 @@ function putTunnel(
       : (existing?.name ?? '');
   const force = request.query.get('forceRename') === 'true';
   return store.transaction(() => {
-    if (name !== '' && store.nameTaken(caller.id, name, id)) {
+    const holder = store.tunnelByName(caller.id, name);
+    if (holder !== undefined && holder.id !== tunnelId) {
       if (!force) {
         return problem(409, 'The tunnel name is taken.');
       }
-      const holder = store.tunnelByName(caller.id, name) as TunnelRecord;
       store.putTunnel({...holder, name: ''});
     }
     const record: TunnelRecord = {
-      id,
+      id: tunnelId,
       owner: caller.id,
       name,
       fields: {...existing?.fields, ...writable(body)},
@@ -235,8 +235,8 @@ function putTunnel(
     for (const port of (body.ports as unknown[] | undefined) ?? []) {
       const fields = objectOf(port);
       if (fields !== undefined && typeof fields.portNumber === 'number') {
-        store.putPort(id, fields.portNumber, {
-          ...store.port(id, fields.portNumber),
+        store.putPort(tunnelId, fields.portNumber, {
+          ...store.port(tunnelId, fields.portNumber),
           ...fields,
         });
       }

@@ -3,9 +3,9 @@
  * open relay.
  */
 
-import {problem} from './problem.ts';
-import type {Authenticate} from './routes.ts';
+import {problem, type Answer} from './problem.ts';
 
 /** Refuses every request as unsigned. */
-export const refuseAll: Authenticate = () =>
-  Promise.resolve(problem(401, 'Sign in with a GitHub account.'));
+export function refuseAll(): Promise<Answer> {
+  return Promise.resolve(problem(401, 'Sign in with a GitHub account.'));
+}

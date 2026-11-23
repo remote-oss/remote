@@ -11,6 +11,16 @@ import {
 import {problem, success} from '../../src/problem.ts';
 import {refuseAll} from '../../src/refuse-all.ts';
 
+/** The message `work` throws with. */
+function messageOf(work: () => unknown): string {
+  try {
+    work();
+    return 'no error';
+  } catch (error) {
+    return (error as Error).message;
+  }
+}
+
 const SETTINGS = {
   RELAY_DOMAIN: 'relay.test',
   RELAY_PORT: '8443',
@@ -79,33 +89,38 @@ describe('the contract rules of the relay', () => {
 describe('the answers of the relay', () => {
   it('a problem carries the title of its status and its detail', () => {
     deepStrictEqual(
-      [400, 401, 403, 404, 409, 500].map(
-        status => (problem(status, 'why').body as {title: string}).title,
-      ),
       [
-        'Bad Request',
-        'Unauthorized',
-        'Forbidden',
-        'Not Found',
-        'Conflict',
-        'Error',
+        [400, 401, 403, 404, 409, 500].map(
+          status => (problem(status, 'why').body as {title: string}).title,
+        ),
+        problem(404, 'There is no such tunnel.'),
+      ],
+      [
+        [
+          'Bad Request',
+          'Unauthorized',
+          'Forbidden',
+          'Not Found',
+          'Conflict',
+          'Error',
+        ],
+        {
+          status: 404,
+          body: {title: 'Not Found', detail: 'There is no such tunnel.'},
+        },
       ],
     );
-    deepStrictEqual(problem(404, 'There is no such tunnel.'), {
-      status: 404,
-      body: {title: 'Not Found', detail: 'There is no such tunnel.'},
-    });
   });
 
   it('a success has a body when given one, and none otherwise', () => {
     deepStrictEqual(
-      [success({a: 1}), success()],
-      [{status: 200, body: {a: 1}}, {status: 200}],
+      [success({answer: 1}), success()],
+      [{status: 200, body: {answer: 1}}, {status: 200}],
     );
   });
 
   it('the relay without sign-in refuses every request as unsigned', async () => {
-    deepStrictEqual(await refuseAll({authorization: 'github token'}), {
+    deepStrictEqual(await refuseAll(), {
       status: 401,
       body: {title: 'Unauthorized', detail: 'Sign in with a GitHub account.'},
     });
@@ -125,14 +140,15 @@ describe('the settings of the relay', () => {
   });
 
   it('names a setting that is missing or empty', () => {
-    for (const name of Object.keys(SETTINGS)) {
-      throws(() => configOf({...SETTINGS, [name]: undefined}), {
-        message: `${name} is not set`,
-      });
-      throws(() => configOf({...SETTINGS, [name]: ''}), {
-        message: `${name} is not set`,
-      });
-    }
+    const names = Object.keys(SETTINGS);
+    deepStrictEqual(
+      names.flatMap(name =>
+        [undefined, ''].map(value =>
+          messageOf(() => configOf({...SETTINGS, [name]: value})),
+        ),
+      ),
+      names.flatMap(name => [`${name} is not set`, `${name} is not set`]),
+    );
   });
 
   it('refuses a port that is not a port number', () => {
