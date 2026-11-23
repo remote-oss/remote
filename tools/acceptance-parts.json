@@ -287,7 +287,7 @@
     "explorer-trust-pickers": {"position.test.ts": 0.1},
     "extensionpack": {
       "cli.test.ts": 0,
-      "local.test.ts": 0.5,
+      "local.test.ts": 0.6,
       "manage.test.ts": 0.1,
       "page.test.ts": 0.3,
       "smoke.test.ts": 0,

@@ -99,19 +99,22 @@ describe('the extension pack in a local window (card #3039, F-9103)', function (
   });
 
   after(async () => {
-    await closeWindow(window);
-    for (const identifier of installedHere) {
-      launcher(
-        {
-          extensions: variable('HARNESS_EXTENSIONS_FOLDER'),
-          userData: variable('HARNESS_USER_DATA'),
-          logs: path.join(
-            variable('HARNESS_RUN_FOLDER'),
-            'extensionpack-local',
-          ),
-        },
-        ['--uninstall-extension', identifier],
-      );
+    try {
+      await closeWindow(window);
+    } finally {
+      for (const identifier of installedHere) {
+        launcher(
+          {
+            extensions: variable('HARNESS_EXTENSIONS_FOLDER'),
+            userData: variable('HARNESS_USER_DATA'),
+            logs: path.join(
+              variable('HARNESS_RUN_FOLDER'),
+              'extensionpack-local',
+            ),
+          },
+          ['--uninstall-extension', identifier],
+        );
+      }
     }
   });
 

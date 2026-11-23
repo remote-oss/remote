@@ -74,8 +74,11 @@ describe('uninstalling the extension pack and its members in a window (card #303
   });
 
   afterEach(async () => {
-    await closeWindow(window);
-    restoredLaunchSet();
+    try {
+      await closeWindow(window);
+    } finally {
+      restoredLaunchSet();
+    }
   });
 
   it('F-9102 AC-2 (c3037-no-dialog): uninstalling the pack shows no dialog, confirmation or notification', async () => {
