@@ -1092,6 +1092,13 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
+  it('#3003: the cli-path launch is a renderer launch with the title the page helpers find a window by and core’s custom dialogs, which a page read shows', () => {
+    deepStrictEqual(
+      launches.find(launch => launch.label === 'cli-path')?.settings,
+      {'window.title': '[${rootName}]', 'window.dialogStyle': 'custom'},
+    );
+  });
+
   it('tooling-51, connect-84, containers-101, tooling-168, #2355: socket-prime (a part of socket), the containers-podman launch, cli-path, wsl, the ports and install primers and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
     deepStrictEqual(
       launches

@@ -54,14 +54,17 @@ function launcherAmong(names: readonly string[]): string {
 /** How long a read of what the window shows may take when the row reports where it stopped. */
 const FACTS_MILLISECONDS = 10_000;
 
+/** The most characters one read of what the window shows keeps. */
+const FACTS_LENGTH = 600;
+
 /**
  * What window `name` shows when a step has not finished: its agent's last events, the quick pick, the dialog, the notifications and the remote
  * indicator, each read within a bound and told as it came, so that a row that stops says what it was waiting on.
  */
 async function windowFacts(name: string): Promise<string> {
   function bounded<Value>(read: () => Promise<Value>): () => Promise<string> {
-    return async () =>
-      JSON.stringify(
+    return async () => {
+      const told = JSON.stringify(
         await Promise.race([
           read(),
           new Promise<string>(resolve => {
@@ -71,6 +74,10 @@ async function windowFacts(name: string): Promise<string> {
           }),
         ]),
       );
+      return told.length > FACTS_LENGTH
+        ? `${told.slice(0, FACTS_LENGTH)}…`
+        : told;
+    };
   }
   return [
     // The agent's own record needs no read of the page, which every read below may wait on if the window does not answer.
@@ -154,9 +161,14 @@ describe('the launcher of the exec-server path (card #2500, F-2008)', function (
         );
       });
     } finally {
+      // A close that fails is told and does not replace the failure of the step above it, which is what the row reports.
       await stamped(ROW_NAME, 'the first window closes', 200_000, () =>
         closeContained('f2008-launcher', pressEscape),
-      );
+      ).catch((caught: unknown) => {
+        console.log(
+          `${ROW_NAME}: the first window's close failed: ${String(caught)}`,
+        );
+      });
     }
     await stamped(ROW_NAME, 'the second window opens', 60_000, () =>
       openWindow('harness', 'f2008-launcher-again'),

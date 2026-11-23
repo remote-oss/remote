@@ -1,7 +1,8 @@
 /**
  * @fileoverview The steps of a row that has never run on CI, each stamped with how long it took and bounded, so that a
  * hang names its step and a row that stops stops at the step and not at the cut of the test runner (card #3003). It
- * imports nothing from the harness, so that the tools project can test it.
+ * imports nothing from the harness, and its rows sit beside it in the suite, so that a change to it reaches the `cli-path`
+ * launch alone.
  */
 
 /** The clock and the output of a step, which a test replaces. */
