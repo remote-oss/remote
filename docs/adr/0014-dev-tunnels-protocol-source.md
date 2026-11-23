@@ -1,7 +1,8 @@
 # ADR-0014: The tunnel service and its host speak the dev tunnels protocol, read from its MIT code
 
-- Status: accepted (the user, 2026-11-22, D-107: "I approve"). The admission of `microsoft/dev-tunnels-ssh`, added after
-  that approval, stands as a veto-only item put to the user on 2026-11-22.
+- Status: accepted (the user, 2026-11-22, D-107: "I approve", given to this ADR as it was written then). The admission
+  of `microsoft/dev-tunnels-ssh`, added after that approval, is the architects' under the same delegation, and stands
+  as a veto-only item on the user's list for confirmation.
 - Date: 2026-11-22
 - Deciders: the user (D-101, D-107), for the wire-compatible service and `microsoft/dev-tunnels`'s admissibility (the
   `dev-tunnels-ssh` amendment: veto-only); design by athena with proteus

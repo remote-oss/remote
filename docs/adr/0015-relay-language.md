@@ -101,6 +101,9 @@ Every package in the repository is TypeScript, and every gate is built for it (A
 
 ### R (fallback): the relay in Rust, with russh
 
+- **Licence:** `russh` is Apache-2.0 (crates.io 0.37.1; `[cli]` patches it from `microsoft/vscode-russh`, also
+  Apache-2.0). R would need it admitted as a dependency, which is the user's decision. ADR-0014 admits MIT sources only.
+
 If the spike fails, the relay is a Rust crate in the repository, and CI gains a second toolchain on GitHub's runners
 only:
 - **Toolchain:** a pinned toolchain from `rust-toolchain.toml`, and the cargo cache (rust-cache).
