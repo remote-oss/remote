@@ -151,6 +151,69 @@ function failureShown(window: string, milliseconds: number): Promise<void> {
   );
 }
 
+/** Answers the fingerprint pick of the window `alias` with `answer` and checks the failure dialog, the known-hosts file and that the window is unconnected. */
+async function cancelledPick(
+  alias: string,
+  answer: 'no' | 'dismiss',
+): Promise<void> {
+  const known = await asking(alias);
+  appendScript([
+    {surface: 'pick', match: 'fingerprint', answer, window: alias},
+    ...refusals(alias),
+  ]);
+  try {
+    await openWindow(alias, alias);
+    await waitFor(
+      `${alias} to show the failure dialog`,
+      () => recordLines('failureDialog', alias).length > 0,
+      90_000,
+    );
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    deepStrictEqual(
+      [
+        recordLines('failureDialog', alias).map(line => line.question),
+        knownLines(known),
+        await connected(alias),
+      ],
+      [[`Could not establish connection to "${alias}".`], [], false],
+    );
+  } finally {
+    await closeWindow(alias).catch(() => undefined);
+  }
+}
+
+/** Connects window `alias` to a host whose known key changed, with StrictHostKeyChecking `mode`, and checks the refusal, that nothing was asked, and that no file and no setting changed. */
+async function changedKeyRefused(alias: string, mode: string): Promise<void> {
+  const known = changedKnown(alias);
+  await checking(alias, known, mode);
+  const settings = readUserSettings();
+  appendScript(refusals(alias));
+  try {
+    const before = readFileSync(known, 'utf8');
+    await openWindow(alias, alias);
+    await failureShown(alias, 60_000);
+    deepStrictEqual(
+      {
+        failures: failuresOf(alias),
+        asked: [
+          ...recordLines('pick', alias),
+          ...recordLines('maskedInput', alias),
+        ].length,
+        known: readFileSync(known, 'utf8') === before,
+        settingsKept: readUserSettings() === settings,
+      },
+      {
+        failures: [changedDialog(alias)],
+        asked: 0,
+        known: true,
+        settingsKept: true,
+      },
+    );
+  } finally {
+    await closeWindow(alias).catch(() => undefined);
+  }
+}
+
 /** Waits for window `window` to be asked its fingerprint pick. */
 function pickAsked(window: string): Promise<void> {
   return waitFor(
@@ -201,38 +264,13 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
     }
   });
 
-  for (const [suffix, answer] of [
-    ['no', 'no'],
-    ['closed', 'dismiss'],
-  ] as const) {
-    it(`F-2305 AC-12, AC-13 (c3019-cancel-${suffix}): ${suffix === 'no' ? 'Cancel' : 'the pick closed with no choice'} ends in the failure dialog with no reason, leaves the known-hosts file empty, and leaves the window unconnected`, async () => {
-      const alias = `c3019-cancel-${suffix}`;
-      const known = await asking(alias);
-      appendScript([
-        {surface: 'pick', match: 'fingerprint', answer, window: alias},
-        ...refusals(alias),
-      ]);
-      try {
-        await openWindow(alias, alias);
-        await waitFor(
-          `${alias} to show the failure dialog`,
-          () => recordLines('failureDialog', alias).length > 0,
-          90_000,
-        );
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        deepStrictEqual(
-          [
-            recordLines('failureDialog', alias).map(line => line.question),
-            knownLines(known),
-            await connected(alias),
-          ],
-          [[`Could not establish connection to "${alias}".`], [], false],
-        );
-      } finally {
-        await closeWindow(alias).catch(() => undefined);
-      }
-    });
-  }
+  it('F-2305 AC-12, AC-13 (c3019-cancel-no): Cancel ends in the failure dialog with no reason, leaves the known-hosts file empty, and leaves the window unconnected', async () => {
+    await cancelledPick('c3019-cancel-no', 'no');
+  });
+
+  it('F-2305 AC-12, AC-13 (c3019-cancel-closed): the pick closed with no choice, which is how Escape and a loss of focus reach the extension, ends in the failure dialog with no reason, leaves the known-hosts file empty, and leaves the window unconnected', async () => {
+    await cancelledPick('c3019-cancel-closed', 'dismiss');
+  });
 
   it('F-2305 AC-9 (c3019-typed): a typed user@host gets the pick with the host part only', async () => {
     const alias = 'c3019-typed';
@@ -342,39 +380,17 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
       await closeWindow(alias).catch(() => undefined);
     }
   });
-  for (const mode of ['ask', 'yes', 'accept-new']) {
-    it(`F-2305 AC-16, AC-28 (c3021-changed-${mode.replace('-', '')}): a changed key with StrictHostKeyChecking ${mode} fails at once with the reason that the key changed, asks nothing, and changes no file and no setting`, async () => {
-      const alias = `c3021-changed-${mode.replace('-', '')}`;
-      const known = changedKnown(alias);
-      await checking(alias, known, mode);
-      const settings = readUserSettings();
-      appendScript(refusals(alias));
-      try {
-        const before = readFileSync(known, 'utf8');
-        await openWindow(alias, alias);
-        await failureShown(alias, 60_000);
-        deepStrictEqual(
-          {
-            failures: failuresOf(alias),
-            asked: [
-              ...recordLines('pick', alias),
-              ...recordLines('maskedInput', alias),
-            ].length,
-            known: readFileSync(known, 'utf8') === before,
-            settingsKept: readUserSettings() === settings,
-          },
-          {
-            failures: [changedDialog(alias)],
-            asked: 0,
-            known: true,
-            settingsKept: true,
-          },
-        );
-      } finally {
-        await closeWindow(alias).catch(() => undefined);
-      }
-    });
-  }
+  it('F-2305 AC-16, AC-28 (c3021-changed-ask): a changed key with StrictHostKeyChecking ask fails at once with the reason that the key changed, asks nothing, and changes no file and no setting', async () => {
+    await changedKeyRefused('c3021-changed-ask', 'ask');
+  });
+
+  it('F-2305 AC-16, AC-28 (c3021-changed-yes): a changed key with StrictHostKeyChecking yes fails at once with the reason that the key changed, asks nothing, and changes no file and no setting', async () => {
+    await changedKeyRefused('c3021-changed-yes', 'yes');
+  });
+
+  it('F-2305 AC-16, AC-28 (c3021-changed-acceptnew): a changed key with StrictHostKeyChecking accept-new fails at once with the reason that the key changed, asks nothing, and changes no file and no setting', async () => {
+    await changedKeyRefused('c3021-changed-acceptnew', 'accept-new');
+  });
 
   it('F-2305 AC-17 (c3021-retry-changed): Retry on the changed key’s dialog gives the same dialog again and changes no file', async () => {
     const alias = 'c3021-retry-changed';

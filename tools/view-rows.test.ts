@@ -8,6 +8,7 @@
 import {deepStrictEqual, notDeepStrictEqual} from 'node:assert';
 import {
   mergeReads,
+  shownLabels,
   wheelDirection,
   wheelTopProbe,
   type ViewRowRead,
@@ -216,6 +217,72 @@ describe('the probe of the wheel that stands a virtualized list at its top (card
     deepStrictEqual(
       {verdict: await wheelTopProbe(scriptedProbe(reads, sent)), sent},
       {verdict: {settled: true, sign: -400, reads: 2}, sent: [-400, 400, 400]},
+    );
+  });
+});
+
+describe('the labels a walk that could not reach its list’s top tells on stderr (card #3000)', () => {
+  it('the labels stand at the first 20, each cut at 80 characters, and the left-out ones are named as more', () => {
+    const labels = [
+      'x'.repeat(81),
+      'a',
+      'b',
+      'c',
+      'd',
+      'e',
+      'f',
+      'g',
+      'h',
+      'i',
+      'j',
+      'k',
+      'l',
+      'm',
+      'n',
+      'o',
+      'p',
+      'q',
+      'r',
+      's',
+      't',
+      'u',
+      'v',
+    ];
+    deepStrictEqual(
+      shownLabels(labels),
+      `${'x'.repeat(80)}…, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s and 3 more`,
+    );
+  });
+
+  it('a list of 20 labels, one of exactly 80 characters, stands whole with no tail, and the empty list tells nothing', () => {
+    const labels = [
+      'y'.repeat(80),
+      'a',
+      'b',
+      'c',
+      'd',
+      'e',
+      'f',
+      'g',
+      'h',
+      'i',
+      'j',
+      'k',
+      'l',
+      'm',
+      'n',
+      'o',
+      'p',
+      'q',
+      'r',
+      's',
+    ];
+    deepStrictEqual(
+      [shownLabels(labels), shownLabels([])],
+      [
+        `${'y'.repeat(80)}, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s`,
+        '',
+      ],
     );
   });
 });
