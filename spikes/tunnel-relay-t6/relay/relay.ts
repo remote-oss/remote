@@ -264,16 +264,19 @@ async function hostLeg(socket: WebSocket, tunnelId: string, agent: string): Prom
       hostSessions.delete(tunnelId);
     }
   });
-  if (process.env.RELAY_DEBUG === '1') {
-    const send = socket.send.bind(socket);
-    let written = 0;
-    socket.send = ((data: ArrayBuffer | Buffer, ...rest: unknown[]) => {
-      const bytes = Buffer.from(data instanceof ArrayBuffer ? new Uint8Array(data) : data);
-      written += 1;
+  // dev-tunnels-ssh's WebSocketStream passes `send` a buffer it reuses for the next packet, as a browser WebSocket
+  // copies on send. ws queues the buffer as it is while the socket is busy, so the relay copies each one first.
+  const send = socket.send.bind(socket);
+  const debug = process.env.RELAY_DEBUG === '1';
+  let written = 0;
+  socket.send = ((data: ArrayBuffer | Buffer, ...rest: unknown[]) => {
+    const bytes = Buffer.from(data instanceof ArrayBuffer ? new Uint8Array(data) : data);
+    written += 1;
+    if (debug) {
       say(`host leg ${tunnelId}: relay -> host message ${String(written)}, ${String(bytes.length)} bytes, starts ${bytes.subarray(0, 12).toString('hex')}`);
-      return (send as (...parameters: unknown[]) => void)(data, ...rest);
-    }) as typeof socket.send;
-  }
+    }
+    return (send as (...parameters: unknown[]) => void)(bytes, ...rest);
+  }) as typeof socket.send;
   try {
     await session.connect(new WebSocketStream(socket as never));
   } catch (caught) {
@@ -317,7 +320,8 @@ async function clientLeg(socket: WebSocket, tunnelId: string): Promise<void> {
     if (debug) {
       say(`client leg ${tunnelId}: host -> client ${String(data.length)} bytes at ${String(Date.now() - opened)} ms`);
     }
-    socket.send(data);
+    // The channel's buffer may be reused once this handler returns, and ws keeps what it is given: copy it.
+    socket.send(Buffer.from(data));
     channel.adjustWindow(data.length);
   });
   const ended = (side: string) => {
