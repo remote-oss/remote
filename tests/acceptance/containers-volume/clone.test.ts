@@ -34,6 +34,7 @@ import {
   waitForDialog,
   waitForQuickPick,
 } from '../windows/renderer.ts';
+import {ALPINE_3_20} from '../windows/hub-images.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -102,7 +103,7 @@ async function folderOfVolume(volume: string, folder: string): Promise<string> {
     '--rm',
     '--volume',
     `${volume}:/w`,
-    'alpine:3.20',
+    ALPINE_3_20,
     'sh',
     '-c',
     'ls -A "/w/$0" 2>/dev/null | tr "\\n" " " || echo missing; [ -d "/w/$0" ] || echo missing',

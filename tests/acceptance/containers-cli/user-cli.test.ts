@@ -15,6 +15,7 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import {refreshCliBin} from '../../../packages/remote-containers/src/cli-bin/cli-bin.ts';
 import {nodeCliBinFs} from '../../../packages/remote-containers/src/cli-bin/node-cli-bin-fs.ts';
+import {ALPINE_3_22} from '../windows/hub-images.ts';
 
 const execFileAsync = promisify(execFile);
 const PACKAGE = path.join(
@@ -157,7 +158,7 @@ describe('the devcontainer launcher from a shell (card containers-211)', functio
   /** A folder named `name` in the run's folder, with `configuration` as its default file. */
   function project(
     name: string,
-    configuration: string | false = '{"image": "alpine:3.22"}',
+    configuration: string | false = `{"image": "${ALPINE_3_22}"}`,
     file: string[] = ['.devcontainer', 'devcontainer.json'],
   ): string {
     const folder = path.join(root, name);
@@ -387,7 +388,7 @@ describe('the devcontainer launcher from a shell (card containers-211)', functio
     );
     writeFileSync(
       path.join(folder, '.devcontainer', 'Dockerfile'),
-      'FROM alpine:3.22\nLABEL c211=1\n',
+      `FROM ${ALPINE_3_22}\nLABEL c211=1\n`,
     );
     const image = `c211-built:${path.basename(root).toLowerCase()}`;
     const built = await devcontainer([

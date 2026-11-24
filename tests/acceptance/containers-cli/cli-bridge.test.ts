@@ -18,6 +18,7 @@ import {cliPathsOf} from '../../../packages/remote-containers/src/cli/cli-paths.
 import type {CliTarget} from '../../../packages/remote-containers/src/cli/cli-arguments.ts';
 import {nodeCliHost} from '../../../packages/remote-containers/src/cli/node-cli-host.ts';
 import {systemCliPorts} from '../../../packages/remote-containers/src/cli/node-cli-ports.ts';
+import {ALPINE_3_22} from '../windows/hub-images.ts';
 
 const REPOSITORY_ROOT = path.join(import.meta.dirname, '..', '..', '..');
 const PACKAGE = path.join(REPOSITORY_ROOT, 'packages', 'remote-containers');
@@ -93,7 +94,7 @@ describe('the dev container CLI through the bridge, on local Docker (card contai
       path.join(folder, 'ws', '.devcontainer', 'devcontainer.json'),
       JSON.stringify({
         name: 'c3-${localEnv:C3_EMPTY:dflt}',
-        image: 'alpine:3.22',
+        image: ALPINE_3_22,
         postCreateCommand: 'echo created > /tmp/c3-created',
         initializeCommand: `printf '%s' '\${containerEnv:PATH}' > ${initializeProbe}`,
       }),
@@ -236,7 +237,7 @@ describe('the dev container CLI through the bridge, on local Docker (card contai
       path.join(featured, '.devcontainer', 'devcontainer.json'),
       JSON.stringify({
         name: 'featured',
-        image: 'alpine:3.22',
+        image: ALPINE_3_22,
         features: {'./feat': {}},
         containerEnv: {PLAIN: '1'},
         remoteEnv: {WITH: '${containerEnv:PLAIN}'},
