@@ -465,7 +465,7 @@
       "unparsable.test.ts": 0.1,
       "x11.test.ts": 10.2,
       "help-commands.test.ts": 1.1,
-      "host-key.test.ts": 0.6
+      "host-key.test.ts": 1
     },
     "ssh-killed-12": {
       "killed.test.ts": 6.4
