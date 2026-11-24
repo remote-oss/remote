@@ -7,9 +7,11 @@ runs:
   steps:
     # the version comes from packageManager in package.json
     - uses: pnpm/action-setup@v6
+    # no cache of setup-node's own: the store's cache is the step below, keyed by the runner's kind
     - uses: actions/setup-node@v7
       with:
         node-version-file: .node-version
+        package-manager-cache: false
     - id: store
       shell: bash
       run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
