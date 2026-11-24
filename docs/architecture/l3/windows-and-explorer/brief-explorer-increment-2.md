@@ -87,7 +87,7 @@ the push and the signal. It keeps slice 1's three ids as they are.
     deletes the claim. A live owner's next write recreates its own file from its memory, so a fold that races it
     loses nothing. A write never renamed into place is ignored, and removed once it's a day old.
   - **The earlier key:** the `folder.history.v1` value an earlier version kept in `globalState` is read as the
-    oldest layer, each host's newest entry at time 0 and its older ones a step earlier. It's never written again,
+    oldest layer, every entry at time 0, its order kept because ties keep the stored order. It's never written again,
     since any write of `globalState` rewrites the whole entry.
   - BR-10's observable claims (the history survives reloads and restarts, and every window of the profile shares it)
     hold. Its property name is reference data, and the place's restatement as the per-profile global storage is asked

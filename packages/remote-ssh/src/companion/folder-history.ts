@@ -174,8 +174,8 @@ function eventsIn(text: string | undefined): HistoryEvent[] {
 }
 
 /**
- * The earlier version's history as events, the oldest of all: the newest entry of each host at time 0 and each older
- * one a step earlier, so that the list keeps its order. A malformed value is no history.
+ * The earlier version's history as events, the oldest of all, each at time 0: the list keeps its order because the
+ * read keeps the order of events that tie. A malformed value is no history.
  */
 function legacyEvents(memento: HistoryMemento): HistoryEvent[] {
   const stored = memento.get(FOLDER_HISTORY_KEY);
@@ -193,11 +193,11 @@ function legacyEvents(memento: HistoryMemento): HistoryEvent[] {
     const hostKey = host.hostKey;
     return host.entries
       .flatMap(value => entryOf(value) ?? [])
-      .map((entry, position) => ({
+      .map(entry => ({
         host: hostKey,
         entry,
         kind: 'opened' as const,
-        time: -position,
+        time: 0,
       }));
   });
 }
@@ -272,8 +272,10 @@ function hostsOf(
     .map(([hostKey, winners]) => ({
       hostKey,
       entries: winners
-        .sort((first, second) =>
-          decides(first.event, first.session, second) ? -1 : 1,
+        .sort(
+          (first, second) =>
+            second.event.time - first.event.time ||
+            second.session.localeCompare(first.session),
         )
         .map(winner => winner.event.entry),
     }));

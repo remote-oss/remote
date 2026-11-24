@@ -201,6 +201,15 @@ describe('the folder history store, written by two windows at once (card #3095)'
     );
   });
 
+  it('two entries opened at the same time list the later session’s first', async () => {
+    const files = new MemoryFiles();
+    await windowOn(files, 'aaaa').recordOpened('host-a', folder('/from-a'));
+    await windowOn(files, 'bbbb').recordOpened('host-a', folder('/from-b'));
+    deepStrictEqual(windowOn(files, 'cccc').stored(), [
+      {hostKey: 'host-a', entries: [folder('/from-b'), folder('/from-a')]},
+    ]);
+  });
+
   it('two events of one entry at the same time are ordered by their session', async () => {
     const files = new MemoryFiles();
     await windowOn(files, 'bbbb').recordOpened('host-a', folder('/x'));
@@ -235,6 +244,48 @@ describe('the folding of other windows’ files (card #3095)', () => {
         ],
         [{hostKey: 'host-a', entries: [folder('/new'), folder('/old')]}],
       ],
+    );
+  });
+
+  it('a fold never replaces this window’s newer event of an entry with the older one of the file it claims', async () => {
+    const files = new MemoryFiles();
+    files.files.set(`${FOLDER}/bbbb.json`, {
+      text: JSON.stringify({
+        events: [
+          {host: 'host-a', entry: folder('/a'), kind: 'opened', time: 2},
+          {host: 'host-a', entry: folder('/b'), kind: 'opened', time: 2},
+        ],
+      }),
+      modified: 0,
+    });
+    files.clock = 5;
+    const writer = windowOn(files, 'aaaa');
+    await writer.recordOpened('host-a', folder('/a'));
+    files.clock = ONE_DAY + 10;
+    await writer.recordOpened('host-a', folder('/c'));
+    const own = JSON.parse(files.read(`${FOLDER}/aaaa.json`) ?? '{}') as {
+      events: Array<{entry: {path: string}; time: number}>;
+    };
+    deepStrictEqual(
+      own.events.map(event => [event.entry.path, event.time]).sort(),
+      [
+        ['/a', 5],
+        ['/b', 2],
+        ['/c', ONE_DAY + 10],
+      ],
+    );
+  });
+
+  it('a window never claims its own file, however old it is', async () => {
+    const files = new MemoryFiles();
+    const owner = windowOn(files, 'aaaa');
+    await owner.recordOpened('host-a', folder('/one'));
+    files.clock += ONE_DAY + 1;
+    files.operations.length = 0;
+    await owner.recordOpened('host-a', folder('/two'));
+    deepStrictEqual(
+      files.operations.filter(operation => operation.includes('claim')),
+      [],
     );
   });
 
