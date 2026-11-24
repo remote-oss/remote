@@ -1,6 +1,6 @@
 # ADR-0016: The tunnel host agent is our own TypeScript program on the dev tunnels SDK and lib-server
 
-- Status: proposed (athena; proteus's Build and CI section to come before acceptance)
+- Status: proposed (athena; Build and CI by proteus, who agrees with the Decision)
 - Date: 2026-11-24
 - Deciders: athena and proteus
 - Scope: the tunnel host agent (`packages/tunnel-agent`, package `tunnel-agent`), its build, its releases and its tests
@@ -51,7 +51,8 @@ connections an *extension* opens, and the agent is no extension.
    `ruling-22-tunnel-rules` item 8 is **our** client, as F-8902 Q3's accepted compatibility note says.
 3. **It runs on Node.js**, shipped as one archive per platform, Linux x64 and Linux arm64. The archive holds an
    official Node.js build, the bundled agent, and the third-party notices. The agent never updates itself (point 8).
-   proteus's Build and CI section below settles the packaging details.
+   The Node.js build is one exact version, pinned with its checksums (Build and CI, 2), and the agent's rows run on
+   that Node, not the runner's. The Build and CI section below settles the packaging details.
 4. **Not chosen:**
    - a patched `[cli]`: a fork of the editor's CLI kept in step with every editor release, in Rust, with its own
      server download replaced;
@@ -81,8 +82,65 @@ connections an *extension* opens, and the agent is no extension.
 
 ## Build and CI (proteus)
 
-To come: the archive's shape, the Node.js version and how it's fetched and verified, the hosted x64 and arm64 jobs, and
-where releases are published.
+1. **The archive.** There's one per platform, `tunnel-agent-<version>-linux-x64.tar.gz` and
+   `…-linux-arm64.tar.gz`. Each has one top folder, `tunnel-agent-<version>-linux-<arch>/`, holding:
+   - `bin/tunnel-agent`: a POSIX `sh` launcher. It resolves its own path, so a symlink in `~/.local/bin` and the systemd
+     unit both work, and runs the bundled agent with the archive's own Node;
+   - `node/bin/node` and `node/LICENSE`, taken from the official Node.js tarball. Nothing else of it is kept: no
+     `npm`, no headers;
+   - `lib/tunnel-agent.mjs`: the agent, bundled by esbuild (ADR-0002 decision 3) into one file, with its libraries and
+     the SDK compiled in;
+   - `THIRD-PARTY-NOTICES.txt`: every package the bundle holds, by name and version, with that package's own licence
+     text. It's made from esbuild's metafile, so the list is the bundle's and not the lockfile's.
+
+   **The bundle holds no native addon.** The SDK's connections package depends on `websocket`, which asks for
+   `bufferutil` and `utf-8-validate`, two native addons (`node-gyp-build`). The bundle leaves both out, and `websocket`
+   runs on its JavaScript code paths. The build fails if the metafile names any `.node` file or `node-gyp-build`, and a
+   row runs the bundle's `--version` with neither addon present. So the bundle is the same bytes in both archives, only
+   the Node binary differs, and one runner builds both.
+
+   **The build is reproducible.** Entries are sorted, the owner is 0 and the modes are fixed. Every mtime is the
+   built commit's time, and `gzip -n` keeps the name and time out of the header. Two builds of one commit give the
+   same sha256, and a unit row checks it.
+2. **Node.js.** `.node-version` names a major (24), which setup-node resolves to that major's latest patch. The
+   archive needs one exact build:
+   - `packages/tunnel-agent/node.json` pins the version (the latest LTS patch of that major) and the sha256 of
+     `node-v<version>-linux-x64.tar.xz` and of `…-linux-arm64.tar.xz`.
+   - The build fetches both from `https://nodejs.org/dist/v<version>/`, and fails on any mismatch with the pin.
+   - The pin changes only by a reviewed PR, made by `tools/pin-node.ts <version>`. The tool checks the release's
+     `SHASUMS256.txt.asc` with gpg, against the Node.js release team's keys, which the repository keeps as one file
+     taken from their keys repository at a named commit. Then it writes the two sums.
+
+   A Node.js security release makes a new agent release, since the agent never updates itself.
+3. **Hosted jobs.** They run on GitHub's runners, read no secret and push nothing.
+   - **`tunnel-agent`** (ci.yml, on `ubuntu-24.04`) builds both archives. It checks each one's layout, its notices and
+     the no-native rule. It runs the x64 archive's `bin/tunnel-agent --version`, and its `update` answer, with no
+     network. It uploads both archives as the run's artifact, kept 7 days.
+   - **The agent rows** run in #3076's `tunnels-conformance`, as a matrix over `ubuntu-24.04` and `ubuntu-24.04-arm`.
+     Each job needs `tunnel-agent`, takes its own platform's archive from the artifact, and runs the agent **with the
+     archive's Node**, so the program tested is the program shipped. The agent works against the run's relay on the
+     same runner (the brief, §8). The rows are the brief's:
+     - registration, re-register and rename (F-8201 AC-41 to AC-43);
+     - the control protocol subset (§4);
+     - `serve` getting the server for a commit the host lacks (F-8104 AC-35), from the product `acceptance (real
+       server)` already uses, `lib-product`'s `vscodium-reduced.json`: a public download, no secret;
+     - service mode (F-8902 AC-17).
+   - **When they run:** on a pull request that reaches them, on every merge to main, and in the nightly, like #3076's
+     job. Their reach is the agent's package, lib-server, lib-host, lib-log, lib-identifiers, `node.json`, the build
+     tool and `tests/tunnels-conformance/`. `ci-gate` needs both jobs, and their rows join the known-red ledger like a
+     launch's.
+4. **Releases** (proposed: where builds are published is the user's call, ADR-0002 decision 5):
+   - A tag `tunnel-agent-v<version>` on a main commit starts a workflow of its own, on the `push` of that tag only. It
+     runs the same build and agent rows, through a reusable workflow that ci.yml also calls. Only then does it attach
+     the two archives and a `SHA256SUMS` to the tag's GitHub release in this repository, with a build provenance
+     attestation for each archive.
+   - The release lives outside ci.yml because `ci-gate` must need every ci.yml job (`check-ci-gate`), and a release
+     job can't wait for the gate that waits for it.
+   - The one job that writes holds `contents: write`, `id-token: write` and `attestations: write`, on that `push`
+     only, which is an event `check-workflow-tokens` allows a write on. No other job writes, and none reads a secret.
+   - A user checks a download with `sha256sum -c SHA256SUMS`, or with `gh attestation verify`.
+   - The first release waits for the user's yes, through hermes. Until then the run's artifact is the build's
+     output.
 
 ## Check
 

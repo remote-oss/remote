@@ -120,7 +120,14 @@ The agent's command line is ours (R-113). It has only what the criteria need (R-
 
 - **Proof:** #3076's per-run relay runs the agent as the host. Our client's protocol subset (or a test client that
   speaks it) connects through the relay. A hosted job on Linux x64 and one on Linux arm64 each get the server for a
-  commit the host lacks (F-8104 AC-35).
+  commit the host lacks (F-8104 AC-35). #3076's job fits, with these additions (ADR-0016, Build and CI, 3):
+  - **an arm64 leg** for the agent rows, on `ubuntu-24.04-arm`. Each leg builds the relay image itself, since two
+    runners can't share a Docker network, so the image's Node base is pinned by its multi-platform index digest, not
+    one platform's. The Rust client stage stays on x64 only: the agent rows need only the TypeScript test client;
+  - **the agent's archive**, run with its own Node, as the host, with the stub identity's allowlisted test token on
+    `login --token-stdin`;
+  - **service mode on a hosted runner** (F-8902 AC-17) needs `systemctl --user` for the runner's account. That's
+    measured first with a probe, not assumed. If it can't run there, the rows run the unit in a systemd container.
 - **Cards, in order:**
   1. lib-host's local `HostChannel`, with rows against lib-server's script goldens.
   2. The agent skeleton: the package, check-layout and the network rule (ADR-0016), configuration and state (§5),
@@ -130,7 +137,9 @@ The agent's command line is ours (R-113). It has only what the criteria need (R-
   5. The control protocol subset (§4), with daedalus's inventory.
   6. Serving the server through lib-server (§7; F-8104 AC-35).
   7. Service mode (§6; F-8902 AC-17).
-  8. The release archives for x64 and arm64 (ADR-0016, proteus; F-8902 AC-18).
+  8. The build and release (proteus; ADR-0016, Build and CI; F-8902 AC-18): the archive build with its Node pin and
+     notices, the `tunnel-agent` job, the agent rows' arm64 leg in #3076's job, and the tag-triggered release
+     workflow.
 
 ## 9. For the user, through hermes
 
