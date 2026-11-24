@@ -48,7 +48,11 @@ describe('the scan of the files an extension stores (card #3109)', () => {
     });
   });
 
-  it('#3109: a file that cannot be read fails the scan with its path, instead of passing as nothing found', () => {
+  it('#3109: a file that cannot be read fails the scan with its path, instead of passing as nothing found', function () {
+    // A superuser reads a file whatever its mode, so the file cannot be made unreadable for it.
+    if (process.getuid?.() === 0) {
+      this.skip();
+    }
     inScratch(folder => {
       const file = path.join(folder, 'locked');
       writeFileSync(file, 'host-a');
