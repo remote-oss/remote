@@ -323,7 +323,7 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
         phases.tell(told);
       }
       // The label is told once: with the CLI path when the plan says so, before the server is ready; in the other flows
-      // only when the resolve has succeeded, so that the title and the indicator change together.
+      // only when the resolve has ended, whichever way, never for a cancel, so that the title and the indicator change in order.
       let labelHeld = false;
       function tellLabel(): void {
         if (!labelHeld) {
@@ -371,7 +371,10 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
         result.release();
         return refusal(input, {kind: 'cancelled'});
       }
-      if ('release' in result) {
+      if (
+        !controller.signal.aborted &&
+        !('kind' in result && result.kind === 'cancelled')
+      ) {
         tellLabel();
       }
       return result;

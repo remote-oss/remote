@@ -299,9 +299,10 @@ describe('the connector over the connect pipeline', () => {
       ]);
     });
 
-    it('a direct install whose resolve fails after the host reported tells no label', async () => {
+    it('a direct install whose resolve fails after the host reported tells the label at the resolve’s end', async () => {
       deepStrictEqual(await orderOf({openTunnel: tunnelFails}), [
         'server started',
+        'label told',
       ]);
     });
 
