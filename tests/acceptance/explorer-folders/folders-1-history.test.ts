@@ -48,10 +48,7 @@ import {
   viewWindow,
   visit,
 } from '../windows/explorer-folders.ts';
-import {
-  STORED_EXTENSION_KEY,
-  storedPathsOf,
-} from '../windows/stored-history.ts';
+import {HISTORY_FOLDER, storedPathsOf} from '../windows/stored-history.ts';
 import {HOST_A, HOST_B, CURRENT, IN_NEW, refreshed} from './folders-support.ts';
 
 describe('the recent folders under a host (card coverage-102, part 1)', function () {
@@ -309,9 +306,9 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
         30_000,
       );
     }
-    // The history of the row's folders after each visit, as the window answers it and as the editor's global storage
-    // database holds it, for the message of a settle that fails: card #2757 found an entry missing from the window's
-    // reading, and the two together say at which visit it left and whether the stored value lost it too.
+    // The history of the row's folders after each visit, as the window answers it and as the extension's history files
+    // hold it, for the message of a settle that fails: card #2757 found an entry missing from the window's reading, and
+    // the two together say at which visit it left and whether the files lost it too.
     const trace: string[] = [];
     async function told(read: () => Promise<string[]>): Promise<string> {
       // Read for the message only: a read that fails is told, and never fails the row.
@@ -320,30 +317,18 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
         (caught: unknown) => `(unreadable: ${String(caught)})`,
       );
     }
-    async function storedPaths(): Promise<string[]> {
-      const {DatabaseSync} = await import('node:sqlite');
-      const database = new DatabaseSync(
-        path.join(
+    function storedPaths(): Promise<string[]> {
+      // A missing folder is no empty history: the read rejects, so that it is not read as a lost entry.
+      return Promise.resolve().then(() => {
+        const files = path.join(
           variable('HARNESS_USER_DATA'),
-          'User/globalStorage/state.vscdb',
-        ),
-        {readOnly: true},
-      );
-      try {
-        const found = database
-          .prepare('select value from ItemTable where key = ?')
-          .get(STORED_EXTENSION_KEY);
-        const text = found?.value;
-        if (typeof text !== 'string') {
-          // A missing row is no empty history: the read says it found none, so that it is not read as a lost entry.
-          throw new Error(
-            `the state database has no ${STORED_EXTENSION_KEY} row`,
-          );
-        }
-        return storedPathsOf(text, HOST_B, scope);
-      } finally {
-        database.close();
-      }
+          ...HISTORY_FOLDER,
+        );
+        const texts = readdirSync(files)
+          .filter(name => !name.includes('.tmp-'))
+          .map(name => readFileSync(path.join(files, name), 'utf8'));
+        return storedPathsOf(texts, HOST_B, scope);
+      });
     }
     async function visited(name: string): Promise<void> {
       await visit(HOST_B, name);

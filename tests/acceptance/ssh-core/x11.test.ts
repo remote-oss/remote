@@ -43,7 +43,10 @@ const DISPLAY_LINE = /^DISPLAY=localhost:\d+\.0\n/;
 /** The X client's own report of its connection to the display. */
 const CONNECTED = /\nname of display: +localhost:\d+\.0\n/;
 
-/** The files of the client that are not logs, caches or the editor's own state, as kinds: ids and numbers become placeholders. A root that doesn't exist has none. */
+/**
+ * The files of the client that are not logs, caches or the editor's own state, as kinds: ids (a window session's UUID
+ * among them) and numbers become placeholders. A root that doesn't exist has none.
+ */
 function clientFileKinds(): string[] {
   const roots: Array<[string, string]> = [
     [variable('HARNESS_USER_DATA'), 'USER'],
@@ -66,7 +69,15 @@ function clientFileKinds(): string[] {
       files(folder).map(file => `${label}/${path.relative(folder, file)}`),
     )
     .filter(file => !noise.test(file))
-    .map(file => file.replace(/[0-9a-f]{32}/g, 'H').replace(/\d+/g, 'N'))
+    .map(file =>
+      file
+        .replace(
+          /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g,
+          'U',
+        )
+        .replace(/[0-9a-f]{32}/g, 'H')
+        .replace(/\d+/g, 'N'),
+    )
     .sort();
 }
 
