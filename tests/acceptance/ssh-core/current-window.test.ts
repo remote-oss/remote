@@ -18,7 +18,6 @@ import {
   nextEmptyWindow,
   openWindow,
   recordLines,
-  sshChildren,
   sshdLog,
   userSettings,
   variable,
@@ -77,17 +76,21 @@ async function switched(
   return next;
 }
 
+/** The pids of this machine's ssh processes toward the host. */
+async function sshOfHost(): Promise<number[]> {
+  return (await hostConnections())
+    .filter(each => each.program === 'ssh')
+    .map(each => each.processId);
+}
+
 /**
- * The pids of the ssh this row's own windows started: the ssh children of the run's connection helpers now, of
- * which the row's connections are the only ones open, so a master another row's ControlPersist left is not among
- * them (card #3131).
+ * The pids of the ssh toward the host that `after` lists but `before` does not: the row's own, started by its
+ * windows between the two reads — in the local-server mode as the ssh of a connection helper, in the terminal
+ * mode without one — while a master another row's ControlPersist left is in both and not among them (card
+ * #3131).
  */
-async function sshOfRow(): Promise<number[]> {
-  const pids: number[] = [];
-  for (const helperId of await connectionHelpers()) {
-    pids.push(...(await sshChildren(helperId)));
-  }
-  return pids;
+function newSsh(before: readonly number[], after: readonly number[]): number[] {
+  return after.filter(each => !before.includes(each));
 }
 
 /** The linux clock ticks per second that /proc's process starttimes count in. */
@@ -186,12 +189,16 @@ async function sshListed(
  * its command line and whether the row's own connection started it — so the failure names the red's processes
  * (card #3131).
  */
-async function counted(check: () => void, rowStart: number): Promise<void> {
+async function counted(
+  check: () => void,
+  rowStart: number,
+  rowPids: readonly number[],
+): Promise<void> {
   try {
     check();
   } catch (failure) {
     throw new Error(
-      `${String(failure)}\n${await sshListed(rowStart, await sshOfRow())}`,
+      `${String(failure)}\n${await sshListed(rowStart, rowPids)}`,
       {cause: failure},
     );
   }
@@ -201,12 +208,15 @@ async function counted(check: () => void, rowStart: number): Promise<void> {
  * Waits up to 15 s for the row to leave no helper and no ssh of its own, and throws naming what is left: the
  * helpers, and every ssh toward the host with its command line and whether the row counted it (card #3131).
  */
-async function rowClean(rowStart: number): Promise<void> {
+async function rowClean(
+  rowStart: number,
+  rowPids: readonly number[],
+): Promise<void> {
   const clean = await waitFor(
     'no helper or ssh of the row left',
     async () =>
       (await connectionHelpers()).length === 0 &&
-      (await sshOfRow()).length === 0,
+      (await sshOfHost()).every(each => !rowPids.includes(each)),
     15_000,
   ).then(
     () => true,
@@ -214,7 +224,7 @@ async function rowClean(rowStart: number): Promise<void> {
   );
   if (!clean) {
     throw new Error(
-      `helpers left: ${(await connectionHelpers()).join(', ')}\n${await sshListed(rowStart, await sshOfRow())}`,
+      `helpers left: ${(await connectionHelpers()).join(', ')}\n${await sshListed(rowStart, rowPids)}`,
     );
   }
 }
@@ -560,10 +570,11 @@ describe('Connect Current Window to Host', function () {
       async () => (await connectionHelpers()).length === 0,
       15_000,
     );
+    const before = await sshOfHost();
     await openWindow('harness', 'c3014-leave');
     await connectedWithin('c3014-leave', 90_000);
     const helpers = await connectionHelpers();
-    const sshPids = await sshOfRow();
+    const sshPids = newSsh(before, await sshOfHost());
     const servers = await serverMainProcesses();
     const next = await switched('c3014-leave', {label: 'noforward'});
     try {
@@ -572,25 +583,31 @@ describe('Connect Current Window to Host', function () {
       const leftHelpers = (await connectionHelpers()).filter(each =>
         helpers.includes(each),
       );
-      const leftSsh = (await sshOfRow()).filter(each => sshPids.includes(each));
-      await counted(() => {
-        deepStrictEqual(
-          [
-            {
-              helpers: helpers.length,
-              sshPids: sshPids.length > 0,
-              servers: servers.length > 0,
-            },
-            leftHelpers,
-            leftSsh,
-            servers.every(each => after.includes(each)),
-          ],
-          [{helpers: 1, sshPids: true, servers: true}, [], [], true],
-        );
-      }, rowStart);
+      const leftSsh = (await sshOfHost()).filter(each =>
+        sshPids.includes(each),
+      );
+      await counted(
+        () => {
+          deepStrictEqual(
+            [
+              {
+                helpers: helpers.length,
+                sshPids: sshPids.length > 0,
+                servers: servers.length > 0,
+              },
+              leftHelpers,
+              leftSsh,
+              servers.every(each => after.includes(each)),
+            ],
+            [{helpers: 1, sshPids: true, servers: true}, [], [], true],
+          );
+        },
+        rowStart,
+        sshPids,
+      );
     } finally {
       await closeWindow(next).catch(() => undefined);
-      await rowClean(rowStart);
+      await rowClean(rowStart, sshPids);
     }
   });
 
@@ -598,7 +615,7 @@ describe('Connect Current Window to Host', function () {
     const rowStart = Date.now();
     try {
       await closeAllButLocal();
-      await rowClean(rowStart);
+      await rowClean(rowStart, []);
       await userSettings({
         'remote.SSH.remotePlatform': {
           ...PLATFORMS['remote.SSH.remotePlatform'],
@@ -606,26 +623,28 @@ describe('Connect Current Window to Host', function () {
         },
         'remote.SSH.useLocalServer': false,
       });
+      const before = await sshOfHost();
       await openWindow('harness', 'c3014-own');
       await connectedWithin('c3014-own', 90_000);
-      const first = await sshOfRow();
+      const first = newSsh(before, await sshOfHost());
       const next = await switched('c3014-own', {typed: '127.0.0.1'});
       await connectedEmpty(next, '127.0.0.1', 90_000);
       const goneFirst = await waitFor(
         'the first ssh gone',
-        async () => (await sshOfRow()).every(each => !first.includes(each)),
+        async () => (await sshOfHost()).every(each => !first.includes(each)),
         10_000,
       ).then(
         () => true,
         () => false,
       );
-      const second = await sshOfRow();
       const since = new Date().toISOString();
+      const beforeSecond = await sshOfHost();
       const again = await switched(next, {typed: '127.0.0.1'});
       await connectedEmpty(again, '127.0.0.1', 90_000);
+      const second = newSsh(beforeSecond, await sshOfHost());
       const goneSecond = await waitFor(
         'the second ssh gone',
-        async () => (await sshOfRow()).every(each => !second.includes(each)),
+        async () => (await sshOfHost()).every(each => !second.includes(each)),
         10_000,
       ).then(
         () => true,
@@ -640,24 +659,28 @@ describe('Connect Current Window to Host', function () {
         10_000,
       );
       const logins = await acceptedKeyLogins(since);
-      await counted(() => {
-        deepStrictEqual(
-          {
-            first: first.length > 0,
-            goneFirst,
-            second: second.length > 0,
-            goneSecond,
-            logins,
-          },
-          {
-            first: true,
-            goneFirst: true,
-            second: true,
-            goneSecond: true,
-            logins: 1,
-          },
-        );
-      }, rowStart);
+      await counted(
+        () => {
+          deepStrictEqual(
+            {
+              first: first.length > 0,
+              goneFirst,
+              second: second.length > 0,
+              goneSecond,
+              logins,
+            },
+            {
+              first: true,
+              goneFirst: true,
+              second: true,
+              goneSecond: true,
+              logins: 1,
+            },
+          );
+        },
+        rowStart,
+        second,
+      );
     } finally {
       await userSettings({
         ...PLATFORMS,
