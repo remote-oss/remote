@@ -126,8 +126,8 @@ connections an *extension* opens, and the agent is no extension.
    A Node.js security release makes a new agent release, since the agent never updates itself.
 3. **Hosted jobs.** They run on GitHub's runners, read no secret and push nothing.
    - **`tunnel-agent`** (ci.yml, on `ubuntu-24.04`) builds both archives. It checks each one's layout, its notices and
-     the no-native rule. It runs the x64 archive's `bin/tunnel-agent --version`, and its `update` answer, with no
-     network. It uploads both archives as the run's artifact, kept 7 days.
+     the no-native rule. It runs the x64 archive's `bin/tunnel-agent --version` with no network. The agent has no
+     update command or method (brief §2, §4). It uploads both archives as the run's artifact, kept 7 days.
    - **The agent rows** run in #3076's `tunnels-conformance`, as a matrix over `ubuntu-24.04` and `ubuntu-24.04-arm`.
      Each job needs `tunnel-agent`, takes its own platform's archive from the artifact, and runs the agent **with the
      archive's Node**, so the program tested is the program shipped. The agent works against the run's relay on the
