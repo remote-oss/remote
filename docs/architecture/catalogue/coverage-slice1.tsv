@@ -403,7 +403,7 @@ F-2302.AC-5	acceptance
 F-2302.AC-6	acceptance	
 F-2302.AC-7	acceptance	
 F-2302.AC-8	acceptance	
-F-2302.AC-9	todo	
+F-2302.AC-9	acceptance	
 F-2302.AC-10	acceptance	
 F-2302.AC-11	core	core: the save prompt of a dirty editor before the window reloads
 F-2302.AC-12	core	core: the save prompt's Cancel, which keeps the window as it was
@@ -420,14 +420,14 @@ F-2302.AC-22	acceptance
 F-2302.AC-23	acceptance	
 F-2302.AC-24	core	core: Close Remote Connection's empty window and the Open Recent order
 F-2302.AC-25	todo	
-F-2302.AC-26	todo	
+F-2302.AC-26	acceptance	
 F-2302.AC-27	acceptance	
 F-2302.AC-28	acceptance	
 F-2302.AC-29	acceptance	
 F-2302.AC-30	core	core: the save prompt's Save
 F-2302.AC-31	acceptance	
 F-2302.AC-32	todo	
-F-2302.AC-33	todo	
+F-2302.AC-33	acceptance	
 F-2302.AC-34	unit	
 F-2303.AC-1	unit	
 F-2303.AC-2	unit	
@@ -503,11 +503,11 @@ F-2305.AC-12	acceptance
 F-2305.AC-13	acceptance	
 F-2305.AC-14	core	core: the quick pick filtering its items as the user types
 F-2305.AC-15	todo	
-F-2305.AC-16	todo	
-F-2305.AC-17	todo	
-F-2305.AC-18	todo	
+F-2305.AC-16	acceptance	
+F-2305.AC-17	acceptance	
+F-2305.AC-18	acceptance	
 F-2305.AC-19	todo	
-F-2305.AC-20	todo	
+F-2305.AC-20	acceptance	
 F-2305.AC-21	todo	
 F-2305.AC-22	todo	
 F-2305.AC-23	todo	
@@ -515,13 +515,13 @@ F-2305.AC-24	acceptance
 F-2305.AC-25	acceptance	
 F-2305.AC-26	todo	
 F-2305.AC-27	todo	
-F-2305.AC-28	todo	
+F-2305.AC-28	acceptance	
 F-2305.AC-29	todo	
 F-2305.AC-30	todo	
 F-2305.AC-31	todo	
 F-2305.AC-32	acceptance	
 F-2305.AC-33	todo	
-F-2305.AC-34	todo	
+F-2305.AC-34	acceptance	
 F-2305.AC-35	todo	
 F-2305.AC-36	acceptance	
 F-2305.AC-37	core	core: the remote indicator disconnected text
