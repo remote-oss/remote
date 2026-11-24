@@ -671,7 +671,7 @@ describe('the connect pipeline, on a connection server another window started (c
     );
   });
 
-  it('F-2413 6.4: a take-up in exec mode prunes nothing', async () => {
+  it('ruling-2995-takeup-cleanup (corrected): with the setting on, as an editor that names no CLI source runs its direct install, the take-up prunes too, since only a direct install stores the record', async () => {
     const {recording} = await sharedConnect({
       startedHelper: false,
       storedRecord: HELD,
@@ -681,7 +681,7 @@ describe('the connect pipeline, on a connection server another window started (c
         taken: recording.calls.includes('serverAnswers'),
         pruned: recording.calls.includes('cleanup'),
       },
-      {taken: true, pruned: false},
+      {taken: true, pruned: true},
     );
   });
 

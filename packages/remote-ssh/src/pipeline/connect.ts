@@ -615,9 +615,9 @@ async function runSteps(
 
   /**
    * The window's connection to the server a running connection server holds, when the host says it still runs on the
-   * record's port in the record's data folder and it answers with the record's token; in legacy mode the old installs
-   * are pruned there, as on every legacy connect. None when any of that fails, so that the full setup follows at the
-   * current settings.
+   * record's port in the record's data folder and it answers with the record's token; the old installs are pruned
+   * there, as every direct install prunes, since only a direct install stores the record. None when any of that fails,
+   * so that the full setup follows at the current settings.
    */
   async function heldServerConnection(
     record: SharedRecord,
@@ -680,9 +680,7 @@ async function runSteps(
     options.logger.info(
       `the held server on port ${String(record.remotePort)} answered: using it`,
     );
-    if (!options.useExecServer) {
-      await pruneOldInstalls(dataFolder);
-    }
+    await pruneOldInstalls(dataFolder);
     installed();
     return connectionOver(opening, server);
   }
