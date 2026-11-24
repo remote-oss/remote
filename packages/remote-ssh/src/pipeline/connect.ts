@@ -13,6 +13,7 @@ import type {Logger} from 'lib-log';
 import type {SessionCheck} from 'lib-ssh';
 import type {
   CliControl,
+  Plan,
   ProbedHost,
   StartedServer,
   TransferPhase,
@@ -75,6 +76,8 @@ export interface ConnectOptions {
    * whose record holds it. Nothing before it means the host was reached.
    */
   onHostReported?: () => void;
+  /** Called once the plan of the install is made, with its kind: the CLI path (`cli`), a download, or a reuse. */
+  onPlanned?: (kind: Plan['kind']) => void;
   /** The value of `remote.SSH.maxReconnectionAttempts`, as the user wrote it. */
   maximumReconnectionAttempts: unknown;
   /** How long the pre-connection script may take, with its question to the user. */
@@ -543,6 +546,7 @@ async function runSteps(
   if ('failure' in planned) {
     return failure(ofPlan(planned.failure));
   }
+  options.onPlanned?.(planned.plan.kind);
   const gate = await steps.gate(input, cancellation);
   const stopped = cancelled();
   if (stopped !== undefined) {
