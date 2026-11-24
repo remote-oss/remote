@@ -143,10 +143,13 @@ connections an *extension* opens, and the agent is no extension.
      launch's.
 4. **Releases** (proposed: where builds are published is the user's call, ADR-0002 decision 5):
    - A tag `tunnel-agent-v<version>` on a main commit starts a workflow of its own, on the `push` of that tag only.
-     Its first step fails unless the tagged commit is an ancestor of `main` (`git merge-base --is-ancestor`), because
-     a tag trigger alone doesn't enforce "on a main commit". It then runs the same build and agent rows, through a reusable workflow that ci.yml also calls. Only then does it attach
-     the two archives and a `SHA256SUMS` to the tag's GitHub release in this repository, with a build provenance
-     attestation for each archive.
+     Its first step checks out `main` in full (`fetch-depth: 0`) and fails unless the tagged commit is an ancestor of
+     `main` (`git merge-base --is-ancestor`): a tag trigger alone doesn't enforce "on a main commit", and a shallow
+     clone would leave `merge-base` nothing to compare. It then runs the same build and agent rows, through a
+     reusable workflow that ci.yml also calls. Only then does it attach the two archives and a `SHA256SUMS` to the
+     tag's GitHub release in this repository, with a build provenance attestation for each archive.
+   - **Proposed, the user's repository setting:** a tag ruleset that lets only the release's owners create
+     `tunnel-agent-v*` tags, which closes the trigger itself.
    - The release lives outside ci.yml because `ci-gate` must need every ci.yml job (`check-ci-gate`), and a release
      job can't wait for the gate that waits for it.
    - The one job that writes holds `contents: write`, `id-token: write` and `attestations: write`, on that `push`
