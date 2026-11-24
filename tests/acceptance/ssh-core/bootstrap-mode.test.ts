@@ -297,11 +297,20 @@ describe('the setting and the legacy bootstrap on the standard editor (card #302
       deepStrictEqual(
         {
           outlived: stillRunning,
+          firstDownloaded: stepsOf(first).includes(
+            'Downloading VS Code Server',
+          ),
           download: steps.includes('Downloading VS Code Server'),
           install: steps.includes('Installing VS Code Server'),
           reused: (await serverMainProcesses()).includes(servers[0] ?? -1),
         },
-        {outlived: servers, download: false, install: false, reused: true},
+        {
+          outlived: servers,
+          firstDownloaded: true,
+          download: false,
+          install: false,
+          reused: true,
+        },
       );
     } finally {
       await closeWindow(second).catch(() => undefined);
