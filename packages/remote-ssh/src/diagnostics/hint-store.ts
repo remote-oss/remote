@@ -57,7 +57,7 @@ export interface HintEvents {
   read(): HintStore;
   /** Keeps `record` as this window's latest state of its resolve. */
   record(record: SessionRecord): Promise<void>;
-  /** Hides every record that started at or before `clearedAt`, in every window. */
+  /** Hides every record that started before `clearedAt`, in every window. */
   clear(clearedAt: string): Promise<void>;
 }
 
@@ -180,7 +180,9 @@ export function hintEventsOf(options: {
         .at(-1);
       const records = winners
         .flatMap(event => (event.kind === 'record' ? [event.record] : []))
-        .filter(record => clearedAt === undefined || record.started > clearedAt)
+        .filter(
+          record => clearedAt === undefined || record.started >= clearedAt,
+        )
         .sort((first, second) => first.started.localeCompare(second.started))
         .slice(-RECORDS_KEPT);
       return clearedAt === undefined ? {records} : {records, clearedAt};

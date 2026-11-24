@@ -56,7 +56,7 @@ The records are read from the files of every window (a file named `<session>.jso
 another window folds it into its own; a name ending in `.tmp-<id>` is a write not yet renamed and is not read), as
 follows. The newest event of each record, told by its `started`, decides: a record that a window writes again with more
 hints replaces its earlier state, and of two events of one time the one of the greater session name decides. The newest
-`clearedAt` hides every record that started at or before it, whichever window wrote it and whenever. The two newest
+`clearedAt` hides every record that started before it, whichever window wrote it and whenever. The two newest
 of the records that are left, by `started`, are the records of the store, oldest first. A window keeps in its file only its
 two newest records and its newest clear. The value an earlier version kept in the extension's global state under
 `remote.ssh.hints` is read by the extension as the oldest layer and is never written; a test needs only the files.

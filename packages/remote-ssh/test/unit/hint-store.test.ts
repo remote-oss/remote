@@ -165,6 +165,17 @@ describe('the hint events written by two windows at once', () => {
     );
   });
 
+  it('F-2605.AC-22: a clear hides the records that began before it, and not one that began at the very time of it', async () => {
+    const files = new MemoryFiles();
+    const events = windowOn(files, 'aaaa');
+    await recordAll(files, events, first, second);
+    await events.clear(second.started);
+    deepStrictEqual(events.read(), {
+      records: [second],
+      clearedAt: second.started,
+    });
+  });
+
   it('F-2605.AC-22: a record that began before a clear stays hidden when more hints are written to it', async () => {
     const files = new MemoryFiles();
     const events = windowOn(files, 'aaaa');

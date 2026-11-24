@@ -29,7 +29,7 @@ describe('the stored connection hints (#2326, #3099)', () => {
     );
   });
 
-  it('the newest event of a record decides, and a clear hides the records that started at or before it', () => {
+  it('the newest event of a record decides, and a clear hides the records that started before it', () => {
     deepStrictEqual(
       recordsOf([
         fileOf(

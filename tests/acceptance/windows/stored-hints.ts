@@ -1,7 +1,7 @@
 /**
  * @fileoverview The connection hints as the extension's files in the editor's global storage hold them, read the way
  * the extension's README documents the accessor: every window's file is a list of events, the newest event of each
- * record decides, the newest clear hides the records that started at or before it, and the two newest records show,
+ * record decides, the newest clear hides the records that started before it, and the two newest records show,
  * oldest first. It imports nothing from the harness, so that the tools project can test it.
  */
 
@@ -68,7 +68,7 @@ export function recordsOf(texts: readonly string[]): HintRecords {
         ? [event.record]
         : [],
     )
-    .filter(record => clearedAt === undefined || record.started > clearedAt)
+    .filter(record => clearedAt === undefined || record.started >= clearedAt)
     .sort((first, second) => first.started.localeCompare(second.started))
     .slice(-RECORDS_SHOWN);
 }
