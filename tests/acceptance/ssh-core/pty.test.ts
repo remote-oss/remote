@@ -268,8 +268,11 @@ describe('F-2106: pseudo-terminal allocation', function () {
   it('F-2106 AC-7, AC-9 (c86-force): with the setting on and RequestTTY force a terminal is allocated, with the exec server and without it', async () => {
     await keepingSettings(async () => {
       const seen: unknown[] = [];
+      // What each connect showed, told when the row fails so that the red names the connect that did not connect and why.
+      const told: string[] = [];
       for (const settings of [{}, {}, {'remote.SSH.useExecServer': false}]) {
         await closeAllButLocal();
+        const started = Date.now();
         const found = await ptyConnect('c86-force', 'pty-force', {
           [PERMIT]: true,
           ...settings,
@@ -278,12 +281,19 @@ describe('F-2106: pseudo-terminal allocation', function () {
           found.connected,
           found.sessions.some(each => each.startsWith('pts')),
         ]);
+        told.push(
+          `connect ${String(seen.length)} (${'remote.SSH.useExecServer' in settings ? 'without' : 'with'} the exec server) took ${String(Math.round((Date.now() - started) / 1000))} s: connected ${String(found.connected)}, sessions ${JSON.stringify(found.sessions)}, the last lines of its log: ${JSON.stringify(found.logged.slice(-12))}`,
+        );
       }
-      deepStrictEqual(seen, [
-        [true, true],
-        [true, true],
-        [true, true],
-      ]);
+      deepStrictEqual(
+        seen,
+        [
+          [true, true],
+          [true, true],
+          [true, true],
+        ],
+        `the connects of the row as [connected, a terminal on the host] were ${JSON.stringify(seen)}; ${told.join('; ')}`,
+      );
     });
   });
 
