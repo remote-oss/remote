@@ -57,24 +57,31 @@ The agent's command line is ours (R-113). It has only what the criteria need (R-
 - **Where:** port 31545 of the tunnel. The agent serves `[cli]`'s msgpack RPC there (`[cli]`
   `tunnels/control_server.rs`, `tunnels/protocol.rs`), with the protocol version `[cli]` gives, 6
   (`constants.rs:30`).
-- **The methods:** only those our Remote - Tunnels client calls. daedalus's inventory on #3136 lists each `[cli]`
-  method with its parameters and result, and marks which our client uses. The client brief confirms the list. A method
-  our client never calls isn't implemented, and the agent answers it as an unknown method.
-  - **`version`**: `{version, protocol_version: 6}` (`protocol.rs:238-241`).
+- **The wire** (daedalus's inventory on #3136, comment 7140321314):
+  - MessagePack maps `{id, method, params}` and `{id, result | error}`, with duplex streams;
+  - a tunnel connection needs no challenge, so the agent sends `version` first.
+- **The methods:** only those our Remote - Tunnels client needs. The client brief confirms the list. Any other method,
+  `[cli]`'s exec-server ones (`fs_*`, `spawn*`, `acquire_cli`, `sys_kill`) included, gets an error answer, and the
+  connection stays open.
+  - **`version`** (agent to client, first): `{version, protocol_version: 6}` (`protocol.rs:238-241`).
+  - **`ping`**: an empty answer.
   - **`serve`**: starts the editor's server for the client and answers when it's ready (§7). `[cli]`'s parameters
     (`protocol.rs:65-78`: `socket_id`, `commit_id`, `quality`, `extensions`, `connection_token`, `compress`) gain
     one field of ours, the client's **server source**. It's what lib-server's plan needs by F-3902 rule 5(i): the
     product's server download template, its quality, and the server's data folder name. `use_local_download` stays
     false in release 1.
-  - **`servermsg`**: `{i: socket_id, body}` (`protocol.rs:89-93`). It carries each of the client's connections to the
-    server, bridged by the agent to the server's own socket, as `[cli]` does (`tunnels/server_bridge.rs`).
+  - **`servermsg`**, with **`serverclose`** and **`serverlog`** from the agent: `{i: socket_id, body}`
+    (`protocol.rs:89-93`). They carry each of the client's connections to the server, bridged by the agent to the
+    server's own socket, as `[cli]` does (`tunnels/server_bridge.rs`).
   - **`forward` / `unforward`**: add a port to the tunnel as **private**, or remove it (`ForwardParams {port,
     public}`; a `public: true` is refused). That's how the client reaches a host port through its loopback listener
     (`ruling-22-open-four` point 3). `ForwardResult.uri` carries no web address in release 1, because none is
     served. The client brief fixes what the client does with it. Each forwarded port counts against the relay's 10
-    ports per tunnel (brief-relay §6).
-  - **`update`**: always `{up_to_date: true, did_update: false}` (`protocol.rs:108-111`). The agent never updates
-    itself (F-8902 AC-18; F-8104 AC-34).
+    ports per tunnel (brief-relay §6). A private port creates no web address in our relay, so `forward` stays in
+    release 1 (F-8202 AC-27's address clauses are the web path's). That keeps the ports limit (F-8203) meaningful,
+    since every port the editor forwards is a tunnel port. `net_connect` over the control session isn't used.
+  - **`update`**: not implemented. Our client never asks, so it shows no update prompt (F-8104 AC-34), and the agent
+    never updates itself (F-8902 AC-18). `makehttpreq` is out too: `use_local_download` is false.
   - **`challenge_issue` / `challenge_verify`**: not implemented. The relay's owner-only connect tokens
     (brief-relay §4) are the access control.
 - **Our client is the client meant here.** The `serve` addition makes "the client works unchanged"
@@ -98,8 +105,11 @@ The agent's command line is ours (R-113). It has only what the criteria need (R-
 
 ## 6. Service mode (F-8902 AC-17)
 
-- **`service install`** writes a systemd **user** unit and runs `systemctl --user enable --now` on it. The unit
-  restarts the agent on failure.
+- **`service install`** writes a systemd **user** unit and runs `systemctl --user enable --now` on it. The unit is
+  daedalus's draft on #3136: `Restart=always` after 10 s, after `network-online`, `UMask=0077` and
+  `NoNewPrivileges`. Its name is the state folder's lib-identifiers constant plus `.service`, under
+  `~/.config/systemd/user/`. The agent never uses `sudo`; if lingering is off, it prints one line saying the unit runs
+  only while the user is logged in.
 - **`service uninstall`** runs `systemctl --user disable --now` and removes the unit file. Afterwards the unit no
   longer exists.
 - **Nothing else:** no system-wide unit, no root, and no keep-awake option.
