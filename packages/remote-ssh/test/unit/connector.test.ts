@@ -34,6 +34,7 @@ function connectorOptions(
     logger: options.logger,
     serve: options.serve,
     useExecServer: options.useExecServer,
+    manualBootstrap: false,
     settingLines: options.settingLines,
     writeWindowStart: options.writeWindowStart,
   };

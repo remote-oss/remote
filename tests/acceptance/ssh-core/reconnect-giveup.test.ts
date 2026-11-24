@@ -30,9 +30,11 @@ import {
   type StateReads,
 } from '../windows/reconnection-state.ts';
 import {
+  answerDialog,
   dialogOf,
   notifications,
   pageFocusFacts,
+  paletteRun,
   statusBarText,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -122,6 +124,16 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
       agentLife: () => agentLife(name),
       rendererLines: () => rendererLines(name),
       timeline: () => timeline.lines(),
+      probeDialog: async () => {
+        await paletteRun(name, 'File: Clear Recently Opened');
+        const shown = await waitForDialog(name, 5_000).then(
+          each => `showed at once: ${JSON.stringify(each.message)}`,
+          () => 'did not show within 5 s',
+        );
+        // The dialog is core's own confirmation: Cancel leaves the recent list as it is.
+        await answerDialog(name, 'Cancel').catch(() => undefined);
+        return shown;
+      },
     };
     const dialog = await waitForDialog(name, 180_000).catch(
       async (caught: unknown) => {

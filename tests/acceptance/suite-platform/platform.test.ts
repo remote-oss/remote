@@ -276,6 +276,26 @@ describe(`the platform case "${label}" of the VSCodium run`, () => {
         [],
       );
     });
+
+    it('F-2206 AC-36 (platform-broken-settings): the "You selected ..." notification still appears, although nothing is stored', () => {
+      deepStrictEqual(
+        record
+          .filter(line => line.surface === 'notice')
+          .map(line => line.question),
+        [
+          'You selected "linux" as the remote platform - this will be stored in the setting "remote.SSH.remotePlatform" and can be changed there if needed.',
+        ],
+      );
+    });
+
+    it('F-2206 AC-36 (platform-broken-settings): the failure to write is logged', () => {
+      deepStrictEqual(
+        connectionLog().some(line =>
+          line.includes("the platform setting's write was refused"),
+        ),
+        true,
+      );
+    });
   }
 
   if (label === 'platform-mute-default') {

@@ -185,6 +185,12 @@ function inventory(): InventoryFixture {
   return fixture;
 }
 
+/** The English text of a manifest string: the table's text of a `%key%` reference, or the string itself. */
+function englishText(value: unknown): unknown {
+  const key = nlsKey(value);
+  return key === null ? value : englishTable()[key];
+}
+
 /** The fields of a setting schema the fidelity row compares, with a single-element type array unwrapped. */
 function settingFields(
   value: Record<string, unknown>,
@@ -207,8 +213,8 @@ function settingFields(
     tags: value.tags,
     items: value.items,
     additionalProperties: value.additionalProperties,
-    deprecationMessage: value.deprecationMessage,
-    markdownDeprecationMessage: value.markdownDeprecationMessage,
+    deprecationMessage: englishText(value.deprecationMessage),
+    markdownDeprecationMessage: englishText(value.markdownDeprecationMessage),
   };
 }
 
@@ -912,7 +918,7 @@ describe('the manifest rows of slices 1 and 2', () => {
         resolved(platform?.markdownDescription),
         (platform?.additionalProperties as {enum?: string[]} | undefined)?.enum,
         resolved(windows?.markdownDescription),
-        windows?.deprecationMessage,
+        resolved(windows?.deprecationMessage),
       ],
       [
         "A map of the remote hostname to the platform for that remote. The hostname may include a star '*' to wildcard match. Valid values: `linux`, `macOS`, `windows`. Note - this setting will soon be required when `#remote.SSH.useLocalServer#` is disabled, so it is currently being autopopulated for successful connections, but is not currently used.",
@@ -920,6 +926,61 @@ describe('the manifest rows of slices 1 and 2', () => {
         '**Deprecated**: Enables experimental support for connecting to Windows remotes. Add the names of windows remotes to this list.',
         'Deprecated: Please use `#remote.SSH.remotePlatorm#` instead',
       ],
+    );
+  });
+
+  /** The two deprecation messages: where each is in the manifest, and its English text, as the reference spells it. */
+  const DEPRECATION_MESSAGES = [
+    {
+      setting: 'remote.SSH.windowsRemotes',
+      field: 'deprecationMessage',
+      key: 'setting.windowsRemotes.deprecationMessage',
+      text: 'Deprecated: Please use `#remote.SSH.remotePlatorm#` instead',
+    },
+    {
+      setting: 'remote.SSH.allowLocalServerDownload',
+      field: 'markdownDeprecationMessage',
+      key: 'setting.allowLocalServerDownload.deprecationMessage',
+      text: 'Deprecated, please use `#remote.SSH.localServerDownload#`',
+    },
+  ] as const;
+
+  it('F-2002 AC-14 (card #2961, ruling-2880-windowsremotes-deprecation): the deprecation message of windowsRemotes is a key of the string table whose English text keeps the reference’s own misspelling remotePlatorm, letter for letter', () => {
+    const message = properties['remote.SSH.windowsRemotes']?.deprecationMessage;
+    deepStrictEqual(
+      [
+        message,
+        resolved(message),
+        strings['setting.windowsRemotes.deprecationMessage'],
+      ],
+      [
+        '%setting.windowsRemotes.deprecationMessage%',
+        'Deprecated: Please use `#remote.SSH.remotePlatorm#` instead',
+        'Deprecated: Please use `#remote.SSH.remotePlatorm#` instead',
+      ],
+    );
+  });
+
+  it('F-2002 AC-14, AC-6 (card #2961): each deprecation message is a key of the string table, and a non-English table gives no other text than the English, so the message falls back to it in every language', () => {
+    const rows = DEPRECATION_MESSAGES.map(each => {
+      const schema: Record<string, unknown> = properties[each.setting] ?? {};
+      const fallbacks = [...nlsTables()]
+        .filter(([file]) => file !== 'package.nls.json')
+        .map(([file, table]) => [
+          file,
+          (table[each.key] as string | undefined) ?? strings[each.key],
+        ]);
+      return [
+        schema[each.field],
+        strings[each.key],
+        fallbacks
+          .filter(([, text]) => text !== each.text)
+          .map(([file]) => file),
+      ];
+    });
+    deepStrictEqual(
+      rows,
+      DEPRECATION_MESSAGES.map(each => [`%${each.key}%`, each.text, []]),
     );
   });
 
@@ -1372,8 +1433,10 @@ describe('the manifest rows of slices 1 and 2', () => {
         // The value texts are literal in the manifest, not keys of the string table.
         values.map((value, index) => [value, texts[index]]),
         [...values].sort(),
-        properties['remote.SSH.allowLocalServerDownload']
-          ?.markdownDeprecationMessage,
+        resolved(
+          properties['remote.SSH.allowLocalServerDownload']
+            ?.markdownDeprecationMessage,
+        ),
       ],
       [
         'string',
