@@ -307,6 +307,13 @@ describe("the connect's CLI path: the window resolves", () => {
   });
 });
 
+describe("the connect's CLI path: what it leaves for later windows", () => {
+  it('ruling-2995-held-server: a connect over the CLI stores no shared record, so no later window takes up a server the CLI holds', async () => {
+    const {result, recording} = await connectOverCli();
+    deepStrictEqual(['connected' in result, recording.records], [true, []]);
+  });
+});
+
 describe("the connect's CLI path: the fallback before the window resolves", () => {
   /** A connect whose CLI download fails. */
   function installFails(): ReturnType<typeof connectOverCli> {

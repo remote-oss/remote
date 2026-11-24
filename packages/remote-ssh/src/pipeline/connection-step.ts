@@ -203,6 +203,7 @@ export function openConnectionStep(
         socksPort: outcome.socksPort,
         startedLogin,
         storedRecord: outcome.sharedRecord ?? undefined,
+        startedHelper: connection.startedByMe,
         storeSharedRecord: record => {
           token = record.connectionToken;
           return connection.storeSharedRecord(record);
