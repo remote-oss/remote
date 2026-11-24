@@ -13,24 +13,20 @@ import {
   writeDeleteResult,
   writeFoldersHistory,
 } from 'lib-companion';
-import {
-  type HistoryMemento,
-  removeOpened,
-  storedHistory,
-} from './folder-history.ts';
+import type {HistoryStore} from './folder-history.ts';
 import {allOf} from './registrations.ts';
 
 /** Registers `getSshFoldersHistory` and `deleteSshFolderFromHistory` through `protocol`; the result disposes both. */
 export function serveHistoryEndpoints(
   protocol: Protocol,
-  memento: HistoryMemento,
+  store: HistoryStore,
 ): Registration {
   const registrations = [
     protocol.serve({
       commandId: SSH_ENDPOINTS.getSshFoldersHistory.commandId,
       kind: 'query',
       read: readEnvelope,
-      handle: () => writeFoldersHistory({hosts: storedHistory(memento)}),
+      handle: () => writeFoldersHistory({hosts: store.stored()}),
       empty: () => writeFoldersHistory({hosts: []}),
     }),
     protocol.serve({
@@ -39,7 +35,7 @@ export function serveHistoryEndpoints(
       read: readDeleteRequest,
       handle: async request =>
         writeDeleteResult({
-          changed: await removeOpened(memento, request.hostKey, request.path),
+          changed: await store.removeOpened(request.hostKey, request.path),
         }),
     }),
   ];
