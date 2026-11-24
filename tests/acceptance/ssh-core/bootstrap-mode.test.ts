@@ -38,6 +38,7 @@ import {
   windowTitle,
 } from '../windows/renderer.ts';
 import {PLATFORMS} from '../windows/tunnel-support.ts';
+import {hostBlock, writeConfig} from '../windows/config-keywords-support.ts';
 
 const SETTING = 'remote.SSH.useExecServer';
 
@@ -117,12 +118,17 @@ describe('the setting and the legacy bootstrap on the standard editor (card #302
 
   it('F-2103 AC-4 (c3027-off): with the setting off on a fresh host the legacy layout is installed, no CLI process runs, no download notification shows, and the title and the indicator change together', async () => {
     await freshHost();
+    // An alias no earlier window of the run resolved: the editor caches the label of a remote it has shown, so a window on
+    // a known one is titled with the host before it connects.
+    const alias = 'c3027-off-host';
+    const before = readUserSettings();
     await userSettings({
-      ...PLATFORMS,
+      'remote.SSH.configFile': writeConfig(alias, [hostBlock(alias, [])]),
+      'remote.SSH.remotePlatform': {[alias]: 'linux'},
       [SETTING]: false,
     });
     const name = 'c3027-off';
-    await openWindow('harness', name);
+    await openWindow(alias, name);
     const samples: Array<{
       time: number;
       title: string;
@@ -157,8 +163,8 @@ describe('the setting and the legacy bootstrap on the standard editor (card #302
           });
           const last = samples.at(-1);
           return (
-            last?.indicator === 'SSH: harness' &&
-            last.title.includes('SSH: harness')
+            last?.indicator === `SSH: ${alias}` &&
+            last.title.includes(`SSH: ${alias}`)
           );
         },
         INSTALL_MILLISECONDS,
@@ -166,11 +172,8 @@ describe('the setting and the legacy bootstrap on the standard editor (card #302
         throw new Error(`${String(caught)}\n${transitions()}`);
       });
       await connectedWithin(name, INSTALL_MILLISECONDS);
-      const firstTitle = samples.find(sample =>
-        sample.title.includes('SSH: harness'),
-      );
-      const firstIndicator = samples.find(
-        sample => sample.indicator === 'SSH: harness',
+      const firstNamed = samples.find(sample =>
+        sample.title.includes(`SSH: ${alias}`),
       );
       deepStrictEqual(
         {
@@ -183,21 +186,24 @@ describe('the setting and the legacy bootstrap on the standard editor (card #302
               text.includes('Downloading VS Code Server...'),
             ),
           ),
-          together:
-            firstTitle !== undefined &&
-            firstIndicator !== undefined &&
-            Math.abs(firstTitle.time - firstIndicator.time) <= 1000,
+          opening: [
+            samples[0]?.title.includes('SSH: ') ?? true,
+            samples[0]?.indicator,
+          ],
+          together: firstNamed?.indicator,
         },
         {
           installed: [true],
           cliProcess: '',
           downloadNotice: false,
-          together: true,
+          opening: [false, 'Opening Remote...'],
+          together: `SSH: ${alias}`,
         },
         transitions(),
       );
     } finally {
       await closeWindow(name).catch(() => undefined);
+      restoreUserSettings(before);
     }
   });
 

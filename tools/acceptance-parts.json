@@ -435,6 +435,7 @@
       "agent-forwarding.test.ts": 5.6,
       "agent-setting.test.ts": 0,
       "agent-terminals.test.ts": 0.9,
+      "bootstrap-mode.test.ts": 1.4,
       "code-cli.test.ts": 0.5,
       "code-files.test.ts": 0.6,
       "connection-logs.test.ts": 0.4,
