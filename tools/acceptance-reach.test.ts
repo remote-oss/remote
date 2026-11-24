@@ -1148,7 +1148,7 @@ describe('acceptance-reach: a source deleted or moved since the base (card tooli
   });
 });
 
-describe("acceptance-reach: what a change of the known-red list reaches (card #3148)", () => {
+describe('acceptance-reach: what a change of the known-red list reaches (card #3148)', () => {
   const LAUNCHES: Launch[] = [
     {label: 'alpha-one', kind: 'plain', suite: 'alpha'},
     {label: 'beta-one', kind: 'plain', suite: 'beta'},
@@ -1202,11 +1202,7 @@ describe("acceptance-reach: what a change of the known-red list reaches (card #3
         knownRedsEditReach(before, '{"entries": []}', LAUNCHES),
         knownRedsEditReach('not json', before, LAUNCHES),
         knownRedsEditReach(before, listOf({file: 'x', title: 'y'}), LAUNCHES),
-        knownRedsEditReach(
-          listOf(entry('gone-one', 'g1')),
-          listOf(),
-          LAUNCHES,
-        ),
+        knownRedsEditReach(listOf(entry('gone-one', 'g1')), listOf(), LAUNCHES),
       ],
       [undefined, undefined, undefined, undefined],
     );

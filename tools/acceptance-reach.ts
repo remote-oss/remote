@@ -1063,8 +1063,15 @@ export function measuredPaths(
   return measured;
 }
 
+/** The key that names an entry's row: its launch, file and title. */
+function knownRedKey(entry: Record<string, unknown>): string {
+  return JSON.stringify([entry.launch, entry.file, entry.title]);
+}
+
 /** The entries of a known-red list's text, or undefined when it is not a list of entries that each name a launch. */
-function knownRedEntries(text: string): Array<Record<string, unknown>> | undefined {
+function knownRedEntries(
+  text: string,
+): Array<Record<string, unknown>> | undefined {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -1098,15 +1105,13 @@ export function knownRedsEditReach(
   if (earlier === undefined || later === undefined) {
     return undefined;
   }
-  const keyOf = (entry: Record<string, unknown>): string =>
-    JSON.stringify([entry.launch, entry.file, entry.title]);
   const laterByKey = new Map(
-    later.map(entry => [keyOf(entry), JSON.stringify(entry)]),
+    later.map(entry => [knownRedKey(entry), JSON.stringify(entry)]),
   );
   const labels = new Set(launches.map(launch => launch.label));
   const reached = new Set<string>();
   for (const entry of earlier) {
-    if (laterByKey.get(keyOf(entry)) === JSON.stringify(entry)) {
+    if (laterByKey.get(knownRedKey(entry)) === JSON.stringify(entry)) {
       continue;
     }
     const label = String(entry.launch);
@@ -1119,7 +1124,7 @@ export function knownRedsEditReach(
 }
 
 /** What the known-red list's change since `base` reaches (knownRedsEditReach), the head read at `root`. */
-export function knownRedsReach(
+function knownRedsReach(
   base: string,
   launches: readonly Launch[],
   root: string,
@@ -1130,7 +1135,11 @@ export function knownRedsReach(
   });
   const absolute = path.join(root, KNOWN_REDS_FILE);
   return before.status === 0 && existsSync(absolute)
-    ? knownRedsEditReach(before.stdout, readFileSync(absolute, 'utf8'), launches)
+    ? knownRedsEditReach(
+        before.stdout,
+        readFileSync(absolute, 'utf8'),
+        launches,
+      )
     : undefined;
 }
 
