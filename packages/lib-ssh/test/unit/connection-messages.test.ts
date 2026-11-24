@@ -38,6 +38,22 @@ describe('connection requests (contracts §4 S9)', () => {
     );
   });
 
+  it("ruling-2995-takeup-cleanup: reads a record's data folder, and drops one that is empty or no text", () => {
+    function folderOf(dataFolder: unknown): unknown {
+      const request = readConnectionRequest({
+        type: 'setSharedRecord',
+        record: {...RECORD, dataFolder},
+      });
+      return request?.type === 'setSharedRecord'
+        ? request.record.dataFolder
+        : 'unread';
+    }
+    deepStrictEqual(
+      [folderOf('/home/u/.server'), folderOf(''), folderOf(7)],
+      ['/home/u/.server', undefined, undefined],
+    );
+  });
+
   it('reads an answer to a question', () => {
     deepStrictEqual(
       readConnectionRequest({type: 'answer', promptId: 3, text: 'yes'}),

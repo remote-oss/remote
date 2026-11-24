@@ -661,6 +661,8 @@ export function stepsOf(
       void ports.cliPath.presenter.present(failed);
     },
     maintain: (input, ...rest) => serverSteps(input).maintain(input, ...rest),
+    heldServer: (input, ...rest) =>
+      serverSteps(input).heldServer(input, ...rest),
     installExtensions: (input, ...rest) =>
       serverSteps(input).installExtensions(input, ...rest),
     ...tunnelStep,

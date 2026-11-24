@@ -614,12 +614,34 @@ async function runSteps(
   }
 
   /**
-   * The window's connection to the server a running connection server holds, when that server answers with the token
-   * its record names; none when it does not, so that the full setup follows at the current settings.
+   * The window's connection to the server a running connection server holds, when the host says it still runs on the
+   * record's port in the record's data folder and it answers with the record's token; in legacy mode the old installs
+   * are pruned there, as on every legacy connect. None when any of that fails, so that the full setup follows at the
+   * current settings.
    */
   async function heldServerConnection(
     record: SharedRecord,
   ): Promise<Connection | Failed | undefined> {
+    const {dataFolder} = record;
+    if (dataFolder === undefined) {
+      options.logger.info(
+        'the shared record names no data folder: setting the server up anew',
+      );
+      return undefined;
+    }
+    const held = await steps.heldServer(
+      input,
+      lease,
+      host,
+      dataFolder,
+      cancellation,
+    );
+    if (held.kind !== 'alive' || held.port !== record.remotePort) {
+      options.logger.info(
+        `the held server is not running on port ${String(record.remotePort)} (${held.kind === 'alive' ? `its log names port ${String(held.port)}` : held.reason}): setting the server up anew`,
+      );
+      return cancelled();
+    }
     const server: StartedServer = {
       endpoint: {kind: 'port', port: record.remotePort},
       processId: 0,
@@ -658,8 +680,33 @@ async function runSteps(
     options.logger.info(
       `the held server on port ${String(record.remotePort)} answered: using it`,
     );
+    if (!options.useExecServer) {
+      await pruneOldInstalls(dataFolder);
+    }
     installed();
     return connectionOver(opening, server);
+  }
+
+  /**
+   * Prunes the installs older than the five newest in `dataFolder`, or in the settings' data folder when none is given,
+   * taking the locks as an install does (the host's system decides the method). A failure is only logged.
+   */
+  async function pruneOldInstalls(dataFolder?: string): Promise<void> {
+    await quietly('the clean-up of old installs', async () => {
+      const outcome = await steps.maintain(
+        input,
+        lease,
+        'cleanup',
+        cancellation,
+        host,
+        dataFolder,
+      );
+      if (outcome.kind !== 'done') {
+        options.logger.warn(
+          `the clean-up of old installs ended with ${outcome.kind}`,
+        );
+      }
+    });
   }
 
   // A connection server another window started: its live server is used as it is, else the folder is checked here.
@@ -815,23 +862,9 @@ async function runSteps(
     options.logger.info(listeningLine(started.server.endpoint.port));
   }
   // The direct install, which is the legacy mode and the exec server mode of an editor that names no CLI source, prunes
-  // the installs older than the five newest on every connect and reload, once this connect's server runs, taking the
-  // locks as the install did (the host's system decides the method); a connect over the CLI never gets here. A failure
-  // is only logged.
-  await quietly('the clean-up of old installs', async () => {
-    const outcome = await steps.maintain(
-      input,
-      lease,
-      'cleanup',
-      cancellation,
-      host,
-    );
-    if (outcome.kind !== 'done') {
-      options.logger.warn(
-        `the clean-up of old installs ended with ${outcome.kind}`,
-      );
-    }
-  });
+  // the old installs on every connect and reload, once this connect's server runs; a connect over the CLI never gets
+  // here.
+  await pruneOldInstalls();
   if (started.server.reused) {
     await quietly('the default extensions', () =>
       steps.installExtensions(input, lease, cancellation),
@@ -859,6 +892,7 @@ async function runSteps(
         connectionToken: started.server.connectionToken,
         agentLink: forwarding.agentLink,
         display: forwarding.display,
+        dataFolder: planned.plan.dataFolder,
       });
       options.logger.info(
         `the shared record was ${stored ? 'stored' : 'declined by the connection'}`,

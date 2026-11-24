@@ -10,6 +10,7 @@ import type {
   CliInstallOutcome,
   CliServeParams,
   GateOutcome,
+  HeldServerOutcome,
   MaintenanceOutcome,
   Plan,
   PlanFailure,
@@ -322,7 +323,19 @@ export interface ConnectSteps {
     action: 'kill' | 'uninstall' | 'cleanup',
     cancellation: AbortSignal,
     host?: ProbedHost,
+    dataFolder?: string,
   ): Promise<MaintenanceOutcome>;
+  /**
+   * Whether the server a shared record holds still runs in `dataFolder`, the record's, read on the host over the lease's
+   * session; it starts nothing and takes no lock.
+   */
+  heldServer(
+    input: ConnectInput,
+    lease: ConnectionLease,
+    host: ProbedHost,
+    dataFolder: string,
+    cancellation: AbortSignal,
+  ): Promise<HeldServerOutcome>;
   /** Installs the default extensions on a server that was already running; a failure never fails the connect. */
   installExtensions(
     input: ConnectInput,

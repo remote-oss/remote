@@ -393,6 +393,8 @@ export function steps(
       note(action, undefined);
       return Promise.resolve({kind: 'done'});
     },
+    heldServer: () =>
+      note('heldServer', Promise.resolve({kind: 'alive', port: 4321})),
     installExtensions: () => {
       note('installExtensions', undefined);
       return Promise.resolve();
