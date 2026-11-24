@@ -61,11 +61,8 @@ import {
   serveSliceEndpoints,
 } from './companion/slice-endpoints.ts';
 import {pushActiveFolders} from './companion/active-folders.ts';
-import {
-  historyStoreOf,
-  newSession,
-  NODE_HISTORY_FILES,
-} from './companion/folder-history.ts';
+import {historyStoreOf} from './companion/folder-history.ts';
+import {newSession, NODE_EVENT_FILES} from './state/event-files.ts';
 import {serveHistoryEndpoints} from './companion/history-endpoints.ts';
 import {signalHostsChanged} from './companion/hosts-changed.ts';
 import {
@@ -351,7 +348,7 @@ export async function activate(
   const historyStore = historyStoreOf({
     folder: path.join(context.globalStorageUri.fsPath, 'folder-history'),
     session: newSession(),
-    files: NODE_HISTORY_FILES,
+    files: NODE_EVENT_FILES,
     legacy: context.globalState,
     now: Date.now,
   });
