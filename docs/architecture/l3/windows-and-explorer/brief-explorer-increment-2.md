@@ -89,8 +89,9 @@ the push and the signal. It keeps slice 1's three ids as they are.
   - **The earlier key:** the `folder.history.v1` value an earlier version kept in `globalState` is read as the
     oldest layer, each host's newest entry at time 0 and its older ones a step earlier. It's never written again,
     since any write of `globalState` rewrites the whole entry.
-  - F-2503 BR-10 makes the place reference data, not a contract: its observable claims (the history survives
-    reloads and restarts, and every window of the profile shares it) hold for the per-profile global storage.
+  - BR-10's observable claims (the history survives reloads and restarts, and every window of the profile shares it)
+    hold. Its property name is reference data, and the place's restatement as the per-profile global storage is asked
+    on remote-oss/remote-ssh#61.
 - **What is recorded:** once per extension-host session, in an SSH window with a folder or a workspace whose first
   resolve succeeded (BR-2, BR-5). remote-ssh learns this from lib-authority's resolver handle, through
   `onFirstResolveSettled` and `lastResolve() === 'succeeded'`. No lib-authority change is needed.
