@@ -22,6 +22,15 @@ export function coreButtons(
 }
 
 /**
+ * The label core writes on the quick input's Back button in the title bar: the keybinding of the Back, as the
+ * platform's core writes it. macOS binds it to Ctrl+-, which macOS writes as ⌃-; Linux and Windows bind it to
+ * Ctrl+Alt+-.
+ */
+export function backLabel(platform: string = process.platform): string {
+  return platform === 'darwin' ? 'Back (⌃-)' : 'Back (Ctrl+Alt+-)';
+}
+
+/**
  * The part the product adds to a window's name for the run's engine: ` @ <address>` when the run's engine is a named
  * endpoint, which `address` (the run's `DOCKER_HOST`) is on the Windows job, and none on a run that uses the default.
  */

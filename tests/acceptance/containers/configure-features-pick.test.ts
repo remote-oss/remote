@@ -9,6 +9,7 @@ import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {closeWindow, inWindow, variable, waitFor} from '../windows/harness.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
+import {backLabel} from '../windows/platform-forms.ts';
 import {
   acceptQuickPick,
   clearQuickPickInput,
@@ -489,7 +490,7 @@ describe('Configure Container Features: the pick and the write (card containers-
     let back: unknown;
     await withPick('c150-configure-back', text, async (window, folder) => {
       await intoWalk(window);
-      await pressQuickPickTitleButton(window, 'Back (Ctrl+Alt+-)');
+      await pressQuickPickTitleButton(window, backLabel());
       await new Promise(resolve => setTimeout(resolve, 1500));
       back = [configurationText(folder), await quickPickFacts(window)];
     });
@@ -537,11 +538,7 @@ describe('Configure Container Features: the pick and the write (card containers-
       [
         text,
         [text, undefined],
-        [
-          ['Back (Ctrl+Alt+-)', 'Finish'],
-          'low',
-          '{"enabled":true,"level":"low"}',
-        ],
+        [[backLabel(), 'Finish'], 'low', '{"enabled":true,"level":"low"}'],
         [LAB_LABEL],
       ],
     );

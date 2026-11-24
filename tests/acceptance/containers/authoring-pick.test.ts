@@ -8,6 +8,7 @@ import {
   waitFor,
   windowState,
 } from '../windows/harness.ts';
+import {backLabel} from '../windows/platform-forms.ts';
 import {
   acceptQuickPick,
   allQuickPickRows,
@@ -44,8 +45,8 @@ import {
 const TEMPLATE_PLACEHOLDER =
   'Select a container configuration template or enter a custom template id';
 
-/** The title button every option, feature and optional file pick has. */
-const BACK = 'Back (Ctrl+Alt+-)';
+/** The title button every option, feature and optional file pick has, as the platform writes it. */
+const BACK = backLabel();
 
 /** The files of the run's pinned template index and of the templates it mirrors, which the rows take their expectations from. */
 const INDEX_FILE = fileURLToPath(

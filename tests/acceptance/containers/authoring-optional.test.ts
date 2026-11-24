@@ -9,15 +9,16 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {activations} from '../windows/folder-windows.ts';
+import {backLabel} from '../windows/platform-forms.ts';
 import {
   acceptQuickPick,
   dialogOf,
   editorTabs,
   notificationCentre,
-  pressControlAlt,
   pageText,
   pressEscape,
   pressQuickPickBack,
+  pressQuickPickBackKey,
   pressQuickPickOk,
   pressQuickPickTitleButton,
   quickPickChecks,
@@ -111,7 +112,7 @@ describe('Optional Files/Directories in the wizard (card containers-90)', functi
           {
             title: 'Optional Files/Directories',
             placeholder: OPTIONAL_PLACEHOLDER,
-            titleButtons: ['Back (Ctrl+Alt+-)'],
+            titleButtons: [backLabel()],
             multiSelect: true,
           },
           {counter: '0 Selected', okShown: true},
@@ -215,7 +216,7 @@ describe('Optional Files/Directories in the wizard (card containers-90)', functi
         if (method === 'button') {
           await pressQuickPickBack(window);
         } else {
-          await pressControlAlt(window, '-');
+          await pressQuickPickBackKey(window);
         }
         await screenWith(window, FEATURES_PLACEHOLDER);
         seen.push((await quickPickChecks(window)).filter(each => each.checked));

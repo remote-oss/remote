@@ -4676,6 +4676,20 @@ export async function pressQuickPickBack(name: string): Promise<void> {
   );
 }
 
+/**
+ * Presses the platform's keybinding of the quick input's Back in window `name`: Ctrl+Alt+- on Linux and Windows,
+ * Ctrl+- on macOS.
+ */
+export async function pressQuickPickBackKey(name: string): Promise<void> {
+  await pressStroke(await pageOf(name), name, {
+    key: '-',
+    code: 'Minus',
+    windowsVirtualKeyCode: 189,
+    nativeVirtualKeyCode: 189,
+    modifiers: process.platform === 'darwin' ? CONTROL : ALT_AND_CONTROL,
+  });
+}
+
 /** The rows of the multi-select quick pick open in window `name` with the state of each one's checkbox. */
 export async function quickPickChecks(
   name: string,

@@ -4,6 +4,7 @@ import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {removeContainers, setUserSetting} from '../windows/folder-windows.ts';
+import {backLabel} from '../windows/platform-forms.ts';
 import {
   containersLog,
   containersLogSince,
@@ -55,7 +56,7 @@ const DOCKER_IN_DOCKER = 'Docker (Docker-in-Docker)';
 const FEATURES_SCREEN = {
   title: 'Select Features',
   placeholder: FEATURES,
-  titleButtons: ['Back (Ctrl+Alt+-)', 'Finish'],
+  titleButtons: [backLabel(), 'Finish'],
   multiSelect: true,
 };
 
