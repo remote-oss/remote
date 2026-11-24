@@ -72,7 +72,7 @@ async function registryAnswer(): Promise<string> {
     const answer = await fetch(
       `http://${variable('HARNESS_TEMPLATE_REGISTRY')}/`,
     );
-    return `with ${answer.status} ${answer.statusText}`;
+    return `with ${String(answer.status)} ${answer.statusText}`;
   } catch (caught) {
     return `with ${String(caught)}`;
   }
