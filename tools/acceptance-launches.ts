@@ -1456,7 +1456,11 @@ export function launchesOf(root: string): Launch[] {
       label: 'explorer-home',
       suite: 'explorer-home',
       // Core's dialogs are drawn in the window, where the renderer helpers read them.
-      settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
+      settings: {
+        ...EXPLORER_LAUNCH.settings,
+        ...PALETTE_HISTORY_OFF,
+        'window.dialogStyle': 'custom',
+      },
       // The empty script makes Remote - SSH show its real pickers, which the rows of the SSH group's hand-overs read.
       environment: {
         ...EXPLORER_LAUNCH.environment,
@@ -1884,6 +1888,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'containers-view',
       suite: 'containers-view',
       registry: true,
+      settings: {...CONTAINERS_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
     },
   ];
   return launches;

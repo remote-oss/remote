@@ -832,7 +832,13 @@ describe('the launches of the VSCodium run', () => {
           'containers-ssh-env-host',
           'containers-ssh-noclient',
         ].map(label => [label, label, shared, undefined, undefined]),
-        ['containers-view', 'containers-view', shared, undefined, undefined],
+        [
+          'containers-view',
+          'containers-view',
+          {...shared, 'workbench.commandPalette.history': 0},
+          undefined,
+          undefined,
+        ],
       ],
     );
   });
@@ -1345,6 +1351,8 @@ describe('the launches of the VSCodium run', () => {
           'web-ui',
           'web-ui-trust',
           'containers-shutdown',
+          'containers-view',
+          'explorer-home',
         ].map(label => history(launchLabelled(launches, label))),
         launches
           .filter(launch => launch.suite === 'containers')
@@ -1352,7 +1360,7 @@ describe('the launches of the VSCodium run', () => {
           .filter(value => value !== 0),
         history(launchLabelled(launches, 'windows')),
       ],
-      [[0, 0, 0, 0, 0, 0, 0, 0], [], undefined],
+      [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [], undefined],
     );
   });
 
