@@ -510,6 +510,269 @@ describe('the connect pipeline, when it works', () => {
   });
 });
 
+describe('the connect pipeline, on a connection server another window started (card #2995, ruling-2995-shared-reuse, F-2407 6.4, F-2102 5.1)', () => {
+  /** A record an earlier connection server wrote, without the held server's data folder. */
+  const HELD_EARLIER = {
+    remotePort: 4321,
+    operatingSystem: 'linux',
+    architecture: 'x64',
+    temporaryFolder: '/tmp',
+    connectionToken: 'held-token',
+  };
+  const HELD = {...HELD_EARLIER, dataFolder: '/srv/held/.server'};
+  const SETUP_STEPS = ['checkInstallFolder', 'plan', 'transfer', 'start'];
+
+  /**
+   * A connect in shared mode over a lease with `lease`'s fields, with the steps' changes `changesOf` makes, in exec
+   * mode unless `legacy`.
+   */
+  async function sharedConnect(
+    lease: Partial<ConnectionLease>,
+    changesOf: (recording: Recording) => Partial<ConnectSteps> = () => ({}),
+    legacy = false,
+  ) {
+    const {recording, options: defaults} = setup();
+    const options = legacy ? {...defaults, useExecServer: false} : defaults;
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        lookupBeforeConnection: () => false,
+        openConnection: () =>
+          Promise.resolve({
+            kind: 'done',
+            value: {...leaseOf(recording), waits: WAITS, ...lease},
+          }),
+        ...changesOf(recording),
+      }),
+      options,
+    );
+    return {result, recording};
+  }
+
+  /** The setup steps among the calls `recording` holds, in order. */
+  function setupStepsOf(recording: {calls: readonly string[]}): string[] {
+    return recording.calls.filter(call => SETUP_STEPS.includes(call));
+  }
+
+  it('F-2407 AC-15, 6.4 step 2: a held server that answers with its token is used as it is: no folder check, plan, install or start, and the window gets its token', async () => {
+    const {result, recording} = await sharedConnect({
+      startedHelper: false,
+      storedRecord: HELD,
+    });
+    deepStrictEqual(
+      {
+        token:
+          'connected' in result ? result.connected.connectionToken : undefined,
+        port: 'serverPort' in result ? result.serverPort : undefined,
+        setup: setupStepsOf(recording),
+        asked: recording.calls.includes('serverAnswers'),
+      },
+      {token: 'held-token', port: 4321, setup: [], asked: true},
+    );
+  });
+
+  it('F-2407 6.4 step 3: a held server that does not answer with its token is dropped: its tunnel closes, and the folder check, the plan, the install and the start run at the current settings', async () => {
+    const {result, recording} = await sharedConnect(
+      {startedHelper: false, storedRecord: HELD},
+      () => ({serverAnswers: () => Promise.resolve(false)}),
+    );
+    deepStrictEqual(
+      {
+        connected: 'connected' in result,
+        setup: setupStepsOf(recording),
+        closes: recording.tunnelCloses,
+      },
+      {connected: true, setup: SETUP_STEPS, closes: 1},
+    );
+  });
+
+  it('F-2407 6.4 step 3: a held server whose tunnel does not open is dropped the same way', async () => {
+    let tries = 0;
+    const {result, recording} = await sharedConnect(
+      {startedHelper: false, storedRecord: HELD},
+      seen => ({
+        openTunnel: (input, lease, server, onWaiting, signal, onSettingUp) => {
+          tries += 1;
+          onSettingUp?.();
+          return tries === 1
+            ? tunnelFails()
+            : Promise.resolve({kind: 'done', value: tunnelOf(seen)});
+        },
+      }),
+    );
+    deepStrictEqual(
+      {connected: 'connected' in result, setup: setupStepsOf(recording)},
+      {connected: true, setup: SETUP_STEPS},
+    );
+  });
+
+  it('F-2407 6.4 step 3: a held server whose tunnel opens only after its bound is dropped, and the late tunnel is closed', async () => {
+    let tries = 0;
+    const {result, recording} = await sharedConnect(
+      {
+        startedHelper: false,
+        storedRecord: HELD,
+        waits: {probeMilliseconds: 1000, tunnelMilliseconds: 20},
+      },
+      seen => ({
+        openTunnel: (input, lease, server, onWaiting, signal, onSettingUp) => {
+          tries += 1;
+          onSettingUp?.();
+          const opened = {kind: 'done' as const, value: tunnelOf(seen)};
+          return tries === 1
+            ? new Promise(resolve => {
+                setTimeout(() => {
+                  resolve(opened);
+                }, 60);
+              })
+            : Promise.resolve(opened);
+        },
+      }),
+    );
+    await new Promise(resolve => setTimeout(resolve, 80));
+    deepStrictEqual(
+      {
+        connected: 'connected' in result,
+        setup: setupStepsOf(recording),
+        closes: recording.tunnelCloses,
+      },
+      {connected: true, setup: SETUP_STEPS, closes: 1},
+    );
+  });
+
+  it('F-2413 6.4 step 1, AC-17: a take-up in legacy mode prunes the old installs in the held server’s data folder, whatever the setting now says, before the window gets its connection', async () => {
+    const pruned: Array<string | undefined> = [];
+    const {result, recording} = await sharedConnect(
+      {startedHelper: false, storedRecord: HELD},
+      seen => ({
+        maintain: (input, lease, action, cancellation, host, dataFolder) => {
+          seen.calls.push(action);
+          pruned.push(dataFolder);
+          return Promise.resolve({kind: 'done'});
+        },
+      }),
+      true,
+    );
+    deepStrictEqual(
+      {
+        connected: 'connected' in result,
+        pruned,
+        order: recording.calls.filter(call =>
+          ['heldServer', 'serverAnswers', 'cleanup'].includes(call),
+        ),
+        setup: setupStepsOf(recording),
+      },
+      {
+        connected: true,
+        pruned: ['/srv/held/.server'],
+        order: ['heldServer', 'serverAnswers', 'cleanup'],
+        setup: [],
+      },
+    );
+  });
+
+  it('ruling-2995-takeup-cleanup (corrected): with the setting on, as an editor that names no CLI source runs its direct install, the take-up prunes too, since only a direct install stores the record', async () => {
+    const {recording} = await sharedConnect({
+      startedHelper: false,
+      storedRecord: HELD,
+    });
+    deepStrictEqual(
+      {
+        taken: recording.calls.includes('serverAnswers'),
+        pruned: recording.calls.includes('cleanup'),
+      },
+      {taken: true, pruned: true},
+    );
+  });
+
+  it('ruling-2995-takeup-cleanup: a record without a data folder, from an earlier connection server, is stale: no host check, no tunnel, and the full setup', async () => {
+    const {result, recording} = await sharedConnect({
+      startedHelper: false,
+      storedRecord: HELD_EARLIER,
+    });
+    deepStrictEqual(
+      {
+        connected: 'connected' in result,
+        checked: recording.calls.includes('heldServer'),
+        asked: recording.calls.includes('serverAnswers'),
+        setup: setupStepsOf(recording),
+      },
+      {connected: true, checked: false, asked: false, setup: SETUP_STEPS},
+    );
+  });
+
+  it('ruling-2995-held-server: a held server the host says is gone, or that runs on another port, is dropped before any tunnel opens to it', async () => {
+    const outcomes = [
+      {
+        kind: 'notAlive' as const,
+        reason: 'no server of this commit runs there',
+      },
+      {kind: 'alive' as const, port: 5555},
+    ];
+    const seen = [];
+    for (const outcome of outcomes) {
+      const {result, recording} = await sharedConnect(
+        {startedHelper: false, storedRecord: HELD},
+        () => ({heldServer: () => Promise.resolve(outcome)}),
+      );
+      seen.push({
+        connected: 'connected' in result,
+        tunnelsBeforeStart: recording.calls
+          .slice(0, recording.calls.indexOf('start'))
+          .filter(call => call === 'openTunnel').length,
+        asked: recording.calls.includes('serverAnswers'),
+        setup: setupStepsOf(recording),
+      });
+    }
+    deepStrictEqual(
+      seen,
+      Array(2).fill({
+        connected: true,
+        tunnelsBeforeStart: 0,
+        asked: false,
+        setup: SETUP_STEPS,
+      }),
+    );
+  });
+
+  it('F-2407 AC-7: a joined connection server with no record checks the folder after the join, and its refusal ends the connect there, before the plan', async () => {
+    const refusal = {
+      kind: 'invalidSetting' as const,
+      reason: {id: 'installPathProvided', values: ['relative/inst']},
+    };
+    const {result, recording} = await sharedConnect(
+      {startedHelper: false, storedRecord: undefined},
+      () => ({checkInstallFolder: () => ({kind: 'failed', failure: refusal})}),
+    );
+    deepStrictEqual(
+      {
+        connected: 'connected' in result,
+        probed: recording.calls.includes('probe'),
+        planned: recording.calls.includes('plan'),
+      },
+      {connected: false, probed: true, planned: false},
+    );
+  });
+
+  it('F-2407 AC-7: a connection server this window started had the folder checked by its start, so the connect checks it no second time', async () => {
+    const {recording} = await sharedConnect({
+      startedHelper: true,
+      storedRecord: undefined,
+    });
+    deepStrictEqual(recording.calls.includes('checkInstallFolder'), false);
+  });
+
+  it('F-2407 AC-7: in terminal mode the folder is checked before the connection, as before', async () => {
+    const {recording, options} = setup();
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(
+      recording.calls.indexOf('checkInstallFolder') <
+        recording.calls.indexOf('openConnection'),
+      true,
+    );
+  });
+});
+
 describe('the connect pipeline, with the client install lock (card #2844, F-2408 BR-6, 7.E2)', () => {
   it('BR-6: the lock is held from after the lookup, before the connection opens, until the server started', async () => {
     const {recording, options} = setup();
@@ -1766,6 +2029,7 @@ describe('the connect pipeline, what it keeps and gives back', () => {
         temporaryFolder: '/tmp',
         connectionToken: 'secret-token',
         ...NO_FORWARDING,
+        dataFolder: '/home/dev/.server',
       },
     ]);
   });

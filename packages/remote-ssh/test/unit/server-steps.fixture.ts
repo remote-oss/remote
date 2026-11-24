@@ -219,6 +219,7 @@ export function leaseOn(channel: RecordingChannel): ConnectionLease {
     socksPort: 1080,
     startedLogin: true,
     storedRecord: undefined,
+    startedHelper: true,
     storeSharedRecord: () => Promise.resolve(true),
     onNotice: () => () => undefined,
     answer: () => Promise.resolve(false),

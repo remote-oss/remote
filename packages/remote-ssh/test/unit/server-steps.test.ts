@@ -163,6 +163,64 @@ describe('the server steps: maintain', () => {
   });
 });
 
+describe('the server steps: the held server', () => {
+  /** The script a step sent to a host that answered with `answer`, and the outcome. */
+  async function heldIn(
+    answer: readonly string[],
+  ): Promise<{outcome: unknown; script: string}> {
+    const channel = channelAnswering(answer);
+    const outcome = await createServerSteps(dependencies()).heldServer(
+      INPUT,
+      leaseOn(channel),
+      HOST,
+      '/srv/held/.server-data',
+      new AbortController().signal,
+    );
+    const call = channel.calls[0];
+    return {
+      outcome,
+      script: call?.operation === 'runScript' ? call.request.script : '',
+    };
+  }
+
+  it("ruling-2995-held-server: the check runs in the record's data folder, not the settings', and reads the port", async () => {
+    const {outcome, script} = await heldIn(
+      lines('Ok', 'server.alive=yes', 'server.port=4321'),
+    );
+    deepStrictEqual(
+      [
+        outcome,
+        script.includes("INSTALL_ROOT='/srv/held'"),
+        script.includes("DATA_FOLDER='.server-data'"),
+      ],
+      [{kind: 'alive', port: 4321}, true, true],
+    );
+  });
+
+  it("ruling-2995-takeup-cleanup: a clean-up given a data folder runs there, and without one in the settings' folder", async () => {
+    async function rootOf(dataFolder: string | undefined): Promise<boolean> {
+      const channel = channelAnswering(lines('Ok'));
+      await createServerSteps(dependencies()).maintain(
+        INPUT,
+        leaseOn(channel),
+        'cleanup',
+        new AbortController().signal,
+        HOST,
+        dataFolder,
+      );
+      const call = channel.calls[0];
+      return (
+        call?.operation === 'runScript' &&
+        call.request.script.includes("INSTALL_ROOT='/srv/held'")
+      );
+    }
+    deepStrictEqual(
+      [await rootOf('/srv/held/.server-data'), await rootOf(undefined)],
+      [true, false],
+    );
+  });
+});
+
 describe('the server steps: plan', () => {
   it('downloads from the address the override gives, for the host platform', () => {
     const steps = createServerSteps(dependencies());

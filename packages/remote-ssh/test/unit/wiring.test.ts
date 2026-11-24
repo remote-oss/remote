@@ -183,6 +183,7 @@ function portsOf(
     minimumLevel: (): Level => 'info',
   });
   const ports: WiringPorts = {
+    serverStatus: () => Promise.resolve(undefined),
     warnManualBootstrap: () => {
       seen.modeWarnings += 1;
     },
@@ -497,6 +498,33 @@ describe("the composition of a connect's steps", () => {
       },
     );
     deepStrictEqual(counts, [1, 0, 0, 0]);
+  });
+
+  it('F-2407 6.4 step 2 (card #2995, ruling-2995-shared-reuse): a held server answers only with a reply that is not the refusal of its token: 403 or no reply is no answer, and each check asks for the address and the token', async () => {
+    const asked: unknown[] = [];
+    const answers: boolean[] = [];
+    for (const status of [404, 200, 403, undefined]) {
+      const {ports} = portsOf();
+      const steps = stepsOf({
+        ...ports,
+        serverStatus: (address, token) => {
+          asked.push([address, token]);
+          return Promise.resolve(status);
+        },
+      });
+      answers.push(
+        await steps.serverAnswers(
+          {host: '127.0.0.1', port: 20000},
+          'held-token',
+          new AbortController().signal,
+        ),
+      );
+    }
+    const each = [{host: '127.0.0.1', port: 20000}, 'held-token'];
+    deepStrictEqual(
+      {answers, asked},
+      {answers: [true, true, false, false], asked: [each, each, each, each]},
+    );
   });
 
   it("connect-14: checkInstallFolder reads the server settings of this connect's host alias", () => {
@@ -890,6 +918,31 @@ describe("the composition's forwarding of the later server steps", () => {
       );
     }
     deepStrictEqual(methods, ['flock', 'link']);
+  });
+
+  it("ruling-2995-held-server: the held server check is this connect's server steps', in the record's data folder", async () => {
+    const {ports} = portsOf();
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    const channel = channelAnswering(
+      lines('Ok', 'server.alive=yes', 'server.port=4321'),
+    );
+    const outcome = await steps.heldServer(
+      inputFor('dev'),
+      leaseOn(channel),
+      HOST,
+      '/srv/held/.server-data',
+      new AbortController().signal,
+    );
+    const [call] = channel.calls;
+    deepStrictEqual(
+      [
+        outcome,
+        call?.operation === 'runScript' &&
+          call.request.script.includes("INSTALL_ROOT='/srv/held'"),
+      ],
+      [{kind: 'alive', port: 4321}, true],
+    );
   });
 
   it("connect-14: the extensions install is this connect's server steps' install", async () => {

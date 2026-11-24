@@ -23,7 +23,11 @@ import {
   runScript,
   single,
 } from './fake-host.ts';
-import {installHostHooks, statusOf} from './bootstrap-script.fixture.ts';
+import {
+  installHostHooks,
+  serverFactsOf,
+  statusOf,
+} from './bootstrap-script.fixture.ts';
 
 /** Whether the process is still running after up to 5 s: a signal returns before the process has exited. */
 async function stillRunning(processId: number): Promise<boolean> {
@@ -60,6 +64,27 @@ describe('the POSIX bootstrap script', () => {
     rmSync(pidFile);
     return serverPid;
   }
+
+  describe('the held server check', () => {
+    it('ruling-2995-held-server: a started server is alive on the port its log names, a killed one is not, and the check starts nothing', () => {
+      runScript(host, single('install'), parametersFor());
+      const started = serverFactsOf(host, single('start'), parametersFor());
+      const whileRunning = serverFactsOf(
+        host,
+        single('heldServer'),
+        parametersFor(),
+      );
+      runScript(host, single('kill'), parametersFor());
+      deepStrictEqual(
+        [
+          whileRunning,
+          serverFactsOf(host, single('heldServer'), parametersFor()),
+          serverFactsOf(host, single('heldServer'), parametersFor()),
+        ],
+        [{alive: 'yes', port: started.port}, {alive: 'no'}, {alive: 'no'}],
+      );
+    });
+  });
 
   describe('kill, uninstall and cleanup', () => {
     it('F-2411.BR-3: kill stops the server and removes bin/', () => {
