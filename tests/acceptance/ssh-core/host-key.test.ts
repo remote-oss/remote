@@ -142,13 +142,27 @@ function failuresOf(window: string): string[] {
   return recordLines('failureDialog', window).map(line => line.question);
 }
 
-/** Waits for window `window` to show a failure dialog. */
-function failureShown(window: string, milliseconds: number): Promise<void> {
+/** Waits for window `window` to show `count` failure dialogs. */
+function failuresShown(
+  window: string,
+  count: number,
+  milliseconds: number,
+): Promise<void> {
   return waitFor(
-    `${window} to show its failure dialog`,
-    () => recordLines('failureDialog', window).length > 0,
+    `${window} to show ${String(count)} failure dialogs`,
+    () => recordLines('failureDialog', window).length >= count,
     milliseconds,
   );
+}
+
+/** The script entry that answers the failure dialog of window `window` with Retry. */
+function retryEntry(window: string) {
+  return {
+    surface: 'failureDialog',
+    match: 'Could not establish connection',
+    answer: {button: 'Retry'},
+    window,
+  } as const;
 }
 
 /** Answers the fingerprint pick of the window `alias` with `answer` and checks the failure dialog, the known-hosts file and that the window is unconnected. */
@@ -191,7 +205,7 @@ async function changedKeyRefused(alias: string, mode: string): Promise<void> {
   try {
     const before = readFileSync(known, 'utf8');
     await openWindow(alias, alias);
-    await failureShown(alias, 60_000);
+    await failuresShown(alias, 1, 60_000);
     deepStrictEqual(
       {
         failures: failuresOf(alias),
@@ -397,36 +411,24 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
     const known = changedKnown(alias);
     await checking(alias, known, 'ask');
     const settings = readUserSettings();
-    const again = nextEmptyName();
-    appendScript([
-      {
-        surface: 'failureDialog',
-        match: 'Could not establish connection',
-        answer: {button: 'Retry'},
-        window: alias,
-      },
-      ...refusals(again),
-    ]);
+    appendScript([retryEntry(alias), ...refusals(alias)]);
     try {
       const before = readFileSync(known, 'utf8');
       await openWindow(alias, alias);
-      await failureShown(again, 90_000);
+      await failuresShown(alias, 2, 90_000);
       deepStrictEqual(
         {
-          first: failuresOf(alias),
-          second: failuresOf(again),
+          failures: failuresOf(alias),
           known: readFileSync(known, 'utf8') === before,
           settingsKept: readUserSettings() === settings,
         },
         {
-          first: [changedDialog(alias)],
-          second: [changedDialog(alias)],
+          failures: [changedDialog(alias), changedDialog(alias)],
           known: true,
           settingsKept: true,
         },
       );
     } finally {
-      await closeWindow(again).catch(() => undefined);
       await closeWindow(alias).catch(() => undefined);
     }
   });
@@ -441,7 +443,7 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
     try {
       const before = readFileSync(known, 'utf8');
       await openWindow(alias, alias);
-      await failureShown(alias, 60_000);
+      await failuresShown(alias, 1, 60_000);
       deepStrictEqual(
         {
           failures: failuresOf(alias),
@@ -466,35 +468,31 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
     const alias = 'c3021-retry-pick';
     const known = await asking(alias);
     const settings = readUserSettings();
-    const again = nextEmptyName();
     appendScript([
       {surface: 'pick', match: 'fingerprint', answer: 'no', window: alias},
-      {
-        surface: 'failureDialog',
-        match: 'Could not establish connection',
-        answer: {button: 'Retry'},
-        window: alias,
-      },
-      {surface: 'pick', match: 'fingerprint', answer: 'no', window: again},
-      ...refusals(again),
+      retryEntry(alias),
+      {surface: 'pick', match: 'fingerprint', answer: 'no', window: alias},
+      ...refusals(alias),
     ]);
     try {
       await openWindow(alias, alias);
-      await failureShown(again, 90_000);
+      await failuresShown(alias, 2, 90_000);
       deepStrictEqual(
         {
           known: knownLines(known),
-          failures: failuresOf(again),
+          failures: failuresOf(alias),
           settingsKept: readUserSettings() === settings,
         },
         {
           known: [],
-          failures: [`Could not establish connection to "${alias}".`],
+          failures: [
+            `Could not establish connection to "${alias}".`,
+            `Could not establish connection to "${alias}".`,
+          ],
           settingsKept: true,
         },
       );
     } finally {
-      await closeWindow(again).catch(() => undefined);
       await closeWindow(alias).catch(() => undefined);
     }
   });
