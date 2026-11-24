@@ -1,43 +1,30 @@
 /**
- * @fileoverview The hint store the extension keeps in its global state, read from the profile's state database by a
- * row of a launch whose editor writes it to disk.
+ * @fileoverview The connection hints the extension keeps, read from the files of its global storage folder by a row of a
+ * launch whose editor writes them to disk, through the accessor the extension's README documents.
  */
 
+import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {variable, waitFor} from './harness.ts';
-import {readStateDatabase} from './state-database.ts';
+import {type HintRecords, HINTS_FOLDER, recordsOf} from './stored-hints.ts';
 
-/** The records of the hint store: when each connect started, and the hints it kept. */
-export type HintRecords = Array<{
-  started: string;
-  hints: Array<{
-    kind?: string;
-    status?: string;
-    statusNumber?: number;
-    text?: string;
-    message?: string;
-    details?: string;
-    mitigations?: string[];
-    resources?: string[];
-  }>;
-}>;
+export type {HintRecords} from './stored-hints.ts';
 
-/** The records of the hint store the extension keeps in its global state; none before it writes one. */
+/** The records of the hint store as the files of every window hold them; none before a window writes one. */
 export function hintRecords(): HintRecords {
-  return readStateDatabase(
-    path.join(variable('HARNESS_USER_DATA'), 'User/globalStorage/state.vscdb'),
-    database => {
-      const entry = database
-        .prepare('SELECT value FROM ItemTable WHERE key = ?')
-        .get('remote-oss.remote-ssh') as {value: string} | undefined;
-      const store =
-        entry === undefined
-          ? undefined
-          : ((JSON.parse(entry.value) as Record<string, unknown>)[
-              'remote.ssh.hints'
-            ] as {records?: HintRecords} | undefined);
-      return store?.records ?? [];
-    },
+  const folder = path.join(variable('HARNESS_USER_DATA'), ...HINTS_FOLDER);
+  return recordsOf(
+    existsSync(folder)
+      ? readdirSync(folder)
+          .filter(name => /\.json$|\.claim-[0-9a-f]+$/.test(name))
+          .flatMap(name => {
+            try {
+              return [readFileSync(path.join(folder, name), 'utf8')];
+            } catch {
+              return [];
+            }
+          })
+      : [],
   );
 }
 
