@@ -17,6 +17,7 @@ import {
 } from '../../../tools/view-rows.ts';
 import path from 'node:path';
 import {inWindow, isOpen, variable, windowState} from './harness.ts';
+import {activateWindow} from './display.ts';
 import {
   dispatchAt,
   evaluateAt,
@@ -501,17 +502,20 @@ async function evaluate<Value>(
 }
 
 /**
- * Brings window `name`'s page to the front, as a click on the window does, and waits for the page to report the
- * focus: a window the window manager left unfocused hides its quick input, and a palette run in it never shows.
+ * Gives window `name` the display's focus through the window manager, as a click on the window does, and waits for
+ * the page to report the focus: a window the window manager left unfocused hides its quick input, and a palette run in
+ * it never shows. The manager's `--sync` activation is asked for on every pass, so the grab stays ordered against
+ * what the display does between the passes.
  */
 export async function focusWindow(name: string): Promise<void> {
-  await dispatchAt(await pageOf(name), `window ${name}`, [
-    {method: 'Page.bringToFront', params: {}},
-  ]);
   await settled(
-    () => `window ${name} to hold the focus after its page came to the front`,
-    async () =>
-      (await evaluate<boolean>(name, 'document.hasFocus()')) || undefined,
+    () => `window ${name} to hold the focus after the display activated it`,
+    async () => {
+      await activateWindow(name);
+      return (
+        (await evaluate<boolean>(name, 'document.hasFocus()')) || undefined
+      );
+    },
   );
 }
 
