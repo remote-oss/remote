@@ -133,7 +133,7 @@
   "label": "type:decision",
   "title": "Decision: interface between Remote Explorer and its family companions",
   "epic": "E59",
-  "acCount": 36,
+  "acCount": 37,
   "surfaces": {
    "commands": [
     "remote-internal.getActiveSshRemote",
