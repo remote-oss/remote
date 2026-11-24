@@ -506,15 +506,20 @@ describe('Connect Current Window to Host', function () {
         () => true,
         () => false,
       );
+      await waitFor(
+        'the sshd line for the disconnect',
+        async () =>
+          (await sshdLog(since)).some(line =>
+            line.includes('Disconnected from user harness'),
+          ),
+        10_000,
+      );
       deepStrictEqual(
         {
           first: first.length > 0,
           goneFirst,
           second: second.length > 0,
           goneSecond,
-          disconnected: (await sshdLog(since)).some(line =>
-            line.includes('Disconnected from user harness'),
-          ),
           logins: await acceptedKeyLogins(since),
         },
         {
@@ -522,7 +527,6 @@ describe('Connect Current Window to Host', function () {
           goneFirst: true,
           second: true,
           goneSecond: true,
-          disconnected: true,
           logins: 1,
         },
       );

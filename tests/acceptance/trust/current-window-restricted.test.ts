@@ -85,22 +85,27 @@ describe('Connect Current Window to Host in Restricted Mode', function () {
   });
 
   it('F-2302 AC-26 (c3014-restricted-switch): in Restricted Mode a host picked from the palette reloads the same window onto it with no folder, and opens no window', async () => {
-    const leftover = emptyWindows();
-    appendScript([hostAnswer(name, {label: 'harness'})]);
-    const next = await nextEmptyWindow(() => runFromPalette(name, SWITCH));
-    await waitFor(
-      `${next} to show its host`,
-      async () => (await windowState(next)).remoteName === 'ssh-remote',
-      120_000,
-    );
-    deepStrictEqual(
-      [
-        (await windowState(next)).remoteAuthority,
-        (await windowState(next)).folders,
-        windowEvents(name).at(-1)?.event,
-        emptyWindows().filter(each => !leftover.includes(each)),
-      ],
-      ['ssh-remote+harness', [], 'deactivated', [next]],
-    );
+    let next = '';
+    try {
+      const leftover = emptyWindows();
+      appendScript([hostAnswer(name, {label: 'harness'})]);
+      next = await nextEmptyWindow(() => runFromPalette(name, SWITCH));
+      await waitFor(
+        `${next} to show its host`,
+        async () => (await windowState(next)).remoteName === 'ssh-remote',
+        120_000,
+      );
+      deepStrictEqual(
+        [
+          (await windowState(next)).remoteAuthority,
+          (await windowState(next)).folders,
+          windowEvents(name).at(-1)?.event,
+          emptyWindows().filter(each => !leftover.includes(each)),
+        ],
+        ['ssh-remote+harness', [], 'deactivated', [next]],
+      );
+    } finally {
+      await closeWindow(next).catch(() => undefined);
+    }
   });
 });
