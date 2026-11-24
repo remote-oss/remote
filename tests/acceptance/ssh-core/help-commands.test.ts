@@ -24,6 +24,7 @@ import {openFolderWindow} from '../windows/folder-windows.ts';
 import {paletteItems, runFromPalette} from '../windows/palette.ts';
 import {
   dialogOf,
+  focusWindow,
   notifications,
   outputChannelOf,
   pageText,
@@ -497,6 +498,7 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
         folder,
         'remote-oss.remote-explorer',
       );
+      await focusWindow(folder);
       await runFromPalette(folder, 'Remote-SSH: Help');
       await runFromPalette(folder, 'Remote-SSH: Get Started with SSH');
       // The command the palette hides: invoked as the window's own command, whose open never settles in the run's editor.
