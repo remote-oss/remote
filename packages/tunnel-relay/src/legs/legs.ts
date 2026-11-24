@@ -3,8 +3,7 @@
  * server the relay is, with key exchange, host key and cipher all `none` (`[dev-tunnels] rs/src/connections/
  * relay_tunnel_host.rs:367-383,951-956`). Each client leg is piped, unread, through a `client-ssh-session-stream`
  * channel the relay opens on its tunnel's host session (`:82-106,958-969`). A leg that sends nothing for a minute is
- * pinged, and closed when no pong comes within ten seconds (`ws.rs:147-187`), so a silent leg never reaches the
- * brief's two idle minutes.
+ * pinged, and ended when no pong comes within ten seconds (`ws.rs:147-187`).
  */
 
 import type {IncomingMessage} from 'node:http';
