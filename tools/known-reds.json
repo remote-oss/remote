@@ -72,15 +72,6 @@
     "added": "2026-11-13"
   },
   {
-    "launch": "explorer-folders",
-    "file": "explorer-folders/folders-4-many.test.ts",
-    "title": "F-2503 AC-21 (many-folders): 122 different folders opened one after another on one host are all listed, most recent first, none dropped",
-    "card": 2467,
-    "owner": "hestia",
-    "evidence": 43356589144,
-    "added": "2026-11-13"
-  },
-  {
     "launch": "containers-a",
     "file": "containers/authoring-where.test.ts",
     "title": "F-0405 AC-32 (c101-no-source-rebuild-with): remote-containers.rebuildAndReopenInContainer on a configuration with no container source and a stopped container shows the modal warning, Cancel changes nothing and Use Template opens the template screen, and the container keeps its id and state",
