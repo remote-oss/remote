@@ -25,8 +25,15 @@ The relay is `brief-relay.md`, and the host is `brief-agent.md`.
 - **One domain, in the package:** `relay.json` (`{"domain": "<domain>"}`) beside the manifest. The release build writes
   it, once the user names the domain at the first staging deployment (F-8902 item 8). There's no setting for it
   (R-60).
-- **Tests:** the acceptance harness writes the per-run relay's domain into the installed copy's `relay.json`, and gives
-  the editor the per-run relay's CA (#3076).
+- **Tests** (proteus's wiring, beside #3076):
+  - the acceptance harness writes the per-run relay's domain into the installed copy's `relay.json`;
+  - a `tunnels` launch publishes the relay on the runner's loopback (`127.0.0.1:443`), and every name the relay hands
+    out resolves there (`cp.<domain>`, `<domain>`, and any `*.<domain>`). The run's domain is under `.localhost`,
+    which systemd-resolved on Ubuntu resolves to loopback, so no hosts file or wildcard is needed. A probe on a
+    hosted runner confirms this before §8's rows rely on it; the fallback is a local DNS for the run's domain;
+  - the editor gets the run's CA as `NODE_EXTRA_CA_CERTS` in its environment, never `NODE_TLS_REJECT_UNAUTHORIZED`.
+    So the extension host's `https` and the client leg's TLS both trust it. The skeleton card's first row proves it
+    with a management-client `GET`.
 - **The management client:** the SDK's, with our domain as its custom domain (`[dev-tunnels]`
   `ts/src/management/tunnelManagementHttpClient.ts:275`), at the relay's API version (brief-relay §2). Its HTTPS goes
   through Node's `https` in the extension host, so the editor's proxy settings apply (F-8203).
@@ -107,8 +114,10 @@ The relay is `brief-relay.md`, and the host is `brief-agent.md`.
 
 ## 8. Proof, and the cards this brief makes (cut by daedalus)
 
-- **Proof:** #3076's per-run relay with the agent as host, and the editor's acceptance launches with this extension
-  pointed at that relay (§2). It runs in a hosted Linux job.
+- **Proof:** the client rows run in a VSCodium acceptance job for a `tunnels` launch, on a hosted Linux runner. Before
+  the editor starts, that job starts #3076's relay stack itself (the relay and stub-identity images, built in the job)
+  and the agent from the `tunnel-agent` artifact. So that launch's job needs `tunnel-agent`, and the harness gains a
+  fixture for the stack. This wiring is proteus's.
 - **Cards, in order:**
   1. The package skeleton, `relay.json` and the management client (§2).
   2. Sign-in and the providers answer (§3).
