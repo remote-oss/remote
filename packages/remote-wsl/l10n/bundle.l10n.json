@@ -1,0 +1,6 @@
+{
+  "WSL stays inactive in this window because another extension that connects to WSL distros is enabled. Both use the same commands and settings. Disable one of the two and reload the window.": "WSL stays inactive in this window because another extension that connects to WSL distros is enabled. Both use the same commands and settings. Disable one of the two and reload the window.",
+  "Show Other Extension": "Show Other Extension",
+  "Local hostAuthority resolutions are not possible in web": "Local hostAuthority resolutions are not possible in web",
+  "WSL on the web requires an exec server.": "WSL on the web requires an exec server."
+}

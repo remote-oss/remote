@@ -15,7 +15,11 @@
 import {existsSync, readFileSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {readPackageSources} from './identifier-sources.ts';
-import {translatedStrings} from './translated-strings.ts';
+import {
+  importedNames,
+  stringConstants,
+  translatedStrings,
+} from './translated-strings.ts';
 import {
   isMainModule,
   messageOf,
@@ -205,19 +209,71 @@ export function shippedSources(directory: string, relative = 'src'): string[] {
   });
 }
 
+/**
+ * A shipped source of the closure: its package, its path below the package, its text, and the text each name it
+ * imports from another file holds when that constant is a string.
+ */
+interface ClosureSource {
+  member: string;
+  relative: string;
+  source: string;
+  imported: Map<string, string>;
+}
+
+/** The shipped sources of the closure, each with the string constants the names it imports hold. */
+function closureSources(root: string, folder: string): ClosureSource[] {
+  const byPath = new Map<
+    string,
+    {member: string; relative: string; source: string}
+  >();
+  for (const member of closureFolders(root, folder)) {
+    const directory = path.join(root, 'packages', member);
+    for (const relative of shippedSources(directory)) {
+      const where = path.join(directory, relative);
+      byPath.set(where, {
+        member,
+        relative,
+        source: readFileSync(where, 'utf8'),
+      });
+    }
+  }
+  const constants = new Map(
+    [...byPath].map(([where, entry]) => [where, stringConstants(entry.source)]),
+  );
+  return [...byPath].map(([where, entry]) => {
+    const imported = new Map<string, string>();
+    for (const [name, specifier] of importedNames(entry.source)) {
+      if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
+        continue;
+      }
+      const modulePath = path.resolve(path.dirname(where), specifier);
+      const text = (
+        constants.get(modulePath) ?? constants.get(`${modulePath}.ts`)
+      )?.get(name);
+      if (text !== undefined) {
+        imported.set(name, text);
+      }
+    }
+    return {...entry, imported};
+  });
+}
+
 /** A problem for each string the package's code translates that the default bundle has no key for. */
 function untranslatedProblems(
-  directory: string,
+  sources: readonly ClosureSource[],
+  folder: string,
   keys: ReadonlySet<string>,
 ): FileProblem[] {
-  return shippedSources(directory).flatMap(file =>
-    translatedStrings(file, readFileSync(path.join(directory, file), 'utf8'))
-      .filter(found => !keys.has(found.text))
-      .map(found => ({
-        file: `${file}:${String(found.line)}`,
-        text: `"${found.text}" is translated but not a key of ${BUNDLE_SOURCE}`,
-      })),
-  );
+  return sources
+    .filter(source => source.member === folder)
+    .flatMap(source =>
+      translatedStrings(source.relative, source.source, source.imported)
+        .filter(found => !keys.has(found.text))
+        .map(found => ({
+          file: `${source.relative}:${String(found.line)}`,
+          text: `"${found.text}" is translated but not a key of ${BUNDLE_SOURCE}`,
+        })),
+    );
 }
 
 /**
@@ -250,24 +306,19 @@ export function closureFolders(root: string, folder: string): string[] {
 
 /** A problem for each key of the default bundle that no code of the package or of its libraries translates. */
 function unusedKeyProblems(
-  root: string,
+  sources: readonly ClosureSource[],
   folder: string,
   keys: ReadonlySet<string>,
 ): FileProblem[] {
-  const directory = path.join(root, 'packages', folder);
-  if (shippedSources(directory).length === 0) {
+  if (!sources.some(source => source.member === folder)) {
     return [];
   }
   const translated = new Set(
-    closureFolders(root, folder).flatMap(member => {
-      const memberDirectory = path.join(root, 'packages', member);
-      return shippedSources(memberDirectory).flatMap(file =>
-        translatedStrings(
-          file,
-          readFileSync(path.join(memberDirectory, file), 'utf8'),
-        ).map(found => found.text),
-      );
-    }),
+    sources
+      .flatMap(source =>
+        translatedStrings(source.relative, source.source, source.imported),
+      )
+      .map(found => found.text),
   );
   return [...keys]
     .filter(key => !translated.has(key))
@@ -305,10 +356,11 @@ function bundleProblems(
     }
     return;
   }
+  const sources = closureSources(root, folder);
   problems.push(...emptyTextProblems(BUNDLE_SOURCE, source));
   const sourceKeys = new Set(source.keys());
-  problems.push(...untranslatedProblems(directory, sourceKeys));
-  problems.push(...unusedKeyProblems(root, folder, sourceKeys));
+  problems.push(...untranslatedProblems(sources, folder, sourceKeys));
+  problems.push(...unusedKeyProblems(sources, folder, sourceKeys));
   problems.push(
     ...translationProblems(
       readTables(directory, translatedFiles, problems),

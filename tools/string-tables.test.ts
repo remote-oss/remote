@@ -270,6 +270,60 @@ describe('string-tables', () => {
       ]);
     });
 
+    it('counts a constant the file imports from another file of the package, by its relative import', () => {
+      write('src/strings.ts', "export const WARNING = 'w';\n");
+      source(
+        'src/extension.ts',
+        "import {WARNING} from './strings.ts';\nl10n.t(WARNING);\n",
+      );
+      deepStrictEqual(problems(), [
+        'packages/remote-x/src/extension.ts:2: "w" is translated but not a key of l10n/bundle.l10n.json',
+      ]);
+    });
+
+    it('passes a key only a constant imported from another file of the package translates', () => {
+      remove('src/base.ts');
+      write('l10n/bundle.l10n.json', {Text: 'Text'});
+      write('src/strings.ts', "export const TEXT = 'Text';\n");
+      source(
+        'src/extension.ts',
+        "import {TEXT} from './strings.ts';\nl10n.t(TEXT);\n",
+      );
+      for (const locale of LOCALES) {
+        write(`l10n/bundle.l10n.${locale}.json`, {Text: 'Text'});
+      }
+      deepStrictEqual(problems(), []);
+    });
+
+    it('counts a string given to a translate that is a parameter of the calling function', () => {
+      source(
+        'src/extension.ts',
+        "function show(translate: (text: string) => string): string {\n  return translate('Missing');\n}\n",
+      );
+      deepStrictEqual(problems(), [
+        'packages/remote-x/src/extension.ts:2: "Missing" is translated but not a key of l10n/bundle.l10n.json',
+      ]);
+    });
+
+    it('counts a string given to a translate the file declares for the calling function', () => {
+      source(
+        'src/extension.ts',
+        "function show(): string {\n  function translate(text: string): string {\n    return l10n.t(text);\n  }\n  return translate('Missing');\n}\n",
+      );
+      deepStrictEqual(problems(), [
+        'packages/remote-x/src/extension.ts:5: "Missing" is translated but not a key of l10n/bundle.l10n.json',
+      ]);
+    });
+
+    it('counts no constant the imported file does not hold, and none from a package specifier', () => {
+      write('src/strings.ts', "export const OTHER = 'w';\n");
+      source(
+        'src/extension.ts',
+        "import {WARNING} from './strings.ts';\nimport {OTHER} from 'lib-x';\nl10n.t(WARNING);\nl10n.t(OTHER);\n",
+      );
+      deepStrictEqual(problems(), []);
+    });
+
     it('reports the template given to filled that is not a key', () => {
       source('src/texts.ts', "filled(translate, 'y {0}', []);\n");
       deepStrictEqual(problems(), [

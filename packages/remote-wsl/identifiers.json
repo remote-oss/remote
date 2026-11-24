@@ -62,5 +62,22 @@
     }
   ],
   "settingPairs": [],
-  "ungated": []
+  "ungated": [],
+  "pseudoLocalized": true,
+  "locales": [
+    "cs",
+    "de",
+    "es",
+    "fr",
+    "it",
+    "ja",
+    "ko",
+    "pl",
+    "pt-br",
+    "qps-ploc",
+    "ru",
+    "tr",
+    "zh-cn",
+    "zh-tw"
+  ]
 }

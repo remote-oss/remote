@@ -1,5 +1,8 @@
 {
-  "displayName": "WSL",
+  "displayName": {
+    "message": "WSL",
+    "comment": ["{Locked='WSL'}"]
+  },
   "description": "Open your Linux projects in WSL and use Linux tools from a Windows editor, without leaving it.",
   "commands.category.wsl": "WSL",
   "commands.category.file": "File",
