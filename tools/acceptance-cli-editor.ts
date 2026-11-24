@@ -67,11 +67,18 @@ export function withCliTemplate(productText: string, template: string): string {
   return `${JSON.stringify({...product, cliDownloadUrlTemplate: template}, null, '\t')}\n`;
 }
 
-/** The `product.json` of the editor whose executable is `executable`. */
-export function productFileOf(executable: string): string {
+/**
+ * The `product.json` of the editor whose executable is `executable`, by the client's platform: `resources/app` beside
+ * the executable on Linux and Windows, and `Contents/Resources/app` of the bundle on macOS, whose executable is in
+ * `Contents/MacOS`.
+ */
+export function productFileOf(
+  executable: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
   return path.join(
     path.dirname(executable),
-    'resources',
+    ...(platform === 'darwin' ? ['..', 'Resources'] : ['resources']),
     'app',
     'product.json',
   );

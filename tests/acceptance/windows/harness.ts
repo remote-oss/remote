@@ -25,6 +25,7 @@ import {
   restoreRoute as restoreRouteOf,
   type RouteCut,
 } from '../../../tools/acceptance-network.ts';
+import {productFileOf} from '../../../tools/acceptance-cli-editor.ts';
 import {runCommand} from '../../../tools/command-runner.ts';
 import {oneTimeCode} from '../../../tools/one-time-code.ts';
 import {filesHolding} from '../../../tools/secret-search.ts';
@@ -1318,15 +1319,7 @@ export interface EditorProduct {
 /** The facts of the launch's editor, read from its product.json. */
 export function editorProduct(): EditorProduct {
   return JSON.parse(
-    readFileSync(
-      path.join(
-        path.dirname(variable('HARNESS_EDITOR_EXECUTABLE')),
-        'resources',
-        'app',
-        'product.json',
-      ),
-      'utf8',
-    ),
+    readFileSync(productFileOf(variable('HARNESS_EDITOR_EXECUTABLE')), 'utf8'),
   ) as EditorProduct;
 }
 

@@ -66,6 +66,21 @@ describe('the CLI-source editor', () => {
     );
   });
 
+  it('#3120: the product file is below resources/app beside the executable on Linux and Windows, and below Contents/Resources/app of the bundle on macOS', () => {
+    deepStrictEqual(
+      [
+        productFileOf('/editor/codium', 'linux'),
+        productFileOf('/editor/codium', 'win32'),
+        productFileOf('/App.app/Contents/MacOS/Codium', 'darwin'),
+      ],
+      [
+        '/editor/resources/app/product.json',
+        '/editor/resources/app/product.json',
+        '/App.app/Contents/Resources/app/product.json',
+      ],
+    );
+  });
+
   it('#2735: the commit of an editor is its product’s, and none when the product has none, names an empty one or is not there', () => {
     const commit = '0123456789abcdef0123456789abcdef01234567';
     const outcomes: unknown[] = [];
