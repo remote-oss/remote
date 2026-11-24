@@ -626,7 +626,8 @@ describe('Connect Current Window to Host', function () {
       const before = await sshOfHost();
       await openWindow('harness', 'c3014-own');
       await connectedWithin('c3014-own', 90_000);
-      const first = newSsh(before, await sshOfHost());
+      const afterConnect = await sshOfHost();
+      const first = newSsh(before, afterConnect);
       const next = await switched('c3014-own', {typed: '127.0.0.1'});
       await connectedEmpty(next, '127.0.0.1', 90_000);
       const goneFirst = await waitFor(
@@ -637,11 +638,10 @@ describe('Connect Current Window to Host', function () {
         () => true,
         () => false,
       );
+      const second = newSsh(afterConnect, await sshOfHost());
       const since = new Date().toISOString();
-      const beforeSecond = await sshOfHost();
       const again = await switched(next, {typed: '127.0.0.1'});
       await connectedEmpty(again, '127.0.0.1', 90_000);
-      const second = newSsh(beforeSecond, await sshOfHost());
       const goneSecond = await waitFor(
         'the second ssh gone',
         async () => (await sshOfHost()).every(each => !second.includes(each)),
