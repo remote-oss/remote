@@ -38,7 +38,7 @@ The agent's command line is ours (R-113). It has only what the criteria need (R-
 
 - **The relay:** the management client with our domain (`[dev-tunnels]`
   `ts/src/management/tunnelManagementHttpClient.ts:275`, `https://cp.<domain>/`) at the relay's API version
-  (brief-relay §2). The domain comes from the agent's configuration file (§5); release 1 has one relay.
+  (brief-relay §2). The domain comes from the archive's shipped `config.json` (§5); release 1 has one relay.
 - **The first registration:** the agent creates a tunnel, with a fresh id and the name the user chose or the
   machine's host name. It adds port 31545, `[cli]`'s control port (`[cli]` `constants.rs:14`), and registers its
   host endpoint (brief-relay §5).
@@ -90,10 +90,12 @@ The agent's command line is ours (R-113). It has only what the criteria need (R-
 
 ## 5. What the agent keeps
 
-- **One state folder per user:** `~/.<agent folder>/`. The folder's name comes from lib-identifiers, the family's one
-  source of names users see (D-14), as one new constant, not a literal in the agent. The folder is mode 0700.
+- **One state folder per user:** `~/.remote-oss-tunnel-agent/`, a fixed family name from one lib-identifiers constant
+  (D-14, #3159), since the agent may serve several products' clients. The folder is mode 0700.
+- **Shipped defaults:** `config.json` inside the archive, `{domain, githubClientId}` (the relay's domain and the
+  device flow's public OAuth client id). The release build writes it at the first staging deployment, and tests write
+  the per-run values into the unpacked copy (#3160).
 - **Its files:**
-  - **`config.json`**: the relay's domain;
   - **`tunnel.json`**: the tunnel record `{tunnelId, clusterId, name}`, for §3's re-register;
   - **`host-key`**: the host's SSH key, made once, mode 0600;
   - **`credential`**: the GitHub token, mode 0600.
