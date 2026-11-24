@@ -58,6 +58,10 @@ on:
           coverage, slice 1 and server lifecycle, which a launch's proof does not need
         type: boolean
         default: false
+      systemd-user-probe:
+        description: Probe systemd user units for the runner's account on GitHub's Linux runners (x64 and arm64); with launches-only
+        type: boolean
+        default: false
   # Once a night, at 04:43, main runs the genuine VS Code job and every part of the VSCodium suite at that commit, in
   # groups of their own that no merge replaces: the full run that names the commits since a part's last green.
   schedule:
@@ -84,6 +88,82 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'push' && github.event_name != 'schedule' }}
 
 jobs:
+  # What a systemd user unit can do on GitHub's Linux runners, for the tunnel host agent's service mode: lingering, the
+  # user manager, enable --now, a restart after a kill, the network-online target from a user unit, and disable --now.
+  # Dispatch only; it reads no secret and changes nothing outside the runner.
+  systemd-user-probe:
+    if: inputs.systemd-user-probe
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - name: The machine and the account
+        run: |
+          set -x
+          id; uname -m; systemctl --version | head -1
+          loginctl list-sessions --no-legend || true
+          loginctl show-user "$USER" -p Linger -p State 2>&1 || true
+          ls -ld "/run/user/$(id -u)" 2>&1 || true
+      - name: Lingering and the user manager
+        run: |
+          set -x
+          sudo loginctl enable-linger "$USER"
+          for i in $(seq 1 20); do [ -S "/run/user/$(id -u)/bus" ] && break; sleep 1; done
+          ls -l "/run/user/$(id -u)/bus" 2>&1 || true
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          systemctl --user is-system-running 2>&1 || true
+          systemctl --user list-units --all --no-legend 'network-online.target' 'default.target' 2>&1 || true
+      - name: A unit like the agent's, enabled, killed, restarted, disabled
+        run: |
+          set -x
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          mkdir -p ~/.config/systemd/user
+          cat > ~/.config/systemd/user/probe-agent.service <<'UNIT'
+          [Unit]
+          Description=probe of a user unit like the tunnel host agent's
+          After=network-online.target
+          Wants=network-online.target
+          [Service]
+          ExecStart=/bin/sleep infinity
+          Restart=always
+          RestartSec=10
+          UMask=0077
+          NoNewPrivileges=yes
+          [Install]
+          WantedBy=default.target
+          UNIT
+          systemctl --user daemon-reload
+          systemctl --user enable --now probe-agent.service
+          sleep 2
+          systemctl --user show probe-agent.service -p ActiveState -p SubState -p MainPID -p NRestarts
+          systemctl --user status probe-agent.service --no-pager 2>&1 | head -8 || true
+          first=$(systemctl --user show probe-agent.service -p MainPID --value)
+          kill -9 "$first"
+          start=$(date +%s)
+          for i in $(seq 1 30); do
+            now=$(systemctl --user show probe-agent.service -p MainPID --value)
+            [ "$now" != "0" ] && [ "$now" != "$first" ] && break
+            sleep 1
+          done
+          echo "restarted as $now after $(( $(date +%s) - start )) s (was $first)"
+          systemctl --user show probe-agent.service -p NRestarts
+          journalctl --user -u probe-agent.service --no-pager 2>&1 | tail -6 || true
+          systemctl --user disable --now probe-agent.service
+          rm ~/.config/systemd/user/probe-agent.service
+          systemctl --user daemon-reload
+          systemctl --user status probe-agent.service --no-pager 2>&1 | head -3 || true
+      - name: Without lingering
+        if: always()
+        run: |
+          set -x
+          sudo loginctl disable-linger "$USER" || true
+          sleep 3
+          loginctl show-user "$USER" -p Linger -p State 2>&1 || true
+          ls -ld "/run/user/$(id -u)" 2>&1 || true
+
   # The jobs on GitHub's runners pin ubuntu-24.04. On 2026-10-25 ubuntu-latest moved to ubuntu-26.04, whose coreutils
   # are uutils, and a unit row that read GNU mkdir's wording turned every pull request red at once. image-canary.yml
   # runs the same checks and unit tests on ubuntu-latest once a day, so the next image move shows there first (#1379).
