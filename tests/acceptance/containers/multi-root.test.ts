@@ -4,11 +4,13 @@ import {mkdirSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
+  closeContained,
   closeWindow,
   connectedToContainer,
   devContainerFolder,
   devContainersOf,
   inWindow,
+  isOpen,
   reloadWindow,
   runLabelArguments,
   startInWindow,
@@ -27,6 +29,7 @@ import {
   notificationButtons,
   notificationCentre,
   notificationLinks,
+  pressEscape,
   quickPickFacts,
   quickPickRows,
   toastFacts,
@@ -452,7 +455,9 @@ describe('multi-root workspaces (card coverage-104)', function () {
         [SAVE_FIRST, ['OK'], null, [], []],
       );
     } finally {
-      await closeWindow(window).catch(() => undefined);
+      if (isOpen(window)) {
+        await closeContained(window, pressEscape).catch(() => undefined);
+      }
     }
   });
 
@@ -577,7 +582,9 @@ describe('multi-root workspaces (card coverage-104)', function () {
       );
     } finally {
       for (const window of windows) {
-        await closeWindow(window).catch(() => undefined);
+        if (isOpen(window)) {
+          await closeContained(window, pressEscape).catch(() => undefined);
+        }
       }
       await inWindow('local', NOTIFICATION_RESET);
     }
