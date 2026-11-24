@@ -945,6 +945,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           {
             'window.title': '[${rootName}]',
+            'workbench.commandPalette.history': 0,
             'security.workspace.trust.startupPrompt': 'once',
           },
         ],
@@ -1334,8 +1335,8 @@ describe('the launches of the VSCodium run', () => {
     }
     deepStrictEqual(
       [
-        ['ssh-core', 'ssh-agents', 'terminal-login', 'wsl-linux'].map(label =>
-          history(launchLabelled(launches, label)),
+        ['ssh-core', 'ssh-agents', 'terminal-login', 'wsl-linux', 'trust'].map(
+          label => history(launchLabelled(launches, label)),
         ),
         launches
           .filter(launch => launch.suite === 'containers')
@@ -1343,7 +1344,7 @@ describe('the launches of the VSCodium run', () => {
           .filter(value => value !== 0),
         history(launchLabelled(launches, 'windows')),
       ],
-      [[0, 0, 0, 0], [], undefined],
+      [[0, 0, 0, 0, 0], [], undefined],
     );
   });
 

@@ -1518,6 +1518,7 @@ export function launchesOf(root: string): Launch[] {
       suite: 'trust',
       settings: {
         ...TRUST_LAUNCH.settings,
+        ...PALETTE_HISTORY_OFF,
         // Core's default is never; the rows answer core's startup prompt, so this launch turns it on.
         'security.workspace.trust.startupPrompt': 'once',
       },
