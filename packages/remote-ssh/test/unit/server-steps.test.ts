@@ -221,6 +221,33 @@ describe('the server steps: the held server', () => {
   });
 });
 
+describe('the server steps: the default extensions', () => {
+  it("ruling-2995-takeup-cleanup (1): the install of the default extensions runs in a given data folder, and without one in the settings' folder", async () => {
+    async function rootOf(dataFolder: string | undefined): Promise<boolean> {
+      const channel = channelAnswering(lines('Ok'));
+      await createServerSteps(
+        dependencies({
+          settings: settingsWith({defaultExtensions: ['pub.ext']}),
+        }),
+      ).installExtensions(
+        INPUT,
+        leaseOn(channel),
+        new AbortController().signal,
+        dataFolder,
+      );
+      const call = channel.calls[0];
+      return (
+        call?.operation === 'runScript' &&
+        call.request.script.includes("INSTALL_ROOT='/srv/held'")
+      );
+    }
+    deepStrictEqual(
+      [await rootOf('/srv/held/.server-data'), await rootOf(undefined)],
+      [true, false],
+    );
+  });
+});
+
 describe('the server steps: plan', () => {
   it('downloads from the address the override gives, for the host platform', () => {
     const steps = createServerSteps(dependencies());

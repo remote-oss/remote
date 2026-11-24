@@ -680,9 +680,21 @@ async function runSteps(
     options.logger.info(
       `the held server on port ${String(record.remotePort)} answered: using it`,
     );
-    await pruneOldInstalls(dataFolder);
+    await afterReuse(dataFolder);
     installed();
     return connectionOver(opening, server);
+  }
+
+  /**
+   * What a connect does on a server that was already running, in `dataFolder`, the folder it was installed in: prunes
+   * the old installs there, then installs the default extensions the host lacks, before the window's remote extension
+   * host starts.
+   */
+  async function afterReuse(dataFolder: string): Promise<void> {
+    await pruneOldInstalls(dataFolder);
+    await quietly('the default extensions', () =>
+      steps.installExtensions(input, lease, cancellation, dataFolder),
+    );
   }
 
   /**
@@ -862,11 +874,10 @@ async function runSteps(
   // The direct install, which is the legacy mode and the exec server mode of an editor that names no CLI source, prunes
   // the old installs on every connect and reload, once this connect's server runs; a connect over the CLI never gets
   // here.
-  await pruneOldInstalls();
   if (started.server.reused) {
-    await quietly('the default extensions', () =>
-      steps.installExtensions(input, lease, cancellation),
-    );
+    await afterReuse(planned.plan.dataFolder);
+  } else {
+    await pruneOldInstalls();
   }
   const tunnel = await runBounded(
     signal => tunnelTo(started.server, signal),

@@ -685,6 +685,33 @@ describe('the connect pipeline, on a connection server another window started (c
     );
   });
 
+  it('F-2506 6.1 step 2, AC-6 (ruling-2995-takeup-cleanup): a take-up prunes and then installs the default extensions in the record’s data folder, whatever the setting now says, before the window gets its connection', async () => {
+    const done: Array<[string, string | undefined]> = [];
+    const {result} = await sharedConnect(
+      {startedHelper: false, storedRecord: HELD},
+      () => ({
+        maintain: (input, lease, action, cancellation, host, dataFolder) => {
+          done.push([action, dataFolder]);
+          return Promise.resolve({kind: 'done'});
+        },
+        installExtensions: (input, lease, cancellation, dataFolder) => {
+          done.push(['installExtensions', dataFolder]);
+          return Promise.resolve();
+        },
+      }),
+    );
+    deepStrictEqual(
+      {connected: 'connected' in result, done},
+      {
+        connected: true,
+        done: [
+          ['cleanup', '/srv/held/.server'],
+          ['installExtensions', '/srv/held/.server'],
+        ],
+      },
+    );
+  });
+
   it('ruling-2995-takeup-cleanup: a record without a data folder, from an earlier connection server, is stale: no host check, no tunnel, and the full setup', async () => {
     const {result, recording} = await sharedConnect({
       startedHelper: false,
@@ -1917,6 +1944,41 @@ describe('the connect pipeline, what it keeps and gives back', () => {
     );
     return recording;
   }
+
+  it('ruling-2995-takeup-cleanup (2): on a server that was already running, the full flow prunes and then installs the default extensions, both in the folder its plan names', async () => {
+    const {recording, options} = setup();
+    const folders: Array<[string, string | undefined]> = [];
+    await connect(
+      INPUT,
+      steps(recording, {
+        start: () => Promise.resolve(REUSED),
+        maintain: (input, lease, action, cancellation, host, dataFolder) => {
+          folders.push([action, dataFolder]);
+          return Promise.resolve({kind: 'done'});
+        },
+        installExtensions: (input, lease, cancellation, dataFolder) => {
+          folders.push(['installExtensions', dataFolder]);
+          return Promise.resolve();
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(folders, [
+      ['cleanup', '/home/dev/.server'],
+      ['installExtensions', '/home/dev/.server'],
+    ]);
+  });
+
+  it('F-2413 6.4 step 1: a fresh direct install, a server this connect started, prunes the old installs and installs no default extensions', async () => {
+    const {recording, options} = setup();
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(
+      recording.calls.filter(call =>
+        ['start', 'cleanup', 'installExtensions'].includes(call),
+      ),
+      ['start', 'cleanup'],
+    );
+  });
 
   it('installs the default extensions on a server that was already running', async () => {
     deepStrictEqual(

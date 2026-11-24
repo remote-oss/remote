@@ -673,10 +673,10 @@ export function createServerSteps(
         );
       }
     },
-    installExtensions: async (input, lease, cancellation) => {
+    installExtensions: async (input, lease, cancellation, dataFolder) => {
       await installExtensions(
         lease.channel,
-        parametersFor({}),
+        inDataFolder(parametersFor({}), dataFolder),
         settings.defaultExtensions,
         dependencies.logger,
         cancellation,

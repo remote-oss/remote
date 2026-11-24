@@ -341,6 +341,7 @@ export interface ConnectSteps {
     input: ConnectInput,
     lease: ConnectionLease,
     cancellation: AbortSignal,
+    dataFolder?: string,
   ): Promise<void>;
   /**
    * The path the window's tunnel takes, read once for the connect. The pipeline bounds the tunnel step itself only
