@@ -62,6 +62,7 @@ import {
 } from './companion/slice-endpoints.ts';
 import {pushActiveFolders} from './companion/active-folders.ts';
 import {historyStoreOf} from './companion/folder-history.ts';
+import {type HintEvents, hintEventsOf} from './diagnostics/hint-store.ts';
 import {newSession, NODE_EVENT_FILES} from './state/event-files.ts';
 import {serveHistoryEndpoints} from './companion/history-endpoints.ts';
 import {signalHostsChanged} from './companion/hosts-changed.ts';
@@ -308,6 +309,14 @@ export async function activate(
   if (vscode.env.remoteName !== 'ssh-remote') {
     result.writeWindowStart();
   }
+  const session = newSession();
+  const hintEvents = hintEventsOf({
+    folder: path.join(context.globalStorageUri.fsPath, 'connection-hints'),
+    session,
+    files: NODE_EVENT_FILES,
+    earlier: context.globalState,
+    now: Date.now,
+  });
   const connect = await registerConnectOf(
     context,
     manifest,
@@ -328,6 +337,7 @@ export async function activate(
       hostsChanged,
     },
     adapters,
+    hintEvents,
   );
   context.subscriptions.push({
     dispose: () => {
@@ -347,7 +357,7 @@ export async function activate(
   };
   const historyStore = historyStoreOf({
     folder: path.join(context.globalStorageUri.fsPath, 'folder-history'),
-    session: newSession(),
+    session,
     files: NODE_EVENT_FILES,
     legacy: context.globalState,
     now: Date.now,
@@ -465,6 +475,7 @@ async function registerConnectOf(
   host: ReturnType<typeof identifierHost>,
   served: ServedActivation,
   adapters: EditorAdapters,
+  hintEvents: HintEvents,
 ): Promise<ConnectRegistration> {
   const window = {alias: (): string => ''};
   const troubleshootingEditor = troubleshootingEditorOf(vscode, () => {
@@ -501,7 +512,7 @@ async function registerConnectOf(
         path.join(context.globalStorageUri.fsPath, 'preconnect-confirmations'),
       ),
       noticeState: context.globalState,
-      hintState: context.globalState,
+      hintEvents,
       documentation: () => helpLinksOf(manifest).documentation,
       troubleshooting: {
         enabled: () =>
@@ -618,7 +629,7 @@ async function registerConnectOf(
       openExternal: address =>
         vscode.env.openExternal(vscode.Uri.parse(address)),
       translate,
-      globalState: context.globalState,
+      hintEvents,
       logger: served.logger,
       notice: adapters.notice,
       addHost: {
