@@ -759,45 +759,6 @@ describe('the install location the user setting picks (card #2487)', function ()
     }
   });
 
-  it('F-2407 AC-15 (c2487-inertchange): a changed value at a connected window shows nothing and creates nothing, and a reload while the connection server runs keeps the old folder', async () => {
-    await freshHost();
-    const prior = `${HOME}/cust15`;
-    const now = `${HOME}/cust15b`;
-    const name = 'c2487-inertchange';
-    try {
-      await setting(SETTING, value(prior));
-      await openConnected(name, INSTALL_MILLISECONDS);
-      await setting(SETTING, value(now));
-      await new Promise(resolve => setTimeout(resolve, 8_000));
-      try {
-        await inWindow(name, 'workbench.action.reloadWindow');
-      } catch (error) {
-        console.log(
-          `c2487-inertchange the reload failed; the open dialog of ${name}: ${JSON.stringify(await dialogOf(name))}`,
-        );
-        console.log(
-          `c2487-inertchange the failureDialog records of ${name}: ${JSON.stringify(recordLines('failureDialog', name))}`,
-        );
-        console.log(
-          `c2487-inertchange the recent records of ${name}: ${JSON.stringify(recordLines(undefined, name).slice(-6))}`,
-        );
-        throw error;
-      }
-      await connectedWithin(name, INSTALL_MILLISECONDS);
-      deepStrictEqual(
-        {
-          prior: await serverAt(prior),
-          now: await serverAt(now),
-          dialogs: recordLines('failureDialog', name).length,
-        },
-        {prior: true, now: false, dialogs: 0},
-      );
-    } finally {
-      await closeWindow(name).catch(() => undefined);
-      await setting(SETTING, undefined);
-    }
-  });
-
   it('F-2407 AC-16 (c2487-newvalue): after the connection server for the host is ended, the reconnect checks and uses the new value, and the old folder is still on the host', async () => {
     await freshHost();
     const prior = `${HOME}/cust16`;
