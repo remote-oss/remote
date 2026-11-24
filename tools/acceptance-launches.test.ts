@@ -457,6 +457,7 @@ describe('the launches of the VSCodium run', () => {
         ['ssh-locks', undefined, true, undefined],
         ['ssh-downloaders', undefined, true, undefined],
         ['ssh-containers', ['remote-oss.remote-containers'], true, undefined],
+        ['cli-path', undefined, true, undefined],
         ['wsl-linux', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl-linux-web', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl', ['remote-oss.remote-wsl'], true, undefined],
@@ -1091,6 +1092,13 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
+  it('#3003: the cli-path launch is a renderer launch with the title the page helpers find a window by and core’s custom dialogs, which a page read shows', () => {
+    deepStrictEqual(
+      launches.find(launch => launch.label === 'cli-path')?.settings,
+      {'window.title': '[${rootName}]', 'window.dialogStyle': 'custom'},
+    );
+  });
+
   it('tooling-51, connect-84, containers-101, tooling-168, #2355: socket-prime (a part of socket), the containers-podman launch, cli-path, wsl, the ports and install primers and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
     deepStrictEqual(
       launches
@@ -1364,7 +1372,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, login-shells, preconnect, agent-notmp, default-ports, the explorer, trust and containers launches and every ports case', () => {
+  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, login-shells, preconnect, agent-notmp, default-ports, cli-path, the explorer, trust and containers launches and every ports case', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
@@ -1410,6 +1418,7 @@ describe('the launches of the VSCodium run', () => {
         'ssh-locks',
         'ssh-downloaders',
         'ssh-containers',
+        'cli-path',
         ...labelsFromExplorer(),
       ],
     );

@@ -19,8 +19,7 @@ import type {
 } from 'lib-server';
 import {
   CONNECT_WAIT_TIMEOUT,
-  EXEC_SERVER_NO_CLI,
-  EXEC_SERVER_SETTING_OFF,
+  directInstallRefusal,
   execServerNotSetUp,
   type FailureContext,
   type FailureDetail,
@@ -84,8 +83,10 @@ export interface ConnectOptions {
   logger: Logger;
   /** The editor's commit and quality, which the CLI path's `serve` names. */
   serve: {commit: string; quality: string};
-  /** The value of `remote.SSH.useExecServer`, read when the connect starts. */
+  /** The effective value of `remote.SSH.useExecServer`, read when the connect starts: false in the manual bootstrap. */
   useExecServer: boolean;
+  /** Whether `remote.SSH.localServerDownload` turns the manual bootstrap on, read when the connect starts. */
+  manualBootstrap: boolean;
   /** The lines of the settings listing, as the settings are when the connect starts. */
   settingLines: readonly string[];
   /** Writes the editor version, the extension and the platform to the log when the window has not yet. */
@@ -691,9 +692,7 @@ async function runSteps(
   }
   if (purpose === 'control') {
     if (planned.plan.kind !== 'cli') {
-      return failure(
-        options.useExecServer ? EXEC_SERVER_NO_CLI : EXEC_SERVER_SETTING_OFF,
-      );
+      return failure(directInstallRefusal(options));
     }
     const holding = await holdOverCli({
       input,

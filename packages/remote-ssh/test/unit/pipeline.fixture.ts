@@ -456,6 +456,7 @@ export function setup(level: Level = 'info'): {
       logger: createLogger(logSink, {minimumLevel: () => level}),
       serve: {commit: 'c1', quality: 'insider'},
       useExecServer: true,
+      manualBootstrap: false,
       settingLines: [],
       writeWindowStart: () => undefined,
     },
