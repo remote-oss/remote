@@ -320,7 +320,7 @@
   "label": "spec:draft",
   "title": "Host-key verification",
   "epic": "E23",
-  "acCount": 45,
+  "acCount": 43,
   "surfaces": {
    "commands": [],
    "settings": [

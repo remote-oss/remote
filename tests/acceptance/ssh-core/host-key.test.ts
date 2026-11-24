@@ -21,6 +21,7 @@ import {
   closeWindow,
   connected,
   connectedWithin,
+  heldLines,
   hostAnswer,
   inWindow,
   nextEmptyName,
@@ -30,11 +31,13 @@ import {
   readUserSettings,
   recordLines,
   restoreUserSettings,
+  signal,
   userSettings,
   variable,
   waitFor,
 } from '../windows/harness.ts';
-import {INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
+import {INSTALL_MILLISECONDS, setting} from '../windows/maintenance.ts';
+import {quickPickOf} from '../windows/renderer.ts';
 
 const HOST_KEY_FILE = '/etc/ssh/ssh_host_ed25519_key.pub';
 
@@ -237,6 +240,23 @@ function pickAsked(window: string): Promise<void> {
     () => picksOf(window).length > 0,
     90_000,
   );
+}
+
+/** Connects window `alias` through a scripted Continue in its fingerprint pick, and gives the pick's question and the known-hosts lines the connect wrote. */
+async function throughPick(
+  alias: string,
+): Promise<{question: string; written: number}> {
+  const known = await asking(alias);
+  const linesBefore = knownLines(known).length;
+  appendScript([
+    {surface: 'pick', match: 'fingerprint', answer: 'yes', window: alias},
+  ]);
+  await openWindow(alias, alias);
+  await connectedWithin(alias, INSTALL_MILLISECONDS);
+  return {
+    question: picksOf(alias)[0] ?? '',
+    written: knownLines(known).length - linesBefore,
+  };
 }
 
 describe('host-key questions in a window (card #3019, F-2305)', function () {
@@ -517,6 +537,93 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
       );
     } finally {
       await closeWindow(alias).catch(() => undefined);
+    }
+  });
+});
+
+describe('host-key questions in the terminal and the login terminal (card #3025, F-2305)', function () {
+  this.timeout(600_000);
+
+  let saved: string | undefined;
+  let fingerprint = '';
+
+  before(async () => {
+    saved = readUserSettings();
+    fingerprint = (await harnessHostFingerprint()) ?? '';
+  });
+
+  after(() => {
+    restoreUserSettings(saved);
+  });
+
+  it('F-2305 AC-30 (c3025-terminal-pick): in the terminal mode with remote.SSH.showLoginTerminal off, the window meets the fingerprint pick of the classic wording, and Continue connects it', async () => {
+    const alias = 'c3025-terminal-pick';
+    const before = readUserSettings();
+    await setting('remote.SSH.useLocalServer', false);
+    await setting('remote.SSH.showLoginTerminal', false);
+    const settings = readUserSettings();
+    try {
+      const {question, written} = await throughPick(alias);
+      deepStrictEqual(
+        {question, written, settingsKept: readUserSettings() === settings},
+        {
+          question: `"${alias}" has fingerprint "${fingerprint}".`,
+          written: 1,
+          settingsKept: true,
+        },
+      );
+    } finally {
+      await closeWindow(alias).catch(() => undefined);
+      restoreUserSettings(before);
+    }
+  });
+
+  it('F-2305 AC-33 (c3025-login-terminal): in local-server mode with remote.SSH.showLoginTerminal true, the unknown key is asked as without the setting, and Continue connects it', async () => {
+    const alias = 'c3025-login-terminal';
+    const before = readUserSettings();
+    const known = await asking(alias);
+    await setting('remote.SSH.showLoginTerminal', true);
+    const settings = readUserSettings();
+    const linesBefore = knownLines(known).length;
+    appendScript([
+      {
+        surface: 'pick',
+        match: 'fingerprint',
+        answer: 'yes',
+        window: alias,
+        after: 'c3025-login-go',
+      },
+    ]);
+    try {
+      await openWindow(alias, alias);
+      const deadline = Date.now() + 90_000;
+      while (heldLines(alias).length === 0) {
+        if (Date.now() > deadline) {
+          throw new Error(`${alias} never showed the fingerprint pick`);
+        }
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      const shown = await quickPickOf(alias);
+      signal('c3025-login-go');
+      await connectedWithin(alias, INSTALL_MILLISECONDS);
+      deepStrictEqual(
+        {
+          question: picksOf(alias),
+          placeholder: shown?.placeholder,
+          written: knownLines(known).length - linesBefore,
+          settingsKept: readUserSettings() === settings,
+        },
+        {
+          question: [`"${alias}" has fingerprint "${fingerprint}".`],
+          placeholder: 'Are you sure you want to continue connecting?',
+          written: 1,
+          settingsKept: true,
+        },
+      );
+    } finally {
+      signal('c3025-login-go');
+      await closeWindow(alias).catch(() => undefined);
+      restoreUserSettings(before);
     }
   });
 });
