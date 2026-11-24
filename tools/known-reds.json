@@ -137,7 +137,7 @@
   {
     "launch": "windows",
     "file": "windows/platform-pick.test.ts",
-    "title": "F-2206 AC-26 (c94-kill-current): Kill Current VS Code Server asks the platform in a connected window; after Escape the window stays connected with no dialog and no entry, and after Linux the kill completes with no entry",
+    "title": "F-2206 AC-26 (c94-kill-current): Kill Current VS Code Server asks the platform in a connected window; after Escape the window stays connected with no notification, no dialog and no entry, and after Linux the kill completes with no entry",
     "card": 2580,
     "owner": "proteus",
     "evidence": 44807795511,

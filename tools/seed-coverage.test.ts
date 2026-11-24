@@ -2,9 +2,12 @@ import {deepStrictEqual, throws} from 'node:assert';
 import {
   bodyOf,
   byCriterion,
+  criteriaFor,
   issueNumbersOf,
+  mergedSeed,
   type Program,
   scopeNamed,
+  seedAction,
   seedFor,
   seedOf,
 } from './seed-coverage.ts';
@@ -291,6 +294,220 @@ describe('seed-coverage', () => {
   it('containers release 1: an unknown name throws', () => {
     throws(() => scopeNamed('nothing'), {
       message: 'no coverage set named nothing',
+    });
+  });
+
+  describe('merging into a file that exists (card #2988)', () => {
+    const HEADER = 'ac\ttag\treason\n';
+    const FEATURES = ['F-0101', 'F-0102', 'F-0103'];
+
+    it('#2988: every line keeps its tag, its reason and its place, and only the missing criteria are added as todo', () => {
+      const existing = `${HEADER}F-0101.AC-1\tacceptance\t\nF-0101.AC-2\tcore\twhy it is core\nF-0102.AC-1\tdeferred\tlater\n`;
+      const merged = mergedSeed(
+        existing,
+        ['F-0101.AC-1', 'F-0101.AC-2', 'F-0101.AC-3', 'F-0102.AC-1'],
+        FEATURES,
+      );
+      deepStrictEqual(
+        [merged.text, merged.added, merged.unlisted],
+        [
+          `${HEADER}F-0101.AC-1\tacceptance\t\nF-0101.AC-2\tcore\twhy it is core\nF-0101.AC-3\ttodo\t\nF-0102.AC-1\tdeferred\tlater\n`,
+          ['F-0101.AC-3'],
+          [],
+        ],
+      );
+    });
+
+    it('#2988: a criterion is inserted in numeric order among the lines, with a letter after its bare number, and not at the end', () => {
+      const existing = `${HEADER}F-0101.AC-1\tunit\t\nF-0101.AC-4\tunit\t\nF-0102.AC-1\tunit\t\n`;
+      const merged = mergedSeed(
+        existing,
+        [
+          'F-0101.AC-1',
+          'F-0101.AC-3',
+          'F-0101.AC-3b',
+          'F-0101.AC-4',
+          'F-0102.AC-1',
+        ],
+        FEATURES,
+      );
+      deepStrictEqual(
+        merged.text.split('\n').map(line => line.split('\t')[0]),
+        [
+          'ac',
+          'F-0101.AC-1',
+          'F-0101.AC-3',
+          'F-0101.AC-3b',
+          'F-0101.AC-4',
+          'F-0102.AC-1',
+          '',
+        ],
+      );
+    });
+
+    it('#2988: a feature the file has no line of yet goes between the features around it, and after the last one at the end', () => {
+      const existing = `${HEADER}F-0101.AC-1\tunit\t\nF-0103.AC-1\tunit\t\n`;
+      const merged = mergedSeed(
+        existing,
+        ['F-0101.AC-1', 'F-0102.AC-1', 'F-0103.AC-1'],
+        FEATURES,
+      );
+      deepStrictEqual(
+        merged.text.split('\n').map(line => line.split('\t')[0]),
+        ['ac', 'F-0101.AC-1', 'F-0102.AC-1', 'F-0103.AC-1', ''],
+      );
+    });
+
+    it('#2988: a line of a feature outside the set stops the merge and names the feature, whatever else the file holds', () => {
+      const existing = `${HEADER}F-0101.AC-1\tunit\t\nF-1008.AC-1\ttodo\t\nF-1008.AC-2\ttodo\t\nF-0999.AC-1\ttodo\t\n`;
+      throws(
+        () => mergedSeed(existing, ['F-0101.AC-1'], FEATURES),
+        /outside the set: F-1008, F-0999/,
+      );
+    });
+
+    it('#2988: a line the issues no longer list is kept and reported as unlisted', () => {
+      const existing = `${HEADER}F-0101.AC-1\tacceptance\t\nF-0101.AC-9\tdeferred\tgone from the issue\n`;
+      const merged = mergedSeed(existing, ['F-0101.AC-1'], FEATURES);
+      deepStrictEqual(
+        [merged.text, merged.added, merged.unlisted],
+        [existing, [], ['F-0101.AC-9']],
+      );
+    });
+
+    it('#2988: a file that has every criterion comes back as it was, so a check has nothing to add', () => {
+      const existing = `${HEADER}F-0101.AC-1\tcore\tx\nF-0102.AC-1\tunit\t\n`;
+      const merged = mergedSeed(
+        existing,
+        ['F-0102.AC-1', 'F-0101.AC-1'],
+        FEATURES,
+      );
+      deepStrictEqual([merged.text, merged.added], [existing, []]);
+    });
+
+    it('#2988: the criteria of a set come from the issues of its features', () => {
+      function program(
+        name: string,
+        programArguments: readonly string[],
+      ): ReturnType<Program> {
+        const feature = programArguments[2] === '11' ? 'F-0101' : 'F-0102';
+        return {
+          status: 0,
+          stdout: `- **${feature}.AC-1** Given a thing\n`,
+          stderr: '',
+        };
+      }
+      const catalogue =
+        'id\trepo\tissue\nF-0101\tremote-containers\t11\nF-0102\tremote-containers\t12\n';
+      deepStrictEqual(
+        criteriaFor(catalogue, program, {
+          name: 'x',
+          file: 'x.tsv',
+          features: ['F-0101', 'F-0102'],
+          repository: 'remote-containers',
+        }),
+        ['F-0101.AC-1', 'F-0102.AC-1'],
+      );
+    });
+  });
+
+  describe('what a run does (card #2988)', () => {
+    const FEATURES = ['F-0101'];
+    const EXISTING =
+      'ac\ttag\treason\nF-0101.AC-1\tunit\t\nF-0101.AC-3\tdeferred\tlater\n';
+    const CRITERIA = ['F-0101.AC-1', 'F-0101.AC-2', 'F-0101.AC-3'];
+
+    it('#2988: a file that does not exist is written as the seed, every line todo', () => {
+      deepStrictEqual(
+        seedAction('x.tsv', undefined, CRITERIA, FEATURES, false),
+        {
+          write: seedOf(CRITERIA),
+          lines: ['wrote 3 criteria'],
+        },
+      );
+    });
+
+    it('#2988: a file that exists is merged and never replaced by the seed: its tags and reasons stay, and the missing criterion is added as todo', () => {
+      const action = seedAction('x.tsv', EXISTING, CRITERIA, FEATURES, false);
+      deepStrictEqual(
+        [
+          action.write,
+          action.write === seedOf(CRITERIA),
+          action.lines,
+          action.failure,
+        ],
+        [
+          'ac\ttag\treason\nF-0101.AC-1\tunit\t\nF-0101.AC-2\ttodo\t\nF-0101.AC-3\tdeferred\tlater\n',
+          false,
+          ['added 1 criteria: F-0101.AC-2'],
+          undefined,
+        ],
+      );
+    });
+
+    it('#2988: --check on a file that lacks a criterion fails naming it and writes nothing', () => {
+      deepStrictEqual(seedAction('x.tsv', EXISTING, CRITERIA, FEATURES, true), {
+        lines: [],
+        failure: 'x.tsv lacks 1 criteria: F-0101.AC-2',
+      });
+    });
+
+    it('#2988: --check on a complete file passes and writes nothing', () => {
+      deepStrictEqual(
+        seedAction(
+          'x.tsv',
+          EXISTING,
+          ['F-0101.AC-1', 'F-0101.AC-3'],
+          FEATURES,
+          true,
+        ),
+        {lines: ['the file has every criterion']},
+      );
+    });
+
+    it('#2988: --check with no file fails naming it and writes nothing', () => {
+      deepStrictEqual(
+        seedAction('x.tsv', undefined, CRITERIA, FEATURES, true),
+        {
+          lines: [],
+          failure: 'x.tsv does not exist',
+        },
+      );
+    });
+
+    it('#2988: the lines the issues no longer list are reported in a write and in a check, and kept', () => {
+      const listed = ['F-0101.AC-1'];
+      const written = seedAction('x.tsv', EXISTING, listed, FEATURES, false);
+      const checked = seedAction('x.tsv', EXISTING, listed, FEATURES, true);
+      deepStrictEqual(
+        [written.lines, written.write?.includes('F-0101.AC-3'), checked.lines],
+        [
+          [
+            'kept 1 lines the issues no longer list: F-0101.AC-3',
+            'added 0 criteria: ',
+          ],
+          true,
+          [
+            'kept 1 lines the issues no longer list: F-0101.AC-3',
+            'the file has every criterion',
+          ],
+        ],
+      );
+    });
+
+    it('#2988: two missing criteria that come in reverse order are added in numeric order', () => {
+      const merged = mergedSeed(
+        'ac\ttag\treason\nF-0101.AC-1\tunit\t\n',
+        ['F-0101.AC-1', 'F-0101.AC-10', 'F-0101.AC-2'],
+        FEATURES,
+      );
+      deepStrictEqual(
+        [merged.added, merged.text],
+        [
+          ['F-0101.AC-2', 'F-0101.AC-10'],
+          'ac\ttag\treason\nF-0101.AC-1\tunit\t\nF-0101.AC-2\ttodo\t\nF-0101.AC-10\ttodo\t\n',
+        ],
+      );
     });
   });
 });

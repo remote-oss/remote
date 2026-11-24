@@ -4,6 +4,7 @@ import type {SettingHost} from 'lib-identifiers';
 import {
   agentForwardingOf,
   defaultForwardsOf,
+  effectiveUseExecServer,
   listedSettings,
   localDownloadModeOf,
   termsSettingsOf,
@@ -219,6 +220,58 @@ describe('the RemoteCommand switch of a connect (F-2107 BR-10)', () => {
     deepStrictEqual(
       termsSettingsOf(hostWith({[USE_LOCAL]: 'true'})).useLocalServerSetting,
       false,
+    );
+  });
+});
+
+describe('the effective exec server switch of a connect (F-2406 BR-2, card #2971, ruling-2948-bootstrap-findings)', () => {
+  const EXEC = 'remote.SSH.useExecServer';
+
+  it('F-2406 BR-2: with the manual bootstrap on, the switch is off whatever is configured', () => {
+    deepStrictEqual(
+      [true, false, undefined].map(configured =>
+        effectiveUseExecServer(
+          hostWith({[MODE]: 'manual-bootstrap', [EXEC]: configured}),
+        ),
+      ),
+      [false, false, false],
+    );
+  });
+
+  it('F-2406 BR-2: in every other mode the switch is the configured one', () => {
+    deepStrictEqual(
+      ['auto', 'always', 'off'].flatMap(mode =>
+        [true, false].map(configured =>
+          effectiveUseExecServer(hostWith({[MODE]: mode, [EXEC]: configured})),
+        ),
+      ),
+      [true, false, true, false, true, false],
+    );
+  });
+
+  it('F-2406 BR-2: the old switch false turns the manual bootstrap off, and the configured switch counts again', () => {
+    deepStrictEqual(
+      effectiveUseExecServer(
+        hostWith({[MODE]: 'manual-bootstrap', [ALLOW]: false, [EXEC]: true}),
+      ),
+      true,
+    );
+  });
+
+  it("F-2406 BR-2: the log's settings listing shows remote.SSH.useExecServer = false while the manual bootstrap is on, and the configured value otherwise", () => {
+    /** The listing's line for the exec server switch, with `written` as the user's settings. */
+    function lineOf(written: Record<string, unknown>): string[] {
+      return settingLines(listedSettings(hostWith(written))).filter(line =>
+        line.startsWith(`${EXEC} `),
+      );
+    }
+    deepStrictEqual(
+      [
+        lineOf({[MODE]: 'manual-bootstrap', [EXEC]: true}),
+        lineOf({[MODE]: 'auto', [EXEC]: true}),
+        lineOf({[MODE]: 'auto'}),
+      ],
+      [[`${EXEC} = false`], [`${EXEC} = true`], [`${EXEC} = undefined`]],
     );
   });
 });

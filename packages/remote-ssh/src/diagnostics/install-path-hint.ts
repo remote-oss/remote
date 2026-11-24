@@ -1,6 +1,6 @@
 /**
- * @fileoverview The error hint of an install folder setting the client's check rejected: the value as written, and the
- * steps to take.
+ * @fileoverview The error hint of an install folder setting the client's check rejected: its message, the value as
+ * written as its details, and the steps to take.
  */
 
 import type {FailureHint} from 'lib-ssh';
@@ -16,7 +16,8 @@ export function installPathHint(
   const setting = settings.serverInstallPath.id;
   return {
     status: 'InvalidCustomServerPath',
-    message: `${ownText({id: 'S143', values: []}, translate)} (Provided: "${value}")`,
+    message: ownText({id: 'S143', values: []}, translate),
+    details: {text: `Provided: "${value}"`},
     mitigations: [
       {id: 'S058', values: []},
       {id: 'S048', values: [setting]},

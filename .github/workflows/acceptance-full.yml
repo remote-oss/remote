@@ -24,3 +24,6 @@ jobs:
     uses: ./.github/workflows/acceptance-launches.yml
     with:
       full: true
+    # the one secret the called workflow takes, never inherit: only its CLI archives' step reads it
+    secrets:
+      REMOTE_OSS_CLI_ARCHIVES_TOKEN: ${{ secrets.REMOTE_OSS_CLI_ARCHIVES_TOKEN }}

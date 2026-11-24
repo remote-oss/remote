@@ -87,6 +87,8 @@ export interface ClientFilePort {
   remove(file: string): Promise<void>;
   /** Whether a file exists. */
   exists(file: string): Promise<boolean>;
+  /** Whether anything is at the path: a file, a folder, or a link to either. */
+  entryExists(file: string): Promise<boolean>;
   /** The size of a file in bytes. */
   size(file: string): Promise<number>;
   /** The SHA-256 of a file's bytes as lower-case hex. */
@@ -101,8 +103,9 @@ export interface ClientFilePort {
   ): Promise<{kind: 'renamed'} | {kind: 'failed'; detail: string}>;
   /**
    * Copies `source` into a new folder of its own in `folder`, under the manual bootstrap's fixed archive name with its
-   * `.done` marker file beside it, and gives the copy's path; the folder is left in place. A copy that fails
-   * carries the file system's text.
+   * `.done` marker file beside it, and gives the copy's path; the folder is left in place. Anything at `source` that is
+   * not a regular file (a folder, a named pipe, a socket or a device) is copied as an empty file, since the client
+   * never checks what it copies and a pipe would never end. A copy that fails carries the file system's text.
    */
   stage(
     source: string,
