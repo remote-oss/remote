@@ -1,6 +1,6 @@
 # ADR-0016: The tunnel host agent is our own TypeScript program on the dev tunnels SDK and lib-server
 
-- Status: proposed (athena; Build and CI by proteus, who agrees with the Decision)
+- Status: accepted (athena and proteus, 2026-11-24). Build and CI by proteus
 - Date: 2026-11-24
 - Deciders: athena and proteus
 - Scope: the tunnel host agent (`packages/tunnel-agent`, package `tunnel-agent`), its build, its releases and its tests
@@ -39,8 +39,10 @@ connections an *extension* opens, and the agent is no extension.
 
 1. **The agent is a TypeScript program of ours**, the service package `packages/tunnel-agent` (the third service
    kind's second member, `ruling-3062-service-kind`). It is built on:
-   - the dev tunnels TypeScript SDK (`TunnelRelayTunnelHost` and the management client with our domain) and
-     `@microsoft/dev-tunnels-ssh`, at the versions ADR-0015's lockfile already holds;
+   - the dev tunnels TypeScript SDK: `@microsoft/dev-tunnels-connections` (`TunnelRelayTunnelHost`),
+     `-management` (the management client with our domain) and `-contracts`. These three are new to the lockfile, and
+     the agent skeleton card pins them at 1.3.82, the npm version the relay brief reads. They come with
+     `@microsoft/dev-tunnels-ssh`, at the version the relay's lockfile entry holds;
    - lib-server, for the server by F-3902's rules, over a new local `HostChannel`;
    - lib-host, lib-log and lib-identifiers.
 
