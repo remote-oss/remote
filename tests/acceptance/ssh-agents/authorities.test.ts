@@ -6,7 +6,8 @@
 
 import {deepStrictEqual} from 'node:assert';
 import {spawnSync} from 'node:child_process';
-import {readFileSync, readdirSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
   connectedWithin,
@@ -18,6 +19,7 @@ import {
 } from '../windows/harness.ts';
 import {labelsWithin} from '../windows/labels-wait.ts';
 import {authorityHex} from './authority-hex.ts';
+import {scanStored} from './stored-scan.ts';
 import {
   answerDialog,
   chooseQuickPickRow,
@@ -168,17 +170,11 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
         variable('HARNESS_USER_DATA'),
         'User/globalStorage/remote-oss.remote-ssh',
       );
-      const stored = (() => {
-        try {
-          return readdirSync(storage).filter(name =>
-            readFileSync(path.join(storage, name), 'utf8').includes(
-              block.hostName,
-            ),
-          );
-        } catch {
-          return [];
-        }
-      })();
+      const stored = scanStored(storage, block.hostName).holding;
+      const scratch = mkdtempSync(path.join(tmpdir(), 'f2008-control-'));
+      writeFileSync(path.join(scratch, 'planted.json'), block.hostName);
+      const control = scanStored(scratch, block.hostName).holding;
+      rmSync(scratch, {recursive: true, force: true});
       deepStrictEqual(
         {
           indicator: shown.indicator.includes(`SSH: ${label}`),
@@ -186,8 +182,16 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
           newLines: linesOf(files.knownHosts).length - linesBefore,
           found: found.status,
           stored,
+          control,
         },
-        {indicator: true, title: true, newLines: 1, found: 0, stored: []},
+        {
+          indicator: true,
+          title: true,
+          newLines: 1,
+          found: 0,
+          stored: [],
+          control: ['planted.json'],
+        },
         `the labels of f2008-hex-address, the last reads: ${shown.reads}`,
       );
     } finally {
