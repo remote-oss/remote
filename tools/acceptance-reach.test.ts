@@ -860,6 +860,26 @@ describe("acceptance-reach: what a workflow file's change reaches (card tooling-
     );
   });
 
+  it('#3088: a job that makes no launch reaches no launch when it sets itself up with a local action; a job that calls a local workflow reaches every launch', () => {
+    deepStrictEqual(
+      [
+        reachOfCi(
+          edited(
+            'steps: [{run: pnpm lint}]',
+            'steps: [{uses: ./.github/actions/setup-pnpm}, {run: pnpm lint}]',
+          ),
+        ),
+        reachOfCi(
+          edited(
+            '  ci-gate:',
+            '  more:\n    uses: ./.github/workflows/platform.yml\n  ci-gate:',
+          ),
+        ),
+      ],
+      [[], undefined],
+    );
+  });
+
   it("tooling-177: a change to the job that makes a pull request's launches, to a job it needs, or to a new job that makes launches reaches every launch", () => {
     const needing = edited(
       '    uses: ./.github/workflows/acceptance-launches.yml',
