@@ -473,6 +473,28 @@ export const EXEC_SERVER_NO_CLI: FailureDetail = {
   },
 };
 
+/** The refusal of an exec server while the manual bootstrap is on, which turns the exec server off. */
+export const EXEC_SERVER_MANUAL_BOOTSTRAP: FailureDetail = {
+  kind: 'execServerUnavailable',
+  reason: {
+    text: 'The exec server is off: the setting remote.SSH.localServerDownload is manual-bootstrap.',
+  },
+};
+
+/**
+ * The refusal of an exec server for a window whose server was installed directly: for the manual bootstrap, for the
+ * setting off, or else for the host's platform.
+ */
+export function directInstallRefusal(options: {
+  useExecServer: boolean;
+  manualBootstrap: boolean;
+}): FailureDetail {
+  if (options.manualBootstrap) {
+    return EXEC_SERVER_MANUAL_BOOTSTRAP;
+  }
+  return options.useExecServer ? EXEC_SERVER_NO_CLI : EXEC_SERVER_SETTING_OFF;
+}
+
 /** The refusal of an exec server while the window's connection to the host is lost. */
 export const EXEC_SERVER_LOST: FailureDetail = {
   kind: 'execServerUnavailable',

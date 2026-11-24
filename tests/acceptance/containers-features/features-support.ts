@@ -20,7 +20,14 @@ import {
   reopenStarted,
   variable,
 } from '../windows/harness.ts';
-import {corruptArchiveLines} from '../windows/corrupt-archive.ts';
+import {
+  brokerUrlOf,
+  secondBuildText,
+  corruptArchiveLines,
+  corruptArchiveName,
+  probeArchive,
+  probeText,
+} from '../windows/corrupt-archive.ts';
 import {runTemplatesReady} from '../windows/run-templates.ts';
 
 const execFileAsync = promisify(execFile);
@@ -147,8 +154,24 @@ export function featureBuilds(): {
           };
         } catch (second) {
           const again = corruptArchiveLines(containersLogSince(secondMark));
+          const download = /Downloading: (\S+ \S+)/u.exec(
+            reasons.find(line => line.includes('Downloading: ')) ?? '',
+          )?.[1];
+          const broker =
+            download === undefined ? undefined : brokerUrlOf(download);
+          const fromHere =
+            broker === undefined
+              ? ''
+              : ` Probe of the broker address: ${probeText(await probeArchive(broker))}.`;
           throw new Error(
-            `both builds of ${name} failed. First: ${reasons.join(' | ')}. Second: ${again.length === 0 ? 'no corrupt-archive verdict, so it failed for another reason' : again.join(' | ')}. ${second instanceof Error ? second.message : String(second)}`,
+            `${secondBuildText({
+              firstName: corruptArchiveName(containersLogSince(firstMark)),
+              featureRow: name,
+              first: reasons,
+              second: again,
+              secondMessage:
+                second instanceof Error ? second.message : String(second),
+            })}${fromHere}`,
             {cause: second},
           );
         }

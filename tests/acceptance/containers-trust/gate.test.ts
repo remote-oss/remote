@@ -138,15 +138,23 @@ const ANSWERED_DIALOG_MILLISECONDS = 60_000;
  * naming which it was: the same question shown again after the page held none (core asked a second time, a behaviour of
  * the product), no dialog at all (the next question never came), or the answered dialog never closed (a stale dialog).
  */
-async function dialogAfter(name: string, answered: string) {
+async function afterAnswered<Found>(
+  name: string,
+  answered: string,
+  look: (milliseconds: number) => Promise<Found>,
+  messageOf: (found: Found) => string,
+): Promise<Found> {
   let gone = false;
   const deadline = Date.now() + ANSWERED_DIALOG_MILLISECONDS;
   while (Date.now() < deadline) {
-    const shown = await waitForDialog(name, 300).catch(() => undefined);
+    const shown = await look(300).then(
+      found => ({found}),
+      () => undefined,
+    );
     if (shown === undefined) {
       gone = true;
-    } else if (shown.message !== answered) {
-      return shown;
+    } else if (messageOf(shown.found) !== answered) {
+      return shown.found;
     } else if (gone) {
       throw new Error(
         `window ${name}: same question again: ${JSON.stringify(answered)} was on the page again after the page held no dialog, once it had been answered Cancel`,
@@ -157,6 +165,26 @@ async function dialogAfter(name: string, answered: string) {
     gone
       ? `window ${name}: no next dialog: the page held no dialog for ${String(ANSWERED_DIALOG_MILLISECONDS / 1000)} s after ${JSON.stringify(answered)} was answered Cancel`
       : `window ${name}: stale dialog never closed: ${JSON.stringify(answered)} was still the dialog on the page ${String(ANSWERED_DIALOG_MILLISECONDS / 1000)} s after it was answered Cancel`,
+  );
+}
+
+/** The next dialog of window `name` after the one saying `answered` was answered, in the window's own page. */
+function dialogAfter(name: string, answered: string) {
+  return afterAnswered(
+    name,
+    answered,
+    milliseconds => waitForDialog(name, milliseconds),
+    shown => shown.message,
+  );
+}
+
+/** The next dialog of the window `name`, wherever its page is, after the one saying `answered` was answered. */
+function dialogOfNameAfter(name: string, answered: string) {
+  return afterAnswered(
+    name,
+    answered,
+    milliseconds => waitForDialogOfName(name, milliseconds),
+    shown => shown.dialog.message,
   );
 }
 
@@ -400,14 +428,14 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     );
     await clickButton(name, "Don't Trust");
     const reloaded = reloadWindow(name);
-    await waitForDialog(name);
+    const asked = await waitForDialog(name);
     await waitFor(
       'the reload to stop the container',
       async () => (await containerStateOf(containerId)) === 'exited',
       120_000,
     );
     await answerDialog(name, answer);
-    return {name, folder, containerId, reloaded};
+    return {name, folder, containerId, reloaded, asked: asked.message};
   }
 
   it('F-0106 AC-48 (c123-restart-accepted): Trust Folder & Continue after the reload stopped the container starts that same container again, without a build, and the window connects to it', async () => {
@@ -429,11 +457,9 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
   });
 
   it('F-0106 AC-48 (c123-restart-declined): declining the trust dialog after the reload stopped the container leaves that container stopped', async () => {
-    const {name, folder, containerId, reloaded} = await stoppedThenAnswered(
-      'restart-declined',
-      'Cancel',
-    );
-    await waitForDialog(name);
+    const {name, folder, containerId, reloaded, asked} =
+      await stoppedThenAnswered('restart-declined', 'Cancel');
+    await dialogAfter(name, asked);
     await answerDialog(name, 'OK');
     await reloaded;
     await waitFor(
@@ -583,9 +609,9 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       devContainerFolder('open-decline-from'),
     );
     await openFolderFrom(from, folder);
-    await waitForDialog('open-decline');
+    const asked = await waitForDialog('open-decline');
     await answerDialog('open-decline', 'Cancel');
-    const declined = await waitForDialog('open-decline');
+    const declined = await dialogAfter('open-decline', asked.message);
     const declinedText = await dialogText('open-decline');
     await answerDialog('open-decline', 'OK');
     await waitFor(
@@ -612,9 +638,9 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     const folder = devContainerFolder('open-wait', {name: 'Open Wait'});
     const from = await openFolderWindow(devContainerFolder('open-wait-from'));
     await openFolderFrom(from, folder);
-    await waitForDialog('open-wait');
+    const asked = await waitForDialog('open-wait');
     await answerDialog('open-wait', 'Cancel');
-    const declined = await waitForDialog('open-wait');
+    const declined = await dialogAfter('open-wait', asked.message);
     const declinedText = await dialogText('open-wait');
     await waitFor(
       'the window to be the local folder again, with no OK pressed',
@@ -815,7 +841,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     const folder = devContainerFolder(key, {name: key});
     const from = await openFolderWindow(devContainerFolder(`${key}-from`));
     await open(from, folder);
-    await waitForDialog(key);
+    const asked = await waitForDialog(key);
     const authority = decodeURIComponent(
       (await windowState(key)).folders[0] ?? '',
     );
@@ -833,7 +859,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       indicator: await statusBarText(key, 'status.host'),
     };
     await answerDialog(key, 'Cancel');
-    await waitForDialog(key);
+    await dialogAfter(key, asked.message);
     await answerDialog(key, 'OK');
     await closeWindow(key);
     return {shown, folder};
@@ -951,9 +977,9 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     const from = await openFolderWindow(devContainerFolder(`${name}-from`));
     const before = windowNames().filter(isOpen);
     await openFolderFrom(from, folder);
-    await waitForDialog(name);
+    const asked = await waitForDialog(name);
     await decline(name);
-    const declined = await waitForDialog(name);
+    const declined = await dialogAfter(name, asked.message);
     const declinedText = await dialogText(name);
     await finish(name);
     await waitFor(
@@ -1083,9 +1109,9 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     );
     await clickButton(name, "Don't Trust");
     const reloaded = reloadWindow(name);
-    await waitForDialog(name);
+    const trustAsked = await waitForDialog(name);
     await answerDialog(name, 'Cancel');
-    await waitForDialog(name);
+    await dialogAfter(name, trustAsked.message);
     await answerDialog(name, 'OK');
     await reloaded;
     await closeWindow(name);
@@ -1104,7 +1130,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     const asked = question.dialog;
     const askedText = await dialogTextAt(question.address);
     await answerDialogAt(question.address, 'Cancel');
-    const refusal = await waitForDialogOfName(name);
+    const refusal = await dialogOfNameAfter(name, asked.message);
     const declined = refusal.dialog;
     const declinedText = await dialogTextAt(refusal.address);
     await answerDialogAt(refusal.address, 'OK');
@@ -1297,7 +1323,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       indicator: await statusBarText('c74-untrusted', 'status.host'),
     };
     await answerDialog('c74-untrusted', 'Cancel');
-    const declined = await waitForDialog('c74-untrusted');
+    const declined = await dialogAfter('c74-untrusted', asked.message);
     const declinedText = await dialogText('c74-untrusted');
     await answerDialog('c74-untrusted', 'OK');
     await waitFor(

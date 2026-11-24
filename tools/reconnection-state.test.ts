@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  earlierFailureLines,
   logLinesBetween,
   reconnectionGlance,
   reconnectionState,
@@ -36,6 +37,10 @@ function reads(replaced: Partial<StateReads> = {}): StateReads {
       '[+0.00 s] dialog none; notifications []',
       '[+4.25 s] dialog "Cannot reconnect"; notifications []',
     ],
+    probeDialog: () =>
+      Promise.resolve(
+        'showed at once: "Do you want to clear the recent list?"',
+      ),
     ...replaced,
   };
 }
@@ -69,6 +74,10 @@ describe('the state a window showed when its wait for core’s dialog timed out 
         '',
         'the last lines of the connection log since then:',
         'kept',
+        'the window’s renderer log before the end: every line about a reconnection given up, with its time from the end:',
+        'none (the log holds no stamped line before the end)',
+        'a second dialog asked of the window by its palette, File: Clear Recently Opened (it shows when the dialog queue is free):',
+        'showed at once: "Do you want to clear the recent list?"',
       ].join('\n'),
     );
   });
@@ -114,6 +123,7 @@ describe('the state a window showed when its wait for core’s dialog timed out 
         timeline: () => {
           throw new Error('no timeline');
         },
+        probeDialog: () => Promise.reject(new Error('no palette')),
       }),
       'win',
       0,
@@ -142,7 +152,89 @@ describe('the state a window showed when its wait for core’s dialog timed out 
       '(unreadable: Error: no renderer log)',
       'the last lines of the connection log since then:',
       '(unreadable: Error: no log file)',
+      'the window’s renderer log before the end: every line about a reconnection given up, with its time from the end:',
+      '(unreadable: Error: no renderer log)',
+      'a second dialog asked of the window by its palette, File: Clear Recently Opened (it shows when the dialog queue is free):',
+      '(unreadable: Error: no palette)',
     ]);
+  });
+
+  it('#2753: a probe of the second dialog that does not answer is told after its bound, and the explanation still ends', async () => {
+    const text = await reconnectionState(
+      reads({probeDialog: () => new Promise<string>(() => undefined)}),
+      'win',
+      1,
+      1000,
+      50,
+    );
+    deepStrictEqual(text.split('\n').slice(-2), [
+      'a second dialog asked of the window by its palette, File: Clear Recently Opened (it shows when the dialog queue is free):',
+      '(no answer in 0.05 s)',
+    ]);
+  });
+
+  it('#2753: the lines about a reconnection given up before the end are told with their time from it, and a failure after the end is not among them', () => {
+    const ended = Date.parse('2026-11-19T07:00:10Z');
+    deepStrictEqual(
+      earlierFailureLines(
+        [
+          '2026-11-19 07:00:00.500 [info] a line about nothing',
+          '2026-11-19 07:00:04.000 [error] [remote-connection][Management][x][reconnect] A RemoteAuthorityResolverError occurred while trying to reconnect. Will give up now! Error:',
+          '    at stack frame without a stamp',
+          '2026-11-19 07:00:06.250 [info] Error handled: Not showing a notification for the error.',
+          '2026-11-19 07:00:11.000 [error] [ExtensionHost][y][reconnect] permanent failure occurred while running the reconnecting loop.',
+        ],
+        ended,
+        60,
+      ),
+      [
+        '[-6.0 s] 2026-11-19 07:00:04.000 [error] [remote-connection][Manageme',
+        '[-3.8 s] 2026-11-19 07:00:06.250 [info] Error handled: Not showing a ',
+      ],
+    );
+  });
+
+  it('#2753: five thousand lines about a failure before the end are told as the last twelve, each cut at the width, after a line that counts the others', () => {
+    const ended = Date.parse('2026-11-19T08:00:00Z');
+    const lines = Array.from(
+      {length: 5000},
+      (unused, index) =>
+        `2026-11-19 07:${String(Math.floor(index / 100)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000 [error] permanent failure number ${String(index)} ${'x'.repeat(500)}`,
+    );
+    const told = earlierFailureLines(lines, ended, 80);
+    deepStrictEqual(
+      [
+        told.length,
+        told[0],
+        told.slice(1).every(line => line.length <= 80 + 12),
+        told.at(-1)?.includes('permanent failure number 4999') ?? false,
+      ],
+      [13, 'and 4988 more before them', true, true],
+    );
+  });
+
+  it('#2753: a log with stamped lines before the end and none about a failure says how many it held and from when, and a log with none says so', () => {
+    const ended = Date.parse('2026-11-19T07:00:10Z');
+    deepStrictEqual(
+      [
+        earlierFailureLines(
+          [
+            '2026-11-19 07:00:00.500 [info] a line about nothing',
+            '2026-11-19 07:00:02.000 [info] another',
+            '2026-11-19 07:00:11.000 [error] permanent failure occurred',
+          ],
+          ended,
+          60,
+        ),
+        earlierFailureLines(['    at a frame', 'no stamp here'], ended, 60),
+      ],
+      [
+        [
+          'none (the log holds 2 stamped lines before the end, the first -9.5 s from it)',
+        ],
+        ['none (the log holds no stamped line before the end)'],
+      ],
+    );
   });
 
   it('#2753: the glance keeps the last six activations and the last ten matching renderer lines, each cut at 240 characters', async () => {
