@@ -63,6 +63,7 @@ export {
   type MaintenanceOutcome,
   uninstall,
 } from './lifecycle/maintenance.ts';
+export {heldServer, type HeldServerOutcome} from './lifecycle/held-server.ts';
 export {
   plan,
   type ExistingLayout,

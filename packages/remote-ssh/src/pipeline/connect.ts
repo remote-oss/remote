@@ -10,7 +10,7 @@
 import type {Connected, Failed} from 'lib-authority';
 import {shouldApplyDefaults} from 'lib-forwarding';
 import type {Logger} from 'lib-log';
-import type {SessionCheck} from 'lib-ssh';
+import type {SessionCheck, SharedRecord} from 'lib-ssh';
 import type {
   CliControl,
   Plan,
@@ -49,6 +49,7 @@ import type {
   ConnectWaits,
   StepFailure,
   StepResult,
+  TunnelOpening,
 } from './steps.ts';
 
 /** What the window is told while the connect runs, in the order the steps happen. */
@@ -225,12 +226,7 @@ function contextOf(
 }
 
 /** The checks that come first, in the order of their failures. */
-const CHECKS = [
-  'checkConfigFile',
-  'checkStartSettings',
-  'validate',
-  'checkInstallFolder',
-] as const;
+const CHECKS = ['checkConfigFile', 'checkStartSettings', 'validate'] as const;
 
 /** One connect: runs the steps in order and returns the connection, or the failure. */
 export function connect(
@@ -398,6 +394,13 @@ async function runSteps(
       return failure(invalid.failure);
     }
   }
+  // Shared, the install folder is checked by the start of a connection server, or once a joined one has no live server.
+  if (steps.lookupBeforeConnection()) {
+    const folder = steps.checkInstallFolder(input);
+    if (folder.kind === 'failed') {
+      return failure(folder.failure);
+    }
+  }
   if (input.attempt === 1) {
     const script = await runBounded(
       signal => steps.preconnect(input, signal),
@@ -542,6 +545,202 @@ async function runSteps(
     host,
     cancellation,
   );
+
+  /** Opens the window's tunnel to `server`, with the phases of its wait and its setup. */
+  function tunnelTo(server: StartedServer, signal: AbortSignal) {
+    return steps.openTunnel(
+      input,
+      lease,
+      server,
+      () => {
+        options.onPhase({kind: 'waitingForForwarding'});
+      },
+      signal,
+      () => {
+        options.onPhase({kind: 'settingUpTunnel'});
+      },
+    );
+  }
+
+  /** The bound of the tunnel step: on the SOCKS path only, since a second `ssh` has bounds of its own and a login to wait for. */
+  function tunnelBound(): number | undefined {
+    return steps.tunnelPath() === 'socks'
+      ? tunnelWaits.tunnelMilliseconds
+      : undefined;
+  }
+
+  /** The window's connection over `tunnel` to `server`, with the settings write and the forwards of a connect that worked. */
+  function connectionOver(
+    tunnel: TunnelOpening,
+    server: StartedServer,
+  ): Connection {
+    void quietly('the platform setting', () =>
+      steps.rememberPlatform(input, host.operatingSystem),
+    );
+    startDefaultForwards();
+    steps.linkAgent(lease, forwarding.agentLink);
+    return {
+      connected: {
+        ...tunnel.opened,
+        connectionToken: server.connectionToken,
+        trusted: false,
+      },
+      serverPort: server.endpoint.kind === 'port' ? server.endpoint.port : 0,
+      forwarding,
+      checkSession: () => lease.checkSession(),
+      release: () => {
+        tunnel.close();
+        lease.release();
+      },
+      onTransport: listener => {
+        let tunnelEndActive = true;
+        const stopLease = lease.onNotice(notice => {
+          if (notice.type === 'transportLost') {
+            listener('lost');
+          } else if (notice.type === 'helperGone') {
+            listener('closed');
+          }
+        });
+        tunnel.onClosed(detail => {
+          if (!tunnelEndActive) {
+            return;
+          }
+          options.logger.warn(`the window tunnel ended: ${detail}`);
+          listener('lost');
+        });
+        return () => {
+          tunnelEndActive = false;
+          stopLease();
+        };
+      },
+    };
+  }
+
+  /**
+   * The window's connection to the server a running connection server holds, when the host says it still runs on the
+   * record's port in the record's data folder and it answers with the record's token; the old installs are pruned
+   * there, as every direct install prunes, since only a direct install stores the record. None when any of that fails,
+   * so that the full setup follows at the current settings.
+   */
+  async function heldServerConnection(
+    record: SharedRecord,
+  ): Promise<Connection | Failed | undefined> {
+    const {dataFolder} = record;
+    if (dataFolder === undefined) {
+      options.logger.info(
+        'the shared record names no data folder: setting the server up anew',
+      );
+      return undefined;
+    }
+    const held = await steps.heldServer(
+      input,
+      lease,
+      host,
+      dataFolder,
+      cancellation,
+    );
+    if (held.kind !== 'alive' || held.port !== record.remotePort) {
+      options.logger.info(
+        `the held server is not running on port ${String(record.remotePort)} (${held.kind === 'alive' ? `its log names port ${String(held.port)}` : held.reason}): setting the server up anew`,
+      );
+      return cancelled();
+    }
+    const server: StartedServer = {
+      endpoint: {kind: 'port', port: record.remotePort},
+      processId: 0,
+      connectionToken: record.connectionToken,
+      reused: true,
+    };
+    const tunnel = await bounded(
+      signal => tunnelTo(server, signal),
+      tunnelBound(),
+      cancellation,
+      late => {
+        if (late.kind === 'done') {
+          late.value.close();
+        }
+      },
+    );
+    if ('interrupted' in tunnel || tunnel.value.kind !== 'done') {
+      options.logger.info(
+        "the held server's tunnel did not open: setting the server up anew",
+      );
+      return cancelled();
+    }
+    const opening = tunnel.value.value;
+    const answers = await steps.serverAnswers(
+      opening.opened.address,
+      record.connectionToken,
+      cancellation,
+    );
+    if (!answers) {
+      opening.close();
+      options.logger.info(
+        'the held server did not answer with its token: setting the server up anew',
+      );
+      return cancelled();
+    }
+    options.logger.info(
+      `the held server on port ${String(record.remotePort)} answered: using it`,
+    );
+    options.logger.info(listeningLine(record.remotePort));
+    await afterReuse(dataFolder);
+    installed();
+    return connectionOver(opening, server);
+  }
+
+  /**
+   * What a connect does on a server that was already running, in `dataFolder`, the folder it was installed in: prunes
+   * the old installs there, then installs the default extensions the host lacks, before the window's remote extension
+   * host starts.
+   */
+  async function afterReuse(dataFolder: string): Promise<void> {
+    await pruneOldInstalls(dataFolder);
+    await quietly('the default extensions', () =>
+      steps.installExtensions(input, lease, cancellation, dataFolder),
+    );
+  }
+
+  /**
+   * Prunes the installs older than the five newest in `dataFolder`, or in the settings' data folder when none is given,
+   * taking the locks as an install does (the host's system decides the method). A failure is only logged.
+   */
+  async function pruneOldInstalls(dataFolder?: string): Promise<void> {
+    await quietly('the clean-up of old installs', async () => {
+      const outcome = await steps.maintain(
+        input,
+        lease,
+        'cleanup',
+        cancellation,
+        host,
+        dataFolder,
+      );
+      if (outcome.kind !== 'done') {
+        options.logger.warn(
+          `the clean-up of old installs ended with ${outcome.kind}`,
+        );
+      }
+    });
+  }
+
+  // A connection server another window started: its live server is used as it is when this connect is certainly a direct
+  // install, as the held server is; else the folder is checked here and the full setup follows at the current settings.
+  if (!steps.lookupBeforeConnection() && !lease.startedHelper) {
+    if (
+      purpose === 'window' &&
+      lease.storedRecord !== undefined &&
+      steps.certainlyDirect(input, host)
+    ) {
+      const takenUp = await heldServerConnection(lease.storedRecord);
+      if (takenUp !== undefined) {
+        return takenUp;
+      }
+    }
+    const folder = steps.checkInstallFolder(input);
+    if (folder.kind === 'failed') {
+      return failure(folder.failure);
+    }
+  }
   let planned = steps.plan(input, host);
   if ('failure' in planned) {
     return failure(ofPlan(planned.failure));
@@ -683,44 +882,16 @@ async function runSteps(
     options.logger.info(listeningLine(started.server.endpoint.port));
   }
   // The direct install, which is the legacy mode and the exec server mode of an editor that names no CLI source, prunes
-  // the installs older than the five newest on every connect and reload, once this connect's server runs, taking the
-  // locks as the install did (the host's system decides the method); a connect over the CLI never gets here. A failure
-  // is only logged.
-  await quietly('the clean-up of old installs', async () => {
-    const outcome = await steps.maintain(
-      input,
-      lease,
-      'cleanup',
-      cancellation,
-      host,
-    );
-    if (outcome.kind !== 'done') {
-      options.logger.warn(
-        `the clean-up of old installs ended with ${outcome.kind}`,
-      );
-    }
-  });
+  // the old installs on every connect and reload, once this connect's server runs; a connect over the CLI never gets
+  // here.
   if (started.server.reused) {
-    await quietly('the default extensions', () =>
-      steps.installExtensions(input, lease, cancellation),
-    );
+    await afterReuse(planned.plan.dataFolder);
+  } else {
+    await pruneOldInstalls();
   }
   const tunnel = await runBounded(
-    signal =>
-      steps.openTunnel(
-        input,
-        lease,
-        started.server,
-        () => {
-          options.onPhase({kind: 'waitingForForwarding'});
-        },
-        signal,
-        () => {
-          options.onPhase({kind: 'settingUpTunnel'});
-        },
-      ),
-    // A second `ssh` has bounds of its own and a login to wait for, which a limit sized for the relay would cut off.
-    steps.tunnelPath() === 'socks' ? tunnelWaits.tunnelMilliseconds : undefined,
+    signal => tunnelTo(started.server, signal),
+    tunnelBound(),
     {kind: 'timeout'},
     late => {
       late.close();
@@ -740,6 +911,7 @@ async function runSteps(
         connectionToken: started.server.connectionToken,
         agentLink: forwarding.agentLink,
         display: forwarding.display,
+        dataFolder: planned.plan.dataFolder,
       });
       options.logger.info(
         `the shared record was ${stored ? 'stored' : 'declined by the connection'}`,
@@ -750,45 +922,5 @@ async function runSteps(
       `no shared record is stored: the server's endpoint is a ${endpoint.kind}`,
     );
   }
-  void quietly('the platform setting', () =>
-    steps.rememberPlatform(input, host.operatingSystem),
-  );
-  startDefaultForwards();
-  const {opened} = tunnel.value;
-  steps.linkAgent(lease, forwarding.agentLink);
-  return {
-    connected: {
-      ...opened,
-      connectionToken: started.server.connectionToken,
-      trusted: false,
-    },
-    serverPort: endpoint.kind === 'port' ? endpoint.port : 0,
-    forwarding,
-    checkSession: () => lease.checkSession(),
-    release: () => {
-      tunnel.value.close();
-      lease.release();
-    },
-    onTransport: listener => {
-      let tunnelEndActive = true;
-      const stopLease = lease.onNotice(notice => {
-        if (notice.type === 'transportLost') {
-          listener('lost');
-        } else if (notice.type === 'helperGone') {
-          listener('closed');
-        }
-      });
-      tunnel.value.onClosed(detail => {
-        if (!tunnelEndActive) {
-          return;
-        }
-        options.logger.warn(`the window tunnel ended: ${detail}`);
-        listener('lost');
-      });
-      return () => {
-        tunnelEndActive = false;
-        stopLease();
-      };
-    },
-  };
+  return connectionOver(tunnel.value, started.server);
 }
