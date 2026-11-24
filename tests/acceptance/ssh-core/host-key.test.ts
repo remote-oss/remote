@@ -255,6 +255,8 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
   it('F-2305 AC-11 (c3019-continue): Continue in the fingerprint pick connects the window, and ssh has written the host’s key', async () => {
     const alias = 'c3019-continue';
     const known = await asking(alias);
+    const settings = readUserSettings();
+    const linesBefore = knownLines(known).length;
     appendScript([
       {surface: 'pick', match: 'fingerprint', answer: 'yes', window: alias},
     ]);
@@ -268,10 +270,11 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
       deepStrictEqual(
         [
           picksOf(alias),
-          knownLines(known).length,
+          knownLines(known).length - linesBefore,
           knownLines(known)[0]?.split(/\s+/).slice(-2),
+          readUserSettings() === settings,
         ],
-        [[`"${alias}" has fingerprint "${fingerprint}".`], 1, key],
+        [[`"${alias}" has fingerprint "${fingerprint}".`], 1, key, true],
       );
     } finally {
       await closeWindow(alias).catch(() => undefined);
@@ -362,6 +365,7 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
       'HostKeyAlias c3019-keyname',
       'HashKnownHosts no',
     ]);
+    const settings = readUserSettings();
     appendScript([
       {surface: 'pick', match: 'fingerprint', answer: 'yes', window: alias},
     ]);
@@ -369,8 +373,16 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
       await openWindow(alias, alias);
       await connectedWithin(alias, INSTALL_MILLISECONDS);
       deepStrictEqual(
-        [picksOf(alias), knownLines(known).map(line => line.split(/\s+/)[0])],
-        [[`"${alias}" has fingerprint "${fingerprint}".`], ['c3019-keyname']],
+        [
+          picksOf(alias),
+          knownLines(known).map(line => line.split(/\s+/)[0]),
+          readUserSettings() === settings,
+        ],
+        [
+          [`"${alias}" has fingerprint "${fingerprint}".`],
+          ['c3019-keyname'],
+          true,
+        ],
       );
     } finally {
       await closeWindow(alias).catch(() => undefined);
