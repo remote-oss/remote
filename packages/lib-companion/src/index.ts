@@ -10,4 +10,3 @@ export * from './endpoints.ts';
 export * from './payloads.ts';
 export * from './protocol.ts';
 export {hostKeyOfAuthority, isConfiguredAlias} from './host-key.ts';
-export {removeFolderCopies, type RemovalOutcome} from './history.ts';

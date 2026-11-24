@@ -70,11 +70,27 @@ the push and the signal. It keeps slice 1's three ids as they are.
 
 - **Shape and order:** one ordered list per host key, most recent first, with folders and workspace files in the
   same list (BR-1). There's no limit and no pruning (BR-6, BR-12).
-- **Where it lives:** `ExtensionContext.globalState` of `remote-oss.remote-ssh`, under the key `folder.history.v1`.
-  F-2503 BR-10 makes the name reference data, not a contract, so the family's convention decides it. F-3901 records
-  that convention for remote-ssh's other stores (F-2102, F-2305, F-2306, F-2307, F-2501, F-2702): our id, the
-  reference's inner names, and nothing migrated. The value format is ours, and another extension's global state
-  can't be read anyway.
+- **Where it lives (ruling-3095-history-files):** one file per window session in remote-ssh's global storage folder
+  for the profile, `<globalStorageUri>/folder-history/<session>.json`, the session a `crypto.randomUUID()` taken at
+  activation.
+  - **Writes:** a window writes only its own file, whole, as a temporary file in the same folder renamed over it.
+    No two windows write one file, so no write is lost. `globalState` can't hold the history: the extension's whole
+    global state is one storage entry that each window writes whole from its own cache (`[oss]`
+    `src/vs/workbench/api/common/extHostMemento.ts`), so a window's write can drop another window's (#2757, #3095).
+  - **The file:** this session's events, `{events: [{host, entry: {path, kind}, kind: opened | removed, time}]}`,
+    the newest event of each entry only.
+  - **The read** merges every window's file (and its claims, below). For each entry under its host, the newest
+    event wins, with ties broken by the later session. Entries whose newest event is `opened` are listed newest
+    first, in the endpoints' format.
+  - **Folding:** a window folds another session's file only when it's untouched for 24 h, and only after
+    claiming it by a rename to `<session>.claim-<random>`. It takes the claim's events into its own file, then
+    deletes the claim. A live owner's next write recreates its own file from its memory, so a fold that races it
+    loses nothing. A write never renamed into place is ignored, and removed once it's a day old.
+  - **The earlier key:** the `folder.history.v1` value an earlier version kept in `globalState` is read as the
+    oldest layer, each host's newest entry at time 0 and its older ones a step earlier. It's never written again,
+    since any write of `globalState` rewrites the whole entry.
+  - F-2503 BR-10 makes the place reference data, not a contract: its observable claims (the history survives
+    reloads and restarts, and every window of the profile shares it) hold for the per-profile global storage.
 - **What is recorded:** once per extension-host session, in an SSH window with a folder or a workspace whose first
   resolve succeeded (BR-2, BR-5). remote-ssh learns this from lib-authority's resolver handle, through
   `onFirstResolveSettled` and `lastResolve() === 'succeeded'`. No lib-authority change is needed.
@@ -83,8 +99,8 @@ the push and the signal. It keeps slice 1's three ids as they are.
   - The path is the `vscode-remote` URI's path with no trailing `/` (BR-3).
   - The key is per section 2 ruling 7 (BR-4).
   - Empty windows, file-only windows, local windows and failed connections record nothing (BR-5; F-2503 AC-28).
-- **Writes survive across windows** (BR-15): every write reads the stored value at that moment and writes the
-  result, never from a copy kept in memory. Two windows writing a second or more apart both survive.
+- **Writes survive across windows** (BR-15): each window writes only its own file, so two windows writing at any
+  moment both survive.
 - **Nothing notifies other windows** of a change (BR-11). The explorer in another window sees it after Refresh
   (F-5902 AC-10).
 
