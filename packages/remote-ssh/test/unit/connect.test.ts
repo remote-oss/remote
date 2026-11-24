@@ -531,7 +531,7 @@ describe('the connect pipeline, on a connection server another window started (c
     changesOf: (recording: Recording) => Partial<ConnectSteps> = () => ({}),
     legacy = false,
   ) {
-    const {recording, options: defaults} = setup();
+    const {recording, options: defaults, logSink} = setup();
     const options = legacy ? {...defaults, useExecServer: false} : defaults;
     const result = await connect(
       INPUT,
@@ -546,7 +546,7 @@ describe('the connect pipeline, on a connection server another window started (c
       }),
       options,
     );
-    return {result, recording};
+    return {result, recording, logSink};
   }
 
   /** The setup steps among the calls `recording` holds, in order. */
@@ -709,6 +709,19 @@ describe('the connect pipeline, on a connection server another window started (c
           ['installExtensions', '/srv/held/.server'],
         ],
       },
+    );
+  });
+
+  it('F-2003 BR-6 item 9: a take-up logs that the held server is listening, on the record’s port', async () => {
+    const {logSink} = await sharedConnect({
+      startedHelper: false,
+      storedRecord: HELD,
+    });
+    deepStrictEqual(
+      logSink.lines
+        .map(line => line.message)
+        .filter(message => message.startsWith('Remote server listening')),
+      ['Remote server listening on port 4321'],
     );
   });
 

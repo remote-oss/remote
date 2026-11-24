@@ -680,6 +680,7 @@ async function runSteps(
     options.logger.info(
       `the held server on port ${String(record.remotePort)} answered: using it`,
     );
+    options.logger.info(listeningLine(record.remotePort));
     await afterReuse(dataFolder);
     installed();
     return connectionOver(opening, server);
