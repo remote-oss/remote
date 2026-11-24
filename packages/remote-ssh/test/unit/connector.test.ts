@@ -14,6 +14,7 @@ import {
   CLI_PLAN,
   endTunnel,
   INPUT,
+  leaseOf,
   LINKED,
   type Recording,
   setup,
@@ -318,6 +319,52 @@ describe('the connector over the connect pipeline', () => {
         'server started',
         'label told',
       ]);
+    });
+
+    /** The labels told by a connect whose failure handling throws after the host reported, the window cancelling it first or not. */
+    async function toldWhenFailureThrows(
+      cancelled: boolean,
+    ): Promise<string[]> {
+      const order: string[] = [];
+      const {recording, options} = setup();
+      const connector: SshConnector = connectorOf({
+        stepsFor: () =>
+          steps(recording, {
+            openConnection: () =>
+              Promise.resolve({
+                kind: 'done',
+                value: {
+                  ...leaseOf(recording),
+                  release: () => {
+                    throw new Error('release broke');
+                  },
+                },
+              }),
+            openTunnel: () => {
+              if (cancelled) {
+                connector.cancel();
+              }
+              return tunnelFails();
+            },
+          }),
+        terminalMode: () => false,
+        options: connectorOptions(options),
+        revealLog: () => undefined,
+        applyTerminalEnvironment: () => undefined,
+      });
+      connector.onHostReported(() => {
+        order.push('label told');
+      });
+      await connector.connect(HOST_INPUT).catch(() => undefined);
+      return order;
+    }
+
+    it('a direct install whose failure handling throws after the host reported tells the label once, as a failed resolve does', async () => {
+      deepStrictEqual(await toldWhenFailureThrows(false), ['label told']);
+    });
+
+    it('a direct install whose failure handling throws after the window cancelled it tells no label', async () => {
+      deepStrictEqual(await toldWhenFailureThrows(true), []);
     });
 
     it('a direct install cancelled by the window while its server start fails for another reason tells no label', async () => {

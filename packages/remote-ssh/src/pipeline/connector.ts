@@ -352,6 +352,11 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
           },
         });
       } catch (caught) {
+        // A step that throws after the host reported ends the resolve as a failure does: the label is told, once, unless the
+        // resolve was cancelled.
+        if (!controller.signal.aborted) {
+          tellLabel();
+        }
         dependencies.resolveEnded?.(
           [],
           controller.signal.aborted ? 'cancelled' : 'failed',
