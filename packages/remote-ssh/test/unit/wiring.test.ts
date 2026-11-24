@@ -920,6 +920,31 @@ describe("the composition's forwarding of the later server steps", () => {
     deepStrictEqual(methods, ['flock', 'link']);
   });
 
+  it("ruling-2995-held-server: the held server check is this connect's server steps', in the record's data folder", async () => {
+    const {ports} = portsOf();
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    const channel = channelAnswering(
+      lines('Ok', 'server.alive=yes', 'server.port=4321'),
+    );
+    const outcome = await steps.heldServer(
+      inputFor('dev'),
+      leaseOn(channel),
+      HOST,
+      '/srv/held/.server-data',
+      new AbortController().signal,
+    );
+    const [call] = channel.calls;
+    deepStrictEqual(
+      [
+        outcome,
+        call?.operation === 'runScript' &&
+          call.request.script.includes("INSTALL_ROOT='/srv/held'"),
+      ],
+      [{kind: 'alive', port: 4321}, true],
+    );
+  });
+
   it("connect-14: the extensions install is this connect's server steps' install", async () => {
     const {ports} = portsOf({server: {defaultExtensions: ['pub.ext']}});
     const steps = stepsOf(ports);

@@ -511,14 +511,15 @@ describe('the connect pipeline, when it works', () => {
 });
 
 describe('the connect pipeline, on a connection server another window started (card #2995, ruling-2995-shared-reuse, F-2407 6.4, F-2102 5.1)', () => {
-  const HELD = {
+  /** A record an earlier connection server wrote, without the held server's data folder. */
+  const HELD_EARLIER = {
     remotePort: 4321,
     operatingSystem: 'linux',
     architecture: 'x64',
     temporaryFolder: '/tmp',
     connectionToken: 'held-token',
-    dataFolder: '/srv/held/.server',
   };
+  const HELD = {...HELD_EARLIER, dataFolder: '/srv/held/.server'};
   const SETUP_STEPS = ['checkInstallFolder', 'plan', 'transfer', 'start'];
 
   /**
@@ -685,11 +686,9 @@ describe('the connect pipeline, on a connection server another window started (c
   });
 
   it('ruling-2995-takeup-cleanup: a record without a data folder, from an earlier connection server, is stale: no host check, no tunnel, and the full setup', async () => {
-    const {dataFolder, ...older} = HELD;
-    void dataFolder;
     const {result, recording} = await sharedConnect({
       startedHelper: false,
-      storedRecord: older,
+      storedRecord: HELD_EARLIER,
     });
     deepStrictEqual(
       {

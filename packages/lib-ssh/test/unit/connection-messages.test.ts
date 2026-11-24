@@ -39,7 +39,7 @@ describe('connection requests (contracts §4 S9)', () => {
   });
 
   it("ruling-2995-takeup-cleanup: reads a record's data folder, and drops one that is empty or no text", () => {
-    function folderOf(dataFolder: unknown): unknown {
+    function folderOf(dataFolder: string | number): unknown {
       const request = readConnectionRequest({
         type: 'setSharedRecord',
         record: {...RECORD, dataFolder},
