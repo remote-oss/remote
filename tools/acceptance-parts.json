@@ -287,9 +287,11 @@
     "explorer-trust-pickers": {"position.test.ts": 0.1},
     "extensionpack": {
       "cli.test.ts": 0,
+      "manage.test.ts": 0.1,
       "page.test.ts": 0.3,
       "smoke.test.ts": 0,
-      "states.test.ts": 0.1
+      "states.test.ts": 0.1,
+      "uninstall.test.ts": 0.2
     },
     "extensionpack-german": {"locale.test.ts": 0.1},
     "extensionpack-lp-de": {"language.test.ts": 0.1},
