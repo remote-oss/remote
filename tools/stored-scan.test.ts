@@ -20,6 +20,13 @@ function inScratch(body: (folder: string) => void): void {
   }
 }
 
+/** Skips the row of `context` for a superuser, who reads any file and lists any folder whatever its mode. */
+function skipForSuperuser(context: Mocha.Context): void {
+  if (process.getuid?.() === 0) {
+    context.skip();
+  }
+}
+
 describe('the scan of the files an extension stores (card #3109)', () => {
   it('#3109: a file in a folder of the folder is read and reported, which a scan that read the entries as files would miss', () => {
     inScratch(folder => {
@@ -49,10 +56,7 @@ describe('the scan of the files an extension stores (card #3109)', () => {
   });
 
   it('#3109: a file that cannot be read fails the scan with its path, instead of passing as nothing found', function () {
-    // A superuser reads a file whatever its mode, so the file cannot be made unreadable for it.
-    if (process.getuid?.() === 0) {
-      this.skip();
-    }
+    skipForSuperuser(this);
     inScratch(folder => {
       const file = path.join(folder, 'locked');
       writeFileSync(file, 'host-a');
@@ -61,6 +65,23 @@ describe('the scan of the files an extension stores (card #3109)', () => {
         () => scanStored(folder, 'host-a'),
         (caught: Error) => caught.message.includes(file),
       );
+    });
+  });
+
+  it('#3109: a folder that cannot be listed fails the scan with its path, instead of passing as no folder', function () {
+    skipForSuperuser(this);
+    inScratch(folder => {
+      const locked = path.join(folder, 'locked');
+      mkdirSync(locked);
+      chmodSync(locked, 0o000);
+      try {
+        throws(
+          () => scanStored(locked, 'host-a'),
+          (caught: Error) => caught.message.includes(locked),
+        );
+      } finally {
+        chmodSync(locked, 0o700);
+      }
     });
   });
 });
