@@ -457,6 +457,7 @@ describe('the launches of the VSCodium run', () => {
         ['ssh-locks', undefined, true, undefined],
         ['ssh-downloaders', undefined, true, undefined],
         ['ssh-containers', ['remote-oss.remote-containers'], true, undefined],
+        ['cli-path', undefined, true, undefined],
         ['wsl-linux', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl-linux-web', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl', ['remote-oss.remote-wsl'], true, undefined],
@@ -682,7 +683,7 @@ describe('the launches of the VSCodium run', () => {
         ...['containers-a', 'containers-b'].map(label => [
           label,
           'containers',
-          shared,
+          {...shared, 'workbench.commandPalette.history': 0},
           ['ms-vscode-remote.remote-containers'],
           undefined,
         ]),
@@ -759,7 +760,7 @@ describe('the launches of the VSCodium run', () => {
         [
           'containers-shutdown',
           'containers-shutdown',
-          shared,
+          {...shared, 'workbench.commandPalette.history': 0},
           ['ms-vscode-remote.remote-containers'],
           undefined,
         ],
@@ -831,7 +832,13 @@ describe('the launches of the VSCodium run', () => {
           'containers-ssh-env-host',
           'containers-ssh-noclient',
         ].map(label => [label, label, shared, undefined, undefined]),
-        ['containers-view', 'containers-view', shared, undefined, undefined],
+        [
+          'containers-view',
+          'containers-view',
+          {...shared, 'workbench.commandPalette.history': 0},
+          undefined,
+          undefined,
+        ],
       ],
     );
   });
@@ -944,6 +951,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           {
             'window.title': '[${rootName}]',
+            'workbench.commandPalette.history': 0,
             'security.workspace.trust.startupPrompt': 'once',
           },
         ],
@@ -961,6 +969,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           {
             'window.title': '[${rootName}]',
+            'workbench.commandPalette.history': 0,
             'security.workspace.trust.startupPrompt': 'never',
           },
         ],
@@ -1088,6 +1097,13 @@ describe('the launches of the VSCodium run', () => {
         ],
       ],
       [[['containers-podman', 'podman']], true, 'podman', undefined],
+    );
+  });
+
+  it('#3003: the cli-path launch is a renderer launch with the title the page helpers find a window by and core’s custom dialogs, which a page read shows', () => {
+    deepStrictEqual(
+      launches.find(launch => launch.label === 'cli-path')?.settings,
+      {'window.title': '[${rootName}]', 'window.dialogStyle': 'custom'},
     );
   });
 
@@ -1311,8 +1327,40 @@ describe('the launches of the VSCodium run', () => {
       [
         ['ssh-newclient', 'ssh-newclient-pickers'],
         {'window.title': '[${rootName}]', 'remote.SSH.path': client},
-        {'window.title': '[${rootName}]', 'workbench.startupEditor': 'none'},
+        {
+          'window.title': '[${rootName}]',
+          'workbench.startupEditor': 'none',
+          'workbench.commandPalette.history': 0,
+        },
       ],
+    );
+  });
+
+  it('#2940: every launch whose rows read the order of the palette’s list starts with the palette’s history switched off, so no earlier command leads the alphabetical list', () => {
+    function history(launch: Launch): unknown {
+      return settingsOfLaunch(launch)?.['workbench.commandPalette.history'];
+    }
+    deepStrictEqual(
+      [
+        [
+          'ssh-core',
+          'ssh-agents',
+          'terminal-login',
+          'wsl-linux',
+          'trust',
+          'web-ui',
+          'web-ui-trust',
+          'containers-shutdown',
+          'containers-view',
+          'explorer-home',
+        ].map(label => history(launchLabelled(launches, label))),
+        launches
+          .filter(launch => launch.suite === 'containers')
+          .map(history)
+          .filter(value => value !== 0),
+        history(launchLabelled(launches, 'windows')),
+      ],
+      [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [], undefined],
     );
   });
 
@@ -1336,7 +1384,8 @@ describe('the launches of the VSCodium run', () => {
           .map(launch => launch.label.includes('ssh-newclient')),
       ],
       [
-        [2, 2],
+        // the cache and the install, in the shared steps and in the CLI job's copy of them
+        [4, 4],
         [true, true],
       ],
     );
@@ -1363,7 +1412,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, login-shells, preconnect, agent-notmp, default-ports, the explorer, trust and containers launches and every ports case', () => {
+  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, login-shells, preconnect, agent-notmp, default-ports, cli-path, the explorer, trust and containers launches and every ports case', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
@@ -1409,6 +1458,7 @@ describe('the launches of the VSCodium run', () => {
         'ssh-locks',
         'ssh-downloaders',
         'ssh-containers',
+        'cli-path',
         ...labelsFromExplorer(),
       ],
     );
@@ -2455,7 +2505,10 @@ describe('the platform cases (card coverage-12)', () => {
           {PATH: '<run>/browser-bin:<path>'},
           undefined,
           undefined,
-          {'window.title': '[${rootName}]'},
+          {
+            'window.title': '[${rootName}]',
+            'workbench.commandPalette.history': 0,
+          },
         ],
       ],
     );

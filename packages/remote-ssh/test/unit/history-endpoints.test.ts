@@ -12,11 +12,7 @@ import {
 import {createRecordingFake} from 'lib-companion/testing/recording-fake';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import {
-  FOLDER_HISTORY_KEY,
-  type HistoryMemento,
-  storedHistory,
-} from '../../src/companion/folder-history.ts';
+import {legacyOf, MemoryFiles, windowOn} from './history-files.fixture.ts';
 import {serveHistoryEndpoints} from '../../src/companion/history-endpoints.ts';
 import {mismatchLine} from '../../src/companion/slice-endpoints.ts';
 
@@ -40,19 +36,16 @@ const STORED = {
   ],
 } as const;
 
-/** A scene: the served endpoints over a fake bus, a memento holding `STORED`, and the log. */
+/** A scene: the served endpoints over a fake bus, a store whose earlier global state holds `STORED`, and the log. */
 function sceneOf() {
   const fake = createRecordingFake();
   const sink = new MemorySink();
   const mismatches: string[] = [];
-  let stored: unknown = JSON.parse(JSON.stringify(STORED)) as unknown;
-  const memento: HistoryMemento = {
-    get: key => (key === FOLDER_HISTORY_KEY ? stored : undefined),
-    update: (key, value) => {
-      stored = value;
-      return Promise.resolve();
-    },
-  };
+  const store = windowOn(
+    new MemoryFiles(),
+    'aaaa',
+    legacyOf(JSON.parse(JSON.stringify(STORED)) as unknown),
+  );
   const protocol = createProtocol({
     // eslint-disable-next-line id-length -- the protocol's option is named bus
     bus: fake,
@@ -61,12 +54,12 @@ function sceneOf() {
       mismatches.push(mismatchLine(mismatch));
     },
   });
-  const registration = serveHistoryEndpoints(protocol, memento);
+  const registration = serveHistoryEndpoints(protocol, store);
   return {
     fake,
     sink,
     mismatches,
-    memento,
+    store,
     registration,
     call: (commandId: string, ...given: unknown[]): unknown =>
       fake.registered(commandId)?.(...given),
@@ -82,10 +75,7 @@ describe('the history endpoints served to Remote Explorer (card ssh-provider-02)
     };
     deepStrictEqual(
       [answer, answer.hosts.map(host => host.hostKey)],
-      [
-        writeFoldersHistory({hosts: storedHistory(scene.memento)}),
-        ['zeta', 'alpha'],
-      ],
+      [writeFoldersHistory({hosts: scene.store.stored()}), ['zeta', 'alpha']],
     );
   });
 
@@ -96,7 +86,7 @@ describe('the history endpoints served to Remote Explorer (card ssh-provider-02)
       writeDeleteRequest({hostKey: 'alpha', path: '/a'}),
     );
     deepStrictEqual(
-      [result, storedHistory(scene.memento)[1]?.entries, scene.sink.lines],
+      [result, scene.store.stored()[1]?.entries, scene.sink.lines],
       [
         writeDeleteResult({changed: true}),
         [{path: '/w.code-workspace', kind: 'workspace'}],
@@ -118,7 +108,7 @@ describe('the history endpoints served to Remote Explorer (card ssh-provider-02)
 
   it('F-3906 rule 11, AC-20: no argument, a foreign one and an unknown major are not acted on, and the mismatch line comes once for the major', async () => {
     const scene = sceneOf();
-    const before = JSON.stringify(storedHistory(scene.memento));
+    const before = JSON.stringify(scene.store.stored());
     const answers = [
       scene.call(GET_HISTORY),
       scene.call(GET_HISTORY, 'foreign'),
@@ -135,7 +125,7 @@ describe('the history endpoints served to Remote Explorer (card ssh-provider-02)
         answers[0],
         answers[1],
         answers.slice(2).map(answer => answer === undefined),
-        JSON.stringify(storedHistory(scene.memento)),
+        JSON.stringify(scene.store.stored()),
         scene.mismatches.length,
       ],
       [

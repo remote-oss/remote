@@ -224,6 +224,8 @@ export async function evaluateAt<Value>(
  * Sends the input `commands` one after the other to the page at protocol address `address`, each awaiting its own
  * answer. A command that gets none within `milliseconds` fails with a {@link NoAnswerError} that names the page and the
  * command (its method and the first characters of its parameters), and so does a socket that closes before an answer.
+ * A command the page answers with an `error` fails the press with the protocol's message, naming the page and the
+ * command: a key the browser rejects is no press that worked, and it is no {@link NoAnswerError} (the page answered).
  */
 export async function dispatchAt(
   address: string,
@@ -234,14 +236,20 @@ export async function dispatchAt(
   const socket = await openSocket(address, owner, milliseconds);
   try {
     for (const [index, command] of commands.entries()) {
-      await answerTo(
+      const description = `${command.method} ${JSON.stringify(command.params).slice(0, 120)}`;
+      const answer = await answerTo(
         socket,
         owner,
         index + 1,
         command,
-        `${command.method} ${JSON.stringify(command.params).slice(0, 120)}`,
+        description,
         milliseconds,
       );
+      if (answer.error !== undefined) {
+        throw new Error(
+          `${owner}: the page rejected ${description}: ${answer.error.message}`,
+        );
+      }
     }
   } finally {
     socket.close();

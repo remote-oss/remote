@@ -50,11 +50,13 @@ import {
 } from './agent-standing.ts';
 import {explainedFailure, section} from './connect-failure.ts';
 import {editorFolderOf} from './editor-folder.ts';
+import {emptyProbe} from './empty-probe.ts';
 import {
   type CloseAttempt,
   closeUntilGone,
   type DebugTarget,
   listedPages,
+  leftoverNote,
   pagesDescription,
   REMEMBERED_PAGES,
   waitUntilPageLeft,
@@ -1472,6 +1474,30 @@ async function pagesListedNow(): Promise<DebugTarget[] | undefined> {
   }
 }
 
+/** The ids of the pages that the last `leftoverPagesNote` told, so that a page that stays is told once and not at every teardown. */
+let toldLeftoverPages = '';
+
+/**
+ * What the editor lists that no open window remembers, told when it differs from what was told last: the pages that a
+ * window left behind after its close or its row's failure stay in the list for the rest of the launch, and every later
+ * row has more pages to tell apart (#2936). Nothing when none is listed, when the list cannot be read, or when these were
+ * told already.
+ */
+export async function leftoverPagesNote(): Promise<string | undefined> {
+  const listed = await pagesListedNow();
+  if (listed === undefined) {
+    return undefined;
+  }
+  const next = leftoverNote(
+    listed,
+    REMEMBERED_PAGES,
+    isOpen,
+    toldLeftoverPages,
+  );
+  toldLeftoverPages = next.told;
+  return next.note;
+}
+
 /** How many times a close is sent while the window stays listed and open: the close, and one more. */
 const CLOSE_ATTEMPTS = 2;
 
@@ -2587,6 +2613,41 @@ export async function connectedWithin(
     await waitFor(
       `${name} to be connected`,
       () => connected(name, user),
+      milliseconds,
+    );
+  } catch (caught) {
+    throw await explainedFailure(
+      caught,
+      async () => `${await connectState()}\n${ownConnectOf(name)}`,
+    );
+  }
+}
+
+/**
+ * Waits until window `name`, which has no folder, is connected through authority `alias`, for up to `milliseconds`: it
+ * writes a file through its remote file system, at a full URI, and the file reaches the host of `user`. A window with a
+ * folder is {@link connectedWithin}'s: the agent has nowhere to write a relative file in a window without one.
+ */
+export async function connectedEmpty(
+  name: string,
+  alias: string,
+  milliseconds: number,
+  user = 'harness',
+): Promise<void> {
+  const probe = emptyProbe(name, alias, user);
+  const token = `${name}-${String(Date.now())}`;
+  await onHostAs(user, 'mkdir', '-p', probe.folder);
+  try {
+    await waitFor(
+      `${name} to be connected`,
+      async () => {
+        try {
+          await inWindow(name, 'acceptance.agent.writeFile', probe.uri, token);
+          return (await onHostAs(user, 'cat', probe.file)) === token;
+        } catch {
+          return false;
+        }
+      },
       milliseconds,
     );
   } catch (caught) {

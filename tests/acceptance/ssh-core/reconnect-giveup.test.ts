@@ -30,15 +30,27 @@ import {
   type StateReads,
 } from '../windows/reconnection-state.ts';
 import {
+  answerDialog,
   dialogOf,
   notifications,
   pageFocusFacts,
+  paletteRun,
   statusBarText,
   waitForDialog,
 } from '../windows/renderer.ts';
 
 /** The account of the `password-retry` alias, which asks for its password up to three times. */
 const ACCOUNT = 'harness-pwonly';
+
+/**
+ * How long a window is given after its connect before the shared connection ends. Core shows "Cannot reconnect" through
+ * a listener that is a workbench contribution of the last phase, `LifecyclePhase.Eventually` ([oss]
+ * `src/vs/workbench/contrib/remote/browser/remote.contribution.ts`). Nothing in the window shows that phase at the log
+ * level the launch runs at, so the row waits a fixed time: the phase came 2.1 s after the window's agent had activated in a
+ * trace-level run, and the dialog showed after a 12 s wait. A connection that ends before the phase has no listener for its
+ * permanent failure, and core never shows the dialog (card #2753).
+ */
+const WORKBENCH_SETTLED_MILLISECONDS = 15_000;
 
 /** The line that starts a reconnection attempt of the alias in the log. */
 const RECONNECTION =
@@ -88,11 +100,13 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
     ]);
     await openWindow('password-retry', name, ACCOUNT);
     await connectedWithin(name, 120_000, ACCOUNT);
+    await new Promise(resolve =>
+      setTimeout(resolve, WORKBENCH_SETTLED_MILLISECONDS),
+    );
     const mark = connectionLog().length;
     const asked = recordLines('maskedInput', name).length;
     const endedAt = Date.now();
-    // The window's page is read once before the outage: core's dialog did not show in a window whose page the harness
-    // had not read before the shared connection ended (21 of 24 rows of the third wrong password), and shows in one it had.
+    // The window's page is read once before the outage, which the failure's explanation reports.
     const readStarted = Date.now();
     await statusBarText(name, 'status.host');
     const readEnded = Date.now();
@@ -122,6 +136,16 @@ describe('a reconnection that is refused its password (card #2663, F-2505 AC-12)
       agentLife: () => agentLife(name),
       rendererLines: () => rendererLines(name),
       timeline: () => timeline.lines(),
+      probeDialog: async () => {
+        await paletteRun(name, 'File: Clear Recently Opened');
+        const shown = await waitForDialog(name, 5_000).then(
+          each => `showed at once: ${JSON.stringify(each.message)}`,
+          () => 'did not show within 5 s',
+        );
+        // The dialog is core's own confirmation: Cancel leaves the recent list as it is.
+        await answerDialog(name, 'Cancel').catch(() => undefined);
+        return shown;
+      },
     };
     const dialog = await waitForDialog(name, 180_000).catch(
       async (caught: unknown) => {

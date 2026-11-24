@@ -338,7 +338,7 @@ describe('the protocol connection of the page reads (card #2858)', () => {
 });
 
 describe('the long bound of the reads that walk a list in the page (card #2858)', () => {
-  it('#2858: every function of the renderer helpers whose in-page code loops with while and awaits passes the long bound, and the three that do are the walkers', () => {
+  it('#2858: every function of the renderer helpers whose in-page code loops with while and awaits passes the long bound, and the four that do are the walkers', () => {
     const source = readFileSync(
       path.join(
         REPOSITORY_ROOT,
@@ -362,6 +362,7 @@ describe('the long bound of the reads that walk a list in the page (card #2858)'
       });
     deepStrictEqual(walkers, [
       ['viewRows', true],
+      ['ensureRowDrawn', true],
       ['portsRows', true],
       ['allQuickPickRows', true],
     ]);
@@ -388,6 +389,48 @@ describe('the protocol connection of the page inputs (card #2908)', () => {
       noAnswer: true,
       requests: [[1, 'Input.dispatchKeyEvent']],
     });
+  });
+
+  /** An answer of the protocol to request `request` that rejects the command with `message`. */
+  function rejection(message: string, request: number): string {
+    return JSON.stringify({id: request, error: {code: -32000, message}});
+  }
+
+  it('#2964: a command the page answers with an error fails the press, naming the page, the command and the protocol’s message, and it is no failure to answer', async () => {
+    deepStrictEqual(
+      await pressAgainst((socket, request) => {
+        socket.write(textFrame(rejection('Invalid parameters', request.id)));
+      }),
+      {
+        failure:
+          'Error: window w1: the page rejected Input.dispatchKeyEvent {"type":"keyDown","key":"a"}: Invalid parameters',
+        noAnswer: false,
+        requests: [[1, 'Input.dispatchKeyEvent']],
+      },
+    );
+  });
+
+  it('#2964: a command rejected after one that was accepted fails at the second, which the failure names, and sends no third', async () => {
+    deepStrictEqual(
+      await pressAgainst((socket, request) => {
+        socket.write(
+          textFrame(
+            request.id === 1
+              ? answerOf({}, 1)
+              : rejection('Target closed', request.id),
+          ),
+        );
+      }),
+      {
+        failure:
+          'Error: window w1: the page rejected Input.dispatchKeyEvent {"type":"keyUp","key":"a"}: Target closed',
+        noAnswer: false,
+        requests: [
+          [1, 'Input.dispatchKeyEvent'],
+          [2, 'Input.dispatchKeyEvent'],
+        ],
+      },
+    );
   });
 
   it('#2908: a frame of another id is not the answer, so a page that only sends one gives no answer', async () => {
