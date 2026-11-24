@@ -500,6 +500,21 @@ async function evaluate<Value>(
   }
 }
 
+/**
+ * Brings window `name`'s page to the front, as a click on the window does, and waits for the page to report the
+ * focus: a window the window manager left unfocused hides its quick input, and a palette run in it never shows.
+ */
+export async function focusWindow(name: string): Promise<void> {
+  await dispatchAt(await pageOf(name), `window ${name}`, [
+    {method: 'Page.bringToFront', params: {}},
+  ]);
+  await settled(
+    () => `window ${name} to hold the focus after its page came to the front`,
+    async () =>
+      (await evaluate<boolean>(name, 'document.hasFocus()')) || undefined,
+  );
+}
+
 /** How many terminals' text areas window `name`'s page holds and the titles of its terminal tabs. */
 export interface TerminalPageFacts {
   rows: number;
