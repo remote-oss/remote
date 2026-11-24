@@ -760,7 +760,7 @@ describe('the launches of the VSCodium run', () => {
         [
           'containers-shutdown',
           'containers-shutdown',
-          shared,
+          {...shared, 'workbench.commandPalette.history': 0},
           ['ms-vscode-remote.remote-containers'],
           undefined,
         ],
@@ -963,6 +963,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           {
             'window.title': '[${rootName}]',
+            'workbench.commandPalette.history': 0,
             'security.workspace.trust.startupPrompt': 'never',
           },
         ],
@@ -1335,16 +1336,23 @@ describe('the launches of the VSCodium run', () => {
     }
     deepStrictEqual(
       [
-        ['ssh-core', 'ssh-agents', 'terminal-login', 'wsl-linux', 'trust'].map(
-          label => history(launchLabelled(launches, label)),
-        ),
+        [
+          'ssh-core',
+          'ssh-agents',
+          'terminal-login',
+          'wsl-linux',
+          'trust',
+          'web-ui',
+          'web-ui-trust',
+          'containers-shutdown',
+        ].map(label => history(launchLabelled(launches, label))),
         launches
           .filter(launch => launch.suite === 'containers')
           .map(history)
           .filter(value => value !== 0),
         history(launchLabelled(launches, 'windows')),
       ],
-      [[0, 0, 0, 0, 0], [], undefined],
+      [[0, 0, 0, 0, 0, 0, 0, 0], [], undefined],
     );
   });
 
@@ -2489,7 +2497,10 @@ describe('the platform cases (card coverage-12)', () => {
           {PATH: '<run>/browser-bin:<path>'},
           undefined,
           undefined,
-          {'window.title': '[${rootName}]'},
+          {
+            'window.title': '[${rootName}]',
+            'workbench.commandPalette.history': 0,
+          },
         ],
       ],
     );
