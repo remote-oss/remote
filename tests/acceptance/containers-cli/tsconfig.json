@@ -7,9 +7,6 @@
   "include": ["${configDir}"],
   "references": [
     {
-      "path": "../windows"
-    },
-    {
       "path": "../../../packages/lib-log"
     },
     {

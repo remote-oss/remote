@@ -34,7 +34,7 @@ import {
   dockerLines,
   removeClone,
 } from './volume-clones.ts';
-import {ALPINE_3_20} from '../windows/hub-images.ts';
+import {ALPINE_3_20} from './hub-images.ts';
 
 const execFileAsync = promisify(execFile);
 

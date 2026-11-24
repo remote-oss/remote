@@ -15,7 +15,7 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import {refreshCliBin} from '../../../packages/remote-containers/src/cli-bin/cli-bin.ts';
 import {nodeCliBinFs} from '../../../packages/remote-containers/src/cli-bin/node-cli-bin-fs.ts';
-import {ALPINE_3_22} from '../windows/hub-images.ts';
+import {ALPINE_3_22} from './hub-images.ts';
 
 const execFileAsync = promisify(execFile);
 const PACKAGE = path.join(

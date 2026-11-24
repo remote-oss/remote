@@ -18,7 +18,7 @@ import {cliPathsOf} from '../../../packages/remote-containers/src/cli/cli-paths.
 import type {CliTarget} from '../../../packages/remote-containers/src/cli/cli-arguments.ts';
 import {nodeCliHost} from '../../../packages/remote-containers/src/cli/node-cli-host.ts';
 import {systemCliPorts} from '../../../packages/remote-containers/src/cli/node-cli-ports.ts';
-import {ALPINE_3_22} from '../windows/hub-images.ts';
+import {ALPINE_3_22} from './hub-images.ts';
 
 const REPOSITORY_ROOT = path.join(import.meta.dirname, '..', '..', '..');
 const PACKAGE = path.join(REPOSITORY_ROOT, 'packages', 'remote-containers');
