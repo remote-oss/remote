@@ -38,6 +38,7 @@ import {
   showPorts,
 } from './ports-support.ts';
 import {forwardByHand} from '../windows/forward-support.ts';
+import {mismatchReport} from './mismatch-report.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -694,70 +695,91 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
             String(first[0]).localeCompare(String(second[0])),
           );
       }
-      deepStrictEqual(
-        {
-          origins: [
-            sortRows(await portsRows(browserWindow)),
-            sortRows(await portsRows(previewWindow)),
+      const observed = {
+        origins: [
+          sortRows(await portsRows(browserWindow)),
+          sortRows(await portsRows(previewWindow)),
+        ],
+        icons: [
+          (await portsRows(browserWindow)).map(shown => shown.icon).sort(),
+          (await portsRows(previewWindow)).map(shown => shown.icon).sort(),
+        ],
+        tabs: [
+          (await editorTabs(browserWindow))
+            .map(entry => entry.label)
+            .filter(label => label.startsWith('localhost:')),
+          (await editorTabs(previewWindow))
+            .map(entry => entry.label)
+            .filter(label => label.startsWith('localhost:')),
+        ],
+        browser: browserOpens(logFile),
+        notices: [
+          (await notificationCentre(browserWindow)).filter(text =>
+            [browserDecl, browserDet].some(port => text.includes(String(port))),
+          ),
+          (await notificationCentre(previewWindow)).filter(text =>
+            [previewDecl, previewDet, ignored].some(port =>
+              text.includes(String(port)),
+            ),
+          ),
+        ],
+      };
+      const expected = {
+        origins: [
+          [
+            [String(browserDecl), 'Dev Containers'],
+            [String(browserDet), 'Auto Forwarded'],
+          ].sort((first, second) =>
+            String(first[0]).localeCompare(String(second[0])),
+          ),
+          [
+            [String(previewDecl), 'Dev Containers'],
+            [String(previewDet), 'Auto Forwarded'],
+            [String(ignored), 'Dev Containers'],
+          ].sort((first, second) =>
+            String(first[0]).localeCompare(String(second[0])),
+          ),
+        ],
+        icons: [
+          [
+            'codicon-ports-forwarded-with-process-icon',
+            'codicon-ports-forwarded-with-process-icon',
           ],
-          icons: [
-            (await portsRows(browserWindow)).map(shown => shown.icon).sort(),
-            (await portsRows(previewWindow)).map(shown => shown.icon).sort(),
+          [
+            'codicon-ports-forwarded-with-process-icon',
+            'codicon-ports-forwarded-with-process-icon',
+            'codicon-ports-forwarded-with-process-icon',
           ],
-          tabs: [
-            (await editorTabs(browserWindow))
-              .map(entry => entry.label)
-              .filter(label => label.startsWith('localhost:')),
-            (await editorTabs(previewWindow))
-              .map(entry => entry.label)
-              .filter(label => label.startsWith('localhost:')),
-          ],
-          browser: browserOpens(logFile),
-          notices: [
-            (await notificationCentre(browserWindow)).filter(text =>
-              [browserDecl, browserDet].some(port =>
-                text.includes(String(port)),
+        ],
+        tabs: [[], []],
+        browser: [],
+        notices: [[], []],
+      };
+      try {
+        deepStrictEqual(observed, expected);
+      } catch (mismatch) {
+        throw new Error(
+          await mismatchReport(
+            mismatch,
+            await portsRows(previewWindow),
+            async () =>
+              JSON.stringify(
+                await Promise.all(
+                  [browserWindow, previewWindow].map(async window =>
+                    (await portsRows(window)).map(shown => [
+                      shown.port,
+                      shown.forwardedAddress,
+                      shown.runningProcess,
+                      shown.origin,
+                    ]),
+                  ),
+                ),
               ),
-            ),
-            (await notificationCentre(previewWindow)).filter(text =>
-              [previewDecl, previewDet, ignored].some(port =>
-                text.includes(String(port)),
-              ),
-            ),
-          ],
-        },
-        {
-          origins: [
-            [
-              [String(browserDecl), 'Dev Containers'],
-              [String(browserDet), 'Auto Forwarded'],
-            ].sort((first, second) =>
-              String(first[0]).localeCompare(String(second[0])),
-            ),
-            [
-              [String(previewDecl), 'Dev Containers'],
-              [String(previewDet), 'Auto Forwarded'],
-              [String(ignored), 'Dev Containers'],
-            ].sort((first, second) =>
-              String(first[0]).localeCompare(String(second[0])),
-            ),
-          ],
-          icons: [
-            [
-              'codicon-ports-forwarded-with-process-icon',
-              'codicon-ports-forwarded-with-process-icon',
-            ],
-            [
-              'codicon-ports-forwarded-with-process-icon',
-              'codicon-ports-forwarded-with-process-icon',
-              'codicon-ports-forwarded-with-process-icon',
-            ],
-          ],
-          tabs: [[], []],
-          browser: [],
-          notices: [[], []],
-        },
-      );
+            () => new Promise(resolve => setTimeout(resolve, 1000)),
+          ),
+          {cause: mismatch},
+        );
+      }
     } finally {
       for (const stop of [...browserStops, ...previewStops]) {
         await stop();
