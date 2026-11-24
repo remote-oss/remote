@@ -42,7 +42,10 @@ connections an *extension* opens, and the agent is no extension.
    - the dev tunnels TypeScript SDK: `@microsoft/dev-tunnels-connections` (`TunnelRelayTunnelHost`),
      `-management` (the management client with our domain) and `-contracts`. These three are new to the lockfile, and
      the agent skeleton card pins them at 1.3.82, the npm version the relay brief reads. They come with
-     `@microsoft/dev-tunnels-ssh`, at the version the relay's lockfile entry holds;
+     `@microsoft/dev-tunnels-ssh`, at the version the relay's lockfile entry holds, and with
+     `@microsoft/dev-tunnels-ssh-tcp`. The connections package peer-depends on that one
+     (`[dev-tunnels]` `ts/src/connections/package.json:29-30`), and `TunnelRelayTunnelHost` uses it, so the skeleton
+     card pins it beside `-ssh`;
    - lib-server, for the server by F-3902's rules, over a new local `HostChannel`;
    - lib-host, lib-log and lib-identifiers.
 
@@ -81,6 +84,13 @@ connections an *extension* opens, and the agent is no extension.
   hosted Linux job on each of x64 and arm64 (F-8104 AC-35).
 - **Licence:** the agent's archive carries Node.js's own `LICENSE`, and each bundled package's licence from its own
   metadata.
+  - **What decides whether a dependency may be bundled** is ADR-0002 decision 8 (licences compatible with MIT, checked
+    by `tools/licences.ts`'s allowlist, which holds Apache-2.0 and ISC). It is not ADR-0014, which admits **sources
+    to read**, not dependencies. So `websocket` (Apache-2.0) and `es5-ext` (ISC) may be bundled without the user's
+    admission. ADR-0015's "russh would need the user's admission" conflated the two; for a dependency, ADR-0002
+    decision 8 governs.
+  - **An Apache-2.0 package's `NOTICE` file**, where it has one, goes into `THIRD-PARTY-NOTICES.txt` whole, beside
+    its licence text.
 
 ## Build and CI (proteus)
 
@@ -132,8 +142,9 @@ connections an *extension* opens, and the agent is no extension.
      tool and `tests/tunnels-conformance/`. `ci-gate` needs both jobs, and their rows join the known-red ledger like a
      launch's.
 4. **Releases** (proposed: where builds are published is the user's call, ADR-0002 decision 5):
-   - A tag `tunnel-agent-v<version>` on a main commit starts a workflow of its own, on the `push` of that tag only. It
-     runs the same build and agent rows, through a reusable workflow that ci.yml also calls. Only then does it attach
+   - A tag `tunnel-agent-v<version>` on a main commit starts a workflow of its own, on the `push` of that tag only.
+     Its first step fails unless the tagged commit is an ancestor of `main` (`git merge-base --is-ancestor`), because
+     a tag trigger alone doesn't enforce "on a main commit". It then runs the same build and agent rows, through a reusable workflow that ci.yml also calls. Only then does it attach
      the two archives and a `SHA256SUMS` to the tag's GitHub release in this repository, with a build provenance
      attestation for each archive.
    - The release lives outside ci.yml because `ci-gate` must need every ci.yml job (`check-ci-gate`), and a release
