@@ -33,10 +33,16 @@ describe('the scan of the files an extension stores (card #3109)', () => {
       mkdirSync(path.join(folder, 'history'));
       writeFileSync(path.join(folder, 'history', 'entries.json'), 'host-a');
       writeFileSync(path.join(folder, 'other.json'), 'nothing');
-      deepStrictEqual(scanStored(folder, 'host-a'), {
-        read: 2,
-        holding: [path.join('history', 'entries.json')],
-      });
+      deepStrictEqual(
+        {
+          ...scanStored(folder, 'host-a'),
+          read: scanStored(folder, 'host-a').read.toSorted(),
+        },
+        {
+          read: [path.join('history', 'entries.json'), 'other.json'],
+          holding: [path.join('history', 'entries.json')],
+        },
+      );
     });
   });
 
@@ -44,13 +50,16 @@ describe('the scan of the files an extension stores (card #3109)', () => {
     inScratch(folder => {
       mkdirSync(path.join(folder, 'empty'));
       writeFileSync(path.join(folder, 'one'), 'x');
-      deepStrictEqual(scanStored(folder, 'host-a'), {read: 1, holding: []});
+      deepStrictEqual(scanStored(folder, 'host-a'), {
+        read: ['one'],
+        holding: [],
+      });
     });
   });
 
   it('#3109: a folder that is not there holds nothing', () => {
     deepStrictEqual(scanStored('/nonexistent/stored-scan-folder', 'host-a'), {
-      read: 0,
+      read: [],
       holding: [],
     });
   });

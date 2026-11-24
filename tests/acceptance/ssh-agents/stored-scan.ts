@@ -3,8 +3,8 @@ import path from 'node:path';
 
 /** What a scan of a folder read and found. */
 export interface StoredScan {
-  /** How many regular files the scan read. */
-  read: number;
+  /** The regular files the scan read, relative to the folder. */
+  read: string[];
   /** The files under the folder, relative to it, whose text holds the searched text. */
   holding: string[];
 }
@@ -20,13 +20,13 @@ export function scanStored(folder: string, text: string): StoredScan {
     entries = readdirSync(folder, {recursive: true, withFileTypes: true});
   } catch (caught) {
     if ((caught as NodeJS.ErrnoException).code === 'ENOENT') {
-      return {read: 0, holding: []};
+      return {read: [], holding: []};
     }
     throw new Error(`the scan of ${folder} failed: ${String(caught)}`, {
       cause: caught,
     });
   }
-  const scan: StoredScan = {read: 0, holding: []};
+  const scan: StoredScan = {read: [], holding: []};
   for (const entry of entries.filter(each => each.isFile())) {
     const file = path.join(entry.parentPath, entry.name);
     let content;
@@ -37,9 +37,10 @@ export function scanStored(folder: string, text: string): StoredScan {
         cause: caught,
       });
     }
-    scan.read += 1;
+    const relative = path.relative(folder, file);
+    scan.read.push(relative);
     if (content.includes(text)) {
-      scan.holding.push(path.relative(folder, file));
+      scan.holding.push(relative);
     }
   }
   return scan;

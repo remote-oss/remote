@@ -171,6 +171,9 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
         'User/globalStorage/remote-oss.remote-ssh',
       );
       const scan = scanStored(storage, block.hostName);
+      console.log(
+        `f2008-hex-address: the trust-store scan of the storage folder read ${JSON.stringify(scan.read)}`,
+      );
       const scratch = mkdtempSync(path.join(tmpdir(), 'f2008-control-'));
       writeFileSync(path.join(scratch, 'planted.json'), block.hostName);
       const control = scanStored(scratch, block.hostName).holding;
@@ -181,7 +184,7 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
           title: shown.title.includes(`[SSH: ${label}]`),
           newLines: linesOf(files.knownHosts).length - linesBefore,
           found: found.status,
-          scanned: scan.read > 0,
+          scanned: scan.read.length > 0,
           stored: scan.holding,
           control,
         },
