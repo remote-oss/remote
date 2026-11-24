@@ -720,9 +720,14 @@ async function runSteps(
     });
   }
 
-  // A connection server another window started: its live server is used as it is, else the folder is checked here.
+  // A connection server another window started: its live server is used as it is when this connect is certainly a direct
+  // install, as the held server is; else the folder is checked here and the full setup follows at the current settings.
   if (!steps.lookupBeforeConnection() && !lease.startedHelper) {
-    if (purpose === 'window' && lease.storedRecord !== undefined) {
+    if (
+      purpose === 'window' &&
+      lease.storedRecord !== undefined &&
+      steps.certainlyDirect(input, host)
+    ) {
       const takenUp = await heldServerConnection(lease.storedRecord);
       if (takenUp !== undefined) {
         return takenUp;

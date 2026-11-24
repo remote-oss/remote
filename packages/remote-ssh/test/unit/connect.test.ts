@@ -712,6 +712,22 @@ describe('the connect pipeline, on a connection server another window started (c
     );
   });
 
+  it('F-2103 AC-6, AC-9 (ruling-2995-takeup-mode): a connect that may take the CLI, as after the user switched the mode, takes up no held server: no host check, no tunnel to it, and the full setup', async () => {
+    const {result, recording} = await sharedConnect(
+      {startedHelper: false, storedRecord: HELD},
+      () => ({certainlyDirect: () => false}),
+    );
+    deepStrictEqual(
+      {
+        connected: 'connected' in result,
+        checked: recording.calls.includes('heldServer'),
+        asked: recording.calls.includes('serverAnswers'),
+        setup: setupStepsOf(recording),
+      },
+      {connected: true, checked: false, asked: false, setup: SETUP_STEPS},
+    );
+  });
+
   it('F-2003 BR-6 item 9: a take-up logs that the held server is listening, on the record’s port', async () => {
     const {logSink} = await sharedConnect({
       startedHelper: false,

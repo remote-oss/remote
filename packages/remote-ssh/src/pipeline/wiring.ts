@@ -663,6 +663,8 @@ export function stepsOf(
     maintain: (input, ...rest) => serverSteps(input).maintain(input, ...rest),
     heldServer: (input, ...rest) =>
       serverSteps(input).heldServer(input, ...rest),
+    certainlyDirect: (input, host) =>
+      serverSteps(input).certainlyDirect(input, host),
     installExtensions: (input, ...rest) =>
       serverSteps(input).installExtensions(input, ...rest),
     ...tunnelStep,

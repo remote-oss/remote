@@ -177,6 +177,7 @@ type ServerStepNames =
   | 'startCli'
   | 'maintain'
   | 'heldServer'
+  | 'certainlyDirect'
   | 'installExtensions';
 
 /** The archive source the planner reads, from what the resolution found. */
@@ -418,6 +419,11 @@ export function createServerSteps(
         ),
         cancellation,
       ),
+    certainlyDirect: (input, host) =>
+      !dependencies.useExecServer ||
+      dependencies.socketMode() ||
+      manualBootstrap() ||
+      cliAddressOf(profile, templatePlatformOf(host)).kind !== 'address',
     plan: (input, host, options) => {
       const platform = templatePlatformOf(host);
       const resolution = resolveServerArchive(

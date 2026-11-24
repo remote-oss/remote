@@ -945,6 +945,16 @@ describe("the composition's forwarding of the later server steps", () => {
     );
   });
 
+  it("ruling-2995-takeup-mode: whether a connect is certainly direct is this connect's server steps' reading", async () => {
+    const {ports} = portsOf();
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    deepStrictEqual(
+      typeof steps.certainlyDirect(inputFor('dev'), HOST),
+      'boolean',
+    );
+  });
+
   it("connect-14: the extensions install is this connect's server steps' install", async () => {
     const {ports} = portsOf({server: {defaultExtensions: ['pub.ext']}});
     const steps = stepsOf(ports);

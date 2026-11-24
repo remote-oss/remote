@@ -326,6 +326,11 @@ export interface ConnectSteps {
     dataFolder?: string,
   ): Promise<MaintenanceOutcome>;
   /**
+   * Whether this connect's plan for `host` is certainly the direct install, read from the plan's own inputs: the setting
+   * off, a socket-mode start, a manual bootstrap, or no usable CLI source. False wherever it might be the CLI.
+   */
+  certainlyDirect(input: ConnectInput, host: ProbedHost): boolean;
+  /**
    * Whether the server a shared record holds still runs in `dataFolder`, the record's, read on the host over the lease's
    * session; it starts nothing and takes no lock.
    */

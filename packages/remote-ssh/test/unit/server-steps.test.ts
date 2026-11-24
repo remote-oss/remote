@@ -439,6 +439,48 @@ describe('the server steps: plan, the CLI path', () => {
     deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
   });
 
+  it('ruling-2995-takeup-mode: wherever a connect is certainly direct, its plan is the direct install; and it is not certain where the plan is the CLI', () => {
+    const installed = {
+      ...HOST,
+      installed: true,
+      installFolder: '/home/u/.server/bin/abc123',
+    };
+    const cases: Array<
+      [string, Parameters<typeof dependencies>[0], typeof HOST]
+    > = [
+      [CLI_TEMPLATE, {}, HOST],
+      [CLI_TEMPLATE, {useExecServer: false}, HOST],
+      [CLI_TEMPLATE, {useExecServer: false}, installed],
+      [CLI_TEMPLATE, {socketMode: () => true}, HOST],
+      [CLI_TEMPLATE, {policy: sshPolicyFor('manualBootstrap')}, HOST],
+      ['', {}, HOST],
+      ['not a url ${os}', {}, HOST],
+    ];
+    const judged = cases.map(([template, changes, host]) => {
+      const steps = createServerSteps(
+        dependencies({
+          profile: {...PROFILE, cliDownloadUrlTemplate: template},
+          ...changes,
+        }),
+      );
+      const result = steps.plan(INPUT, host);
+      const kind = 'plan' in result ? result.plan.kind : 'failed';
+      return [
+        steps.certainlyDirect(INPUT, host),
+        kind === 'cli' ? 'cli' : 'not the CLI',
+      ];
+    });
+    deepStrictEqual(judged, [
+      [false, 'cli'],
+      [true, 'not the CLI'],
+      [true, 'not the CLI'],
+      [true, 'not the CLI'],
+      [true, 'not the CLI'],
+      [true, 'not the CLI'],
+      [true, 'not the CLI'],
+    ]);
+  });
+
   it('brief §2 row 3: an unusable template is logged once, with its reason', () => {
     const {messages} = planned('not a url ${os}');
     deepStrictEqual(cliPathLines(messages), [

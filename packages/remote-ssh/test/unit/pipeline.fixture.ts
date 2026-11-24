@@ -395,6 +395,7 @@ export function steps(
     },
     heldServer: () =>
       note('heldServer', Promise.resolve({kind: 'alive', port: 4321})),
+    certainlyDirect: () => true,
     installExtensions: () => {
       note('installExtensions', undefined);
       return Promise.resolve();
