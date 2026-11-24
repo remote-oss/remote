@@ -549,6 +549,27 @@ describe('the connect pipeline, on a connection server another window started (c
     return {result, recording, logSink};
   }
 
+  /** What a connect did about the held server: whether it connected, checked the host, asked the server, and set up. */
+  function takeUpOf(
+    result: Awaited<ReturnType<typeof sharedConnect>>['result'],
+    recording: {calls: readonly string[]},
+  ) {
+    return {
+      connected: 'connected' in result,
+      checked: recording.calls.includes('heldServer'),
+      asked: recording.calls.includes('serverAnswers'),
+      setup: setupStepsOf(recording),
+    };
+  }
+
+  /** A connect that took up nothing: it connected over the full setup, and never checked or asked a held server. */
+  const NO_TAKE_UP = {
+    connected: true,
+    checked: false,
+    asked: false,
+    setup: SETUP_STEPS,
+  };
+
   /** The setup steps among the calls `recording` holds, in order. */
   function setupStepsOf(recording: {calls: readonly string[]}): string[] {
     return recording.calls.filter(call => SETUP_STEPS.includes(call));
@@ -717,15 +738,7 @@ describe('the connect pipeline, on a connection server another window started (c
       {startedHelper: false, storedRecord: HELD},
       () => ({certainlyDirect: () => false}),
     );
-    deepStrictEqual(
-      {
-        connected: 'connected' in result,
-        checked: recording.calls.includes('heldServer'),
-        asked: recording.calls.includes('serverAnswers'),
-        setup: setupStepsOf(recording),
-      },
-      {connected: true, checked: false, asked: false, setup: SETUP_STEPS},
-    );
+    deepStrictEqual(takeUpOf(result, recording), NO_TAKE_UP);
   });
 
   it('F-2003 BR-6 item 9: a take-up logs that the held server is listening, on the record’s port', async () => {
@@ -746,15 +759,7 @@ describe('the connect pipeline, on a connection server another window started (c
       startedHelper: false,
       storedRecord: HELD_EARLIER,
     });
-    deepStrictEqual(
-      {
-        connected: 'connected' in result,
-        checked: recording.calls.includes('heldServer'),
-        asked: recording.calls.includes('serverAnswers'),
-        setup: setupStepsOf(recording),
-      },
-      {connected: true, checked: false, asked: false, setup: SETUP_STEPS},
-    );
+    deepStrictEqual(takeUpOf(result, recording), NO_TAKE_UP);
   });
 
   it('ruling-2995-held-server: a held server the host says is gone, or that runs on another port, is dropped before any tunnel opens to it', async () => {

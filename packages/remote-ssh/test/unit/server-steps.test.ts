@@ -163,6 +163,28 @@ describe('the server steps: maintain', () => {
   });
 });
 
+/**
+ * Whether the script `runStep` sends runs in the held server's folder: for a data folder given, and for none, when it runs
+ * in the settings' folder.
+ */
+async function runsInHeldFolder(
+  runStep: (
+    channel: ReturnType<typeof channelAnswering>,
+    dataFolder: string | undefined,
+  ) => Promise<unknown>,
+): Promise<boolean[]> {
+  async function rootOf(dataFolder: string | undefined): Promise<boolean> {
+    const channel = channelAnswering(lines('Ok'));
+    await runStep(channel, dataFolder);
+    const call = channel.calls[0];
+    return (
+      call?.operation === 'runScript' &&
+      call.request.script.includes("INSTALL_ROOT='/srv/held'")
+    );
+  }
+  return [await rootOf('/srv/held/.server-data'), await rootOf(undefined)];
+}
+
 describe('the server steps: the held server', () => {
   /** The script a step sent to a host that answered with `answer`, and the outcome. */
   async function heldIn(
@@ -198,24 +220,17 @@ describe('the server steps: the held server', () => {
   });
 
   it("ruling-2995-takeup-cleanup: a clean-up given a data folder runs there, and without one in the settings' folder", async () => {
-    async function rootOf(dataFolder: string | undefined): Promise<boolean> {
-      const channel = channelAnswering(lines('Ok'));
-      await createServerSteps(dependencies()).maintain(
-        INPUT,
-        leaseOn(channel),
-        'cleanup',
-        new AbortController().signal,
-        HOST,
-        dataFolder,
-      );
-      const call = channel.calls[0];
-      return (
-        call?.operation === 'runScript' &&
-        call.request.script.includes("INSTALL_ROOT='/srv/held'")
-      );
-    }
     deepStrictEqual(
-      [await rootOf('/srv/held/.server-data'), await rootOf(undefined)],
+      await runsInHeldFolder((channel, dataFolder) =>
+        createServerSteps(dependencies()).maintain(
+          INPUT,
+          leaseOn(channel),
+          'cleanup',
+          new AbortController().signal,
+          HOST,
+          dataFolder,
+        ),
+      ),
       [true, false],
     );
   });
@@ -223,26 +238,19 @@ describe('the server steps: the held server', () => {
 
 describe('the server steps: the default extensions', () => {
   it("ruling-2995-takeup-cleanup (1): the install of the default extensions runs in a given data folder, and without one in the settings' folder", async () => {
-    async function rootOf(dataFolder: string | undefined): Promise<boolean> {
-      const channel = channelAnswering(lines('Ok'));
-      await createServerSteps(
-        dependencies({
-          settings: settingsWith({defaultExtensions: ['pub.ext']}),
-        }),
-      ).installExtensions(
-        INPUT,
-        leaseOn(channel),
-        new AbortController().signal,
-        dataFolder,
-      );
-      const call = channel.calls[0];
-      return (
-        call?.operation === 'runScript' &&
-        call.request.script.includes("INSTALL_ROOT='/srv/held'")
-      );
-    }
     deepStrictEqual(
-      [await rootOf('/srv/held/.server-data'), await rootOf(undefined)],
+      await runsInHeldFolder((channel, dataFolder) =>
+        createServerSteps(
+          dependencies({
+            settings: settingsWith({defaultExtensions: ['pub.ext']}),
+          }),
+        ).installExtensions(
+          INPUT,
+          leaseOn(channel),
+          new AbortController().signal,
+          dataFolder,
+        ),
+      ),
       [true, false],
     );
   });
