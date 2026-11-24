@@ -132,6 +132,9 @@ interface Failure extends ShownDialog {
   toasts: string[];
 }
 
+/** How many lines of the containers log a failed wait for the dialog of a build prints. */
+const LAST_LOG_LINES = 60;
+
 describe('what a failed build with Features says (card containers-94)', function () {
   this.timeout(1_800_000);
 
@@ -186,12 +189,21 @@ describe('what a failed build with Features says (card containers-94)', function
     prepare?.(folder);
     const window = await openFolderWindow(folder);
     windows.push(window);
-    if (reloads) {
-      await reopenStarted(window);
-    } else {
-      await startInWindow(window, 'remote-containers.reopenInContainer');
+    const mark = containersLog().length;
+    let dialog;
+    try {
+      if (reloads) {
+        await reopenStarted(window);
+      } else {
+        await startInWindow(window, 'remote-containers.reopenInContainer');
+      }
+      dialog = await waitForDialog(window, DIALOG_MILLISECONDS);
+    } catch (caught) {
+      throw new Error(
+        `${String(caught)}\nthe containers log since the reopen of ${name}, its last ${String(LAST_LOG_LINES)} lines:\n${containersLogSince(mark).slice(-LAST_LOG_LINES).join('\n')}`,
+        {cause: caught},
+      );
     }
-    const dialog = await waitForDialog(window, DIALOG_MILLISECONDS);
     return {
       ...dialog,
       primary: await primaryButtonOf(window),
