@@ -627,3 +627,54 @@ describe('host-key questions in the terminal and the login terminal (card #3025,
     }
   });
 });
+
+describe('host-key questions across two windows (card #3023, F-2305)', function () {
+  this.timeout(600_000);
+
+  let saved: string | undefined;
+
+  before(() => {
+    saved = readUserSettings();
+  });
+
+  after(() => {
+    restoreUserSettings(saved);
+  });
+
+  it('F-2305 AC-44 (c3023-shared-known): with the first window connected through the shared local server and the key removed from the known-hosts file, the second connects to the same host without any host-key question', async () => {
+    const alias = 'c3023-shared-known';
+    const before = readUserSettings();
+    const known = await asking(alias, [
+      `HostKeyAlias ${alias}`,
+      'HashKnownHosts no',
+    ]);
+    const settings = readUserSettings();
+    const first = `${alias}-a`;
+    const next = `${alias}-b`;
+    appendScript([
+      {surface: 'pick', match: 'fingerprint', answer: 'yes', window: first},
+    ]);
+    try {
+      await openWindow(alias, first);
+      await connectedWithin(first, INSTALL_MILLISECONDS);
+      const firstWritten = knownLines(known).length;
+      writeFileSync(known, '');
+      await openWindow(alias, next);
+      await connectedWithin(next, INSTALL_MILLISECONDS);
+      deepStrictEqual(
+        {
+          firstWritten,
+          picks: picksOf(next),
+          masked: recordLines('maskedInput', next),
+          known: knownLines(known),
+          settingsKept: readUserSettings() === settings,
+        },
+        {firstWritten: 1, picks: [], masked: [], known: [], settingsKept: true},
+      );
+    } finally {
+      await closeWindow(first).catch(() => undefined);
+      await closeWindow(next).catch(() => undefined);
+      restoreUserSettings(before);
+    }
+  });
+});
