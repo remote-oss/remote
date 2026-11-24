@@ -29,7 +29,6 @@ import {
   notificationButtons,
   notificationCentre,
   notificationLinks,
-  pressEscape,
   quickPickFacts,
   quickPickRows,
   toastFacts,
@@ -160,6 +159,15 @@ async function showsWorkspaceNotice(name: string): Promise<boolean> {
     () => true,
     () => false,
   );
+}
+
+/**
+ * Answers the untitled workspace's save prompt with Don't Save, so
+ * the close ends the window; Escape answers it with Cancel, which
+ * leaves the window open and its next close asks again.
+ */
+async function dontSave(name: string): Promise<void> {
+  await answerDialog(name, "Don't Save");
 }
 
 /**
@@ -456,7 +464,7 @@ describe('multi-root workspaces (card coverage-104)', function () {
       );
     } finally {
       if (isOpen(window)) {
-        await closeContained(window, pressEscape).catch(() => undefined);
+        await closeContained(window, dontSave).catch(() => undefined);
       }
     }
   });
@@ -583,7 +591,7 @@ describe('multi-root workspaces (card coverage-104)', function () {
     } finally {
       for (const window of windows) {
         if (isOpen(window)) {
-          await closeContained(window, pressEscape).catch(() => undefined);
+          await closeContained(window, dontSave).catch(() => undefined);
         }
       }
       await inWindow('local', NOTIFICATION_RESET);
