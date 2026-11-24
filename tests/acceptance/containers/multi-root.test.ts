@@ -4,11 +4,13 @@ import {mkdirSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
+  closeContained,
   closeWindow,
   connectedToContainer,
   devContainerFolder,
   devContainersOf,
   inWindow,
+  isOpen,
   reloadWindow,
   runLabelArguments,
   startInWindow,
@@ -27,6 +29,7 @@ import {
   notificationButtons,
   notificationCentre,
   notificationLinks,
+  type NotificationLink,
   quickPickFacts,
   quickPickRows,
   toastFacts,
@@ -160,9 +163,19 @@ async function showsWorkspaceNotice(name: string): Promise<boolean> {
 }
 
 /**
+ * Answers the untitled workspace's save prompt with Don't Save, so
+ * the close ends the window; Escape answers it with Cancel, which
+ * leaves the window open and its next close asks again.
+ */
+async function dontSave(name: string): Promise<void> {
+  await answerDialog(name, "Don't Save");
+}
+
+/**
  * Opens `first`, adds `second` to it as the user's Add Folder to Workspace does, and gives the window and the lines
  * its notification centre gained: the window becomes an untitled workspace, and the notification of the roots that
- * carry a configuration follows.
+ * carry a configuration follows. A step that fails leaves no window behind: the contained close ends it, and the
+ * failure goes on to the row.
  */
 async function addedTo(
   label: string,
@@ -170,31 +183,36 @@ async function addedTo(
   second: string,
 ): Promise<{window: string; added: string[]}> {
   const window = await openFolderWindow(first);
-  const before = await notificationCentre(window);
-  await inWindow(window, 'acceptance.agent.addFolder', second);
-  await waitFor(
-    `window ${window} of ${label} to become an untitled workspace`,
-    async () =>
-      (
-        await windowState(window).catch(() => undefined)
-      )?.workspaceFile?.startsWith('untitled:') === true,
-    60_000,
-  );
-  await waitFor(
-    `a new line of the notification centre for ${label} in window ${window}`,
-    async () =>
-      (await notificationCentre(window)).some(text => !before.includes(text)),
-    20_000,
-  ).then(
-    () => true,
-    () => false,
-  );
-  return {
-    window,
-    added: (await notificationCentre(window)).filter(
-      text => !before.includes(text),
-    ),
-  };
+  try {
+    const before = await notificationCentre(window);
+    await inWindow(window, 'acceptance.agent.addFolder', second);
+    await waitFor(
+      `window ${window} of ${label} to become an untitled workspace`,
+      async () =>
+        (
+          await windowState(window).catch(() => undefined)
+        )?.workspaceFile?.startsWith('untitled:') === true,
+      60_000,
+    );
+    await waitFor(
+      `a new line of the notification centre for ${label} in window ${window}`,
+      async () =>
+        (await notificationCentre(window)).some(text => !before.includes(text)),
+      20_000,
+    ).then(
+      () => true,
+      () => false,
+    );
+    return {
+      window,
+      added: (await notificationCentre(window)).filter(
+        text => !before.includes(text),
+      ),
+    };
+  } catch (failure) {
+    await closeContained(window, dontSave).catch(() => undefined);
+    throw failure;
+  }
 }
 
 /** The bind mounts of container `containerId`: their sources. */
@@ -428,6 +446,7 @@ describe('multi-root workspaces (card coverage-104)', function () {
     const first = devContainerFolder('c104-untitled-a', {name: 'First'});
     const second = devContainerFolder('c104-untitled-b', {name: 'Second'});
     const window = await openFolderWindow(first);
+    let shown: [string, string[], string | null, string[], string[]];
     try {
       await inWindow(window, 'acceptance.agent.addFolder', second);
       await waitFor(
@@ -441,23 +460,37 @@ describe('multi-root workspaces (card coverage-104)', function () {
       await startInWindow(window, 'remote-containers.reopenInContainer');
       const dialog = await waitForDialog(window, 60_000);
       await answerDialog(window, dialog.buttons[0] ?? '');
-      deepStrictEqual(
-        [
-          dialog.details,
-          dialog.buttons,
-          (await windowState(window)).remoteName,
-          await devContainersOf(first),
-          await devContainersOf(second),
-        ],
-        [SAVE_FIRST, ['OK'], null, [], []],
-      );
+      shown = [
+        dialog.details,
+        dialog.buttons,
+        (await windowState(window)).remoteName,
+        await devContainersOf(first),
+        await devContainersOf(second),
+      ];
     } finally {
-      await closeWindow(window).catch(() => undefined);
+      if (isOpen(window)) {
+        await closeContained(window, dontSave).catch(() => undefined);
+      }
     }
+    deepStrictEqual(
+      [shown, isOpen(window)],
+      [[SAVE_FIRST, ['OK'], null, [], []], false],
+    );
   });
 
   it('F-0402 AC-15 (c3013-added): a folder added to a folder window makes an untitled workspace whose notification has the folder wording with the repository sentence, for one configured root and for two; Current Folder keeps it from that workspace only; two plain roots show nothing', async () => {
     const windows: string[] = [];
+    let facts: [
+      string[],
+      NotificationLink[],
+      string[],
+      string[],
+      [boolean, string[]],
+      boolean,
+      boolean,
+      boolean,
+      string[],
+    ];
     try {
       const onePlain = path.join(
         variable('HARNESS_RUN_FOLDER'),
@@ -491,7 +524,7 @@ describe('multi-root workspaces (card coverage-104)', function () {
         ADDED_NOTICE_START,
         "Don't Show Again...",
       );
-      const followUp = [
+      const followUp: [boolean, string[]] = [
         (await notificationCentre(both.window)).includes(FOLDER_FOLLOW_UP),
         await notificationButtons(both.window, FOLDER_FOLLOW_UP),
       ];
@@ -545,18 +578,28 @@ describe('multi-root workspaces (card coverage-104)', function () {
       windows.push(plain.window);
       await closeWindow(plain.window).catch(() => undefined);
 
-      deepStrictEqual(
-        [
-          single.added,
-          singleLinks,
-          singleButtons,
-          both.added,
-          followUp,
-          afterReload,
-          rootAShows,
-          rootBShows,
-          plain.added,
-        ],
+      facts = [
+        single.added,
+        singleLinks,
+        singleButtons,
+        both.added,
+        followUp,
+        afterReload,
+        rootAShows,
+        rootBShows,
+        plain.added,
+      ];
+    } finally {
+      for (const window of windows) {
+        if (isOpen(window)) {
+          await closeContained(window, dontSave).catch(() => undefined);
+        }
+      }
+      await inWindow('local', NOTIFICATION_RESET);
+    }
+    deepStrictEqual(
+      [facts, windows.filter(isOpen)],
+      [
         [
           [ADDED_NOTICE],
           [
@@ -574,12 +617,8 @@ describe('multi-root workspaces (card coverage-104)', function () {
           true,
           [],
         ],
-      );
-    } finally {
-      for (const window of windows) {
-        await closeWindow(window).catch(() => undefined);
-      }
-      await inWindow('local', NOTIFICATION_RESET);
-    }
+        [],
+      ],
+    );
   });
 });
