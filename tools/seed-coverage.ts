@@ -1,16 +1,19 @@
 /**
- * @fileoverview seed-coverage: writes a coverage file with every criterion tagged `todo`.
+ * @fileoverview seed-coverage: writes a coverage file with the criteria of a set's features tagged `todo`, and never
+ * changes a line of one that exists.
  *
- *     node tools/seed-coverage.ts [<name>]
+ *     node tools/seed-coverage.ts [<name>] [--check]
  *
- * `<name>` picks the set, `slice1` (the default), `containers-r1`, `explorer` or `extensionpack-r1`, and writes the set's file. It reads
- * the issue number of each of the set's features from the catalogue, fetches the feature's issue with `gh issue view`
- * in its own repository and takes the criteria from its body. Run it once, commit the output, and tag the lines by
- * hand afterwards; running it again overwrites the tags.
+ * `<name>` picks the set, `slice1` (the default), `containers-r1`, `explorer` or `extensionpack-r1`, and names the set's
+ * file. It reads the issue number of each of the set's features from the catalogue, fetches the feature's issue with
+ * `gh issue view` in its own repository and takes the criteria from its body. A file that does not exist is written with
+ * every criterion `todo`. A file that exists is never rewritten: its lines keep their tags, reasons and places, the
+ * criteria it lacks are inserted as `todo` lines in numeric order, and a line of a feature outside the set stops the run,
+ * naming the feature. With `--check` nothing is written, and the run fails when it would have added a line.
  */
 
 import {spawnSync} from 'node:child_process';
-import {readFileSync, writeFileSync} from 'node:fs';
+import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {isMainModule, messageOf, REPOSITORY_ROOT} from './repository.ts';
 import {
@@ -112,25 +115,90 @@ export function bodyOf(
   return result.stdout;
 }
 
+/** The criteria of every feature of a set (the first slice's by default), from the catalogue and the issues. */
+export function criteriaFor(
+  catalogue: string,
+  program: Program,
+  scope: CoverageScope = SLICE_ONE_SCOPE,
+): string[] {
+  const numbers = issueNumbersOf(catalogue);
+  return scope.features.flatMap(feature => {
+    const entry = numbers.get(feature);
+    if (entry === undefined) {
+      throw new Error(`${feature} is not in the catalogue`);
+    }
+    return acceptanceCriteriaOf(
+      bodyOf(entry.issue, entry.repository, program),
+      feature,
+    );
+  });
+}
+
 /** The text of a coverage file (the first slice's by default), from the catalogue and the issues. */
 export function seedFor(
   catalogue: string,
   program: Program,
   scope: CoverageScope = SLICE_ONE_SCOPE,
 ): string {
-  const numbers = issueNumbersOf(catalogue);
-  return seedOf(
-    scope.features.flatMap(feature => {
-      const entry = numbers.get(feature);
-      if (entry === undefined) {
-        throw new Error(`${feature} is not in the catalogue`);
-      }
-      return acceptanceCriteriaOf(
-        bodyOf(entry.issue, entry.repository, program),
-        feature,
-      );
-    }),
-  );
+  return seedOf(criteriaFor(catalogue, program, scope));
+}
+
+/** What merging the criteria into an existing coverage file gives. */
+export interface Merged {
+  /** The file's text: every line it had, in its place, and the missing criteria as `todo` lines in numeric order. */
+  text: string;
+  /** The criteria that were not in the file and were inserted. */
+  added: string[];
+  /** The ids in the file that the issues no longer list, kept as they are. */
+  unlisted: string[];
+}
+
+/** The id of a coverage line: its first field. */
+function idOf(line: string): string {
+  return line.split('\t')[0] ?? '';
+}
+
+/**
+ * Merges `criteria` into the text of an existing coverage file and changes or drops no line: the lines keep their
+ * tags, reasons and places, and each criterion the file lacks is inserted as a `todo` line before the first line that
+ * sorts after it. A line of a feature outside `features` throws, naming every such feature.
+ */
+export function mergedSeed(
+  existing: string,
+  criteria: readonly string[],
+  features: readonly string[],
+): Merged {
+  const [header = '', ...rest] = existing.split('\n');
+  const lines = rest.filter(line => line !== '');
+  const outside = [
+    ...new Set(
+      lines
+        .map(line => idOf(line).split('.AC-')[0] ?? '')
+        .filter(feature => !features.includes(feature)),
+    ),
+  ];
+  if (outside.length > 0) {
+    throw new Error(
+      `the file has lines of features outside the set: ${outside.join(', ')}`,
+    );
+  }
+  const present = new Set(lines.map(idOf));
+  const added = criteria
+    .filter(criterion => !present.has(criterion))
+    .sort(byCriterion);
+  const merged = [...lines];
+  for (const criterion of added) {
+    const after = merged.findIndex(
+      line => byCriterion(idOf(line), criterion) > 0,
+    );
+    merged.splice(after < 0 ? merged.length : after, 0, `${criterion}\ttodo\t`);
+  }
+  const wanted = new Set(criteria);
+  return {
+    text: [header, ...merged, ''].join('\n'),
+    added,
+    unlisted: [...present].filter(entry => !wanted.has(entry)),
+  };
 }
 
 /** The set `name` picks by its name; none picks the first slice's. */
@@ -145,10 +213,63 @@ export function scopeNamed(name: string | undefined): CoverageScope {
   return scope;
 }
 
+/** What a run of the tool does: the file text to write, if any, the lines to print and the failure, if any. */
+export interface SeedAction {
+  write?: string;
+  lines: string[];
+  failure?: string;
+}
+
+/**
+ * What the tool does for the coverage file `file`, whose text is `existing` or none when there is no file: it writes
+ * the seed of a new file; it merges into an existing one and never replaces it with the seed; with `check` it writes
+ * nothing and fails when the file is missing or lacks a criterion.
+ */
+export function seedAction(
+  file: string,
+  existing: string | undefined,
+  criteria: readonly string[],
+  features: readonly string[],
+  check: boolean,
+): SeedAction {
+  if (existing === undefined) {
+    return check
+      ? {lines: [], failure: `${file} does not exist`}
+      : {
+          write: seedOf(criteria),
+          lines: [`wrote ${String(criteria.length)} criteria`],
+        };
+  }
+  const merged = mergedSeed(existing, criteria, features);
+  const lines =
+    merged.unlisted.length === 0
+      ? []
+      : [
+          `kept ${String(merged.unlisted.length)} lines the issues no longer list: ${merged.unlisted.join(', ')}`,
+        ];
+  if (!check) {
+    return {
+      write: merged.text,
+      lines: [
+        ...lines,
+        `added ${String(merged.added.length)} criteria: ${merged.added.join(', ')}`,
+      ],
+    };
+  }
+  return merged.added.length > 0
+    ? {
+        lines,
+        failure: `${file} lacks ${String(merged.added.length)} criteria: ${merged.added.join(', ')}`,
+      }
+    : {lines: [...lines, 'the file has every criterion']};
+}
+
 if (isMainModule(import.meta.url)) {
   try {
-    const scope = scopeNamed(process.argv[2]);
-    const text = seedFor(
+    const scope = scopeNamed(
+      process.argv.slice(2).find(word => !word.startsWith('--')),
+    );
+    const criteria = criteriaFor(
       readFileSync(
         path.join(REPOSITORY_ROOT, 'docs', 'architecture', 'catalogue.tsv'),
         'utf8',
@@ -157,10 +278,23 @@ if (isMainModule(import.meta.url)) {
         spawnSync(name, [...programArguments], {encoding: 'utf8'}),
       scope,
     );
-    writeFileSync(path.join(REPOSITORY_ROOT, scope.file), text);
-    console.log(
-      `seed-coverage: ${String(text.split('\n').length - 2)} criteria`,
+    const file = path.join(REPOSITORY_ROOT, scope.file);
+    const action = seedAction(
+      scope.file,
+      existsSync(file) ? readFileSync(file, 'utf8') : undefined,
+      criteria,
+      scope.features,
+      process.argv.includes('--check'),
     );
+    if (action.write !== undefined) {
+      writeFileSync(file, action.write);
+    }
+    for (const line of action.lines) {
+      console.log(`seed-coverage: ${line}`);
+    }
+    if (action.failure !== undefined) {
+      throw new Error(action.failure);
+    }
   } catch (error) {
     console.error(`seed-coverage: ${messageOf(error)}`);
     process.exitCode = 1;

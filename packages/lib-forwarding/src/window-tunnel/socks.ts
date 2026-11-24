@@ -93,6 +93,22 @@ function replyLength(reply: Uint8Array): number | undefined | null {
   }
 }
 
+/**
+ * What the relay had not answered when the bound ended, so that a failure says whether the connection's ssh was silent
+ * from the start (the greeting) or the host's side was (the reply to the connect request), and how much of a reply came.
+ */
+function unansweredAt(
+  stage: 'greeting' | 'reply' | 'open',
+  read: number,
+): string {
+  if (stage === 'greeting') {
+    return 'no reply to the greeting';
+  }
+  return read === 0
+    ? 'no reply to the connect request'
+    : `only ${String(read)} bytes of the reply to the connect request`;
+}
+
 /** Asks the relay on `relay` for a connection to `port` and gives the connection once it is open. */
 function openThroughRelay(
   relay: Duplex,
@@ -109,7 +125,9 @@ function openThroughRelay(
     const cancelTimer = init.scheduler.setTimer(
       init.handshakeMilliseconds,
       () => {
-        fail('the relay did not answer in time');
+        fail(
+          `the relay did not answer in time: ${unansweredAt(stage, received.length)}`,
+        );
       },
     );
     function fail(reason: string | Error): void {

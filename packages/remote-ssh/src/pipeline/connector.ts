@@ -28,12 +28,7 @@ import {
   type ControlConnection,
   type PhaseEvent,
 } from './connect.ts';
-import {
-  EXEC_SERVER_LOST,
-  EXEC_SERVER_NO_CLI,
-  EXEC_SERVER_SETTING_OFF,
-  failedWith,
-} from './failure.ts';
+import {EXEC_SERVER_LOST, directInstallRefusal, failedWith} from './failure.ts';
 import type {CancelSource} from 'lib-authority';
 import type {SshTarget} from 'lib-ssh';
 import {sshTargetOf} from './host-settings.ts';
@@ -278,12 +273,7 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
     }
     const {control} = current.connection;
     if (control === undefined) {
-      return refusal(
-        input,
-        dependencies.options.useExecServer
-          ? EXEC_SERVER_NO_CLI
-          : EXEC_SERVER_SETTING_OFF,
-      );
+      return refusal(input, directInstallRefusal(dependencies.options));
     }
     if (windowExec?.connection !== current.connection) {
       windowExec = {

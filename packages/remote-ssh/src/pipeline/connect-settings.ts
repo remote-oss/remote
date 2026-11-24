@@ -32,13 +32,25 @@ const LISTED_BY_THE_SEARCH: ReadonlyArray<keyof typeof settings> = [
   'permitPtyAllocation',
 ];
 
-/** The settings of the log's listing: every setting of the table but those the client search lists, each with its id and its effective value. */
+/**
+ * The settings of the log's listing: every setting of the table but those the client search lists, each with its id
+ * and its effective value; `remote.SSH.useExecServer` is false while the manual bootstrap is on.
+ */
 export function listedSettings(
   host: SettingHost,
 ): Array<readonly [string, unknown]> {
+  const bootstrapping = localDownloadModeOf(host) === 'manualBootstrap';
   return (Object.keys(settings) as Array<keyof typeof settings>)
     .filter(entry => !LISTED_BY_THE_SEARCH.includes(entry))
-    .map(entry => [settings[entry].id, valueOf(host, entry)] as const);
+    .map(
+      entry =>
+        [
+          settings[entry].id,
+          bootstrapping && entry === 'useExecServer'
+            ? false
+            : valueOf(host, entry),
+        ] as const,
+    );
 }
 
 /** A switch's value: true only for the boolean true. */
@@ -80,6 +92,14 @@ export function localDownloadModeOf(host: SettingHost): LocalDownloadMode {
     return 'manualBootstrap';
   }
   return mode === 'always' || mode === 'off' ? mode : 'auto';
+}
+
+/** `remote.SSH.useExecServer` as a connect uses it: false while the manual bootstrap is on, whatever is configured. */
+export function effectiveUseExecServer(host: SettingHost): boolean {
+  return (
+    switchOf(host, 'useExecServer') &&
+    localDownloadModeOf(host) !== 'manualBootstrap'
+  );
 }
 
 /** `remote.SSH.enableAgentForwarding`: on unless it is the boolean false, as its default of true reads. */

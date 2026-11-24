@@ -1350,11 +1350,16 @@ export function launchesOf(root: string): Launch[] {
     },
     // The CLI path: the editor's copy names a CLI source; named only until CI holds the CLI archives' token.
     {
+      ...RENDERER_LAUNCH,
       label: 'cli-path',
-      kind: 'plain',
       suite: 'cli-path',
-      cliSource: true,
+      cliSource: true as const,
       namedOnly: true,
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        // Core draws its dialogs natively on Linux unless asked otherwise, which a row's read of the page does not show.
+        'window.dialogStyle': 'custom',
+      },
     },
     // WSL on Linux: its commands stay out of the way where WSL cannot run, in a desktop window, in the browser build
     // the editor stands in for with `remote.extensionKind`, and beside the other WSL extension, where it stands down.
