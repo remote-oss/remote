@@ -94,7 +94,7 @@
       "lifecycle-more.test.ts": 1.7,
       "lifecycle-order.test.ts": 2.6,
       "mount-settings.test.ts": 1.5,
-      "multi-root.test.ts": 3.3,
+      "multi-root.test.ts": 12.2,
       "open-folder-dialog.test.ts": 0.1,
       "open-folder-failure.test.ts": 1.2,
       "open-folder-virtual.test.ts": 1.5,
@@ -287,9 +287,11 @@
     "explorer-trust-pickers": {"position.test.ts": 0.1},
     "extensionpack": {
       "cli.test.ts": 0,
+      "manage.test.ts": 0.1,
       "page.test.ts": 0.3,
       "smoke.test.ts": 0,
-      "states.test.ts": 0.1
+      "states.test.ts": 0.1,
+      "uninstall.test.ts": 0.2
     },
     "extensionpack-german": {"locale.test.ts": 0.1},
     "extensionpack-lp-de": {"language.test.ts": 0.1},
@@ -435,10 +437,11 @@
       "agent-forwarding.test.ts": 5.6,
       "agent-setting.test.ts": 0,
       "agent-terminals.test.ts": 0.9,
+      "bootstrap-mode.test.ts": 1.4,
       "code-cli.test.ts": 0.5,
       "code-files.test.ts": 0.6,
       "connection-logs.test.ts": 0.4,
-      "current-window.test.ts": 2,
+      "current-window.test.ts": 2.6,
       "debug-tasks.test.ts": 0.1,
       "download-hints.test.ts": 0.3,
       "download-stalls.test.ts": 1.5,
@@ -464,7 +467,8 @@
       "tunnel-refusals.test.ts": 6.8,
       "unparsable.test.ts": 0.1,
       "x11.test.ts": 10.2,
-      "help-commands.test.ts": 1.1
+      "help-commands.test.ts": 1.1,
+      "host-key.test.ts": 1
     },
     "ssh-killed-12": {
       "killed.test.ts": 6.4
@@ -505,6 +509,7 @@
     },
     "trust": {
       "agent-link.test.ts": 1.9,
+      "current-window-restricted.test.ts": 1.3,
       "new-window.test.ts": 0.2,
       "preconnect-restricted.test.ts": 0.3,
       "restricted-activation.test.ts": 0.3,

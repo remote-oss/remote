@@ -683,7 +683,7 @@ describe('the launches of the VSCodium run', () => {
         ...['containers-a', 'containers-b'].map(label => [
           label,
           'containers',
-          shared,
+          {...shared, 'workbench.commandPalette.history': 0},
           ['ms-vscode-remote.remote-containers'],
           undefined,
         ]),
@@ -760,7 +760,7 @@ describe('the launches of the VSCodium run', () => {
         [
           'containers-shutdown',
           'containers-shutdown',
-          shared,
+          {...shared, 'workbench.commandPalette.history': 0},
           ['ms-vscode-remote.remote-containers'],
           undefined,
         ],
@@ -832,7 +832,13 @@ describe('the launches of the VSCodium run', () => {
           'containers-ssh-env-host',
           'containers-ssh-noclient',
         ].map(label => [label, label, shared, undefined, undefined]),
-        ['containers-view', 'containers-view', shared, undefined, undefined],
+        [
+          'containers-view',
+          'containers-view',
+          {...shared, 'workbench.commandPalette.history': 0},
+          undefined,
+          undefined,
+        ],
       ],
     );
   });
@@ -945,6 +951,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           {
             'window.title': '[${rootName}]',
+            'workbench.commandPalette.history': 0,
             'security.workspace.trust.startupPrompt': 'once',
           },
         ],
@@ -962,6 +969,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           {
             'window.title': '[${rootName}]',
+            'workbench.commandPalette.history': 0,
             'security.workspace.trust.startupPrompt': 'never',
           },
         ],
@@ -1319,8 +1327,40 @@ describe('the launches of the VSCodium run', () => {
       [
         ['ssh-newclient', 'ssh-newclient-pickers'],
         {'window.title': '[${rootName}]', 'remote.SSH.path': client},
-        {'window.title': '[${rootName}]', 'workbench.startupEditor': 'none'},
+        {
+          'window.title': '[${rootName}]',
+          'workbench.startupEditor': 'none',
+          'workbench.commandPalette.history': 0,
+        },
       ],
+    );
+  });
+
+  it('#2940: every launch whose rows read the order of the palette’s list starts with the palette’s history switched off, so no earlier command leads the alphabetical list', () => {
+    function history(launch: Launch): unknown {
+      return settingsOfLaunch(launch)?.['workbench.commandPalette.history'];
+    }
+    deepStrictEqual(
+      [
+        [
+          'ssh-core',
+          'ssh-agents',
+          'terminal-login',
+          'wsl-linux',
+          'trust',
+          'web-ui',
+          'web-ui-trust',
+          'containers-shutdown',
+          'containers-view',
+          'explorer-home',
+        ].map(label => history(launchLabelled(launches, label))),
+        launches
+          .filter(launch => launch.suite === 'containers')
+          .map(history)
+          .filter(value => value !== 0),
+        history(launchLabelled(launches, 'windows')),
+      ],
+      [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [], undefined],
     );
   });
 
@@ -2465,7 +2505,10 @@ describe('the platform cases (card coverage-12)', () => {
           {PATH: '<run>/browser-bin:<path>'},
           undefined,
           undefined,
-          {'window.title': '[${rootName}]'},
+          {
+            'window.title': '[${rootName}]',
+            'workbench.commandPalette.history': 0,
+          },
         ],
       ],
     );

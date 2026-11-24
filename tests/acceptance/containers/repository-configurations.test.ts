@@ -49,6 +49,10 @@ const REOPEN = 'remote-containers.reopenInContainer';
 const EXTERNAL_NOTICE_START =
   'There is a Dev Container configuration available for this repository.';
 
+/** The whole reopen notification of a configuration outside the folder, the links as their words (S368 with S426). */
+const EXTERNAL_NOTICE =
+  'There is a Dev Container configuration available for this repository. Reopen folder to develop in a container (learn more).';
+
 /** The page the notification's last link opens. */
 const INTRODUCTION =
   'https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md';
@@ -333,7 +337,7 @@ describe('configurations outside the repository (card containers-161, F-0302)', 
     }
   });
 
-  it('F-0302 AC-3, AC-13, AC-36, AC-44 (c161-notice): the window of a repository with a mirrored file shows the notification with the repository’s wording, also beside its own file, for a portless ssh remote and for a subfolder; a root written with ~, ${env:HOME} or ${userHome} matches nothing and a trailing slash still matches', async () => {
+  it('F-0402 AC-10, F-0302 AC-3, AC-13, AC-36, AC-44 (c161-notice): the window of a repository with a mirrored file shows the notification with the repository’s wording, also beside its own file, for a portless ssh remote and for a subfolder; a root written with ~, ${env:HOME} or ${userHome} matches nothing and a trailing slash still matches', async () => {
     const name = 'c161-notice';
     const root = freshFolder(`${name}-root`);
     const home = os.homedir();
@@ -343,7 +347,7 @@ describe('configurations outside the repository (card containers-161, F-0302)', 
       label: string,
       folder: string,
       roots: readonly string[],
-    ): Promise<{shown: boolean; links: NotificationLink[]}> {
+    ): Promise<{shown: boolean; message: string[]; links: NotificationLink[]}> {
       await setUserSetting(SETTING, roots);
       const window = await openFolderWindow(folder);
       try {
@@ -358,10 +362,15 @@ describe('configurations outside the repository (card containers-161, F-0302)', 
           () => true,
           () => false,
         );
+        const message = shown
+          ? (await notificationCentre(window)).filter(text =>
+              text.startsWith(EXTERNAL_NOTICE_START),
+            )
+          : [];
         const links = shown
           ? await notificationLinks(window, EXTERNAL_NOTICE_START)
           : [];
-        return {shown, links};
+        return {shown, message, links};
       } finally {
         await closeWindow(window).catch(() => undefined);
       }
@@ -409,6 +418,8 @@ describe('configurations outside the repository (card containers-161, F-0302)', 
     deepStrictEqual(
       [
         Object.entries(outcomes).map(([key, each]) => [key, each.shown]),
+        outcomes.portless.message,
+        outcomes.beside.message,
         outcomes.portless.links,
         outcomes.beside.links,
       ],
@@ -422,6 +433,8 @@ describe('configurations outside the repository (card containers-161, F-0302)', 
           ['env', false],
           ['tilde', false],
         ],
+        [EXTERNAL_NOTICE],
+        [EXTERNAL_NOTICE],
         links,
         links,
       ],
