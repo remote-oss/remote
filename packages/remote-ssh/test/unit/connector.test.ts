@@ -306,6 +306,41 @@ describe('the connector over the connect pipeline', () => {
       ]);
     });
 
+    it('a direct install cancelled by the window while its server start fails for another reason tells no label', async () => {
+      const order: string[] = [];
+      const {recording, options} = setup();
+      const connector: SshConnector = connectorOf({
+        stepsFor: () =>
+          steps(recording, {
+            start: () => {
+              connector.cancel();
+              return Promise.resolve({
+                kind: 'failed',
+                failure: {kind: 'serverStart'},
+              });
+            },
+          }),
+        terminalMode: () => false,
+        options: connectorOptions(options),
+        revealLog: () => undefined,
+        applyTerminalEnvironment: () => undefined,
+      });
+      connector.onHostReported(() => {
+        order.push('label told');
+      });
+      await connector.connect(HOST_INPUT);
+      deepStrictEqual(order, []);
+    });
+
+    it('a direct install whose connect a step ends as cancelled, with no abort, tells no label', async () => {
+      deepStrictEqual(
+        await orderOf({
+          gate: () => Promise.resolve({kind: 'cancelled'}),
+        }),
+        [],
+      );
+    });
+
     it('a direct install whose resolve is cancelled after the host reported tells no label', async () => {
       const order: string[] = [];
       const {recording, options} = setup();
