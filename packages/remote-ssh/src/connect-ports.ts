@@ -235,6 +235,8 @@ export interface ConnectMachine {
   newTemporaryToken: () => string;
   /** A cryptographic random integer in 1..999999999, which names an agent link. */
   drawLinkNumber: () => number;
+  /** The status a server on this machine's `address` answers a request carrying `connectionToken` with. */
+  serverStatus: WiringPorts['serverStatus'];
 }
 
 /** The parts of a connect that show the connecting window. */
@@ -379,6 +381,7 @@ export function wiringPortsOf(
       );
     },
     tunnels: surfaces.tunnels,
+    serverStatus: machine.serverStatus,
     defaultRead: () =>
       waitForDefaultRead(surfaces.defaultReadEvents, machine.scheduler),
     terms: {
