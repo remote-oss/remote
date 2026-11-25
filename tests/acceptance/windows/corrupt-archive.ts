@@ -27,18 +27,34 @@ export function corruptArchiveLines(lines: readonly string[]): string[] {
 }
 
 /**
+ * The download SDKMAN gave up on, as `<candidate> <version>`: the last `Downloading:` line before the last verdict of the
+ * build's log. A build downloads more than one archive (the JDK first, then maven), and only the last verdict, the one
+ * the install gave up after, belongs to the failing one; none when the log shows no corrupt archive.
+ */
+export function failingDownload(lines: readonly string[]): string | undefined {
+  const shown = corruptArchiveLines(lines);
+  const verdict = shown.findLastIndex(line =>
+    line.includes('The archive was corrupt'),
+  );
+  const download = shown
+    .slice(0, Math.max(verdict, 0))
+    .findLast(line => line.includes('Downloading: '));
+  return /Downloading: (\S+ \S+)/.exec(download ?? '')?.[1];
+}
+
+/**
  * The name of that fault for a reader of the red: `SDKMAN served a corrupt <candidate> <version> archive (<its verdict>)`,
- * from the first download line and the verdict of the build's log; none when the log shows no corrupt archive.
+ * from the download the install gave up on (failingDownload) and the verdict of the build's log; none when the log shows
+ * no corrupt archive.
  */
 export function corruptArchiveName(
   lines: readonly string[],
 ): string | undefined {
-  const shown = corruptArchiveLines(lines);
-  const download = /Downloading: (\S+ \S+)/.exec(
-    shown.find(line => line.includes('Downloading: ')) ?? '',
-  )?.[1];
+  const download = failingDownload(lines);
   const verdict = /(Stop! The archive was corrupt[^.!]*[.!]?)/.exec(
-    shown.find(line => line.includes('The archive was corrupt')) ?? '',
+    corruptArchiveLines(lines).find(line =>
+      line.includes('The archive was corrupt'),
+    ) ?? '',
   )?.[1];
   return download === undefined || verdict === undefined
     ? undefined

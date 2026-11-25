@@ -25,6 +25,7 @@ import {
   secondBuildText,
   corruptArchiveLines,
   corruptArchiveName,
+  failingDownload,
   probeArchive,
   probeText,
 } from '../windows/corrupt-archive.ts';
@@ -93,6 +94,7 @@ export function featureBuilds(): {
   buildAgainOnCorruptArchive: (
     name: string,
     configuration: Readonly<Record<string, unknown>>,
+    prepare?: (folder: string) => void,
   ) => Promise<Built & {mark: number}>;
   closeNow: (window: string) => Promise<void>;
   reopen: (built: Built, removeContainer: boolean) => Promise<Built>;
@@ -127,10 +129,13 @@ export function featureBuilds(): {
   }
   return {
     build,
-    buildAgainOnCorruptArchive: async (name, configuration) => {
+    buildAgainOnCorruptArchive: async (name, configuration, prepare) => {
       const firstMark = containersLog().length;
       try {
-        return {...(await build(name, configuration)), mark: firstMark};
+        return {
+          ...(await build(name, configuration, prepare)),
+          mark: firstMark,
+        };
       } catch (first) {
         const reasons = corruptArchiveLines(containersLogSince(firstMark));
         if (reasons.length === 0) {
@@ -149,14 +154,12 @@ export function featureBuilds(): {
         const secondMark = containersLog().length;
         try {
           return {
-            ...(await build(`${name}-again`, configuration)),
+            ...(await build(`${name}-again`, configuration, prepare)),
             mark: secondMark,
           };
         } catch (second) {
           const again = corruptArchiveLines(containersLogSince(secondMark));
-          const download = /Downloading: (\S+ \S+)/u.exec(
-            reasons.find(line => line.includes('Downloading: ')) ?? '',
-          )?.[1];
+          const download = failingDownload(containersLogSince(firstMark));
           const broker =
             download === undefined ? undefined : brokerUrlOf(download);
           const fromHere =
@@ -194,6 +197,20 @@ export function featureBuilds(): {
       return {window, folder: built.folder, containerId};
     },
   };
+}
+
+/** The text of `file` in container `containerId`. */
+export async function textInContainer(
+  containerId: string,
+  file: string,
+): Promise<string> {
+  const {stdout} = await execFileAsync('docker', [
+    'exec',
+    containerId,
+    'cat',
+    file,
+  ]);
+  return stdout;
 }
 
 /** The environment a Feature recorded in the container, by variable. */
