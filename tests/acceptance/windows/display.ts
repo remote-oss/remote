@@ -197,20 +197,6 @@ async function settledWithin(
 }
 
 /**
- * Whether the display settles its closing of window `windowId` within `limitMilliseconds`. The close is a graceful
- * quit, asked through the window manager and answered by the window itself: a `windowclose` would destroy the window
- * and take its client with it. A limit that passes, or a display that fails, is no answer, so the row goes on and the
- * readout names the window still there.
- */
-export async function closeWindowWithin(
-  driver: KeyDriver,
-  windowId: string,
-  limitMilliseconds: number = SYNC_ACTIVATION_MILLISECONDS,
-): Promise<boolean> {
-  return settledWithin(driver, limitMilliseconds, 'windowquit', windowId);
-}
-
-/**
  * Gives the managed frame of window `name` the display's focus for a manager that may refuse it while another window
  * holds the focus: the frame is raised first, the manager's `--sync` activation is asked for with its limit as now,
  * and while the manager does not confirm it, the frame is asked for the focus plainly, so the wait around it goes on.
@@ -314,18 +300,4 @@ export function windowsOf(windows: readonly TopLevelWindow[]): string {
         })`,
     )
     .join(', ');
-}
-
-/** The name a folderless VSCodium window holds: the bare title, with no folder in it. */
-const FOLDERLESS_WINDOW_NAME = 'VSCodium - Insiders';
-
-/** The folderless VSCodium windows of `after` that no window of `before` held: a window the row's command opened, which the row closes before its grab, or none while the command left no new window behind. */
-export function newFolderlessWindows(
-  before: readonly TopLevelWindow[],
-  after: readonly TopLevelWindow[],
-): TopLevelWindow[] {
-  const beforeIds = new Set(before.map(each => each.id));
-  return after.filter(
-    each => each.name === FOLDERLESS_WINDOW_NAME && !beforeIds.has(each.id),
-  );
 }

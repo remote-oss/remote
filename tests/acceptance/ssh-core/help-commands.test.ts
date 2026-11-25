@@ -25,10 +25,8 @@ import {
   activateFrameWithin,
   activateWindowWithin,
   activeWindowNameOf,
-  closeWindowWithin,
   drive,
   managedPick,
-  newFolderlessWindows,
   topLevelWindows,
   topLevelWindowsOf,
   windowsOf,
@@ -518,21 +516,13 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
       const before = await topLevelWindows();
       await runFromPalette(folder, 'Remote-SSH: Help');
       const after = await topLevelWindows();
-      // Help opens the extension's documentation outside the editor, which may open a new folderless window that takes the display's focus: close it before the grab, so the manager has nothing to hold the focus on.
-      const fresh = newFolderlessWindows(before, after);
-      for (const each of fresh) {
-        await closeWindowWithin(drive, each.id);
-      }
       process.stderr.write(
         `the display's windows before Help ${windowsOf(before)}, and after Help ${windowsOf(after)}\n`,
       );
       await focusWindow(folder, {
         ...harnessFocusReads(),
-        // While Help left no new window behind, the manager may still refuse the frame while another window holds the focus: the grab raises the frame and asks it again by focus.
-        activate: name =>
-          fresh.length === 0
-            ? activateFrameWithin(name, drive)
-            : activateWindowWithin(name, drive),
+        // The manager may refuse the frame while another window holds the display's focus, Help's external open or a window the display already holds: the grab raises the frame, asks the activation, and asks it again by focus.
+        activate: name => activateFrameWithin(name, drive),
         windowInstants: () =>
           Promise.resolve([
             {label: 'before Help', windows: before},
@@ -722,23 +712,6 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
     );
   });
 
-  it('card #3010 (c3010-fresh-folderless): a folderless window is fresh while it appears after Help and no window before held its id', () => {
-    deepStrictEqual(
-      newFolderlessWindows(
-        [
-          {id: '514', name: 'VSCodium - Insiders', managed: true},
-          {id: '4194465', name: 'c2486-companion-less', managed: true},
-        ],
-        [
-          {id: '514', name: 'VSCodium - Insiders', managed: true},
-          {id: '524', name: 'VSCodium - Insiders', managed: true},
-          {id: '4194465', name: 'c2486-companion-less', managed: true},
-        ],
-      ),
-      [{id: '524', name: 'VSCodium - Insiders', managed: true}],
-    );
-  });
-
   it('card #3010 (c3010-frame-raise): an activation the manager does not confirm raises the frame and asks it again by focus', async () => {
     const calls: string[] = [];
     async function driver(...words: string[]): Promise<string> {
@@ -766,29 +739,6 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
           'windowfocus 111',
         ],
       ],
-    );
-  });
-
-  it('card #3010 (c3010-window-quit): the close of a window asks it to quit, and settles as true while it answers and false, without a throw, while it does not', async () => {
-    const calls: string[] = [];
-    function settlingDriver(...words: string[]): Promise<string> {
-      calls.push(words.join(' '));
-      return Promise.resolve('');
-    }
-    async function hangingDriver(...words: string[]): Promise<string> {
-      calls.push(words.join(' '));
-      if (words[0] === 'windowquit') {
-        await new Promise<string>(() => undefined);
-      }
-      return '';
-    }
-    deepStrictEqual(
-      [
-        await closeWindowWithin(settlingDriver, '111', 100),
-        await closeWindowWithin(hangingDriver, '111', 100),
-        calls,
-      ],
-      [true, false, ['windowquit 111', 'windowquit 111']],
     );
   });
 
