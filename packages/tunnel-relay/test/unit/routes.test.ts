@@ -31,7 +31,7 @@ describe('the management routes of the relay', () => {
   }
 
   function context(config: RelayConfig = CONFIG): RouteContext {
-    return {store, config, authenticate};
+    return {store, config, authenticate, report: () => undefined};
   }
 
   /** Sends `method path` with the API version and `query`, `body` and `headers`. */
@@ -56,7 +56,7 @@ describe('the management routes of the relay', () => {
         path,
         query,
         headers: options.headers ?? {},
-        body: options.body,
+        readBody: () => Promise.resolve(options.body),
       },
       context(options.config),
     );
@@ -76,6 +76,32 @@ describe('the management routes of the relay', () => {
   });
 
   describe('every request', () => {
+    it('passes on a failure to read the body that is no refusal, for the server to answer 500', async () => {
+      let failure = '';
+      try {
+        await route(
+          {
+            method: 'PUT',
+            path: '/tunnels/one',
+            query: new URLSearchParams({'api-version': API_VERSION}),
+            headers: {},
+            readBody: () => Promise.reject(new Error('the stream broke')),
+          },
+          context(),
+        );
+      } catch (caught) {
+        failure = String(caught);
+      }
+      deepStrictEqual(failure, 'Error: the stream broke');
+    });
+
+    it('answers 400 to a path with an escape that decodes to nothing', async () => {
+      deepStrictEqual(detailOf(await send('GET', '/tunnels/%E0%A4%A')), [
+        400,
+        'The path is not valid.',
+      ]);
+    });
+
     it('needs the one API version', async () => {
       deepStrictEqual(
         [
@@ -201,6 +227,37 @@ describe('the management routes of the relay', () => {
       deepStrictEqual(store.portsOf('one'), [
         {portNumber: 80, protocol: 'http', description: 'b'},
       ]);
+    });
+
+    it('is refused, and nothing is stored, when a port it lists has a number outside 1 to 65535 or none that is a whole number', async () => {
+      const seen = [];
+      for (const portNumber of [0, 65536, 1.5, '80', null]) {
+        seen.push(
+          detailOf(
+            await send('PUT', '/tunnels/one', {
+              body: {name: 'web', ports: [{portNumber}]},
+            }),
+          ),
+        );
+      }
+      deepStrictEqual(
+        [seen, store.tunnelById('one'), store.portsOf('one')],
+        [
+          Array<[number, string]>(5).fill([
+            400,
+            'The port number is not valid.',
+          ]),
+          undefined,
+          [],
+        ],
+      );
+    });
+
+    it('keeps a listed port with no number out of the store, as before', async () => {
+      await send('PUT', '/tunnels/one', {
+        body: {ports: [{protocol: 'http'}, 'text']},
+      });
+      deepStrictEqual(store.portsOf('one'), []);
     });
 
     it('is refused for an id, name, labels or description the contract does not allow, or a body that is not a tunnel', async () => {

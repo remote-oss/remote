@@ -72,13 +72,18 @@ function recorder(): {
 describe('the HTTPS service of the relay', () => {
   let store: Store;
   let context: RouteContext;
+  let reported: unknown[];
 
   beforeEach(() => {
     store = new Store(':memory:');
+    reported = [];
     context = {
       store,
       config: CONFIG,
       authenticate: () => Promise.resolve({id: 7, login: 'owner'}),
+      report: error => {
+        reported.push(error);
+      },
     };
   });
 
@@ -145,9 +150,76 @@ describe('the HTTPS service of the relay', () => {
         },
         {
           status: 500,
-          body: {title: 'Error', detail: 'The relay failed: Error: down'},
+          body: {title: 'Error', detail: 'The relay failed.'},
         },
       ],
+    );
+  });
+
+  it('reports the error behind a 500 out of band, and the answer names nothing of it', async () => {
+    const answer = await answerRequest(
+      incoming('GET', `/tunnels?api-version=${API_VERSION}`),
+      {...context, authenticate: () => Promise.reject(new Error('down'))},
+    );
+    deepStrictEqual(
+      [JSON.stringify(answer.body).includes('down'), String(reported[0])],
+      [false, 'Error: down'],
+    );
+  });
+
+  it('answers 400 to a request target that is no URL, and never rejects', async () => {
+    deepStrictEqual(await answerRequest(incoming('GET', 'http://'), context), {
+      status: 400,
+      body: {title: 'Bad Request', detail: 'The request target is not valid.'},
+    });
+  });
+
+  it('answers 413 to a body over a mebibyte, and stores nothing of it', async () => {
+    const answer = await answerRequest(
+      incoming(
+        'PUT',
+        `/tunnels/one?api-version=${API_VERSION}`,
+        JSON.stringify({name: 'web', description: 'x'.repeat(1024 * 1024)}),
+      ),
+      context,
+    );
+    deepStrictEqual(
+      [answer, store.tunnelById('one')],
+      [
+        {
+          status: 413,
+          body: {title: 'Payload Too Large', detail: 'The body is too large.'},
+        },
+        undefined,
+      ],
+    );
+  });
+
+  it('reads no body before the caller has signed in: a refused caller gets 401 whatever the body', async () => {
+    const refused: RouteContext = {
+      ...context,
+      authenticate: () =>
+        Promise.resolve({
+          status: 401,
+          body: {title: 'Unauthorized', detail: 'Sign in.'},
+        }),
+    };
+    deepStrictEqual(
+      [
+        await answerRequest(
+          incoming('PUT', `/tunnels/one?api-version=${API_VERSION}`, '{'),
+          refused,
+        ),
+        await answerRequest(
+          incoming(
+            'PUT',
+            `/tunnels/one?api-version=${API_VERSION}`,
+            'x'.repeat(1024 * 1024 + 1),
+          ),
+          refused,
+        ),
+      ].map(answer => answer.status),
+      [401, 401],
     );
   });
 

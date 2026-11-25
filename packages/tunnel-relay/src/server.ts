@@ -6,8 +6,11 @@
 import {randomBytes} from 'node:crypto';
 import {createServer, type Server} from 'node:https';
 import type {IncomingMessage, ServerResponse} from 'node:http';
-import {problem, type Answer} from './problem.ts';
+import {problem, Refused, type Answer} from './problem.ts';
 import {route, type RouteContext} from './routes.ts';
+
+/** The most a request body may hold, in bytes: a tunnel with its ports and endpoints is far smaller. */
+const BODY_LIMIT_BYTES = 1024 * 1024;
 
 /** The HTTPS server of `context`, with the certificate and key given, not yet listening. */
 export function relayServer(
@@ -22,17 +25,19 @@ export function relayServer(
   });
 }
 
-/** The answer to `request`: the routes', a 400 for a body that is not JSON, or a 500 when the routes throw. */
+/**
+ * The answer to `request`: the routes', a 400 for a request target that isn't a URL, or a 500 that names nothing of
+ * the error when the routes throw; the error goes to the context's report. It never rejects.
+ */
 export async function answerRequest(
   request: IncomingMessage,
   context: RouteContext,
 ): Promise<Answer> {
-  const url = new URL(request.url ?? '/', 'https://relay.invalid');
-  let body: unknown;
+  let url: URL;
   try {
-    body = await bodyOf(request);
+    url = new URL(request.url ?? '/', 'https://relay.invalid');
   } catch {
-    return problem(400, 'The body is not JSON.');
+    return problem(400, 'The request target is not valid.');
   }
   try {
     return await route(
@@ -41,22 +46,33 @@ export async function answerRequest(
         path: url.pathname,
         query: url.searchParams,
         headers: headersOf(request),
-        body,
+        readBody: () => bodyOf(request),
       },
       context,
     );
   } catch (error) {
-    return problem(500, `The relay failed: ${String(error)}`);
+    context.report(error);
+    return problem(500, 'The relay failed.');
   }
 }
 
+/** The body of `request` as JSON, none when empty; one larger than the limit, or that isn't JSON, is refused. */
 async function bodyOf(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
+  let size = 0;
   for await (const chunk of request) {
+    size += (chunk as Buffer).length;
+    if (size > BODY_LIMIT_BYTES) {
+      throw new Refused(problem(413, 'The body is too large.'));
+    }
     chunks.push(chunk as Buffer);
   }
   const text = Buffer.concat(chunks).toString('utf8');
-  return text === '' ? undefined : (JSON.parse(text) as unknown);
+  try {
+    return text === '' ? undefined : (JSON.parse(text) as unknown);
+  } catch {
+    throw new Refused(problem(400, 'The body is not JSON.'));
+  }
 }
 
 function headersOf(

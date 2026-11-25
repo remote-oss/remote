@@ -11,7 +11,14 @@ import {Store} from './store.ts';
 const config = configOf(process.env);
 const store = new Store(config.storeFile);
 const server = relayServer(
-  {store, config, authenticate: refuseAll},
+  {
+    store,
+    config,
+    authenticate: refuseAll,
+    report: error => {
+      process.stderr.write(`the relay failed: ${String(error)}\n`);
+    },
+  },
   readFileSync(config.certificateFile),
   readFileSync(config.keyFile),
 );

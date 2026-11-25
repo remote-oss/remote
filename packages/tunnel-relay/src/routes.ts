@@ -4,7 +4,7 @@
  * the wire. Sources: `[dev-tunnels] rs/src/management/http_client.rs:38-42,61-307` and `[cli] tunnels/dev_tunnels.rs`.
  */
 
-import {problem, success, type Answer} from './problem.ts';
+import {problem, Refused, success, type Answer} from './problem.ts';
 import type {RelayConfig} from './config.ts';
 import {areLabels, isTunnelId, isTunnelName, MAX_DESCRIPTION} from './names.ts';
 import type {Store, TunnelRecord} from './store.ts';
@@ -23,8 +23,8 @@ export type Authenticate = (
   headers: Readonly<Record<string, string | undefined>>,
 ) => Promise<Caller | Answer>;
 
-/** A request as the routes take it. */
-export interface Request {
+/** A request as the routes take it, its body read. */
+interface Request {
   method: string;
   path: string;
   query: URLSearchParams;
@@ -32,11 +32,41 @@ export interface Request {
   body: unknown;
 }
 
+/** A request as the server hands it over: its body is read only once the caller has signed in. */
+export interface IncomingRequest extends Omit<Request, 'body'> {
+  /** The body as JSON, none when empty; a body the relay refuses throws `Refused`. */
+  readBody(): Promise<unknown>;
+}
+
 /** What the routes work with. */
 export interface RouteContext {
   store: Store;
   config: RelayConfig;
   authenticate: Authenticate;
+  /** Hears an error a route threw, which the caller's answer doesn't carry. */
+  report(error: unknown): void;
+}
+
+/** Whether `value` is a TCP port number: an integer from 1 to 65535. */
+function isPortNumber(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= 65535
+  );
+}
+
+/** The parts of `path` decoded, or none when one holds an escape that isn't one. */
+function decodedParts(path: string): string[] | undefined {
+  try {
+    return path
+      .split('/')
+      .filter(part => part !== '')
+      .map(decodeURIComponent);
+  } catch {
+    return undefined;
+  }
 }
 
 /** The tunnel fields a client sends that the relay sets itself, ignored on a write. */
@@ -55,27 +85,40 @@ const CHECK_NAME = ':checkNameAvailability';
 
 /** Answers `request`. */
 export async function route(
-  request: Request,
+  incoming: IncomingRequest,
   context: RouteContext,
 ): Promise<Answer> {
-  if (request.query.get('api-version') !== API_VERSION) {
+  if (incoming.query.get('api-version') !== API_VERSION) {
     return problem(400, `The api-version must be ${API_VERSION}.`);
   }
-  const parts = request.path.split('/').filter(part => part !== '');
+  const parts = decodedParts(incoming.path);
+  if (parts === undefined) {
+    return problem(400, 'The path is not valid.');
+  }
   const clustersAsked = parts.length === 1 && parts[0] === 'clusters';
   if ((parts[0] !== 'tunnels' || parts.length > 4) && !clustersAsked) {
     return problem(404, 'There is no such route.');
   }
-  const caller = await context.authenticate(request.headers);
+  const caller = await context.authenticate(incoming.headers);
   if (!('id' in caller)) {
     return caller;
   }
+  let body: unknown;
+  try {
+    body = await incoming.readBody();
+  } catch (caught) {
+    if (caught instanceof Refused) {
+      return caught.answer;
+    }
+    throw caught;
+  }
+  const request: Request = {...incoming, body};
   if (clustersAsked) {
     return request.method === 'GET'
       ? success([clusterOf(context.config)])
       : problem(404, 'There is no such route.');
   }
-  const [, tunnelPart, section, item] = parts.map(decodeURIComponent);
+  const [, tunnelPart, section, item] = parts;
   if (tunnelPart === undefined) {
     return request.method === 'GET'
       ? listTunnels(request.query, caller, context)
@@ -240,7 +283,7 @@ function putTunnel(
     store.putTunnel(record);
     for (const port of (body.ports as unknown[] | undefined) ?? []) {
       const fields = objectOf(port);
-      if (fields !== undefined && typeof fields.portNumber === 'number') {
+      if (fields !== undefined && isPortNumber(fields.portNumber)) {
         store.putPort(tunnelId, fields.portNumber, {
           ...store.port(tunnelId, fields.portNumber),
           ...fields,
@@ -253,6 +296,15 @@ function putTunnel(
 
 /** The answer that refuses a tunnel body's name, labels or description, or none. */
 function fieldProblem(body: Record<string, unknown>): Answer | undefined {
+  const ports: unknown[] = Array.isArray(body.ports) ? body.ports : [];
+  if (
+    ports.some(port => {
+      const portNumber = objectOf(port)?.portNumber;
+      return portNumber !== undefined && !isPortNumber(portNumber);
+    })
+  ) {
+    return problem(400, 'The port number is not valid.');
+  }
   if (
     body.name !== undefined &&
     (typeof body.name !== 'string' || !isTunnelName(body.name))
@@ -326,7 +378,7 @@ function portRoute(
       : problem(404, 'There is no such route.');
   }
   const number = Number(item);
-  if (!Number.isInteger(number) || number < 1 || number > 65535) {
+  if (!isPortNumber(number)) {
     return problem(400, 'The port number is not valid.');
   }
   const existing = store.port(tunnel.id, number);

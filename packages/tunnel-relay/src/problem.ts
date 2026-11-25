@@ -33,7 +33,20 @@ function titleOf(status: number): string {
       return 'Not Found';
     case 409:
       return 'Conflict';
+    case 413:
+      return 'Payload Too Large';
     default:
       return 'Error';
+  }
+}
+
+/** A request the relay answers with `answer` before routing it, such as a body it won't read. */
+export class Refused extends Error {
+  readonly answer: Answer;
+
+  /** A refusal answered with `answer`. */
+  constructor(answer: Answer) {
+    super(JSON.stringify(answer.body));
+    this.answer = answer;
   }
 }
