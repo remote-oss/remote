@@ -33,14 +33,22 @@ on:
         description: Install and start Docker Desktop on windows-2025 and report what its engine does (set both launch inputs to none)
         type: boolean
         default: false
+      docker-desktop-backend:
+        description: The engine the Docker Desktop probe installs
+        type: choice
+        options:
+          - wsl-2
+          - hyper-v
+        default: wsl-2
 
 permissions:
   contents: read
 
 jobs:
   # Docker Desktop on GitHub's Windows runner: whether it installs and starts inside a job, how long that takes, what its
-  # WSL 2 engine reports for a bind mount of a C:\ folder, whether WSL integration reaches an Ubuntu distro, and whether
-  # the Hyper-V engine is possible at all. Dispatch only; it reads no secret and changes nothing outside the runner.
+  # engine reports for a bind mount of a C:\ folder, and whether WSL integration reaches an Ubuntu distro (the WSL 2
+  # engine) or what a bind of a folder outside File Sharing gives (the Hyper-V engine). Dispatch only; it reads no secret
+  # and changes nothing outside the runner.
   docker-desktop-probe:
     if: inputs.docker-desktop-probe
     runs-on: windows-2025
@@ -53,15 +61,16 @@ jobs:
       DESKTOP_URL: https://desktop.docker.com/win/main/amd64/245822/Docker%20Desktop%20Installer.exe
       DESKTOP_SHA256: a5e299131c9c53d60f3f752b162078945eb5faf6eedcf0be20a214c6e6cea444
       DOCKER_EXE: C:\Program Files\Docker\Docker\resources\bin\docker.exe
+      BACKEND: ${{ inputs.docker-desktop-backend }}
     steps:
       - name: The machine before
         run: |
           Get-CimInstance Win32_ComputerSystem | Format-List Model, HypervisorPresent, NumberOfLogicalProcessors, TotalPhysicalMemory
           Get-CimInstance Win32_Processor | Format-List Name, VirtualizationFirmwareEnabled, SecondLevelAddressTranslationExtensions
-          foreach ($name in 'Microsoft-Hyper-V-All', 'Microsoft-Hyper-V', 'VirtualMachinePlatform', 'Microsoft-Windows-Subsystem-Linux', 'Containers') {
-            $feature = Get-WindowsOptionalFeature -Online -FeatureName $name -ErrorAction SilentlyContinue
-            "{0}: {1}" -f $name, ($feature.State ?? 'absent')
-          }
+          Get-WindowsOptionalFeature -Online |
+            Where-Object { $_.FeatureName -like '*Hyper-V*' -or $_.FeatureName -in 'VirtualMachinePlatform', 'Microsoft-Windows-Subsystem-Linux', 'Containers' } |
+            Sort-Object FeatureName | Format-Table -AutoSize FeatureName, State
+          Get-Service vmms, vmcompute, hvhost -ErrorAction SilentlyContinue | Format-Table -AutoSize Name, Status, StartType
           wsl --version
           wsl --status
           Get-Command docker -All -ErrorAction SilentlyContinue | Format-Table -AutoSize Source
@@ -75,11 +84,22 @@ jobs:
           $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
           if ($hash -ne $env:DESKTOP_SHA256) { "the installer has sha256 $hash, not its pin"; exit 1 }
           "downloaded and checked in {0:n0} s" -f $clock.Elapsed.TotalSeconds
-      - name: Install it with the WSL 2 engine
+      - name: The Hyper-V features the engine needs, enabled with no restart
+        if: inputs.docker-desktop-backend == 'hyper-v'
+        run: |
+          # a restart ends a hosted job, so a feature that needs one rules the engine out on this runner
+          $missing = Get-WindowsOptionalFeature -Online | Where-Object { $_.FeatureName -like 'Microsoft-Hyper-V*' -and $_.State -ne 'Enabled' }
+          foreach ($feature in $missing) {
+            $result = Enable-WindowsOptionalFeature -Online -FeatureName $feature.FeatureName -All -NoRestart -ErrorAction Continue
+            "{0}: enabled, RestartNeeded {1}" -f $feature.FeatureName, $result.RestartNeeded
+          }
+          if (-not $missing) { 'every Microsoft-Hyper-V feature was already enabled' }
+          Get-Service vmms, vmcompute, hvhost -ErrorAction SilentlyContinue | Format-Table -AutoSize Name, Status, StartType
+      - name: Install it with the engine of the input
         run: |
           $clock = [Diagnostics.Stopwatch]::StartNew()
           $installer = Join-Path $env:RUNNER_TEMP 'DockerDesktopInstaller.exe'
-          $process = Start-Process $installer -Wait -PassThru -ArgumentList 'install', '--quiet', '--accept-license', '--backend=wsl-2', '--always-run-service'
+          $process = Start-Process $installer -Wait -PassThru -ArgumentList 'install', '--quiet', '--accept-license', "--backend=$env:BACKEND", '--always-run-service'
           "the installer exited {0} after {1:n0} s" -f $process.ExitCode, $clock.Elapsed.TotalSeconds
           Get-Service com.docker.service -ErrorAction SilentlyContinue | Format-Table -AutoSize Name, Status, StartType
           if ($process.ExitCode -ne 0) { exit 1 }
@@ -97,6 +117,7 @@ jobs:
           "the engine answered: {0} after {1:n0} s" -f $up, $clock.Elapsed.TotalSeconds
           & $env:DOCKER_EXE context ls
           wsl -l -v
+          if ($env:BACKEND -eq 'hyper-v') { Get-VM -ErrorAction Continue | Format-Table -AutoSize Name, State, MemoryAssigned }
           if (-not $up) {
             Get-ChildItem "$env:LOCALAPPDATA\Docker\log" -Recurse -Filter *.log -ErrorAction SilentlyContinue |
               Sort-Object LastWriteTime -Descending | Select-Object -First 3 |
@@ -104,9 +125,32 @@ jobs:
             exit 1
           }
           & $env:DOCKER_EXE --context desktop-linux info --format '{{.OperatingSystem}} | {{.KernelVersion}} | {{.Driver}}'
+      - name: File Sharing, and a bind of a folder outside it
+        if: inputs.docker-desktop-backend == 'hyper-v'
+        continue-on-error: true
+        run: |
+          $settings = Join-Path $env:APPDATA 'Docker\settings-store.json'
+          if (Test-Path $settings) {
+            $store = Get-Content $settings -Raw | ConvertFrom-Json -AsHashtable
+            "the settings' keys: {0}" -f (($store.Keys | Sort-Object) -join ', ')
+            $store.GetEnumerator() | Where-Object Key -like '*shar*' | ForEach-Object { "{0} = {1}" -f $_.Key, ($_.Value | ConvertTo-Json -Compress) }
+          } else { 'no settings-store.json' }
+          $image = 'mirror.gcr.io/library/alpine:3.22'
+          foreach ($folder in 'C:\desktop-outside', (Join-Path $env:USERPROFILE 'desktop-inside')) {
+            New-Item -ItemType Directory -Force $folder | Out-Null
+            Set-Content (Join-Path $folder 'hello.txt') "from $folder"
+            "--- $folder"
+            & $env:DOCKER_EXE --context desktop-linux run --rm -v "${folder}:/probe" $image cat /probe/hello.txt 2>&1
+            "exited {0}" -f $LASTEXITCODE
+            $id = & $env:DOCKER_EXE --context desktop-linux create --mount "type=bind,source=$folder,target=/probe" $image true 2>&1
+            "create: {0}" -f ($id -join ' ')
+            if ($LASTEXITCODE -eq 0) { & $env:DOCKER_EXE --context desktop-linux rm $id | Out-Null }
+          }
       - name: A bind mount of a C:\ folder, and what docker inspect says of its consistency
         run: |
-          $folder = 'C:\desktop-probe'
+          # the Hyper-V engine's File Sharing list is taken to hold the user's profile folder (the step before prints it); the
+          # WSL 2 engine shares every drive
+          $folder = if ($env:BACKEND -eq 'hyper-v') { Join-Path $env:USERPROFILE 'desktop-probe' } else { 'C:\desktop-probe' }
           New-Item -ItemType Directory -Force $folder | Out-Null
           Set-Content (Join-Path $folder 'hello.txt') 'from the Windows side'
           $image = 'mirror.gcr.io/library/alpine:3.22'
@@ -122,6 +166,7 @@ jobs:
             & $env:DOCKER_EXE --context desktop-linux rm $id | Out-Null
           }
       - name: WSL integration with an Ubuntu distro
+        if: inputs.docker-desktop-backend == 'wsl-2'
         continue-on-error: true
         timeout-minutes: 25
         run: |
@@ -144,17 +189,6 @@ jobs:
           }
           "docker in the distro answered: {0} after {1:n0} s" -f $up, $clock.Elapsed.TotalSeconds
           wsl -d Ubuntu-24.04 -- sh -c 'mkdir -p /tmp/p && echo from-wsl > /tmp/p/hello.txt && docker run --rm -v /mnt/c/desktop-probe:/probe mirror.gcr.io/library/alpine:3.22 cat /probe/hello.txt'
-      - name: The Hyper-V engine
-        if: always()
-        run: |
-          # the engine needs the Hyper-V feature; enabling it here, last, on a runner thrown away after the job, says whether
-          # it takes a restart, and a restart ends a hosted job
-          $feature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -ErrorAction SilentlyContinue
-          "the Hyper-V feature: {0}" -f ($feature.State ?? 'absent')
-          if ($feature -and $feature.State -ne 'Enabled') {
-            $result = Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -All -NoRestart -ErrorAction Continue
-            "enabled with no restart; RestartNeeded: {0}" -f $result.RestartNeeded
-          }
 
   # the Windows launch groups as a JSON list, one matrix job each
   windows-groups:
