@@ -185,6 +185,19 @@ function readDisplay(value: unknown): StoredDisplay | undefined {
     : undefined;
 }
 
+/**
+ * A data folder a record names, when the host can hold a server there: an absolute POSIX path whose last name, after
+ * its last `/`, is a folder's own name. Its reader splits it there into the install root and the folder's name, so a
+ * value with no `/`, an empty last name, `.` or `..` gives a folder that isn't the one the record was written for.
+ */
+function readDataFolder(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value.startsWith('/')) {
+    return undefined;
+  }
+  const name = value.slice(value.lastIndexOf('/') + 1);
+  return name === '' || name === '.' || name === '..' ? undefined : value;
+}
+
 function readSharedRecord(value: unknown): SharedRecord | undefined {
   if (!isFields(value)) {
     return undefined;
@@ -207,7 +220,7 @@ function readSharedRecord(value: unknown): SharedRecord | undefined {
   }
   const agentLink = readAgentLink(value.agentLink);
   const display = readDisplay(value.display);
-  const {dataFolder} = value;
+  const dataFolder = readDataFolder(value.dataFolder);
   return {
     remotePort,
     operatingSystem,
@@ -216,9 +229,7 @@ function readSharedRecord(value: unknown): SharedRecord | undefined {
     connectionToken,
     ...(agentLink === undefined ? {} : {agentLink}),
     ...(display === undefined ? {} : {display}),
-    ...(typeof dataFolder === 'string' && dataFolder !== ''
-      ? {dataFolder}
-      : {}),
+    ...(dataFolder === undefined ? {} : {dataFolder}),
   };
 }
 
