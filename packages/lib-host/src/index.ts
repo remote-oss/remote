@@ -3,6 +3,7 @@
  * places files there, whatever the transport.
  */
 
+export {ABSOLUTE_HOST_PATH} from './absolute-path.ts';
 export {
   posixQuote,
   powershellQuote,

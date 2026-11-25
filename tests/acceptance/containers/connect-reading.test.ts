@@ -31,62 +31,47 @@ import {
 } from '../windows/sampling.ts';
 
 /**
- * The image the pull row opens: a small public Docker Hub image, pinned by the digest of its index (Node 22 on Alpine
- * 3.22, which holds the libstdc++ the editor's server needs), in the form `repository@digest`: the CLI cannot parse a
- * tag together with a digest and then pulls during its read. Docker Hub gives the CLI the image's details without a
- * pull, so the pull is the one inside Starting container that F-0408 AC-15 describes; an image of the run's own
- * registry is read by a pull during the configuration read instead (`reading-2408-pull-registry`).
+ * The image the pull row opens: a small public image, pinned by the digest of its index (Node 22 on Alpine 3.22, which
+ * holds the libstdc++ the editor's server needs), in the form `repository@digest`: the CLI cannot parse a tag together
+ * with a digest and then pulls during its read. It is Docker Hub's, read through Google's mirror of it, which hosted
+ * runners are not limited on (an anonymous read of Docker Hub itself answers 429 from a shared runner address, and the CLI
+ * then pulls during its read). The mirror gives the CLI the image's details without a pull, so the pull is the one inside
+ * Starting container that F-0408 AC-15 describes; an image of the run's own registry is read by a pull during the
+ * configuration read instead (`reading-2408-pull-registry`).
  */
+const PULLED_REGISTRY = 'mirror.gcr.io';
 const PULLED_REPOSITORY = 'library/node';
 const PULLED_DIGEST =
   'sha256:cd7807368cf24826297cbad5dca1a44972ccfd770647db52a8c7589eb4599ac8';
-const PULLED_IMAGE = `docker.io/${PULLED_REPOSITORY}@${PULLED_DIGEST}`;
+const PULLED_IMAGE = `${PULLED_REGISTRY}/${PULLED_REPOSITORY}@${PULLED_DIGEST}`;
 
-/** How long a read of Docker Hub may take before the row gives up, in milliseconds. */
-const HUB_MILLISECONDS = 30_000;
-
-/** Asks Docker Hub for `address`; a network error (a name that does not resolve, a reset, the time limit) is told as Docker Hub's, with its cause. */
-async function fromHub(
-  address: string,
-  init: RequestInit = {},
-): Promise<Response> {
-  try {
-    return await fetch(address, {
-      ...init,
-      signal: AbortSignal.timeout(HUB_MILLISECONDS),
-    });
-  } catch (caught) {
-    throw new Error(
-      `Docker Hub could not be reached for ${address} (${String(caught)}; cause: ${String((caught as {cause?: unknown}).cause)}), so the row cannot tell whether the CLI reads ${PULLED_IMAGE}'s details without a pull`,
-      {cause: caught},
-    );
-  }
-}
+/** How long a read of the registry may take before the row gives up, in milliseconds. */
+const REGISTRY_MILLISECONDS = 30_000;
 
 /**
- * Reads the image's manifest from Docker Hub the way the CLI does, anonymously, and gives the status Hub answered: when
- * it refuses (an anonymous limit on a shared runner address), the CLI cannot read the details either and pulls during
- * its read, so the row names that cause instead of a misplaced pull. A Hub that does not answer within
- * `HUB_MILLISECONDS`, or a network error, fails the row naming Docker Hub.
+ * Reads the image's manifest from the registry the way the CLI does, anonymously, and gives the status it answered:
+ * when it refuses, the CLI cannot read the details either and pulls during its read, so the row names that cause
+ * instead of a misplaced pull. A registry that does not answer within `REGISTRY_MILLISECONDS`, or a network error,
+ * fails the row naming the registry.
  */
-async function hubManifestStatus(): Promise<number> {
-  const token = (await (
-    await fromHub(
-      `https://auth.docker.io/token?service=registry.docker.io&scope=repository:${PULLED_REPOSITORY}:pull`,
-    )
-  ).json()) as {token?: string};
-  const answer = await fromHub(
-    `https://registry-1.docker.io/v2/${PULLED_REPOSITORY}/manifests/${PULLED_DIGEST}`,
-    {
+async function registryManifestStatus(): Promise<number> {
+  const address = `https://${PULLED_REGISTRY}/v2/${PULLED_REPOSITORY}/manifests/${PULLED_DIGEST}`;
+  try {
+    const answer = await fetch(address, {
       method: 'HEAD',
       headers: {
-        Authorization: `Bearer ${token.token ?? ''}`,
         Accept:
           'application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json',
       },
-    },
-  );
-  return answer.status;
+      signal: AbortSignal.timeout(REGISTRY_MILLISECONDS),
+    });
+    return answer.status;
+  } catch (caught) {
+    throw new Error(
+      `${PULLED_REGISTRY} could not be reached for ${address} (${String(caught)}; cause: ${String((caught as {cause?: unknown}).cause)}), so the row cannot tell whether the CLI reads ${PULLED_IMAGE}'s details without a pull`,
+      {cause: caught},
+    );
+  }
 }
 
 const execFileAsync = promisify(execFile);
@@ -282,10 +267,10 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
       '--force',
       PULLED_IMAGE,
     ]).catch(() => undefined);
-    const hubStatus = await hubManifestStatus();
-    if (hubStatus !== 200) {
+    const registryStatus = await registryManifestStatus();
+    if (registryStatus !== 200) {
       throw new Error(
-        `Docker Hub answered ${String(hubStatus)} to the anonymous read of ${PULLED_IMAGE}'s manifest, so the CLI cannot read its details and pulls during the read, before Starting container`,
+        `${PULLED_REGISTRY} answered ${String(registryStatus)} to the anonymous read of ${PULLED_IMAGE}'s manifest, so the CLI cannot read its details and pulls during the read, before Starting container`,
       );
     }
     const folder = devContainerFolder('c68-pull', {

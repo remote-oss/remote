@@ -72,6 +72,8 @@ describe('connection requests (contracts §4 S9)', () => {
         'C:\\Users\\u/.vscode-server',
         'C:/.vscode-server',
         'C:\\Users\\u\\.vscode-server',
+        'C:foo/.vscode-server',
+        'c:/Users/u/.vscode-server',
       ].map(folderOf),
       [
         '/a/.server',
@@ -87,6 +89,8 @@ describe('connection requests (contracts §4 S9)', () => {
         'C:\\Users\\u/.vscode-server',
         undefined,
         undefined,
+        undefined,
+        'c:/Users/u/.vscode-server',
       ],
     );
   });
