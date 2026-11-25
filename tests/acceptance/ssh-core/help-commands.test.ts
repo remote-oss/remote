@@ -21,10 +21,12 @@ import {
 import {indicatorGroups} from '../windows/activation-support.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
+import {activateWindowWithin, activeWindowNameOf} from '../windows/display.ts';
 import {paletteItems, runFromPalette} from '../windows/palette.ts';
 import {
   dialogOf,
   focusWindow,
+  type FocusReads,
   notifications,
   outputChannelOf,
   pageText,
@@ -511,5 +513,45 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
     } finally {
       await closeContained(folder, pressEscape, 30_000);
     }
+  });
+
+  it('card #3010 (c3010-focus-readout): a hanging driver stub times out and names the active window', async () => {
+    // A driver whose `--sync` activation never settles: the display holds one window for the name, and its active window has a name, so the readout has something to name on every side.
+    const activeName = 'the active window';
+    const windowId = '98765';
+    async function driver(...words: string[]): Promise<string> {
+      if (words[0] === 'windowactivate') {
+        await new Promise<string>(() => undefined);
+        return '';
+      }
+      if (words[0] === 'search') {
+        return windowId;
+      }
+      if (words[0] === 'getactivewindow') {
+        return activeName;
+      }
+      return '';
+    }
+    const reads: FocusReads = {
+      activate: name => activateWindowWithin(name, driver, 100),
+      pageHasFocus: () => Promise.resolve(false),
+      activeWindowName: () => activeWindowNameOf(driver),
+    };
+    let caught: unknown;
+    try {
+      await focusWindow('a window', reads, 1_000);
+    } catch (error) {
+      caught = error;
+    }
+    deepStrictEqual(
+      [
+        caught instanceof Error,
+        caught instanceof Error &&
+          caught.message.includes(`window ${windowId}`),
+        caught instanceof Error && caught.message.includes('not confirmed'),
+        caught instanceof Error && caught.message.includes(activeName),
+      ],
+      [true, true, true, true],
+    );
   });
 });

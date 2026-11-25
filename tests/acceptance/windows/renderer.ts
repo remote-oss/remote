@@ -17,7 +17,12 @@ import {
 } from '../../../tools/view-rows.ts';
 import path from 'node:path';
 import {inWindow, isOpen, variable, windowState} from './harness.ts';
-import {activateWindow} from './display.ts';
+import {
+  activateWindowWithin,
+  activeWindowName,
+  drive,
+  type ActivationOutcome,
+} from './display.ts';
 import {
   dispatchAt,
   evaluateAt,
@@ -502,20 +507,75 @@ async function evaluate<Value>(
 }
 
 /**
+ * The reads of a focus wait, so a test can stand a display driver and a page in for the harness's: the grab, the page's
+ * own report of the focus, and the window the display's active window is.
+ */
+export interface FocusReads {
+  /** Asks the window manager to give window `name` the display's focus, bounded, so a manager that never confirms goes on as no answer. */
+  activate(name: string): Promise<ActivationOutcome>;
+  /** Whether the page of window `name` holds the focus. */
+  pageHasFocus(name: string): Promise<boolean>;
+  /** The window the display's active window is. */
+  activeWindowName(): Promise<string>;
+}
+
+/** The reads of a focus wait over the harness's own display and pages. */
+function harnessFocusReads(): FocusReads {
+  return {
+    activate: name => activateWindowWithin(name, drive),
+    pageHasFocus: name => evaluate<boolean>(name, 'document.hasFocus()'),
+    activeWindowName,
+  };
+}
+
+/** What a focus wait last read of the display, for its timeout: the window it held, whether the manager confirmed it, and the active window. */
+interface FocusReadout {
+  windowId: string | undefined;
+  confirmed: boolean;
+  activeWindowName: string;
+}
+
+/** The focus wait's timeout, naming the window the display last held for the name, whether the manager confirmed it, and the window the display's active window is. */
+function focusTimeout(name: string, readout: FocusReadout): string {
+  const held =
+    readout.windowId === undefined
+      ? 'no visible window'
+      : `window ${readout.windowId}`;
+  return (
+    `window ${name} to hold the focus: the display last held ${held} for it, ` +
+    `its activation was ${readout.confirmed ? 'confirmed' : 'not confirmed'} by the window manager, ` +
+    `and the display's active window is ${readout.activeWindowName}`
+  );
+}
+
+/**
  * Gives window `name` the display's focus through the window manager, as a click on the window does, and waits for
  * the page to report the focus: a window the window manager left unfocused hides its quick input, and a palette run in
  * it never shows. The manager's `--sync` activation is asked for on every pass, so the grab stays ordered against
  * what the display does between the passes.
  */
-export async function focusWindow(name: string): Promise<void> {
+export async function focusWindow(
+  name: string,
+  reads: FocusReads = harnessFocusReads(),
+  waitMilliseconds: number = WAIT_MILLISECONDS,
+): Promise<void> {
+  const readout: FocusReadout = {
+    windowId: undefined,
+    confirmed: false,
+    activeWindowName: 'unreadable',
+  };
   await settled(
-    () => `window ${name} to hold the focus after the display activated it`,
+    () => focusTimeout(name, readout),
     async () => {
-      await activateWindow(name);
-      return (
-        (await evaluate<boolean>(name, 'document.hasFocus()')) || undefined
-      );
+      const outcome = await reads.activate(name);
+      readout.windowId = outcome.windowId;
+      readout.confirmed = outcome.confirmed;
+      readout.activeWindowName = await reads
+        .activeWindowName()
+        .catch((reading: unknown) => String(reading));
+      return (await reads.pageHasFocus(name)) || undefined;
     },
+    waitMilliseconds,
   );
 }
 
