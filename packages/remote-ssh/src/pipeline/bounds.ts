@@ -136,3 +136,6 @@ export function connectionLimitsFor(
     loginMilliseconds: helperWaitSeconds * 1000 + LOGIN_MARGIN_MILLISECONDS,
   };
 }
+
+/** How long a server a running connection server holds has to answer the window's check of its token. */
+export const HELD_SERVER_CHECK_MILLISECONDS = 5 * 1000;

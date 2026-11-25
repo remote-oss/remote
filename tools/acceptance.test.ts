@@ -1134,6 +1134,17 @@ describe('acceptance', () => {
     );
   });
 
+  it('card #3016: Host held is the harness account by key behind a ProxyCommand that never connects', () => {
+    deepStrictEqual(
+      [
+        accountBlock('held').startsWith('Host held\n'),
+        accountBlock('held').includes('\n  User harness\n'),
+        accountBlock('held').endsWith('\n  ProxyCommand sleep 3600'),
+      ],
+      [true, true, true],
+    );
+  });
+
   it('D-85: Host password-ask is the password account whose host key is asked, against its own known hosts', () => {
     strictEqual(
       accountBlock('password-ask'),
