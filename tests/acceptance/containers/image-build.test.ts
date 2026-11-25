@@ -112,23 +112,24 @@ function argumentsOf(
 }
 
 /**
- * The starts of the connect's own progress notices: its connecting toast and the reading of the configuration, which the
- * editor shows only once that phase has lasted a while, and the notice of a folder that holds a configuration.
+ * The starts of the notices the connect and the folder's reopen prompt show of themselves, which no row about a cache is
+ * about: the connecting toast, the reading of the configuration (shown by the editor only once that phase has lasted a
+ * while) and the prompt that a folder holds a configuration.
  */
-const PROGRESS_STARTS = [
+const CONNECT_NOTICE_STARTS = [
   'Connecting to Dev Container',
   'Reading Dev Container Configuration',
   'Folder contains',
 ];
 
-/** Whether `text` is one of the connect's own progress notices, which no row about a cache is about. */
-function isProgress(text: string): boolean {
-  return PROGRESS_STARTS.some(start => text.startsWith(start));
+/** Whether `text` is one of the notices of `CONNECT_NOTICE_STARTS`. */
+function isConnectNotice(text: string): boolean {
+  return CONNECT_NOTICE_STARTS.some(start => text.startsWith(start));
 }
 
 /**
  * Samples the notifications and the dialog of window `name` while `connect` goes on, and gives what they showed besides the
- * connect's own progress notices.
+ * notices of `CONNECT_NOTICE_STARTS`.
  */
 async function shownDuring(
   name: string,
@@ -140,7 +141,7 @@ async function shownDuring(
     while (!gate.done) {
       try {
         for (const text of await notifications(name)) {
-          if (!isProgress(text)) {
+          if (!isConnectNotice(text)) {
             shown.add(text);
           }
         }
@@ -495,7 +496,7 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
             'Reading Dev Container Configuration (show log)',
             'importing cache manifest from c52-never-pushed:1 failed',
             'Error: could not import the cache',
-          ].map(isProgress),
+          ].map(isConnectNotice),
         ],
         ['built', undefined, [], [], true, [true, false, false]],
       );
