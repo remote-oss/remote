@@ -133,5 +133,14 @@
     "owner": "dike",
     "evidence": 44859397697,
     "added": "2026-11-21"
+  },
+  {
+    "launch": "ssh-core",
+    "file": "ssh-core/help-commands.test.ts",
+    "title": "F-2004 AC-25 (c2486-companion-less-part): with no companion, the help commands run with no notification",
+    "card": 3010,
+    "owner": "selene",
+    "evidence": 45539077615,
+    "added": "2026-11-25"
   }
 ]
