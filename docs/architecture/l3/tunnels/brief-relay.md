@@ -70,10 +70,12 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
 
   `aad` and `bearer` get 401, with the detail "Sign in with a GitHub account." (GitHub only, D-107 question 4).
 - **Who the token belongs to:** the relay calls `GET https://api.github.com/user` with the token, and caches the
-  answer for five minutes, keyed by a hash of the token (at most 1,000 accounts, least recently used out first). A
-  token GitHub refuses is held as refused for 60 s, keyed the same way. A source address gets at most 10 lookups a
-  minute for tokens in neither cache, then 429 with `Retry-After`. An unauthenticated `/user` counts against the
-  relay's own limit at GitHub (`ruling-3207-relay-hardening`). The account is its **numeric `id`**. Any GitHub token that
+  answer for five minutes, keyed by a hash of the token. A token GitHub refuses is held as refused for 60 s, keyed the
+  same way. Accounts and refusals share one map of at most 1,000 entries, least recently used out first (#3209).
+  A source address, the socket's peer address since the relay terminates TLS itself, gets at most 10 lookups for
+  tokens in neither cache in a one-minute window from its first such lookup, then 429 with `Retry-After`. An
+  unauthenticated `/user` counts against the relay's own limit at GitHub (`ruling-3207-relay-hardening`). A
+  deployment that puts a proxy in front of the relay must revisit the source address. The account is its **numeric `id`**. Any GitHub token that
   identifies an account works, a personal access token included (`ruling-22-tunnel-rules` 2). The scopes our client
   and agent ask for are `read:user`, the identity part of `[cli]`'s `read:user+read:org` (`auth.rs:96`). The relay
   needs no organization data.
