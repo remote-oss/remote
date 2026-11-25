@@ -186,16 +186,20 @@ function readDisplay(value: unknown): StoredDisplay | undefined {
 }
 
 /**
- * A data folder a record names, when the host can hold a server there: an absolute POSIX path whose last name, after
- * its last `/`, is a folder's own name. Its reader splits it there into the install root and the folder's name, so a
- * value with no `/`, an empty last name, `.` or `..` gives a folder that isn't the one the record was written for.
+ * A data folder a record names, when the host can hold a server there: an absolute POSIX path with a folder above its
+ * last name, and a last name that is a folder's own. Its reader splits it at its last `/` into the install root and the
+ * folder's name, and the scripts read an empty install root as the home folder; so a value with no `/`, a folder right
+ * under `/`, an empty last name, `.` or `..` gives a folder that isn't the one the record was written for.
  */
 function readDataFolder(value: unknown): string | undefined {
   if (typeof value !== 'string' || !value.startsWith('/')) {
     return undefined;
   }
-  const name = value.slice(value.lastIndexOf('/') + 1);
-  return name === '' || name === '.' || name === '..' ? undefined : value;
+  const split = value.lastIndexOf('/');
+  const name = value.slice(split + 1);
+  return split === 0 || name === '' || name === '.' || name === '..'
+    ? undefined
+    : value;
 }
 
 function readSharedRecord(value: unknown): SharedRecord | undefined {

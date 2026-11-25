@@ -56,11 +56,12 @@ describe('connection requests (contracts §4 S9)', () => {
     );
   });
 
-  it('drops a data folder that the split at its last slash cannot read as an absolute folder and its own name', () => {
+  it('drops a data folder that the split at its last slash cannot read as an absolute root above a folder of its own name', () => {
     deepStrictEqual(
       [
-        '/.server',
+        '/a/.server',
         '/home/u/.server',
+        '/.server',
         '.server',
         'home/u/.server',
         '/',
@@ -70,8 +71,9 @@ describe('connection requests (contracts §4 S9)', () => {
         '/home/u/..server',
       ].map(folderOf),
       [
-        '/.server',
+        '/a/.server',
         '/home/u/.server',
+        undefined,
         undefined,
         undefined,
         undefined,
