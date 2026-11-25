@@ -156,3 +156,20 @@ export async function execConnect(
     });
   }
 }
+
+/** The process ids of the servers the CLI started for the commit: the wrapper below `cli/servers`, sorted. */
+export async function execServerPids(): Promise<number[]> {
+  // The bracket keeps the pattern from matching the shell that runs it.
+  return (
+    await onHostAs(
+      'harness',
+      'sh',
+      '-c',
+      `pgrep -u harness -f '${DATA_FOLDER}/cli/servers/[^ ]*/server/bin/[c]odium-server'; status=$?; [ $status -le 1 ] || exit $status`,
+    )
+  )
+    .split('\n')
+    .filter(line => line !== '')
+    .map(Number)
+    .sort((first, second) => first - second);
+}
