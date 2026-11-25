@@ -377,6 +377,8 @@ export function steps(
           onLost: listener => {
             recording.bridgeLost = listener;
           },
+          firstServe: () =>
+            Promise.resolve(note('firstServe', {kind: 'serving'} as const)),
           close: () => {
             recording.calls.push('closeBridge');
           },

@@ -66,6 +66,14 @@ const IMPOSED_PROPERTY_KEYS = [
   // GitHub Actions workflow syntax: a workflow's `on` and a job's `if` (check-workflow-tokens reads them).
   'on',
   'if',
+  // JWT (RFC 7515, RFC 7519): a header's `alg` and `typ` and the `exp` claim; the dev tunnels access tokens' `scp`,
+  // `tid` and `cid` claims, which the tunnel relay issues and reads back.
+  'alg',
+  'typ',
+  'exp',
+  'scp',
+  'tid',
+  'cid',
   // ESLint: the `loc` of a report descriptor, the `end` of a source location, the `min` of id-length.
   'loc',
   'end',
