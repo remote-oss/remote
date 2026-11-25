@@ -10,6 +10,7 @@
  * repository's issues and runs are read through GitHub's API, with GH_TOKEN when the environment holds one.
  */
 
+import {gitHubReader} from './github-read.ts';
 import {isMainModule, REPOSITORY_ROOT} from './repository.ts';
 import {type KnownRed, readKnownReds} from './known-reds.ts';
 
@@ -87,25 +88,7 @@ export function gitHubLookups(
   token: string | undefined,
   fetchUrl: typeof fetch = fetch,
 ): Lookups {
-  async function read(route: string): Promise<Record<string, unknown>> {
-    const response = await fetchUrl(
-      `https://api.github.com/repos/${repository}/${route}`,
-      {
-        headers: {
-          Accept: 'application/vnd.github+json',
-          ...(token === undefined || token === ''
-            ? {}
-            : {Authorization: `Bearer ${token}`}),
-        },
-      },
-    );
-    if (!response.ok) {
-      throw new Error(
-        `check-known-reds: GitHub answered ${String(response.status)} for ${route}`,
-      );
-    }
-    return (await response.json()) as Record<string, unknown>;
-  }
+  const read = gitHubReader('check-known-reds', repository, token, fetchUrl);
   return {
     async issue(issue) {
       const answer = await read(`issues/${String(issue)}`);
