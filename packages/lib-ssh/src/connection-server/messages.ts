@@ -185,19 +185,30 @@ function readDisplay(value: unknown): StoredDisplay | undefined {
     : undefined;
 }
 
+/** The absolute forms of the install path the plan accepts: a POSIX root, or a Windows drive letter. */
+const ABSOLUTE_PATH = /^(\/|[A-Za-z]:)/;
+
+/** A Windows drive with no folder on it. */
+const BARE_DRIVE = /^[A-Za-z]:$/;
+
 /**
- * A data folder a record names, when the host can hold a server there: an absolute POSIX path with a folder above its
- * last name, and a last name that is a folder's own. Its reader splits it at its last `/` into the install root and the
- * folder's name, and the scripts read an empty install root as the home folder; so a value with no `/`, a folder right
- * under `/`, an empty last name, `.` or `..` gives a folder that isn't the one the record was written for.
+ * A data folder a record names, when the host can hold a server there: an absolute path, POSIX or Windows, with a
+ * folder above its last name, and a last name that is a folder's own. Its reader splits it at its last `/` into the
+ * install root and the folder's name, and the scripts read an empty install root as the home folder; so a value with
+ * no `/`, a folder right under `/` or right on a drive, an empty last name, `.` or `..` gives a folder that isn't the
+ * one the record was written for.
  */
 function readDataFolder(value: unknown): string | undefined {
-  if (typeof value !== 'string' || !value.startsWith('/')) {
+  if (typeof value !== 'string' || !ABSOLUTE_PATH.test(value)) {
     return undefined;
   }
   const split = value.lastIndexOf('/');
   const name = value.slice(split + 1);
-  return split === 0 || name === '' || name === '.' || name === '..'
+  return split <= 0 ||
+    BARE_DRIVE.test(value.slice(0, split)) ||
+    name === '' ||
+    name === '.' ||
+    name === '..'
     ? undefined
     : value;
 }

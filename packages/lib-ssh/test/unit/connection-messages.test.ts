@@ -56,7 +56,7 @@ describe('connection requests (contracts §4 S9)', () => {
     );
   });
 
-  it('drops a data folder that the split at its last slash cannot read as an absolute root above a folder of its own name', () => {
+  it('drops a data folder that the split at its last slash cannot read as an absolute root, POSIX or Windows, above a folder of its own name', () => {
     deepStrictEqual(
       [
         '/a/.server',
@@ -69,6 +69,9 @@ describe('connection requests (contracts §4 S9)', () => {
         '/home/u/.',
         '/home/u/..',
         '/home/u/..server',
+        'C:\\Users\\u/.vscode-server',
+        'C:/.vscode-server',
+        'C:\\Users\\u\\.vscode-server',
       ].map(folderOf),
       [
         '/a/.server',
@@ -81,6 +84,9 @@ describe('connection requests (contracts §4 S9)', () => {
         undefined,
         undefined,
         '/home/u/..server',
+        'C:\\Users\\u/.vscode-server',
+        undefined,
+        undefined,
       ],
     );
   });
