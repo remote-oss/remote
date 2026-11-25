@@ -88,12 +88,22 @@ export const EXEC_FACTS = {
  */
 export async function freshExecHost(): Promise<void> {
   await freshHost();
+  // Ended in a command of its own: a shell whose command line also named the file it removes would match its own pattern.
+  // The bracket keeps pkill's pattern from matching the shell that runs it.
   await onHostAs(
     'harness',
     'sh',
     '-c',
-    // The bracket keeps pkill's pattern from matching this shell's own command line.
-    `pkill -f '${DATA_FOLDER.replace('/.', '/[.]')}/${launcherName()}' || true; rm -rf '${DATA_FOLDER}/${launcherName()}' '${DATA_FOLDER}'/.cli.*.log`,
+    `pkill -f '${DATA_FOLDER.replace('/.', '/[.]')}/${launcherName()}' || true`,
+  );
+  await onHostAs(
+    'harness',
+    'rm',
+    '-rf',
+    `${DATA_FOLDER}/${launcherName()}`,
+    ...(await namesIn(DATA_FOLDER))
+      .filter(name => /^\.cli\..*\.log$/u.test(name))
+      .map(name => `${DATA_FOLDER}/${name}`),
   );
 }
 
