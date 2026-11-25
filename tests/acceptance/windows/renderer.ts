@@ -10,6 +10,7 @@
 import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
 import {
   mergeReads,
+  shownLabels,
   wheelDirection,
   wheelTopProbe,
   type ViewRowRead,
@@ -618,6 +619,7 @@ export async function renderedRows(
 interface ViewRowsWalk {
   settled: boolean;
   reads: ViewRowRead[][];
+  probeReads?: number;
 }
 
 /**
@@ -701,7 +703,7 @@ export async function viewRows(
         // The list is still filling its rows, and its wheel tells no direction: the walk reads it where it stands
         // and stands, so the read's wait may wheel it again once its rows have told.
         window.remoteOssViewRowsTrace = undefined;
-        return {settled: false, reads: [read()]};
+        return {settled: false, reads: [read()], probeReads: wheelTop.reads};
       }
       await toTop(wheelTop.sign);
       // The walk stands at the list's top now, where a fresh read would, so the reads after it read the list the
@@ -746,8 +748,10 @@ export async function viewRows(
   }
   if (!walk.settled) {
     process.stderr.write(
-      `window ${name}, view ${viewName}: the wheel to the top could not tell its direction, and the list stands where it is, showing ${
-        walk.reads.flatMap(read => read.map(each => each.label)).join(', ') ||
+      `window ${name}, view ${viewName}: the wheel to the top could not tell its direction in ${String(
+        walk.probeReads,
+      )} reads, and the list stands where it is, showing ${
+        shownLabels(walk.reads.flatMap(read => read.map(each => each.label))) ||
         'no row'
       }\n`,
     );
@@ -3572,13 +3576,24 @@ export async function chooseQuickPickItem(
 
 /**
  * Chooses the row labelled `label` of the quick pick open in window `name` by the keys a user presses: the arrow keys
- * from the focused row to it, then Enter. Unlike {@link chooseQuickPickItem} it types no filter, so every row stays.
+ * from the focused row to it, then Enter. Unlike {@link chooseQuickPickItem} it types no filter, so every row stays. A
+ * pick that does not settle fails naming the pages, with the window that held the focus, for a palette that opened
+ * elsewhere or not at all.
  */
 export async function chooseQuickPickRow(
   name: string,
   label: string,
 ): Promise<void> {
-  await waitForQuickPick(name, 30_000);
+  try {
+    await waitForQuickPick(name, 30_000);
+  } catch (caught) {
+    const pages = await pageFocusFacts().catch((reading: unknown) => [
+      `unreadable: ${String(reading)}`,
+    ]);
+    throw new Error(`${String(caught)}; pages ${JSON.stringify(pages)}`, {
+      cause: caught,
+    });
+  }
   const address = await pageOf(name);
   for (let presses = 0; presses < 100; presses += 1) {
     const rows = await quickPickRows(name);

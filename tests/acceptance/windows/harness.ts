@@ -50,6 +50,7 @@ import {
 } from './agent-standing.ts';
 import {explainedFailure, section} from './connect-failure.ts';
 import {editorFolderOf} from './editor-folder.ts';
+import {emptyProbe} from './empty-probe.ts';
 import {
   type CloseAttempt,
   closeUntilGone,
@@ -2612,6 +2613,41 @@ export async function connectedWithin(
     await waitFor(
       `${name} to be connected`,
       () => connected(name, user),
+      milliseconds,
+    );
+  } catch (caught) {
+    throw await explainedFailure(
+      caught,
+      async () => `${await connectState()}\n${ownConnectOf(name)}`,
+    );
+  }
+}
+
+/**
+ * Waits until window `name`, which has no folder, is connected through authority `alias`, for up to `milliseconds`: it
+ * writes a file through its remote file system, at a full URI, and the file reaches the host of `user`. A window with a
+ * folder is {@link connectedWithin}'s: the agent has nowhere to write a relative file in a window without one.
+ */
+export async function connectedEmpty(
+  name: string,
+  alias: string,
+  milliseconds: number,
+  user = 'harness',
+): Promise<void> {
+  const probe = emptyProbe(name, alias, user);
+  const token = `${name}-${String(Date.now())}`;
+  await onHostAs(user, 'mkdir', '-p', probe.folder);
+  try {
+    await waitFor(
+      `${name} to be connected`,
+      async () => {
+        try {
+          await inWindow(name, 'acceptance.agent.writeFile', probe.uri, token);
+          return (await onHostAs(user, 'cat', probe.file)) === token;
+        } catch {
+          return false;
+        }
+      },
       milliseconds,
     );
   } catch (caught) {

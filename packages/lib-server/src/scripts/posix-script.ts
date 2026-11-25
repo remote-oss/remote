@@ -581,6 +581,21 @@ const CLEANUP_BODY: readonly string[] = [
 ];
 
 /**
+ * Whether the server the data folder's commit recorded still runs, and the port its log last named, for a window that
+ * takes up a running server; it starts nothing, takes no lock and changes nothing.
+ */
+const HELD_SERVER_BODY: readonly string[] = [
+  'HELD_PID=$(cat "$BOOT_PREFIX.pid" 2>/dev/null)',
+  'if is_server_process "$HELD_PID" "$INSTALL_DIR"; then',
+  '  fact server.alive yes',
+  `  fact server.port "$(sed -n 's/^${READY_LINE} \\([0-9][0-9]*\\)$/\\1/p' "$BOOT_PREFIX.log" 2>/dev/null | tail -n 1)"`,
+  'else',
+  '  fact server.alive no',
+  'fi',
+  'finish Ok',
+];
+
+/**
  * Ends the CLI that `startCli` started, only while its process is still that CLI: its first argument is the CLI's own
  * file and its second `command-shell`, read field by field from `/proc`, so neither a recycled process id nor a
  * process that merely mentions the file passes. Without `/proc` the fields can't be read, and nothing is ended.
@@ -623,6 +638,8 @@ function bodyOf(step: BodyStep): readonly string[] {
       return UNINSTALL_BODY;
     case 'cleanup':
       return CLEANUP_BODY;
+    case 'heldServer':
+      return HELD_SERVER_BODY;
     default:
       return STEPWISE_BODIES[step];
   }

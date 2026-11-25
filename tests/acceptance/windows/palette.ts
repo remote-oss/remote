@@ -77,7 +77,7 @@ async function showedPalette(name: string): Promise<void> {
   }
 }
 
-/** The labels of the items that the command palette of window `name` lists for `text`, once its list has settled. */
+/** The labels of the items that the command palette of window `name` lists for `text`, once its list has settled, whose launch has the palette's history of run commands switched off (`PALETTE_HISTORY_OFF` in `tools/acceptance-launches.ts`), so a row that reads the order of the list finds the alphabetical one. */
 export async function paletteItems(
   name: string,
   text: string,
