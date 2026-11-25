@@ -16,6 +16,7 @@ import {
   relaunch,
   reopenInContainer,
   terminalBuffer,
+  terminalNames,
   variable,
   waitFor,
   windowEvents,
@@ -167,6 +168,19 @@ function printingAtStart(label: string, variables: readonly string[]): string {
         `printf '${label}${String(index)}:%s\\n' "$(tr '\\0' '\\n' < /proc/$$/environ | sed -n 's/^${each}=//p')"`,
     )
     .join('; ');
+}
+
+/**
+ * Closes window `name`'s terminals and waits until it reports none, so that a restart or a reload that keeps the
+ * running server leaves no earlier shell for the editor to reconnect: such a shell keeps the environment it started with.
+ */
+async function withoutTerminals(name: string): Promise<void> {
+  await inWindow(name, 'workbench.action.terminal.killAll');
+  await waitFor(
+    'the window to have no terminal',
+    async () => (await terminalNames(name)).length === 0,
+    30_000,
+  );
 }
 
 /** What `printing(label, variables)` printed in a terminal of `name`, one value per variable. */
@@ -340,6 +354,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       const containerId = await containerOf(folder);
       const names = ['MY_CONTAINER_VAR2', 'MY_REMOTE_VAR3'];
       const before = await printed(name, 'before', names);
+      await withoutTerminals(name);
       const mark = containersLog().length;
       await relaunch(name, {environment: {F0416_LOCAL_VAR: 'changed-local'}});
       await connectedToContainer(name);
@@ -596,6 +611,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
         file,
         JSON.stringify({...configuration, userEnvProbe: 'none'}),
       );
+      await withoutTerminals(name);
       await reloadWindow(name);
       await connectedToContainer(name);
       deepStrictEqual(
