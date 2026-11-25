@@ -404,17 +404,28 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
   it('F-2308 AC-15 (c82-kill): killing the install terminal of a connected window drops the connection at once and a reconnection makes a new install terminal with the password prompt', async () => {
     await setUserSetting(SHOW_TERMINAL, true);
     const name = await openPasswordWindow('c82-kill');
-    await untilPrompt(name, PASSWORD_PROMPT);
-    await typeInTerminal(name, `${hostPassword()}\n`);
-    await waitFor(
-      'the window to connect',
-      async () => (await windowState(name)).remoteName === 'ssh-remote',
-      120_000,
-    );
-    await paletteRun(name, 'Terminal: Kill the Active Terminal');
-    const facts = await untilPrompt(name, PASSWORD_PROMPT);
-    deepStrictEqual(facts?.terminals, ['install']);
-    await closeWindow(name);
+    try {
+      await untilPrompt(name, PASSWORD_PROMPT);
+      await typeInTerminal(name, `${hostPassword()}\n`);
+      await waitFor(
+        'the window to connect',
+        async () => (await windowState(name)).remoteName === 'ssh-remote',
+        120_000,
+      );
+      const before = await terminalNames(name);
+      await paletteRun(name, 'Terminal: Kill the Active Terminal');
+      const facts = await untilPrompt(name, PASSWORD_PROMPT).catch(
+        (caught: unknown) => {
+          throw new Error(
+            `${String(caught)}; the terminals before the kill: ${JSON.stringify(before)}`,
+            {cause: caught},
+          );
+        },
+      );
+      deepStrictEqual(facts?.terminals, ['install']);
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+    }
   });
 
   it('F-2308 AC-18 (c82-switch): switching the setting on during a hidden attempt changes nothing, and the next attempt reveals its terminal', async () => {
@@ -561,52 +572,60 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
 
   it('F-2308 AC-28 (c82-uninstall-other): in a connected window the kill on another password host reveals an Uninstall VS Code Server terminal beside install, takes the password there, closes itself, and install and the panel stay', async () => {
     const name = await connectedByTerminal('c82-uninstall-other');
-    await killHost(name, 'password-retry');
-    await untilKillTab(name, true);
-    const beside = await tabNames(name);
-    await screenWith(name, PASSWORD_ONLY_PROMPT);
-    await typeInTerminal(name, `${hostPassword()}\n`);
-    await untilKillTab(name, false);
-    deepStrictEqual(
-      {beside, left: await tabNames(name), panel: await panelShown(name)},
-      {
-        beside: ['install', 'Uninstall VS Code Server'],
-        left: ['install'],
-        panel: true,
-      },
-    );
-    await closeAfterKill(name);
+    try {
+      await killHost(name, 'password-retry');
+      await untilKillTab(name, true);
+      const beside = await tabNames(name);
+      await screenWith(name, PASSWORD_ONLY_PROMPT);
+      await typeInTerminal(name, `${hostPassword()}\n`);
+      await untilKillTab(name, false);
+      deepStrictEqual(
+        {beside, left: await tabNames(name), panel: await panelShown(name)},
+        {
+          beside: ['install', 'Uninstall VS Code Server'],
+          left: ['install'],
+          panel: true,
+        },
+      );
+      await closeAfterKill(name);
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+    }
   });
 
   it('F-2308 AC-19 (c82-uninstall-hidden): with the setting off the Uninstall VS Code Server terminal stays hidden and the password comes as a quick input', async () => {
     const name = await connectedByTerminal('c82-uninstall-hidden');
-    await setUserSetting(SHOW_TERMINAL, false);
-    await killHost(name, 'password');
     try {
-      await waitFor(
-        'the password quick input',
-        async () =>
-          (await quickPickOf(name))?.placeholder.startsWith(
-            'Enter password',
-          ) === true,
-        60_000,
-      );
-    } catch (caught) {
-      throw new Error(
-        `${String(caught)}; the quick input: ${JSON.stringify((await quickPickOf(name))?.placeholder)}, the terminals: ${JSON.stringify(await terminalNames(name))}, the indicator: ${JSON.stringify(await statusBarText(name, 'status.host'))}`,
-        {cause: caught},
-      );
+      await setUserSetting(SHOW_TERMINAL, false);
+      await killHost(name, 'password');
+      try {
+        await waitFor(
+          'the password quick input',
+          async () =>
+            (await quickPickOf(name))?.placeholder.startsWith(
+              'Enter password',
+            ) === true,
+          60_000,
+        );
+      } catch (caught) {
+        throw new Error(
+          `${String(caught)}; the quick input: ${JSON.stringify((await quickPickOf(name))?.placeholder)}, the terminals: ${JSON.stringify(await terminalNames(name))}, the indicator: ${JSON.stringify(await statusBarText(name, 'status.host'))}`,
+          {cause: caught},
+        );
+      }
+      const hidden = {
+        tabs: await tabNames(name),
+        quick: (await quickPickOf(name))?.placeholder,
+      };
+      await answerInputBox(name, hostPassword());
+      deepStrictEqual(hidden, {
+        tabs: ['install'],
+        quick: 'Enter password for harness-pw@127.0.0.1',
+      });
+      await closeAfterKill(name);
+    } finally {
+      await closeWindow(name).catch(() => undefined);
     }
-    const hidden = {
-      tabs: await tabNames(name),
-      quick: (await quickPickOf(name))?.placeholder,
-    };
-    await answerInputBox(name, hostPassword());
-    deepStrictEqual(hidden, {
-      tabs: ['install'],
-      quick: 'Enter password for harness-pw@127.0.0.1',
-    });
-    await closeAfterKill(name);
   });
 
   /** The text on the screen of the terminal window `name` shows, read in the page. */
