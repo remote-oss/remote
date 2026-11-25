@@ -73,8 +73,11 @@ The relay is `brief-relay.md`, and the host is `brief-agent.md`.
   4. reads the agent's `version`. A protocol version other than 6 shows "Your tunnel connection is outdated, please
      upgrade to the latest version to continue using tunnels." with "Upgrade". "Upgrade" opens this extension's page
      through core's `extension.open` (`ruling-22-open-four` point 1), and the resolve fails;
-  5. calls `serve` with the editor's commit and quality, and **its server source**: lib-product's server download
-     template, quality and server data folder name (brief-agent §4, F-3902);
+  5. runs Remote - SSH's licence gate on its own product (F-2409; F-3902 rule 11), asking the user here if the source
+     needs acceptance, then calls `serve` with the editor's commit and quality and **its server source**: a
+     `Pick<ProductProfile, …>` of its product (identity, server names, download template and redirect hosts, licence
+     fields), carrying `licenceAccepted`. The agent resolves it for its own platform (`ruling-3163-serve-inputs`).
+     `ServeParams.extensions` carries the default extensions;
   6. returns core's managed authority (`[oss]` `src/vscode-dts/vscode.proposed.resolvers.d.ts:46`,
      `ManagedResolvedAuthority`). Each connection core makes is one `socket_id` over `servermsg`, closed by
      `serverclose`.
