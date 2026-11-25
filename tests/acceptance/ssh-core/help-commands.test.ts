@@ -1,4 +1,4 @@
-import {deepStrictEqual} from 'node:assert';
+import {deepStrictEqual, rejects} from 'node:assert';
 import {existsSync, mkdirSync, readFileSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {
@@ -24,6 +24,7 @@ import {openFolderWindow} from '../windows/folder-windows.ts';
 import {activateWindowWithin, activeWindowNameOf} from '../windows/display.ts';
 import {paletteItems, runFromPalette} from '../windows/palette.ts';
 import {
+  chooseQuickPickRow,
   dialogOf,
   focusWindow,
   type FocusReads,
@@ -502,6 +503,8 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
       );
       await focusWindow(folder);
       await runFromPalette(folder, 'Remote-SSH: Help');
+      // Help opens the extension's documentation outside the editor, which takes the display's focus from the window: the grab goes again before the next command.
+      await focusWindow(folder);
       await runFromPalette(folder, 'Remote-SSH: Get Started with SSH');
       // The command the palette hides: invoked as the window's own command, whose open never settles in the run's editor.
       await startInWindow(folder, HELP_COMMANDS.feedback);
@@ -552,6 +555,23 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
         caught instanceof Error && caught.message.includes(activeName),
       ],
       [true, true, true, true],
+    );
+  });
+
+  it("card #3010 (c3010-pick-readout): a quick pick that never settles fails naming the display's active window", async () => {
+    // A pick that never shows, beside a display whose active window has a name: the timeout names the taker, which the pages' facts cannot see.
+    await rejects(
+      () =>
+        chooseQuickPickRow('a window', 'a row', {
+          quickPick: () =>
+            Promise.reject(
+              new Error(
+                'timed out waiting for a quick pick in window a window',
+              ),
+            ),
+          activeWindowName: () => Promise.resolve('the taker window'),
+        }),
+      {message: /the display's active window "the taker window"/},
     );
   });
 });
