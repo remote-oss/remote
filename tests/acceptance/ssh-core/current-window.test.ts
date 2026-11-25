@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {execFile} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
@@ -18,6 +19,7 @@ import {
   nextEmptyWindow,
   openWindow,
   recordLines,
+  RESOLVING_INDICATOR,
   sshdLog,
   userSettings,
   variable,
@@ -26,11 +28,19 @@ import {
   windowNames,
   windowState,
 } from '../windows/harness.ts';
+import {bindKeys} from '../windows/explorer-folders.ts';
 import {
   openFolderWindow,
   openWorkspaceWindow,
 } from '../windows/folder-windows.ts';
 import {closeAllButLocal, serverMainProcesses} from '../windows/maintenance.ts';
+import {paletteItems} from '../windows/palette.ts';
+import {
+  groupedQuickPickRows,
+  pressControlAlt,
+  pressEscape,
+  statusBarText,
+} from '../windows/renderer.ts';
 import {PLATFORMS} from '../windows/tunnel-support.ts';
 
 /** The command that reloads the window it runs in onto a picked host. */
@@ -227,6 +237,25 @@ async function rowClean(
       `helpers left: ${(await connectionHelpers()).join(', ')}\n${await sshListed(rowStart, rowPids)}`,
     );
   }
+}
+
+/** Whether the held window's ProxyCommand still runs on the runner: true while its `sleep 3600` runs, false when it is gone, and an error when pgrep says neither. */
+async function stillHeld(): Promise<boolean> {
+  const status = await new Promise<number>(resolve => {
+    execFile('pgrep', ['-f', '^sleep 3600$'], error => {
+      if (error === null) {
+        resolve(0);
+      } else if (typeof error.code === 'number') {
+        resolve(error.code);
+      } else {
+        resolve(-1);
+      }
+    });
+  });
+  if (status !== 0 && status !== 1) {
+    throw new Error(`the held check's pgrep exited ${String(status)}`);
+  }
+  return status === 0;
 }
 
 describe('Connect Current Window to Host', function () {
@@ -685,6 +714,79 @@ describe('Connect Current Window to Host', function () {
       await userSettings({
         ...PLATFORMS,
         'remote.SSH.useLocalServer': undefined,
+      });
+    }
+  });
+
+  it('F-2302 AC-32 (c3017-inflight): while a window shows Opening Remote..., neither the palette nor the indicator menu offers Connect Current Window to Host..., and a key bound with a host abandons the connect and reloads the same window onto that host, connected', async () => {
+    const restore = await bindKeys([
+      {key: 'ctrl+alt+h', command: SWITCH, argument: {host: 'harness'}},
+    ]);
+    let next = '';
+    try {
+      await closeAllButLocal();
+      await userSettings({...PLATFORMS, 'remote.SSH.connectTimeout': 300});
+      await openWindow('held', 'c3017-inflight');
+      await waitFor(
+        'Opening Remote...',
+        async () =>
+          (await statusBarText('c3017-inflight', 'status.host')) ===
+          RESOLVING_INDICATOR,
+        60_000,
+      );
+      const palette = await paletteItems(
+        'c3017-inflight',
+        'Connect Current Window',
+      );
+      await pressEscape('c3017-inflight');
+      void inWindow('c3017-inflight', 'workbench.action.remote.showMenu').catch(
+        () => undefined,
+      );
+      await waitFor(
+        'the indicator menu',
+        async () =>
+          (await groupedQuickPickRows('c3017-inflight').catch(() => []))
+            .length > 0,
+        30_000,
+      );
+      const menu = (await groupedQuickPickRows('c3017-inflight')).map(
+        each => each.label,
+      );
+      await pressEscape('c3017-inflight');
+      const leftover = emptyWindows();
+      next = await nextEmptyWindow(() =>
+        pressControlAlt('c3017-inflight', 'h'),
+      );
+      await connectedWithin(next, 90_000);
+      const held = await waitFor(
+        'the held connect ended',
+        async () => !(await stillHeld()),
+        15_000,
+      ).then(
+        () => true,
+        () => false,
+      );
+      deepStrictEqual(
+        [
+          palette.filter(each =>
+            each.includes('Connect Current Window to Host'),
+          ),
+          menu.filter(each => each.includes('Connect Current Window to Host')),
+          menu.includes('Close Remote Connection'),
+          (await windowState(next)).remoteAuthority,
+          windowEvents('c3017-inflight').at(-1)?.event,
+          emptyWindows().filter(each => !leftover.includes(each)),
+          held,
+        ],
+        [[], [], true, 'ssh-remote+harness', 'deactivated', [next], true],
+      );
+    } finally {
+      restore();
+      await closeWindow('c3017-inflight').catch(() => undefined);
+      await closeWindow(next).catch(() => undefined);
+      await userSettings({
+        ...PLATFORMS,
+        'remote.SSH.connectTimeout': undefined,
       });
     }
   });
