@@ -238,14 +238,14 @@ describe('main-push-skip: whether a push to main leaves out the VSCodium parts (
           ],
         },
       'actions/runs/5/attempts/2': {conclusion: 'success'},
-      'actions/runs/5/attempts/2/jobs?per_page=100&page=1': {
+      'actions/runs/5/attempts/2/jobs?per_page=20&page=1': {
         total_count: 3,
         jobs: [
           {name: 'one', conclusion: 'success', id: 1},
           {name: 'two', conclusion: 'skipped', id: 2},
         ],
       },
-      'actions/runs/5/attempts/2/jobs?per_page=100&page=2': {
+      'actions/runs/5/attempts/2/jobs?per_page=20&page=2': {
         total_count: 3,
         jobs: [{name: 'three', conclusion: null, id: 3}],
       },
@@ -265,7 +265,10 @@ describe('main-push-skip: whether a push to main leaves out the VSCodium parts (
           : new Response(JSON.stringify(answer), {status: 200}),
       );
     }) as typeof fetch;
-    const lookups = repositoryLookups('.', 'owner/repo', 'secret', fetchUrl);
+    const lookups = repositoryLookups('.', 'owner/repo', 'secret', fetchUrl, {
+      tries: 1,
+      pause: () => Promise.resolve(),
+    });
     deepStrictEqual(
       [
         await lookups.contains('h1', 'p1'),

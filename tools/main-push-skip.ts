@@ -25,7 +25,7 @@ import {
   partsOfTable,
   suiteFilesIn,
 } from './acceptance-parts.ts';
-import {gitHubReader} from './github-read.ts';
+import {gitHubReader, type ReadTries} from './github-read.ts';
 import {isMainModule, REPOSITORY_ROOT} from './repository.ts';
 
 /** The pushed commit: its subject, its tree and its first parent. */
@@ -157,14 +157,32 @@ function gitIn(root: string, ...words: string[]): string {
   return execFileSync('git', words, {cwd: root, encoding: 'utf8'}).trim();
 }
 
+/**
+ * How the API lookups ask again: a large run's jobs come in pages of 20, since GitHub answered 502 for a page of 100 of
+ * an 80-part gate's attempt, and a server error gets two more tries, 5 s and 10 s later.
+ */
+const JOBS_PAGE = 20;
+const LOOKUP_TRIES: ReadTries = {
+  tries: 3,
+  pause: next =>
+    new Promise(resolve => setTimeout(resolve, (next - 1) * 5_000)),
+};
+
 /** The lookups of this repository: git in `root` for the head, GitHub's API with `token` for the rest. */
 export function repositoryLookups(
   root: string,
   repository: string,
   token: string | undefined,
   fetchUrl: typeof fetch = fetch,
+  retry: ReadTries = LOOKUP_TRIES,
 ): SkipLookups {
-  const read = gitHubReader('main-push-skip', repository, token, fetchUrl);
+  const read = gitHubReader(
+    'main-push-skip',
+    repository,
+    token,
+    fetchUrl,
+    retry,
+  );
   return {
     head(pullRequest) {
       gitIn(
@@ -204,7 +222,7 @@ export function repositoryLookups(
       const jobs: Array<{name: string; conclusion: string | null}> = [];
       for (let page = 1; ; page += 1) {
         const answer = await read(
-          `${route}/jobs?per_page=100&page=${String(page)}`,
+          `${route}/jobs?per_page=${String(JOBS_PAGE)}&page=${String(page)}`,
         );
         const found = (answer.jobs ?? []) as typeof jobs;
         jobs.push(
