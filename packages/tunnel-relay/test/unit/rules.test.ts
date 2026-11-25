@@ -9,7 +9,6 @@ import {
   MAX_LABELS,
 } from '../../src/names.ts';
 import {problem, success} from '../../src/problem.ts';
-import {refuseAll} from '../../src/refuse-all.ts';
 
 /** The message `work` throws with. */
 function messageOf(work: () => unknown): string {
@@ -28,6 +27,8 @@ const SETTINGS = {
   TLS_KEY: '/run/key.pem',
   RELAY_STORE: '/run/relay.db',
   RELAY_CLUSTER: 'usw2',
+  RELAY_ALLOWLIST: '/run/allowlist',
+  RELAY_TOKEN_KEY: '/run/token.key',
 };
 
 describe('the contract rules of the relay', () => {
@@ -118,13 +119,6 @@ describe('the answers of the relay', () => {
       [{status: 200, body: {answer: 1}}, {status: 200}],
     );
   });
-
-  it('the relay without sign-in refuses every request as unsigned', async () => {
-    deepStrictEqual(await refuseAll(), {
-      status: 401,
-      body: {title: 'Unauthorized', detail: 'Sign in with a GitHub account.'},
-    });
-  });
 });
 
 describe('the settings of the relay', () => {
@@ -136,7 +130,18 @@ describe('the settings of the relay', () => {
       keyFile: '/run/key.pem',
       storeFile: '/run/relay.db',
       clusterId: 'usw2',
+      githubApi: 'https://api.github.com',
+      allowlistFile: '/run/allowlist',
+      tokenKeyFile: '/run/token.key',
     });
+  });
+
+  it('asks the GitHub API the settings name instead of the public one', () => {
+    deepStrictEqual(
+      configOf({...SETTINGS, RELAY_GITHUB_API: 'https://github.test'})
+        .githubApi,
+      'https://github.test',
+    );
   });
 
   it('names a setting that is missing or empty', () => {

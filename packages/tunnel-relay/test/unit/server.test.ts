@@ -1,19 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import type {IncomingMessage, ServerResponse} from 'node:http';
 import {Readable} from 'node:stream';
-import type {RelayConfig} from '../../src/config.ts';
 import {API_VERSION, type RouteContext} from '../../src/routes.ts';
 import {answerRequest, relayServer, write} from '../../src/server.ts';
 import {Store} from '../../src/store.ts';
-
-const CONFIG: RelayConfig = {
-  domain: 'relay.test',
-  port: 443,
-  certificateFile: '',
-  keyFile: '',
-  storeFile: ':memory:',
-  clusterId: 'usw2',
-};
+import {Tokens} from '../../src/auth/tokens.ts';
+import {TEST_CONFIG} from './settings.ts';
 
 /** A request as the server reads it: its method, address, headers and body text. */
 function incoming(
@@ -79,8 +71,10 @@ describe('the HTTPS service of the relay', () => {
     reported = [];
     context = {
       store,
-      config: CONFIG,
-      authenticate: () => Promise.resolve({id: 7, login: 'owner'}),
+      config: TEST_CONFIG,
+      authenticate: () =>
+        Promise.resolve({kind: 'account', id: 7, login: 'owner'}),
+      tokens: new Tokens(Buffer.alloc(32, 1), () => 0),
       report: error => {
         reported.push(error);
       },

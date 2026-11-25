@@ -1,0 +1,335 @@
+import {deepStrictEqual} from 'node:assert';
+import {createHmac} from 'node:crypto';
+import {Allowlist} from '../../src/auth/allowlist.ts';
+import {authenticateWith} from '../../src/auth/authenticate.ts';
+import {GithubIdentity, type Fetch} from '../../src/auth/github.ts';
+import {Tokens} from '../../src/auth/tokens.ts';
+
+const SIGNING_KEY = Buffer.alloc(32, 7);
+
+/** The message `work` throws with. */
+function messageOf(work: () => unknown): string {
+  try {
+    work();
+    return 'no error';
+  } catch (error) {
+    return (error as Error).message;
+  }
+}
+
+/** A `fetch` that answers every request with `status` and `body`, and records the requests. */
+function fetchAnswering(
+  status: number,
+  body: unknown,
+): {fetch: Fetch; asked: Array<{address: string; init: RequestInit}>} {
+  const asked: Array<{address: string; init: RequestInit}> = [];
+  function fetch(address: string, init: RequestInit): Promise<Response> {
+    asked.push({address, init});
+    return Promise.resolve(
+      new Response(typeof body === 'string' ? body : JSON.stringify(body), {
+        status,
+      }),
+    );
+  }
+  return {fetch, asked};
+}
+
+describe("the relay's tunnel tokens", () => {
+  it('a token carries its tunnel, cluster, scope and expiry, a day for a host and an hour for the rest', () => {
+    const tokens = new Tokens(SIGNING_KEY, () => 1_000_000);
+    function claimsOf(token: string): unknown {
+      return JSON.parse(
+        Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8'),
+      );
+    }
+    deepStrictEqual(
+      [
+        claimsOf(tokens.issue('one', 'usw2', 'host')),
+        claimsOf(tokens.issue('one', 'usw2', 'connect')),
+        claimsOf(tokens.issue('one', 'usw2', 'manage:ports')),
+      ],
+      [
+        {exp: 1000 + 86_400, scp: 'host', tid: 'one', cid: 'usw2'},
+        {exp: 1000 + 3600, scp: 'connect', tid: 'one', cid: 'usw2'},
+        {exp: 1000 + 3600, scp: 'manage:ports', tid: 'one', cid: 'usw2'},
+      ],
+    );
+  });
+
+  it('a token checks back to its grant until it expires', () => {
+    let clock = 0;
+    const tokens = new Tokens(SIGNING_KEY, () => clock);
+    const token = tokens.issue('one', 'usw2', 'connect');
+    const before = tokens.check(token);
+    clock = 3600 * 1000;
+    deepStrictEqual(
+      [before, tokens.check(token)],
+      [{tunnelId: 'one', scope: 'connect'}, undefined],
+    );
+  });
+
+  it('refuses a token of another key, an altered one, a malformed one, and one whose claims are not a grant', () => {
+    const tokens = new Tokens(SIGNING_KEY, () => 0);
+    const token = tokens.issue('one', 'usw2', 'host');
+    const [header = '', , signature = ''] = token.split('.');
+    deepStrictEqual(
+      [
+        new Tokens(Buffer.alloc(32, 8), () => 0).check(token),
+        tokens.check(
+          `${header}.${Buffer.from('{"tid":"two"}').toString('base64url')}.${signature}`,
+        ),
+        tokens.check('only.two'),
+        tokens.check('a.b.c.d'),
+        tokens.check(`${header}.e30.short`),
+        tokens.check(signedClaims({exp: 99, scp: 'manage', tid: 'one'})),
+        tokens.check(signedClaims({exp: 99, scp: 'host', tid: 7})),
+        tokens.check(signedClaims({exp: 'later', scp: 'host', tid: 'one'})),
+        tokens.check(signedClaims({exp: 99, tid: 'one'})),
+        tokens.check(signedClaims([1])),
+        tokens.check(`${header}.%%.${resign(`${header}.%%`)}`),
+        tokens.check(signedClaims({exp: 99, scp: 'host', tid: 'one'})),
+      ],
+      [
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {tunnelId: 'one', scope: 'host'},
+      ],
+    );
+  });
+
+  it('refuses a key shorter than 32 bytes', () => {
+    deepStrictEqual(
+      messageOf(() => new Tokens(Buffer.alloc(31), () => 0)),
+      'The token key has 31 bytes, fewer than 32.',
+    );
+  });
+});
+
+/** The HS256 signature of `unsigned` with the test key, as the relay computes it. */
+function resign(unsigned: string): string {
+  return createHmac('sha256', SIGNING_KEY).update(unsigned).digest('base64url');
+}
+
+/** A token whose claims are `claims`, signed with the test key as the relay signs. */
+function signedClaims(claims: unknown): string {
+  const header = Buffer.from('{"alg":"HS256","typ":"JWT"}').toString(
+    'base64url',
+  );
+  const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
+  return `${header}.${payload}.${resign(`${header}.${payload}`)}`;
+}
+
+describe('who a GitHub token belongs to', () => {
+  it('asks the API with the token, and keeps the account five minutes by a hash of the token', async () => {
+    let clock = 0;
+    const {fetch, asked} = fetchAnswering(200, {id: 42, login: 'octo'});
+    const github = new GithubIdentity(
+      'https://github.test',
+      fetch,
+      () => clock,
+    );
+    const first = await github.accountOf('secret');
+    clock = 5 * 60 * 1000 - 1;
+    const kept = await github.accountOf('secret');
+    const other = await github.accountOf('another');
+    clock = 5 * 60 * 1000;
+    await github.accountOf('secret');
+    deepStrictEqual(
+      [
+        first,
+        kept,
+        other,
+        asked.length,
+        asked[0]?.address,
+        (asked[0]?.init.headers as Record<string, string>).Authorization,
+      ],
+      [
+        {kind: 'account', account: {id: 42, login: 'octo'}},
+        {kind: 'account', account: {id: 42, login: 'octo'}},
+        {kind: 'account', account: {id: 42, login: 'octo'}},
+        3,
+        'https://github.test/user',
+        'Bearer secret',
+      ],
+    );
+  });
+
+  it('says a token GitHub refuses is refused, and any other failure is a failure', async () => {
+    async function answerOf(fetch: Fetch): Promise<unknown> {
+      return new GithubIdentity(
+        'https://github.test',
+        fetch,
+        () => 0,
+      ).accountOf('secret');
+    }
+    deepStrictEqual(
+      [
+        await answerOf(fetchAnswering(401, {}).fetch),
+        await answerOf(fetchAnswering(500, {}).fetch),
+        await answerOf(fetchAnswering(200, 'not json').fetch),
+        await answerOf(fetchAnswering(200, {id: '42', login: 'octo'}).fetch),
+        await answerOf(fetchAnswering(200, null).fetch),
+        await answerOf(() => Promise.reject(new Error('offline'))),
+      ],
+      [
+        {kind: 'refused'},
+        {kind: 'failed', reason: 'GitHub answered 500'},
+        {kind: 'failed', reason: 'GitHub answered with no account'},
+        {kind: 'failed', reason: 'GitHub answered with no account'},
+        {kind: 'failed', reason: 'GitHub answered with no account'},
+        {kind: 'failed', reason: 'Error: offline'},
+      ],
+    );
+  });
+});
+
+describe('the allowlist', () => {
+  it('admits the numeric ids of its file, skips comments and other lines, and reads the file again when it changes', () => {
+    let modified = 1;
+    let text = '42\n# the operator\n  7  # a comment\nnot-an-id\n';
+    let reads = 0;
+    const allowlist = new Allowlist({
+      modified: () => modified,
+      text: () => {
+        reads += 1;
+        return text;
+      },
+    });
+    const before = [
+      allowlist.admits(42),
+      allowlist.admits(7),
+      allowlist.admits(8),
+    ];
+    const unchanged = allowlist.admits(42);
+    text = '8\n';
+    modified = 2;
+    deepStrictEqual(
+      [before, unchanged, allowlist.admits(42), allowlist.admits(8), reads],
+      [[true, true, false], true, false, true, 2],
+    );
+  });
+});
+
+describe('who a request is from', () => {
+  /** The caller or refusal for `authorization`, with GitHub answering `answer` and account 42 admitted. */
+  async function callerFor(
+    authorization: string | undefined,
+    githubStatus = 200,
+    tokens = new Tokens(SIGNING_KEY, () => 0),
+  ): Promise<unknown> {
+    const authenticate = authenticateWith({
+      github: new GithubIdentity(
+        'https://github.test',
+        fetchAnswering(githubStatus, {id: 42, login: 'octo'}).fetch,
+        () => 0,
+      ),
+      allowlist: new Allowlist({modified: () => 1, text: () => '42\n'}),
+      tokens,
+    });
+    return authenticate({authorization});
+  }
+
+  it('takes an admitted account from either GitHub form', async () => {
+    const account = {kind: 'account', id: 42, login: 'octo'};
+    deepStrictEqual(
+      [
+        await callerFor('github secret'),
+        await callerFor('github client_id=abc secret'),
+      ],
+      [account, account],
+    );
+  });
+
+  it('takes a tunnel token as its grant, and refuses one that does not check', async () => {
+    const tokens = new Tokens(SIGNING_KEY, () => 0);
+    deepStrictEqual(
+      [
+        await callerFor(
+          `tunnel ${tokens.issue('one', 'usw2', 'host')}`,
+          200,
+          tokens,
+        ),
+        await callerFor('tunnel forged', 200, tokens),
+        await callerFor('tunnel one two', 200, tokens),
+      ],
+      [
+        {kind: 'tunnel', tunnelId: 'one', scope: 'host'},
+        {
+          status: 401,
+          body: {
+            title: 'Unauthorized',
+            detail: 'The tunnel token is not valid.',
+          },
+        },
+        {
+          status: 401,
+          body: {
+            title: 'Unauthorized',
+            detail: 'Sign in with a GitHub account.',
+          },
+        },
+      ],
+    );
+  });
+
+  it('refuses no header, other schemes, a refused token, a failed lookup, and an account not on the allowlist', async () => {
+    const signIn = {
+      status: 401,
+      body: {title: 'Unauthorized', detail: 'Sign in with a GitHub account.'},
+    };
+    const notAdmitted = authenticateWith({
+      github: new GithubIdentity(
+        'https://github.test',
+        fetchAnswering(200, {id: 9, login: 'stranger'}).fetch,
+        () => 0,
+      ),
+      allowlist: new Allowlist({modified: () => 1, text: () => '42\n'}),
+      tokens: new Tokens(SIGNING_KEY, () => 0),
+    });
+    deepStrictEqual(
+      [
+        await callerFor(undefined),
+        await callerFor('github'),
+        await callerFor('aad token'),
+        await callerFor('bearer token'),
+        await callerFor('github secret', 401),
+        await callerFor('github secret', 503),
+        await notAdmitted({authorization: 'github secret'}),
+      ],
+      [
+        signIn,
+        signIn,
+        signIn,
+        signIn,
+        {
+          status: 401,
+          body: {title: 'Unauthorized', detail: 'GitHub refused the token.'},
+        },
+        {
+          status: 502,
+          body: {
+            title: 'Error',
+            detail: 'GitHub could not be asked: GitHub answered 503',
+          },
+        },
+        {
+          status: 403,
+          body: {
+            title: 'Forbidden',
+            detail:
+              "The tunnel service doesn't admit the GitHub account stranger.",
+          },
+        },
+      ],
+    );
+  });
+});
