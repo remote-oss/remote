@@ -33,6 +33,14 @@ export function isLibraryFolder(folder: string): boolean {
   return folder.startsWith('lib-');
 }
 
+/** The services: workspace packages that run on their own, outside the editor (layout.md). */
+const SERVICE_FOLDERS: readonly string[] = ['tunnel-relay'];
+
+/** Whether `folder` under packages/ is a service. */
+export function isServiceFolder(folder: string): boolean {
+  return SERVICE_FOLDERS.includes(folder);
+}
+
 /** The entries of a directory, sorted by name so that every report has the same order on every platform. */
 export function sortedEntries(directory: string): Dirent[] {
   return readdirSync(directory, {withFileTypes: true}).sort((left, right) =>
