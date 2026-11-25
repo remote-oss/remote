@@ -1,9 +1,10 @@
 /**
  * @fileoverview The windows of the harness display through `xdotool` and `xprop`, the key driver the display step
- * installs: the window of a name, its activation through the window manager, and the window the display's active
- * window is. A page read over the protocol cannot say what the window manager gave its active window to, so the
- * display says it. The activation asks for the window the manager manages: `xdotool search` returns the children of a
- * name as well, and a child window takes no activation.
+ * installs: the window of a name, its activation through the window manager, the window the display's active window
+ * is, and the display's visible windows at an instant, with their names and managedness. A page read over the
+ * protocol cannot say what the window manager gave its active window to, so the display says it. The activation asks
+ * for the window the manager manages: `xdotool search` returns the children of a name as well, and a child window
+ * takes no activation.
  */
 
 import {execFile} from 'node:child_process';
@@ -169,6 +170,65 @@ async function syncConfirmed(
   return outcome === 'confirmed';
 }
 
+/** Whether the display settles `words` within `limitMilliseconds`: a limit that passes, or a driver that fails, is no answer, so the wait around it goes on. */
+async function settledWithin(
+  driver: KeyDriver,
+  limitMilliseconds: number,
+  ...words: string[]
+): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  const settled = await new Promise<boolean>(resolve => {
+    timer = setTimeout(() => {
+      resolve(false);
+    }, limitMilliseconds);
+    void driver(...words).then(
+      () => {
+        resolve(true);
+      },
+      () => {
+        resolve(false);
+      },
+    );
+  });
+  if (timer !== undefined) {
+    clearTimeout(timer);
+  }
+  return settled;
+}
+
+/** Whether the display settles its closing of window `windowId` within `limitMilliseconds`: a limit that passes, or a display that fails, is no answer, so the row goes on and the readout names the window still there. */
+export async function closeWindowWithin(
+  driver: KeyDriver,
+  windowId: string,
+  limitMilliseconds: number = SYNC_ACTIVATION_MILLISECONDS,
+): Promise<boolean> {
+  return settledWithin(driver, limitMilliseconds, 'windowclose', windowId);
+}
+
+/**
+ * Gives the managed frame of window `name` the display's focus for a manager that may refuse it while another window
+ * holds the focus: the frame is raised first, the manager's `--sync` activation is asked for with its limit as now,
+ * and while the manager does not confirm it, the frame is asked for the focus plainly, so the wait around it goes on.
+ */
+export async function activateFrameWithin(
+  name: string,
+  driver: KeyDriver,
+  limitMilliseconds: number = SYNC_ACTIVATION_MILLISECONDS,
+  wmReader: WmReader = hasWmState,
+): Promise<ActivationOutcome> {
+  const candidates = await windowCandidatesOf(name, driver, wmReader);
+  const windowId = managedPick(candidates);
+  if (windowId === undefined) {
+    return {windowId: undefined, confirmed: false, candidates};
+  }
+  await settledWithin(driver, limitMilliseconds, 'windowraise', windowId);
+  const confirmed = await syncConfirmed(driver, windowId, limitMilliseconds);
+  if (!confirmed) {
+    await settledWithin(driver, limitMilliseconds, 'windowfocus', windowId);
+  }
+  return {windowId, confirmed, candidates};
+}
+
 /** The name of the window the display's active window is through `driver`, `none` when the display reports no active window. */
 export async function activeWindowNameOf(driver: KeyDriver): Promise<string> {
   try {
@@ -186,4 +246,81 @@ export async function activeWindowNameOf(driver: KeyDriver): Promise<string> {
 /** The name of the window the display's active window is, `none` when the display reports no active window. */
 export async function activeWindowName(): Promise<string> {
   return await activeWindowNameOf(drive);
+}
+
+/** A visible window on the display, with its name and whether the window manager manages it. */
+export interface TopLevelWindow {
+  /** The X window id. */
+  id: string;
+  /** The window's name, or none while the display gives it none. */
+  name: string;
+  /** Whether the window holds a WM_STATE, which only a managed top-level does. */
+  managed: boolean;
+}
+
+/** The display's visible windows at a named instant of a row, so a focus wait that never settles says what the display held then. */
+export interface WindowInstant {
+  /** What the instant is, as the readout says it. */
+  label: string;
+  /** The display's visible windows then. */
+  windows: TopLevelWindow[];
+}
+
+/** The display's visible windows through `driver` and `wmReader`, each with its name and whether the manager manages it; none while the display is not visible. */
+export async function topLevelWindowsOf(
+  driver: KeyDriver,
+  wmReader: WmReader,
+): Promise<TopLevelWindow[]> {
+  let found: string;
+  try {
+    found = await driver('search', '--onlyvisible', '--name', '.*');
+  } catch (caught) {
+    // `xdotool search` exits with 1 when no window matches; a driver that is missing or fails otherwise is no answer.
+    if ((caught as {code?: unknown}).code === 1) {
+      return [];
+    }
+    throw caught;
+  }
+  const windows: TopLevelWindow[] = [];
+  for (const windowId of found.split('\n')) {
+    if (windowId !== '') {
+      windows.push({
+        id: windowId,
+        name: await driver('getwindowname', windowId).catch(() => ''),
+        managed: await wmReader(windowId),
+      });
+    }
+  }
+  return windows;
+}
+
+/** The display's visible windows on the harness display, each with its name and whether the manager manages it. */
+export function topLevelWindows(): Promise<TopLevelWindow[]> {
+  return topLevelWindowsOf(drive, hasWmState);
+}
+
+/** The windows of a list, as the readout says them: each with its name and whether the window manager manages it. */
+export function windowsOf(windows: readonly TopLevelWindow[]): string {
+  return windows
+    .map(
+      each =>
+        `${each.id} (${each.name === '' ? 'no name' : each.name}, ${
+          each.managed ? 'managed' : 'no WM_STATE'
+        })`,
+    )
+    .join(', ');
+}
+
+/** The name a folderless VSCodium window holds: the bare title, with no folder in it. */
+const FOLDERLESS_WINDOW_NAME = 'VSCodium - Insiders';
+
+/** The folderless VSCodium windows of `after` that no window of `before` held: a window the row's command opened, which the row closes before its grab, or none while the command left no new window behind. */
+export function newFolderlessWindows(
+  before: readonly TopLevelWindow[],
+  after: readonly TopLevelWindow[],
+): TopLevelWindow[] {
+  const beforeIds = new Set(before.map(each => each.id));
+  return after.filter(
+    each => each.name === FOLDERLESS_WINDOW_NAME && !beforeIds.has(each.id),
+  );
 }

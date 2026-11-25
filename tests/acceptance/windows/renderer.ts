@@ -21,8 +21,10 @@ import {
   activateWindowWithin,
   activeWindowName,
   drive,
+  windowsOf,
   type ActivationOutcome,
   type WindowCandidate,
+  type WindowInstant,
 } from './display.ts';
 import {
   dispatchAt,
@@ -508,8 +510,9 @@ async function evaluate<Value>(
 }
 
 /**
- * The reads of a focus wait, so a test can stand a display driver and a page in for the harness's: the grab, the page's
- * own report of the focus, and the window the display's active window is.
+ * The reads of a focus wait, so a test can stand a display driver and a page in for the harness's: the grab, the
+ * page's own report of the focus, the window the display's active window is, and the display's windows at the row's
+ * instants.
  */
 export interface FocusReads {
   /** Asks the window manager to give window `name` the display's focus, bounded, so a manager that never confirms goes on as no answer. */
@@ -518,10 +521,12 @@ export interface FocusReads {
   pageHasFocus(name: string): Promise<boolean>;
   /** The window the display's active window is. */
   activeWindowName(): Promise<string>;
+  /** The display's visible windows at named instants of the row, for the timeout readout; none while the row holds no instants. */
+  windowInstants?(): Promise<WindowInstant[]>;
 }
 
 /** The reads of a focus wait over the harness's own display and pages. */
-function harnessFocusReads(): FocusReads {
+export function harnessFocusReads(): FocusReads {
   return {
     activate: name => activateWindowWithin(name, drive),
     pageHasFocus: name => evaluate<boolean>(name, 'document.hasFocus()'),
@@ -529,15 +534,16 @@ function harnessFocusReads(): FocusReads {
   };
 }
 
-/** What a focus wait last read of the display, for its timeout: the window it held, the display's windows for the name and their managedness, whether the manager confirmed it, and the active window. */
+/** What a focus wait last read of the display, for its timeout: the window it held, the display's windows for the name and their managedness, whether the manager confirmed it, the active window, and the display's windows at the row's instants. */
 interface FocusReadout {
   windowId: string | undefined;
   candidates: WindowCandidate[];
   confirmed: boolean;
   activeWindowName: string;
+  instants: WindowInstant[];
 }
 
-/** The focus wait's timeout, naming the window the display last held for the name, the display's windows for the name with their managedness, whether the manager confirmed it, and the window the display's active window is. */
+/** The focus wait's timeout, naming the window the display last held for the name, the display's windows for the name with their managedness, whether the manager confirmed it, the window the display's active window is, and the display's windows at the row's instants. */
 function focusTimeout(name: string, readout: FocusReadout): string {
   const held =
     readout.windowId === undefined
@@ -551,10 +557,16 @@ function focusTimeout(name: string, readout: FocusReadout): string {
             each => `${each.id} (${each.managed ? 'managed' : 'no WM_STATE'})`,
           )
           .join(', ')}`;
+  const instants =
+    readout.instants.length === 0
+      ? ''
+      : `, the display's windows ${readout.instants
+          .map(instant => `${instant.label} ${windowsOf(instant.windows)}`)
+          .join(', and ')}`;
   return (
     `window ${name} to hold the focus: the display last held ${held} for it${windows}, ` +
     `its activation was ${readout.confirmed ? 'confirmed' : 'not confirmed'} by the window manager, ` +
-    `and the display's active window is ${readout.activeWindowName}`
+    `and the display's active window is ${readout.activeWindowName}${instants}`
   );
 }
 
@@ -569,11 +581,16 @@ export async function focusWindow(
   reads: FocusReads = harnessFocusReads(),
   waitMilliseconds: number = WAIT_MILLISECONDS,
 ): Promise<void> {
+  // The row's instants are its own fixed snapshots of the display, so the read asks them once; a read that fails is no answer.
+  const instants = await (
+    reads.windowInstants?.() ?? Promise.resolve([] as WindowInstant[])
+  ).catch(() => [] as WindowInstant[]);
   const readout: FocusReadout = {
     windowId: undefined,
     candidates: [],
     confirmed: false,
     activeWindowName: 'unreadable',
+    instants,
   };
   await settled(
     () => focusTimeout(name, readout),

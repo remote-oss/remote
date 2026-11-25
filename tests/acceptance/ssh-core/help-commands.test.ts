@@ -22,15 +22,23 @@ import {indicatorGroups} from '../windows/activation-support.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
+  activateFrameWithin,
   activateWindowWithin,
   activeWindowNameOf,
+  closeWindowWithin,
+  drive,
   managedPick,
+  newFolderlessWindows,
+  topLevelWindows,
+  topLevelWindowsOf,
+  windowsOf,
 } from '../windows/display.ts';
 import {paletteItems, runFromPalette} from '../windows/palette.ts';
 import {
   chooseQuickPickRow,
   dialogOf,
   focusWindow,
+  harnessFocusReads,
   type FocusReads,
   notifications,
   outputChannelOf,
@@ -506,9 +514,31 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
         'remote-oss.remote-explorer',
       );
       await focusWindow(folder);
+      // The display's windows at the row's two instants, so the row's readout says what the display held around Help:
+      const before = await topLevelWindows();
       await runFromPalette(folder, 'Remote-SSH: Help');
-      // Help opens the extension's documentation outside the editor, which takes the display's focus from the window: the grab goes again before the next command.
-      await focusWindow(folder);
+      const after = await topLevelWindows();
+      // Help opens the extension's documentation outside the editor, which may open a new folderless window that takes the display's focus: close it before the grab, so the manager has nothing to hold the focus on.
+      const fresh = newFolderlessWindows(before, after);
+      for (const each of fresh) {
+        await closeWindowWithin(drive, each.id);
+      }
+      process.stderr.write(
+        `the display's windows before Help ${windowsOf(before)}, and after Help ${windowsOf(after)}\n`,
+      );
+      await focusWindow(folder, {
+        ...harnessFocusReads(),
+        // While Help left no new window behind, the manager may still refuse the frame while another window holds the focus: the grab raises the frame and asks it again by focus.
+        activate: name =>
+          fresh.length === 0
+            ? activateFrameWithin(name, drive)
+            : activateWindowWithin(name, drive),
+        windowInstants: () =>
+          Promise.resolve([
+            {label: 'before Help', windows: before},
+            {label: 'after Help', windows: after},
+          ]),
+      });
       await runFromPalette(folder, 'Remote-SSH: Get Started with SSH');
       // The command the palette hides: invoked as the window's own command, whose open never settles in the run's editor.
       await startInWindow(folder, HELP_COMMANDS.feedback);
@@ -668,6 +698,123 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
           activeWindowName: () => Promise.resolve('the taker window'),
         }),
       {message: /the display's active window "the taker window"/},
+    );
+  });
+
+  it('card #3010 (c3010-toplevel-list): the display list is every visible window, with its name and whether the manager manages it', async () => {
+    function driver(...words: string[]): Promise<string> {
+      if (words[0] === 'search') {
+        return Promise.resolve('514\n4194465');
+      }
+      if (words[0] === 'getwindowname' && words[1] === '514') {
+        return Promise.resolve('VSCodium - Insiders');
+      }
+      return Promise.resolve('c2486-companion-less');
+    }
+    deepStrictEqual(
+      await topLevelWindowsOf(driver, windowId =>
+        Promise.resolve(windowId === '4194465'),
+      ),
+      [
+        {id: '514', name: 'VSCodium - Insiders', managed: false},
+        {id: '4194465', name: 'c2486-companion-less', managed: true},
+      ],
+    );
+  });
+
+  it('card #3010 (c3010-fresh-folderless): a folderless window is fresh while it appears after Help and no window before held its id', () => {
+    deepStrictEqual(
+      newFolderlessWindows(
+        [
+          {id: '514', name: 'VSCodium - Insiders', managed: true},
+          {id: '4194465', name: 'c2486-companion-less', managed: true},
+        ],
+        [
+          {id: '514', name: 'VSCodium - Insiders', managed: true},
+          {id: '524', name: 'VSCodium - Insiders', managed: true},
+          {id: '4194465', name: 'c2486-companion-less', managed: true},
+        ],
+      ),
+      [{id: '524', name: 'VSCodium - Insiders', managed: true}],
+    );
+  });
+
+  it('card #3010 (c3010-frame-raise): an activation the manager does not confirm raises the frame and asks it again by focus', async () => {
+    const calls: string[] = [];
+    async function driver(...words: string[]): Promise<string> {
+      calls.push(words.join(' '));
+      if (words[0] === 'search') {
+        return '111';
+      }
+      if (words[0] === 'windowactivate') {
+        await new Promise<string>(() => undefined);
+      }
+      return '';
+    }
+    const outcome = await activateFrameWithin('a window', driver, 100, () =>
+      Promise.resolve(true),
+    );
+    deepStrictEqual(
+      [outcome.windowId, outcome.confirmed, calls],
+      [
+        '111',
+        false,
+        [
+          'search --onlyvisible --name a window',
+          'windowraise 111',
+          'windowactivate --sync 111',
+          'windowfocus 111',
+        ],
+      ],
+    );
+  });
+
+  it("card #3010 (c3010-toplevel-readout): a focus wait that never settles lists the display's windows at the row's instants", async () => {
+    async function driver(...words: string[]): Promise<string> {
+      if (words[0] === 'windowactivate') {
+        await new Promise<string>(() => undefined);
+      }
+      return '';
+    }
+    const reads: FocusReads = {
+      activate: name =>
+        activateWindowWithin(name, driver, 100, () => Promise.resolve(false)),
+      pageHasFocus: () => Promise.resolve(false),
+      activeWindowName: () => Promise.resolve('none'),
+      windowInstants: () =>
+        Promise.resolve([
+          {
+            label: 'before Help',
+            windows: [{id: '514', name: 'VSCodium - Insiders', managed: true}],
+          },
+          {
+            label: 'after Help',
+            windows: [
+              {id: '514', name: 'VSCodium - Insiders', managed: true},
+              {id: '524', name: 'VSCodium - Insiders', managed: false},
+            ],
+          },
+        ]),
+    };
+    let caught: unknown;
+    try {
+      await focusWindow('a window', reads, 1_000);
+    } catch (error) {
+      caught = error;
+    }
+    deepStrictEqual(
+      [
+        caught instanceof Error,
+        caught instanceof Error &&
+          caught.message.includes(
+            'before Help 514 (VSCodium - Insiders, managed)',
+          ),
+        caught instanceof Error &&
+          caught.message.includes(
+            'after Help 514 (VSCodium - Insiders, managed), 524 (VSCodium - Insiders, no WM_STATE)',
+          ),
+      ],
+      [true, true, true],
     );
   });
 });
