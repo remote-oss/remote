@@ -267,7 +267,7 @@ describe('main-push-skip: whether a push to main leaves out the VSCodium parts (
     }) as typeof fetch;
     const lookups = repositoryLookups('.', 'owner/repo', 'secret', fetchUrl, {
       tries: 1,
-      pause: () => Promise.resolve(),
+      pauseMilliseconds: 0,
     });
     deepStrictEqual(
       [

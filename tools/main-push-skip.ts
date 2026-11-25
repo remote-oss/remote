@@ -162,11 +162,7 @@ function gitIn(root: string, ...words: string[]): string {
  * an 80-part gate's attempt, and a server error gets two more tries, 5 s and 10 s later.
  */
 const JOBS_PAGE = 20;
-const LOOKUP_TRIES: ReadTries = {
-  tries: 3,
-  pause: next =>
-    new Promise(resolve => setTimeout(resolve, (next - 1) * 5_000)),
-};
+const LOOKUP_TRIES: ReadTries = {tries: 3, pauseMilliseconds: 5_000};
 
 /** The lookups of this repository: git in `root` for the head, GitHub's API with `token` for the rest. */
 export function repositoryLookups(

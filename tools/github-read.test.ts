@@ -6,20 +6,25 @@
 import {deepStrictEqual} from 'node:assert';
 import {gitHubReader} from './github-read.ts';
 
-/** A fetch that answers `statuses` in turn, the last one for good, and counts its requests. */
+/** A fetch that answers `statuses` in turn, the last one for good, and keeps the time of each request. */
 function answering(...statuses: number[]): {
   fetchUrl: typeof fetch;
   requests: () => number;
+  gaps: () => number[];
 } {
-  let count = 0;
+  const times: number[] = [];
   const fetchUrl = (() => {
-    const status = statuses[Math.min(count, statuses.length - 1)] ?? 200;
-    count += 1;
+    const status = statuses[Math.min(times.length, statuses.length - 1)] ?? 200;
+    times.push(performance.now());
     return Promise.resolve(
       new Response(status === 200 ? '{"found":true}' : '{}', {status}),
     );
   }) as typeof fetch;
-  return {fetchUrl, requests: () => count};
+  return {
+    fetchUrl,
+    requests: () => times.length,
+    gaps: () => times.slice(1).map((time, index) => time - (times[index] ?? 0)),
+  };
 }
 
 /** Reads `route` and gives its answer or its error's message. */
@@ -33,15 +38,8 @@ async function outcomeOf(
 }
 
 describe('github-read: one repository’s routes in GitHub’s API (#3149)', () => {
-  it('#3149: a server error is asked again after a pause, up to the tries given, and the last one names how many', async () => {
-    const pauses: number[] = [];
-    const retry = {
-      tries: 3,
-      pause: (next: number) => {
-        pauses.push(next);
-        return Promise.resolve();
-      },
-    };
+  it('#3149: a server error is asked again, each try waiting the pause longer than the one before, up to the tries given, and the last one names how many', async () => {
+    const retry = {tries: 3, pauseMilliseconds: 20};
     const recovers = answering(502, 503, 200);
     const fails = answering(502);
     deepStrictEqual(
@@ -56,14 +54,17 @@ describe('github-read: one repository’s routes in GitHub’s API (#3149)', () 
           'runs/2',
         ),
         fails.requests(),
-        pauses,
+        // The second try waits the pause and the third twice it; a timer is never early by more than a millisecond.
+        [...recovers.gaps(), ...fails.gaps()].map(
+          (waited, index) => waited >= (index % 2 === 0 ? 19 : 39),
+        ),
       ],
       [
         {found: true},
         3,
         'tool: GitHub answered 502 for runs/2 (3 tries)',
         3,
-        [2, 3, 2, 3],
+        [true, true, true, true],
       ],
     );
   });
@@ -76,7 +77,7 @@ describe('github-read: one repository’s routes in GitHub’s API (#3149)', () 
         await outcomeOf(
           gitHubReader('tool', 'owner/repo', undefined, missing.fetchUrl, {
             tries: 3,
-            pause: () => Promise.resolve(),
+            pauseMilliseconds: 0,
           }),
           'issues/7',
         ),
