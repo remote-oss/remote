@@ -1,7 +1,8 @@
 /**
  * @fileoverview The window's local bridge on the CLI path: a listener on this machine's loopback whose every connection
- * is one server socket of the CLI. The first connection runs `serve`, which installs and starts the server; each later
- * one runs `openSocket`. Bytes go both ways as `servermsg` frames over the one control connection.
+ * is one server socket of the CLI. The first `serve`, which installs and starts the server, runs once: when the connect
+ * asks for it before the window resolves, or else at the first connection. The first connection takes its socket, and
+ * each later one runs `openSocket`. Bytes go both ways as `servermsg` frames over the one control connection.
  */
 
 import type {Duplex, LocalPort} from 'lib-forwarding';
@@ -29,6 +30,11 @@ export interface CliBridge {
    * `controlClosed` when the control connection ended or a `serve` outlasted its bound. Never after `close`.
    */
   onLost(listener: (cause: CliBridgeLoss) => void): void;
+  /**
+   * Runs the first `serve` if it hasn't run, and gives how it ended: `serving`, or the loss it is. The socket it opens
+   * stays for the first connection.
+   */
+  firstServe(): Promise<{kind: 'serving'} | CliBridgeLoss>;
   close(): void;
 }
 
@@ -67,6 +73,7 @@ export async function openCliBridge(
   const lossListeners: Array<(cause: CliBridgeLoss) => void> = [];
   const connections = new Set<Duplex>();
   let firstServe: Promise<Served> | undefined;
+  let firstSocketTaken = false;
   let ended = false;
   let loss: CliBridgeLoss | undefined;
 
@@ -88,7 +95,8 @@ export async function openCliBridge(
     events.onServeLog(line);
   }
 
-  async function serveOnce(): Promise<Served> {
+  /** The first `serve`, bounded, started at the first call. */
+  function startFirstServe(): Promise<Served> {
     if (firstServe === undefined) {
       firstServe = bounded(
         control.serve(serveParams, line => {
@@ -100,9 +108,17 @@ export async function openCliBridge(
       void firstServe.then(() => {
         events.onFirstServeEnded();
       });
-      return firstServe;
     }
-    const before = await firstServe;
+    return firstServe;
+  }
+
+  async function serveOnce(): Promise<Served> {
+    const first = startFirstServe();
+    if (!firstSocketTaken) {
+      firstSocketTaken = true;
+      return first;
+    }
+    const before = await first;
     if (before.kind !== 'serving') {
       return before;
     }
@@ -212,6 +228,12 @@ export async function openCliBridge(
     address: {host: '127.0.0.1', port: dependencies.port},
     onLost: listener => {
       lossListeners.push(listener);
+    },
+    firstServe: async () => {
+      const outcome = await startFirstServe();
+      return outcome.kind === 'serving'
+        ? {kind: 'serving'}
+        : failureLoss(outcome);
     },
     close: () => {
       if (ended) {
