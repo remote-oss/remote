@@ -83,6 +83,8 @@ export interface ConnectOptions {
   maximumReconnectionAttempts: unknown;
   /** How long the pre-connection script may take, with its question to the user. */
   preconnectMilliseconds: number;
+  /** How long a later window waits for the command-line program its connection shares to take its token. */
+  cliTakeUpMilliseconds: number;
   logger: Logger;
   /** The editor's commit and quality, which the CLI path's `serve` names. */
   serve: {commit: string; quality: string};
@@ -769,6 +771,7 @@ async function runSteps(
       steps,
       logger: options.logger,
       useExecServer: options.useExecServer,
+      takeUpMilliseconds: options.cliTakeUpMilliseconds,
       cancellation,
     });
     if (holding.kind === 'held') {
@@ -796,6 +799,7 @@ async function runSteps(
       useExecServer: options.useExecServer,
       failedOf: detail => failedWith(detail, contextOf(input, options, detail)),
       onServerPhase: options.onPhase,
+      takeUpMilliseconds: options.cliTakeUpMilliseconds,
       cancellation,
     });
     if (overCli.kind === 'connected') {

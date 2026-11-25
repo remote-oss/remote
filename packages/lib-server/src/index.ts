@@ -144,6 +144,7 @@ export {
   installCli,
   startCli,
   stopCli,
+  stopCliScript,
 } from './lifecycle/cli.ts';
 export {proxyVariableText} from './proxy-variable-text.ts';
 export {

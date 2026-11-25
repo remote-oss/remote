@@ -299,7 +299,7 @@ describe('the held control connection', () => {
     );
   });
 
-  it('brief-remote-ssh-engines §2: giving it back stops the program and gives the lease back once', async () => {
+  it('brief-remote-ssh-engines §2, ruling-3028-shared-cli: giving it back stops no program the connection shares, and gives the lease back once', async () => {
     const {recording, held} = await holding();
     held.release();
     await new Promise(resolve => {
@@ -310,7 +310,7 @@ describe('the held control connection', () => {
         recording.calls.filter(call => call.startsWith('stopCli')),
         recording.releases,
       ],
-      [['stopCli 88'], 1],
+      [[], 1],
     );
   });
 });
@@ -334,6 +334,7 @@ function connectorOverCli(
     options: {
       maximumReconnectionAttempts: settings.maximumReconnectionAttempts,
       preconnectMilliseconds: settings.preconnectMilliseconds,
+      cliTakeUpMilliseconds: 50,
       logger: settings.logger,
       serve: settings.serve,
       useExecServer: settings.useExecServer,

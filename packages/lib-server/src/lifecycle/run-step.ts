@@ -43,7 +43,7 @@ export interface StepOptions {
 const SECRET_NAME = /TOKEN|SECRET|PASS|KEY|CRED|AUTH|COOKIE|PRIVATE/i;
 
 /** The interpreter a host needs, from what its channel knows of it. */
-function interpreterOf(channel: HostChannel): Interpreter {
+export function interpreterOf(channel: HostChannel): Interpreter {
   return channel.platformHint() === 'windows' ? 'powershell' : 'posixShell';
 }
 

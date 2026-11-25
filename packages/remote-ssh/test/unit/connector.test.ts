@@ -32,6 +32,7 @@ function connectorOptions(
   return {
     maximumReconnectionAttempts: options.maximumReconnectionAttempts,
     preconnectMilliseconds: options.preconnectMilliseconds,
+    cliTakeUpMilliseconds: 50,
     logger: options.logger,
     serve: options.serve,
     useExecServer: options.useExecServer,
