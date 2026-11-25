@@ -42,7 +42,7 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
 | `GET/PUT/DELETE /tunnels/{id}/ports[/{n}]` | Ports. A PUT of an existing port with the same protocol succeeds, a changed protocol is 400 with the detail `The tunnel port protocol cannot be changed.` (`[cli] dev_tunnels.rs:38,1040-1049`), and 409 is read as "exists" (`relay_tunnel_host.rs:287`) |
 | `GET /userlimits` | Our limits as `NamedRateStatus` (`contracts/rate_status.rs:12-26`) |
 | `GET /clusters` | Our one cluster, as `[ClusterDetails]` `{clusterId, uri: "https://cp.<domain>", azureLocation: ""}` (the TypeScript SDK's `listClusters`, `ts/src/management/tunnelManagementHttpClient.ts:687-698`; `ts/src/contracts/clusterDetails.ts:11-26`) |
-| `GET /clusters/recommendations` | **404**, with a ProblemDetails body. The npm TypeScript SDK 1.3.82 (the lockfile's version, ADR-0015) asks it before creating a tunnel. In T.6 (run 45110368187) our relay answered 404 and the host carried on with the one cluster. The route isn't in `[dev-tunnels]` at the pin, so the relay offers no recommendation |
+| `GET /clusters/recommendations` | **404**, with a ProblemDetails body. The npm TypeScript SDK 1.3.82, which T.6 ran, asks it before creating a tunnel. In T.6 (run 45110368187) our relay answered 404 and the host carried on with the one cluster. The family's own pin is 1.3.50 (ADR-0016), and the relay answers the same to any version. The route isn't in `[dev-tunnels]` at the pin, so the relay offers no recommendation |
 
 - **Shapes:** the `[dev-tunnels] contracts` types, camelCase, with null fields left out. Every `Tunnel` the relay returns
   carries `clusterId` and `tunnelId`, which `[cli]` unwraps (`dev_tunnels.rs:449,580,638,692-693`).
