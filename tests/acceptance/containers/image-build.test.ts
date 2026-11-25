@@ -112,8 +112,23 @@ function argumentsOf(
 }
 
 /**
+ * The starts of the connect's own progress notices: its connecting toast and the reading of the configuration, which the
+ * editor shows only once that phase has lasted a while, and the notice of a folder that holds a configuration.
+ */
+const PROGRESS_STARTS = [
+  'Connecting to Dev Container',
+  'Reading Dev Container Configuration',
+  'Folder contains',
+];
+
+/** Whether `text` is one of the connect's own progress notices, which no row about a cache is about. */
+function isProgress(text: string): boolean {
+  return PROGRESS_STARTS.some(start => text.startsWith(start));
+}
+
+/**
  * Samples the notifications and the dialog of window `name` while `connect` goes on, and gives what they showed besides the
- * connecting toast of the connect itself.
+ * connect's own progress notices.
  */
 async function shownDuring(
   name: string,
@@ -125,10 +140,7 @@ async function shownDuring(
     while (!gate.done) {
       try {
         for (const text of await notifications(name)) {
-          if (
-            !text.startsWith('Connecting to Dev Container') &&
-            !text.startsWith('Folder contains')
-          ) {
+          if (!isProgress(text)) {
             shown.add(text);
           }
         }
@@ -479,8 +491,13 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
           lines.some(line =>
             line.endsWith('importing cache manifest from c52-never-pushed:1'),
           ),
+          [
+            'Reading Dev Container Configuration (show log)',
+            'importing cache manifest from c52-never-pushed:1 failed',
+            'Error: could not import the cache',
+          ].map(isProgress),
         ],
-        ['built', undefined, [], [], true],
+        ['built', undefined, [], [], true, [true, false, false]],
       );
       await closeWindow(name);
     } finally {
