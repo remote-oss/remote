@@ -106,8 +106,8 @@ A file holds `{"events": [...]}`, one event for each change to an entry, and an 
 A window holds one event for each entry, the newest it knows. To read the history, take every window's file and, for each
 host and path, the newest event over all of them: it decides, and an entry whose newest event is `removed` is not listed.
 Two events at the same time are decided by the later session, comparing the session names as text. The entries of a host
-are listed by time, the most recent first, and the later session first at the same time. The order of the hosts is that of the
-earlier version's value, then by each host's oldest entry.
+are listed by time, the most recent first, and the later session first at the same time. The hosts are ordered as the earlier
+version's value ordered them, then, for the others, the host whose oldest entry is oldest first.
 
 Two kinds of name in the folder are not a window's file:
 
