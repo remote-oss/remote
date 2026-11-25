@@ -25,58 +25,76 @@ function execLayout(facts: ExecFacts) {
   };
 }
 
+/** Compares `actual` with `expected` and, when they differ, adds what the connect's log said of the install to the failure. */
+function same(actual: unknown, expected: unknown, told: string): void {
+  try {
+    deepStrictEqual(actual, expected);
+  } catch (failure) {
+    throw new Error(`${String(failure)}\n${told}`, {cause: failure});
+  }
+}
+
 describe('the exec-server mode on the CLI-source editor (card #3028, F-2103)', function () {
   this.timeout(600_000);
 
   it.skip('F-2103 AC-2 (c3028-unset): waits for #3082 (an exec-mode connect makes an empty bin/<commit>): with the setting unset on a fresh host the editor’s CLI file, its server below cli/servers and one CLI process stand, and there is no bin/<commit>', async () => {
     await keepingSettings(async () => {
-      const {facts, messages} = await execConnect(
+      const {facts, messages, told} = await execConnect(
         'c3028-unset',
         'c3028-unset',
         {},
       );
-      deepStrictEqual(
+      same(
         [facts, messages],
         [{...EXEC_FACTS, binFolder: false}, NO_MESSAGES],
+        told,
       );
     });
   });
 
   it('F-2103 AC-5 (c3028-true): with the setting set to true on a fresh host the result is the same as with it unset: the CLI file, its server and one CLI process', async () => {
     await keepingSettings(async () => {
-      const {facts, messages} = await execConnect('c3028-true', 'c3028-true', {
-        'remote.SSH.useExecServer': true,
-      });
-      deepStrictEqual([execLayout(facts), messages], [EXEC_FACTS, NO_MESSAGES]);
+      const {facts, messages, told} = await execConnect(
+        'c3028-true',
+        'c3028-true',
+        {'remote.SSH.useExecServer': true},
+      );
+      same([execLayout(facts), messages], [EXEC_FACTS, NO_MESSAGES], told);
     });
   });
 
   it('F-2103 AC-18, AC-30 (c3028-strings): the strings "no" and "false" give exec mode and the extension shows no message', async () => {
     const outcomes: unknown[] = [];
+    const lines: string[] = [];
     for (const value of ['no', 'false']) {
       await keepingSettings(async () => {
-        const {facts, messages} = await execConnect(
+        const {facts, messages, told} = await execConnect(
           `c3028-string-${value}`,
           `c3028-string-${value}`,
           {'remote.SSH.useExecServer': value},
         );
         outcomes.push([value, execLayout(facts), messages]);
+        lines.push(`${value}: ${told}`);
       });
     }
-    deepStrictEqual(outcomes, [
-      ['no', EXEC_FACTS, NO_MESSAGES],
-      ['false', EXEC_FACTS, NO_MESSAGES],
-    ]);
+    same(
+      outcomes,
+      [
+        ['no', EXEC_FACTS, NO_MESSAGES],
+        ['false', EXEC_FACTS, NO_MESSAGES],
+      ],
+      lines.join('\n'),
+    );
   });
 
   it('F-2103 AC-34 (c3028-lower-case): only the lower-case key "remote.ssh.useExecServer": false in the user settings gives exec mode, as with the setting unset', async () => {
     await keepingSettings(async () => {
-      const {facts, messages} = await execConnect(
+      const {facts, messages, told} = await execConnect(
         'c3028-lower-case',
         'c3028-lower-case',
         {'remote.ssh.useExecServer': false},
       );
-      deepStrictEqual([execLayout(facts), messages], [EXEC_FACTS, NO_MESSAGES]);
+      same([execLayout(facts), messages], [EXEC_FACTS, NO_MESSAGES], told);
     });
   });
 
@@ -92,13 +110,14 @@ describe('the exec-server mode on the CLI-source editor (card #3028, F-2103)', f
         'remote.SSH.useExecServer': false,
       }),
     );
-    deepStrictEqual(
+    same(
       [
         execLayout(exec.facts),
         execLayout(legacy.facts),
         legacy.facts.binFolder,
       ],
       [EXEC_FACTS, {launcher: false, server: false, cliProcesses: 0}, true],
+      `${exec.told}\n${legacy.told}`,
     );
   });
 });

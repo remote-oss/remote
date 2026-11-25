@@ -9,6 +9,7 @@ import {applicationNameOf} from '../../../tools/acceptance-cli-editor.ts';
 import {
   closeWindow,
   connectedWithin,
+  connectionLog,
   editorProduct,
   onHostAs,
   openWindow,
@@ -33,7 +34,7 @@ export interface ExecFacts {
   server: boolean;
   /** Whether the legacy install folder `bin/<commit>` is there. */
   binFolder: boolean;
-  /** How many processes run the CLI file of the commit. */
+  /** How many CLI processes serve the host: the CLI file of the commit run with `command-shell`, not its agent host child. */
   cliProcesses: number;
 }
 
@@ -67,7 +68,7 @@ export async function execFacts(): Promise<ExecFacts> {
     'harness',
     'sh',
     '-c',
-    `ps -eo args | grep -F '${dataFolder()}/${launcherName()}' | grep -v grep; true`,
+    `ps -eo args | grep -F '${dataFolder()}/${launcherName()} command-shell' | grep -v grep; true`,
   );
   return {
     launcher: (await namesIn(dataFolder())).includes(launcherName()),
@@ -87,7 +88,7 @@ export const EXEC_FACTS = {
 } as const;
 
 /**
- * Makes the host fresh for an exec-mode row: no server, no install, and no CLI file or log of an earlier connect, so
+ * Makes the host fresh for an exec-mode row: no server, no install, no CLI process, and no CLI file or log of an earlier connect, so
  * that the CLI file the row finds was placed by its own connect.
  */
 export async function freshExecHost(): Promise<void> {
@@ -96,7 +97,8 @@ export async function freshExecHost(): Promise<void> {
     'harness',
     'sh',
     '-c',
-    `rm -rf '${dataFolder()}/${launcherName()}' '${dataFolder()}'/.cli.*.log`,
+    // The bracket keeps pkill's pattern from matching this shell's own command line.
+    `pkill -f '${dataFolder().replace('/.', '/[.]')}/${launcherName()}' || true; rm -rf '${dataFolder()}/${launcherName()}' '${dataFolder()}'/.cli.*.log`,
   );
 }
 
@@ -115,9 +117,10 @@ export async function execConnect(
   rowName: string,
   name: string,
   settings: Readonly<Record<string, unknown>>,
-): Promise<{facts: ExecFacts; messages: Messages}> {
+): Promise<{facts: ExecFacts; messages: Messages; told: string}> {
   await stamped(rowName, 'the host is made fresh', 120_000, freshExecHost);
   await userSettings({...PLATFORMS, ...settings});
+  const mark = connectionLog().length;
   await stamped(rowName, 'the window opens', 60_000, () =>
     openWindow('harness', name),
   );
@@ -127,6 +130,13 @@ export async function execConnect(
     );
     await new Promise(resolve => setTimeout(resolve, 3000));
     return {
+      told: `the connect's lines about the install: ${JSON.stringify(
+        connectionLog()
+          .slice(mark)
+          .filter(line =>
+            /exec|legacy|CLI|install|Server result|server-progress/i.test(line),
+          ),
+      )}`,
       facts: await execFacts(),
       messages: {
         dialog: await dialogOf(name),
