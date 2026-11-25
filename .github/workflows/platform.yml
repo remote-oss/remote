@@ -117,7 +117,9 @@ jobs:
           "the engine answered: {0} after {1:n0} s" -f $up, $clock.Elapsed.TotalSeconds
           & $env:DOCKER_EXE context ls
           wsl -l -v
-          if ($env:BACKEND -eq 'hyper-v') { Get-VM -ErrorAction Continue | Format-Table -AutoSize Name, State, MemoryAssigned }
+          if ($env:BACKEND -eq 'hyper-v') {
+            if (Get-Command Get-VM -ErrorAction SilentlyContinue) { Get-VM | Format-Table -AutoSize Name, State, MemoryAssigned } else { 'no Get-VM cmdlet' }
+          }
           if (-not $up) {
             Get-ChildItem "$env:LOCALAPPDATA\Docker\log" -Recurse -Filter *.log -ErrorAction SilentlyContinue |
               Sort-Object LastWriteTime -Descending | Select-Object -First 3 |
