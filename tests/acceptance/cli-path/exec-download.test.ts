@@ -66,7 +66,7 @@ async function noServerOnHost(): Promise<void> {
 describe("the connection's notification over the CLI on a host without the server (card #3175)", function () {
   this.timeout(600_000);
 
-  it('F-2103 AC-22 (c3028-exec-download): a first connect to a host without the server shows Initializing, then Downloading, then each later stage that occurs, in order, before the window resolves; a second connect starts at Initializing and shows no Downloading', async () => {
+  it('F-2103 AC-22 (c3028-exec-download): a first connect to a host without the server shows Initializing, then Downloading, then each later stage that occurs, in order, before the window resolves; a second connect shows the tunnel after its first serve and no Downloading', async () => {
     await noServerOnHost();
     const first = 'c3028-exec-download';
     await openWindow('harness', first);
@@ -90,13 +90,13 @@ describe("the connection's notification over the CLI on a host without the serve
       {
         first: firstStages.slice(0, 2),
         firstInOrder: inOrder(firstStages),
-        secondFirst: secondStages[0],
+        secondTunnel: secondStages.includes('Setting up SSH tunnel'),
         secondDownloads: secondStages.includes('Downloading VS Code Server'),
       },
       {
         first: ['Initializing VS Code Server', 'Downloading VS Code Server'],
         firstInOrder: true,
-        secondFirst: 'Initializing VS Code Server',
+        secondTunnel: true,
         secondDownloads: false,
       },
       JSON.stringify({firstStages, secondStages}),
