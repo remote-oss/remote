@@ -13,6 +13,17 @@ const RECORD: SharedRecord = {
   connectionToken: 'token-value',
 };
 
+/** The data folder a stored record keeps when it is sent with `dataFolder`. */
+function folderOf(dataFolder: string | number): unknown {
+  const request = readConnectionRequest({
+    type: 'setSharedRecord',
+    record: {...RECORD, dataFolder},
+  });
+  return request?.type === 'setSharedRecord'
+    ? request.record.dataFolder
+    : 'unread';
+}
+
 describe('connection requests (contracts §4 S9)', () => {
   it('reads the requests that carry nothing', () => {
     deepStrictEqual(
@@ -39,18 +50,54 @@ describe('connection requests (contracts §4 S9)', () => {
   });
 
   it("ruling-2995-takeup-cleanup: reads a record's data folder, and drops one that is empty or no text", () => {
-    function folderOf(dataFolder: string | number): unknown {
-      const request = readConnectionRequest({
-        type: 'setSharedRecord',
-        record: {...RECORD, dataFolder},
-      });
-      return request?.type === 'setSharedRecord'
-        ? request.record.dataFolder
-        : 'unread';
-    }
     deepStrictEqual(
       [folderOf('/home/u/.server'), folderOf(''), folderOf(7)],
       ['/home/u/.server', undefined, undefined],
+    );
+  });
+
+  it('drops a data folder that the split at its last slash cannot read as an absolute root, POSIX or Windows, above a folder of its own name', () => {
+    deepStrictEqual(
+      [
+        '/a/.server',
+        '/home/u/.server',
+        '/.server',
+        '.server',
+        'home/u/.server',
+        '/',
+        '/home/u/',
+        '/home/u/.',
+        '/home/u/..',
+        '/home/u/..server',
+        'C:\\Users\\u/.vscode-server',
+        'C:/.vscode-server',
+        'C:\\Users\\u\\.vscode-server',
+      ].map(folderOf),
+      [
+        '/a/.server',
+        '/home/u/.server',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        '/home/u/..server',
+        'C:\\Users\\u/.vscode-server',
+        undefined,
+        undefined,
+      ],
+    );
+  });
+
+  it('reads a shared reply whose record holds a data folder the split cannot read as no data folder', () => {
+    deepStrictEqual(
+      readConnectionReply({
+        type: 'sharedRecord',
+        record: {...RECORD, dataFolder: 'relative/.server'},
+      }),
+      readConnectionReply({type: 'sharedRecord', record: {...RECORD}}),
     );
   });
 

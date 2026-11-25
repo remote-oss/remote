@@ -61,7 +61,9 @@ Every package in the repository is TypeScript, and every gate is built for it (A
    thresholds), and `check-licences`. The last carries `@microsoft/dev-tunnels-ssh`'s MIT notice and its
    dependencies' into the package's third-party notices. The unit rows sit under its `test/unit`, which `.mocharc.json`
    already reads. `check-public-surface` and the extension manifest checks don't apply: it's a service, not an
-   extension.
+   extension. As a service it is a layout kind of its own, named in `SERVICE_FOLDERS` (layout.md; ruling-3062-service-kind), and
+   the extensions' network rule (contracts §5), which binds code that runs in the extension host, leaves it out by name
+   (`network-rule.test.ts`; ruling-3062-network-rule).
 2. **Pins.** `@microsoft/dev-tunnels-ssh` (and `-ssh-tcp` if used) is pinned by the lockfile at an exact version, never
    a range. The `[dev-tunnels]` commit the conformance suite builds from is pinned in one place, at the `[cli]` pin
    `64048c1409ff`, and a row checks the two pins agree.
