@@ -1358,7 +1358,8 @@ export function launchesOf(root: string): Launch[] {
       suite: 'no-proposals',
       proposedApi: false,
     },
-    // The CLI path: the editor's copy names a CLI source; named only until CI holds the CLI archives' token.
+    // The CLI path: the editor's copy names a CLI source. Named only, so a run that names no launch needs no CLI archives'
+    // token; CI's parts make it (tools/acceptance-parts.ts), in the job whose fetch step holds that token.
     {
       ...RENDERER_LAUNCH,
       label: 'cli-path',
