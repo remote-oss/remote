@@ -769,6 +769,29 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
     );
   });
 
+  it('card #3010 (c3010-window-quit): the close of a window asks it to quit, and settles as true while it answers and false, without a throw, while it does not', async () => {
+    const calls: string[] = [];
+    function settlingDriver(...words: string[]): Promise<string> {
+      calls.push(words.join(' '));
+      return Promise.resolve('');
+    }
+    async function hangingDriver(...words: string[]): Promise<string> {
+      calls.push(words.join(' '));
+      if (words[0] === 'windowquit') {
+        await new Promise<string>(() => undefined);
+      }
+      return '';
+    }
+    deepStrictEqual(
+      [
+        await closeWindowWithin(settlingDriver, '111', 100),
+        await closeWindowWithin(hangingDriver, '111', 100),
+        calls,
+      ],
+      [true, false, ['windowquit 111', 'windowquit 111']],
+    );
+  });
+
   it("card #3010 (c3010-toplevel-readout): a focus wait that never settles lists the display's windows at the row's instants", async () => {
     async function driver(...words: string[]): Promise<string> {
       if (words[0] === 'windowactivate') {

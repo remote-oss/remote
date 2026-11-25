@@ -196,13 +196,18 @@ async function settledWithin(
   return settled;
 }
 
-/** Whether the display settles its closing of window `windowId` within `limitMilliseconds`: a limit that passes, or a display that fails, is no answer, so the row goes on and the readout names the window still there. */
+/**
+ * Whether the display settles its closing of window `windowId` within `limitMilliseconds`. The close is a graceful
+ * quit, asked through the window manager and answered by the window itself: a `windowclose` would destroy the window
+ * and take its client with it. A limit that passes, or a display that fails, is no answer, so the row goes on and the
+ * readout names the window still there.
+ */
 export async function closeWindowWithin(
   driver: KeyDriver,
   windowId: string,
   limitMilliseconds: number = SYNC_ACTIVATION_MILLISECONDS,
 ): Promise<boolean> {
-  return settledWithin(driver, limitMilliseconds, 'windowclose', windowId);
+  return settledWithin(driver, limitMilliseconds, 'windowquit', windowId);
 }
 
 /**
