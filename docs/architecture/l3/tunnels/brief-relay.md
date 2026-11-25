@@ -70,7 +70,10 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
 
   `aad` and `bearer` get 401, with the detail "Sign in with a GitHub account." (GitHub only, D-107 question 4).
 - **Who the token belongs to:** the relay calls `GET https://api.github.com/user` with the token, and caches the
-  answer for five minutes, keyed by a hash of the token. The account is its **numeric `id`**. Any GitHub token that
+  answer for five minutes, keyed by a hash of the token (at most 1,000 accounts, least recently used out first). A
+  token GitHub refuses is held as refused for 60 s, keyed the same way. A source address gets at most 10 lookups a
+  minute for tokens in neither cache, then 429 with `Retry-After`. An unauthenticated `/user` counts against the
+  relay's own limit at GitHub (`ruling-3207-relay-hardening`). The account is its **numeric `id`**. Any GitHub token that
   identifies an account works, a personal access token included (`ruling-22-tunnel-rules` 2). The scopes our client
   and agent ask for are `read:user`, the identity part of `[cli]`'s `read:user+read:org` (`auth.rs:96`). The relay
   needs no organization data.
@@ -93,7 +96,10 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
     and `cid`. The TypeScript SDK reads only `exp` (`ts/src/management/tunnelAccessTokenProperties.ts:11-12,70-72`).
   - The lifetimes are 24 h for `host`, and 1 h for `connect` and `manage:ports`. `[cli]` fetches the host token again
     on each reconnect (`[cli] dev_tunnels.rs:156-180`).
-  - `tunnel <token>` is valid only for its tunnel and its scopes.
+  - `tunnel <token>` is valid only for its tunnel and its scopes. The claims also carry `own`, the owner's numeric id,
+    and `gen`, a random generation stored with the tunnel at its creation: new on every create, kept on update. On
+    use, the stored tunnel must match both, so a deleted id created again, by anyone, refuses every older token
+    (`ruling-3207-relay-hardening`).
 
 ## 5. The relay's two WebSocket legs
 
