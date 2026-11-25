@@ -1,7 +1,9 @@
 /**
- * @fileoverview The windows of the harness display through `xdotool`, the key driver the display step installs: the
- * window of a name, its activation through the window manager, and the window the display's active window is. A page
- * read over the protocol cannot say what the window manager gave its active window to, so the display says it.
+ * @fileoverview The windows of the harness display through `xdotool` and `xprop`, the key driver the display step
+ * installs: the window of a name, its activation through the window manager, and the window the display's active
+ * window is. A page read over the protocol cannot say what the window manager gave its active window to, so the
+ * display says it. The activation asks for the window the manager manages: `xdotool search` returns the children of a
+ * name as well, and a child window takes no activation.
  */
 
 import {execFile} from 'node:child_process';
@@ -20,6 +22,34 @@ export async function drive(...words: string[]): Promise<string> {
 /** A key driver over the harness display: the harness installs `xdotool`, and a test stands a stand-in in its place. */
 export type KeyDriver = typeof drive;
 
+/** Reads the X window `id`'s WM_STATE on the harness display: a managed top-level holds it, and a child window does not. */
+async function hasWmState(windowId: string): Promise<boolean> {
+  try {
+    await execFileAsync('xprop', ['-id', windowId, 'WM_STATE'], {
+      env: {...process.env, DISPLAY: process.env.DISPLAY ?? ':99'},
+    });
+    return true;
+  } catch (caught) {
+    // xprop exits 123 when the property is absent, and a missing tool is no answer either.
+    const code = (caught as {code?: unknown}).code;
+    if (code === 123 || code === 'ENOENT') {
+      return false;
+    }
+    throw caught;
+  }
+}
+
+/** Whether a window is managed, read on the display, so a test can stand a display in for the harness's. */
+export type WmReader = (windowId: string) => Promise<boolean>;
+
+/** A window the display holds for a name, with whether the window manager manages it. */
+export interface WindowCandidate {
+  /** The X window id. */
+  id: string;
+  /** Whether the window holds a WM_STATE, which only a managed top-level does. */
+  managed: boolean;
+}
+
 /** How long the window manager is given to confirm a `--sync` activation, in milliseconds. */
 const SYNC_ACTIVATION_MILLISECONDS = 5_000;
 
@@ -28,32 +58,53 @@ function namePattern(name: string): string {
   return name.replace(/[\]\\()[\]{}|^$.*+]/g, '\\$&');
 }
 
-/** The window `name` is on the display through `driver`, or nothing while it is not visible. */
-async function windowIdOf(
+/** The windows of a name on the display through `driver`, with whether each is managed; none while the name is not visible. */
+async function windowCandidatesOf(
   name: string,
   driver: KeyDriver,
-): Promise<string | undefined> {
+  wmReader: WmReader,
+): Promise<WindowCandidate[]> {
+  let found: string;
   try {
-    const found = await driver(
+    found = await driver(
       'search',
       '--onlyvisible',
       '--name',
       namePattern(name),
     );
-    const last = found.split('\n').at(-1) ?? '';
-    return last === '' ? undefined : last;
   } catch (caught) {
     // `xdotool search` exits with 1 when no window matches; a driver that is missing or fails otherwise is no answer.
     if ((caught as {code?: unknown}).code === 1) {
-      return undefined;
+      return [];
     }
     throw caught;
   }
+  const candidates: WindowCandidate[] = [];
+  for (const windowId of found.split('\n')) {
+    if (windowId !== '') {
+      candidates.push({id: windowId, managed: await wmReader(windowId)});
+    }
+  }
+  return candidates;
 }
 
-/** The window `name` is on the harness display, or nothing while it is not visible. */
+/** The window the activation asks for among `candidates`: the last one the manager manages, and the last of them while none is managed. */
+export function managedPick(
+  candidates: readonly WindowCandidate[],
+): string | undefined {
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    const candidate = candidates[index];
+    if (candidate?.managed) {
+      return candidate.id;
+    }
+  }
+  const last = candidates[candidates.length - 1];
+  return last?.id;
+}
+
+/** The managed window of a name on the harness display, or nothing while the name is not visible. */
 export async function displayWindow(name: string): Promise<string | undefined> {
-  return await windowIdOf(name, drive);
+  return managedPick(await windowCandidatesOf(name, drive, hasWmState));
 }
 
 /**
@@ -65,6 +116,8 @@ export interface ActivationOutcome {
   windowId: string | undefined;
   /** Whether the window manager confirmed the activation within its limit. */
   confirmed: boolean;
+  /** Every visible X window the name matched, with whether each is managed: the pick's candidates. */
+  candidates: WindowCandidate[];
 }
 
 /**
@@ -76,13 +129,15 @@ export async function activateWindowWithin(
   name: string,
   driver: KeyDriver,
   limitMilliseconds: number = SYNC_ACTIVATION_MILLISECONDS,
+  wmReader: WmReader = hasWmState,
 ): Promise<ActivationOutcome> {
-  const windowId = await windowIdOf(name, driver);
+  const candidates = await windowCandidatesOf(name, driver, wmReader);
+  const windowId = managedPick(candidates);
   if (windowId === undefined) {
-    return {windowId: undefined, confirmed: false};
+    return {windowId: undefined, confirmed: false, candidates};
   }
   const confirmed = await syncConfirmed(driver, windowId, limitMilliseconds);
-  return {windowId, confirmed};
+  return {windowId, confirmed, candidates};
 }
 
 /** Whether the window manager confirms `windowId`'s `--sync` activation within `limitMilliseconds`. */

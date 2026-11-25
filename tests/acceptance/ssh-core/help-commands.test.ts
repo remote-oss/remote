@@ -21,7 +21,11 @@ import {
 import {indicatorGroups} from '../windows/activation-support.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
-import {activateWindowWithin, activeWindowNameOf} from '../windows/display.ts';
+import {
+  activateWindowWithin,
+  activeWindowNameOf,
+  managedPick,
+} from '../windows/display.ts';
 import {paletteItems, runFromPalette} from '../windows/palette.ts';
 import {
   chooseQuickPickRow,
@@ -536,7 +540,8 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
       return '';
     }
     const reads: FocusReads = {
-      activate: name => activateWindowWithin(name, driver, 100),
+      activate: name =>
+        activateWindowWithin(name, driver, 100, () => Promise.resolve(false)),
       pageHasFocus: () => Promise.resolve(false),
       activeWindowName: () => activeWindowNameOf(driver),
     };
@@ -553,6 +558,97 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
           caught.message.includes(`window ${windowId}`),
         caught instanceof Error && caught.message.includes('not confirmed'),
         caught instanceof Error && caught.message.includes(activeName),
+      ],
+      [true, true, true, true],
+    );
+  });
+
+  it('card #3010 (c3010-managed-pick): the activation asks the manager for the last managed window, and the last of them while none is managed', () => {
+    deepStrictEqual(
+      [
+        managedPick([]),
+        managedPick([
+          {id: '1', managed: false},
+          {id: '2', managed: false},
+        ]),
+        managedPick([
+          {id: '1', managed: true},
+          {id: '2', managed: false},
+        ]),
+        managedPick([
+          {id: '1', managed: false},
+          {id: '2', managed: true},
+          {id: '3', managed: false},
+        ]),
+        managedPick([
+          {id: '1', managed: true},
+          {id: '2', managed: true},
+        ]),
+      ],
+      [undefined, '2', '1', '2', '2'],
+    );
+  });
+
+  it('card #3010 (c3010-managed-activate): a name that matches a managed frame and a later child asks the manager for the frame, and the outcome carries the candidates with their managedness', async () => {
+    async function driver(...words: string[]): Promise<string> {
+      if (words[0] === 'search') {
+        return '111\n222';
+      }
+      if (words[0] === 'windowactivate' && words.at(2) === '111') {
+        return '';
+      }
+      await new Promise<string>(() => undefined);
+      return '';
+    }
+    const outcome = await activateWindowWithin(
+      'a window',
+      driver,
+      100,
+      windowId => Promise.resolve(windowId === '111'),
+    );
+    deepStrictEqual(
+      [outcome.windowId, outcome.confirmed, outcome.candidates],
+      [
+        '111',
+        true,
+        [
+          {id: '111', managed: true},
+          {id: '222', managed: false},
+        ],
+      ],
+    );
+  });
+
+  it("card #3010 (c3010-managed-readout): a focus wait that never settles lists the display's windows for the name, with their managedness", async () => {
+    async function driver(...words: string[]): Promise<string> {
+      if (words[0] === 'windowactivate') {
+        await new Promise<string>(() => undefined);
+        return '';
+      }
+      if (words[0] === 'search') {
+        return '98765';
+      }
+      return '';
+    }
+    const reads: FocusReads = {
+      activate: name =>
+        activateWindowWithin(name, driver, 100, () => Promise.resolve(false)),
+      pageHasFocus: () => Promise.resolve(false),
+      activeWindowName: () => Promise.resolve('none'),
+    };
+    let caught: unknown;
+    try {
+      await focusWindow('a window', reads, 1_000);
+    } catch (error) {
+      caught = error;
+    }
+    deepStrictEqual(
+      [
+        caught instanceof Error,
+        caught instanceof Error &&
+          caught.message.includes('98765 (no WM_STATE)'),
+        caught instanceof Error && caught.message.includes('window 98765'),
+        caught instanceof Error && caught.message.includes('not confirmed'),
       ],
       [true, true, true, true],
     );

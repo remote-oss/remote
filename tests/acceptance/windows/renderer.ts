@@ -22,6 +22,7 @@ import {
   activeWindowName,
   drive,
   type ActivationOutcome,
+  type WindowCandidate,
 } from './display.ts';
 import {
   dispatchAt,
@@ -528,21 +529,30 @@ function harnessFocusReads(): FocusReads {
   };
 }
 
-/** What a focus wait last read of the display, for its timeout: the window it held, whether the manager confirmed it, and the active window. */
+/** What a focus wait last read of the display, for its timeout: the window it held, the display's windows for the name and their managedness, whether the manager confirmed it, and the active window. */
 interface FocusReadout {
   windowId: string | undefined;
+  candidates: WindowCandidate[];
   confirmed: boolean;
   activeWindowName: string;
 }
 
-/** The focus wait's timeout, naming the window the display last held for the name, whether the manager confirmed it, and the window the display's active window is. */
+/** The focus wait's timeout, naming the window the display last held for the name, the display's windows for the name with their managedness, whether the manager confirmed it, and the window the display's active window is. */
 function focusTimeout(name: string, readout: FocusReadout): string {
   const held =
     readout.windowId === undefined
       ? 'no visible window'
       : `window ${readout.windowId}`;
+  const windows =
+    readout.candidates.length === 0
+      ? ''
+      : `, the display's windows for it ${readout.candidates
+          .map(
+            each => `${each.id} (${each.managed ? 'managed' : 'no WM_STATE'})`,
+          )
+          .join(', ')}`;
   return (
-    `window ${name} to hold the focus: the display last held ${held} for it, ` +
+    `window ${name} to hold the focus: the display last held ${held} for it${windows}, ` +
     `its activation was ${readout.confirmed ? 'confirmed' : 'not confirmed'} by the window manager, ` +
     `and the display's active window is ${readout.activeWindowName}`
   );
@@ -561,6 +571,7 @@ export async function focusWindow(
 ): Promise<void> {
   const readout: FocusReadout = {
     windowId: undefined,
+    candidates: [],
     confirmed: false,
     activeWindowName: 'unreadable',
   };
@@ -569,6 +580,7 @@ export async function focusWindow(
     async () => {
       const outcome = await reads.activate(name);
       readout.windowId = outcome.windowId;
+      readout.candidates = outcome.candidates;
       readout.confirmed = outcome.confirmed;
       readout.activeWindowName = await reads
         .activeWindowName()
