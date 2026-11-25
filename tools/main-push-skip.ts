@@ -37,7 +37,7 @@ export interface PushedCommit {
 
 /** A pull request's head commit and its tree. */
 export interface HeadCommit {
-  sha: string;
+  commit: string;
   tree: string;
 }
 
@@ -81,7 +81,7 @@ function partsMissing(
   parts: readonly string[],
 ): string[] {
   const passed = new Set(
-    jobs.filter(job => job.conclusion === 'success').map(job => job.name),
+    jobs.filter(each => each.conclusion === 'success').map(each => each.name),
   );
   return parts.filter(part => !passed.has(partJob(part)));
 }
@@ -100,49 +100,49 @@ export async function skipDecision(
   parts: readonly string[],
   lookups: SkipLookups,
 ): Promise<SkipDecision> {
-  const train = TRAIN_SUBJECT.exec(pushed.subject);
-  if (train === null) {
+  const number = TRAIN_SUBJECT.exec(pushed.subject)?.[1];
+  if (number === undefined) {
     return {skip: false, reason: 'the push is not a release train’s merge'};
   }
-  const pullRequest = `#${train[1]}`;
+  const pullRequest = `#${number}`;
   if (parts.length === 0) {
     return {skip: false, reason: 'the parts table gives no part'};
   }
   try {
-    const head = await lookups.head(Number(train[1]));
+    const head = await lookups.head(Number(number));
     if (head.tree !== pushed.tree) {
       return {
         skip: false,
-        reason: `the pushed tree ${pushed.tree} is not the tree ${head.tree} of ${pullRequest}’s head ${head.sha}`,
+        reason: `the pushed tree ${pushed.tree} is not the tree ${head.tree} of ${pullRequest}’s head ${head.commit}`,
       };
     }
-    if (!(await lookups.contains(head.sha, pushed.parent))) {
+    if (!(await lookups.contains(head.commit, pushed.parent))) {
       return {
         skip: false,
-        reason: `the pushed commit’s parent ${pushed.parent} is not in the history of ${pullRequest}’s head ${head.sha}`,
+        reason: `the pushed commit’s parent ${pushed.parent} is not in the history of ${pullRequest}’s head ${head.commit}`,
       };
     }
     const seen: string[] = [];
-    for (const run of await lookups.gateRuns(head.sha)) {
-      for (let attempt = run.attempts; attempt >= 1; attempt -= 1) {
-        const facts = await lookups.attempt(run.id, attempt);
+    for (const gateRun of await lookups.gateRuns(head.commit)) {
+      for (let attempt = gateRun.attempts; attempt >= 1; attempt -= 1) {
+        const facts = await lookups.attempt(gateRun.id, attempt);
         const missing = partsMissing(facts.jobs, parts);
         if (facts.conclusion === 'success' && missing.length === 0) {
           return {
             skip: true,
-            reason: `release train ${pullRequest}’s head ${head.sha} has the pushed tree ${pushed.tree}, and its gate run ${String(run.id)} passed every one of the ${String(parts.length)} parts on attempt ${String(attempt)}`,
+            reason: `release train ${pullRequest}’s head ${head.commit} has the pushed tree ${pushed.tree}, and its gate run ${String(gateRun.id)} passed every one of the ${String(parts.length)} parts on attempt ${String(attempt)}`,
           };
         }
         seen.push(
           missing.length === 0
-            ? `${String(run.id)} attempt ${String(attempt)}: ${String(facts.conclusion)}`
-            : `${String(run.id)} attempt ${String(attempt)}: ${String(facts.conclusion)}, no passing job for ${missingText(missing)}`,
+            ? `${String(gateRun.id)} attempt ${String(attempt)}: ${String(facts.conclusion)}`
+            : `${String(gateRun.id)} attempt ${String(attempt)}: ${String(facts.conclusion)}, no passing job for ${missingText(missing)}`,
         );
       }
     }
     return {
       skip: false,
-      reason: `no gate run of ${pullRequest}’s head ${head.sha} passed every part${seen.length === 0 ? ': there is none' : ` (${seen.join('; ')})`}`,
+      reason: `no gate run of ${pullRequest}’s head ${head.commit} passed every part${seen.length === 0 ? ': there is none' : ` (${seen.join('; ')})`}`,
     };
   } catch (error) {
     return {
@@ -166,7 +166,7 @@ export function repositoryLookups(
 ): SkipLookups {
   const read = gitHubReader('main-push-skip', repository, token, fetchUrl);
   return {
-    async head(pullRequest) {
+    head(pullRequest) {
       gitIn(
         root,
         'fetch',
@@ -176,10 +176,10 @@ export function repositoryLookups(
         'origin',
         `refs/pull/${String(pullRequest)}/head`,
       );
-      return {
-        sha: gitIn(root, 'rev-parse', 'FETCH_HEAD'),
+      return Promise.resolve({
+        commit: gitIn(root, 'rev-parse', 'FETCH_HEAD'),
         tree: gitIn(root, 'rev-parse', 'FETCH_HEAD^{tree}'),
-      };
+      });
     },
     async contains(head, commit) {
       const answer = await read(`compare/${commit}...${head}`);
@@ -195,8 +195,8 @@ export function repositoryLookups(
         head_repository?: {full_name?: string} | null;
       }>;
       return runs
-        .filter(run => run.head_repository?.full_name === repository)
-        .map(run => ({id: run.id, attempts: run.run_attempt}));
+        .filter(each => each.head_repository?.full_name === repository)
+        .map(each => ({id: each.id, attempts: each.run_attempt}));
     },
     async attempt(runId, attempt) {
       const route = `actions/runs/${String(runId)}/attempts/${String(attempt)}`;
@@ -208,7 +208,10 @@ export function repositoryLookups(
         );
         const found = (answer.jobs ?? []) as typeof jobs;
         jobs.push(
-          ...found.map(job => ({name: job.name, conclusion: job.conclusion})),
+          ...found.map(each => ({
+            name: each.name,
+            conclusion: each.conclusion,
+          })),
         );
         if (found.length === 0 || jobs.length >= Number(answer.total_count)) {
           break;

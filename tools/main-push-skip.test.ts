@@ -54,27 +54,33 @@ function lookupsOf(
   const asked: string[] = [];
   return {
     asked,
-    async head(pullRequest) {
+    head(pullRequest) {
       asked.push(`head ${String(pullRequest)}`);
-      return {sha: HEAD, tree};
+      return Promise.resolve({commit: HEAD, tree});
     },
-    async contains(head, commit) {
+    contains(head, commit) {
       asked.push(`contains ${head.slice(0, 1)} ${commit.slice(0, 1)}`);
-      return contains;
+      return Promise.resolve(contains);
     },
-    async gateRuns(head) {
+    gateRuns(head) {
       asked.push(`runs ${head.slice(0, 1)}`);
-      return attempts.length === 0 ? [] : [{id: 77, attempts: attempts.length}];
+      return Promise.resolve(
+        attempts.length === 0 ? [] : [{id: 77, attempts: attempts.length}],
+      );
     },
-    async attempt(runId, attempt) {
+    attempt(runId, attempt) {
       asked.push(`attempt ${String(runId)} ${String(attempt)}`);
       const found = attempts[attempt - 1];
-      if (found === undefined) {
-        throw new Error(`no attempt ${String(attempt)}`);
-      }
-      return found;
+      return found === undefined
+        ? Promise.reject(new Error(`no attempt ${String(attempt)}`))
+        : Promise.resolve(found);
     },
   };
+}
+
+/** What git in `cwd` prints for `words`, trimmed. */
+function gitOutput(cwd: string, ...words: string[]): string {
+  return execFileSync('git', words, {cwd, encoding: 'utf8'}).trim();
 }
 
 describe('main-push-skip: whether a push to main leaves out the VSCodium parts (#3149)', () => {
@@ -244,7 +250,7 @@ describe('main-push-skip: whether a push to main leaves out the VSCodium parts (
         jobs: [{name: 'three', conclusion: null, id: 3}],
       },
     };
-    const fetchUrl = (async (address: string, init?: RequestInit) => {
+    const fetchUrl = ((address: string, init?: RequestInit) => {
       const route = address.replace(
         'https://api.github.com/repos/owner/repo/',
         '',
@@ -253,9 +259,11 @@ describe('main-push-skip: whether a push to main leaves out the VSCodium parts (
         `${route} ${String((init?.headers as Record<string, string>).Authorization)}`,
       );
       const answer = answers[route];
-      return answer === undefined
-        ? new Response('{}', {status: 404})
-        : new Response(JSON.stringify(answer), {status: 200});
+      return Promise.resolve(
+        answer === undefined
+          ? new Response('{}', {status: 404})
+          : new Response(JSON.stringify(answer), {status: 200}),
+      );
     }) as typeof fetch;
     const lookups = repositoryLookups('.', 'owner/repo', 'secret', fetchUrl);
     deepStrictEqual(
@@ -265,7 +273,11 @@ describe('main-push-skip: whether a push to main leaves out the VSCodium parts (
         await lookups.contains('h1', 'p3'),
         await lookups.gateRuns('h1'),
         await lookups.attempt(5, 2),
-        await lookups.attempt(9, 1).catch((error: Error) => error.message),
+        await lookups
+          .attempt(9, 1)
+          .catch((error: unknown) =>
+            error instanceof Error ? error.message : String(error),
+          ),
         routes.length,
         routes[0],
       ],
@@ -294,16 +306,15 @@ describe('main-push-skip: whether a push to main leaves out the VSCodium parts (
     try {
       const origin = path.join(folder, 'origin');
       const clone = path.join(folder, 'clone');
-      const git = (cwd: string, ...words: string[]) =>
-        execFileSync('git', words, {cwd, encoding: 'utf8'}).trim();
       execFileSync('git', ['init', '--quiet', '-b', 'main', origin]);
-      for (const [file, subject] of [
+      const commits: Array<[string, string]> = [
         ['one.txt', 'first'],
         ['two.txt', 'train: release train 1: #1, one gate run (#2)'],
-      ]) {
+      ];
+      for (const [file, subject] of commits) {
         writeFileSync(path.join(origin, file), subject);
-        git(origin, 'add', file);
-        git(
+        gitOutput(origin, 'add', file);
+        gitOutput(
           origin,
           '-c',
           'user.name=row',
@@ -317,7 +328,7 @@ describe('main-push-skip: whether a push to main leaves out the VSCodium parts (
           subject,
         );
       }
-      git(origin, 'update-ref', 'refs/pull/2/head', 'HEAD');
+      gitOutput(origin, 'update-ref', 'refs/pull/2/head', 'HEAD');
       execFileSync('git', [
         'clone',
         '--quiet',
@@ -333,12 +344,12 @@ describe('main-push-skip: whether a push to main leaves out the VSCodium parts (
         [
           {
             subject: 'train: release train 1: #1, one gate run (#2)',
-            tree: git(origin, 'rev-parse', 'HEAD^{tree}'),
-            parent: git(origin, 'rev-parse', 'HEAD^1'),
+            tree: gitOutput(origin, 'rev-parse', 'HEAD^{tree}'),
+            parent: gitOutput(origin, 'rev-parse', 'HEAD^1'),
           },
           {
-            sha: git(origin, 'rev-parse', 'HEAD'),
-            tree: git(origin, 'rev-parse', 'HEAD^{tree}'),
+            commit: gitOutput(origin, 'rev-parse', 'HEAD'),
+            tree: gitOutput(origin, 'rev-parse', 'HEAD^{tree}'),
           },
         ],
       );
