@@ -5,7 +5,7 @@
  */
 
 import type {PlainData} from 'lib-helper';
-import type {SessionLock} from 'lib-host';
+import {ABSOLUTE_HOST_PATH, type SessionLock} from 'lib-host';
 import type {FailureHint, FailureReason} from '../diagnostics/classify.ts';
 import type {FailureKind} from '../diagnostics/rules.ts';
 import type {SpawnFailure} from '../process/session.ts';
@@ -185,9 +185,6 @@ function readDisplay(value: unknown): StoredDisplay | undefined {
     : undefined;
 }
 
-/** The absolute forms of the install path the plan accepts: a POSIX root, or a Windows drive letter. */
-const ABSOLUTE_PATH = /^(\/|[A-Za-z]:)/;
-
 /** A Windows drive with no folder on it. */
 const BARE_DRIVE = /^[A-Za-z]:$/;
 
@@ -199,7 +196,7 @@ const BARE_DRIVE = /^[A-Za-z]:$/;
  * one the record was written for.
  */
 function readDataFolder(value: unknown): string | undefined {
-  if (typeof value !== 'string' || !ABSOLUTE_PATH.test(value)) {
+  if (typeof value !== 'string' || !ABSOLUTE_HOST_PATH.test(value)) {
     return undefined;
   }
   const split = value.lastIndexOf('/');
