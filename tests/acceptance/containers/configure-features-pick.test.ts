@@ -621,3 +621,24 @@ describe('the number of the Features of a configuration text (card #3150)', () =
     );
   });
 });
+
+describe('the entry of a Feature in a configuration text (card #3179)', () => {
+  it('a text that does not parse is the wait\'s "not yet" naming it, and a parsed one gives the entry of its Feature as its JSON text, so the value-to-become-{} wait is pinned on both', () => {
+    KEYS[LAB_PLAIN] = 'lab/plain:1';
+    /** The entry of the Feature `name` in `text`, as the wait reads it, or the wait's "not yet" message for a text that does not parse. */
+    function entryOrNotYet(text: string, name: string): string {
+      try {
+        return featureEntry(text, name);
+      } catch (error) {
+        return error instanceof Error ? error.message : '';
+      }
+    }
+    deepStrictEqual(
+      [
+        entryOrNotYet('{"features": {"lab', LAB_PLAIN),
+        entryOrNotYet('{"features": {"lab/plain:1": {}}}', LAB_PLAIN),
+      ],
+      ['the configuration does not parse: {"features": {"lab', '{}'],
+    );
+  });
+});
