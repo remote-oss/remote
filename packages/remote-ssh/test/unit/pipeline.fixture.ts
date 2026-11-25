@@ -264,6 +264,7 @@ export function leaseOf(recording: Recording): ConnectionLease {
     socksPort: 1080,
     startedLogin: true,
     storedRecord: undefined,
+    startedHelper: true,
     storeSharedRecord: record => {
       recording.records.push(record);
       return Promise.resolve(true);
@@ -376,6 +377,8 @@ export function steps(
           onLost: listener => {
             recording.bridgeLost = listener;
           },
+          firstServe: () =>
+            Promise.resolve(note('firstServe', {kind: 'serving'} as const)),
           close: () => {
             recording.calls.push('closeBridge');
           },
@@ -392,10 +395,14 @@ export function steps(
       note(action, undefined);
       return Promise.resolve({kind: 'done'});
     },
+    heldServer: () =>
+      note('heldServer', Promise.resolve({kind: 'alive', port: 4321})),
+    certainlyDirect: () => true,
     installExtensions: () => {
       note('installExtensions', undefined);
       return Promise.resolve();
     },
+    serverAnswers: () => note('serverAnswers', Promise.resolve(true)),
     tunnelPath: () => 'socks',
     openTunnel: (input, lease, server, onWaiting, signal, onSettingUp) => {
       onSettingUp?.();

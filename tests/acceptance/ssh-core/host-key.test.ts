@@ -171,6 +171,7 @@ async function cancelledPick(
   answer: 'no' | 'dismiss',
 ): Promise<void> {
   const known = await asking(alias);
+  const settings = readUserSettings();
   appendScript([
     {surface: 'pick', match: 'fingerprint', answer, window: alias},
     ...refusals(alias),
@@ -188,8 +189,9 @@ async function cancelledPick(
         recordLines('failureDialog', alias).map(line => line.question),
         knownLines(known),
         await connected(alias),
+        readUserSettings() === settings,
       ],
-      [[`Could not establish connection to "${alias}".`], [], false],
+      [[`Could not establish connection to "${alias}".`], [], false, true],
     );
   } finally {
     await closeWindow(alias).catch(() => undefined);
@@ -255,6 +257,8 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
   it('F-2305 AC-11 (c3019-continue): Continue in the fingerprint pick connects the window, and ssh has written the host’s key', async () => {
     const alias = 'c3019-continue';
     const known = await asking(alias);
+    const settings = readUserSettings();
+    const linesBefore = knownLines(known).length;
     appendScript([
       {surface: 'pick', match: 'fingerprint', answer: 'yes', window: alias},
     ]);
@@ -268,10 +272,11 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
       deepStrictEqual(
         [
           picksOf(alias),
-          knownLines(known).length,
+          knownLines(known).length - linesBefore,
           knownLines(known)[0]?.split(/\s+/).slice(-2),
+          readUserSettings() === settings,
         ],
-        [[`"${alias}" has fingerprint "${fingerprint}".`], 1, key],
+        [[`"${alias}" has fingerprint "${fingerprint}".`], 1, key, true],
       );
     } finally {
       await closeWindow(alias).catch(() => undefined);
@@ -300,6 +305,7 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
       'remote.SSH.configFile': file,
       'remote.SSH.remotePlatform': {localhost: 'linux'},
     });
+    const settings = readUserSettings();
     const folder = path.join(variable('HARNESS_RUN_FOLDER'), alias);
     mkdirSync(folder, {recursive: true});
     const first = await openFolderWindow(folder);
@@ -316,9 +322,11 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
         inWindow(first, 'opensshremotes.openEmptyWindowInCurrentWindow'),
       );
       await pickAsked(next);
-      deepStrictEqual(picksOf(next), [
-        `"localhost" has fingerprint "${fingerprint}".`,
-      ]);
+      await failuresShown(next, 1, 90_000);
+      deepStrictEqual(
+        [picksOf(next), readUserSettings() === settings],
+        [[`"localhost" has fingerprint "${fingerprint}".`], true],
+      );
     } finally {
       await closeWindow(next ?? first).catch(() => undefined);
     }
@@ -327,6 +335,7 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
   it('F-2305 AC-10 (c3019-md5): with FingerprintHash md5 the pick’s fingerprint is the MD5: one', async () => {
     const alias = 'c3019-md5';
     await asking(alias, ['FingerprintHash md5']);
+    const settings = readUserSettings();
     appendScript([
       {surface: 'pick', match: 'fingerprint', answer: 'no', window: alias},
       ...refusals(alias),
@@ -348,9 +357,11 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
           .split(' ')[1] ?? '';
       await openWindow(alias, alias);
       await pickAsked(alias);
-      deepStrictEqual(picksOf(alias), [
-        `"${alias}" has fingerprint "${hashed}".`,
-      ]);
+      await failuresShown(alias, 1, 90_000);
+      deepStrictEqual(
+        [picksOf(alias), readUserSettings() === settings],
+        [[`"${alias}" has fingerprint "${hashed}".`], true],
+      );
     } finally {
       await closeWindow(alias).catch(() => undefined);
     }
@@ -362,6 +373,7 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
       'HostKeyAlias c3019-keyname',
       'HashKnownHosts no',
     ]);
+    const settings = readUserSettings();
     appendScript([
       {surface: 'pick', match: 'fingerprint', answer: 'yes', window: alias},
     ]);
@@ -369,8 +381,16 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
       await openWindow(alias, alias);
       await connectedWithin(alias, INSTALL_MILLISECONDS);
       deepStrictEqual(
-        [picksOf(alias), knownLines(known).map(line => line.split(/\s+/)[0])],
-        [[`"${alias}" has fingerprint "${fingerprint}".`], ['c3019-keyname']],
+        [
+          picksOf(alias),
+          knownLines(known).map(line => line.split(/\s+/)[0]),
+          readUserSettings() === settings,
+        ],
+        [
+          [`"${alias}" has fingerprint "${fingerprint}".`],
+          ['c3019-keyname'],
+          true,
+        ],
       );
     } finally {
       await closeWindow(alias).catch(() => undefined);
@@ -380,6 +400,7 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
   it('F-2305 AC-25 (c3019-visual): with VisualHostKey yes the pick’s title is the fingerprint alone, with no picture', async () => {
     const alias = 'c3019-visual';
     await asking(alias, ['VisualHostKey yes']);
+    const settings = readUserSettings();
     appendScript([
       {surface: 'pick', match: 'fingerprint', answer: 'no', window: alias},
       ...refusals(alias),
@@ -387,9 +408,11 @@ describe('host-key questions in a window (card #3019, F-2305)', function () {
     try {
       await openWindow(alias, alias);
       await pickAsked(alias);
-      deepStrictEqual(picksOf(alias), [
-        `"${alias}" has fingerprint "${fingerprint}".`,
-      ]);
+      await failuresShown(alias, 1, 90_000);
+      deepStrictEqual(
+        [picksOf(alias), readUserSettings() === settings],
+        [[`"${alias}" has fingerprint "${fingerprint}".`], true],
+      );
     } finally {
       await closeWindow(alias).catch(() => undefined);
     }

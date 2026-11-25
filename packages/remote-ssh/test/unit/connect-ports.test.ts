@@ -168,6 +168,7 @@ function assemblyInputs(
     prober: changes.prober ?? new FakeProber({}),
     newTemporaryToken: () => 'token',
     drawLinkNumber: () => 7,
+    serverStatus: () => Promise.resolve(undefined),
   };
   return {surfaces, machine, clock, recorded};
 }
