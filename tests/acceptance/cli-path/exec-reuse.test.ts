@@ -41,15 +41,15 @@ describe('the exec-server mode across windows and modes (card #3028, F-2103)', f
 
   it('F-2103 AC-10 (c3028-second-window): New Window on Active Host in an exec-mode window opens a second window that connects with no new login, and the host still runs one server and one CLI', async () => {
     await keepingSettings(async () => {
-      const row = 'c3028-second-window';
-      await stamped(row, 'the host is made fresh', 120_000, freshExecHost);
+      const rowName = 'c3028-second-window';
+      await stamped(rowName, 'the host is made fresh', 120_000, freshExecHost);
       await userSettings({...PLATFORMS});
-      await stamped(row, 'the first window opens', 60_000, () =>
+      await stamped(rowName, 'the first window opens', 60_000, () =>
         openWindow('harness', 'c3028-sw-first'),
       );
       let second = '';
       try {
-        await stamped(row, 'the first connect', 130_000, () =>
+        await stamped(rowName, 'the first connect', 130_000, () =>
           connectedWithin('c3028-sw-first', 120_000),
         );
         const since = new Date().toISOString();
@@ -63,15 +63,20 @@ describe('the exec-server mode across windows and modes (card #3028, F-2103)', f
             'opensshremotes.openEmptyWindowOnCurrentHost',
           ),
         );
-        await stamped(row, 'the second window connects', 60_000, async () => {
-          await waitFor(
-            `${second} to be connected`,
-            async () =>
-              (await windowState(second).catch(() => undefined))
-                ?.remoteAuthority != null,
-            50_000,
-          );
-        });
+        await stamped(
+          rowName,
+          'the second window connects',
+          60_000,
+          async () => {
+            await waitFor(
+              `${second} to be connected`,
+              async () =>
+                (await windowState(second).catch(() => undefined))
+                  ?.remoteAuthority != null,
+              50_000,
+            );
+          },
+        );
         const after = {
           servers: await execServerPids(),
           facts: await execFacts(),
@@ -102,15 +107,15 @@ describe('the exec-server mode across windows and modes (card #3028, F-2103)', f
 
   it('F-2103 AC-11 (c3028-reuse): a window that connects over a new ssh to a host whose server already runs reuses that server process and shows no download', async () => {
     await keepingSettings(async () => {
-      const row = 'c3028-reuse';
-      await stamped(row, 'the host is made fresh', 120_000, freshExecHost);
+      const rowName = 'c3028-reuse';
+      await stamped(rowName, 'the host is made fresh', 120_000, freshExecHost);
       await userSettings({...PLATFORMS});
-      await stamped(row, 'the first window opens', 60_000, () =>
+      await stamped(rowName, 'the first window opens', 60_000, () =>
         openWindow('harness', 'c3028-reuse-first'),
       );
-      let servers: number[] = [];
+      let servers: number[];
       try {
-        await stamped(row, 'the first connect', 130_000, () =>
+        await stamped(rowName, 'the first connect', 130_000, () =>
           connectedWithin('c3028-reuse-first', 120_000),
         );
         servers = await execServerPids();
@@ -118,12 +123,12 @@ describe('the exec-server mode across windows and modes (card #3028, F-2103)', f
         await closeWindow('c3028-reuse-first').catch(() => undefined);
       }
       // The first window's ssh ends with its connection server, which a new window then starts again.
-      await stamped(row, 'no helper is left', 120_000, closeAllButLocal);
-      await stamped(row, 'the second window opens', 60_000, () =>
+      await stamped(rowName, 'no helper is left', 120_000, closeAllButLocal);
+      await stamped(rowName, 'the second window opens', 60_000, () =>
         openWindow('harness', 'c3028-reuse-second'),
       );
       try {
-        await stamped(row, 'the second connect', 130_000, () =>
+        await stamped(rowName, 'the second connect', 130_000, () =>
           connectedWithin('c3028-reuse-second', 120_000),
         );
         deepStrictEqual(
@@ -150,15 +155,15 @@ describe('the exec-server mode across windows and modes (card #3028, F-2103)', f
 
   it('F-2103 AC-6, AC-9 (c3028-switch): changing the setting in a connected window shows nothing and reloads nothing; the next reload installs the other mode beside the first, whose server still runs, with a new ssh login', async () => {
     await keepingSettings(async () => {
-      const row = 'c3028-switch';
+      const rowName = 'c3028-switch';
       const name = 'c3028-switch';
-      await stamped(row, 'the host is made fresh', 120_000, freshExecHost);
+      await stamped(rowName, 'the host is made fresh', 120_000, freshExecHost);
       await userSettings({...PLATFORMS});
-      await stamped(row, 'the window opens', 60_000, () =>
+      await stamped(rowName, 'the window opens', 60_000, () =>
         openWindow('harness', name),
       );
       try {
-        await stamped(row, 'the first connect', 130_000, () =>
+        await stamped(rowName, 'the first connect', 130_000, () =>
           connectedWithin(name, 120_000),
         );
         const servers = await execServerPids();
@@ -175,10 +180,10 @@ describe('the exec-server mode across windows and modes (card #3028, F-2103)', f
             .map(line => `${line.surface}: ${line.question}`),
         };
         const since = new Date().toISOString();
-        await stamped(row, 'the window reloads', 60_000, () =>
+        await stamped(rowName, 'the window reloads', 60_000, () =>
           reloadWindow(name),
         );
-        await stamped(row, 'the reloaded window connects', 130_000, () =>
+        await stamped(rowName, 'the reloaded window connects', 130_000, () =>
           connectedWithin(name, 120_000),
         );
         const facts = await execFacts();
