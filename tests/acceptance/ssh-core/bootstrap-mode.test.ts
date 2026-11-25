@@ -116,7 +116,7 @@ describe('the setting and the legacy bootstrap on the standard editor (card #302
     }
   });
 
-  it.skip('F-2103 AC-4 (c3027-off): waits for #3092, athena’s ruling-3027-legacy-label: with the setting off on a fresh host the legacy layout is installed, no CLI process runs, no download notification shows, and the title and the indicator change together', async () => {
+  it('F-2103 AC-4 (c3027-off): with the setting off on a fresh host the legacy layout is installed, no CLI process runs, no download notification shows, and the suffix of the title comes after the server is listening, the indicator after the title, and no setup notification shows between them', async () => {
     await freshHost();
     // An alias no earlier window of the run resolved: the editor caches the label of a remote it has shown, so a window on
     // a known one is titled with the host before it connects.
@@ -128,12 +128,14 @@ describe('the setting and the legacy bootstrap on the standard editor (card #302
       [SETTING]: false,
     });
     const name = 'c3027-off';
+    const mark = connectionLog().length;
     await openWindow(alias, name);
     const samples: Array<{
       time: number;
       title: string;
       indicator: string;
       shown: string[];
+      listening: boolean;
     }> = [];
     /** The polls at which the title or the indicator changed: when, the title and the indicator. */
     function transitions(): string {
@@ -160,6 +162,9 @@ describe('the setting and the legacy bootstrap on the standard editor (card #302
             title: await windowTitle(name).catch(() => ''),
             indicator: await statusBarText(name, 'status.host').catch(() => ''),
             shown: await notifications(name).catch(() => []),
+            listening: connectionLog()
+              .slice(mark)
+              .some(line => line.includes('Remote server listening on port')),
           });
           const last = samples.at(-1);
           return (
@@ -172,8 +177,11 @@ describe('the setting and the legacy bootstrap on the standard editor (card #302
         throw new Error(`${String(caught)}\n${transitions()}`);
       });
       await connectedWithin(name, INSTALL_MILLISECONDS);
-      const firstNamed = samples.find(sample =>
+      const titled = samples.findIndex(sample =>
         sample.title.includes(`SSH: ${alias}`),
+      );
+      const indicated = samples.findIndex(
+        sample => sample.indicator === `SSH: ${alias}`,
       );
       deepStrictEqual(
         {
@@ -190,14 +198,24 @@ describe('the setting and the legacy bootstrap on the standard editor (card #302
             samples[0]?.title.includes('SSH: ') ?? true,
             samples[0]?.indicator,
           ],
-          together: firstNamed?.indicator,
+          listeningBeforeTitle: samples[titled]?.listening,
+          indicatorAfterTitle: titled >= 0 && indicated >= titled,
+          setupBetween: samples
+            .slice(titled, indicated + 1)
+            .some(sample =>
+              sample.shown.some(text =>
+                /Setting up|Initializing|Downloading|Installing/u.test(text),
+              ),
+            ),
         },
         {
           installed: [true],
           cliProcess: '',
           downloadNotice: false,
           opening: [false, 'Opening Remote...'],
-          together: `SSH: ${alias}`,
+          listeningBeforeTitle: true,
+          indicatorAfterTitle: true,
+          setupBetween: false,
         },
         transitions(),
       );

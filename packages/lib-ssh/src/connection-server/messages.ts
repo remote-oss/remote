@@ -32,6 +32,8 @@ export interface SharedRecord {
   agentLink?: StoredAgentLink;
   /** The first window's display plan, which a later window of the connection keeps. */
   display?: StoredDisplay;
+  /** The data folder the held server was installed in: a later window checks the server and prunes old installs there. */
+  dataFolder?: string;
 }
 
 /** How long the shared session has to answer the probe of a session check, in milliseconds. */
@@ -205,6 +207,7 @@ function readSharedRecord(value: unknown): SharedRecord | undefined {
   }
   const agentLink = readAgentLink(value.agentLink);
   const display = readDisplay(value.display);
+  const {dataFolder} = value;
   return {
     remotePort,
     operatingSystem,
@@ -213,6 +216,9 @@ function readSharedRecord(value: unknown): SharedRecord | undefined {
     connectionToken,
     ...(agentLink === undefined ? {} : {agentLink}),
     ...(display === undefined ? {} : {display}),
+    ...(typeof dataFolder === 'string' && dataFolder !== ''
+      ? {dataFolder}
+      : {}),
   };
 }
 
