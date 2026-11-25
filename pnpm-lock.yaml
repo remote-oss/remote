@@ -418,6 +418,14 @@ importers:
         specifier: workspace:*
         version: link:../lib-wsl
 
+  packages/tunnel-agent:
+    dependencies:
+      lib-identifiers:
+        specifier: workspace:*
+        version: link:../lib-identifiers
+
+  packages/tunnel-relay: {}
+
   tests/acceptance:
     dependencies:
       lib-authority:
