@@ -126,6 +126,57 @@ describe('main-push-skip: whether a push to main leaves out the VSCodium parts (
     );
   });
 
+  it('#3149: a part job that was skipped or did not finish is no passing job, though its attempt passed', async () => {
+    const skippedPart = attemptOf('success', PARTS.slice(1));
+    const unfinishedPart = attemptOf('success', PARTS.slice(1));
+    deepStrictEqual(
+      [
+        await skipDecision(
+          PUSHED,
+          PARTS,
+          lookupsOf([
+            {
+              ...skippedPart,
+              jobs: [
+                ...skippedPart.jobs,
+                {
+                  name: 'acceptance-pr / acceptance (vscodium, ssh 1/2)',
+                  conclusion: 'skipped',
+                },
+              ],
+            },
+          ]),
+        ),
+        await skipDecision(
+          PUSHED,
+          PARTS,
+          lookupsOf([
+            {
+              ...unfinishedPart,
+              jobs: [
+                ...unfinishedPart.jobs,
+                {
+                  name: 'acceptance-pr / acceptance (vscodium, ssh 1/2)',
+                  conclusion: null,
+                },
+              ],
+            },
+          ]),
+        ),
+      ],
+      [
+        {
+          skip: false,
+          reason: `no gate run of #3167’s head ${HEAD} passed every part (77 attempt 1: success, no passing job for ssh 1/2)`,
+        },
+        {
+          skip: false,
+          reason: `no gate run of #3167’s head ${HEAD} passed every part (77 attempt 1: success, no passing job for ssh 1/2)`,
+        },
+      ],
+    );
+  });
+
   it('#3149: a red or cancelled gate, or none at all, runs every part', async () => {
     deepStrictEqual(
       [
@@ -202,10 +253,22 @@ describe('main-push-skip: whether a push to main leaves out the VSCodium parts (
           PARTS,
           lookups,
         ),
+        await skipDecision(
+          {...PUSHED, subject: `Revert "${PUSHED.subject}" (#3180)`},
+          PARTS,
+          lookups,
+        ),
+        await skipDecision(
+          {...PUSHED, subject: `${PUSHED.subject} and more`},
+          PARTS,
+          lookups,
+        ),
         await skipDecision(PUSHED, [], lookups),
         lookups.asked,
       ],
       [
+        {skip: false, reason: 'the push is not a release train’s merge'},
+        {skip: false, reason: 'the push is not a release train’s merge'},
         {skip: false, reason: 'the push is not a release train’s merge'},
         {skip: false, reason: 'the push is not a release train’s merge'},
         {skip: false, reason: 'the parts table gives no part'},
@@ -229,6 +292,7 @@ describe('main-push-skip: whether a push to main leaves out the VSCodium parts (
       'compare/p1...h1': {status: 'ahead'},
       'compare/p2...h1': {status: 'identical'},
       'compare/p3...h1': {status: 'diverged'},
+      'compare/p4...h1': {status: 'behind'},
       'actions/workflows/ci.yml/runs?event=pull_request&head_sha=h1&per_page=100':
         {
           workflow_runs: [
@@ -274,6 +338,7 @@ describe('main-push-skip: whether a push to main leaves out the VSCodium parts (
         await lookups.contains('h1', 'p1'),
         await lookups.contains('h1', 'p2'),
         await lookups.contains('h1', 'p3'),
+        await lookups.contains('h1', 'p4'),
         await lookups.gateRuns('h1'),
         await lookups.attempt(5, 2),
         await lookups
@@ -288,6 +353,7 @@ describe('main-push-skip: whether a push to main leaves out the VSCodium parts (
         true,
         true,
         false,
+        false,
         [{id: 5, attempts: 2}],
         {
           conclusion: 'success',
@@ -298,7 +364,7 @@ describe('main-push-skip: whether a push to main leaves out the VSCodium parts (
           ],
         },
         'main-push-skip: GitHub answered 404 for actions/runs/9/attempts/1',
-        8,
+        9,
         'compare/p1...h1 Bearer secret',
       ],
     );
