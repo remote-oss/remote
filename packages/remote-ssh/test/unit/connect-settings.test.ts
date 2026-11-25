@@ -257,6 +257,25 @@ describe('the effective exec server switch of a connect (F-2406 BR-2, card #2971
       true,
     );
   });
+  it('F-2103 AC-18, AC-30 (BR-2): the setting is used for its truthiness, so "no" and "false" give exec mode and "", 0, false and null do not (card #3180)', () => {
+    deepStrictEqual(
+      [true, 'no', 'false', 'yes', 1, false, 0, '', null].map(configured =>
+        effectiveUseExecServer(hostWith({[EXEC]: configured})),
+      ),
+      [true, true, true, true, true, false, false, false, false],
+    );
+  });
+
+  it('F-2103 AC-18, AC-30 (BR-2): with the manual bootstrap on, every value of the setting is false (card #3180)', () => {
+    deepStrictEqual(
+      [true, 'no', 'false', 'yes', 1, false, 0, '', null].map(configured =>
+        effectiveUseExecServer(
+          hostWith({[MODE]: 'manual-bootstrap', [EXEC]: configured}),
+        ),
+      ),
+      [false, false, false, false, false, false, false, false, false],
+    );
+  });
 
   it("F-2406 BR-2: the log's settings listing shows remote.SSH.useExecServer = false while the manual bootstrap is on, and the configured value otherwise", () => {
     /** The listing's line for the exec server switch, with `written` as the user's settings. */

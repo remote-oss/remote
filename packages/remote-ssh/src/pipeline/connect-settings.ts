@@ -97,7 +97,7 @@ export function localDownloadModeOf(host: SettingHost): LocalDownloadMode {
 /** `remote.SSH.useExecServer` as a connect uses it: false while the manual bootstrap is on, whatever is configured. */
 export function effectiveUseExecServer(host: SettingHost): boolean {
   return (
-    switchOf(host, 'useExecServer') &&
+    truthyOf(host, 'useExecServer') &&
     localDownloadModeOf(host) !== 'manualBootstrap'
   );
 }
