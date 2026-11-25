@@ -1,10 +1,13 @@
 /**
  * @fileoverview The relay's tunnel access tokens: a JWT per scope, signed HS256 with the relay's own key, with the
- * claims `exp`, `scp`, `tid` and `cid` (the relay brief's section 4). The TypeScript SDK reads only `exp`
+ * claims `exp`, `scp`, `tid`, `own`, `gen` and `cid` (the relay brief's section 4): `own` and `gen` are the tunnel's
+ * owner and generation when it was minted, so the token reaches no later tunnel given the same id. The TypeScript SDK
+ * reads only `exp`
  * (`[dev-tunnels] ts/src/management/tunnelAccessTokenProperties.ts:11-12,70-72`); the relay reads them all back.
  */
 
 import {createHmac, timingSafeEqual} from 'node:crypto';
+import type {TunnelRecord} from '../store.ts';
 
 /** The scopes the relay issues tokens for (`rs/src/contracts/tunnel_access_scopes.rs`). */
 const TOKEN_SCOPES = ['host', 'connect', 'manage:ports'] as const;
@@ -25,6 +28,10 @@ const MIN_KEY_BYTES = 32;
 /** What a valid token grants. */
 export interface TokenGrant {
   tunnelId: string;
+  /** The numeric GitHub id of the tunnel's owner when the token was minted. */
+  owner: number;
+  /** The tunnel's generation when the token was minted. */
+  generation: string;
   scope: TokenScope;
 }
 
@@ -49,12 +56,18 @@ export class Tokens {
     this.now = now;
   }
 
-  /** A token of `scope` for tunnel `tunnelId` in cluster `clusterId`. */
-  issue(tunnelId: string, clusterId: string, scope: TokenScope): string {
+  /** A token of `scope` for `tunnel` in cluster `clusterId`. */
+  issue(
+    tunnel: Pick<TunnelRecord, 'id' | 'owner' | 'generation'>,
+    clusterId: string,
+    scope: TokenScope,
+  ): string {
     const claims = {
       exp: Math.floor(this.now() / 1000) + LIFETIMES[scope],
       scp: scope,
-      tid: tunnelId,
+      tid: tunnel.id,
+      own: tunnel.owner,
+      gen: tunnel.generation,
       cid: clusterId,
     };
     const unsigned = `${encoded({alg: 'HS256', typ: 'JWT'})}.${encoded(claims)}`;
@@ -84,11 +97,18 @@ export class Tokens {
       typeof claims.exp !== 'number' ||
       claims.exp * 1000 <= this.now() ||
       typeof claims.tid !== 'string' ||
+      typeof claims.own !== 'number' ||
+      typeof claims.gen !== 'string' ||
       !isTokenScope(scope)
     ) {
       return undefined;
     }
-    return {tunnelId: claims.tid, scope};
+    return {
+      tunnelId: claims.tid,
+      owner: claims.own,
+      generation: claims.gen,
+      scope,
+    };
   }
 
   /** The base64url HMAC-SHA256 of `unsigned` with the key. */

@@ -5,6 +5,7 @@
  * `[dev-tunnels] rs/src/management/http_client.rs:38-42,61-307` and `[cli] tunnels/dev_tunnels.rs`.
  */
 
+import {randomBytes} from 'node:crypto';
 import {problem, Refused, success, type Answer} from './problem.ts';
 import {isTokenScope, type TokenScope, type Tokens} from './auth/tokens.ts';
 import type {RelayConfig} from './config.ts';
@@ -334,6 +335,7 @@ function putTunnel(
       id: tunnelId,
       owner: caller.id,
       name,
+      generation: existing?.generation ?? randomBytes(16).toString('base64url'),
       fields: {...existing?.fields, ...writable(body)},
     };
     store.putTunnel(record);
@@ -523,7 +525,7 @@ function tunnelView(
           accessTokens: Object.fromEntries(
             scopes.map(scope => [
               scope,
-              tokens.issue(tunnel.id, config.clusterId, scope),
+              tokens.issue(tunnel, config.clusterId, scope),
             ]),
           ),
         }),

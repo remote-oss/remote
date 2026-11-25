@@ -4,8 +4,18 @@ import {Allowlist} from '../../src/auth/allowlist.ts';
 import {authenticateWith} from '../../src/auth/authenticate.ts';
 import {GithubIdentity, type Fetch} from '../../src/auth/github.ts';
 import {Tokens} from '../../src/auth/tokens.ts';
+import type {TunnelRecord} from '../../src/store.ts';
 
 const SIGNING_KEY = Buffer.alloc(32, 7);
+
+/** Tunnel `one` as the store holds it: owner 42, generation `g1`. */
+const TUNNEL_ONE: TunnelRecord = {
+  id: 'one',
+  owner: 42,
+  name: '',
+  generation: 'g1',
+  fields: {},
+};
 
 /** The message `work` throws with. */
 function messageOf(work: () => unknown): string {
@@ -34,8 +44,11 @@ function fetchAnswering(
   return {fetch, asked};
 }
 
+/** The claims a token for tunnel `one` names it by. */
+const MINTED = {tid: 'one', own: 42, gen: 'g1', cid: 'usw2'};
+
 describe("the relay's tunnel tokens", () => {
-  it('a token carries its tunnel, cluster, scope and expiry, a day for a host and an hour for the rest', () => {
+  it("a token carries its tunnel, the tunnel's owner and generation, cluster, scope and expiry, a day for a host and an hour for the rest", () => {
     const tokens = new Tokens(SIGNING_KEY, () => 1_000_000);
     function claimsOf(token: string): unknown {
       return JSON.parse(
@@ -44,14 +57,14 @@ describe("the relay's tunnel tokens", () => {
     }
     deepStrictEqual(
       [
-        claimsOf(tokens.issue('one', 'usw2', 'host')),
-        claimsOf(tokens.issue('one', 'usw2', 'connect')),
-        claimsOf(tokens.issue('one', 'usw2', 'manage:ports')),
+        claimsOf(tokens.issue(TUNNEL_ONE, 'usw2', 'host')),
+        claimsOf(tokens.issue(TUNNEL_ONE, 'usw2', 'connect')),
+        claimsOf(tokens.issue(TUNNEL_ONE, 'usw2', 'manage:ports')),
       ],
       [
-        {exp: 1000 + 86_400, scp: 'host', tid: 'one', cid: 'usw2'},
-        {exp: 1000 + 3600, scp: 'connect', tid: 'one', cid: 'usw2'},
-        {exp: 1000 + 3600, scp: 'manage:ports', tid: 'one', cid: 'usw2'},
+        {exp: 1000 + 86_400, scp: 'host', ...MINTED},
+        {exp: 1000 + 3600, scp: 'connect', ...MINTED},
+        {exp: 1000 + 3600, scp: 'manage:ports', ...MINTED},
       ],
     );
   });
@@ -59,18 +72,21 @@ describe("the relay's tunnel tokens", () => {
   it('a token checks back to its grant until it expires', () => {
     let clock = 0;
     const tokens = new Tokens(SIGNING_KEY, () => clock);
-    const token = tokens.issue('one', 'usw2', 'connect');
+    const token = tokens.issue(TUNNEL_ONE, 'usw2', 'connect');
     const before = tokens.check(token);
     clock = 3600 * 1000;
     deepStrictEqual(
       [before, tokens.check(token)],
-      [{tunnelId: 'one', scope: 'connect'}, undefined],
+      [
+        {tunnelId: 'one', owner: 42, generation: 'g1', scope: 'connect'},
+        undefined,
+      ],
     );
   });
 
   it('refuses a token of another key, an altered one, a malformed one, and one whose claims are not a grant', () => {
     const tokens = new Tokens(SIGNING_KEY, () => 0);
-    const token = tokens.issue('one', 'usw2', 'host');
+    const token = tokens.issue(TUNNEL_ONE, 'usw2', 'host');
     const [header = '', , signature = ''] = token.split('.');
     deepStrictEqual(
       [
@@ -81,13 +97,21 @@ describe("the relay's tunnel tokens", () => {
         tokens.check('only.two'),
         tokens.check('a.b.c.d'),
         tokens.check(`${header}.e30.short`),
-        tokens.check(signedClaims({exp: 99, scp: 'manage', tid: 'one'})),
-        tokens.check(signedClaims({exp: 99, scp: 'host', tid: 7})),
-        tokens.check(signedClaims({exp: 'later', scp: 'host', tid: 'one'})),
-        tokens.check(signedClaims({exp: 99, tid: 'one'})),
+        tokens.check(signedClaims({exp: 99, scp: 'manage', ...MINTED})),
+        tokens.check(signedClaims({exp: 99, scp: 'host', ...MINTED, tid: 7})),
+        tokens.check(signedClaims({exp: 'later', scp: 'host', ...MINTED})),
+        tokens.check(signedClaims({exp: 99, ...MINTED})),
         tokens.check(signedClaims([1])),
         tokens.check(`${header}.%%.${resign(`${header}.%%`)}`),
-        tokens.check(signedClaims({exp: 99, scp: 'host', tid: 'one'})),
+        tokens.check(
+          signedClaims({exp: 99, scp: 'host', tid: 'one', gen: 'g1'}),
+        ),
+        tokens.check(
+          signedClaims({exp: 99, scp: 'host', ...MINTED, own: '42'}),
+        ),
+        tokens.check(signedClaims({exp: 99, scp: 'host', tid: 'one', own: 42})),
+        tokens.check(signedClaims({exp: 99, scp: 'host', ...MINTED, gen: 1})),
+        tokens.check(signedClaims({exp: 99, scp: 'host', ...MINTED})),
       ],
       [
         undefined,
@@ -101,7 +125,11 @@ describe("the relay's tunnel tokens", () => {
         undefined,
         undefined,
         undefined,
-        {tunnelId: 'one', scope: 'host'},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {tunnelId: 'one', owner: 42, generation: 'g1', scope: 'host'},
       ],
     );
   });
@@ -225,6 +253,7 @@ describe('who a request is from', () => {
     authorization: string | undefined,
     githubStatus = 200,
     tokens = new Tokens(SIGNING_KEY, () => 0),
+    stored = TUNNEL_ONE,
   ): Promise<unknown> {
     const authenticate = authenticateWith({
       github: new GithubIdentity(
@@ -234,6 +263,9 @@ describe('who a request is from', () => {
       ),
       allowlist: new Allowlist({modified: () => 1, text: () => '42\n'}),
       tokens,
+      tunnels: {
+        tunnelById: tunnelId => (tunnelId === stored.id ? stored : undefined),
+      },
     });
     return authenticate({authorization});
   }
@@ -254,7 +286,7 @@ describe('who a request is from', () => {
     deepStrictEqual(
       [
         await callerFor(
-          `tunnel ${tokens.issue('one', 'usw2', 'host')}`,
+          `tunnel ${tokens.issue(TUNNEL_ONE, 'usw2', 'host')}`,
           200,
           tokens,
         ),
@@ -281,6 +313,29 @@ describe('who a request is from', () => {
     );
   });
 
+  it('refuses a tunnel token whose tunnel is gone, or is stored with another owner or generation', async () => {
+    const tokens = new Tokens(SIGNING_KEY, () => 0);
+    const token = `tunnel ${tokens.issue(TUNNEL_ONE, 'usw2', 'connect')}`;
+    const refused = {
+      status: 401,
+      body: {title: 'Unauthorized', detail: 'The tunnel token is not valid.'},
+    };
+    deepStrictEqual(
+      [
+        await callerFor(token, 200, tokens, {...TUNNEL_ONE, id: 'two'}),
+        await callerFor(token, 200, tokens, {...TUNNEL_ONE, owner: 43}),
+        await callerFor(token, 200, tokens, {...TUNNEL_ONE, generation: 'g2'}),
+        await callerFor(token, 200, tokens, {...TUNNEL_ONE, name: 'renamed'}),
+      ],
+      [
+        refused,
+        refused,
+        refused,
+        {kind: 'tunnel', tunnelId: 'one', scope: 'connect'},
+      ],
+    );
+  });
+
   it('refuses no header, other schemes, a refused token, a failed lookup, and an account not on the allowlist', async () => {
     const signIn = {
       status: 401,
@@ -294,6 +349,7 @@ describe('who a request is from', () => {
       ),
       allowlist: new Allowlist({modified: () => 1, text: () => '42\n'}),
       tokens: new Tokens(SIGNING_KEY, () => 0),
+      tunnels: {tunnelById: () => undefined},
     });
     deepStrictEqual(
       [

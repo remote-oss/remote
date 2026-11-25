@@ -21,6 +21,7 @@ const authenticate = authenticateWith({
     text: () => readFileSync(config.allowlistFile, 'utf8'),
   }),
   tokens,
+  tunnels: store,
 });
 const server = relayServer(
   {
