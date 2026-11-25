@@ -36,7 +36,7 @@ const server = relayServer(
     config,
     authenticate,
     tokens,
-    legs: new Legs(authenticate),
+    legs: new Legs(authenticate, reportFailure),
     report: reportFailure,
   },
   readFileSync(config.certificateFile),

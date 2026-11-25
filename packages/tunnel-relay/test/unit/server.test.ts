@@ -79,8 +79,11 @@ describe('the HTTPS service of the relay', () => {
       report: error => {
         reported.push(error);
       },
-      legs: new Legs(() =>
-        Promise.resolve({kind: 'account', id: 7, login: 'owner'}),
+      legs: new Legs(
+        () => Promise.resolve({kind: 'account', id: 7, login: 'owner'}),
+        error => {
+          reported.push(error);
+        },
       ),
     };
   });

@@ -53,6 +53,7 @@ const NODE_TIMERS: Timers = {
 /** The legs of the relay: the host session of each tunnel, and the clients piped through it. */
 export class Legs implements TunnelLegs {
   private readonly authenticate: Authenticate;
+  private readonly report: (failure: unknown) => void;
   private readonly timers: Timers;
   private readonly hosts = new Map<string, HostSession>();
   private readonly sockets = {
@@ -60,9 +61,14 @@ export class Legs implements TunnelLegs {
     client: socketsSpeaking(CLIENT_PROTOCOL),
   };
 
-  /** Legs authorized by `authenticate`, kept alive on `timers`. */
-  constructor(authenticate: Authenticate, timers = NODE_TIMERS) {
+  /** Legs authorized by `authenticate`, kept alive on `timers`; a sign-in that fails goes to `report`. */
+  constructor(
+    authenticate: Authenticate,
+    report: (failure: unknown) => void,
+    timers = NODE_TIMERS,
+  ) {
     this.authenticate = authenticate;
+    this.report = report;
     this.timers = timers;
   }
 
@@ -99,7 +105,8 @@ export class Legs implements TunnelLegs {
         authorization: request.headers.authorization,
       });
     } catch (error) {
-      refuse(socket, problem(500, `The relay failed: ${String(error)}`));
+      this.report(error);
+      refuse(socket, problem(500, 'The relay failed.'));
       return;
     }
     if ('status' in caller) {

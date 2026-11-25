@@ -105,10 +105,17 @@ describe("the relay's WebSocket legs", () => {
   let address: string;
   const opened: WebSocket[] = [];
   const sessions: HostSide[] = [];
+  let reported: unknown[];
+
+  /** Hears a failure the legs report. */
+  function reportOf(failure: unknown): void {
+    reported.push(failure);
+  }
 
   beforeEach(async () => {
+    reported = [];
     timers = new FakeTimers();
-    legs = new Legs(authenticate, timers);
+    legs = new Legs(authenticate, reportOf, timers);
     server = createServer();
     server.on('upgrade', (request, socket, head: Buffer) => {
       void legs.upgrade(request, socket, head);
@@ -341,15 +348,17 @@ describe("the relay's WebSocket legs", () => {
       );
     });
 
-    it("passes on the sign-in's refusal, and answers 500 when it fails", async () => {
+    it("passes on the sign-in's refusal, and answers 500 with one fixed line when it fails, reporting why to the relay alone", async () => {
       deepStrictEqual(
         [
           await refusal('/relay/host/one', [HOST], 'refused'),
           await refusal('/relay/host/one', [HOST], 'broken'),
+          reported.map(String),
         ],
         [
           [401, 'Sign in with a GitHub account.'],
-          [500, 'The relay failed: Error: down'],
+          [500, 'The relay failed.'],
+          ['Error: down'],
         ],
       );
     });
@@ -490,7 +499,7 @@ describe("the relay's WebSocket legs", () => {
 
   describe('the keep-alive', () => {
     it("runs on the node's timers unless it is given others", async () => {
-      legs = new Legs(authenticate);
+      legs = new Legs(authenticate, reportOf);
       const websocket = await opening(
         '/relay/host/one',
         [HOST],
