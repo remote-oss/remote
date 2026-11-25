@@ -744,6 +744,7 @@ describe('the management routes of the relay', () => {
         allowlist: new Allowlist({modified: () => 1, text: () => ''}),
         tokens: TOKENS,
         tunnels: store,
+        report: () => undefined,
       })({authorization: `tunnel ${token}`});
     }
 

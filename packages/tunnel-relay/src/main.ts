@@ -12,6 +12,11 @@ import {Legs} from './legs/legs.ts';
 import {relayServer} from './server.ts';
 import {Store} from './store.ts';
 
+/** Writes a failure the relay's answers don't carry to its standard error. */
+function reportFailure(failure: unknown): void {
+  process.stderr.write(`the relay failed: ${String(failure)}\n`);
+}
+
 const config = configOf(process.env);
 const store = new Store(config.storeFile);
 const tokens = new Tokens(readFileSync(config.tokenKeyFile), Date.now);
@@ -23,6 +28,7 @@ const authenticate = authenticateWith({
   }),
   tokens,
   tunnels: store,
+  report: reportFailure,
 });
 const server = relayServer(
   {
@@ -31,9 +37,7 @@ const server = relayServer(
     authenticate,
     tokens,
     legs: new Legs(authenticate),
-    report: error => {
-      process.stderr.write(`the relay failed: ${String(error)}\n`);
-    },
+    report: reportFailure,
   },
   readFileSync(config.certificateFile),
   readFileSync(config.keyFile),
