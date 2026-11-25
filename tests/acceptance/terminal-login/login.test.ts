@@ -3,6 +3,7 @@ import {setUserSetting} from '../windows/folder-windows.ts';
 import {
   connectionLog,
   closeWindow,
+  isOpen,
   hostPassword,
   inWindow,
   onHostAs,
@@ -135,6 +136,13 @@ async function untilPrompt(name: string, prompt: string) {
     );
   }
   return facts;
+}
+
+/** Closes window `name` when it is still open, and says nothing of a close that fails: a row's own close has usually done it. */
+async function closeIfOpen(name: string): Promise<void> {
+  if (isOpen(name)) {
+    await closeWindow(name).catch(() => undefined);
+  }
 }
 
 /** The name of the terminal that a failed attempt with an error hint leaves (F-2605). */
@@ -403,8 +411,9 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
 
   it('F-2308 AC-15 (c82-kill): killing the install terminal of a connected window drops the connection at once and a reconnection makes a new install terminal with the password prompt', async () => {
     await setUserSetting(SHOW_TERMINAL, true);
-    const name = await openPasswordWindow('c82-kill');
+    const name = 'c82-kill';
     try {
+      await openPasswordWindow(name);
       await untilPrompt(name, PASSWORD_PROMPT);
       await typeInTerminal(name, `${hostPassword()}\n`);
       await waitFor(
@@ -424,7 +433,7 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
       );
       deepStrictEqual(facts?.terminals, ['install']);
     } finally {
-      await closeWindow(name).catch(() => undefined);
+      await closeIfOpen(name);
     }
   });
 
@@ -473,22 +482,28 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
   /** A window on the password host, connected by the password typed in its terminal; the setting is on. */
   async function connectedByTerminal(label: string): Promise<string> {
     await setUserSetting(SHOW_TERMINAL, true);
-    const name = await openPasswordWindow(label);
-    await untilPrompt(name, PASSWORD_PROMPT);
-    const resolvedBefore = resolvedConnects();
-    await typeInTerminal(name, `${hostPassword()}\n`);
-    // The window carries the remote's name from the start, so the connect is over once the log says it resolved.
-    await waitFor(
-      'the connect to resolve',
-      () => resolvedConnects() > resolvedBefore,
-      120_000,
-    );
-    await waitFor(
-      'the window to connect',
-      async () => (await windowState(name)).remoteName === 'ssh-remote',
-      120_000,
-    );
-    return name;
+    const name = label;
+    try {
+      await openPasswordWindow(label);
+      await untilPrompt(name, PASSWORD_PROMPT);
+      const resolvedBefore = resolvedConnects();
+      await typeInTerminal(name, `${hostPassword()}\n`);
+      // The window carries the remote's name from the start, so the connect is over once the log says it resolved.
+      await waitFor(
+        'the connect to resolve',
+        () => resolvedConnects() > resolvedBefore,
+        120_000,
+      );
+      await waitFor(
+        'the window to connect',
+        async () => (await windowState(name)).remoteName === 'ssh-remote',
+        120_000,
+      );
+      return name;
+    } catch (caught) {
+      await closeIfOpen(name);
+      throw caught;
+    }
   }
 
   /** How many connects the extension's log says resolved. */
@@ -589,7 +604,7 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
       );
       await closeAfterKill(name);
     } finally {
-      await closeWindow(name).catch(() => undefined);
+      await closeIfOpen(name);
     }
   });
 
@@ -624,7 +639,7 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
       });
       await closeAfterKill(name);
     } finally {
-      await closeWindow(name).catch(() => undefined);
+      await closeIfOpen(name);
     }
   });
 
