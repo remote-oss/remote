@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {parse as parseYaml} from 'yaml';
 import {
+  cliArchivesCacheProblems,
   cliArchivesSecretProblems,
   workflowsTokenProblems,
   workflowTokenProblems,
@@ -152,8 +153,11 @@ const REFUSED =
 
 /** A step of a workflow, as the rows below read it. */
 interface ReadStep {
+  id?: string;
   run?: string;
+  uses?: string;
   env?: Record<string, string>;
+  with?: Record<string, string>;
 }
 
 /** The jobs of the repository's workflow `file`. */
@@ -257,6 +261,112 @@ describe('check-workflow-tokens: the reach of the CLI archives’ secret', () =>
         ];
       }),
       pairs.map(([file]) => [file, FETCH, SECRET, true, ['LAUNCHES'], true]),
+    );
+  });
+});
+
+/** A workflow whose one job, `run`, has one step of `action` whose `path` is `paths`, one per line. */
+function cacheWorkflow(action: string, paths: readonly string[]): string {
+  const lines = paths.map(each => `            ${each}\n`).join('');
+  return secretWorkflow(
+    `    runs-on: x\n    steps:\n      - uses: ${action}\n        with:\n          path: |\n${lines}`,
+  );
+}
+
+describe('check-workflow-tokens: no cache holds the CLI archives (card #3197)', () => {
+  it('a cache path that names a CLI archive, or a folder it is in, fails, however it is written from the checkout', () => {
+    const paths = [
+      '.vscode-test/downloads',
+      './.vscode-test/downloads/',
+      '.vscode-test/**',
+      '.vscode-test/*/cli-*.tar.gz',
+      '${{ github.workspace }}/.vscode-test',
+      '.',
+      '.vscode-test/downloads/cli-linux-x?4.tar.gz',
+    ];
+    deepStrictEqual(
+      paths.map(
+        each =>
+          cliArchivesCacheProblems(
+            'w.yml',
+            cacheWorkflow('actions/cache@v6', [each]),
+          ).length,
+      ),
+      [4, 4, 4, 4, 4, 4, 1],
+    );
+  });
+
+  it('the restore and save actions are read too, and a problem names the step, the path and the archive', () => {
+    deepStrictEqual(
+      ['actions/cache/restore@v6', 'actions/cache/save@v6'].map(action =>
+        cliArchivesCacheProblems(
+          'w.yml',
+          cacheWorkflow(action, [
+            '.vscode-test/downloads/VSCodium-*',
+            '.vscode-test/downloads/cli-alpine-x64.tar.gz',
+          ]),
+        ),
+      ),
+      [0, 1].map(() => [
+        "w.yml: jobs.run.steps.0.with.path caches .vscode-test/downloads/cli-alpine-x64.tar.gz, which holds the CLI archive .vscode-test/downloads/cli-alpine-x64.tar.gz; a fork's pull request can restore a cache saved on main",
+      ]),
+    );
+  });
+
+  it('the VSCodium archives, a path outside the checkout, a ! path, another action and a step with no path pass', () => {
+    deepStrictEqual(
+      [
+        cacheWorkflow('actions/cache@v6', [
+          '.vscode-test/downloads/VSCodium-*',
+          '.vscode-test/downloads/vscodium-reh-*',
+          '~/.cache/remote-oss',
+          '!.vscode-test/downloads',
+        ]),
+        cacheWorkflow('actions/upload-artifact@v5', ['.vscode-test']),
+        secretWorkflow(
+          '    runs-on: x\n    steps:\n      - uses: actions/cache@v6\n      - run: true\n',
+        ),
+        secretWorkflow('    uses: ./.github/workflows/other.yml\n'),
+      ].map(text => cliArchivesCacheProblems('w.yml', text)),
+      [[], [], [], []],
+    );
+  });
+
+  it('the repository’s six VSCodium jobs cache the VSCodium archives alone, under the pins’ key with no fallback, before the acceptance step', () => {
+    const jobs: Array<[string, string]> = [
+      ['ci.yml', 'acceptance-vscodium'],
+      ['ci.yml', 'acceptance-vscodium-containers'],
+      ['ci.yml', 'acceptance-vscodium-cli'],
+      ['acceptance-launches.yml', 'run'],
+      ['acceptance-launches.yml', 'run-containers'],
+      ['acceptance-launches.yml', 'run-cli'],
+    ];
+    deepStrictEqual(
+      jobs.map(([file, name]) => {
+        const steps = jobsOf(file)[name]?.steps ?? [];
+        const pins = steps.findIndex(step => step.id === 'vscodium-pins');
+        const acceptance = steps.findIndex(
+          step =>
+            step.run?.startsWith('pnpm test:acceptance:vscodium') === true,
+        );
+        return [
+          steps[pins - 1]?.run,
+          steps[pins]?.run,
+          steps[pins + 1]?.uses,
+          steps[pins + 1]?.with,
+          pins + 1 < acceptance,
+        ];
+      }),
+      jobs.map(() => [
+        'pnpm install --frozen-lockfile',
+        'node tools/vscodium-pins-key.ts >> "$GITHUB_OUTPUT"',
+        'actions/cache@v6',
+        {
+          path: '.vscode-test/downloads/VSCodium-*\n.vscode-test/downloads/vscodium-reh-*\n',
+          key: 'vscodium-archives-${{ runner.os }}-${{ runner.arch }}-${{ steps.vscodium-pins.outputs.key }}',
+        },
+        true,
+      ]),
     );
   });
 });

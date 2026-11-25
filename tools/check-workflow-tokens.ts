@@ -12,11 +12,15 @@
  * archives, which holds it in its own `env`. A job that calls a workflow may pass it there by name; no job passes
  * every secret (`secrets: inherit`), and no workflow or job `env` holds it, so the acceptance step, which starts the
  * editor, the hosts and the containers with its environment, never sees it.
+ *
+ * No cache holds the CLI archives either: a cache saved on main can be restored by a fork's pull request, so a cache
+ * path that names one of them in the run's download cache, or a folder they are in, fails the check.
  */
 
 import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {parse as parseYaml} from 'yaml';
+import {CLI_ARCHIVES, cliArchiveName} from './acceptance-downloads.ts';
 import {isMainModule, REPOSITORY_ROOT} from './repository.ts';
 
 const WORKFLOWS = '.github/workflows';
@@ -122,6 +126,82 @@ export function cliArchivesSecretProblems(
   return problems;
 }
 
+/** The CLI archives' files in the run's download cache, from the checkout's root. */
+const CLI_ARCHIVE_FILES: readonly string[] = Object.keys(CLI_ARCHIVES).map(
+  platform => `.vscode-test/downloads/${cliArchiveName(platform)}`,
+);
+
+/**
+ * A cache path from the checkout's root as a regular expression, `./` and `${{ github.workspace }}/` taken off: `**`
+ * matches across folders, `*` and `?` within one; the checkout itself (`.` or nothing) matches every file in it.
+ */
+function cachePathPattern(cachePath: string): RegExp {
+  const relative = cachePath
+    .trim()
+    .replace(/^\$\{\{\s*github\.workspace\s*\}\}\/?/u, '')
+    .replace(/^(?:\.\/)+/u, '')
+    .replace(/\/+$/u, '');
+  if (relative === '' || relative === '.') {
+    return /^/u;
+  }
+  const source = relative
+    .split(/(\*\*|\*|\?)/u)
+    .map(part =>
+      part === '**'
+        ? '.*'
+        : part === '*'
+          ? '[^/]*'
+          : part === '?'
+            ? '[^/]'
+            : part.replace(/[.+^${}()|[\]\\]/gu, '\\$&'),
+    )
+    .join('');
+  return new RegExp(`^${source}$`, 'u');
+}
+
+/** Whether the cache path `cachePath` holds `file`: it names the file or one of the folders the file is in. */
+function cachePathHolds(cachePath: string, file: string): boolean {
+  const pattern = cachePathPattern(cachePath);
+  const segments = file.split('/');
+  return segments
+    .map((segment, index) => segments.slice(0, index + 1).join('/'))
+    .some(prefix => pattern.test(prefix));
+}
+
+/**
+ * What is wrong with the workflow `file` whose text is `text` in the reach of the CLI archives' bytes: each path of an
+ * `actions/cache` step (its restore and save actions too) that holds one of the CLI archives. A `!` path, which takes
+ * files out, is not read.
+ */
+export function cliArchivesCacheProblems(file: string, text: string): string[] {
+  const workflow = (parseYaml(text) ?? {}) as {
+    jobs?: Record<
+      string,
+      {steps?: Array<{uses?: unknown; with?: {path?: unknown}}>}
+    >;
+  };
+  return Object.entries(workflow.jobs ?? {}).flatMap(([name, definition]) =>
+    (definition.steps ?? []).flatMap((step, index) => {
+      const paths =
+        typeof step.uses === 'string' &&
+        step.uses.startsWith('actions/cache') &&
+        typeof step.with?.path === 'string'
+          ? step.with.path.split('\n').filter(line => line.trim() !== '')
+          : [];
+      return paths
+        .filter(cachePath => !cachePath.trim().startsWith('!'))
+        .flatMap(cachePath =>
+          CLI_ARCHIVE_FILES.filter(archive =>
+            cachePathHolds(cachePath, archive),
+          ).map(
+            archive =>
+              `${file}: jobs.${name}.steps.${String(index)}.with.path caches ${cachePath.trim()}, which holds the CLI archive ${archive}; a fork's pull request can restore a cache saved on main`,
+          ),
+        );
+    }),
+  );
+}
+
 /** The events of a workflow's `on`: a name, a list of names, or a map from name to its filters. */
 function eventsOf(on: unknown): string[] {
   if (typeof on === 'string') {
@@ -208,7 +288,10 @@ export function workflowTokenProblems(file: string, text: string): string[] {
   return problems;
 }
 
-/** The problems of every workflow under `root`'s `.github/workflows`: its tokens, and the reach of the CLI archives' secret. */
+/**
+ * The problems of every workflow under `root`'s `.github/workflows`: its tokens, the reach of the CLI archives' secret
+ * and its caches' reach of their bytes.
+ */
 export function workflowsTokenProblems(root: string): string[] {
   const folder = path.join(root, WORKFLOWS);
   return readdirSync(folder)
@@ -220,6 +303,7 @@ export function workflowsTokenProblems(root: string): string[] {
       return [
         ...workflowTokenProblems(file, text),
         ...cliArchivesSecretProblems(file, text),
+        ...cliArchivesCacheProblems(file, text),
       ];
     });
 }
