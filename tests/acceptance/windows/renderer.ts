@@ -2911,6 +2911,34 @@ export async function dialogOf(name: string): Promise<ShownDialog | undefined> {
   );
 }
 
+/** Marks the dialog open in window `name`, so that a later read can tell it from another one; nothing happens when none is open. */
+export async function markDialog(name: string): Promise<void> {
+  await evaluate<boolean>(
+    name,
+    `(() => {
+      const box = document.querySelector('${DIALOG_BOX}');
+      box?.setAttribute('data-acceptance-answered', 'yes');
+      return box !== null;
+    })()`,
+  );
+}
+
+/** Whether the dialog open in window `name` is the one `markDialog` marked, another one, or there is none. */
+export async function dialogIdentity(
+  name: string,
+): Promise<'none' | 'answered' | 'another'> {
+  return evaluate<'none' | 'answered' | 'another'>(
+    name,
+    `(() => {
+      const box = document.querySelector('${DIALOG_BOX}');
+      if (box === null) {
+        return 'none';
+      }
+      return box.getAttribute('data-acceptance-answered') === 'yes' ? 'answered' : 'another';
+    })()`,
+  );
+}
+
 /** Clicks the status bar item `itemId` of window `name`, as a user's click on its label does. */
 export async function clickStatusItem(
   name: string,

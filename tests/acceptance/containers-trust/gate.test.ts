@@ -35,7 +35,9 @@ import {
   answerDialog,
   answerDialogAt,
   answerFolderDialog,
+  dialogIdentity,
   dialogOf,
+  markDialog,
   clickButton,
   dialogText,
   dialogTextAt,
@@ -56,6 +58,7 @@ import {
   stateOf as containerStateOf,
   VIEW,
 } from '../windows/dev-containers-view.ts';
+import {afterAnswered, ANSWERED_DIALOG_MILLISECONDS} from './after-answered.ts';
 import {answerNativeFolderDialog} from './native-folder-dialog.ts';
 import {folderWrapper, recordedCalls} from '../windows/folder-wrapper.ts';
 import {closeLeftoverWindows} from '../windows/maintenance.ts';
@@ -129,63 +132,28 @@ async function ranOnHost(folder: string): Promise<{
 
 const NOTHING_RAN = {dockerCalls: false, initialized: false, containers: []};
 
-/** How long the dialog the row answered may stay the one on the page before the row fails; the wait is bounded. */
-const ANSWERED_DIALOG_MILLISECONDS = 60_000;
-
-/**
- * The next dialog of window `name` after the one saying `answered` was answered: the answered dialog stays on the page for
- * a moment while it closes, so a dialog with the same message is not the next one. The wait is bounded, and it fails
- * naming which it was: the same question shown again after the page held none (core asked a second time, a behaviour of
- * the product), no dialog at all (the next question never came), or the answered dialog never closed (a stale dialog).
- */
-async function afterAnswered<Found>(
-  name: string,
-  answered: string,
-  look: (milliseconds: number) => Promise<Found>,
-  messageOf: (found: Found) => string,
-): Promise<Found> {
-  let gone = false;
-  const deadline = Date.now() + ANSWERED_DIALOG_MILLISECONDS;
-  while (Date.now() < deadline) {
-    const shown = await look(300).then(
-      found => ({found}),
-      () => undefined,
-    );
-    if (shown === undefined) {
-      gone = true;
-    } else if (messageOf(shown.found) !== answered) {
-      return shown.found;
-    } else if (gone) {
-      throw new Error(
-        `window ${name}: same question again: ${JSON.stringify(answered)} was on the page again after the page held no dialog, once it had been answered Cancel`,
-      );
-    }
-  }
-  throw new Error(
-    gone
-      ? `window ${name}: no next dialog: the page held no dialog for ${String(ANSWERED_DIALOG_MILLISECONDS / 1000)} s after ${JSON.stringify(answered)} was answered Cancel`
-      : `window ${name}: stale dialog never closed: ${JSON.stringify(answered)} was still the dialog on the page ${String(ANSWERED_DIALOG_MILLISECONDS / 1000)} s after it was answered Cancel`,
-  );
-}
-
 /** The next dialog of window `name` after the one saying `answered` was answered, in the window's own page. */
 function dialogAfter(name: string, answered: string) {
-  return afterAnswered(
-    name,
-    answered,
-    milliseconds => waitForDialog(name, milliseconds),
-    shown => shown.message,
-  );
+  return afterAnswered(name, answered, {
+    look: milliseconds => waitForDialog(name, milliseconds),
+    messageOf: shown => shown.message,
+    mark: async () => {
+      await markDialog(name);
+    },
+    identity: () => dialogIdentity(name),
+    now: Date.now,
+    bound: ANSWERED_DIALOG_MILLISECONDS,
+  });
 }
 
 /** The next dialog of the window `name`, wherever its page is, after the one saying `answered` was answered. */
 function dialogOfNameAfter(name: string, answered: string) {
-  return afterAnswered(
-    name,
-    answered,
-    milliseconds => waitForDialogOfName(name, milliseconds),
-    shown => shown.dialog.message,
-  );
+  return afterAnswered(name, answered, {
+    look: milliseconds => waitForDialogOfName(name, milliseconds),
+    messageOf: shown => shown.dialog.message,
+    now: Date.now,
+    bound: ANSWERED_DIALOG_MILLISECONDS,
+  });
 }
 
 describe('Dev Containers trust gate rows (card containers-12)', function () {
