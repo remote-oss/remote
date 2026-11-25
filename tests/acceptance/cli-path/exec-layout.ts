@@ -16,15 +16,10 @@ import {
   userSettings,
   variable,
 } from '../windows/harness.ts';
-import {freshHost} from '../windows/maintenance.ts';
+import {DATA_FOLDER, freshHost} from '../windows/maintenance.ts';
 import {dialogOf, notifications} from '../windows/renderer.ts';
 import {PLATFORMS} from '../windows/tunnel-support.ts';
 import {stamped} from './stamped-steps.ts';
-
-/** The data folder of the editor under test on the host. */
-function dataFolder(): string {
-  return `/home/harness/${editorProduct().serverDataFolderName}`;
-}
 
 /** What the host holds and runs after a connect, as the rows compare it. */
 export interface ExecFacts {
@@ -68,14 +63,14 @@ export async function execFacts(): Promise<ExecFacts> {
     'harness',
     'sh',
     '-c',
-    `ps -eo args | grep -F '${dataFolder()}/${launcherName()} command-shell' | grep -v grep; true`,
+    `ps -eo args | grep -F '${DATA_FOLDER}/${launcherName()} command-shell' | grep -v grep; true`,
   );
   return {
-    launcher: (await namesIn(dataFolder())).includes(launcherName()),
-    server: (await namesIn(`${dataFolder()}/cli/servers`)).some(name =>
+    launcher: (await namesIn(DATA_FOLDER)).includes(launcherName()),
+    server: (await namesIn(`${DATA_FOLDER}/cli/servers`)).some(name =>
       name.endsWith(`-${commit}`),
     ),
-    binFolder: (await namesIn(`${dataFolder()}/bin`)).includes(commit),
+    binFolder: (await namesIn(`${DATA_FOLDER}/bin`)).includes(commit),
     cliProcesses: processes.split('\n').filter(line => line !== '').length,
   };
 }
@@ -98,7 +93,7 @@ export async function freshExecHost(): Promise<void> {
     'sh',
     '-c',
     // The bracket keeps pkill's pattern from matching this shell's own command line.
-    `pkill -f '${dataFolder().replace('/.', '/[.]')}/${launcherName()}' || true; rm -rf '${dataFolder()}/${launcherName()}' '${dataFolder()}'/.cli.*.log`,
+    `pkill -f '${DATA_FOLDER.replace('/.', '/[.]')}/${launcherName()}' || true; rm -rf '${DATA_FOLDER}/${launcherName()}' '${DATA_FOLDER}'/.cli.*.log`,
   );
 }
 
