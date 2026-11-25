@@ -4,11 +4,11 @@
  * below `cli/servers` and one running CLI on a fresh host, and shows no message of the extension's own.
  */
 
-import {deepStrictEqual} from 'node:assert';
 import {keepingSettings} from '../windows/tunnel-support.ts';
 import {
   EXEC_FACTS,
   execConnect,
+  sameOrTell,
   type ExecFacts,
   type Messages,
 } from './exec-layout.ts';
@@ -25,15 +25,6 @@ function execLayout(facts: ExecFacts) {
   };
 }
 
-/** Compares `actual` with `expected` and, when they differ, adds what the connect's log said of the install to the failure. */
-function same(actual: unknown, expected: unknown, told: string): void {
-  try {
-    deepStrictEqual(actual, expected);
-  } catch (failure) {
-    throw new Error(`${String(failure)}\n${told}`, {cause: failure});
-  }
-}
-
 describe('the exec-server mode on the CLI-source editor (card #3028, F-2103)', function () {
   this.timeout(600_000);
 
@@ -44,7 +35,7 @@ describe('the exec-server mode on the CLI-source editor (card #3028, F-2103)', f
         'c3028-unset',
         {},
       );
-      same(
+      await sameOrTell(
         [facts, messages],
         [{...EXEC_FACTS, binFolder: false}, NO_MESSAGES],
         told,
@@ -59,7 +50,11 @@ describe('the exec-server mode on the CLI-source editor (card #3028, F-2103)', f
         'c3028-true',
         {'remote.SSH.useExecServer': true},
       );
-      same([execLayout(facts), messages], [EXEC_FACTS, NO_MESSAGES], told);
+      await sameOrTell(
+        [execLayout(facts), messages],
+        [EXEC_FACTS, NO_MESSAGES],
+        told,
+      );
     });
   });
 
@@ -77,7 +72,7 @@ describe('the exec-server mode on the CLI-source editor (card #3028, F-2103)', f
         lines.push(`${value}: ${told}`);
       });
     }
-    same(
+    await sameOrTell(
       outcomes,
       [
         ['no', EXEC_FACTS, NO_MESSAGES],
@@ -94,7 +89,11 @@ describe('the exec-server mode on the CLI-source editor (card #3028, F-2103)', f
         'c3028-lower-case',
         {'remote.ssh.useExecServer': false},
       );
-      same([execLayout(facts), messages], [EXEC_FACTS, NO_MESSAGES], told);
+      await sameOrTell(
+        [execLayout(facts), messages],
+        [EXEC_FACTS, NO_MESSAGES],
+        told,
+      );
     });
   });
 
@@ -110,7 +109,7 @@ describe('the exec-server mode on the CLI-source editor (card #3028, F-2103)', f
         'remote.SSH.useExecServer': false,
       }),
     );
-    same(
+    await sameOrTell(
       [
         execLayout(exec.facts),
         execLayout(legacy.facts),

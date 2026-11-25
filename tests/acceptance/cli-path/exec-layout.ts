@@ -5,6 +5,7 @@
  * only by the rows of this suite, so that a change to it reaches the `cli-path` launch alone.
  */
 
+import {deepStrictEqual} from 'node:assert';
 import {applicationNameOf} from '../../../tools/acceptance-cli-editor.ts';
 import {
   closeWindow,
@@ -56,22 +57,46 @@ function launcherName(): string {
   return `${name}-${editorProduct().commit}`;
 }
 
+/** The command lines of the CLI processes that serve the host: the CLI file of the commit run with `command-shell`. */
+export async function cliProcessLines(): Promise<string[]> {
+  return (
+    await onHostAs(
+      'harness',
+      'sh',
+      '-c',
+      `ps -eo pid,ppid,args | grep -F '${DATA_FOLDER}/${launcherName()} command-shell' | grep -v grep; true`,
+    )
+  )
+    .split('\n')
+    .filter(line => line !== '');
+}
+
+/** Compares `actual` with `expected` and, when they differ, adds what `told` says to the failure. */
+export async function sameOrTell(
+  actual: unknown,
+  expected: unknown,
+  told: (() => Promise<string> | string) | string,
+): Promise<void> {
+  try {
+    deepStrictEqual(actual, expected);
+  } catch (failure) {
+    throw new Error(
+      `${String(failure)}\n${typeof told === 'string' ? told : await told()}`,
+      {cause: failure},
+    );
+  }
+}
+
 /** What the host holds and runs of the editor under test now. */
 export async function execFacts(): Promise<ExecFacts> {
   const {commit} = editorProduct();
-  const processes = await onHostAs(
-    'harness',
-    'sh',
-    '-c',
-    `ps -eo args | grep -F '${DATA_FOLDER}/${launcherName()} command-shell' | grep -v grep; true`,
-  );
   return {
     launcher: (await namesIn(DATA_FOLDER)).includes(launcherName()),
     server: (await namesIn(`${DATA_FOLDER}/cli/servers`)).some(name =>
       name.endsWith(`-${commit}`),
     ),
     binFolder: (await namesIn(`${DATA_FOLDER}/bin`)).includes(commit),
-    cliProcesses: processes.split('\n').filter(line => line !== '').length,
+    cliProcesses: (await cliProcessLines()).length,
   };
 }
 
@@ -94,7 +119,7 @@ export async function freshExecHost(): Promise<void> {
     'harness',
     'sh',
     '-c',
-    `pkill -f '${DATA_FOLDER.replace('/.', '/[.]')}/${launcherName()}' || true`,
+    `pkill -f '${DATA_FOLDER.replace('/.', '/[.]')}/(${launcherName()}|cli/)' || true`,
   );
   await onHostAs(
     'harness',
