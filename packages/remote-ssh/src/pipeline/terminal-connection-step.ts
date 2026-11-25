@@ -278,6 +278,7 @@ export function openTerminalConnectionStep(
             socksPort: socksPort ?? 0,
             startedLogin: true,
             storedRecord: undefined,
+            startedHelper: true,
             storeSharedRecord: () => Promise.resolve(false),
             onNotice: listener => {
               noticeListeners.push(listener);

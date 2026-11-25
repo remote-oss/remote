@@ -1456,7 +1456,11 @@ export function launchesOf(root: string): Launch[] {
       label: 'explorer-home',
       suite: 'explorer-home',
       // Core's dialogs are drawn in the window, where the renderer helpers read them.
-      settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
+      settings: {
+        ...EXPLORER_LAUNCH.settings,
+        ...PALETTE_HISTORY_OFF,
+        'window.dialogStyle': 'custom',
+      },
       // The empty script makes Remote - SSH show its real pickers, which the rows of the SSH group's hand-overs read.
       environment: {
         ...EXPLORER_LAUNCH.environment,
@@ -1537,6 +1541,7 @@ export function launchesOf(root: string): Launch[] {
       ...RENDERER_LAUNCH,
       label: 'web-ui',
       suite: 'web-ui',
+      settings: {...RENDERER_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
       // A recording xdg-open that the suite writes into the run's folder comes first on the editor's PATH, so that
       // opening the web UI opens nothing on the machine.
       environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
@@ -1551,6 +1556,7 @@ export function launchesOf(root: string): Launch[] {
       // rows connect only through the local server.
       settings: {
         ...TRUST_LAUNCH.settings,
+        ...PALETTE_HISTORY_OFF,
         'security.workspace.trust.startupPrompt': 'never',
       },
       environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
@@ -1696,6 +1702,7 @@ export function launchesOf(root: string): Launch[] {
       ...CONTAINERS_LAUNCH,
       label: 'containers-shutdown',
       suite: 'containers-shutdown',
+      settings: {...CONTAINERS_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
       // The other Dev Containers, installed and disabled, as in `containers`.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],
@@ -1881,6 +1888,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'containers-view',
       suite: 'containers-view',
       registry: true,
+      settings: {...CONTAINERS_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
     },
   ];
   return launches;
