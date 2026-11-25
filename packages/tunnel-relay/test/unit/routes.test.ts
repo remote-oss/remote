@@ -9,18 +9,14 @@ import {
   type RouteContext,
 } from '../../src/routes.ts';
 import {Store} from '../../src/store.ts';
+import {Tokens} from '../../src/auth/tokens.ts';
+import {TEST_CONFIG} from './settings.ts';
 
-const CONFIG: RelayConfig = {
-  domain: 'relay.test',
-  port: 443,
-  certificateFile: '',
-  keyFile: '',
-  storeFile: ':memory:',
-  clusterId: 'usw2',
-};
+const OWNER: Caller = {kind: 'account', id: 7, login: 'owner'};
+const OTHER: Caller = {kind: 'account', id: 8, login: 'other'};
 
-const OWNER: Caller = {id: 7, login: 'owner'};
-const OTHER: Caller = {id: 8, login: 'other'};
+/** The relay's tokens at a fixed time, signed with a fixed key. */
+const TOKENS = new Tokens(Buffer.alloc(32, 1), () => 0);
 
 describe('the management routes of the relay', () => {
   let store: Store;
@@ -30,8 +26,14 @@ describe('the management routes of the relay', () => {
     return Promise.resolve(caller);
   }
 
-  function context(config: RelayConfig = CONFIG): RouteContext {
-    return {store, config, authenticate, report: () => undefined};
+  function context(config: RelayConfig = TEST_CONFIG): RouteContext {
+    return {
+      store,
+      config,
+      authenticate,
+      tokens: TOKENS,
+      report: () => undefined,
+    };
   }
 
   /** Sends `method path` with the API version and `query`, `body` and `headers`. */
@@ -131,8 +133,11 @@ describe('the management routes of the relay', () => {
       deepStrictEqual(
         [
           await send('GET', '/clusters'),
-          (await send('GET', '/clusters', {config: {...CONFIG, port: 8443}}))
-            .body,
+          (
+            await send('GET', '/clusters', {
+              config: {...TEST_CONFIG, port: 8443},
+            })
+          ).body,
         ],
         [
           {
@@ -493,7 +498,7 @@ describe('the management routes of the relay', () => {
       const elsewhere = await send('PUT', '/tunnels/one/endpoints/h2-relay', {
         query: {connectionMode: 'TunnelRelay'},
         body: {hostId: 'h2'},
-        config: {...CONFIG, port: 8443},
+        config: {...TEST_CONFIG, port: 8443},
       });
       deepStrictEqual(
         [
@@ -584,6 +589,157 @@ describe('the management routes of the relay', () => {
           [404, 'There is no such route.'],
           [404, 'There is no such route.'],
           [404, 'There is no such tunnel.'],
+        ],
+      );
+    });
+  });
+
+  describe('a tunnel token', () => {
+    beforeEach(async () => {
+      await send('PUT', '/tunnels/one', {body: {name: 'web'}});
+      await send('PUT', '/tunnels/two', {body: {}});
+      await send('PUT', '/tunnels/one/ports/80', {body: {}});
+    });
+
+    /** The statuses of each request as a caller holding a token of `scope` for tunnel one. */
+    async function statusesAs(
+      scope: 'host' | 'connect' | 'manage:ports',
+      requests: ReadonlyArray<[string, string, unknown?]>,
+    ): Promise<number[]> {
+      caller = {kind: 'tunnel', tunnelId: 'one', scope};
+      const statuses: number[] = [];
+      for (const [method, path, body] of requests) {
+        const answer = await send(method, path, {
+          body,
+          query: {connectionMode: 'TunnelRelay'},
+        });
+        statuses.push(answer.status);
+      }
+      return statuses;
+    }
+
+    it('reaches only its own tunnel, by id, and as far as its scope grants', async () => {
+      const requests: ReadonlyArray<[string, string, unknown?]> = [
+        ['GET', '/tunnels/one'],
+        ['GET', '/tunnels/web'],
+        ['GET', '/tunnels/two'],
+        ['GET', '/tunnels/two/ports'],
+        ['GET', '/tunnels/one/ports'],
+        ['PUT', '/tunnels/one/ports/81', {}],
+        ['PUT', '/tunnels/one/endpoints/h1-relay', {hostId: 'h1'}],
+        ['PUT', '/tunnels/one', {}],
+        ['DELETE', '/tunnels/one'],
+        ['GET', '/tunnels'],
+        ['GET', '/tunnels/web:checkNameAvailability'],
+      ];
+      deepStrictEqual(
+        {
+          host: await statusesAs('host', requests),
+          connect: await statusesAs('connect', requests),
+          ports: await statusesAs('manage:ports', requests),
+        },
+        {
+          host: [200, 404, 404, 404, 200, 200, 200, 403, 403, 403, 403],
+          connect: [200, 404, 404, 404, 200, 403, 403, 403, 403, 403, 403],
+          ports: [200, 404, 404, 404, 200, 200, 403, 403, 403, 403, 403],
+        },
+      );
+    });
+
+    it('is refused with the detail that says what it lacks', async () => {
+      caller = {kind: 'tunnel', tunnelId: 'one', scope: 'connect'};
+      deepStrictEqual(detailOf(await send('DELETE', '/tunnels/one/ports/80')), [
+        403,
+        'This token does not grant that.',
+      ]);
+    });
+
+    it('reads its tunnel with no access tokens, whatever scopes it asks for', async () => {
+      caller = {kind: 'tunnel', tunnelId: 'one', scope: 'host'};
+      const answer = await send('GET', '/tunnels/one', {
+        query: {tokenScopes: 'host,connect'},
+      });
+      deepStrictEqual('accessTokens' in (answer.body as object), false);
+    });
+  });
+
+  describe("an owner's access tokens", () => {
+    it('are one per scope asked for that the relay issues, on create, update, get and list alike', async () => {
+      const scopes = {tokenScopes: 'host,connect,manage,manage:ports'};
+      const created = await send('PUT', '/tunnels/one', {
+        body: {},
+        query: scopes,
+      });
+      const updated = await send('PUT', '/tunnels/one', {
+        body: {},
+        query: scopes,
+      });
+      const read = await send('GET', '/tunnels/one', {query: scopes});
+      const listed = await send('GET', '/tunnels', {query: scopes});
+      const plain = await send('GET', '/tunnels/one');
+      function grants(body: unknown): unknown {
+        return Object.fromEntries(
+          Object.entries(
+            (body as {accessTokens: Record<string, string>}).accessTokens,
+          ).map(([scope, token]) => [scope, TOKENS.check(token)]),
+        );
+      }
+      const expected = {
+        host: {tunnelId: 'one', scope: 'host'},
+        connect: {tunnelId: 'one', scope: 'connect'},
+        'manage:ports': {tunnelId: 'one', scope: 'manage:ports'},
+      };
+      deepStrictEqual(
+        [
+          grants(created.body),
+          grants(updated.body),
+          grants(read.body),
+          grants(
+            (listed.body as {value: Array<{value: unknown[]}>}).value[0]
+              ?.value[0],
+          ),
+          'accessTokens' in (plain.body as object),
+        ],
+        [expected, expected, expected, expected, false],
+      );
+    });
+  });
+
+  describe('access control', () => {
+    it('refuses an Anonymous entry that allows, on a tunnel or a port, and keeps a deny and other entries', async () => {
+      const allow = {entries: [{type: 'Anonymous', scopes: ['connect']}]};
+      const deny = {entries: [{type: 'Anonymous', isDeny: true}]};
+      const others = {entries: [{type: 'Users', subjects: ['42']}, 'junk']};
+      await send('PUT', '/tunnels/one', {body: {}});
+      deepStrictEqual(
+        [
+          detailOf(
+            await send('PUT', '/tunnels/two', {body: {accessControl: allow}}),
+          ),
+          detailOf(
+            await send('PUT', '/tunnels/one/ports/80', {
+              body: {accessControl: allow},
+            }),
+          ),
+          (await send('PUT', '/tunnels/three', {body: {accessControl: deny}}))
+            .status,
+          (
+            await send('PUT', '/tunnels/one/ports/80', {
+              body: {accessControl: deny},
+            })
+          ).status,
+          (await send('PUT', '/tunnels/four', {body: {accessControl: others}}))
+            .status,
+          (await send('PUT', '/tunnels/five', {body: {accessControl: 'none'}}))
+            .status,
+        ],
+        [
+          [400, "Public access isn't offered."],
+          [400, "Public access isn't offered."],
+          200,
+          200,
+          200,
+          200,
         ],
       );
     });
