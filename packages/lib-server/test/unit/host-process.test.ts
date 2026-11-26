@@ -307,7 +307,7 @@ describe('a process on a host with a POSIX shell, run for real', () => {
     ]);
   });
 
-  it('a signal to the group ends the command and the children it started, and a group already gone is no failure', async () => {
+  it('a signal to the group ends the command and the children it started with no word from the shell about it, and a group already gone is no failure', async () => {
     const server = localExecServer(HOST_BASE);
     const spawned = await spawnOnHost(server, {
       ...requestOf(),
@@ -337,6 +337,9 @@ describe('a process on a host with a POSIX shell, run for real', () => {
     const status = await spawned.process.exited;
     const after = await membersOf();
     await signalGroupOnHost(server, processId, 'KILL');
-    deepStrictEqual([before, status, after], [3, 143, []]);
+    deepStrictEqual(
+      [before, status, after, await textOf(spawned.process.stderr)],
+      [3, 143, [], ''],
+    );
   });
 });
