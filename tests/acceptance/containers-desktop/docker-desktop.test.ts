@@ -173,19 +173,20 @@ describe('Dev Containers on Docker Desktop for Windows (card #3172)', function (
       const [localFolder = '', configFile = ''] = labels.split('|');
       deepStrictEqual(
         {
-          source: bind?.Source,
+          source: realpathSync.native(bind?.Source ?? ''),
           openedAt: (await windowState(name)).folders.map(each =>
             each.slice(-'/workspaces/c3020-repo/sub/deeper'.length),
           ),
           windowsLabels: [
             /^[a-z]:\\/.test(localFolder),
             /^[A-Za-z]:[\\/]/.test(configFile),
+            /^[A-Za-z]:\\/.test(bind?.Source ?? ''),
           ],
         },
         {
           source: realpathSync.native(repository),
           openedAt: ['/workspaces/c3020-repo/sub/deeper'],
-          windowsLabels: [true, true],
+          windowsLabels: [true, true, true],
         },
       );
     } finally {
