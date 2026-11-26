@@ -138,6 +138,9 @@ jobs:
           DESKTOP_SHA256: a5e299131c9c53d60f3f752b162078945eb5faf6eedcf0be20a214c6e6cea444
           DESKTOP_BIN: C:\Program Files\Docker\Docker\resources\bin
         run: |
+          # WSL as the probe found it before the install (the probe's engine came up after these two)
+          wsl --version
+          wsl --status
           $installer = Join-Path $env:RUNNER_TEMP 'DockerDesktopInstaller.exe'
           Invoke-WebRequest $env:DESKTOP_URL -OutFile $installer
           $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
@@ -157,9 +160,13 @@ jobs:
           }
           "the engine answered '{0}' after {1:n0} s" -f $os, $clock.Elapsed.TotalSeconds
           if ($os -ne 'linux') {
-            Get-ChildItem "$env:LOCALAPPDATA\Docker\log" -Recurse -Filter *.log -ErrorAction SilentlyContinue |
-              Sort-Object LastWriteTime -Descending | Select-Object -First 3 |
-              ForEach-Object { "--- $($_.FullName)"; Get-Content $_.FullName -Tail 40 }
+            # the backend's own logs and WSL's state, since the error dialog's text is the backend's
+            $logs = @(Get-ChildItem "$env:LOCALAPPDATA\Docker\log" -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+            $logs | Format-Table -AutoSize LastWriteTime, Length, FullName
+            $logs | Where-Object { $_.Name -match 'backend|wsl|vm|monitor|error' } | Select-Object -First 6 |
+              ForEach-Object { "--- $($_.FullName)"; Get-Content $_.FullName -Tail 60 }
+            wsl -l -v
+            wsl --status
             exit 1
           }
           $context = "$(& $docker context show)".Trim()
