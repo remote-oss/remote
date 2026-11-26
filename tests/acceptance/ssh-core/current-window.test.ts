@@ -757,7 +757,7 @@ describe('Connect Current Window to Host', function () {
       next = await nextEmptyWindow(() =>
         pressControlAlt('c3017-inflight', 'h'),
       );
-      await connectedWithin(next, 90_000);
+      await connectedEmpty(next, 'harness', 90_000);
       const held = await waitFor(
         'the held connect ended',
         async () => !(await stillHeld()),
