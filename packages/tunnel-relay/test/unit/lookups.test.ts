@@ -3,7 +3,36 @@ import {
   LOOKUP_WINDOW,
   LookupLimit,
   LOOKUPS_MOST,
+  SOURCES_MOST,
 } from '../../src/auth/lookups.ts';
+
+/** The window a limit keeps for a source. */
+interface Window {
+  start: number;
+  count: number;
+}
+
+/** Windows that count how far their iterators were stepped, which is what a scan of them costs. */
+function countingWindows(): {
+  windows: Map<string, Window>;
+  steps: () => number;
+} {
+  const windows = new Map<string, Window>();
+  const entries = windows.entries.bind(windows);
+  let steps = 0;
+  windows.entries = () => {
+    const iterator = entries();
+    const counting = {
+      next: () => {
+        steps += 1;
+        return iterator.next();
+      },
+      [Symbol.iterator]: () => counting,
+    };
+    return counting as never;
+  };
+  return {windows, steps: () => steps};
+}
 
 /** A limit over a clock the row sets, in milliseconds. */
 function limitAt(clock: {now: number}): LookupLimit {
@@ -72,18 +101,111 @@ describe('the lookup limit of one address', () => {
     );
   });
 
-  it('drops the windows that have ended once a thousand addresses are held, and keeps the ones that have not', () => {
+  it('drops the windows that have ended, and keeps the ones that have not, and a source that starts again is held once', () => {
     const clock = {now: 1_000_000};
     const limit = limitAt(clock);
-    for (let index = 0; index < 999; index += 1) {
-      limit.take(`old-${String(index)}`);
-    }
-    clock.now = 1_000_000 + LOOKUP_WINDOW - 1;
-    limit.take('late');
-    const before = limit.held;
+    limit.take('first');
+    clock.now += 10_000;
+    limit.take('second');
     clock.now = 1_000_000 + LOOKUP_WINDOW;
-    // The next address finds a thousand held: the 999 that ended go, `late` (started a moment before) stays.
-    limit.take('new');
-    deepStrictEqual([before, limit.held], [1000, 2]);
+    // `first` has ended and starts again behind `second`, which is still running.
+    limit.take('first');
+    const held = [limit.held];
+    clock.now = 1_000_000 + LOOKUP_WINDOW + 10_000;
+    limit.take('third');
+    // `second` has ended now; `first` (started at the first instant) and `third` are running.
+    held.push(limit.held);
+    deepStrictEqual(held, [2, 2]);
+  });
+
+  it('holds at most ten thousand sources however many ask, at a cost that does not grow with the number held', () => {
+    const clock = {now: 1_000_000};
+    const counted = countingWindows();
+    const limit = new LookupLimit(() => clock.now, counted.windows);
+    const asking = 4 * SOURCES_MOST;
+    for (let index = 0; index < asking; index += 1) {
+      limit.take(
+        `10.${String(index >> 16)}.${String((index >> 8) & 255)}.${String(index & 255)}`,
+      );
+    }
+    deepStrictEqual(
+      [limit.held, counted.steps() <= 3 * asking],
+      [SOURCES_MOST, true],
+    );
+  });
+
+  it('drops the source whose window started first when every window held is running, and no other', () => {
+    const clock = {now: 1_000_000};
+    const limit = limitAt(clock);
+    takes(limit, 'first', LOOKUPS_MOST);
+    clock.now += 1;
+    takes(limit, 'second', LOOKUPS_MOST);
+    for (let index = 0; index < SOURCES_MOST - 2; index += 1) {
+      limit.take(`other-${String(index)}`);
+    }
+    const full = limit.held;
+    limit.take('extra');
+    // `second` is asked first: `first` would start a window of its own and drop the oldest, which is `second`.
+    const second = limit.take('second').kind;
+    deepStrictEqual(
+      [full, limit.held, second, limit.take('first').kind],
+      [SOURCES_MOST, SOURCES_MOST, 'refused', 'allowed'],
+    );
+  });
+});
+
+describe('the source that an address counts as', () => {
+  /** Whether `later` is refused after `earlier` has made all ten of its lookups. */
+  function sharedBetween(earlier: string, later: string): boolean {
+    const limit = limitAt({now: 1_000_000});
+    takes(limit, earlier, LOOKUPS_MOST);
+    return limit.take(later).kind === 'refused';
+  }
+
+  it('is one for all addresses of an IPv6 /64, however they are written', () => {
+    deepStrictEqual(
+      [
+        sharedBetween('2001:db8:1:2::1', '2001:db8:1:2:aaaa:bbbb:cccc:dddd'),
+        sharedBetween('2001:db8:1:2::1', '2001:DB8:1:2:0:0:0:5'),
+        sharedBetween('2001:db8:1:2:3:4:5:6', '2001:db8:1:2:7:8:9:a'),
+        sharedBetween('fe80::1%eth0', 'fe80::2%eth1'),
+        sharedBetween('2001:db8:1:2::', '2001:db8:1:2::9'),
+        sharedBetween('::1', '::2'),
+      ],
+      [true, true, true, true, true, true],
+    );
+  });
+
+  it('differs between two /64 prefixes, and between an IPv6 address and an IPv4 one', () => {
+    deepStrictEqual(
+      [
+        sharedBetween('2001:db8:1:2::1', '2001:db8:1:3::1'),
+        sharedBetween('2001:db8:1:2::1', '2001:db8:2:2::1'),
+        sharedBetween('2001:db8:1:2::1', '10.0.0.1'),
+        sharedBetween('10.0.0.1', '10.0.0.2'),
+        sharedBetween('::1', '::ffff:0:1'),
+      ],
+      [false, false, false, false, false],
+    );
+  });
+
+  it('is the IPv4 address for an IPv4-mapped IPv6 address, in either form', () => {
+    deepStrictEqual(
+      [
+        sharedBetween('10.0.0.1', '::ffff:10.0.0.1'),
+        sharedBetween('::ffff:10.0.0.1', '10.0.0.1'),
+        sharedBetween('::ffff:10.0.0.1', '::ffff:a00:1'),
+        sharedBetween('10.1.2.3', '::FFFF:a01:203'),
+        sharedBetween('10.0.0.1', '::ffff:10.0.0.2'),
+      ],
+      [true, true, true, true, false],
+    );
+  });
+
+  it('is the address itself when it is neither, as the empty address of a socket with none', () => {
+    deepStrictEqual(
+      [sharedBetween('', ''), sharedBetween('', 'unknown')],
+      [true, false],
+    );
   });
 });
