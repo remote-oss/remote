@@ -72,8 +72,10 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
 - **Who the token belongs to:** the relay calls `GET https://api.github.com/user` with the token, and caches the
   answer for five minutes, keyed by a hash of the token. A token GitHub refuses is held as refused for 60 s, keyed the
   same way. Accounts and refusals share one map of at most 1,000 entries, least recently used out first (#3209).
-  A source address, the socket's peer address since the relay terminates TLS itself, gets at most 10 lookups for
-  tokens in neither cache in a one-minute window from its first such lookup, then 429 with `Retry-After`. An
+  A source, from the socket's peer address since the relay terminates TLS itself, gets at most 10 lookups for tokens
+  in neither cache in a one-minute window from its first such lookup, then 429 with `Retry-After`. A source is an
+  IPv4 address (an IPv4-mapped IPv6 address counts as its IPv4 address), or an IPv6 address's /64. At most 10,000
+  sources are held; ended windows go first, then the oldest running one. An
   unauthenticated `/user` counts against the relay's own limit at GitHub (`ruling-3207-relay-hardening`). A
   deployment that puts a proxy in front of the relay must revisit the source address. The account is its **numeric `id`**. Any GitHub token that
   identifies an account works, a personal access token included (`ruling-22-tunnel-rules` 2). The scopes our client
