@@ -121,9 +121,11 @@ jobs:
   # a change together with everything merged before it. GitHub keeps one pending job per part, so merges in quick
   # succession collapse into a run of the latest main, which holds each of them.
   # The parts of the VSCodium jobs: every part of tools/acceptance-parts.json's table, about fifteen minutes of rows each,
-  # for a merge to main (every merge runs every part, the full proof right after it), the nightly run, a release tag
-  # and a dispatch of all; the launches a dispatch names, as one part of 180 minutes. The parts with a containers launch
-  # go to their own job.
+  # for a merge to main (the full proof right after it), the nightly run, a release tag and a dispatch of all; the
+  # launches a dispatch names, as one part of 180 minutes. The parts with a containers launch go to their own job.
+  # One merge to main runs none: a release train's merge whose tree a gate run of the train's head passed with every
+  # part (tools/main-push-skip.ts, athena's ruling-3147-throughput), so that proof is the gate's. Every other merge,
+  # a light train's among them, runs every part, and so does the nightly run.
   vscodium-plan:
     if: inputs.vscodium || github.event_name == 'schedule' || github.event_name == 'push'
     # the launch table and the parts table only, as the changes job
@@ -131,23 +133,39 @@ jobs:
       ${{ vars.CI_POOL_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON)) || 'ubuntu-24.04' }}
     timeout-minutes: 10
+    # read only: main-push-skip reads the train's gate run and compares two commits, with this job's own token
+    permissions:
+      contents: read
+      actions: read
     outputs:
       parts: ${{ steps.plan.outputs.parts }}
       containers-parts: ${{ steps.plan.outputs.containers-parts }}
       cli-parts: ${{ steps.plan.outputs.cli-parts }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2 # the pushed commit's parent, for main-push-skip
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # skip=true only for a release train's merge whose gate passed every part on this tree; the reason goes to the
+      # job's summary either way
+      - id: skip
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/main-push-skip.ts >> "$GITHUB_OUTPUT"
       - id: plan
         env:
           LAUNCHES: ${{ inputs.launches }}
+          SKIP: ${{ steps.skip.outputs.skip }}
         run: |
-          if [ -n "$LAUNCHES" ] && [ "$LAUNCHES" != all ]; then
+          if [ "$SKIP" = true ]; then
+            parts='[]'
+          elif [ -n "$LAUNCHES" ] && [ "$LAUNCHES" != all ]; then
             # the part's name goes into its job's name and its concurrency group, and a group too long for GitHub
             # (somewhere past 335 characters: 479 launches characters made no job) leaves the job uncreated; a long
             # list is named by its first 60 characters and how many entries follow
@@ -460,7 +478,7 @@ jobs:
     needs: vscodium-plan
     # every part vscodium-plan gives with no containers launch: on each merge to main, the nightly run, a release tag and
     # a dispatch with vscodium. No variable turns the post-merge run off: it is the proof of what a pull request's
-    # narrowed parts left out.
+    # narrowed parts left out, unless a release train's gate already ran every part on the merged tree.
     if: >-
       !cancelled() && needs.vscodium-plan.result == 'success' && needs.vscodium-plan.outputs.parts != '[]' &&
       (inputs.vscodium || github.event_name == 'schedule' || github.event_name == 'push')
@@ -495,6 +513,18 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # the pinned VSCodium archives, the editor's and the servers', in the run's download cache, cached under a digest of
+      # their pins (tools/vscodium-pins-key.ts): a pin change misses, every other run finds them there and checks their
+      # sha256 as it would a download's. Only these two names: the CLI archives in the same folder are a private
+      # repository's, and a fork's pull request can restore a cache (tools/check-workflow-tokens.ts)
+      - id: vscodium-pins
+        run: node tools/vscodium-pins-key.ts >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: |
+            .vscode-test/downloads/VSCodium-*
+            .vscode-test/downloads/vscodium-reh-*
+          key: vscodium-archives-${{ runner.os }}-${{ runner.arch }}-${{ steps.vscodium-pins.outputs.key }}
       # the containerd image store, the one Docker 29 uses by default and the image-build rows are written against, and a
       # registry mirror for Docker Hub's images
       - run: tools/docker-containerd-store
@@ -578,6 +608,18 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # the pinned VSCodium archives, the editor's and the servers', in the run's download cache, cached under a digest of
+      # their pins (tools/vscodium-pins-key.ts): a pin change misses, every other run finds them there and checks their
+      # sha256 as it would a download's. Only these two names: the CLI archives in the same folder are a private
+      # repository's, and a fork's pull request can restore a cache (tools/check-workflow-tokens.ts)
+      - id: vscodium-pins
+        run: node tools/vscodium-pins-key.ts >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: |
+            .vscode-test/downloads/VSCodium-*
+            .vscode-test/downloads/vscodium-reh-*
+          key: vscodium-archives-${{ runner.os }}-${{ runner.arch }}-${{ steps.vscodium-pins.outputs.key }}
       # the containerd image store, the one Docker 29 uses by default and the image-build rows are written against, and a
       # registry mirror for Docker Hub's images
       - run: tools/docker-containerd-store

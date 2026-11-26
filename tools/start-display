@@ -5,8 +5,8 @@
 #
 # A machine whose :99 is already served keeps it. Otherwise Xvfb and then openbox start in the background, each
 # installed with apt-get when it is missing; both keep running until the job's processes are ended. xdotool, which the
-# row that answers the operating system's own folder chooser types with, is installed when it is missing on either
-# kind of machine. Without a window
+# row that answers the operating system's own folder chooser types with, and xprop, which tells the key driver whether a
+# window is a frame the window manager manages, are installed when they are missing on either kind of machine. Without a window
 # manager no window takes the focus, and the rows that type into a dialog, a menu or a picker are written against a
 # focused window.
 set -euo pipefail
@@ -22,6 +22,8 @@ if [ ! -S "$SOCKET" ]; then
 fi
 # The key driver is wanted on a machine whose display already runs as well.
 command -v xdotool >/dev/null || missing+=(xdotool)
+# The WM_STATE read of the key driver's window picks, in x11-utils.
+command -v xprop >/dev/null || missing+=(x11-utils)
 # How long one apt-get call may run: the five minutes it may wait for the dpkg lock, and two more for its work.
 APT_CALL_SECONDS=420
 # How long the whole step may run, over every call of both attempts: four calls each ended at their own limit would

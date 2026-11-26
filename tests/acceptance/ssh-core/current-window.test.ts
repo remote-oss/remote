@@ -2,17 +2,23 @@ import {deepStrictEqual} from 'node:assert';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
+  acceptedKeyLogins,
   appendScript,
+  closeWindow,
+  connectionHelpers,
+  connectedEmpty,
   connectedWithin,
   emptyWindows,
   hexOf,
   hostAnswer,
+  hostConnections,
   hostPort,
   inWindow,
   nextEmptyName,
   nextEmptyWindow,
   openWindow,
   recordLines,
+  sshdLog,
   userSettings,
   variable,
   waitFor,
@@ -24,7 +30,7 @@ import {
   openFolderWindow,
   openWorkspaceWindow,
 } from '../windows/folder-windows.ts';
-import {closeAllButLocal} from '../windows/maintenance.ts';
+import {closeAllButLocal, serverMainProcesses} from '../windows/maintenance.ts';
 import {PLATFORMS} from '../windows/tunnel-support.ts';
 
 /** The command that reloads the window it runs in onto a picked host. */
@@ -68,6 +74,159 @@ async function switched(
     120_000,
   );
   return next;
+}
+
+/** The pids of this machine's ssh processes toward the host. */
+async function sshOfHost(): Promise<number[]> {
+  return (await hostConnections())
+    .filter(each => each.program === 'ssh')
+    .map(each => each.processId);
+}
+
+/**
+ * The pids of the ssh toward the host that `after` lists but `before` does not: the row's own, started by its
+ * windows between the two reads — in the local-server mode as the ssh of a connection helper, in the terminal
+ * mode without one — while a master another row's ControlPersist left is in both and not among them (card
+ * #3131).
+ */
+function newSsh(before: readonly number[], after: readonly number[]): number[] {
+  return after.filter(each => !before.includes(each));
+}
+
+/** The linux clock ticks per second that /proc's process starttimes count in. */
+const TICKS_PER_SECOND = 100;
+
+/** The argv of process `processId`, read from /proc, or undefined when it ended between the listing and the read. */
+function commandLineOf(processId: number): string[] | undefined {
+  try {
+    return readFileSync(`/proc/${String(processId)}/cmdline`, 'utf8')
+      .split('\0')
+      .filter(part => part !== '');
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The parent of process `processId` and its start, in clock ticks since the boot, from /proc, or undefined when
+ * the process ended between the listing and the read.
+ */
+function processStatOf(
+  processId: number,
+): {parent: number; startTicks: number} | undefined {
+  try {
+    const stat = readFileSync(`/proc/${String(processId)}/stat`, 'utf8');
+    const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    const parent = Number(fields[1]);
+    const startTicks = Number(fields[19]);
+    return Number.isNaN(parent) || Number.isNaN(startTicks)
+      ? undefined
+      : {parent, startTicks};
+  } catch {
+    return undefined;
+  }
+}
+
+/** The boot of the machine this row runs on, in seconds, from /proc/stat, or undefined off linux. */
+function bootSeconds(): number | undefined {
+  try {
+    const line = readFileSync('/proc/stat', 'utf8')
+      .split('\n')
+      .find(entry => entry.startsWith('btime '));
+    return line === undefined ? undefined : Number(line.slice(6));
+  } catch {
+    return undefined;
+  }
+}
+
+/** When a process that started at `startMilliseconds` began against the row that started at `rowStart`. */
+function startAgainst(startMilliseconds: number, rowStart: number): string {
+  const seconds = Math.round(Math.abs(rowStart - startMilliseconds) / 1000);
+  return startMilliseconds < rowStart
+    ? `started ${String(seconds)} s before the row`
+    : `started ${String(seconds)} s after the row`;
+}
+
+/**
+ * Every ssh toward the host, as the row's failure lists them: each as its pid, its parent, its start against
+ * the row's start and its command line, and whether the row counted it — so a red shows what the row counted and
+ * what it left out (card #3131).
+ */
+async function sshListed(
+  rowStart: number,
+  rowPids: readonly number[],
+): Promise<string> {
+  const boot = bootSeconds();
+  const lines: string[] = [];
+  for (const each of await hostConnections()) {
+    if (each.program !== 'ssh') continue;
+    const argv = commandLineOf(each.processId);
+    const stat = processStatOf(each.processId);
+    const startMilliseconds =
+      boot === undefined || stat === undefined
+        ? undefined
+        : boot * 1000 + (stat.startTicks / TICKS_PER_SECOND) * 1000;
+    const parent = stat === undefined ? '' : ` parent ${String(stat.parent)}`;
+    const start =
+      startMilliseconds === undefined
+        ? ''
+        : `, ${startAgainst(startMilliseconds, rowStart)}`;
+    const side = rowPids.includes(each.processId)
+      ? "the row's"
+      : "not the row's";
+    const command = argv === undefined ? '' : `: ${argv.join(' ')}`;
+    lines.push(
+      `  ${String(each.processId)}${parent}${start}, ${side}${command}`,
+    );
+  }
+  return lines.length > 0
+    ? `the ssh of the host, each as its pid, its parent, its start against the row and its command line:\n${lines.join('\n')}`
+    : 'no ssh of the host left';
+}
+
+/**
+ * Runs the row's check, and when it fails appends what the row counted — every ssh toward the host, each with
+ * its command line and whether the row's own connection started it — so the failure names the red's processes
+ * (card #3131).
+ */
+async function counted(
+  check: () => void,
+  rowStart: number,
+  rowPids: readonly number[],
+): Promise<void> {
+  try {
+    check();
+  } catch (failure) {
+    throw new Error(
+      `${String(failure)}\n${await sshListed(rowStart, rowPids)}`,
+      {cause: failure},
+    );
+  }
+}
+
+/**
+ * Waits up to 15 s for the row to leave no helper and no ssh of its own, and throws naming what is left: the
+ * helpers, and every ssh toward the host with its command line and whether the row counted it (card #3131).
+ */
+async function rowClean(
+  rowStart: number,
+  rowPids: readonly number[],
+): Promise<void> {
+  const clean = await waitFor(
+    'no helper or ssh of the row left',
+    async () =>
+      (await connectionHelpers()).length === 0 &&
+      (await sshOfHost()).every(each => !rowPids.includes(each)),
+    15_000,
+  ).then(
+    () => true,
+    () => false,
+  );
+  if (!clean) {
+    throw new Error(
+      `helpers left: ${(await connectionHelpers()).join(', ')}\n${await sshListed(rowStart, rowPids)}`,
+    );
+  }
 }
 
 describe('Connect Current Window to Host', function () {
@@ -400,5 +559,133 @@ describe('Connect Current Window to Host', function () {
       ],
       [1, false],
     );
+  });
+
+  it('F-2302 AC-9 (c3014-leave): the only window on a host switches to another; 10 s later no helper or ssh of the first host is left, and its server still runs', async () => {
+    const rowStart = Date.now();
+    await closeAllButLocal();
+    await userSettings({...PLATFORMS});
+    await waitFor(
+      'no helper left',
+      async () => (await connectionHelpers()).length === 0,
+      15_000,
+    );
+    const before = await sshOfHost();
+    await openWindow('harness', 'c3014-leave');
+    await connectedWithin('c3014-leave', 90_000);
+    const helpers = await connectionHelpers();
+    const sshPids = newSsh(before, await sshOfHost());
+    const servers = await serverMainProcesses();
+    const next = await switched('c3014-leave', {label: 'noforward'});
+    try {
+      await new Promise(resolve => setTimeout(resolve, 10_000));
+      const after = await serverMainProcesses();
+      const leftHelpers = (await connectionHelpers()).filter(each =>
+        helpers.includes(each),
+      );
+      const leftSsh = (await sshOfHost()).filter(each =>
+        sshPids.includes(each),
+      );
+      await counted(
+        () => {
+          deepStrictEqual(
+            [
+              {
+                helpers: helpers.length,
+                sshPids: sshPids.length > 0,
+                servers: servers.length > 0,
+              },
+              leftHelpers,
+              leftSsh,
+              servers.every(each => after.includes(each)),
+            ],
+            [{helpers: 1, sshPids: true, servers: true}, [], [], true],
+          );
+        },
+        rowStart,
+        sshPids,
+      );
+    } finally {
+      await closeWindow(next).catch(() => undefined);
+      await rowClean(rowStart, sshPids);
+    }
+  });
+
+  it('F-2302 AC-33 (c3014-own): with the local server off, a switch ends the window’s ssh within 10 s, and picking the window’s own host ends its ssh and logs one new login', async () => {
+    const rowStart = Date.now();
+    try {
+      await closeAllButLocal();
+      await rowClean(rowStart, []);
+      await userSettings({
+        'remote.SSH.remotePlatform': {
+          ...PLATFORMS['remote.SSH.remotePlatform'],
+          '127.0.0.1': 'linux',
+        },
+        'remote.SSH.useLocalServer': false,
+      });
+      const before = await sshOfHost();
+      await openWindow('harness', 'c3014-own');
+      await connectedWithin('c3014-own', 90_000);
+      const afterConnect = await sshOfHost();
+      const first = newSsh(before, afterConnect);
+      const next = await switched('c3014-own', {typed: '127.0.0.1'});
+      await connectedEmpty(next, '127.0.0.1', 90_000);
+      const goneFirst = await waitFor(
+        'the first ssh gone',
+        async () => (await sshOfHost()).every(each => !first.includes(each)),
+        10_000,
+      ).then(
+        () => true,
+        () => false,
+      );
+      const second = newSsh(afterConnect, await sshOfHost());
+      const since = new Date().toISOString();
+      const again = await switched(next, {typed: '127.0.0.1'});
+      await connectedEmpty(again, '127.0.0.1', 90_000);
+      const goneSecond = await waitFor(
+        'the second ssh gone',
+        async () => (await sshOfHost()).every(each => !second.includes(each)),
+        10_000,
+      ).then(
+        () => true,
+        () => false,
+      );
+      await waitFor(
+        'the sshd line for the disconnect',
+        async () =>
+          (await sshdLog(since)).some(line =>
+            line.includes('Disconnected from user harness'),
+          ),
+        10_000,
+      );
+      const logins = await acceptedKeyLogins(since);
+      await counted(
+        () => {
+          deepStrictEqual(
+            {
+              first: first.length > 0,
+              goneFirst,
+              second: second.length > 0,
+              goneSecond,
+              logins,
+            },
+            {
+              first: true,
+              goneFirst: true,
+              second: true,
+              goneSecond: true,
+              logins: 1,
+            },
+          );
+        },
+        rowStart,
+        second,
+      );
+    } finally {
+      await userSettings({
+        ...PLATFORMS,
+        'remote.SSH.useLocalServer': undefined,
+      });
+    }
   });
 });

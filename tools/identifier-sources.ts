@@ -8,7 +8,7 @@
 
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {isLibraryFolder, messageOf} from './repository.ts';
+import {isLibraryFolder, isServiceFolder, messageOf} from './repository.ts';
 
 /** The kinds an invented identifier or a namespace belongs to. */
 const LEDGER_KINDS = [
@@ -566,6 +566,7 @@ export function readDeclared(file: string, where: string): DeclaredIdentifiers {
 export function needsIdentifiers(packageDirectory: string): boolean {
   return (
     !isLibraryFolder(path.basename(packageDirectory)) &&
+    !isServiceFolder(path.basename(packageDirectory)) &&
     existsSync(path.join(packageDirectory, 'src'))
   );
 }
