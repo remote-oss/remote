@@ -6,13 +6,15 @@
 # - engine-enc: only the run's passphrase key (ENGINE_ENC_KEY at start);
 # - engine-refused: no key accepted and no password method;
 # - engine-tries: no key accepted, and two tries at most (MaxAuthTries 2).
+# The editor's server runs here too, for a Remote-SSH window on this host (card #3081): libstdc++ is what its node binary
+# needs, curl and wget download it, bash is what its scripts may ask for; the harness host's image carries the same.
 # The client's docker CLI runs `docker system dial-stdio` here, so docker is linked where sshd's PATH finds it.
 # The image's own OpenSSH client is upgraded with the server: Alpine's index holds only the newest revision of a
 # package, and a server of a newer revision than the client the image ships can't be installed beside it.
 ARG ENGINE_IMAGE
 FROM ${ENGINE_IMAGE}
 
-RUN apk add --no-cache --upgrade openssh-client-default openssh-server shadow \
+RUN apk add --no-cache --upgrade openssh-client-default openssh-server shadow libstdc++ curl wget bash \
   && ln -s /usr/local/bin/docker /usr/bin/docker \
   && (getent group docker >/dev/null || addgroup -S docker) \
   && for account in engine engine-pw engine-pw2 engine-enc engine-refused engine-tries; do \
