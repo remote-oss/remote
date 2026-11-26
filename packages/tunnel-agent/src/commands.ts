@@ -23,11 +23,15 @@ export const USAGE = [
   '       tunnel-agent --version',
 ].join('\n');
 
+/** What the commands that do work are given to run on. */
+export interface Services {
+  /** Signs in, by the device flow or by the token on the standard input; gives the exit status. */
+  login(fromStandardInput: boolean): Promise<number>;
+}
+
 /** The commands of the agent that a later part of it answers, as their words on the command line. */
 const LATER_COMMANDS: ReadonlyArray<readonly string[]> = [
   [],
-  ['login'],
-  ['login', '--token-stdin'],
   ['service', 'install'],
   ['service', 'uninstall'],
   ['unregister'],
@@ -47,7 +51,11 @@ function isLaterCommand(words: readonly string[]): boolean {
 }
 
 /** Runs the command `words` ask for, writing through `output`, and gives the exit status. */
-export function runCommand(words: readonly string[], output: Output): number {
+export async function runCommand(
+  words: readonly string[],
+  output: Output,
+  services: Services,
+): Promise<number> {
   if (words.length === 1 && words[0] === '--version') {
     output.stdout(`${manifest.version}\n`);
     return 0;
@@ -55,6 +63,16 @@ export function runCommand(words: readonly string[], output: Output): number {
   if (words.length === 1 && words[0] === '--help') {
     output.stdout(`${USAGE}\n`);
     return 0;
+  }
+  if (words.length === 1 && words[0] === 'login') {
+    return services.login(false);
+  }
+  if (
+    words.length === 2 &&
+    words[0] === 'login' &&
+    words[1] === '--token-stdin'
+  ) {
+    return services.login(true);
   }
   if (isLaterCommand(words)) {
     output.stderr(`${['tunnel-agent', ...words].join(' ')}: not built yet\n`);
