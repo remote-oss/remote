@@ -39,31 +39,45 @@ interface StoredEvent {
 /** How many records the store shows. */
 const RECORDS_SHOWN = 2;
 
-/** The events of a file's text; a text that is not one of ours has none. */
-function eventsIn(text: string): StoredEvent[] {
+/** A window's file: its session, which is the file's name before `.json` or `.claim-`, and its text. */
+export interface HintFile {
+  session: string;
+  text: string;
+}
+
+/** The events of a file's text, each with the session of the file; a text that is not one of ours has none. */
+function eventsIn(file: HintFile): Array<[StoredEvent, string]> {
   try {
-    return (JSON.parse(text) as {events?: StoredEvent[]}).events ?? [];
+    const events =
+      (JSON.parse(file.text) as {events?: StoredEvent[]}).events ?? [];
+    return events.map((event): [StoredEvent, string] => [event, file.session]);
   } catch {
     return [];
   }
 }
 
-/** The records of the store, from the texts of the windows' files and claims. */
-export function recordsOf(texts: readonly string[]): HintRecords {
-  const newest = new Map<string, StoredEvent>();
-  for (const event of texts.flatMap(eventsIn)) {
+/** The records of the store, from the windows' files and claims. */
+export function recordsOf(files: readonly HintFile[]): HintRecords {
+  const newest = new Map<string, [StoredEvent, string]>();
+  for (const [event, session] of files.flatMap(eventsIn)) {
     const key =
       event.kind === 'clear'
         ? 'clear'
         : `record ${event.record?.started ?? ''}`;
     const known = newest.get(key);
-    if (known === undefined || (event.time ?? 0) >= (known.time ?? 0)) {
-      newest.set(key, event);
+    const time = event.time ?? 0;
+    const knownTime = known?.[0].time ?? 0;
+    if (
+      known === undefined ||
+      time > knownTime ||
+      (time === knownTime && session > known[1])
+    ) {
+      newest.set(key, [event, session]);
     }
   }
-  const clearedAt = newest.get('clear')?.clearedAt;
+  const clearedAt = newest.get('clear')?.[0].clearedAt;
   return [...newest.values()]
-    .flatMap(event =>
+    .flatMap(([event]) =>
       event.kind === 'record' && event.record !== undefined
         ? [event.record]
         : [],

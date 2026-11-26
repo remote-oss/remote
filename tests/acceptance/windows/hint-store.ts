@@ -19,7 +19,12 @@ export function hintRecords(): HintRecords {
           .filter(name => /\.json$|\.claim-[0-9a-f]+$/.test(name))
           .flatMap(name => {
             try {
-              return [readFileSync(path.join(folder, name), 'utf8')];
+              return [
+                {
+                  session: name.replace(/\.(?:json|claim-[0-9a-f]+)$/, ''),
+                  text: readFileSync(path.join(folder, name), 'utf8'),
+                },
+              ];
             } catch {
               return [];
             }
