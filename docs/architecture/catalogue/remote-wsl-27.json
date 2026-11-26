@@ -8,6 +8,9 @@
   "title": "Connection failures and recovery",
   "epic": "E62",
   "acCount": 32,
+  "referenceOnly": [
+   "F-6208.AC-11"
+  ],
   "surfaces": {
    "commands": [
     "remote-wsl.showLog"

@@ -164,6 +164,9 @@
   "title": "The Remote - SSH log: output channel, Show Log and log level",
   "epic": "E20",
   "acCount": 29,
+  "referenceOnly": [
+   "F-2003.AC-6"
+  ],
   "surfaces": {
    "commands": [
     "opensshremotes.showLog"

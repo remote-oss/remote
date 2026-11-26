@@ -6,14 +6,17 @@
  *
  * `<name>` picks the set, `slice1` (the default), `containers-r1`, `explorer` or `extensionpack-r1`, and names the set's
  * file. It reads the issue number of each of the set's features from the catalogue, fetches the feature's issue with
- * `gh issue view` in its own repository and takes the criteria from its body. A file that does not exist is written with
- * every criterion `todo`. A file that exists is never rewritten: its lines keep their tags, reasons and places, the
- * criteria it lacks are inserted as `todo` lines in numeric order, and a line of a feature outside the set stops the run,
- * naming the feature. With `--check` nothing is written, and the run fails when it would have added a line.
+ * `gh issue view` in its own repository and takes the criteria from its body. A criterion the feature's catalogue entry
+ * lists in its `referenceOnly` field — wholly reference-only, so its line is deleted from the coverage file — is left
+ * out of what a seed or a `--check` merge adds, and an id the issue's body does not list as a criterion stops the run,
+ * naming it. A file that does not exist is written with every criterion `todo`. A file that exists is never rewritten:
+ * its lines keep their tags, reasons and places, the criteria it lacks are inserted as `todo` lines in numeric order,
+ * and a line of a feature outside the set stops the run, naming the feature. With `--check` nothing is written, and the
+ * run fails when it would have added a line.
  */
 
 import {spawnSync} from 'node:child_process';
-import {existsSync, readFileSync, writeFileSync} from 'node:fs';
+import {existsSync, readdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {isMainModule, messageOf, REPOSITORY_ROOT} from './repository.ts';
 import {
@@ -26,22 +29,39 @@ import {
 /** The organisation the repositories of the feature issues are in. */
 const SPEC_OWNER = 'remote-oss';
 
-/** The issue of a catalogue row: its number, and the repository the issue lives in. */
+/**
+ * The issue of a catalogue row: its number, the repository the issue lives in, and the ids of the criteria that are
+ * wholly reference-only, whose lines a coverage file deletes.
+ */
 export interface CatalogueIssue {
   repository: string;
   issue: number;
+  referenceOnly: string[];
 }
 
 /**
- * The issue of every feature of the catalogue that has one: its number, and the repository of its issue, `remote-oss/`
- * plus the row's repository column.
+ * The issue of every feature of the catalogue that has one: its number, the repository of its issue, `remote-oss/` plus
+ * the row's repository column, and the ids the feature's entry in the repository's catalogue files under `root` lists
+ * in its `referenceOnly` field — none when the entry has no such field or the repository has no files.
  */
-export function issueNumbersOf(catalogue: string): Map<string, CatalogueIssue> {
+export function issueNumbersOf(
+  catalogue: string,
+  root = REPOSITORY_ROOT,
+): Map<string, CatalogueIssue> {
   const [header = '', ...rows] = catalogue.split('\n');
   const columns = header.split('\t');
   const idColumn = columns.indexOf('id');
   const issueColumn = columns.indexOf('issue');
   const repositoryColumn = columns.indexOf('repo');
+  const indexes = new Map<string, Map<string, string[]>>();
+  function referenceOnlyOf(feature: string, repository: string): string[] {
+    let index = indexes.get(repository);
+    if (index === undefined) {
+      index = referenceOnlyIndex(root, repository);
+      indexes.set(repository, index);
+    }
+    return index.get(feature) ?? [];
+  }
   const issues = new Map<string, CatalogueIssue>();
   for (const catalogueRow of rows) {
     const fields = catalogueRow.split('\t');
@@ -49,12 +69,48 @@ export function issueNumbersOf(catalogue: string): Map<string, CatalogueIssue> {
     if (fields[idColumn] === undefined || !/^\d+$/.test(issueField)) {
       continue;
     }
+    const repository = fields[repositoryColumn] ?? '';
     issues.set(fields[idColumn], {
-      repository: `${SPEC_OWNER}/${fields[repositoryColumn] ?? ''}`,
+      repository: `${SPEC_OWNER}/${repository}`,
       issue: Number(issueField),
+      referenceOnly: referenceOnlyOf(fields[idColumn], repository),
     });
   }
   return issues;
+}
+
+/**
+ * The `referenceOnly` ids of the entries of the catalogue files `<repository>-<number>.json` in the catalogue folder
+ * under `root`, by the entry's id: none for a feature with no entry.
+ */
+function referenceOnlyIndex(
+  root: string,
+  repository: string,
+): Map<string, string[]> {
+  const index = new Map<string, string[]>();
+  const directory = path.join(root, 'docs', 'architecture', 'catalogue');
+  if (!existsSync(directory)) {
+    return index;
+  }
+  const pattern = new RegExp(
+    `^${repository.replace(/-/g, '\\-')}-\\d+\\.json$`,
+  );
+  for (const name of readdirSync(directory)
+    .filter(entry => pattern.test(entry))
+    .sort()) {
+    const entry = JSON.parse(
+      readFileSync(path.join(directory, name), 'utf8'),
+    ) as
+      | Array<{id?: string; referenceOnly?: string[]}>
+      | {id?: string; referenceOnly?: string[]};
+    const entries = Array.isArray(entry) ? entry : [entry];
+    for (const record of entries) {
+      if (record.id !== undefined) {
+        index.set(record.id, record.referenceOnly ?? []);
+      }
+    }
+  }
+  return index;
 }
 
 /** A criterion id's feature, number and letter: an id ending in `.AC-17b` has the number 17 and the letter `b`. */
@@ -115,22 +171,36 @@ export function bodyOf(
   return result.stdout;
 }
 
-/** The criteria of every feature of a set (the first slice's by default), from the catalogue and the issues. */
+/**
+ * The criteria of every feature of a set (the first slice's by default), from the catalogue and the issues, minus the
+ * criteria the features' catalogue entries list in their `referenceOnly` fields. An id in that list the issue's body
+ * does not list as a criterion throws, naming it.
+ */
 export function criteriaFor(
   catalogue: string,
   program: Program,
   scope: CoverageScope = SLICE_ONE_SCOPE,
+  root = REPOSITORY_ROOT,
 ): string[] {
-  const numbers = issueNumbersOf(catalogue);
+  const numbers = issueNumbersOf(catalogue, root);
   return scope.features.flatMap(feature => {
     const entry = numbers.get(feature);
     if (entry === undefined) {
       throw new Error(`${feature} is not in the catalogue`);
     }
-    return acceptanceCriteriaOf(
+    const listed = acceptanceCriteriaOf(
       bodyOf(entry.issue, entry.repository, program),
       feature,
     );
+    const unlisted = entry.referenceOnly.filter(
+      criterion => !listed.includes(criterion),
+    );
+    if (unlisted.length > 0) {
+      throw new Error(
+        `${feature} lists ${unlisted.join(', ')} as reference-only, but its issue does not list them as criteria`,
+      );
+    }
+    return listed.filter(criterion => !entry.referenceOnly.includes(criterion));
   });
 }
 
@@ -139,8 +209,9 @@ export function seedFor(
   catalogue: string,
   program: Program,
   scope: CoverageScope = SLICE_ONE_SCOPE,
+  root = REPOSITORY_ROOT,
 ): string {
-  return seedOf(criteriaFor(catalogue, program, scope));
+  return seedOf(criteriaFor(catalogue, program, scope, root));
 }
 
 /** What merging the criteria into an existing coverage file gives. */

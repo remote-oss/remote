@@ -7,6 +7,9 @@
   "label": "spec:reviewed",
   "title": "Server prerequisites and supported distros",
   "epic": "E63",
-  "acCount": 19
+  "acCount": 19,
+  "referenceOnly": [
+   "F-6302.AC-11"
+  ]
  }
 ]

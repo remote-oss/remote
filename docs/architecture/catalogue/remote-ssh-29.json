@@ -527,6 +527,10 @@
   "title": "VS Code core features in an SSH window",
   "epic": "E25",
   "acCount": 35,
+  "referenceOnly": [
+   "F-2508.AC-13",
+   "F-2508.AC-34"
+  ],
   "surfaces": {
    "commands": [
     "workbench.action.terminal.new",

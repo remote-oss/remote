@@ -181,7 +181,11 @@
   "label": "spec:draft",
   "title": "Exec server bootstrap mode",
   "epic": "E21",
-  "acCount": 34,
+  "acCount": 33,
+  "referenceOnly": [
+   "F-2103.AC-8",
+   "F-2103.AC-13"
+  ],
   "surfaces": {
    "commands": [],
    "settings": [
@@ -270,6 +274,10 @@
   "title": "SSH tunnel to the server, dynamic forwarding and local port range",
   "epic": "E21",
   "acCount": 46,
+  "referenceOnly": [
+   "F-2104.AC-20",
+   "F-2104.AC-21"
+  ],
   "surfaces": {
    "commands": [],
    "settings": [
@@ -437,6 +445,10 @@
   "title": "PTY allocation",
   "epic": "E21",
   "acCount": 15,
+  "referenceOnly": [
+   "F-2106.AC-8",
+   "F-2106.AC-15"
+  ],
   "surfaces": {
    "commands": [],
    "settings": [

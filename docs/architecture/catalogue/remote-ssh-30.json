@@ -89,7 +89,7 @@
   "label": "spec:reviewed",
   "title": "Mitigation picker: More Actions..., settings fixes and resources",
   "epic": "E26",
-  "acCount": 23,
+  "acCount": 24,
   "surfaces": {
    "commands": [
     "opensshremotes.openConfigFile",
@@ -259,6 +259,15 @@
   "title": "TCP forwarding disabled on the server",
   "epic": "E26",
   "acCount": 17,
+  "referenceOnly": [
+   "F-2604.AC-4",
+   "F-2604.AC-5",
+   "F-2604.AC-6",
+   "F-2604.AC-9",
+   "F-2604.AC-17",
+   "F-2604.AC-18",
+   "F-2604.AC-23"
+  ],
   "surfaces": {
    "commands": [
     "opensshremotes.showLog"
@@ -349,7 +358,7 @@
   "label": "spec:draft",
   "title": "Enhanced session logs and session hints",
   "epic": "E26",
-  "acCount": 27,
+  "acCount": 26,
   "surfaces": {
    "commands": [
     "opensshremotes.clearAllSessionHints"
@@ -774,7 +783,10 @@
   "label": "spec:reviewed",
   "title": "Login shells and profile scripts on the host",
   "epic": "E27",
-  "acCount": 32,
+  "acCount": 31,
+  "referenceOnly": [
+   "F-2704.AC-10"
+  ],
   "surfaces": {
    "commands": [
     "opensshremotes.cleanRemoteServer"

@@ -338,7 +338,10 @@
   "label": "spec:draft",
   "title": "Client-side download and transfer with scp",
   "epic": "E24",
-  "acCount": 28,
+  "acCount": 27,
+  "referenceOnly": [
+   "F-2405.AC-29"
+  ],
   "surfaces": {
    "commands": [],
    "settings": [

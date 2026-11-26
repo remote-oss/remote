@@ -102,6 +102,11 @@
   "title": "Server listening on a socket (multi-user hosts)",
   "epic": "E24",
   "acCount": 31,
+  "referenceOnly": [
+   "F-2410.AC-24",
+   "F-2410.AC-26",
+   "F-2410.AC-27"
+  ],
   "surfaces": {
    "commands": [],
    "settings": [

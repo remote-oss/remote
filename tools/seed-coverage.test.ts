@@ -1,4 +1,7 @@
 import {deepStrictEqual, throws} from 'node:assert';
+import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
 import {
   bodyOf,
   byCriterion,
@@ -48,27 +51,153 @@ describe('seed-coverage', () => {
     deepStrictEqual(byCriterion('F-2001.AC-9', 'F-2601.AC-1') < 0, true);
   });
 
-  it('tooling coverage-25a: issueNumbersOf keeps every row that has an issue, with its repository', () => {
-    deepStrictEqual(
-      issueNumbersOf(
-        'id\tissue\trepo\nF-2001\t11\tremote-ssh\nF-5101\t12\tremote-explorer\n',
-      ),
-      new Map([
-        ['F-2001', {repository: 'remote-oss/remote-ssh', issue: 11}],
-        ['F-5101', {repository: 'remote-oss/remote-explorer', issue: 12}],
-      ]),
-    );
+  it('tooling coverage-25a: issueNumbersOf keeps every row that has an issue, with its repository and no referenceOnly', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'seed-coverage-'));
+    try {
+      deepStrictEqual(
+        issueNumbersOf(
+          'id\tissue\trepo\nF-2001\t11\tremote-ssh\nF-5101\t12\tremote-explorer\n',
+          root,
+        ),
+        new Map([
+          [
+            'F-2001',
+            {repository: 'remote-oss/remote-ssh', issue: 11, referenceOnly: []},
+          ],
+          [
+            'F-5101',
+            {
+              repository: 'remote-oss/remote-explorer',
+              issue: 12,
+              referenceOnly: [],
+            },
+          ],
+        ]),
+      );
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
   });
 
   it('tooling coverage-25a: a row without an issue is not in the map', () => {
-    deepStrictEqual(
-      [
-        ...issueNumbersOf(
-          'id\tissue\trepo\nF-2001\t11\tremote-ssh\nF-2002\t\tremote-ssh\n',
+    const root = mkdtempSync(path.join(tmpdir(), 'seed-coverage-'));
+    try {
+      deepStrictEqual(
+        [
+          ...issueNumbersOf(
+            'id\tissue\trepo\nF-2001\t11\tremote-ssh\nF-2002\t\tremote-ssh\n',
+            root,
+          ),
+        ],
+        [
+          [
+            'F-2001',
+            {repository: 'remote-oss/remote-ssh', issue: 11, referenceOnly: []},
+          ],
+        ],
+      );
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  /** A fresh root whose catalogue folder holds the entry files of `entries`, by file name and text. */
+  function rootWithEntries(entries: Record<string, string>): string {
+    const root = mkdtempSync(path.join(tmpdir(), 'seed-coverage-'));
+    const catalogue = path.join(root, 'docs', 'architecture', 'catalogue');
+    mkdirSync(catalogue, {recursive: true});
+    for (const [name, text] of Object.entries(entries)) {
+      writeFileSync(path.join(catalogue, name), text);
+    }
+    return root;
+  }
+
+  /** The one-feature scope the referenceOnly rows seed. */
+  const TEST_SCOPE = {
+    name: 'test',
+    file: 'coverage-test.tsv',
+    features: ['F-2001'] as const,
+    repository: 'remote-ssh',
+  };
+
+  it('#3254: the referenceOnly ids of a catalogue entry are left out of what its feature seeds', () => {
+    const root = rootWithEntries({
+      'remote-ssh-11.json': JSON.stringify([
+        {id: 'F-2001', referenceOnly: ['F-2001.AC-3']},
+      ]),
+    });
+    try {
+      deepStrictEqual(
+        criteriaFor(
+          'id\tissue\trepo\nF-2001\t11\tremote-ssh\n',
+          issuesAnswering({
+            '11': '- **F-2001.AC-1** one\n- **F-2001.AC-2** two\n- **F-2001.AC-3** three',
+          }),
+          TEST_SCOPE,
+          root,
         ),
-      ],
-      [['F-2001', {repository: 'remote-oss/remote-ssh', issue: 11}]],
+        ['F-2001.AC-1', 'F-2001.AC-2'],
+      );
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  it('#3254: a --check on a file missing exactly the reference-only lines passes', () => {
+    const action = seedAction(
+      'coverage-test.tsv',
+      'ac\ttag\treason\nF-2001.AC-1\ttodo\t\nF-2001.AC-2\ttodo\t\n',
+      ['F-2001.AC-1', 'F-2001.AC-2'],
+      ['F-2001'],
+      true,
     );
+    deepStrictEqual([action.write, action.failure], [undefined, undefined]);
+  });
+
+  it('#3254: a referenceOnly id the issue does not list as a criterion stops the run, naming it', () => {
+    const root = rootWithEntries({
+      'remote-ssh-11.json': JSON.stringify([
+        {id: 'F-2001', referenceOnly: ['F-2001.AC-9']},
+      ]),
+    });
+    try {
+      throws(
+        () =>
+          criteriaFor(
+            'id\tissue\trepo\nF-2001\t11\tremote-ssh\n',
+            issuesAnswering({'11': '- **F-2001.AC-1** one'}),
+            TEST_SCOPE,
+            root,
+          ),
+        {
+          message:
+            'F-2001 lists F-2001.AC-9 as reference-only, but its issue does not list them as criteria',
+        },
+      );
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  it('#3254: an entry without a referenceOnly field seeds every criterion the issue lists, as today', () => {
+    const root = rootWithEntries({
+      'remote-ssh-11.json': JSON.stringify([{id: 'F-2001', acCount: 3}]),
+    });
+    try {
+      deepStrictEqual(
+        criteriaFor(
+          'id\tissue\trepo\nF-2001\t11\tremote-ssh\n',
+          issuesAnswering({
+            '11': '- **F-2001.AC-1** one\n- **F-2001.AC-2** two\n- **F-2001.AC-3** three',
+          }),
+          TEST_SCOPE,
+          root,
+        ),
+        ['F-2001.AC-1', 'F-2001.AC-2', 'F-2001.AC-3'],
+      );
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
   });
 
   /** A program that answers `gh issue view` with the body written for the issue number it was asked about. */
@@ -131,22 +260,29 @@ describe('seed-coverage', () => {
   });
 
   it('#142: seeds the criteria of every feature of the slice from its issue', () => {
-    const catalogue = [
-      'id\tissue\trepo',
-      ...SLICE_ONE_FEATURES.map(
-        (feature, index) => `${feature}\t${String(index + 100)}\tremote-ssh`,
-      ),
-    ].join('\n');
-    deepStrictEqual(
-      seedFor(
-        catalogue,
-        issuesAnswering({
-          '100': '- **F-2001.AC-1** one\n- **F-2001.AC-2** two',
-          '101': '- **F-2101.AC-1** one',
-        }),
-      ),
-      'ac\ttag\treason\nF-2001.AC-1\ttodo\t\nF-2001.AC-2\ttodo\t\nF-2101.AC-1\ttodo\t\n',
-    );
+    const root = mkdtempSync(path.join(tmpdir(), 'seed-coverage-'));
+    try {
+      const catalogue = [
+        'id\tissue\trepo',
+        ...SLICE_ONE_FEATURES.map(
+          (feature, index) => `${feature}\t${String(index + 100)}\tremote-ssh`,
+        ),
+      ].join('\n');
+      deepStrictEqual(
+        seedFor(
+          catalogue,
+          issuesAnswering({
+            '100': '- **F-2001.AC-1** one\n- **F-2001.AC-2** two',
+            '101': '- **F-2101.AC-1** one',
+          }),
+          SLICE_ONE_SCOPE,
+          root,
+        ),
+        'ac\ttag\treason\nF-2001.AC-1\ttodo\t\nF-2001.AC-2\ttodo\t\nF-2101.AC-1\ttodo\t\n',
+      );
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
   });
 
   it('#142: a feature the catalogue lacks throws', () => {
@@ -163,40 +299,50 @@ describe('seed-coverage', () => {
   });
 
   it('tooling coverage-25a: the explorer set seeds each feature from its own repository', () => {
-    const features = EXPLORER_SLICE_ONE_FEATURES;
-    const catalogue = [
-      'id\tissue\trepo',
-      ...features.map(
-        (feature, index) =>
-          `${feature}\t${String(index + 300)}\t${feature === 'F-2503' ? 'remote-ssh' : 'remote-explorer'}`,
-      ),
-    ].join('\n');
-    const repositories: string[] = [];
-    /** A program that answers each issue with one criterion of its feature, recording the repository asked in. */
-    function answering(): Program {
-      return (name, programArguments) => {
-        const feature = features[Number(programArguments[2]) - 300] ?? '';
-        repositories.push(programArguments[4] ?? '');
-        return {
-          status: 0,
-          stdout: `- **${feature}.AC-1** one`,
-          stderr: '',
+    const root = mkdtempSync(path.join(tmpdir(), 'seed-coverage-'));
+    try {
+      const features = EXPLORER_SLICE_ONE_FEATURES;
+      const catalogue = [
+        'id\tissue\trepo',
+        ...features.map(
+          (feature, index) =>
+            `${feature}\t${String(index + 300)}\t${feature === 'F-2503' ? 'remote-ssh' : 'remote-explorer'}`,
+        ),
+      ].join('\n');
+      const repositories: string[] = [];
+      /** A program that answers each issue with one criterion of its feature, recording the repository asked in. */
+      function answering(): Program {
+        return (name, programArguments) => {
+          const feature = features[Number(programArguments[2]) - 300] ?? '';
+          repositories.push(programArguments[4] ?? '');
+          return {
+            status: 0,
+            stdout: `- **${feature}.AC-1** one`,
+            stderr: '',
+          };
         };
-      };
-    }
-    const seeded = seedFor(catalogue, answering(), EXPLORER_SLICE_ONE_SCOPE);
-    deepStrictEqual(
-      [seeded, repositories],
-      [
-        `ac\ttag\treason\n${features
-          .map(feature => `${feature}.AC-1\ttodo\t\n`)
-          .join('')}`,
+      }
+      const seeded = seedFor(
+        catalogue,
+        answering(),
+        EXPLORER_SLICE_ONE_SCOPE,
+        root,
+      );
+      deepStrictEqual(
+        [seeded, repositories],
         [
-          'remote-oss/remote-ssh',
-          ...features.slice(1).map(() => 'remote-oss/remote-explorer'),
+          `ac\ttag\treason\n${features
+            .map(feature => `${feature}.AC-1\ttodo\t\n`)
+            .join('')}`,
+          [
+            'remote-oss/remote-ssh',
+            ...features.slice(1).map(() => 'remote-oss/remote-explorer'),
+          ],
         ],
-      ],
-    );
+      );
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
   });
 
   it('containers release 1: a letter after the same number sorts after the bare number, both ways round', () => {
@@ -252,36 +398,42 @@ describe('seed-coverage', () => {
   });
 
   it('containers release 1: seeds the containers file from the containers repository', () => {
-    const asked: string[] = [];
-    const catalogue = [
-      'id\tissue\trepo',
-      ...CONTAINERS_RELEASE_ONE_SCOPE.features.map(
-        (feature, index) =>
-          `${feature}\t${String(index + 200)}\tremote-containers`,
-      ),
-    ].join('\n');
-    const seeded = seedFor(
-      catalogue,
-      (...given) => {
-        asked.push(given[1][4] ?? '');
-        return {
-          status: 0,
-          stdout:
-            given[1][2] === '200'
-              ? '- **F-0101.AC-3b** b\n- **F-0101.AC-3** a'
-              : '',
-          stderr: '',
-        };
-      },
-      CONTAINERS_RELEASE_ONE_SCOPE,
-    );
-    deepStrictEqual(
-      [seeded, [...new Set(asked)]],
-      [
-        'ac\ttag\treason\nF-0101.AC-3\ttodo\t\nF-0101.AC-3b\ttodo\t\n',
-        ['remote-oss/remote-containers'],
-      ],
-    );
+    const root = mkdtempSync(path.join(tmpdir(), 'seed-coverage-'));
+    try {
+      const asked: string[] = [];
+      const catalogue = [
+        'id\tissue\trepo',
+        ...CONTAINERS_RELEASE_ONE_SCOPE.features.map(
+          (feature, index) =>
+            `${feature}\t${String(index + 200)}\tremote-containers`,
+        ),
+      ].join('\n');
+      const seeded = seedFor(
+        catalogue,
+        (...given) => {
+          asked.push(given[1][4] ?? '');
+          return {
+            status: 0,
+            stdout:
+              given[1][2] === '200'
+                ? '- **F-0101.AC-3b** b\n- **F-0101.AC-3** a'
+                : '',
+            stderr: '',
+          };
+        },
+        CONTAINERS_RELEASE_ONE_SCOPE,
+        root,
+      );
+      deepStrictEqual(
+        [seeded, [...new Set(asked)]],
+        [
+          'ac\ttag\treason\nF-0101.AC-3\ttodo\t\nF-0101.AC-3b\ttodo\t\n',
+          ['remote-oss/remote-containers'],
+        ],
+      );
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
   });
 
   it('containers release 1: no name picks the first slice, containers-r1 the containers file', () => {

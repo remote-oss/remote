@@ -74,6 +74,9 @@
   "title": "Gallery listing and readme: overview, member summary, requirements and links",
   "epic": "E90",
   "acCount": 22,
+  "referenceOnly": [
+   "F-9002.AC-16"
+  ],
   "surfaces": {
    "commands": [],
    "settings": [

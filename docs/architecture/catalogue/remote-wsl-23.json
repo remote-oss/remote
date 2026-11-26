@@ -8,6 +8,9 @@
   "title": "Reopen Folder in WSL and Reopen Folder in Windows",
   "epic": "E62",
   "acCount": 40,
+  "referenceOnly": [
+   "F-6204.AC-30"
+  ],
   "surfaces": {
    "commands": [
     "remote-wsl.reopenInWSL",

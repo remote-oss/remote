@@ -229,7 +229,11 @@
   "label": "spec:draft",
   "title": "Connection progress, phases and cancel",
   "epic": "E23",
-  "acCount": 33,
+  "acCount": 32,
+  "referenceOnly": [
+   "F-2304.AC-24",
+   "F-2304.AC-35"
+  ],
   "surfaces": {
    "commands": [
     "opensshremotes.showDetails (runtime only, not contributed)"
