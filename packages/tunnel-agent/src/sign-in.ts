@@ -20,10 +20,7 @@ export interface HttpAnswer {
 }
 
 /** The one way the sign-in reaches GitHub; the agent passes the platform's `fetch`. */
-type HttpFetch = (
-  url: string,
-  request: HttpRequest,
-) => Promise<HttpAnswer>;
+type HttpFetch = (url: string, request: HttpRequest) => Promise<HttpAnswer>;
 
 /** What a sign-in runs on. */
 export interface SignInPorts {
