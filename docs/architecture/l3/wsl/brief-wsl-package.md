@@ -106,11 +106,12 @@ At every activation, in this order, and never awaiting a `wsl.exe` process (core
 
 ## 5. Identity, localization and the public voice (F-6005, F-7901, F-7904)
 
-- **F-6005 is under revision.** Its stable lines are carded now; AC-5 to AC-7 wait on the revision. Until then:
-  - translations are our own, never copied from the reference (`reading-2348-own-translations`, Q1 option (b)); real
-    locales show English until they exist;
-  - "no English bundle" (AC-6) is read as no `bundle.l10n.en.json`; the default `bundle.l10n.json` ships as the key
-    source the tooling needs.
+- **Translations: F-6005 BR-12's interim,** until the family's translations decision (F-2002 Q5, the user's):
+  - our own translations for the 13 real languages, never copied from the reference's values. Conformance compares
+    only the English locale and BR-5's entries;
+  - "no English bundle" (AC-6) is read as no `bundle.l10n.en.json`. The default `bundle.l10n.json` ships as the key
+    source the tooling needs;
+  - AC-5 and AC-6 are carded (#3140). AC-7 waits on the user (Q1, and Q2's language packs for the run).
 - **No telemetry (F-6005 AC-10, R-28):** the containers source scan and the manifest checks run over remote-wsl and
   lib-wsl.
 - **README, `ruling-2348-readme-voice`.** F-7904 B-3 asks the README to say what Microsoft's extension does; ADR-0008

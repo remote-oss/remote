@@ -51,7 +51,7 @@
    ],
    "localFiles": [
     "global storage data.json per host",
-    "global state key remote.ssh.hints"
+    "<globalStorage>/connection-hints/<session>.json, one per window session"
    ]
   },
   "cites": [
