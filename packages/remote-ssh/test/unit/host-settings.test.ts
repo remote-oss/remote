@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {ABSOLUTE_HOST_PATH} from 'lib-host';
 import {
   effectiveProxyText,
   entryText,
@@ -148,6 +149,26 @@ describe('the install folder setting', () => {
       });
     });
   }
+
+  it('F-2407 BR-3, AC-8 (card #3204): a configured install folder with a drive letter is refused here, before the plan, though the shared test of an absolute host path accepts a drive and a separator', () => {
+    const entries = ['C:\\vs', 'C:/vs', 'c:\\'];
+    deepStrictEqual(
+      entries.map(entry => [
+        installFolderFor({devbox: entry}, 'devbox').kind,
+        entry,
+      ]),
+      entries.map(entry => ['invalid', entry]),
+    );
+  });
+
+  it('F-2407 (card #3204): the shared test of an absolute host path takes a POSIX root and a drive with its separator, and refuses a drive alone or with a name', () => {
+    deepStrictEqual(
+      ['/x', 'C:\\vs', 'C:/vs', 'c:\\', 'C:', 'C:foo'].map(path =>
+        ABSOLUTE_HOST_PATH.test(path),
+      ),
+      [true, true, true, true, false, false],
+    );
+  });
 
   it('does not use the entry of another alias, a glob or a user-prefixed key', () => {
     deepStrictEqual(

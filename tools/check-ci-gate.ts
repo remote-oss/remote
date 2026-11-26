@@ -10,7 +10,8 @@
  * #2219).
  *
  * The VSCodium job and its plan run on every merge to main whatever the repository's variables say: their `if:` reads
- * none, so no variable can turn off the post-merge run, the proof of what a pull request's narrowed parts left out.
+ * none, so no variable can turn off the post-merge run, the proof of what a pull request's narrowed parts left out. Only
+ * the data of a release train's own gate run can leave its parts out (tools/main-push-skip.ts).
  *
  * The launch jobs give a dispatch concurrency groups of its own run (`github.run_id`): a group that names only the part
  * lets one dispatch replace another's pending part.

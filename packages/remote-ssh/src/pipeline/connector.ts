@@ -44,7 +44,10 @@ export interface ConnectorDependencies {
   /** Whether a connect runs in terminal mode (each window its own `ssh`); read once when the connect starts. */
   terminalMode: () => boolean;
   /** The options of one connect, except its cancellation and its phase listener, which the connector supplies. */
-  options: Omit<ConnectOptions, 'cancellation' | 'onPhase' | 'onHostReported'>;
+  options: Omit<
+    ConnectOptions,
+    'cancellation' | 'onPhase' | 'onHostReported' | 'onPlanned'
+  >;
   /** Reveals the connection's log: what the progress's details link shows. */
   revealLog(): void;
   /** Makes these the only variables the window's terminals get from the extension, for the connect that worked. */
@@ -319,6 +322,20 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
         told = phaseOf(event, terminalMode);
         phases.tell(told);
       }
+      // The label is told once: with the CLI path when the plan says so, before the server is ready; in the other flows
+      // only when the resolve has ended, whichever way, never for a cancel, so that the title and the indicator change in order.
+      let labelHeld = false;
+      function tellLabel(): void {
+        if (!labelHeld) {
+          return;
+        }
+        labelHeld = false;
+        hostReported.tell({
+          family: 'ssh-remote',
+          target: input.target,
+          rawHostString: input.rawHostString,
+        });
+      }
       let result: Result | Failed;
       try {
         result = await pipeline(dependencies.stepsFor(onPhase), {
@@ -326,11 +343,12 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
           cancellation: controller.signal,
           onPhase,
           onHostReported: () => {
-            hostReported.tell({
-              family: 'ssh-remote',
-              target: input.target,
-              rawHostString: input.rawHostString,
-            });
+            labelHeld = true;
+          },
+          onPlanned: kind => {
+            if (kind === 'cli') {
+              tellLabel();
+            }
           },
         });
       } catch (caught) {
@@ -352,6 +370,12 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
         // The window was torn down while the server started or the tunnel opened: give the connection back.
         result.release();
         return refusal(input, {kind: 'cancelled'});
+      }
+      if (
+        !controller.signal.aborted &&
+        !('kind' in result && result.kind === 'cancelled')
+      ) {
+        tellLabel();
       }
       return result;
     } finally {

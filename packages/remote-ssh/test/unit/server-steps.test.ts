@@ -163,6 +163,99 @@ describe('the server steps: maintain', () => {
   });
 });
 
+/**
+ * Whether the script `runStep` sends runs in the held server's folder: for a data folder given, and for none, when it runs
+ * in the settings' folder.
+ */
+async function runsInHeldFolder(
+  runStep: (
+    channel: ReturnType<typeof channelAnswering>,
+    dataFolder: string | undefined,
+  ) => Promise<unknown>,
+): Promise<boolean[]> {
+  async function rootOf(dataFolder: string | undefined): Promise<boolean> {
+    const channel = channelAnswering(lines('Ok'));
+    await runStep(channel, dataFolder);
+    const call = channel.calls[0];
+    return (
+      call?.operation === 'runScript' &&
+      call.request.script.includes("INSTALL_ROOT='/srv/held'")
+    );
+  }
+  return [await rootOf('/srv/held/.server-data'), await rootOf(undefined)];
+}
+
+describe('the server steps: the held server', () => {
+  /** The script a step sent to a host that answered with `answer`, and the outcome. */
+  async function heldIn(
+    answer: readonly string[],
+  ): Promise<{outcome: unknown; script: string}> {
+    const channel = channelAnswering(answer);
+    const outcome = await createServerSteps(dependencies()).heldServer(
+      INPUT,
+      leaseOn(channel),
+      HOST,
+      '/srv/held/.server-data',
+      new AbortController().signal,
+    );
+    const call = channel.calls[0];
+    return {
+      outcome,
+      script: call?.operation === 'runScript' ? call.request.script : '',
+    };
+  }
+
+  it("ruling-2995-held-server: the check runs in the record's data folder, not the settings', and reads the port", async () => {
+    const {outcome, script} = await heldIn(
+      lines('Ok', 'server.alive=yes', 'server.port=4321'),
+    );
+    deepStrictEqual(
+      [
+        outcome,
+        script.includes("INSTALL_ROOT='/srv/held'"),
+        script.includes("DATA_FOLDER='.server-data'"),
+      ],
+      [{kind: 'alive', port: 4321}, true, true],
+    );
+  });
+
+  it("ruling-2995-takeup-cleanup: a clean-up given a data folder runs there, and without one in the settings' folder", async () => {
+    deepStrictEqual(
+      await runsInHeldFolder((channel, dataFolder) =>
+        createServerSteps(dependencies()).maintain(
+          INPUT,
+          leaseOn(channel),
+          'cleanup',
+          new AbortController().signal,
+          HOST,
+          dataFolder,
+        ),
+      ),
+      [true, false],
+    );
+  });
+});
+
+describe('the server steps: the default extensions', () => {
+  it("ruling-2995-takeup-cleanup (1): the install of the default extensions runs in a given data folder, and without one in the settings' folder", async () => {
+    deepStrictEqual(
+      await runsInHeldFolder((channel, dataFolder) =>
+        createServerSteps(
+          dependencies({
+            settings: settingsWith({defaultExtensions: ['pub.ext']}),
+          }),
+        ).installExtensions(
+          INPUT,
+          leaseOn(channel),
+          new AbortController().signal,
+          dataFolder,
+        ),
+      ),
+      [true, false],
+    );
+  });
+});
+
 describe('the server steps: plan', () => {
   it('downloads from the address the override gives, for the host platform', () => {
     const steps = createServerSteps(dependencies());
@@ -352,6 +445,48 @@ describe('the server steps: plan, the CLI path', () => {
   it('brief §2 row 3: a template with an unknown placeholder plans the direct install', () => {
     const {result} = planned('https://example.invalid/${platform}.tar.gz');
     deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+
+  it('ruling-2995-takeup-mode: wherever a connect is certainly direct, its plan is the direct install; and it is not certain where the plan is the CLI', () => {
+    const installed = {
+      ...HOST,
+      installed: true,
+      installFolder: '/home/u/.server/bin/abc123',
+    };
+    const cases: Array<
+      [string, Parameters<typeof dependencies>[0], typeof HOST]
+    > = [
+      [CLI_TEMPLATE, {}, HOST],
+      [CLI_TEMPLATE, {useExecServer: false}, HOST],
+      [CLI_TEMPLATE, {useExecServer: false}, installed],
+      [CLI_TEMPLATE, {socketMode: () => true}, HOST],
+      [CLI_TEMPLATE, {policy: sshPolicyFor('manualBootstrap')}, HOST],
+      ['', {}, HOST],
+      ['not a url ${os}', {}, HOST],
+    ];
+    const judged = cases.map(([template, changes, host]) => {
+      const steps = createServerSteps(
+        dependencies({
+          profile: {...PROFILE, cliDownloadUrlTemplate: template},
+          ...changes,
+        }),
+      );
+      const result = steps.plan(INPUT, host);
+      const kind = 'plan' in result ? result.plan.kind : 'failed';
+      return [
+        steps.certainlyDirect(INPUT, host),
+        kind === 'cli' ? 'cli' : 'not the CLI',
+      ];
+    });
+    deepStrictEqual(judged, [
+      [false, 'cli'],
+      [true, 'not the CLI'],
+      [true, 'not the CLI'],
+      [true, 'not the CLI'],
+      [true, 'not the CLI'],
+      [true, 'not the CLI'],
+      [true, 'not the CLI'],
+    ]);
   });
 
   it('brief §2 row 3: an unusable template is logged once, with its reason', () => {

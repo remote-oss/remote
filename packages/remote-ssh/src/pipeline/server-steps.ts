@@ -26,6 +26,7 @@ import {
   cleanup,
   type DownloadBounds,
   type DirectReason,
+  heldServer,
   type CredentialsPort,
   type DownloadPort,
   ensureAccepted,
@@ -143,6 +144,25 @@ type BoundedStop = (
 /** The maintenance of a host's server that each action of the `maintain` step runs. */
 const MAINTENANCE = {kill, uninstall, cleanup} as const;
 
+/**
+ * The parameters with `dataFolder`, a data folder a shared record names, in place of the settings' own: its parent as
+ * the install root and its last name as the data folder's name. None given keeps the parameters as they are.
+ */
+function inDataFolder(
+  parameters: ScriptParameters,
+  dataFolder: string | undefined,
+): ScriptParameters {
+  if (dataFolder === undefined) {
+    return parameters;
+  }
+  const split = dataFolder.lastIndexOf('/');
+  return {
+    ...parameters,
+    installRoot: dataFolder.slice(0, split),
+    dataFolderName: dataFolder.slice(split + 1),
+  };
+}
+
 type ServerStepNames =
   | 'checkStartSettings'
   | 'validate'
@@ -156,6 +176,8 @@ type ServerStepNames =
   | 'installCli'
   | 'startCli'
   | 'maintain'
+  | 'heldServer'
+  | 'certainlyDirect'
   | 'installExtensions';
 
 /** The archive source the planner reads, from what the resolution found. */
@@ -379,12 +401,29 @@ export function createServerSteps(
     },
     probe: (input, lease, cancellation) =>
       probe(lease.channel, parametersFor({}), cancellation),
-    maintain: (input, lease, action, cancellation, host) =>
+    maintain: (input, lease, action, cancellation, host, dataFolder) =>
       MAINTENANCE[action](
         lease.channel,
-        parametersFor({hostOperatingSystem: host?.operatingSystem}),
+        inDataFolder(
+          parametersFor({hostOperatingSystem: host?.operatingSystem}),
+          dataFolder,
+        ),
         cancellation,
       ),
+    heldServer: (input, lease, host, dataFolder, cancellation) =>
+      heldServer(
+        lease.channel,
+        inDataFolder(
+          parametersFor({hostOperatingSystem: host.operatingSystem}),
+          dataFolder,
+        ),
+        cancellation,
+      ),
+    certainlyDirect: (input, host) =>
+      !dependencies.useExecServer ||
+      dependencies.socketMode() ||
+      manualBootstrap() ||
+      cliAddressOf(profile, templatePlatformOf(host)).kind !== 'address',
     plan: (input, host, options) => {
       const platform = templatePlatformOf(host);
       const resolution = resolveServerArchive(
@@ -640,10 +679,10 @@ export function createServerSteps(
         );
       }
     },
-    installExtensions: async (input, lease, cancellation) => {
+    installExtensions: async (input, lease, cancellation, dataFolder) => {
       await installExtensions(
         lease.channel,
-        parametersFor({}),
+        inDataFolder(parametersFor({}), dataFolder),
         settings.defaultExtensions,
         dependencies.logger,
         cancellation,

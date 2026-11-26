@@ -13,6 +13,7 @@ import {
   expectedPackageName,
   isLibraryFolder,
   isMainModule,
+  isServiceFolder,
   messageOf,
   packageFolders,
   REPOSITORY_ROOT,
@@ -103,9 +104,12 @@ function checkPackageFolder(
   const directory = path.join(root, where);
   if (
     !isLibraryFolder(folder) &&
-    !(EXTENSION_FOLDERS as readonly string[]).includes(folder)
+    !(EXTENSION_FOLDERS as readonly string[]).includes(folder) &&
+    !isServiceFolder(folder)
   ) {
-    problems.push(`${where} is neither an extension nor a lib-<name> folder`);
+    problems.push(
+      `${where} is neither an extension, a lib-<name> folder nor a service`,
+    );
   }
   if (!existsSync(path.join(directory, 'README.md'))) {
     problems.push(`${where}/README.md is missing`);
