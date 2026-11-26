@@ -32,6 +32,7 @@ import {
   type DownloadHost,
   downloadHostArguments,
   downloadVariables,
+  ENGINE_SYSTEM_FORMAT,
   forwardSlashes,
   EARLIER_SERVER_ARCHIVE,
   DROP_HUNG_PATH,
@@ -1121,6 +1122,16 @@ function temporaryRun(): {root: string; runFolder: string; cache: string} {
   return {root: path.join(base, 'root'), runFolder: base, cache};
 }
 
+/** Puts an x64 run's two server archives in its download `cache`, and gives the checksums the run pins for them. */
+function cachedX64ServerArchives(cache: string): Record<string, string> {
+  writeFileSync(path.join(cache, serverArchiveName('alpine-x64')), 'musl');
+  writeFileSync(path.join(cache, serverArchiveName('linux-x64')), 'glibc');
+  return {
+    'alpine-x64': createHash('sha256').update('musl').digest('hex'),
+    'linux-x64': createHash('sha256').update('glibc').digest('hex'),
+  };
+}
+
 /** The checksums an arm64 run pins for its two server archives, and the bytes the fake download answers for each. */
 function armServerArchives(): {
   pinned: Record<string, string>;
@@ -1340,12 +1351,7 @@ describe('the download host in the run', () => {
   it("tooling-200: on a Windows run the host also listens on the distro's gateway and names it in the distro bases; the x64 Alpine and glibc archives are served; a Linux run has no distro base", async () => {
     const {root, runFolder, cache} = temporaryRun();
     try {
-      writeFileSync(path.join(cache, serverArchiveName('alpine-x64')), 'musl');
-      writeFileSync(path.join(cache, serverArchiveName('linux-x64')), 'glibc');
-      const checksums = {
-        'alpine-x64': createHash('sha256').update('musl').digest('hex'),
-        'linux-x64': createHash('sha256').update('glibc').digest('hex'),
-      };
+      const checksums = cachedX64ServerArchives(cache);
       const windows = await startRunDownloads(
         (): CommandResult => ({
           status: 0,
@@ -1391,6 +1397,42 @@ describe('the download host in the run', () => {
           Object.keys(linux.variables).filter(name => name.includes('DISTRO')),
         ],
         [true, ['HARNESS_DOWNLOADS_DISTRO_BASE'], ['glibc', 'musl'], []],
+      );
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
+  it("#3172: a Windows run on Docker Desktop's engine has no distro base and asks WSL nothing", async () => {
+    const {root, runFolder, cache} = temporaryRun();
+    try {
+      const checksums = cachedX64ServerArchives(cache);
+      const asked: string[] = [];
+      const desktop = await startRunDownloads(
+        (program): CommandResult => {
+          asked.push(program);
+          return {status: 0, stdout: 'Docker Desktop\n', stderr: ''};
+        },
+        () => Promise.reject(new Error('no download expected')),
+        root,
+        runFolder,
+        'x64',
+        checksums,
+        undefined,
+        undefined,
+        'win32',
+      );
+      await desktop.stop();
+      deepStrictEqual(
+        [
+          desktop.containerAddress,
+          Object.keys(desktop.variables).filter(name =>
+            name.includes('DISTRO'),
+          ),
+          asked.includes('wsl.exe'),
+        ],
+        ['host-gateway', [], false],
       );
     } finally {
       rmSync(root, {recursive: true, force: true});
@@ -1685,7 +1727,7 @@ describe('the download host in the run', () => {
     );
   });
 
-  it("tooling-116: with Docker in WSL2 it listens on the loopback and the distro's gateway, the Windows side's WSL adapter, reached there", () => {
+  it("tooling-116, #3172: with Docker in WSL2 it listens on the loopback and the distro's gateway, the Windows side's WSL adapter, reached there, and names it as the distro's address", () => {
     const asked: string[][] = [];
     deepStrictEqual(
       [
@@ -1693,6 +1735,7 @@ describe('the download host in the run', () => {
           'win32',
           answering(
             {
+              docker: {status: 0, stdout: 'Ubuntu 24.04.3 LTS\n', stderr: ''},
               'wsl.exe': {
                 status: 0,
                 stdout: 'default via 172.29.32.1 dev eth0 proto kernel\n',
@@ -1708,9 +1751,50 @@ describe('the download host in the run', () => {
         {
           listen: ['127.0.0.1', '172.29.32.1'],
           containerAddress: '172.29.32.1',
+          distroAddress: '172.29.32.1',
         },
-        [['wsl.exe', '-e', 'ip', '-4', 'route', 'show', 'default']],
+        [
+          ['docker', 'info', '--format', '{{.OperatingSystem}}'],
+          ['wsl.exe', '-e', 'ip', '-4', 'route', 'show', 'default'],
+        ],
       ],
+    );
+  });
+
+  it("#3172: with Docker Desktop's engine on Windows it listens on the loopback only, reached as host-gateway, and asks WSL nothing", () => {
+    const asked: string[][] = [];
+    deepStrictEqual(
+      [
+        clientReachOf(
+          'win32',
+          answering(
+            {docker: {status: 0, stdout: 'Docker Desktop\n', stderr: ''}},
+            asked,
+          ),
+        ),
+        asked,
+      ],
+      [
+        {listen: ['127.0.0.1'], containerAddress: 'host-gateway'},
+        [['docker', 'info', '--format', '{{.OperatingSystem}}']],
+      ],
+    );
+  });
+
+  it('#3172: a real engine reports its operating system in the format the Desktop check reads', function () {
+    // A real daemon's first calls can take seconds on a busy hosted runner, past mocha's 10 s.
+    this.timeout(60_000);
+    const system = runCommand('docker', [
+      'info',
+      '--format',
+      ENGINE_SYSTEM_FORMAT,
+    ]);
+    if (system.status !== 0) {
+      this.skip();
+    }
+    deepStrictEqual(
+      [system.stdout.trim() !== '', system.stdout.includes('{{')],
+      [true, false],
     );
   });
 

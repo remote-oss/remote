@@ -185,22 +185,18 @@ jobs:
       # to Node on that adapter only
       - name: The download host is reached from the WSL distro
         run: New-NetFirewallRule -DisplayName 'acceptance download host from WSL' -Direction Inbound -Program (Get-Command node).Source -InterfaceAlias 'vEthernet (WSL*)' -Action Allow | Out-Null
-      # The harness gives the containers the default WSL distro's gateway as the download host's address (clientReachOf);
-      # with Docker Desktop that distro is Desktop's own. A listener there and a container that fetches from it show both,
-      # in one line, before any row needs them.
+      # With Docker Desktop's engine the harness has the download host listen on the loopback only and gives the
+      # containers host-gateway as its address (clientReachOf), which Desktop forwards to the client's loopback. A listener
+      # there and a container that fetches from it through that name show both, in one line, before any row needs them.
       - name: Docker Desktop's containers reach the download host's address
         if: contains(env.LAUNCHES, 'containers-desktop')
         timeout-minutes: 5
         run: |
-          $route = "$(wsl -e ip -4 route show default)".Trim()
-          "the default WSL distro's route: $route"
-          $gateway = [regex]::Match($route, '\bvia\s+(\S+)').Groups[1].Value
-          if (-not $gateway) { 'no gateway in that route'; exit 1 }
-          $listener = Start-Process node -PassThru -NoNewWindow -ArgumentList '-e', "require('node:http').createServer((request, response) => response.end('reached')).listen(8077, '$gateway')"
+          $listener = Start-Process node -PassThru -NoNewWindow -ArgumentList '-e', "require('node:http').createServer((request, response) => response.end('reached')).listen(8077, '127.0.0.1')"
           Start-Sleep 2
-          $answer = "$(docker run --rm mirror.gcr.io/library/alpine:3.22 wget -q -T 10 -O - "http://${gateway}:8077/" 2>&1)".Trim()
+          $answer = "$(docker run --rm --add-host downloads:host-gateway mirror.gcr.io/library/alpine:3.22 wget -q -T 10 -O - http://downloads:8077/ 2>&1)".Trim()
           Stop-Process -InputObject $listener -ErrorAction SilentlyContinue
-          "a container's fetch from ${gateway}:8077: '$answer'"
+          "a container's fetch from downloads:8077 at host-gateway, the client's 127.0.0.1:8077: '$answer'"
           if ($answer -ne 'reached') { exit 1 }
       # The image's OpenSSH for Windows, whose agent is a service on a named pipe (disabled until a job starts it); the
       # run's keys go into it and the run takes them out again.

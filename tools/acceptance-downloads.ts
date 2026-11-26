@@ -1058,6 +1058,8 @@ export interface ClientReach {
   listen: string[];
   /** The value `--add-host` gives the download host's names inside a container. */
   containerAddress: string;
+  /** The Windows side's address a WSL 2 distro reaches the host at, with the engine in that distro. */
+  distroAddress?: string;
 }
 
 /** The harness host's own base image, by its digest, where the name lima gives the client is resolved. */
@@ -1067,12 +1069,22 @@ const LIMA_LOOKUP_IMAGE =
 /** An IPv4 address, as a lookup or a route prints it. */
 const IPV4_ADDRESS = /^\d{1,3}(?:\.\d{1,3}){3}$/u;
 
+/** The `docker info` format of the engine's operating system, which Docker Desktop's engine gives as its own name. */
+export const ENGINE_SYSTEM_FORMAT = '{{.OperatingSystem}}';
+
+/** Whether the client's engine is Docker Desktop's, by the operating system it reports; an engine that doesn't answer isn't. */
+function isDockerDesktop(command: CommandRunner): boolean {
+  const info = command('docker', ['info', '--format', ENGINE_SYSTEM_FORMAT]);
+  return info.status === 0 && info.stdout.trim() === 'Docker Desktop';
+}
+
 /**
  * How the download host and the engine's containers reach each other on the client's `platform`.
  * On Linux the engine runs on the client, so the host also listens on Docker's bridge gateway, which `host-gateway`
  * names. With colima on macOS the engine is in a lima VM, which names the client `host.lima.internal` and forwards it to
- * the client's loopback. With the engine in WSL2 on Windows, the distro's default route goes to the Windows side's WSL
- * adapter, so the host also listens there.
+ * the client's loopback. Docker Desktop's engine on Windows forwards `host-gateway` to the client's loopback, as on
+ * Linux but with nothing else to listen on. With the engine in a WSL2 distro of its own, the distro's default route goes
+ * to the Windows side's WSL adapter, so the host also listens there.
  */
 export function clientReachOf(
   platform: NodeJS.Platform,
@@ -1096,6 +1108,9 @@ export function clientReachOf(
     return {listen: ['127.0.0.1'], containerAddress: address};
   }
   if (platform === 'win32') {
+    if (isDockerDesktop(command)) {
+      return {listen: ['127.0.0.1'], containerAddress: 'host-gateway'};
+    }
     const route = checked(command, 'wsl.exe', [
       '-e',
       'ip',
@@ -1110,7 +1125,11 @@ export function clientReachOf(
         `the WSL distro has no IPv4 default route to the Windows host (got ${JSON.stringify(route.trim())})`,
       );
     }
-    return {listen: ['127.0.0.1', gateway], containerAddress: gateway};
+    return {
+      listen: ['127.0.0.1', gateway],
+      containerAddress: gateway,
+      distroAddress: gateway,
+    };
   }
   return {
     listen: ['127.0.0.1', bridgeGateway(command)],
@@ -1228,7 +1247,7 @@ export async function startRunDownloads(
       earlier === undefined
         ? undefined
         : {platform: platforms[0], release: earlier},
-      clientPlatform === 'win32' ? reach.containerAddress : undefined,
+      reach.distroAddress,
     ),
     containerAddress: reach.containerAddress,
     stop: () => host.stop(),
