@@ -4,14 +4,12 @@
  */
 
 import manifest from '../package.json' with {type: 'json'};
-
-/** Where a run writes, and the exit status it ends with. */
-export interface Output {
-  /** Writes `text` to the standard output. */
-  stdout(text: string): void;
-  /** Writes `text` to the standard error. */
-  stderr(text: string): void;
-}
+import type {Output} from './output.ts';
+import {
+  installService,
+  uninstallService,
+  type ServicePorts,
+} from './service.ts';
 
 /** The usage text, as `--help` prints it and an unknown command shows it. */
 export const USAGE = [
@@ -28,8 +26,6 @@ const LATER_COMMANDS: ReadonlyArray<readonly string[]> = [
   [],
   ['login'],
   ['login', '--token-stdin'],
-  ['service', 'install'],
-  ['service', 'uninstall'],
   ['unregister'],
 ];
 
@@ -47,7 +43,11 @@ function isLaterCommand(words: readonly string[]): boolean {
 }
 
 /** Runs the command `words` ask for, writing through `output`, and gives the exit status. */
-export function runCommand(words: readonly string[], output: Output): number {
+export async function runCommand(
+  words: readonly string[],
+  output: Output,
+  service: Omit<ServicePorts, 'output'>,
+): Promise<number> {
   if (words.length === 1 && words[0] === '--version') {
     output.stdout(`${manifest.version}\n`);
     return 0;
@@ -55,6 +55,15 @@ export function runCommand(words: readonly string[], output: Output): number {
   if (words.length === 1 && words[0] === '--help') {
     output.stdout(`${USAGE}\n`);
     return 0;
+  }
+  if (words.length === 2 && words[0] === 'service') {
+    const ports = {...service, output};
+    if (words[1] === 'install') {
+      return installService(ports);
+    }
+    if (words[1] === 'uninstall') {
+      return uninstallService(ports);
+    }
   }
   if (isLaterCommand(words)) {
     output.stderr(`${['tunnel-agent', ...words].join(' ')}: not built yet\n`);
