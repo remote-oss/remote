@@ -77,7 +77,8 @@ The relay is `brief-relay.md`, and the host is `brief-agent.md`.
      needs acceptance, then calls `serve` with the editor's commit and quality and **its server source**: a
      `Pick<ProductProfile, …>` of its product (identity, server names, download template and redirect hosts, licence
      fields), carrying `licenceAccepted`. The agent resolves it for its own platform (`ruling-3163-serve-inputs`).
-     `ServeParams.extensions` carries the default extensions;
+     `ServeParams.extensions` carries the default extensions, and `compress` is false (the agent refuses `true`, as it
+     does `use_local_download`, #3162);
   6. returns core's managed authority (`[oss]` `src/vscode-dts/vscode.proposed.resolvers.d.ts:46`,
      `ManagedResolvedAuthority`). Each connection core makes is one `socket_id` over `servermsg`, closed by
      `serverclose`.
