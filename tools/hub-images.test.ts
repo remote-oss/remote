@@ -10,7 +10,11 @@ const ALPINE_3_22_DIGEST =
 /** The files below `folder` that name `text`. */
 function filesNaming(folder: string, text: string): string[] {
   return readdirSync(folder, {recursive: true, withFileTypes: true})
-    .filter(entry => entry.isFile() && entry.name.endsWith('.json'))
+    .filter(
+      entry =>
+        entry.isFile() &&
+        (entry.name === 'Dockerfile' || entry.name.endsWith('.json')),
+    )
     .map(entry => path.join(entry.parentPath, entry.name))
     .filter(file => readFileSync(file, 'utf8').includes(text));
 }
@@ -31,14 +35,12 @@ describe('the pinned Docker Hub images (card #3116)', () => {
     );
   });
 
-  it('gives the digest the template fixtures hold for alpine:3.22, so a re-pin moves the fixtures with it', () => {
+  it('gives the digest the template fixtures and the Dockerfiles hold for alpine:3.22, so a re-pin moves them with it', () => {
     const fixtures = path.join(
       import.meta.dirname,
       '..',
       'tests',
       'acceptance',
-      'fixtures',
-      'templates',
     );
     const named = filesNaming(fixtures, 'alpine:3.22@');
     deepStrictEqual(
@@ -48,7 +50,7 @@ describe('the pinned Docker Hub images (card #3116)', () => {
           readFileSync(file, 'utf8').includes(pinnedImage('alpine:3.22')),
         ),
       ],
-      [3, true],
+      [5, true],
     );
   });
 });

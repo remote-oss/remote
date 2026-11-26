@@ -1,5 +1,6 @@
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {hubImage} from '../../../tools/hub-images.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -8,7 +9,7 @@ const GIT_IMAGE =
   'mcr.microsoft.com/devcontainers/base@sha256:edfb983aab9c579a385dc23c57d7d3703f5ec920124d99c16204a2cac465aab4';
 
 /** The Dockerfile of the broken repository: its build always fails. */
-const BROKEN_DOCKERFILE = 'FROM alpine:3.20\\nRUN exit 1\\n';
+const BROKEN_DOCKERFILE = `FROM ${hubImage('alpine:3.20')}\\nRUN exit 1\\n`;
 
 /** What the container runs: a repository whose dev container can't be built, served read-only over `git://`. */
 const SERVE = [
