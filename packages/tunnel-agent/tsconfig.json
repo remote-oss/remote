@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The version --version prints is the manifest's, which the bundle inlines.
+    "resolveJsonModule": true
+  },
+  "include": ["src", "package.json"],
+  "references": [
+    {
+      "path": "../lib-identifiers"
+    }
+  ]
+}

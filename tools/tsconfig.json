@@ -15,6 +15,7 @@
     "../tests/acceptance/window-agent/src/window-name.ts",
     "../tests/acceptance/window-agent/src/terminal-selection.ts",
     "../tests/acceptance/containers-ports/mismatch-report.ts",
+    "../tests/acceptance/ssh-agents/stored-scan.ts",
     "../tests/acceptance/windows/agent-events.ts",
     "../tests/acceptance/windows/agent-standing.ts",
     "../tests/acceptance/windows/change-timeline.ts",
