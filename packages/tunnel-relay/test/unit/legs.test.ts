@@ -768,8 +768,10 @@ describe("the relay's WebSocket legs", () => {
       let modified = 1;
       const allowlist = new Allowlist(
         {modified: () => modified, text: () => listed},
-        () => {
-          legs.closeUnadmitted(owner => allowlist.admits(owner));
+        {
+          onRead: () => {
+            legs.closeUnadmitted(owner => allowlist.admits(owner));
+          },
         },
       );
       allowlist.refresh();

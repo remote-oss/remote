@@ -29,8 +29,11 @@ const allowlist = new Allowlist(
     modified: () => statSync(config.allowlistFile).mtimeMs,
     text: () => readFileSync(config.allowlistFile, 'utf8'),
   },
-  () => {
-    legs.closeUnadmitted(owner => allowlist.admits(owner));
+  {
+    onRead: () => {
+      legs.closeUnadmitted(owner => allowlist.admits(owner));
+    },
+    report: reportFailure,
   },
 );
 const authenticate = authenticateWith({

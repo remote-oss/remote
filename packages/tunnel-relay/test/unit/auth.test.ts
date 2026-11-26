@@ -391,8 +391,10 @@ describe('the allowlist', () => {
     let readings = 0;
     const allowlist = new Allowlist(
       {modified: () => modified, text: () => '42\n'},
-      () => {
-        readings += 1;
+      {
+        onRead: () => {
+          readings += 1;
+        },
       },
     );
     allowlist.refresh();
@@ -404,6 +406,79 @@ describe('the allowlist', () => {
     modified = 3;
     allowlist.refresh();
     deepStrictEqual([unchanged, readings], [1, 3]);
+  });
+
+  it("keeps the last list when its file can't be read, reports each failed reading, and reads it again once it can", () => {
+    let state: 'listed' | 'removed' | 'unreadable' | 'changed' = 'listed';
+    const removed = new Error('ENOENT: the file is gone');
+    const unreadable = new Error('EACCES: the file cannot be read');
+    const reported: unknown[] = [];
+    let readings = 0;
+    const allowlist = new Allowlist(
+      {
+        modified: () => {
+          if (state === 'removed') {
+            throw removed;
+          }
+          return state === 'listed' ? 1 : 2;
+        },
+        text: () => {
+          if (state === 'unreadable') {
+            throw unreadable;
+          }
+          return state === 'listed' ? '42\n' : '7\n';
+        },
+      },
+      {
+        onRead: () => {
+          readings += 1;
+        },
+        report: failure => {
+          reported.push(failure);
+        },
+      },
+    );
+    const before = [allowlist.admits(42), allowlist.admits(7)];
+    state = 'removed';
+    allowlist.refresh();
+    const whileRemoved = [allowlist.admits(42), allowlist.admits(7)];
+    state = 'unreadable';
+    const whileUnreadable = [allowlist.admits(42), allowlist.admits(7)];
+    state = 'changed';
+    deepStrictEqual(
+      [
+        before,
+        whileRemoved,
+        whileUnreadable,
+        [allowlist.admits(42), allowlist.admits(7)],
+        reported,
+        readings,
+      ],
+      [
+        [true, false],
+        [true, false],
+        [true, false],
+        [false, true],
+        [removed, removed, removed, unreadable, unreadable],
+        2,
+      ],
+    );
+  });
+
+  it('reads on without telling anyone when it was given no hooks and its file fails', () => {
+    let fails = false;
+    const allowlist = new Allowlist({
+      modified: () => {
+        if (fails) {
+          throw new Error('gone');
+        }
+        return 1;
+      },
+      text: () => '42\n',
+    });
+    const before = allowlist.admits(42);
+    fails = true;
+    deepStrictEqual([before, allowlist.admits(42)], [true, true]);
   });
 });
 

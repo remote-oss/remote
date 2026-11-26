@@ -1,7 +1,8 @@
 /**
  * @fileoverview The accounts the relay admits: a file of numeric GitHub ids, one per line, with `#` comments, kept by the
  * relay's operator. It is read again whenever its modification time changes, and each new reading is announced, so the
- * relay can close the legs of owners it no longer lists.
+ * relay can close the legs of owners it no longer lists. A file that can't be read keeps the last list: the failure is
+ * reported, and no account is admitted or refused because of it.
  */
 
 /** What the allowlist reads of its file. */
@@ -12,17 +13,23 @@ export interface AllowlistFile {
   text(): string;
 }
 
+/** What the allowlist tells: each new reading, and a file it could not read. */
+export interface AllowlistHooks {
+  onRead?: () => void;
+  report?: (failure: unknown) => void;
+}
+
 /** The admitted accounts, read from their file. */
 export class Allowlist {
   private readonly file: AllowlistFile;
-  private readonly onRead: () => void;
+  private readonly hooks: AllowlistHooks;
   private admitted = new Set<number>();
   private readAt = Number.NaN;
 
-  /** The allowlist in `file`; `onRead` runs after each reading of it. */
-  constructor(file: AllowlistFile, onRead: () => void = () => undefined) {
+  /** The allowlist in `file`, telling `hooks` of each reading and of each failure to read. */
+  constructor(file: AllowlistFile, hooks: AllowlistHooks = {}) {
     this.file = file;
-    this.onRead = onRead;
+    this.hooks = hooks;
   }
 
   /** Whether the account with numeric id `accountId` is admitted. */
@@ -31,15 +38,23 @@ export class Allowlist {
     return this.admitted.has(accountId);
   }
 
-  /** Reads the file again when its modification time changed since the last reading. */
+  /** Reads the file again when its modification time changed since the last reading; one it can't read keeps the list. */
   refresh(): void {
-    const modified = this.file.modified();
-    if (modified === this.readAt) {
+    let modified: number;
+    let text: string;
+    try {
+      modified = this.file.modified();
+      if (modified === this.readAt) {
+        return;
+      }
+      text = this.file.text();
+    } catch (failure) {
+      this.hooks.report?.(failure);
       return;
     }
-    this.admitted = idsIn(this.file.text());
+    this.admitted = idsIn(text);
     this.readAt = modified;
-    this.onRead();
+    this.hooks.onRead?.();
   }
 }
 
