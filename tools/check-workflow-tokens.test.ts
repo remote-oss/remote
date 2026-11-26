@@ -351,6 +351,26 @@ describe('check-workflow-tokens: no cache holds the CLI archives (card #3197)', 
     );
   });
 
+  it('a path with a glob character the check does not read fails: braces, brackets, an extglob and a backslash', () => {
+    deepStrictEqual(
+      [
+        '.vscode-test/downloads/{cli-linux-x64.tar.gz,none}',
+        '.vscode-test/downloads/cli-linux-x64.tar.g[z]',
+        '.vscode-test/downloads/@(cli-linux-x64.tar.gz)',
+        '.vscode-test/{downloads}',
+        '.vscode-test/down[l]oads',
+        '.vscode-test/downloads/cli-linux-x64\\.tar.gz',
+      ].map(
+        each =>
+          cliArchivesCacheProblems(
+            'w.yml',
+            cacheWorkflow('actions/cache@v6', [each]),
+          ).length,
+      ),
+      [1, 1, 1, 1, 1, 1],
+    );
+  });
+
   it('each outside path on the list passes: the OpenSSH build and the pnpm store', () => {
     deepStrictEqual(
       cliArchivesCacheProblems(
@@ -448,7 +468,7 @@ describe('check-workflow-tokens: no cache holds the CLI archives (card #3197)', 
     );
   });
 
-  it('the VSCodium archives, a listed path outside the checkout, a ! path, another action and a step with no path pass', () => {
+  it('the VSCodium archives, a listed path outside the checkout, a ! path, a near name whose dot is literal, another action and a step with no path pass', () => {
     deepStrictEqual(
       [
         cacheWorkflow('actions/cache@v6', [
@@ -456,6 +476,7 @@ describe('check-workflow-tokens: no cache holds the CLI archives (card #3197)', 
           '.vscode-test/downloads/vscodium-reh-*',
           '~/.cache/remote-oss',
           '!.vscode-test/downloads',
+          '.vscode-test/downloads/cli.linux-x64.tar.gz',
         ]),
         cacheWorkflow('actions/upload-artifact@v5', ['.vscode-test']),
         secretWorkflow(

@@ -152,8 +152,9 @@ const OUTSIDE_CACHE_PATHS: ReadonlyMap<string, string> = new Map([
 
 /**
  * The path inside the checkout that a cache path names, `./` and `${{ github.workspace }}/` taken off and no trailing
- * `/`; undefined when it names a place the check cannot place inside it: an absolute path, a home path, a path with a
- * `..` folder, or any other expression.
+ * `/`; undefined when the check cannot place it inside the checkout: an absolute path, a home path, a path with a `..`
+ * folder, or one with a glob or expression character the check does not read (braces, brackets, parentheses or a
+ * backslash, so any other `${{ }}` expression too). `actions/cache` reads a path as a glob with all of those.
  */
 function checkoutPathOf(cachePath: string): string | undefined {
   const relative = cachePath
@@ -162,7 +163,7 @@ function checkoutPathOf(cachePath: string): string | undefined {
     .replace(/\/+$/u, '');
   return relative.startsWith('/') ||
     relative.startsWith('~') ||
-    relative.includes('${{') ||
+    /[{}[\]()\\]/u.test(relative) ||
     relative.split('/').includes('..')
     ? undefined
     : relative;
@@ -170,7 +171,8 @@ function checkoutPathOf(cachePath: string): string | undefined {
 
 /**
  * A path inside the checkout as a regular expression: `**` matches across folders, `*` and `?` within one; the
- * checkout itself (`.` or nothing) matches every file in it.
+ * checkout itself (`.` or nothing) matches every file in it. `checkoutPathOf` has already refused the other glob
+ * characters, so only `.`, `+`, `^`, `$` and `|` are left to escape.
  */
 function checkoutPathPattern(relative: string): RegExp {
   if (relative === '' || relative === '.') {
@@ -185,7 +187,7 @@ function checkoutPathPattern(relative: string): RegExp {
           ? '[^/]*'
           : part === '?'
             ? '[^/]'
-            : part.replace(/[.+^${}()|[\]\\]/gu, '\\$&'),
+            : part.replace(/[.+^$|]/gu, '\\$&'),
     )
     .join('');
   return new RegExp(`^${source}$`, 'u');
