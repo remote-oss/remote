@@ -232,6 +232,9 @@ importers:
       lib-log:
         specifier: workspace:*
         version: link:../lib-log
+      lib-state:
+        specifier: workspace:*
+        version: link:../lib-state
 
   packages/lib-companion: {}
 
