@@ -5,6 +5,7 @@
 import {readFileSync, statSync} from 'node:fs';
 import {Allowlist} from './auth/allowlist.ts';
 import {authenticateWith} from './auth/authenticate.ts';
+import {LookupLimit} from './auth/lookups.ts';
 import {GithubIdentity} from './auth/github.ts';
 import {Tokens} from './auth/tokens.ts';
 import {configOf} from './config.ts';
@@ -22,6 +23,7 @@ const store = new Store(config.storeFile);
 const tokens = new Tokens(readFileSync(config.tokenKeyFile), Date.now);
 const authenticate = authenticateWith({
   github: new GithubIdentity(config.githubApi, fetch, Date.now),
+  lookups: new LookupLimit(Date.now),
   allowlist: new Allowlist({
     modified: () => statSync(config.allowlistFile).mtimeMs,
     text: () => readFileSync(config.allowlistFile, 'utf8'),

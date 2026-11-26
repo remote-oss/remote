@@ -112,9 +112,10 @@ export class Legs implements TunnelLegs {
     }
     let caller: Awaited<ReturnType<Authenticate>>;
     try {
-      caller = await this.authenticate({
-        authorization: request.headers.authorization,
-      });
+      caller = await this.authenticate(
+        {authorization: request.headers.authorization},
+        request.socket.remoteAddress ?? '',
+      );
     } catch (error) {
       this.report(error);
       refuse(socket, problem(500, 'The relay failed.'));
@@ -288,7 +289,10 @@ async function clientLeg(
 /** Refuses an upgrade with `answer` as an HTTP answer, and ends the socket. */
 function refuse(socket: Duplex, answer: Answer): void {
   const body = JSON.stringify(answer.body);
+  const headers = Object.entries(answer.headers ?? {})
+    .map(([name, value]) => `${name}: ${value}\r\n`)
+    .join('');
   socket.end(
-    `HTTP/1.1 ${String(answer.status)} Refused\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: ${String(Buffer.byteLength(body))}\r\n\r\n${body}`,
+    `HTTP/1.1 ${String(answer.status)} Refused\r\nConnection: close\r\n${headers}Content-Type: application/json\r\nContent-Length: ${String(Buffer.byteLength(body))}\r\n\r\n${body}`,
   );
 }

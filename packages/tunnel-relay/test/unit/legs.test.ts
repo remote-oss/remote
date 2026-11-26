@@ -25,18 +25,30 @@ type Channel = Opening['channel'];
 const HOST = 'tunnel-relay-host';
 const CLIENT = 'tunnel-relay-client';
 
+/** The addresses the legs gave `authenticate`, in order. */
+const addresses: string[] = [];
+
 /**
  * Takes `tunnel <id> <scope>` as that tunnel's token, `github <login>` as an account, `refused` as a refusal, and
- * `broken` as a failure to ask.
+ * `broken` as a failure to ask, and `limited` as an address that has asked too often.
  */
 function authenticate(
   headers: Parameters<Authenticate>[0],
+  address: string,
 ): ReturnType<Authenticate> {
+  addresses.push(address);
   const [scheme = '', first = '', second = ''] = (
     headers.authorization ?? ''
   ).split(' ');
   if (scheme === 'broken') {
     return Promise.reject(new Error('down'));
+  }
+  if (scheme === 'limited') {
+    return Promise.resolve({
+      status: 429,
+      body: {title: 'Too Many Requests', detail: 'Wait.'},
+      headers: {'Retry-After': '30'},
+    });
   }
   if (scheme === 'tunnel' && (second === 'host' || second === 'connect')) {
     return Promise.resolve({kind: 'tunnel', tunnelId: first, scope: second});
@@ -97,7 +109,8 @@ async function until(condition: () => boolean): Promise<void> {
 }
 
 /** What an upgrade gave: an open socket, or the refusal's status and detail. */
-type Opened = {websocket: WebSocket} | {status: number; detail: string};
+type Opened =
+  {websocket: WebSocket} | {status: number; detail: string; retryAfter: string};
 
 describe("the relay's WebSocket legs", () => {
   let server: Server;
@@ -170,7 +183,11 @@ describe("the relay's WebSocket legs", () => {
           const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
             detail: string;
           };
-          resolve({status: response.statusCode ?? 0, detail: body.detail});
+          resolve({
+            status: response.statusCode ?? 0,
+            detail: body.detail,
+            retryAfter: response.headers['retry-after'] ?? '',
+          });
         });
       });
       websocket.on('error', reject);
@@ -365,6 +382,28 @@ describe("the relay's WebSocket legs", () => {
           [500, 'The relay failed.'],
           ['Error: down'],
         ],
+      );
+    });
+
+    it('gives the sign-in the address of the upgrade’s socket', async () => {
+      addresses.length = 0;
+      await refusal('/relay/host/one', [HOST], 'refused');
+      deepStrictEqual(
+        [
+          addresses.length,
+          /^(::ffff:)?127\.0\.0\.1$|^::1$/.test(addresses[0] ?? ''),
+        ],
+        [1, true],
+      );
+    });
+
+    it('writes the headers of a refusal, such as the Retry-After of an address that has asked too often, before the body', async () => {
+      const result = await open('/relay/host/one', [HOST], 'limited');
+      deepStrictEqual(
+        'websocket' in result
+          ? 'open'
+          : [result.status, result.detail, result.retryAfter],
+        [429, 'Wait.', '30'],
       );
     });
 
@@ -647,6 +686,21 @@ describe("the relay's WebSocket legs", () => {
       socket.emit('error', new Error('reset by the peer'));
       await upgrading;
       deepStrictEqual(socket.destroyed, true);
+    });
+
+    it('gives the sign-in an empty address when the upgrade’s socket has none', async () => {
+      addresses.length = 0;
+      const request = {
+        url: '/relay/host/one',
+        headers: {'sec-websocket-protocol': HOST, authorization: 'refused'},
+        socket: {remoteAddress: undefined},
+      };
+      await legs.upgrade(
+        request as unknown as IncomingMessage,
+        new PassThrough(),
+        Buffer.alloc(0),
+      );
+      deepStrictEqual(addresses, ['']);
     });
   });
 
