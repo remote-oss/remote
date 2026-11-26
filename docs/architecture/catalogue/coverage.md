@@ -32,9 +32,10 @@ fails the check: end the label in `-half` or `-part`. A line may not name a part
 ## The reference-only criteria
 
 The catalogue entry of a feature (a `<repo>-<number>.json` file in this folder) lists the ids of its wholly
-reference-only criteria in a `referenceOnly` field. Such a criterion records the reference's behaviour, or a process
-of the family its own spec keeps out of the catalogue (F-9002.AC-16, remote-extensionpack#6), and is never required
-of the reimplementation, so the coverage file has no line for it: the line is deleted, and none is ever added.
+reference-only criteria in a `referenceOnly` field. Such a criterion records the reference's behaviour, or is a
+process criterion whose own spec says it has no row in a conformance catalogue (F-9002.AC-16, remote-extensionpack#6),
+and it is never required of the reimplementation, so the coverage file has no line for it: the line is deleted, and
+none is ever added.
 `node tools/seed-coverage.ts` reads the field and leaves those ids out of what it seeds and of what its `--check`
 expects, and it stops the run, naming the id, when the field lists an id the feature's issue does not list as a
 criterion. A feature's `acCount` counts the lines of the file, so it is below the issue's criterion count by the

@@ -1026,6 +1026,7 @@ F-2508.AC-9	acceptance
 F-2508.AC-10	acceptance	
 F-2508.AC-11	acceptance	
 F-2508.AC-12	acceptance	
+F-2508.AC-13	core	core: the debugger's "Can't find Node.js binary" modal, a pinned editor build with no node fallback
 F-2508.AC-14	acceptance	
 F-2508.AC-15	acceptance	
 F-2508.AC-16	acceptance	
@@ -1046,6 +1047,7 @@ F-2508.AC-30	acceptance
 F-2508.AC-31	acceptance	
 F-2508.AC-32	acceptance	
 F-2508.AC-33	acceptance	
+F-2508.AC-34	core	core: the modal's "Open 'launch.json'" item, a pinned editor build
 F-2508.AC-35	core	core: the trust prompt's Manage action and the Workspace Trust editor are core's; the pinned editor's startup prompt has no Manage button
 F-2508.AC-36	acceptance	
 F-2508.AC-37	acceptance	
