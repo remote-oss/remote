@@ -27,6 +27,9 @@ const HOST_ENVIRONMENT = {
 
 const NEVER = new AbortController().signal;
 
+/** What a command of this machine needs to find the shell's tools. */
+const HOST_BASE = {PATH: process.env.PATH ?? '/usr/bin:/bin'};
+
 /** Whether the process `processId` of this machine runs: one that has ended and not yet been reaped is gone. */
 function stateOf(processId: string): 'running' | 'gone' {
   const state = spawnSync('ps', ['-o', 'stat=', '-p', processId], {
@@ -263,8 +266,8 @@ describe('the dev container CLI on the SSH host (card #3244)', () => {
       const controller = new AbortController();
       const children: string[] = [];
       const host = execServerCliHost(
-        serverOf(localExecServer(), () =>
-          Promise.resolve({env: {PATH: process.env.PATH ?? '/usr/bin:/bin'}}),
+        serverOf(localExecServer(HOST_BASE), () =>
+          Promise.resolve({env: HOST_BASE}),
         ),
         {...PLACED, node},
       );

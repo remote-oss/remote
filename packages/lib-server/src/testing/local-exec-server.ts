@@ -8,12 +8,17 @@ import type {Readable} from 'node:stream';
 import type {ExecReadStream, ExecServer} from '../cli-control/exec-server.ts';
 import {hostStream} from './fake-exec-host.ts';
 
-/** An exec server whose commands are processes of this machine, so that the scripts run under a real shell. */
-export function localExecServer(): Pick<ExecServer, 'spawn'> {
+/**
+ * An exec server whose commands are processes of this machine, so that the scripts run under a real shell. Each runs
+ * with `base` and the spawn's own variables.
+ */
+export function localExecServer(
+  base: Readonly<Record<string, string>>,
+): Pick<ExecServer, 'spawn'> {
   return {
     spawn: (command, argumentList, options) => {
       const child = spawn(command, argumentList, {
-        env: {...process.env, ...options?.env},
+        env: {...base, ...options?.env},
         stdio: ['pipe', 'pipe', 'pipe'],
       });
       function streamOf(readable: Readable): ExecReadStream {

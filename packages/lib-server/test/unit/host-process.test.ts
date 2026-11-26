@@ -19,6 +19,9 @@ import {
 
 const NEVER = new AbortController().signal;
 
+/** What a command of this machine needs to find the shell's tools. */
+const HOST_BASE = {PATH: process.env.PATH ?? '/usr/bin:/bin'};
+
 const NO_ID = 'the command on the host did not report its process id';
 
 /** What `stream` carries until it ends. */
@@ -284,7 +287,7 @@ describe('a process on a host with a POSIX shell, run for real', () => {
   it('each script starts the command with its input, reports an id, and passes the command’s status back, the group script as the leader of a group of its own', async () => {
     const outcomes = [];
     for (const script of [REPORTING_SCRIPT, GROUP_SCRIPT]) {
-      const spawned = await spawnOnHost(localExecServer(), {
+      const spawned = await spawnOnHost(localExecServer(HOST_BASE), {
         ...requestOf(),
         script,
         command: ['sh', '-c', 'cat; exit 7'],
@@ -305,7 +308,7 @@ describe('a process on a host with a POSIX shell, run for real', () => {
   });
 
   it('a signal to the group ends the command and the children it started, and a group already gone is no failure', async () => {
-    const server = localExecServer();
+    const server = localExecServer(HOST_BASE);
     const spawned = await spawnOnHost(server, {
       ...requestOf(),
       script: GROUP_SCRIPT,
