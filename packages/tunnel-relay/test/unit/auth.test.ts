@@ -408,12 +408,13 @@ describe('the allowlist', () => {
     deepStrictEqual([unchanged, readings], [1, 3]);
   });
 
-  it("keeps the last list when its file can't be read, reports each failed reading, and reads it again once it can", () => {
+  it("keeps the last list when its file can't be read, tells each distinct failure once and its recovery once, and reads it again once it can", () => {
     let state: 'listed' | 'removed' | 'unreadable' | 'changed' = 'listed';
     const removed = new Error('ENOENT: the file is gone');
     const unreadable = new Error('EACCES: the file cannot be read');
     const reported: unknown[] = [];
     let readings = 0;
+    let recoveries = 0;
     const allowlist = new Allowlist(
       {
         modified: () => {
@@ -436,6 +437,9 @@ describe('the allowlist', () => {
         report: failure => {
           reported.push(failure);
         },
+        onRecovered: () => {
+          recoveries += 1;
+        },
       },
     );
     const before = [allowlist.admits(42), allowlist.admits(7)];
@@ -453,14 +457,16 @@ describe('the allowlist', () => {
         [allowlist.admits(42), allowlist.admits(7)],
         reported,
         readings,
+        recoveries,
       ],
       [
         [true, false],
         [true, false],
         [true, false],
         [false, true],
-        [removed, removed, removed, unreadable, unreadable],
+        [removed, unreadable],
         2,
+        1,
       ],
     );
   });
@@ -492,15 +498,19 @@ describe('the allowlist', () => {
     );
   });
 
-  it('keeps the last list when a later reading finds a line that is not an id, reports it, and reads the fixed file', () => {
+  it('keeps the last list when a later reading finds a line that is not an id, tells it once and its recovery once, and reads the fixed file', () => {
     let modified = 1;
     let text = '42\n7\n';
     const reported: unknown[] = [];
+    let recoveries = 0;
     const allowlist = new Allowlist(
       {modified: () => modified, text: () => text},
       {
         report: failure => {
           reported.push(failure);
+        },
+        onRecovered: () => {
+          recoveries += 1;
         },
       },
     );
@@ -513,16 +523,15 @@ describe('the allowlist', () => {
     deepStrictEqual(
       [
         withTypo,
-        reported.map(String),
         [allowlist.admits(42), allowlist.admits(7)],
+        reported.map(String),
+        recoveries,
       ],
       [
         [true, true],
-        [
-          'Error: Line 2 of the allowlist is not an account id: 7x',
-          'Error: Line 2 of the allowlist is not an account id: 7x',
-        ],
         [true, false],
+        ['Error: Line 2 of the allowlist is not an account id: 7x'],
+        1,
       ],
     );
   });
