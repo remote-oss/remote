@@ -3,7 +3,8 @@
  * relay's operator. It is read again whenever its modification time changes, and each new reading is announced, so the
  * relay can close the legs of owners it no longer lists. Its first reading, at start, throws when the file can't be read
  * or holds a line that is neither an id nor a comment, since there is no list to keep. A later reading that fails the
- * same way keeps the last list: the failure is reported, and no account is admitted or refused because of it.
+ * same way keeps the last list: the failure is reported once per distinct failure, again when it changes, and its
+ * recovery is told once, and no account is admitted or refused because of it.
  */
 
 /** What the allowlist reads of its file. */
@@ -14,10 +15,11 @@ export interface AllowlistFile {
   text(): string;
 }
 
-/** What the allowlist tells: each new reading, and a file it could not read. */
+/** What the allowlist tells: each new reading, and the failure or the recovery of a reading. */
 export interface AllowlistHooks {
   onRead?: () => void;
   report?: (failure: unknown) => void;
+  onRecovered?: () => void;
 }
 
 /** The admitted accounts, read from their file. */
@@ -26,6 +28,8 @@ export class Allowlist {
   private readonly hooks: AllowlistHooks;
   private admitted = new Set<number>();
   private readAt = Number.NaN;
+  /** The message of the failure told last, so the same one is told once; the empty string when none is told. */
+  private told = '';
 
   /** The allowlist in `file`, telling `hooks` of each reading and of each failure to read. */
   constructor(file: AllowlistFile, hooks: AllowlistHooks = {}) {
@@ -47,14 +51,25 @@ export class Allowlist {
     this.hooks.onRead?.();
   }
 
-  /** Reads the file again when its modification time changed; one it can't read, or that isn't a list, keeps the list. */
+  /**
+   * Reads the file again when its modification time changed; one it can't read, or that isn't a list, keeps the list.
+   * A failure is told once per distinct failure, again when it changes, and its recovery once.
+   */
   refresh(): void {
     try {
       if (this.file.modified() !== this.readAt) {
         this.load();
       }
     } catch (failure) {
-      this.hooks.report?.(failure);
+      if (String(failure) !== this.told) {
+        this.told = String(failure);
+        this.hooks.report?.(failure);
+      }
+      return;
+    }
+    if (this.told !== '') {
+      this.told = '';
+      this.hooks.onRecovered?.();
     }
   }
 }
