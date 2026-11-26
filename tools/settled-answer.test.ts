@@ -51,6 +51,10 @@ function portsOver(script: {
       phase = 'entered';
       return Promise.resolve();
     },
+    escape: () => {
+      ports.actions.push('escape');
+      return Promise.resolve();
+    },
     sleep: (milliseconds: number) => {
       clock += milliseconds;
       return Promise.resolve();
@@ -152,6 +156,18 @@ describe('the answer to an input box that validates what it is given (card #2754
         ['type 8080'],
         ['type 8080'],
       ],
+    );
+  });
+
+  it('#2754: a box that says the port is forwarded already is closed with Escape, with no Enter, and the answer says so', async () => {
+    const ports = portsOver({
+      before: [boxWith('')],
+      typed: [{...boxWith('8080'), message: 'Port is already forwarded'}],
+      entered: [],
+    });
+    deepStrictEqual(
+      [await answerSettled(ports, '8080'), ports.actions],
+      ['alreadyForwarded', ['type 8080', 'escape']],
     );
   });
 });

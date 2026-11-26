@@ -20,6 +20,8 @@ export interface SettledAnswerPorts {
   type(text: string): Promise<void>;
   /** Presses Enter in the box. */
   enter(): Promise<void>;
+  /** Presses Escape in the box, which closes it with no answer. */
+  escape(): Promise<void>;
   sleep(milliseconds: number): Promise<void>;
   now(): number;
 }
@@ -32,6 +34,12 @@ const READ_EVERY_MILLISECONDS = 100;
 
 /** How long an Enter has to close the box before it is pressed once more, in milliseconds. */
 const ENTER_TAKEN_MILLISECONDS = 3000;
+
+/** What the box says when the port it is asked to forward is forwarded already. */
+const ALREADY_FORWARDED = /already forwarded/iu;
+
+/** How an answer ended: the text went in, or the box said the port was forwarded already and it was closed unanswered. */
+export type AnswerOutcome = 'answered' | 'alreadyForwarded';
 
 /** The box's facts as a line, for the message of an answer that did not go through. */
 export function describedBox(facts: InputBoxFacts): string {
@@ -60,12 +68,13 @@ const ANSWER_ATTEMPTS = 2;
  * Answers the input box that is open with `text`, as a user does: it types the text, waits until the box has taken it and
  * has finished validating it, and presses Enter. A box that is still open `ENTER_TAKEN_MILLISECONDS` later lost the Enter
  * or its value (the box's own update may clear what was typed while it opened), so the answer types the text again and
- * presses Enter once more. An answer that cannot be given fails with what the box showed.
+ * presses Enter once more. A box that says the port is forwarded already is closed with Escape and the answer ends
+ * as `alreadyForwarded`. An answer that cannot be given fails with what the box showed.
  */
 export async function answerSettled(
   ports: SettledAnswerPorts,
   text: string,
-): Promise<void> {
+): Promise<AnswerOutcome> {
   const opened = await readUntil(
     ports,
     facts => facts.open,
@@ -81,6 +90,11 @@ export async function answerSettled(
       facts => facts.value === text && !facts.validating,
       ANSWER_WAIT_MILLISECONDS,
     );
+    if (ALREADY_FORWARDED.test(settled.message)) {
+      // Core's own detection forwarded the port first: the box refuses the answer for ever, and the port is forwarded.
+      await ports.escape();
+      return 'alreadyForwarded';
+    }
     if (settled.value !== text || settled.validating) {
       throw new Error(
         `the input box did not take ${JSON.stringify(text)} and settle: ${describedBox(settled)}`,
@@ -93,7 +107,8 @@ export async function answerSettled(
       ENTER_TAKEN_MILLISECONDS,
     );
     if (!answered.open) {
-      return;
+      return 'answered';
     }
   }
+  return 'answered';
 }

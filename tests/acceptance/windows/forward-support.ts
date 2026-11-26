@@ -14,7 +14,12 @@ import {
   waitFor,
 } from './harness.ts';
 import {activeWindowName} from './display.ts';
-import {inputBoxFacts, pressEnter, typeInInputBox} from './renderer.ts';
+import {
+  inputBoxFacts,
+  pressEnter,
+  pressEscape,
+  typeInInputBox,
+} from './renderer.ts';
 import {answerSettled, describedBox} from './settled-answer.ts';
 
 const execFileAsync = promisify(execFile);
@@ -168,11 +173,12 @@ export async function forwardByHand(
   port: number,
 ): Promise<void> {
   const forwarding = inWindow(window, 'remote.tunnel.forwardCommandPalette');
-  await answerSettled(
+  const answer = await answerSettled(
     {
       facts: () => inputBoxFacts(window),
       type: text => typeInInputBox(window, text),
       enter: () => pressEnter(window),
+      escape: () => pressEscape(window),
       sleep: milliseconds =>
         new Promise(resolve => setTimeout(resolve, milliseconds)),
       now: Date.now,
@@ -185,6 +191,7 @@ export async function forwardByHand(
       resolve('late');
     }, FORWARD_MILLISECONDS);
   });
+  // An answer the box refused as already forwarded was closed with Escape: the command ends, and the port is forwarded.
   const outcome = await Promise.race([forwarding.then(() => 'done'), late]);
   clearTimeout(timer);
   if (outcome === 'late') {
@@ -195,7 +202,7 @@ export async function forwardByHand(
       (caught: unknown) => `unreadable: ${String(caught)}`,
     );
     throw new Error(
-      `window ${window}: Forward a Port was answered with ${String(port)} and had not finished ${String(FORWARD_MILLISECONDS / 1000)} s later; the input box: ${typeof inputBox === 'string' ? inputBox : describedBox(inputBox)}; the display's active window: ${active}`,
+      `window ${window}: Forward a Port was ${answer === 'answered' ? 'answered' : 'closed'} with ${String(port)} and had not finished ${String(FORWARD_MILLISECONDS / 1000)} s later; the input box: ${typeof inputBox === 'string' ? inputBox : describedBox(inputBox)}; the display's active window: ${active}`,
     );
   }
 }
