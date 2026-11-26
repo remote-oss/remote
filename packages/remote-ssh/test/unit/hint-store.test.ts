@@ -250,6 +250,19 @@ describe('the hints an earlier version kept in the global state', () => {
     );
   });
 
+  it('F-2605.AC-22: the time the earlier version was cleared stays when a clear of this version is older, whichever was written last', async () => {
+    const files = new MemoryFiles();
+    const events = windowOn(files, 'aaaa', {
+      records: [first, second, third],
+      clearedAt: '2026-10-08T11:30:00Z',
+    });
+    await events.clear('2026-10-08T10:30:00Z');
+    deepStrictEqual(events.read(), {
+      records: [third],
+      clearedAt: '2026-10-08T11:30:00Z',
+    });
+  });
+
   it('a value that is no store, or a record or a hint that does not fit, adds nothing', () => {
     const files = new MemoryFiles();
     deepStrictEqual(
