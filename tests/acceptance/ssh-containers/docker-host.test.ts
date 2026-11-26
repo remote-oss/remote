@@ -6,15 +6,14 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
+import {rmSync} from 'node:fs';
 import {
   closeWindow,
   inWindow,
   readUserSettings,
   restoreUserSettings,
   userSettings,
-  variable,
   waitFor,
-  windowState,
 } from '../windows/harness.ts';
 import {
   ASK_WITHOUT,
@@ -45,16 +44,18 @@ describe('a Remote-SSH window on an SSH host with Docker (card #3081)', function
     const host = await sshEngine();
     const saved = readUserSettings();
     const name = ALIAS;
+    const known = freshKnown(ALIAS);
+    let file = '';
     try {
       const port = host.address(ACCOUNT).split(':').pop() ?? '';
-      const file = writeConfig(ALIAS, [
+      file = writeConfig(ALIAS, [
         hostBlock(
           ALIAS,
           [
             `Port ${port}`,
             `User ${ACCOUNT}`,
             'StrictHostKeyChecking accept-new',
-            `UserKnownHostsFile ${freshKnown(ALIAS)}`,
+            `UserKnownHostsFile ${known}`,
           ],
           ['Port', 'User', ...ASK_WITHOUT],
         ),
@@ -75,19 +76,37 @@ describe('a Remote-SSH window on an SSH host with Docker (card #3081)', function
         'acceptance.agent.openWindow',
         `vscode-remote://ssh-remote+${ALIAS}/home/${ACCOUNT}/${name}`,
       );
+      // The window carries the remote's name from the start, so it is connected once a file it writes through its remote
+      // file system reaches the host's container.
       await waitFor(
         `window ${name} to connect through ${ALIAS}`,
-        async () =>
-          (await windowState(name).catch(() => undefined))?.remoteName ===
-          'ssh-remote',
+        async () => {
+          try {
+            await inWindow(
+              name,
+              'acceptance.agent.writeFile',
+              'probe.txt',
+              name,
+            );
+            return (
+              (await ownEngineDocker(
+                'exec',
+                host.container,
+                'cat',
+                `/home/${ACCOUNT}/${name}/probe.txt`,
+              )) === name
+            );
+          } catch {
+            return false;
+          }
+        },
         240_000,
       ).catch(async (caught: unknown) => {
         throw new Error(
-          `${String(caught)}; the host's processes: ${JSON.stringify(await processesOf(host.container))}; ${variable('HARNESS_RUN_FOLDER')}`,
+          `${String(caught)}; the host's processes: ${JSON.stringify(await processesOf(host.container))}`,
           {cause: caught},
         );
       });
-      await inWindow(name, 'acceptance.agent.writeFile', 'probe.txt', name);
       const probe = await ownEngineDocker(
         'exec',
         host.container,
@@ -105,6 +124,9 @@ describe('a Remote-SSH window on an SSH host with Docker (card #3081)', function
     } finally {
       await closeWindow(name).catch(() => undefined);
       restoreUserSettings(saved);
+      // The row's own config and known hosts file go with it: nothing of it stays in the run's folder.
+      rmSync(file, {force: true});
+      rmSync(known, {force: true});
       await host.stop();
     }
   });
