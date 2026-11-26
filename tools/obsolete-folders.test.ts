@@ -48,6 +48,25 @@ describe('the .obsolete read of the extensionpack suite (card #3237)', () => {
     ]);
   });
 
+  it('a text that parses to something other than an object stands, unwrapped', () => {
+    const target = file();
+    writeFileSync(target, 'null');
+    deepStrictEqual(
+      (() => {
+        try {
+          obsoleteFoldersOf(target);
+          return 'no failure';
+        } catch (failure) {
+          return [
+            failure instanceof ObsoleteNotYet,
+            failure instanceof TypeError,
+          ];
+        }
+      })(),
+      [false, true],
+    );
+  });
+
   it('a read that fails for any other reason stands, unwrapped', () => {
     const target = file();
     mkdirSync(target);
