@@ -15,7 +15,7 @@ export interface HostMount {
  * The mounts the engine was asked for when container `containerId` was created. The runtime `.Mounts` shows no
  * consistency, so it is never read for one.
  */
-export async function hostMountsOf(containerId: string): Promise<HostMount[]> {
+async function hostMountsOf(containerId: string): Promise<HostMount[]> {
   const {stdout} = await execFileAsync('docker', [
     'inspect',
     '-f',
