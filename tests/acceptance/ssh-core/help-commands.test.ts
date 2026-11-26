@@ -1,4 +1,4 @@
-import {deepStrictEqual} from 'node:assert';
+import {deepStrictEqual, rejects} from 'node:assert';
 import {existsSync, mkdirSync, readFileSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {
@@ -21,9 +21,23 @@ import {
 import {indicatorGroups} from '../windows/activation-support.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
+import {
+  activateFrameWithin,
+  activateWindowWithin,
+  activeWindowNameOf,
+  drive,
+  managedPick,
+  topLevelWindows,
+  topLevelWindowsOf,
+  windowsOf,
+} from '../windows/display.ts';
 import {paletteItems, runFromPalette} from '../windows/palette.ts';
 import {
+  chooseQuickPickRow,
   dialogOf,
+  focusWindow,
+  harnessFocusReads,
+  type FocusReads,
   notifications,
   outputChannelOf,
   pageText,
@@ -487,7 +501,7 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
   it('F-2004 AC-25 (c2486-companion-less-part): with no companion, the help commands run with no notification', async () => {
     const runDir = path.join(
       variable('HARNESS_RUN_FOLDER'),
-      'c2486-no-companion',
+      'c2486-companion-less',
     );
     mkdirSync(runDir, {recursive: true});
     const folder = await openFolderWindow(runDir);
@@ -497,7 +511,24 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
         folder,
         'remote-oss.remote-explorer',
       );
+      await focusWindow(folder);
+      // The display's windows at the row's two instants, so the row's readout says what the display held around Help:
+      const before = await topLevelWindows();
       await runFromPalette(folder, 'Remote-SSH: Help');
+      const after = await topLevelWindows();
+      process.stderr.write(
+        `the display's windows before Help ${windowsOf(before)}, and after Help ${windowsOf(after)}\n`,
+      );
+      await focusWindow(folder, {
+        ...harnessFocusReads(),
+        // The manager may refuse the frame while another window holds the display's focus, Help's external open or a window the display already holds: the grab raises the frame, asks the activation, and asks it again by focus.
+        activate: name => activateFrameWithin(name, drive),
+        windowInstants: () =>
+          Promise.resolve([
+            {label: 'before Help', windows: before},
+            {label: 'after Help', windows: after},
+          ]),
+      });
       await runFromPalette(folder, 'Remote-SSH: Get Started with SSH');
       // The command the palette hides: invoked as the window's own command, whose open never settles in the run's editor.
       await startInWindow(folder, HELP_COMMANDS.feedback);
@@ -509,5 +540,254 @@ describe('the help commands of Remote - SSH (card #2486)', function () {
     } finally {
       await closeContained(folder, pressEscape, 30_000);
     }
+  });
+
+  it('card #3010 (c3010-focus-readout): a hanging driver stub times out and names the active window', async () => {
+    // A driver whose `--sync` activation never settles: the display holds one window for the name, and its active window has a name, so the readout has something to name on every side.
+    const activeName = 'the active window';
+    const windowId = '98765';
+    async function driver(...words: string[]): Promise<string> {
+      if (words[0] === 'windowactivate') {
+        await new Promise<string>(() => undefined);
+        return '';
+      }
+      if (words[0] === 'search') {
+        return windowId;
+      }
+      if (words[0] === 'getactivewindow') {
+        return activeName;
+      }
+      return '';
+    }
+    const reads: FocusReads = {
+      activate: name =>
+        activateWindowWithin(name, driver, 100, () => Promise.resolve(false)),
+      pageHasFocus: () => Promise.resolve(false),
+      activeWindowName: () => activeWindowNameOf(driver),
+    };
+    let caught: unknown;
+    try {
+      await focusWindow('a window', reads, 1_000);
+    } catch (error) {
+      caught = error;
+    }
+    deepStrictEqual(
+      [
+        caught instanceof Error,
+        caught instanceof Error &&
+          caught.message.includes(`window ${windowId}`),
+        caught instanceof Error && caught.message.includes('not confirmed'),
+        caught instanceof Error && caught.message.includes(activeName),
+      ],
+      [true, true, true, true],
+    );
+  });
+
+  it('card #3010 (c3010-managed-pick): the activation asks the manager for the last managed window, and the last of them while none is managed', () => {
+    deepStrictEqual(
+      [
+        managedPick([]),
+        managedPick([
+          {id: '1', managed: false},
+          {id: '2', managed: false},
+        ]),
+        managedPick([
+          {id: '1', managed: true},
+          {id: '2', managed: false},
+        ]),
+        managedPick([
+          {id: '1', managed: false},
+          {id: '2', managed: true},
+          {id: '3', managed: false},
+        ]),
+        managedPick([
+          {id: '1', managed: true},
+          {id: '2', managed: true},
+        ]),
+      ],
+      [undefined, '2', '1', '2', '2'],
+    );
+  });
+
+  it('card #3010 (c3010-managed-activate): a name that matches a managed frame and a later child asks the manager for the frame, and the outcome carries the candidates with their managedness', async () => {
+    async function driver(...words: string[]): Promise<string> {
+      if (words[0] === 'search') {
+        return '111\n222';
+      }
+      if (words[0] === 'windowactivate' && words.at(2) === '111') {
+        return '';
+      }
+      await new Promise<string>(() => undefined);
+      return '';
+    }
+    const outcome = await activateWindowWithin(
+      'a window',
+      driver,
+      100,
+      windowId => Promise.resolve(windowId === '111'),
+    );
+    deepStrictEqual(
+      [outcome.windowId, outcome.confirmed, outcome.candidates],
+      [
+        '111',
+        true,
+        [
+          {id: '111', managed: true},
+          {id: '222', managed: false},
+        ],
+      ],
+    );
+  });
+
+  it("card #3010 (c3010-managed-readout): a focus wait that never settles lists the display's windows for the name, with their managedness", async () => {
+    async function driver(...words: string[]): Promise<string> {
+      if (words[0] === 'windowactivate') {
+        await new Promise<string>(() => undefined);
+        return '';
+      }
+      if (words[0] === 'search') {
+        return '98765';
+      }
+      return '';
+    }
+    const reads: FocusReads = {
+      activate: name =>
+        activateWindowWithin(name, driver, 100, () => Promise.resolve(false)),
+      pageHasFocus: () => Promise.resolve(false),
+      activeWindowName: () => Promise.resolve('none'),
+    };
+    let caught: unknown;
+    try {
+      await focusWindow('a window', reads, 1_000);
+    } catch (error) {
+      caught = error;
+    }
+    deepStrictEqual(
+      [
+        caught instanceof Error,
+        caught instanceof Error &&
+          caught.message.includes('98765 (no WM_STATE)'),
+        caught instanceof Error && caught.message.includes('window 98765'),
+        caught instanceof Error && caught.message.includes('not confirmed'),
+      ],
+      [true, true, true, true],
+    );
+  });
+
+  it("card #3010 (c3010-pick-readout): a quick pick that never settles fails naming the display's active window", async () => {
+    // A pick that never shows, beside a display whose active window has a name: the timeout names the taker, which the pages' facts cannot see.
+    await rejects(
+      () =>
+        chooseQuickPickRow('a window', 'a row', {
+          quickPick: () =>
+            Promise.reject(
+              new Error(
+                'timed out waiting for a quick pick in window a window',
+              ),
+            ),
+          activeWindowName: () => Promise.resolve('the taker window'),
+        }),
+      {message: /the display's active window "the taker window"/},
+    );
+  });
+
+  it('card #3010 (c3010-toplevel-list): the display list is every visible window, with its name and whether the manager manages it', async () => {
+    function driver(...words: string[]): Promise<string> {
+      if (words[0] === 'search') {
+        return Promise.resolve('514\n4194465');
+      }
+      if (words[0] === 'getwindowname' && words[1] === '514') {
+        return Promise.resolve('VSCodium - Insiders');
+      }
+      return Promise.resolve('c2486-companion-less');
+    }
+    deepStrictEqual(
+      await topLevelWindowsOf(driver, windowId =>
+        Promise.resolve(windowId === '4194465'),
+      ),
+      [
+        {id: '514', name: 'VSCodium - Insiders', managed: false},
+        {id: '4194465', name: 'c2486-companion-less', managed: true},
+      ],
+    );
+  });
+
+  it('card #3010 (c3010-frame-raise): an activation the manager does not confirm raises the frame and asks it again by focus', async () => {
+    const calls: string[] = [];
+    async function driver(...words: string[]): Promise<string> {
+      calls.push(words.join(' '));
+      if (words[0] === 'search') {
+        return '111';
+      }
+      if (words[0] === 'windowactivate') {
+        await new Promise<string>(() => undefined);
+      }
+      return '';
+    }
+    const outcome = await activateFrameWithin('a window', driver, 100, () =>
+      Promise.resolve(true),
+    );
+    deepStrictEqual(
+      [outcome.windowId, outcome.confirmed, calls],
+      [
+        '111',
+        false,
+        [
+          'search --onlyvisible --name a window',
+          'windowraise 111',
+          'windowactivate --sync 111',
+          'windowfocus 111',
+        ],
+      ],
+    );
+  });
+
+  it("card #3010 (c3010-toplevel-readout): a focus wait that never settles lists the display's windows at the row's instants", async () => {
+    async function driver(...words: string[]): Promise<string> {
+      if (words[0] === 'windowactivate') {
+        await new Promise<string>(() => undefined);
+      }
+      return '';
+    }
+    const reads: FocusReads = {
+      activate: name =>
+        activateWindowWithin(name, driver, 100, () => Promise.resolve(false)),
+      pageHasFocus: () => Promise.resolve(false),
+      activeWindowName: () => Promise.resolve('none'),
+      windowInstants: () =>
+        Promise.resolve([
+          {
+            label: 'before Help',
+            windows: [{id: '514', name: 'VSCodium - Insiders', managed: true}],
+          },
+          {
+            label: 'after Help',
+            windows: [
+              {id: '514', name: 'VSCodium - Insiders', managed: true},
+              {id: '524', name: 'VSCodium - Insiders', managed: false},
+            ],
+          },
+        ]),
+    };
+    let caught: unknown;
+    try {
+      await focusWindow('a window', reads, 1_000);
+    } catch (error) {
+      caught = error;
+    }
+    deepStrictEqual(
+      [
+        caught instanceof Error,
+        caught instanceof Error &&
+          caught.message.includes(
+            'before Help 514 (VSCodium - Insiders, managed)',
+          ),
+        caught instanceof Error &&
+          caught.message.includes(
+            'after Help 514 (VSCodium - Insiders, managed), 524 (VSCodium - Insiders, no WM_STATE)',
+          ),
+      ],
+      [true, true, true],
+    );
   });
 });

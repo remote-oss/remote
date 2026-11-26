@@ -25,6 +25,7 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {statusItem} from '../windows/renderer.ts';
+import {mismatchReport} from './mismatch-report.ts';
 import {echoes, freePort, rowsWhen, showPorts} from './ports-support.ts';
 
 describe('the ports of a dev container on an engine of its own namespace (card tooling-123)', function () {
@@ -92,26 +93,38 @@ describe('the ports of a dev container on an engine of its own namespace (card t
         () => true,
         () => false,
       );
+      const open = window;
       await showPorts(window);
       const rows = await rowsWhen(window, shown => shown.length > 0);
-      deepStrictEqual(
-        {
-          answersHere,
-          publishedHere: await echoes(`127.0.0.1:${String(published)}`),
-          hostHere: await echoes(`127.0.0.1:${String(host)}`),
-          staticRows: rows.filter(
-            each => each.origin === 'Statically Forwarded',
-          ).length,
-          status: (await statusItem(window, 'status.forwardedPorts')).ariaLabel,
-        },
-        {
-          answersHere: true,
-          publishedHere: false,
-          hostHere: false,
-          staticRows: 0,
-          status: `Forwarded Ports: ${String(forwarded)}`,
-        },
-      );
+      const observed = {
+        answersHere,
+        publishedHere: await echoes(`127.0.0.1:${String(published)}`),
+        hostHere: await echoes(`127.0.0.1:${String(host)}`),
+        staticRows: rows.filter(each => each.origin === 'Statically Forwarded')
+          .length,
+        status: (await statusItem(window, 'status.forwardedPorts')).ariaLabel,
+      };
+      const expected = {
+        answersHere: true,
+        publishedHere: false,
+        hostHere: false,
+        staticRows: 0,
+        status: `Forwarded Ports: ${String(forwarded)}`,
+      };
+      try {
+        deepStrictEqual(observed, expected);
+      } catch (mismatch) {
+        throw new Error(
+          await mismatchReport(
+            mismatch,
+            rows,
+            async () =>
+              (await statusItem(open, 'status.forwardedPorts')).ariaLabel,
+            () => new Promise(resolve => setTimeout(resolve, 1000)),
+          ),
+          {cause: mismatch},
+        );
+      }
     } finally {
       if (window !== undefined) {
         await closeWindow(window).catch(() => undefined);

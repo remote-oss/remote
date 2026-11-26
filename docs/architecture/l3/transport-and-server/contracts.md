@@ -346,7 +346,9 @@ Rules:
 
 Rulings of 2026-10-08 for S9 and S10 (the process side):
 - Secrets never touch the registry file: lib-helper's record carries only endpoint, nonce, process id and the SOCKS
-  port; the shared record of F-2102 (remote port, OS, architecture, temp folder, connection token) lives in the
+  port; the shared record of F-2102 (remote port, OS, architecture, temp folder, connection token, and `dataFolder`:
+  the data folder the held server was installed in, where a later window's `heldServer` check and legacy clean-up
+  run; a record without it is stale, ruling-2995-takeup-cleanup) lives in the
   helper's memory, set once after the connection completes, and reaches a later lease through a `sharedRecord`
   request after its hello. The `sharedRecord` reply also carries `detectedPlatform` (`windows`, `posix`, or null when
   the platform was known or not yet found), which a window whose platform is unknown uses to build its channel; a
@@ -889,11 +891,12 @@ or the extension that asked, shows the cause once.
 
 | Case | When | What serves it | Failure |
 |---|---|---|---|
-| The SSH window | the connector holds the window's connection | `execServerOf(control)` over the control connection the window's bridge rides on, wrapped by `watchedExecServer`; one per held connection, made on the first request | `EXEC_SERVER_SETTING_OFF` or `EXEC_SERVER_NO_CLI` when the window installed its server directly; `EXEC_SERVER_LOST` after its transport was lost |
+| The SSH window | the connector holds the window's connection | `execServerOf(control)` over the control connection the window's bridge rides on, wrapped by `watchedExecServer`; one per held connection, made on the first request | `EXEC_SERVER_MANUAL_BOOTSTRAP`, `EXEC_SERVER_SETTING_OFF` or `EXEC_SERVER_NO_CLI` (in that order, by `directInstallRefusal`) when the window installed its server directly; `EXEC_SERVER_LOST` after its transport was lost |
 | A nested window | the connector holds none | its own connect, by `connectControl`: the same steps up to the authenticated control connection (host key, authentication with the window's prompts, install, start, tunnel to the control port, token check), then no `serve` and no window tunnel; the control connection is held for the window's life | the same refusals; `execServerUnavailable` with a reason when the program could not be set up; the failures of the steps |
 
-**Direct mode.** `remote.SSH.useExecServer` off, or no command-line program for the host's platform, refuses with the
-failure kind `execServerUnavailable` and a reason of its own (the setting, or the platform). No second route over plain
+**Direct mode.** The manual bootstrap (F-2406 BR-2: the effective `remote.SSH.useExecServer` is false while it is on),
+`remote.SSH.useExecServer` off, or no command-line program for the host's platform, refuses with the failure kind
+`execServerUnavailable` and a reason of its own (the mode, the setting, or the platform). No second route over plain
 ssh channels exists, and no direct install is made for an exec server.
 
 **The lost transport.** The returned exec server is a `WatchedExecServer`: `ExecServer` plus the owner's
@@ -919,9 +922,14 @@ host through core's API. `spawn`'s environment is its own parameter, never in th
 | `kill` | H1, data folder | done; the caller then drops S9's record | the channel failure (B shows STR:S076) |
 | `uninstall` | H1, data folder | done, silently | the channel failure |
 | `cleanup` | H1, data folder | done | none raised |
+| `heldServer` | H1, data folder, commit | `alive` with the port its log last named, or `notAlive` with the reason | none raised: every failure is `notAlive` |
 
 Rules:
 - `kill` stops this data folder's server process tree and removes `bin/` (F-2411).
+- `heldServer` reads, for a window that takes up a running connection server's server, whether the process this data
+  folder's commit recorded still runs and the port its log last named (facts `server.alive`, `server.port`). It
+  starts nothing, takes no lock and changes nothing, and only the take-up uses it, with the data folder of S9's
+  record, never the setting's (ruling-2995-held-server).
 - `uninstall` deletes exactly `<home>/<serverDataFolderName>` (F-2412).
 - `cleanup` follows the record's policy: `keepNewest(5)` for SSH on every resolve (F-2413 BR-9 as revised). It
   deletes an older install only when its F-2408 lock can be taken, always keeps the current one, follows

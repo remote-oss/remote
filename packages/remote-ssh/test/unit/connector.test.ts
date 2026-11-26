@@ -11,6 +11,7 @@ import {
 } from '../../src/pipeline/connector.ts';
 import type {ConnectSteps} from '../../src/pipeline/steps.ts';
 import {
+  CLI_PLAN,
   endTunnel,
   INPUT,
   LINKED,
@@ -34,6 +35,7 @@ function connectorOptions(
     logger: options.logger,
     serve: options.serve,
     useExecServer: options.useExecServer,
+    manualBootstrap: false,
     settingLines: options.settingLines,
     writeWindowStart: options.writeWindowStart,
   };
@@ -243,6 +245,101 @@ describe('the connector over the connect pipeline', () => {
         [],
       ],
     );
+  });
+
+  describe('F-2103 AC-4 (#3092): the window label is told with the plan, not with the host report', () => {
+    /** Connects with `changes` (given the connector, when a function), and gives the order in which the steps ran and the label was told. */
+    async function orderOf(
+      changes:
+        | Partial<ConnectSteps>
+        | ((given: SshConnector) => Partial<ConnectSteps>),
+      options: Partial<ConnectOptions> = {},
+    ): Promise<string[]> {
+      const order: string[] = [];
+      const {recording, options: base} = setup();
+      const connector: SshConnector = connectorOf({
+        stepsFor: () =>
+          steps(recording, {
+            start: () => {
+              order.push('server started');
+              return Promise.resolve(STARTED);
+            },
+            ...(typeof changes === 'function' ? changes(connector) : changes),
+          }),
+        terminalMode: () => false,
+        options: {...connectorOptions(base), ...options},
+        revealLog: () => undefined,
+        applyTerminalEnvironment: () => undefined,
+      });
+      connector.onHostReported(() => {
+        order.push('label told');
+      });
+      await connector.connect(HOST_INPUT);
+      return order;
+    }
+
+    /** The labels told by a connect whose window cancels it while its server start gives `outcome`. */
+    function toldWhenCancelledStart(
+      outcome: Awaited<ReturnType<ConnectSteps['start']>>,
+    ): Promise<string[]> {
+      return orderOf(given => ({
+        start: () => {
+          given.cancel();
+          return Promise.resolve(outcome);
+        },
+      }));
+    }
+
+    it('a connect whose plan installs the server directly tells the label after the server started, once the resolve succeeded', async () => {
+      deepStrictEqual(await orderOf({}), ['server started', 'label told']);
+    });
+
+    it('a connect whose plan is the CLI path tells the label as soon as the plan is made, before the server is ready', async () => {
+      deepStrictEqual(
+        await orderOf({
+          plan: () => ({plan: CLI_PLAN}),
+          gate: () => {
+            return Promise.resolve({kind: 'cancelled'});
+          },
+        }),
+        ['label told'],
+      );
+    });
+
+    it('a connect with the setting on and no CLI source, whose plan is a direct install, holds the label until it is connected', async () => {
+      deepStrictEqual(await orderOf({}, {useExecServer: true}), [
+        'server started',
+        'label told',
+      ]);
+    });
+
+    it('a direct install whose resolve fails after the host reported tells the label at the resolve’s end', async () => {
+      deepStrictEqual(await orderOf({openTunnel: tunnelFails}), [
+        'server started',
+        'label told',
+      ]);
+    });
+
+    it('a direct install cancelled by the window while its server start fails for another reason tells no label', async () => {
+      deepStrictEqual(
+        await toldWhenCancelledStart({
+          kind: 'failed',
+          failure: {kind: 'serverStart'},
+        }),
+        [],
+      );
+    });
+
+    it('a direct install whose connect a step ends as cancelled, with no abort, tells no label', async () => {
+      deepStrictEqual(
+        await orderOf({gate: () => Promise.resolve({kind: 'cancelled'})}),
+        [],
+      );
+    });
+
+    it('a direct install whose resolve is cancelled after the host reported tells no label', async () => {
+      deepStrictEqual(await toldWhenCancelledStart(STARTED), []);
+    });
   });
 
   it('F-2304: the stages of the connect reach the phase listeners', async () => {

@@ -30,6 +30,7 @@ import {
   quickPickFacts,
   toggleQuickPickRow,
 } from '../windows/renderer.ts';
+import {runTemplatesReady} from '../windows/run-templates.ts';
 import {
   changed,
   CHANGED_START,
@@ -65,6 +66,18 @@ async function finishedWithPlain(window: string): Promise<void> {
   await pressQuickPickTitleButton(window, 'Finish');
 }
 
+/** What the run's template registry answers, or how it fails: a timed-out build names it. */
+async function registryAnswer(): Promise<string> {
+  try {
+    const answer = await fetch(
+      `http://${variable('HARNESS_TEMPLATE_REGISTRY')}/`,
+    );
+    return `with ${String(answer.status)} ${answer.statusText}`;
+  } catch (caught) {
+    return `with ${String(caught)}`;
+  }
+}
+
 describe('Configure Container Features: after the write (card containers-150, part D)', function () {
   this.timeout(900_000);
 
@@ -98,6 +111,7 @@ describe('Configure Container Features: after the write (card containers-150, pa
 
   it('F-0807 AC-21 (c150-rebuild): Rebuild on that notification recreates the container in the same window and writes devcontainer-lock.json beside the configuration', async () => {
     const folder = devContainerFolder('c150-rebuild', {name: 'C150 Rebuild'});
+    await runTemplatesReady();
     const window = await connectedWindow(folder);
     try {
       const [first = ''] = await devContainersOf(folder);
@@ -105,14 +119,21 @@ describe('Configure Container Features: after the write (card containers-150, pa
       await finishedWithPlain(window);
       await noticesWhen(window, 1);
       await answerNotification(window, CHANGED_START, 'Rebuild');
-      await waitFor(
-        'the rebuilt container',
-        async () => {
-          const [now] = await devContainersOf(folder);
-          return now !== undefined && now !== first;
-        },
-        600_000,
-      );
+      try {
+        await waitFor(
+          'the rebuilt container',
+          async () => {
+            const [now] = await devContainersOf(folder);
+            return now !== undefined && now !== first;
+          },
+          600_000,
+        );
+      } catch (failure) {
+        throw new Error(
+          `${String(failure)}; the registry answers ${await registryAnswer()} and the Dev Containers log ends ${JSON.stringify(containersLog().slice(-3))}`,
+          {cause: failure},
+        );
+      }
       await connectedToContainer(window, 600_000);
       deepStrictEqual(
         existsSync(
@@ -179,6 +200,7 @@ describe('Configure Container Features: in a dev container window and with two m
       name: 'C150 Majors',
       features: {[`${reference}:1`]: {}, [`${reference}:2`]: {}},
     });
+    await runTemplatesReady();
     const window = await connectedWindow(folder);
     try {
       const [container = ''] = await devContainersOf(folder);

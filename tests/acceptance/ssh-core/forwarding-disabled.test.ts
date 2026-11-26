@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {readFileSync} from 'node:fs';
 import {
   appendScript,
   closeWindow,
@@ -15,6 +16,7 @@ import {
   restoreHostNetwork,
   terminalsOf,
   userSettings,
+  variable,
   waitFor,
   windowEvents,
   windowState,
@@ -27,6 +29,7 @@ import {
 } from '../windows/renderer.ts';
 import {hintRecords, type HintRecords} from '../windows/hint-store.ts';
 import {keepingSettings, PLATFORMS} from '../windows/tunnel-support.ts';
+import {changedKeyHostsFile} from '../../../tools/acceptance-keys.ts';
 
 /** The text of the log line that names the forwarding setting. */
 const SETTING_LINE = 'TCP port forwarding appears to be disabled';
@@ -408,17 +411,24 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     });
   });
 
-  it('F-2604 AC-19 (ruling-1985-forwarding-fails): a host whose key changed, with every setting at its default, fails the connect at once with S107’s reason and the MitmPortForwardingDisabled hint, and no server-side port forwarding text, setting line or hint', async () => {
+  it('F-2604 AC-19, F-2305 AC-20 (ruling-1985-forwarding-fails): a host whose key changed, with every setting at its default, fails the connect at once with S107’s reason and the MitmPortForwardingDisabled hint, and no server-side port forwarding text, setting line or hint; the changed key is not trusted, no question offers to accept it, and the window can be closed', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS});
       const name = 'c85-changed';
       const mark = connectionLog().length;
       const since = new Date().toISOString();
+      const keyFile = changedKeyHostsFile(variable('HARNESS_RUN_FOLDER'));
+      const keyBefore = readFileSync(keyFile);
       await opened('changedkey', name);
       await dialogOf(name);
       await new Promise(resolve => setTimeout(resolve, 5_000));
       deepStrictEqual(
         {
+          known: readFileSync(keyFile).equals(keyBefore),
+          asked: [
+            ...recordLines('pick', name),
+            ...recordLines('maskedInput', name),
+          ].length,
           lines: connectionLog()
             .slice(mark)
             .filter(line => line.includes(SETTING_LINE)).length,
@@ -428,12 +438,16 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
             .flatMap(record => record.hints)
             .filter(hint => hint.kind === 'error')
             .map(hint => hint.status),
+          closed: await closeWindow(name).then(() => true),
         },
         {
+          known: true,
+          asked: 0,
           lines: 0,
           dialog:
             'Could not establish connection to "changedkey": Port forwarding is disabled.',
           stored: ['MitmPortForwardingDisabled'],
+          closed: true,
         },
       );
     });

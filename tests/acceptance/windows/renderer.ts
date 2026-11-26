@@ -10,12 +10,22 @@
 import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
 import {
   mergeReads,
+  shownLabels,
   wheelDirection,
   wheelTopProbe,
   type ViewRowRead,
 } from '../../../tools/view-rows.ts';
 import path from 'node:path';
 import {inWindow, isOpen, variable, windowState} from './harness.ts';
+import {
+  activateWindowWithin,
+  activeWindowName,
+  drive,
+  windowsOf,
+  type ActivationOutcome,
+  type WindowCandidate,
+  type WindowInstant,
+} from './display.ts';
 import {
   dispatchAt,
   evaluateAt,
@@ -499,6 +509,105 @@ async function evaluate<Value>(
   }
 }
 
+/**
+ * The reads of a focus wait, so a test can stand a display driver and a page in for the harness's: the grab, the
+ * page's own report of the focus, the window the display's active window is, and the display's windows at the row's
+ * instants.
+ */
+export interface FocusReads {
+  /** Asks the window manager to give window `name` the display's focus, bounded, so a manager that never confirms goes on as no answer. */
+  activate(name: string): Promise<ActivationOutcome>;
+  /** Whether the page of window `name` holds the focus. */
+  pageHasFocus(name: string): Promise<boolean>;
+  /** The window the display's active window is. */
+  activeWindowName(): Promise<string>;
+  /** The display's visible windows at named instants of the row, for the timeout readout; none while the row holds no instants. */
+  windowInstants?(): Promise<WindowInstant[]>;
+}
+
+/** The reads of a focus wait over the harness's own display and pages. */
+export function harnessFocusReads(): FocusReads {
+  return {
+    activate: name => activateWindowWithin(name, drive),
+    pageHasFocus: name => evaluate<boolean>(name, 'document.hasFocus()'),
+    activeWindowName,
+  };
+}
+
+/** What a focus wait last read of the display, for its timeout: the window it held, the display's windows for the name and their managedness, whether the manager confirmed it, the active window, and the display's windows at the row's instants. */
+interface FocusReadout {
+  windowId: string | undefined;
+  candidates: WindowCandidate[];
+  confirmed: boolean;
+  activeWindowName: string;
+  instants: WindowInstant[];
+}
+
+/** The focus wait's timeout, naming the window the display last held for the name, the display's windows for the name with their managedness, whether the manager confirmed it, the window the display's active window is, and the display's windows at the row's instants. */
+function focusTimeout(name: string, readout: FocusReadout): string {
+  const held =
+    readout.windowId === undefined
+      ? 'no visible window'
+      : `window ${readout.windowId}`;
+  const windows =
+    readout.candidates.length === 0
+      ? ''
+      : `, the display's windows for it ${readout.candidates
+          .map(
+            each => `${each.id} (${each.managed ? 'managed' : 'no WM_STATE'})`,
+          )
+          .join(', ')}`;
+  const instants =
+    readout.instants.length === 0
+      ? ''
+      : `, the display's windows ${readout.instants
+          .map(instant => `${instant.label} ${windowsOf(instant.windows)}`)
+          .join(', and ')}`;
+  return (
+    `window ${name} to hold the focus: the display last held ${held} for it${windows}, ` +
+    `its activation was ${readout.confirmed ? 'confirmed' : 'not confirmed'} by the window manager, ` +
+    `and the display's active window is ${readout.activeWindowName}${instants}`
+  );
+}
+
+/**
+ * Gives window `name` the display's focus through the window manager, as a click on the window does, and waits for
+ * the page to report the focus: a window the window manager left unfocused hides its quick input, and a palette run in
+ * it never shows. The manager's `--sync` activation is asked for on every pass, so the grab stays ordered against
+ * what the display does between the passes.
+ */
+export async function focusWindow(
+  name: string,
+  reads: FocusReads = harnessFocusReads(),
+  waitMilliseconds: number = WAIT_MILLISECONDS,
+): Promise<void> {
+  // The row's instants are its own fixed snapshots of the display, so the read asks them once; a read that fails is no answer.
+  const instants = await (
+    reads.windowInstants?.() ?? Promise.resolve([] as WindowInstant[])
+  ).catch(() => [] as WindowInstant[]);
+  const readout: FocusReadout = {
+    windowId: undefined,
+    candidates: [],
+    confirmed: false,
+    activeWindowName: 'unreadable',
+    instants,
+  };
+  await settled(
+    () => focusTimeout(name, readout),
+    async () => {
+      const outcome = await reads.activate(name);
+      readout.windowId = outcome.windowId;
+      readout.candidates = outcome.candidates;
+      readout.confirmed = outcome.confirmed;
+      readout.activeWindowName = await reads
+        .activeWindowName()
+        .catch((reading: unknown) => String(reading));
+      return (await reads.pageHasFocus(name)) || undefined;
+    },
+    waitMilliseconds,
+  );
+}
+
 /** How many terminals' text areas window `name`'s page holds and the titles of its terminal tabs. */
 export interface TerminalPageFacts {
   rows: number;
@@ -618,6 +727,7 @@ export async function renderedRows(
 interface ViewRowsWalk {
   settled: boolean;
   reads: ViewRowRead[][];
+  probeReads?: number;
 }
 
 /**
@@ -701,7 +811,7 @@ export async function viewRows(
         // The list is still filling its rows, and its wheel tells no direction: the walk reads it where it stands
         // and stands, so the read's wait may wheel it again once its rows have told.
         window.remoteOssViewRowsTrace = undefined;
-        return {settled: false, reads: [read()]};
+        return {settled: false, reads: [read()], probeReads: wheelTop.reads};
       }
       await toTop(wheelTop.sign);
       // The walk stands at the list's top now, where a fresh read would, so the reads after it read the list the
@@ -746,8 +856,10 @@ export async function viewRows(
   }
   if (!walk.settled) {
     process.stderr.write(
-      `window ${name}, view ${viewName}: the wheel to the top could not tell its direction, and the list stands where it is, showing ${
-        walk.reads.flatMap(read => read.map(each => each.label)).join(', ') ||
+      `window ${name}, view ${viewName}: the wheel to the top could not tell its direction in ${String(
+        walk.probeReads,
+      )} reads, and the list stands where it is, showing ${
+        shownLabels(walk.reads.flatMap(read => read.map(each => each.label))) ||
         'no row'
       }\n`,
     );
@@ -3570,15 +3682,47 @@ export async function chooseQuickPickItem(
   await pressKey(await pageOf(name), name, 'Enter');
 }
 
+/** The reads of a quick pick's row wait, so a test can stand a window's pick and the display's active window in for the harness's. */
+export interface PickReads {
+  /** Waits for the quick pick open in window `name`; a pick that does not show in time fails. */
+  quickPick(name: string): Promise<ShownQuickPick>;
+  /** The window the display's active window is. */
+  activeWindowName(): Promise<string>;
+}
+
+/** The reads of a quick pick's row wait over the harness's own pick and display. */
+function harnessPickReads(): PickReads {
+  return {
+    quickPick: name => waitForQuickPick(name, 30_000),
+    activeWindowName,
+  };
+}
+
 /**
  * Chooses the row labelled `label` of the quick pick open in window `name` by the keys a user presses: the arrow keys
- * from the focused row to it, then Enter. Unlike {@link chooseQuickPickItem} it types no filter, so every row stays.
+ * from the focused row to it, then Enter. Unlike {@link chooseQuickPickItem} it types no filter, so every row stays. A
+ * pick that does not settle fails naming the pages and the display's active window, so that a taker of the focus the
+ * pages cannot see is named with the failure.
  */
 export async function chooseQuickPickRow(
   name: string,
   label: string,
+  reads: PickReads = harnessPickReads(),
 ): Promise<void> {
-  await waitForQuickPick(name, 30_000);
+  try {
+    await reads.quickPick(name);
+  } catch (caught) {
+    const pages = await pageFocusFacts().catch((reading: unknown) => [
+      `unreadable: ${String(reading)}`,
+    ]);
+    const displayWindowName = await reads
+      .activeWindowName()
+      .catch((reading: unknown) => String(reading));
+    throw new Error(
+      `${String(caught)}; pages ${JSON.stringify(pages)}, the display's active window ${JSON.stringify(displayWindowName)}`,
+      {cause: caught},
+    );
+  }
   const address = await pageOf(name);
   for (let presses = 0; presses < 100; presses += 1) {
     const rows = await quickPickRows(name);

@@ -238,6 +238,13 @@ export function windowPortRangeProblem(
     : undefined;
 }
 
+/**
+ * The setting that switches off the palette's history of commands run from it ([oss]
+ * `src/vs/workbench/browser/workbench.contribution.ts`: "Set to 0 to disable command history"): a launch whose rows read
+ * the order of the palette's list has it from the start, so no earlier row's command leads the alphabetical list.
+ */
+const PALETTE_HISTORY_OFF = {'workbench.commandPalette.history': 0} as const;
+
 const RENDERER_LAUNCH = {
   kind: 'plain',
   debuggingPort: true,
@@ -1076,6 +1083,7 @@ export function launchesOf(root: string): Launch[] {
       suite: 'terminal-login',
       settings: {
         ...RENDERER_LAUNCH.settings,
+        ...PALETTE_HISTORY_OFF,
         'remote.SSH.useLocalServer': false,
         'remote.SSH.showLoginTerminal': true,
         'remote.SSH.remotePlatform': {
@@ -1213,6 +1221,7 @@ export function launchesOf(root: string): Launch[] {
         // A new window opens no Welcome page of its own, as in the containers launches: a row reads the window's editors
         // and the page it draws, and the page's focus is not what a row means to test.
         'workbench.startupEditor': 'none',
+        ...PALETTE_HISTORY_OFF,
       },
     },
     // The same with the pinned OpenSSH client as the user's `remote.SSH.path`, for the criteria about keywords newer than
@@ -1248,6 +1257,7 @@ export function launchesOf(root: string): Launch[] {
       suite: 'ssh-agents',
       settings: {
         'window.title': '[${rootName}]${remoteName}',
+        ...PALETTE_HISTORY_OFF,
         'window.dialogStyle': 'custom',
         'chat.disableAIFeatures': true,
         'chat.remoteAgentHostsEnabled': true,
@@ -1349,13 +1359,19 @@ export function launchesOf(root: string): Launch[] {
       suite: 'no-proposals',
       proposedApi: false,
     },
-    // The CLI path: the editor's copy names a CLI source; named only until CI holds the CLI archives' token.
+    // The CLI path: the editor's copy names a CLI source. Named only, so a run that names no launch needs no CLI archives'
+    // token; CI's parts make it (tools/acceptance-parts.ts), in the job whose fetch step holds that token.
     {
+      ...RENDERER_LAUNCH,
       label: 'cli-path',
-      kind: 'plain',
       suite: 'cli-path',
-      cliSource: true,
+      cliSource: true as const,
       namedOnly: true,
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        // Core draws its dialogs natively on Linux unless asked otherwise, which a row's read of the page does not show.
+        'window.dialogStyle': 'custom',
+      },
     },
     // WSL on Linux: its commands stay out of the way where WSL cannot run, in a desktop window, in the browser build
     // the editor stands in for with `remote.extensionKind`, and beside the other WSL extension, where it stands down.
@@ -1365,6 +1381,7 @@ export function launchesOf(root: string): Launch[] {
       suite: 'wsl',
       files: ['activation.test.ts'],
       withExtensions: ['remote-oss.remote-wsl'],
+      settings: {...RENDERER_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
     },
     {
       ...RENDERER_LAUNCH,
@@ -1441,7 +1458,11 @@ export function launchesOf(root: string): Launch[] {
       label: 'explorer-home',
       suite: 'explorer-home',
       // Core's dialogs are drawn in the window, where the renderer helpers read them.
-      settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
+      settings: {
+        ...EXPLORER_LAUNCH.settings,
+        ...PALETTE_HISTORY_OFF,
+        'window.dialogStyle': 'custom',
+      },
       // The empty script makes Remote - SSH show its real pickers, which the rows of the SSH group's hand-overs read.
       environment: {
         ...EXPLORER_LAUNCH.environment,
@@ -1503,6 +1524,7 @@ export function launchesOf(root: string): Launch[] {
       suite: 'trust',
       settings: {
         ...TRUST_LAUNCH.settings,
+        ...PALETTE_HISTORY_OFF,
         // Core's default is never; the rows answer core's startup prompt, so this launch turns it on.
         'security.workspace.trust.startupPrompt': 'once',
       },
@@ -1521,6 +1543,7 @@ export function launchesOf(root: string): Launch[] {
       ...RENDERER_LAUNCH,
       label: 'web-ui',
       suite: 'web-ui',
+      settings: {...RENDERER_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
       // A recording xdg-open that the suite writes into the run's folder comes first on the editor's PATH, so that
       // opening the web UI opens nothing on the machine.
       environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
@@ -1535,6 +1558,7 @@ export function launchesOf(root: string): Launch[] {
       // rows connect only through the local server.
       settings: {
         ...TRUST_LAUNCH.settings,
+        ...PALETTE_HISTORY_OFF,
         'security.workspace.trust.startupPrompt': 'never',
       },
       environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
@@ -1549,6 +1573,7 @@ export function launchesOf(root: string): Launch[] {
       partOf: 'containers',
       registry: true,
       templates: true,
+      settings: {...CONTAINERS_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
       // A recording xdg-open first on the editor's PATH, so that a row can tell whether a link was opened.
       environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
       // The other Dev Containers, installed and disabled: the package works beside it and warns of nothing.
@@ -1679,6 +1704,7 @@ export function launchesOf(root: string): Launch[] {
       ...CONTAINERS_LAUNCH,
       label: 'containers-shutdown',
       suite: 'containers-shutdown',
+      settings: {...CONTAINERS_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
       // The other Dev Containers, installed and disabled, as in `containers`.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],
@@ -1864,6 +1890,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'containers-view',
       suite: 'containers-view',
       registry: true,
+      settings: {...CONTAINERS_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
     },
   ];
   return launches;

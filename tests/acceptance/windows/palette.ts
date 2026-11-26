@@ -1,3 +1,4 @@
+import {activeWindowName} from './display.ts';
 import {startInWindow, terminalFacts, windowEvents} from './harness.ts';
 import {
   chooseQuickPickRow,
@@ -70,14 +71,18 @@ async function showedPalette(name: string): Promise<void> {
       );
     // A window that does not answer must not replace the palette's own error.
     const terminals = await terminalFacts(name).catch(() => undefined);
+    // The taker of the focus is a window the pages' states cannot see: the display's active window says who it is.
+    const displayWindowName = await activeWindowName().catch(
+      (reading: unknown) => String(reading),
+    );
     throw new Error(
-      `${String(caught)}; pages ${JSON.stringify(pages)}; the quick input and focus in the first seconds (ms from the command) ${JSON.stringify(trail)}; terminals ${JSON.stringify(terminals?.terminals ?? '(unreadable)')}, active ${JSON.stringify(terminals?.active ?? '(unreadable)')}; the agent's events, with the terminals it saw open or become active (ms from the command, which was sent at 0) ${JSON.stringify(events)}`,
+      `${String(caught)}; pages ${JSON.stringify(pages)}, the display's active window ${JSON.stringify(displayWindowName)}; the quick input and focus in the first seconds (ms from the command) ${JSON.stringify(trail)}; terminals ${JSON.stringify(terminals?.terminals ?? '(unreadable)')}, active ${JSON.stringify(terminals?.active ?? '(unreadable)')}; the agent's events, with the terminals it saw open or become active (ms from the command, which was sent at 0) ${JSON.stringify(events)}`,
       {cause: caught},
     );
   }
 }
 
-/** The labels of the items that the command palette of window `name` lists for `text`, once its list has settled. */
+/** The labels of the items that the command palette of window `name` lists for `text`, once its list has settled, whose launch has the palette's history of run commands switched off (`PALETTE_HISTORY_OFF` in `tools/acceptance-launches.ts`), so a row that reads the order of the list finds the alphabetical one. */
 export async function paletteItems(
   name: string,
   text: string,

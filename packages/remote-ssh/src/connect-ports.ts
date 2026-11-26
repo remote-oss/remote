@@ -102,6 +102,7 @@ import {
   agentForwardingOf,
   defaultForwardsOf,
   connectionSettingsOf,
+  effectiveUseExecServer,
   localDownloadModeOf,
   overrideOf,
   listedSettings,
@@ -234,6 +235,8 @@ export interface ConnectMachine {
   newTemporaryToken: () => string;
   /** A cryptographic random integer in 1..999999999, which names an agent link. */
   drawLinkNumber: () => number;
+  /** The status a server on this machine's `address` answers a request carrying `connectionToken` with. */
+  serverStatus: WiringPorts['serverStatus'];
 }
 
 /** The parts of a connect that show the connecting window. */
@@ -365,7 +368,7 @@ export function wiringPortsOf(
       server: () => serverSettingsOf(settings),
       connection: () => connectionSettingsOf(settings),
       override: () => overrideOf(settings),
-      useExecServer: () => switchOf(settings, 'useExecServer'),
+      useExecServer: () => effectiveUseExecServer(settings),
       localDownloadMode: () => localDownloadModeOf(settings),
       agentForwarding: () => agentForwardingOf(settings),
       x11Forwarding: () => x11ForwardingOf(settings),
@@ -378,6 +381,7 @@ export function wiringPortsOf(
       );
     },
     tunnels: surfaces.tunnels,
+    serverStatus: machine.serverStatus,
     defaultRead: () =>
       waitForDefaultRead(surfaces.defaultReadEvents, machine.scheduler),
     terms: {
@@ -636,7 +640,10 @@ export function connectAssemblyOf(
       logger: watch.logger,
       serve: {commit: machine.profile.commit, quality: machine.profile.quality},
       get useExecServer() {
-        return switchOf(surfaces.settings, 'useExecServer');
+        return effectiveUseExecServer(surfaces.settings);
+      },
+      get manualBootstrap() {
+        return localDownloadModeOf(surfaces.settings) === 'manualBootstrap';
       },
       get settingLines() {
         return settingLines(listedSettings(surfaces.settings));
