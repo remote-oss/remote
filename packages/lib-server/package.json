@@ -20,6 +20,10 @@
       "types": "./.tsc/src/testing/fake-exec-host.d.ts",
       "default": "./src/testing/fake-exec-host.ts"
     },
+    "./testing/local-exec-server": {
+      "types": "./.tsc/src/testing/local-exec-server.d.ts",
+      "default": "./src/testing/local-exec-server.ts"
+    },
     "./testing/fake-cli": {
       "types": "./.tsc/src/testing/fake-cli.d.ts",
       "default": "./src/testing/fake-cli.ts"

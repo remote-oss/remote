@@ -50,12 +50,23 @@ export interface HostSpawnRequest {
   script: string;
   /** The program and its arguments, which the script runs as `"$@"`. */
   command: readonly string[];
-  /** Variables added to the host's own for this process. */
-  environment: Readonly<Record<string, string>> | undefined;
+  /** Variables added to the host's own for this process; one with no value is left out. */
+  environment: Readonly<Record<string, string | undefined>> | undefined;
   /** Ends the process, and ends it as soon as its id is known when it is aborted before. */
   cancellation: AbortSignal;
   /** Ends the process the host reported `processId` for. */
   endById(processId: number): Promise<void>;
+}
+
+/** `environment` without the variables that have no value. */
+function definedValues(
+  environment: Readonly<Record<string, string | undefined>> | undefined,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(environment ?? {}).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
+  );
 }
 
 /** What the host sends on a stream, and the process id its first line reported, if it was asked for one. */
@@ -111,7 +122,7 @@ export async function spawnOnHost(
     command = await server.spawn(
       'sh',
       ['-c', request.script, 'sh', ...request.command],
-      {env: {...request.environment}},
+      {env: definedValues(request.environment)},
     );
   } catch (caught) {
     return {

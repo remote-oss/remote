@@ -1,17 +1,14 @@
 import {deepStrictEqual} from 'node:assert';
 import {spawn} from 'node:child_process';
 import type {Readable} from 'node:stream';
-import type {
-  ExecReadStream,
-  ExecServer,
-  ExecSpawnedCommand,
-} from '../../src/index.ts';
+import type {ExecServer, ExecSpawnedCommand} from '../../src/index.ts';
 import {
   GROUP_SCRIPT,
   REPORTING_SCRIPT,
   signalGroupOnHost,
   spawnOnHost,
 } from '../../src/index.ts';
+import {localExecServer} from '../../src/testing/local-exec-server.ts';
 import {
   hostStream,
   KILLED_STATUS,
@@ -38,14 +35,14 @@ function requestOf(cancellation: AbortSignal = NEVER) {
   return {
     script: REPORTING_SCRIPT,
     command: ['docker', 'version'],
-    environment: {DOCKER_HOST: 'tcp://host:2375'},
+    environment: {DOCKER_HOST: 'tcp://host:2375', UNSET: undefined},
     cancellation,
     endById: () => Promise.resolve(),
   };
 }
 
 describe('a process on the exec server’s host', () => {
-  it('starts the command under the shell with the variables in the environment, never in the arguments, and reads its output without the process id', async () => {
+  it('starts the command under the shell with the variables that have a value in the environment, never in the arguments, and reads its output without the process id', async () => {
     const scene = sceneOf({complaint: 'warning'});
     const spawned = await spawnOnHost(scene.server, requestOf());
     if (spawned.kind !== 'spawned') {
@@ -283,79 +280,32 @@ describe('a process on the exec server’s host', () => {
   });
 });
 
-/** An exec server whose commands are processes of this machine, so that the scripts run under a real shell. */
-function localServer(): Pick<ExecServer, 'spawn'> {
-  return {
-    spawn: (command, argumentList, options) => {
-      const child = spawn(command, argumentList, {
-        env: {...process.env, ...options?.env},
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      function streamOf(readable: Readable): ExecReadStream {
-        const stream = hostStream();
-        readable.on('data', (chunk: Buffer) => {
-          stream.send(chunk.toString());
-        });
-        readable.on('end', () => {
-          stream.end();
-        });
-        return stream.stream;
-      }
-      return Promise.resolve({
-        stdin: {
-          write: data => {
-            child.stdin.write(data);
-          },
-          end: () => {
-            child.stdin.end();
-          },
-        },
-        stdout: streamOf(child.stdout),
-        stderr: streamOf(child.stderr),
-        onExit: new Promise(resolve => {
-          child.once('close', (status: number | null) => {
-            resolve({status: status ?? 1});
-          });
-        }),
-      });
-    },
-  };
-}
-
 describe('a process on a host with a POSIX shell, run for real', () => {
-  it('the reporting script reports the shell’s id and then becomes the command, which gets the input and keeps its status', async () => {
-    const spawned = await spawnOnHost(localServer(), {
-      ...requestOf(),
-      command: ['sh', '-c', 'cat; exit 7'],
-    });
-    if (spawned.kind !== 'spawned') {
-      throw new Error('the spawn failed');
+  it('each script starts the command with its input, reports an id, and passes the command’s status back, the group script as the leader of a group of its own', async () => {
+    const outcomes = [];
+    for (const script of [REPORTING_SCRIPT, GROUP_SCRIPT]) {
+      const spawned = await spawnOnHost(localExecServer(), {
+        ...requestOf(),
+        script,
+        command: ['sh', '-c', 'cat; exit 7'],
+      });
+      if (spawned.kind !== 'spawned') {
+        throw new Error('the spawn failed');
+      }
+      spawned.process.stdin.end('hello');
+      outcomes.push([
+        await textOf(spawned.process.stdout),
+        await spawned.process.exited,
+      ]);
     }
-    spawned.process.stdin.end('hello');
-    deepStrictEqual(
-      [await textOf(spawned.process.stdout), await spawned.process.exited],
+    deepStrictEqual(outcomes, [
       ['hello', 7],
-    );
-  });
-
-  it('the group script reports the id of a group of its own, gives the command its input and passes its status back', async () => {
-    const spawned = await spawnOnHost(localServer(), {
-      ...requestOf(),
-      script: GROUP_SCRIPT,
-      command: ['sh', '-c', 'cat; exit 7'],
-    });
-    if (spawned.kind !== 'spawned') {
-      throw new Error('the spawn failed');
-    }
-    spawned.process.stdin.end('hello');
-    deepStrictEqual(
-      [await textOf(spawned.process.stdout), await spawned.process.exited],
       ['hello', 7],
-    );
+    ]);
   });
 
   it('a signal to the group ends the command and the children it started, and a group already gone is no failure', async () => {
-    const server = localServer();
+    const server = localExecServer();
     const spawned = await spawnOnHost(server, {
       ...requestOf(),
       script: GROUP_SCRIPT,
