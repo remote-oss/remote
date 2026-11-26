@@ -135,6 +135,8 @@ import {
   WINDOW_PORT_RANGE_SETTING,
   windowPortRangeProblem,
   withHarnessBases,
+  pathKeysOf,
+  runEnvironmentOf,
   withRunTokens,
 } from './acceptance-launches.ts';
 import {
@@ -1263,6 +1265,9 @@ async function prepare(
     return timedStep(name, PREPARE_STEP_MILLISECONDS, work);
   }
   const runId = acceptanceRunId(process.env, process.pid);
+  console.log(
+    `acceptance: the environment names the search path ${pathKeysOf(process.env).join(', ') || '(nothing)'}`,
+  );
   const podman = chosen.some(launch => launch.engine === 'podman');
   if (podman) {
     requirePodman(command);
@@ -1773,7 +1778,7 @@ export async function runLaunches(
           withRunTokens(
             withHarnessBases(settingsOfLaunch(launch), bases),
             runFolder,
-            process.env.PATH ?? '',
+            runEnvironmentOf(process.env, {}).PATH ?? '',
           ),
           launch,
         );
@@ -2704,7 +2709,7 @@ export function runTestCli(
       path.join(root, 'tests', 'acceptance', 'vscode-test.mjs'),
       ...(label === undefined ? [] : ['--label', label]),
     ],
-    {cwd: root, env: {...process.env, ...variables}},
+    {cwd: root, env: runEnvironmentOf(process.env, variables)},
     undefined,
     launchLimits(variables.HARNESS_RUN_FOLDER, runCommand),
   );
@@ -3193,7 +3198,7 @@ if (isMainModule(import.meta.url)) {
             {
               runFolder: variables.HARNESS_RUN_FOLDER,
               executable: editorExecutableOf(variables, launch),
-              environment: {...process.env, ...variables},
+              environment: runEnvironmentOf(process.env, variables),
             },
             launch,
             {
