@@ -27,3 +27,4 @@ export {
   type ScriptRequest,
   type SessionLock,
 } from './host-channel.ts';
+export {localChannel, type LocalChannelOptions} from './local-channel.ts';
