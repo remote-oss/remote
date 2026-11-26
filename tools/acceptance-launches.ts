@@ -1397,7 +1397,7 @@ export function launchesOf(root: string): Launch[] {
       ...RENDERER_LAUNCH,
       label: 'wsl',
       suite: 'wsl',
-      files: ['distros.test.ts'],
+      files: ['distros.test.ts', 'quiet.test.ts'],
       withExtensions: ['remote-oss.remote-wsl'],
       namedOnly: true,
       wslDistros: true,
