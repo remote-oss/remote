@@ -5,16 +5,19 @@ import path from 'node:path';
 export interface StoredScan {
   /** The regular files the scan read, relative to the folder. */
   read: string[];
-  /** The files under the folder, relative to it, whose text holds the searched text. */
+  /** The files under the folder, relative to it, whose text holds any of the searched texts. */
   holding: string[];
 }
 
 /**
- * Reads every regular file under `folder`, at any depth, and gives those that hold `text`. A folder that is not there
+ * Reads every regular file under `folder`, at any depth, and gives those that hold any of `texts`. A folder that is not there
  * holds nothing; any other failure to read ends the scan with an error that names the path, so that a scan that
  * could not read never passes for one that found nothing.
  */
-export function scanStored(folder: string, text: string): StoredScan {
+export function scanStored(
+  folder: string,
+  texts: readonly string[],
+): StoredScan {
   let entries;
   try {
     entries = readdirSync(folder, {recursive: true, withFileTypes: true});
@@ -39,7 +42,7 @@ export function scanStored(folder: string, text: string): StoredScan {
     }
     const relative = path.relative(folder, file);
     scan.read.push(relative);
-    if (content.includes(text)) {
+    if (texts.some(text => content.includes(text))) {
       scan.holding.push(relative);
     }
   }
