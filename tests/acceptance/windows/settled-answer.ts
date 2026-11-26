@@ -53,10 +53,14 @@ async function readUntil(
   return facts;
 }
 
+/** How many times an answer types its text and presses Enter before it leaves the box to the caller's bound. */
+const ANSWER_ATTEMPTS = 2;
+
 /**
  * Answers the input box that is open with `text`, as a user does: it types the text, waits until the box has taken it and
- * has finished validating it, presses Enter, and presses Enter once more when the box is still open with the text in it
- * after `ENTER_TAKEN_MILLISECONDS`. An answer that cannot be given fails with what the box showed.
+ * has finished validating it, and presses Enter. A box that is still open `ENTER_TAKEN_MILLISECONDS` later lost the Enter
+ * or its value (the box's own update may clear what was typed while it opened), so the answer types the text again and
+ * presses Enter once more. An answer that cannot be given fails with what the box showed.
  */
 export async function answerSettled(
   ports: SettledAnswerPorts,
@@ -70,24 +74,26 @@ export async function answerSettled(
   if (!opened.open) {
     throw new Error(`no input box opened to answer: ${describedBox(opened)}`);
   }
-  await ports.type(text);
-  const settled = await readUntil(
-    ports,
-    facts => facts.value === text && !facts.validating,
-    ANSWER_WAIT_MILLISECONDS,
-  );
-  if (settled.value !== text || settled.validating) {
-    throw new Error(
-      `the input box did not take ${JSON.stringify(text)} and settle: ${describedBox(settled)}`,
+  for (let attempt = 0; attempt < ANSWER_ATTEMPTS; attempt += 1) {
+    await ports.type(text);
+    const settled = await readUntil(
+      ports,
+      facts => facts.value === text && !facts.validating,
+      ANSWER_WAIT_MILLISECONDS,
     );
-  }
-  await ports.enter();
-  const answered = await readUntil(
-    ports,
-    facts => !facts.open,
-    ENTER_TAKEN_MILLISECONDS,
-  );
-  if (answered.open && answered.value === text) {
+    if (settled.value !== text || settled.validating) {
+      throw new Error(
+        `the input box did not take ${JSON.stringify(text)} and settle: ${describedBox(settled)}`,
+      );
+    }
     await ports.enter();
+    const answered = await readUntil(
+      ports,
+      facts => !facts.open,
+      ENTER_TAKEN_MILLISECONDS,
+    );
+    if (!answered.open) {
+      return;
+    }
   }
 }

@@ -81,14 +81,26 @@ describe('the answer to an input box that validates what it is given (card #2754
     deepStrictEqual(ports.actions, ['type 8080', 'enter']);
   });
 
-  it('#2754: an Enter the box did not take, still open with the text in it, is pressed once more', async () => {
-    const ports = portsOver({
+  it('#2754: an Enter the box did not take, or a value its own update cleared, is answered again: the text typed once more and Enter pressed again', async () => {
+    const lost = portsOver({
       before: [boxWith('')],
       typed: [boxWith('8080')],
       entered: [boxWith('8080')],
     });
-    await answerSettled(ports, '8080');
-    deepStrictEqual(ports.actions, ['type 8080', 'enter', 'enter']);
+    const cleared = portsOver({
+      before: [boxWith('')],
+      typed: [boxWith('8080')],
+      entered: [boxWith('')],
+    });
+    await answerSettled(lost, '8080');
+    await answerSettled(cleared, '8080');
+    deepStrictEqual(
+      [lost.actions, cleared.actions],
+      [
+        ['type 8080', 'enter', 'type 8080', 'enter'],
+        ['type 8080', 'enter', 'type 8080', 'enter'],
+      ],
+    );
   });
 
   it('#2754: a box that closes after the first Enter gets no second one', async () => {
