@@ -204,6 +204,11 @@ export function serverFailed(): Failed {
   return failure('serverFailed', {}, GENERIC);
 }
 
+/** The dev container CLI could not be placed on the host, or its folder could not be prepared there. */
+export function cliNotPlaced(): Failed {
+  return failure('cliNotPlaced', {}, GENERIC);
+}
+
 /** The host listener or the relay into the container could not be set up. */
 export function relayFailed(): Failed {
   return failure('relayFailed', {}, GENERIC);

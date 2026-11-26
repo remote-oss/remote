@@ -642,6 +642,45 @@ async function installServerFiles(
   };
 }
 
+/** The server on a remote host, found or installed with no start. */
+export interface ServerOnHost {
+  kind: 'installed';
+  /** The folder of the server's own `node`. */
+  nodeFolder: string;
+  /** The server's data folder on the host. */
+  dataFolder: string;
+}
+
+/**
+ * The editor's server on the host of `request.channel`, in the host's own data folder: found by the probe when a window
+ * already installed it, else installed, and in neither case started.
+ */
+export async function installedServerOnHost(
+  dependencies: ServerStepDependencies,
+  request: InstallRequest,
+): Promise<ServerOnHost | FailedResult> {
+  const {profile, logger} = dependencies;
+  const discovered = await probe(
+    request.channel,
+    parametersOf(dependencies, request, '', ''),
+    request.cancellation,
+  );
+  if (discovered.kind === 'failed') {
+    return failedWith(probeFailure(discovered, logger));
+  }
+  const {host} = discovered;
+  const dataFolder = `${host.home}/${serverDataFolderNameOrDefault(profile)}`;
+  const files = await installServerFiles(dependencies, request, {
+    platform: templatePlatformOf(host),
+    host,
+    installTree: '',
+    dataFolder,
+  });
+  return files.kind === 'failed'
+    ? files
+    : {kind: 'installed', nodeFolder: files.nodeFolder, dataFolder};
+}
+
 /** Runs the steps of one connect. */
 export async function runServerSteps(
   dependencies: ServerStepDependencies,
