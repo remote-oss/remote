@@ -13,12 +13,10 @@ import type {RebuildOptions} from './rebuild-intent.ts';
 import {invocationGuardOf} from './invocation-guard.ts';
 import {reloadIntoContainer} from './reload.ts';
 import type {ReopenPorts} from './reopen-ports.ts';
-import {workspaceFoldersAccepted} from './workspace-folders.ts';
-
-/** The English text of the modal an unsaved multi-root workspace gets, by its string id. */
-const WORKSPACE_TEMPLATES = {
-  S415: 'You need to first save your workspace in a folder containing all its workspace folders.',
-} as const;
+import {
+  untitledWorkspaceRefusal,
+  workspaceFoldersAccepted,
+} from './workspace-folders.ts';
 
 /** What the command reopens: a folder, or a saved workspace by the folder that holds its file and the file's path in it. */
 interface Target {
@@ -50,19 +48,15 @@ export function reopenHandlersOf(
 
   /**
    * What to reopen in this window: its one `file` folder; or, in a saved workspace, whatever its roots, the folder of
-   * the workspace file and the file in it. An unsaved workspace is told to be saved first, and any other window gets
-   * nothing.
+   * the workspace file and the file in it. An untitled workspace that has no single on-disk folder holding all its
+   * roots is told to save first; one with a single on-disk root takes the folder route on that root. Any other window
+   * gets nothing.
    */
   async function targetToReopen(title: string): Promise<Target | undefined> {
     const folders = window.folders();
     const [only] = folders;
     const workspaceFile = window.workspaceFile();
     if (window.remoteName() !== undefined) {
-      logger.info(`${title} does nothing in this window`);
-      return undefined;
-    }
-    // A root that is not a local folder (a virtual one) is out of both workspace routes, as it is out of the folder one.
-    if (folders.some(folder => folder.scheme !== 'file')) {
       logger.info(`${title} does nothing in this window`);
       return undefined;
     }
@@ -77,11 +71,13 @@ export function reopenHandlersOf(
       };
     }
     if (workspaceFile?.scheme === 'untitled') {
-      await ports.informModal(ports.translate(WORKSPACE_TEMPLATES.S415));
-      return undefined;
+      if (folders.length > 1 || only?.scheme !== 'file') {
+        await untitledWorkspaceRefusal(ports);
+        return undefined;
+      }
     }
     if (
-      workspaceFile === undefined &&
+      (workspaceFile === undefined || workspaceFile.scheme === 'untitled') &&
       folders.length === 1 &&
       only?.scheme === 'file'
     ) {

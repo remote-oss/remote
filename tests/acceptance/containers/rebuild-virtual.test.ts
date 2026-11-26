@@ -136,7 +136,7 @@ describe('F-0405 the rebuild commands in virtual workspaces (card coverage-67)',
     );
   });
 
-  it('F-0405 AC-35 (c67-memfs-shared-root): a saved workspace whose only folder is memfs:/ and whose own folder holds a configuration is not rebuilt: nothing is built or created before the user confirms, and dismissing leaves everything as it was', async () => {
+  it('F-0405 AC-35 (c67-memfs-shared-root): a saved workspace whose only folder is memfs:/ and whose own folder holds a configuration asks the S363 dialog naming S408, is not rebuilt: nothing is built or created before the user confirms, and dismissing leaves everything as it was', async () => {
     const folder = devContainerFolder('c67-shared-root', {name: 'Shared Root'});
     const file = path.join(folder, 'x.code-workspace');
     writeFileSync(file, MEMORY_WORKSPACE);
@@ -145,16 +145,27 @@ describe('F-0405 the rebuild commands in virtual workspaces (card coverage-67)',
       const results: unknown[] = [];
       for (const command of REBUILD_COMMANDS) {
         const before = await dockerObjects();
-        const shown = await invokedAndDismissed(name, command);
+        const running = inWindow(name, command).catch(() => undefined);
+        await new Promise(resolve => setTimeout(resolve, UI_MILLISECONDS));
+        const dialog = await dialogOf(name);
+        await answerDialog(name, 'Cancel');
+        await running;
         results.push([
-          shown,
+          dialog === undefined
+            ? undefined
+            : [dialog.message, dialog.details, dialog.buttons],
           (await dockerObjects()) === before,
           (await windowState(name)).remoteName,
         ]);
       }
+      const dialog = [
+        '',
+        "The workspace could fail to open in a container: Workspace contains folder 'memfs:/' not on the local file system.",
+        ['Cancel', 'Continue'],
+      ];
       deepStrictEqual(
         results,
-        REBUILD_COMMANDS.map(() => [[], true, null]),
+        REBUILD_COMMANDS.map(() => [dialog, true, null]),
       );
     } finally {
       await closeWindow(name);

@@ -1,12 +1,19 @@
 /**
  * @fileoverview The check of a saved workspace's folder list before Reopen in Container goes on: the first
- * problem of the list is shown in one modal, whose Continue goes on as if there were none and whose Cancel stops.
+ * problem of the list is shown in one modal, whose Continue goes on as if there were none and whose Cancel stops,
+ * and the one refusal modal the commands that run in an untitled workspace show when it has no single on-disk
+ * folder to save into.
  */
 
 import path from 'node:path';
 import {type ParseError, parse} from 'jsonc-parser';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {filled} from '../surfaces/filled.ts';
+
+/** The English text of the refusal an untitled workspace gets, by its string id. */
+const UNTITLED_WORKSPACE_TEMPLATES = {
+  S415: 'You need to first save your workspace in a folder containing all its workspace folders.',
+} as const;
 
 /** The English text of each message the check gives, by its string id. */
 const WORKSPACE_FOLDER_TEMPLATES = {
@@ -22,6 +29,13 @@ const WORKSPACE_FOLDER_TEMPLATES = {
 /** What reading the workspace file gave: its text, or why it could not be read. */
 export type WorkspaceRead =
   {kind: 'text'; text: string} | {kind: 'unreadable'; message: string};
+
+/** What the untitled workspace's refusal shows. */
+export interface UntitledRefusalPorts {
+  /** A modal information dialog with the detail `text` and one OK button. */
+  informModal(text: string): PromiseLike<unknown>;
+  translate: Translate;
+}
 
 /** What the check reads and asks. */
 export interface WorkspaceFolderPorts {
@@ -127,4 +141,14 @@ export async function workspaceFoldersAccepted(
     : ports.confirmModal(
         filled(ports.translate, WORKSPACE_FOLDER_TEMPLATES.S363, [problem]),
       );
+}
+
+/**
+ * The refusal of an untitled workspace that has no single on-disk folder holding all its roots: the one
+ * information modal, and nothing else.
+ */
+export async function untitledWorkspaceRefusal(
+  ports: UntitledRefusalPorts,
+): Promise<void> {
+  await ports.informModal(ports.translate(UNTITLED_WORKSPACE_TEMPLATES.S415));
 }

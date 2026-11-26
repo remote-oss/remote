@@ -44,6 +44,10 @@ function sceneOf(
         remoteName: () => remoteName,
         workspaceFile: () => workspaceFile,
       },
+      informModal: text => {
+        calls.push(`inform ${text}`);
+        return Promise.resolve();
+      },
       showModal: (message, buttons) => {
         calls.push(`modal ${message} ${buttons.join('|')}`);
         return Promise.resolve(answer ?? undefined);
@@ -169,26 +173,29 @@ describe('the Add Dev Container Configuration Files command (card containers-80)
     deepStrictEqual(scene.calls[0], 'wizard /w roots /w/one,/w/two');
   });
 
-  it('F-0801 AC-1: an untitled window of several folders, or a window of one that is not a file, does nothing and says so', async () => {
-    const several = sceneOf(
-      WRITTEN,
-      null,
+  it('F-0404 AC-13, AC-23, F-0801 AC-25: an untitled workspace, of several on-disk folders or of one virtual folder, gets the save-first modal and nothing more', async () => {
+    const seen: Array<[string[], number]> = [];
+    for (const folders of [
       [
         {scheme: 'file', fsPath: '/a'},
         {scheme: 'file', fsPath: '/b'},
       ],
-      undefined,
-      {scheme: 'untitled', fsPath: '/u/workspace.json'},
-    );
-    const remote = sceneOf(WRITTEN, null, [
-      {scheme: 'vscode-vfs', fsPath: '/a'},
-    ]);
-    await createDevContainerFile(several.ports)();
-    await createDevContainerFile(remote.ports)();
-    deepStrictEqual(
-      [several.calls, remote.calls, linesOf(several.sink).length],
-      [[], [], 1],
-    );
+      [{scheme: 'vscode-vfs', fsPath: '/a'}],
+    ]) {
+      const scene = sceneOf(WRITTEN, null, folders, undefined, {
+        scheme: 'untitled',
+        fsPath: '/u/workspace.json',
+      });
+      await createDevContainerFile(scene.ports)();
+      seen.push([scene.calls, linesOf(scene.sink).length]);
+    }
+    const refused: [string[], number] = [
+      [
+        'inform You need to first save your workspace in a folder containing all its workspace folders.',
+      ],
+      0,
+    ];
+    deepStrictEqual(seen, [refused, refused]);
   });
 
   it('F-0801 AC-14: a dev container window runs the wizard with its folder’s path in the container', async () => {

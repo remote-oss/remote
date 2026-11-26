@@ -2122,6 +2122,7 @@ export async function activate(
                 {modal: true, detail: message},
                 ...buttons,
               ),
+            informModal: text => reopenPorts.informModal(text),
             openFolder: () =>
               vscode.commands.executeCommand(
                 'workbench.action.files.openFolder',

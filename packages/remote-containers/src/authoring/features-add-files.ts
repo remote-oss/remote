@@ -8,16 +8,12 @@
 import type {Logger} from 'lib-log';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {
+  untitledWorkspaceRefusal,
   workspaceFoldersAccepted,
   type WorkspaceFolderPorts,
 } from '../open/workspace-folders.ts';
 import {savedWorkspaceOf} from './create-file.ts';
 import type {WindowFolder} from './configure-features.ts';
-
-/** The English text of the dialog for a workspace that is not saved, by its string id. */
-const ADD_FILES_TEMPLATES = {
-  S415: 'You need to first save your workspace in a folder containing all its workspace folders.',
-} as const;
 
 /** The remote windows whose folders are on the host and whose files are added there. */
 const HOST_REMOTES = ['ssh-remote', 'wsl', 'tunnel'] as const;
@@ -63,7 +59,7 @@ export async function addFilesForFeatures(
   }
   const workspaceFile = window.workspaceFile();
   if (workspaceFile?.scheme === 'untitled' && folders.length > 1) {
-    await ports.informModal(ports.translate(ADD_FILES_TEMPLATES.S415));
+    await untitledWorkspaceRefusal(ports);
     return;
   }
   const saved = savedWorkspaceOf(folders, workspaceFile);

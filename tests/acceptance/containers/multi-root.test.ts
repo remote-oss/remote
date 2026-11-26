@@ -20,6 +20,7 @@ import {
 } from '../windows/harness.ts';
 import {
   openFolderWindow,
+  openMemoryWindow,
   openWorkspaceWindow,
   removeContainers,
 } from '../windows/folder-windows.ts';
@@ -620,5 +621,195 @@ describe('multi-root workspaces (card coverage-104)', function () {
         [],
       ],
     );
+  });
+
+  it('F-0404 AC-6 (c104-ws-cancel): a saved workspace with a folder that resolves outside its root asks the S363 dialog with the S185 detail, and Cancel leaves the window unchanged, with no container', async () => {
+    const label = 'c104-ws-cancel';
+    const folder = path.join(variable('HARNESS_RUN_FOLDER'), label);
+    rmSync(folder, {recursive: true, force: true});
+    mkdirSync(path.join(folder, `${label}-a`), {recursive: true});
+    const file = path.join(folder, `${label}.code-workspace`);
+    writeFileSync(
+      file,
+      JSON.stringify({
+        folders: [{path: `${label}-a`}, {path: `../${label}-out`}],
+      }),
+    );
+    const window = await openWorkspaceWindow(file);
+    let shown: [string, string[], string | null, string[]];
+    try {
+      await startInWindow(window, 'remote-containers.reopenInContainer');
+      const dialog = await waitForDialog(window, 60_000);
+      await answerDialog(window, 'Cancel');
+      shown = [
+        dialog.details,
+        dialog.buttons,
+        (await windowState(window)).remoteName,
+        await devContainersOf(folder),
+      ];
+    } finally {
+      await closeWindow(window).catch(() => undefined);
+    }
+    deepStrictEqual(shown, [
+      `The workspace could fail to open in a container: Folder '${path.join(variable('HARNESS_RUN_FOLDER'), `${label}-out`)}' is not a subfolder of shared root folder '${folder}'.`,
+      ['Cancel', 'Continue'],
+      null,
+      [],
+    ]);
+  });
+
+  it('F-0404 AC-7 (c104-ws-continue): the same dialog answered with Continue opens the container on the shared root alone: one bind mount of the root, the offending folder an empty, unmounted root', async () => {
+    const label = 'c104-ws-continue';
+    const folder = path.join(variable('HARNESS_RUN_FOLDER'), label);
+    rmSync(folder, {recursive: true, force: true});
+    mkdirSync(path.join(folder, `${label}-a`), {recursive: true});
+    configurationAt(folder, '.devcontainer/devcontainer.json', 'Continue');
+    const file = path.join(folder, `${label}.code-workspace`);
+    writeFileSync(
+      file,
+      JSON.stringify({
+        folders: [{path: `${label}-a`}, {path: `../${label}-out`}],
+      }),
+    );
+    const window = await openWorkspaceWindow(file);
+    const remote = label;
+    let shown: [string, string, number, string[], string[]];
+    try {
+      await startInWindow(window, 'remote-containers.reopenInContainer');
+      const dialog = await waitForDialog(window, 60_000);
+      await answerDialog(window, 'Continue');
+      await connectedToContainer(remote);
+      const containers = await devContainersOf(folder);
+      shown = [
+        dialog.details,
+        await windowTitle(remote),
+        containers.length,
+        await bindSources(containers[0] ?? ''),
+        (await windowState(remote)).folders
+          .map(folderUri => decodeURIComponent(new URL(folderUri).pathname))
+          .sort(),
+      ];
+    } finally {
+      await closeWindow(remote).catch(() => undefined);
+      await closeWindow(window).catch(() => undefined);
+      await removeContainers(folder);
+    }
+    deepStrictEqual(shown, [
+      `The workspace could fail to open in a container: Folder '${path.join(variable('HARNESS_RUN_FOLDER'), `${label}-out`)}' is not a subfolder of shared root folder '${folder}'.`,
+      `[${label} (Workspace) [Dev Container: Continue]]`,
+      1,
+      [folder],
+      [`/workspaces/${label}/${label}-a`, `/workspaces/${label}-out`],
+    ]);
+  });
+
+  it('F-0404 AC-23 (c104-addfiles): an untitled workspace of two roots, one already configured, gets the save-first modal from the add-configuration command, and stays local', async () => {
+    const first = devContainerFolder('c104-addfiles-a', {name: 'Configured'});
+    const second = path.join(variable('HARNESS_RUN_FOLDER'), 'c104-addfiles-b');
+    rmSync(second, {recursive: true, force: true});
+    mkdirSync(second, {recursive: true});
+    const window = await openFolderWindow(first);
+    let shown: [string, string[], string | null, string[], string[]];
+    try {
+      await inWindow(window, 'acceptance.agent.addFolder', second);
+      await waitFor(
+        `window ${window} to become an untitled workspace`,
+        async () =>
+          (
+            await windowState(window).catch(() => undefined)
+          )?.workspaceFile?.startsWith('untitled:') === true,
+        60_000,
+      );
+      await startInWindow(window, 'remote-containers.createDevContainerFile');
+      const dialog = await waitForDialog(window, 60_000);
+      await answerDialog(window, dialog.buttons[0] ?? '');
+      shown = [
+        dialog.details,
+        dialog.buttons,
+        (await windowState(window)).remoteName,
+        await devContainersOf(first),
+        await devContainersOf(second),
+      ];
+    } finally {
+      if (isOpen(window)) {
+        await closeContained(window, dontSave).catch(() => undefined);
+      }
+    }
+    deepStrictEqual(shown, [SAVE_FIRST, ['OK'], null, [], []]);
+  });
+
+  it('F-0404 AC-28 (c104-trust-first-part): Reopen of an already-open saved workspace with a failing entry shows the S363 dialog naming the first problem, and Cancel leaves the window unchanged', async () => {
+    const label = 'c104-trust-first';
+    const folder = path.join(variable('HARNESS_RUN_FOLDER'), label);
+    rmSync(folder, {recursive: true, force: true});
+    mkdirSync(path.join(folder, `${label}-a`), {recursive: true});
+    const file = path.join(folder, `${label}.code-workspace`);
+    writeFileSync(
+      file,
+      JSON.stringify({
+        folders: [{path: '/abs/elsewhere'}, {path: `${label}-a`}],
+      }),
+    );
+    const window = await openWorkspaceWindow(file);
+    let shown: [string, string[], string | null, string[]];
+    try {
+      await startInWindow(window, 'remote-containers.reopenInContainer');
+      const dialog = await waitForDialog(window, 60_000);
+      await answerDialog(window, 'Cancel');
+      shown = [
+        dialog.details,
+        dialog.buttons,
+        (await windowState(window)).remoteName,
+        await devContainersOf(folder),
+      ];
+    } finally {
+      await closeWindow(window).catch(() => undefined);
+    }
+    deepStrictEqual(shown, [
+      "The workspace could fail to open in a container: Workspace contains an absolute folder path '/abs/elsewhere'.",
+      ['Cancel', 'Continue'],
+      null,
+      [],
+    ]);
+  });
+
+  it('F-0404 AC-31 (c104-virtual-orders-part): Reopen of a saved workspace of a virtual folder and a local sub-folder shows the S363 dialog naming the virtual folder, with either order in the file', async () => {
+    const seen: Array<[string, string[], string | null]> = [];
+    for (const virtualFirst of [true, false]) {
+      const label = `c104-virtual-orders-${virtualFirst ? 'virtual' : 'local'}`;
+      const folder = path.join(variable('HARNESS_RUN_FOLDER'), label);
+      rmSync(folder, {recursive: true, force: true});
+      mkdirSync(path.join(folder, `${label}-a`), {recursive: true});
+      const file = path.join(folder, `${label}.code-workspace`);
+      writeFileSync(
+        file,
+        JSON.stringify({
+          folders: [
+            ...(virtualFirst ? [{uri: 'memfs:/'}] : []),
+            {path: `${label}-a`},
+            ...(virtualFirst ? [] : [{uri: 'memfs:/'}]),
+          ],
+        }),
+      );
+      const window = await openMemoryWindow(file);
+      try {
+        await startInWindow(window, 'remote-containers.reopenInContainer');
+        const dialog = await waitForDialog(window, 60_000);
+        await answerDialog(window, 'Cancel');
+        seen.push([
+          dialog.details,
+          dialog.buttons,
+          (await windowState(window)).remoteName,
+        ]);
+      } finally {
+        await closeWindow(window).catch(() => undefined);
+      }
+    }
+    const shown: [string, string[], string | null] = [
+      "The workspace could fail to open in a container: Workspace contains folder 'memfs:/' not on the local file system.",
+      ['Cancel', 'Continue'],
+      null,
+    ];
+    deepStrictEqual(seen, [shown, shown]);
   });
 });

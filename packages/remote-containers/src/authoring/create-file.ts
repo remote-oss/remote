@@ -1,13 +1,15 @@
 /**
  * @fileoverview The Add Dev Container Configuration Files command and the continuation every entry that adds a
  * configuration shares: the wizard runs, then the written configuration opens in a preview editor and the reopen
- * notification of the folder is offered. Opening the folder in a container is the caller's own continuation.
+ * notification of the folder is offered. An untitled workspace that has no single on-disk folder holding all its
+ * roots is told to save it first. Opening the folder in a container is the caller's own continuation.
  */
 
 import path from 'node:path';
 import type {Logger} from 'lib-log';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import type {NotificationVariant} from '../open/reopen-notification.ts';
+import {untitledWorkspaceRefusal} from '../open/workspace-folders.ts';
 import type {WizardOutcome} from './wizard-stages.ts';
 
 /** The English templates of the command's texts, by their string ids. */
@@ -79,6 +81,8 @@ export interface CreateFilePorts extends ContinuationPorts {
     message: string,
     buttons: readonly string[],
   ): PromiseLike<string | undefined>;
+  /** A modal information dialog with the detail `text` and one OK button. */
+  informModal(text: string): PromiseLike<unknown>;
   /** Runs core's open-folder command. */
   openFolder(): PromiseLike<unknown>;
   translate: Translate;
@@ -140,6 +144,14 @@ export function createDevContainerFile(
     const saved = savedWorkspaceOf(folders, ports.window.workspaceFile());
     if (saved !== undefined) {
       await addConfiguration(ports, saved.folder, saved.roots);
+      return;
+    }
+    // An untitled workspace with no single on-disk folder holding all its roots is told to save it first.
+    if (
+      ports.window.workspaceFile()?.scheme === 'untitled' &&
+      (folders.length > 1 || only.scheme !== 'file')
+    ) {
+      await untitledWorkspaceRefusal(ports);
       return;
     }
     if (folders.length !== 1 || folder === undefined) {

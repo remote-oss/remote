@@ -362,25 +362,86 @@ describe('Reopen in Container', () => {
     );
   });
 
-  it('F-0405 AC-35: a saved or an unsaved workspace with a root that is not a local folder does nothing and shows nothing', async () => {
-    const seen = [];
-    for (const workspaceFile of [
-      {scheme: 'file', fsPath: '/w/p/team.code-workspace'},
-      {scheme: 'untitled', fsPath: '/Untitled-1'},
-    ]) {
-      const state = setup();
-      state.workspaceFile = workspaceFile;
-      state.folders = [{scheme: 'memfs', fsPath: '/'}];
-      const {lines} = await reopened(state);
-      seen.push([state.modals, state.calls, state.commands, lines]);
-    }
-    const nothing = [
-      [],
-      [],
-      [],
-      ['info: Reopen in Container does nothing in this window'],
-    ];
-    deepStrictEqual(seen, [nothing, nothing]);
+  it('F-0405 AC-35, F-0404.AC-13: a saved workspace whose only root is virtual asks the S363 dialog naming S408, and Cancel runs nothing; an untitled one of the same root gets the save-first modal, and nothing else', async () => {
+    const saved = setup();
+    saved.workspaceFile = {scheme: 'file', fsPath: '/w/p/team.code-workspace'};
+    saved.folders = [{scheme: 'memfs', fsPath: '/'}];
+    saved.workspaceRead = {
+      kind: 'text',
+      text: '{"folders": [{"uri": "memfs:/"}]}',
+    };
+    saved.continueAnswer = false;
+    const savedSeen = await reopened(saved);
+    const untitled = setup();
+    untitled.workspaceFile = {scheme: 'untitled', fsPath: '/Untitled-1'};
+    untitled.folders = [{scheme: 'memfs', fsPath: '/'}];
+    const untitledSeen = await reopened(untitled);
+    deepStrictEqual(
+      [
+        [
+          saved.confirms,
+          saved.modals,
+          saved.calls,
+          saved.commands,
+          savedSeen.lines,
+        ],
+        [
+          untitled.modals,
+          untitled.confirms,
+          untitled.calls,
+          untitled.commands,
+          untitledSeen.lines,
+        ],
+      ],
+      [
+        [
+          [
+            "The workspace could fail to open in a container: Workspace contains folder 'memfs:/' not on the local file system.",
+          ],
+          [],
+          ['ensureTrusted'],
+          [],
+          [],
+        ],
+        [
+          [
+            'You need to first save your workspace in a folder containing all its workspace folders.',
+          ],
+          [],
+          [],
+          [],
+          [],
+        ],
+      ],
+    );
+  });
+
+  it('F-0404.AC-13: an untitled workspace whose only root is on disk takes the folder route on that root, with no save-first modal', async () => {
+    const state = setup();
+    state.workspaceFile = {scheme: 'untitled', fsPath: '/Untitled-1'};
+    state.folders = [{scheme: 'file', fsPath: '/w/p/a'}];
+    state.existing = ['/w/p/a/.devcontainer/devcontainer.json'];
+    state.read = {...CONFIGURATION, workspaceFolder: '/workspaces/p/a'};
+    await reopened(state);
+    deepStrictEqual(
+      [
+        state.modals,
+        state.calls,
+        state.commands.map(each => each.command),
+        (state.commands[0]?.parameters[0] as {path: string}).path,
+      ],
+      [
+        [],
+        [
+          'ensureTrusted',
+          'firstCheck /w/p/a',
+          'readConfiguration /w/p/a',
+          'pinnedEngine',
+        ],
+        ['vscode.openFolder'],
+        '/workspaces/p/a',
+      ],
+    );
   });
 
   it('F-0401 6.5: a remote window with a workspace file does nothing and shows nothing', async () => {
