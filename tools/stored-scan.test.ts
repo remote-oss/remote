@@ -35,8 +35,8 @@ describe('the scan of the files an extension stores (card #3109)', () => {
       writeFileSync(path.join(folder, 'other.json'), 'nothing');
       deepStrictEqual(
         {
-          ...scanStored(folder, 'host-a'),
-          read: scanStored(folder, 'host-a').read.toSorted(),
+          ...scanStored(folder, ['host-a']),
+          read: scanStored(folder, ['host-a']).read.toSorted(),
         },
         {
           read: [path.join('history', 'entries.json'), 'other.json'],
@@ -50,7 +50,7 @@ describe('the scan of the files an extension stores (card #3109)', () => {
     inScratch(folder => {
       mkdirSync(path.join(folder, 'empty'));
       writeFileSync(path.join(folder, 'one'), 'x');
-      deepStrictEqual(scanStored(folder, 'host-a'), {
+      deepStrictEqual(scanStored(folder, ['host-a']), {
         read: ['one'],
         holding: [],
       });
@@ -58,7 +58,7 @@ describe('the scan of the files an extension stores (card #3109)', () => {
   });
 
   it('#3109: a folder that is not there holds nothing', () => {
-    deepStrictEqual(scanStored('/nonexistent/stored-scan-folder', 'host-a'), {
+    deepStrictEqual(scanStored('/nonexistent/stored-scan-folder', ['host-a']), {
       read: [],
       holding: [],
     });
@@ -71,7 +71,7 @@ describe('the scan of the files an extension stores (card #3109)', () => {
       writeFileSync(file, 'host-a');
       chmodSync(file, 0o000);
       throws(
-        () => scanStored(folder, 'host-a'),
+        () => scanStored(folder, ['host-a']),
         (caught: Error) => caught.message.includes(file),
       );
     });
@@ -85,12 +85,27 @@ describe('the scan of the files an extension stores (card #3109)', () => {
       chmodSync(locked, 0o000);
       try {
         throws(
-          () => scanStored(locked, 'host-a'),
+          () => scanStored(locked, ['host-a']),
           (caught: Error) => caught.message.includes(locked),
         );
       } finally {
         chmodSync(locked, 0o700);
       }
+    });
+  });
+
+  it('#3257: a file that names only the host is not found by the host key texts, and a file that holds the key is', () => {
+    inScratch(folder => {
+      writeFileSync(path.join(folder, 'hint.json'), '{"host":"127.0.0.1"}');
+      writeFileSync(
+        path.join(folder, 'known'),
+        '[127.0.0.1]:22 ssh-ed25519 AAAAkey',
+      );
+      writeFileSync(path.join(folder, 'fingerprints'), 'SHA256:abcdef');
+      deepStrictEqual(
+        scanStored(folder, ['AAAAkey', 'SHA256:abcdef']).holding.toSorted(),
+        ['fingerprints', 'known'],
+      );
     });
   });
 });

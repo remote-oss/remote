@@ -11,12 +11,14 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
   connectedWithin,
+  onHostAs,
   openWindow,
   readUserSettings,
   restoreUserSettings,
   userSettings,
   variable,
 } from '../windows/harness.ts';
+import {harnessHostFingerprint} from '../windows/config-keywords-support.ts';
 import {labelsWithin} from '../windows/labels-wait.ts';
 import {authorityHex} from './authority-hex.ts';
 import {scanStored} from './stored-scan.ts';
@@ -170,13 +172,28 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
         variable('HARNESS_USER_DATA'),
         'User/globalStorage/remote-oss.remote-ssh',
       );
-      const scan = scanStored(storage, block.hostName);
+      // A trust store is a store of host keys (the criterion's trust store), so the scan looks for the host's key and its
+      // fingerprint, not for its name: a hint that names its host is no trust store.
+      const hostKey = (
+        await onHostAs('harness', 'cat', '/etc/ssh/ssh_host_ed25519_key.pub')
+      )
+        .trim()
+        .split(/\s+/)[1];
+      const keyTexts = [hostKey ?? '', (await harnessHostFingerprint()) ?? ''];
+      const scan = scanStored(storage, keyTexts);
       console.log(
         `f2008-hex-address: the trust-store scan of the storage folder read ${JSON.stringify(scan.read)}`,
       );
       const scratch = mkdtempSync(path.join(tmpdir(), 'f2008-control-'));
-      writeFileSync(path.join(scratch, 'planted.json'), block.hostName);
-      const control = scanStored(scratch, block.hostName).holding;
+      writeFileSync(
+        path.join(scratch, 'planted.json'),
+        `[${block.hostName}]:${String(block.port)} ssh-ed25519 ${hostKey ?? ''}`,
+      );
+      writeFileSync(
+        path.join(scratch, 'hint.json'),
+        JSON.stringify({host: block.hostName}),
+      );
+      const control = scanStored(scratch, keyTexts).holding;
       rmSync(scratch, {recursive: true, force: true});
       deepStrictEqual(
         {
