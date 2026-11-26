@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
-import {mkdirSync, realpathSync, writeFileSync} from 'node:fs';
+import {realpathSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
@@ -10,6 +10,7 @@ import {
   devContainersOf,
   reloadingCommand,
   reopenInContainer,
+  variable,
   windowState,
 } from '../windows/harness.ts';
 import {notificationCentre} from '../windows/renderer.ts';
@@ -135,10 +136,26 @@ describe('Dev Containers on Docker Desktop for Windows (card #3172)', function (
   });
 
   it('F-0411 AC-32 (c3020-repo-subfolder): a subfolder of a repository binds the repository root as a Windows path, opens at its sub-path, and labels the container with Windows paths', async () => {
-    const repository = devContainerFolder('c3020-repo', {name: 'c3020-repo'});
-    const subfolder = path.join(repository, 'sub', 'deeper');
-    mkdirSync(subfolder, {recursive: true});
+    const subfolder = devContainerFolder('c3020-repo/sub/deeper', {
+      name: 'c3020-repo',
+    });
+    const repository = path.join(variable('HARNESS_RUN_FOLDER'), 'c3020-repo');
     await execFileAsync('git', ['init', '--quiet'], {cwd: repository});
+    await execFileAsync('git', ['add', '--all'], {cwd: repository});
+    await execFileAsync(
+      'git',
+      [
+        '-c',
+        'user.name=Row',
+        '-c',
+        'user.email=row@example.com',
+        'commit',
+        '--quiet',
+        '--message',
+        'repository',
+      ],
+      {cwd: repository},
+    );
     let name: string | undefined;
     try {
       name = await openFolderWindow(subfolder);
