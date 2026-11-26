@@ -69,11 +69,7 @@ jobs:
       # LF line ends: a CRLF shell script would end the host's entrypoint at once
       - run: git config --global core.autocrlf false
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       - name: The Linux side, an Ubuntu distro in WSL2 with its own Docker engine
         timeout-minutes: 30
@@ -222,11 +218,7 @@ jobs:
       HARNESS_RUN_BASE: /tmp/colima
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       - name: Docker for linux/x86_64 through colima
         timeout-minutes: 25
