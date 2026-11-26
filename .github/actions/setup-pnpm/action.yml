@@ -1,0 +1,23 @@
+name: setup-pnpm
+description: >-
+  pnpm at package.json's packageManager version and Node at .node-version, with the pnpm store restored from and saved
+  to a cache of this runner's kind.
+runs:
+  using: composite
+  steps:
+    # the version comes from packageManager in package.json
+    - uses: pnpm/action-setup@v6
+    # no cache of setup-node's own: the store's cache is the step below, keyed by the runner's kind
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .node-version
+        package-manager-cache: false
+    - id: store
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+    # setup-node's own pnpm cache keys the store by system and architecture only, so a GitHub-hosted job restored an
+    # archive a self-hosted runner saved from another depth, and tar failed on it; the runner's kind keeps them apart
+    - uses: actions/cache@v6
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: pnpm-store-${{ runner.environment }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
