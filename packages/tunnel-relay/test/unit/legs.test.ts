@@ -385,7 +385,7 @@ describe("the relay's WebSocket legs", () => {
       );
     });
 
-    it('gives the sign-in the address of the upgrade’s socket, and an empty one when the socket has none', async () => {
+    it('gives the sign-in the address of the upgrade’s socket', async () => {
       addresses.length = 0;
       await refusal('/relay/host/one', [HOST], 'refused');
       deepStrictEqual(
@@ -686,6 +686,21 @@ describe("the relay's WebSocket legs", () => {
       socket.emit('error', new Error('reset by the peer'));
       await upgrading;
       deepStrictEqual(socket.destroyed, true);
+    });
+
+    it('gives the sign-in an empty address when the upgrade’s socket has none', async () => {
+      addresses.length = 0;
+      const request = {
+        url: '/relay/host/one',
+        headers: {'sec-websocket-protocol': HOST, authorization: 'refused'},
+        socket: {remoteAddress: undefined},
+      };
+      await legs.upgrade(
+        request as unknown as IncomingMessage,
+        new PassThrough(),
+        Buffer.alloc(0),
+      );
+      deepStrictEqual(addresses, ['']);
     });
   });
 
