@@ -574,6 +574,33 @@ describe("the relay's WebSocket legs", () => {
       deepStrictEqual(await closed(websocket), 1006);
     });
 
+    it('pings again a minute after a pong, and ends the leg when that second ping goes unanswered', async () => {
+      const websocket = await opening(
+        '/relay/host/one',
+        [HOST],
+        'tunnel one host',
+        {autoPong: false},
+      );
+      const firstPing = new Promise(resolve => {
+        websocket.once('ping', resolve);
+      });
+      timers.fire();
+      await firstPing;
+      websocket.pong();
+      await until(() => timers.delays()[0] === 60_000);
+      const secondPing = new Promise(resolve => {
+        websocket.once('ping', resolve);
+      });
+      timers.fire();
+      await secondPing;
+      const openAfterSecondPing = websocket.readyState === WebSocket.OPEN;
+      timers.fire();
+      deepStrictEqual(
+        [openAfterSecondPing, await closed(websocket)],
+        [true, 1006],
+      );
+    });
+
     it('starts the minute again whenever the leg sends anything, and stops when it closes', async () => {
       const websocket = await opening(
         '/relay/host/one',
