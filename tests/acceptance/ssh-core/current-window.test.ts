@@ -36,6 +36,7 @@ import {
 import {closeAllButLocal, serverMainProcesses} from '../windows/maintenance.ts';
 import {paletteItems} from '../windows/palette.ts';
 import {
+  allQuickPickRows,
   groupedQuickPickRows,
   pressControlAlt,
   pressEscape,
@@ -749,7 +750,7 @@ describe('Connect Current Window to Host', function () {
             .length > 0,
         30_000,
       );
-      const menu = (await groupedQuickPickRows('c3017-inflight')).map(
+      const menu = (await allQuickPickRows('c3017-inflight')).map(
         each => each.label,
       );
       await pressEscape('c3017-inflight');
