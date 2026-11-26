@@ -18,7 +18,9 @@ remote/
 │   ├── remote-wsl/          extension  remote-oss.remote-wsl
 │   ├── remote-server/       extension  remote-oss.remote-server
 │   ├── remote-extensionpack/ extension remote-oss.vscode-remote-extensionpack
-│   └── lib-<name>/          shared libraries (candidates below)
+│   ├── lib-<name>/          shared libraries (candidates below)
+│   ├── tunnel-agent/        service    the tunnel host agent (ADR-0016)
+│   └── tunnel-relay/        service    the tunnel relay (ADR-0015)
 ├── tests/
 │   └── conformance/
 │       └── runner/          one copy of the runner (see tests/conformance/README.md)
@@ -35,6 +37,11 @@ remote/
 3. **An extension never imports another extension.** Extensions talk to each other only through the interfaces the
    specs define (commands, the companion interface of R-66, exported extension APIs). Shared code goes in a library.
 4. **A library never imports an extension**, and the library graph has no cycles.
+5. **A service is a third kind**, named in `SERVICE_FOLDERS` (`tools/repository.ts`): a workspace package that runs on
+   its own, outside the editor, with no extension manifest, publisher or engine floor. `tunnel-relay` (ADR-0015;
+   ruling-3062-service-kind) and `tunnel-agent` (ADR-0016) are the two. A service imports libraries by package name
+   and is imported by nothing. The extensions' network rule (contracts §5: an extension's HTTP goes through the
+   editor's `fetch`) binds code that runs in the extension host, so it leaves a service out.
 
    Rules 3 and 4 hold for every way of reaching another package: by name, by a relative path into its folder, by
    an alias in a manifest or a `tsconfig`, in code and in types. A package reaches another package only by its
@@ -42,10 +49,10 @@ remote/
    files and package manifests. They do not see every route through repository-wide configuration (the root
    manifest, `pnpm-workspace.yaml`, `tsconfig` files and what they extend, symbolic links), so a change to any of
    these is reviewed by the architecture lead.
-5. **Each package keeps its own tests.** Unit tests live in the package. The package's conformance suite moves to
+6. **Each package keeps its own tests.** Unit tests live in the package. The package's conformance suite moves to
    `packages/<x>/tests/conformance/` when the specs and tests move here; until then CI fetches it from
    `remote-oss/remote-<x>`.
-6. **Every package has a `README.md`** that names its maintainers, its features in words (extensions; the feature
+7. **Every package has a `README.md`** that names its maintainers, its features in words (extensions; the feature
    ids live in the traceability matrix, never in shipped prose, D-59) or the contract it offers (libraries), its
    allowed imports and its coverage exclusions. A README ships in the VSIX and is written in the product's voice; the maintainers' table (owner, components, allowed
 imports, coverage exclusions) moves out of shipped READMEs before any publication (#108), into the package's

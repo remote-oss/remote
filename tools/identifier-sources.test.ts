@@ -577,17 +577,19 @@ describe('identifier-sources', () => {
       });
     });
 
-    it('asks identifiers of an extension with src/, not of one without or of a library', () => {
+    it('asks identifiers of an extension with src/, not of one without, of a library or of a service', () => {
       workspace.write('packages/with/src/extension.ts', '');
       workspace.writeManifest('without');
       workspace.write('packages/lib-x/src/channel.ts', '');
+      workspace.write('packages/tunnel-relay/src/main.ts', '');
       deepStrictEqual(
         [
           needsIdentifiers(path.join(workspace.root, 'packages/with')),
           needsIdentifiers(path.join(workspace.root, 'packages/without')),
           needsIdentifiers(path.join(workspace.root, 'packages/lib-x')),
+          needsIdentifiers(path.join(workspace.root, 'packages/tunnel-relay')),
         ],
-        [true, false, false],
+        [true, false, false, false],
       );
     });
   });

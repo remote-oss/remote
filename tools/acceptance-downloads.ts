@@ -204,7 +204,7 @@ export type Download = (address: string) => Promise<Uint8Array>;
  * The pinned file `file`: kept when its bytes match `expected`, else downloaded from `address`, checked and written.
  * Throws `mismatch` when the download does not match either.
  */
-async function pinnedFileOf(
+export async function pinnedFileOf(
   file: string,
   address: string,
   expected: string,

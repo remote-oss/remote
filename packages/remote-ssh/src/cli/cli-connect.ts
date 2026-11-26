@@ -1,9 +1,10 @@
 /**
  * @fileoverview The connect's path through the editor's command-line program: place it, start it with a control token,
  * reach its control port through the window's tunnel, check that it requires its token, authenticate, and give the
- * window a local bridge. The window resolves here; the server is installed and started by the first connection on the
- * bridge. A failure before the window resolves falls back to the direct install; one after it closes the window's
- * transport and shows the failure.
+ * window a local bridge. A window's first resolve waits for the first `serve`, which installs and starts the server, so
+ * the connection's notification shows the download and the install while they last; a reconnection resolves at once
+ * and its first connection serves. A failure before the control is authenticated falls back to the direct install;
+ * a `serve` that fails fails the resolve; one after the resolve closes the window's transport and shows the failure.
  */
 
 import {busyRangeReason} from '../pipeline/port-choice.ts';
@@ -11,9 +12,11 @@ import type {Connected, Failed} from 'lib-authority';
 import type {Logger} from 'lib-log';
 import {
   type CliControl,
+  cliServerFolderOf,
   openCliControl,
   type Plan,
   type ProbedHost,
+  s045EventOf,
   type StartedServer,
 } from 'lib-server';
 import {
@@ -73,6 +76,11 @@ export interface CliConnectContext {
   useExecServer: boolean;
   /** Builds the window's failure from a detail, as the connect does for its own failures. */
   failedOf: (detail: FailureDetail) => Failed;
+  /** Shows a stage of the server's setup, or of the window's connection to it, in the connection's notification. */
+  onServerPhase: (
+    phase:
+      {kind: 'downloading'} | {kind: 'installing'} | {kind: 'settingUpTunnel'},
+  ) => void;
   cancellation: AbortSignal;
 }
 
@@ -223,6 +231,38 @@ async function openControl(
   };
 }
 
+/**
+ * Shows the download stage when the CLI has no server folder for the window's commit: its first `serve` then fetches
+ * the server, and logs that only to its own files. A folder it can't check shows nothing, with one log line.
+ */
+async function showDownload(
+  context: CliConnectContext,
+  control: CliControl,
+): Promise<void> {
+  const folder = cliServerFolderOf(
+    context.plan.cliDataFolder,
+    context.serve.quality,
+    context.serve.commit,
+  );
+  const checked = await control.fsStat(folder);
+  if (checked.kind !== 'stat') {
+    context.logger.info(
+      `the CLI's server folder ${folder} could not be checked (${checked.kind}): no download stage`,
+    );
+    return;
+  }
+  if (!checked.stat.exists) {
+    context.onServerPhase({kind: 'downloading'});
+  }
+}
+
+/** The failure of a resolve whose first `serve` did not serve. */
+function ofFirstServe(loss: CliBridgeLoss): FailureDetail {
+  return loss.kind === 'serveFailed'
+    ? ofCliServe(loss.error, loss.errorLine)
+    : {kind: 'serverStart'};
+}
+
 /** Runs the CLI path. */
 export async function connectOverCli(
   context: CliConnectContext,
@@ -239,9 +279,15 @@ export async function connectOverCli(
     connectionToken: server.connectionToken,
     useLocalDownload: false,
   };
+  let resolving = !context.input.isReconnection;
+  let installing = false;
   const bridge = await steps.openBridge(control, serveParams, {
     onServeLog: line => {
       logger[LOG_LEVELS[line.level] ?? 'info'](line.text);
+      if (resolving && !installing && s045EventOf(line)?.kind === 'hold') {
+        installing = true;
+        context.onServerPhase({kind: 'installing'});
+      }
     },
     onControlEnded: opened.onControlEnded,
   });
@@ -255,6 +301,16 @@ export async function connectOverCli(
   if (bridge === undefined) {
     await abandon();
     return {kind: 'fallback', cause: 'no local port for the bridge'};
+  }
+  if (resolving) {
+    await showDownload(context, control);
+    const served = await bridge.firstServe();
+    resolving = false;
+    if (served.kind !== 'serving') {
+      await abandon();
+      return {kind: 'failed', failure: ofFirstServe(served)};
+    }
+    context.onServerPhase({kind: 'settingUpTunnel'});
   }
   let released = false;
   function giveBack(): void {
