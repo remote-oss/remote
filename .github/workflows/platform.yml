@@ -150,6 +150,13 @@ jobs:
           "the installer exited {0} after {1:n0} s" -f $process.ExitCode, $clock.Elapsed.TotalSeconds
           if ($process.ExitCode -ne 0) { exit 1 }
           $docker = Join-Path $env:DESKTOP_BIN 'docker.exe'
+          # The image's own Docker Engine (the docker service, for Windows containers) holds \\.\pipe\docker_engine, the
+          # pipe Desktop's API proxy listens on. While it runs, Desktop's backend stops at once ("open
+          # \\.\pipe\docker_engine: Access is denied"), so it is stopped and kept off for this job.
+          Get-Service docker -ErrorAction SilentlyContinue | Format-Table -AutoSize Name, Status, StartType
+          Stop-Service docker -Force -ErrorAction SilentlyContinue
+          Set-Service docker -StartupType Disabled -ErrorAction SilentlyContinue
+          Get-Service docker -ErrorAction SilentlyContinue | Format-Table -AutoSize Name, Status, StartType
           $clock.Restart()
           Start-Process 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
           # Desktop's own context, so the image's Windows engine can never answer for it
