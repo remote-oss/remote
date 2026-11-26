@@ -97,7 +97,7 @@ function textOf(file: string): string | undefined {
 /** Waits until the connection log stops gaining lines: a window's connection writes to it for a while after it is connected, and longer on a slow runner. */
 async function logSettled(): Promise<void> {
   let lines = -1;
-  for (let attempt = 0; attempt < 20 && lines !== connectionLog().length; ) {
+  for (let attempt = 0; attempt < 20 && lines !== connectionLog().length;) {
     lines = connectionLog().length;
     attempt += 1;
     await new Promise(resolve => setTimeout(resolve, 3_000));
@@ -566,9 +566,8 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
       .map(([name, text]) => ({
         name: name.replace(/^[0-9a-f-]+(?=\.json$)/u, '<session>'),
         removed: (
-          (JSON.parse(text) as {events: Array<Record<string, unknown>>})
-            .events
-        ).some(
+          JSON.parse(text) as {events: Array<Record<string, unknown>>}
+        ).events.some(
           event =>
             event.host === HOST_B &&
             event.kind === 'removed' &&
