@@ -77,6 +77,12 @@
       "path": "packages/lib-log/tsconfig.test.json"
     },
     {
+      "path": "packages/tunnel-agent"
+    },
+    {
+      "path": "packages/tunnel-agent/tsconfig.test.json"
+    },
+    {
       "path": "packages/tunnel-relay"
     },
     {
@@ -201,6 +207,9 @@
     },
     {
       "path": "tests/acceptance/windows-host"
+    },
+    {
+      "path": "tests/acceptance/containers-wsl"
     },
     {
       "path": "tests/acceptance/explorer-alone"

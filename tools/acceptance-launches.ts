@@ -41,6 +41,8 @@ interface LaunchCommon {
    * one; their names are HARNESS_WSL_DISTROS. Only a Windows client can, and another refuses the launch.
    */
   wslDistros?: true;
+  /** Whether the launch needs a Windows client: left out of the Linux parts, named by platform.yml's Windows job. */
+  windowsClient?: true;
   /**
    * Whether the launch's windows open the run's Windows SSH host, the alias `winhost`: Windows' OpenSSH Server on
    * 127.0.0.1, which the platform workflow's Windows job starts and passes as HARNESS_WINHOST_*. Only a Windows client
@@ -1358,7 +1360,8 @@ export function launchesOf(root: string): Launch[] {
       suite: 'no-proposals',
       proposedApi: false,
     },
-    // The CLI path: the editor's copy names a CLI source; named only until CI holds the CLI archives' token.
+    // The CLI path: the editor's copy names a CLI source. Named only, so a run that names no launch needs no CLI archives'
+    // token; CI's parts make it (tools/acceptance-parts.ts), in the job whose fetch step holds that token.
     {
       ...RENDERER_LAUNCH,
       label: 'cli-path',
@@ -1415,6 +1418,15 @@ export function launchesOf(root: string): Launch[] {
         'remote.SSH.remotePlatform': {winhost: 'windows'},
         'remote.SSH.permitPtyAllocation': true,
       },
+    },
+    // Dev Containers on a Windows client whose engine is the WSL distro's own, reached through executeInWSL; the platform
+    // workflow's Windows job only, by name.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-wsl',
+      suite: 'containers-wsl',
+      namedOnly: true,
+      windowsClient: true,
     },
     {
       ...RENDERER_LAUNCH,

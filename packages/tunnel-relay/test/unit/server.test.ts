@@ -1,19 +1,13 @@
 import {deepStrictEqual} from 'node:assert';
 import type {IncomingMessage, ServerResponse} from 'node:http';
 import {Readable} from 'node:stream';
-import type {RelayConfig} from '../../src/config.ts';
+import {problem} from '../../src/problem.ts';
 import {API_VERSION, type RouteContext} from '../../src/routes.ts';
 import {answerRequest, relayServer, write} from '../../src/server.ts';
 import {Store} from '../../src/store.ts';
-
-const CONFIG: RelayConfig = {
-  domain: 'relay.test',
-  port: 443,
-  certificateFile: '',
-  keyFile: '',
-  storeFile: ':memory:',
-  clusterId: 'usw2',
-};
+import {Tokens} from '../../src/auth/tokens.ts';
+import {Legs} from '../../src/legs/legs.ts';
+import {TEST_CONFIG} from './settings.ts';
 
 /** A request as the server reads it: its method, address, headers and body text. */
 function incoming(
@@ -21,12 +15,14 @@ function incoming(
   url: string | undefined,
   body = '',
   headers: Record<string, string | string[]> = {},
+  remoteAddress: string | null = '10.0.0.1',
 ): IncomingMessage {
   const request = Readable.from(body === '' ? [] : [Buffer.from(body)]);
   return Object.assign(request, {
     method,
     url,
     headers,
+    socket: {remoteAddress: remoteAddress ?? undefined},
   }) as unknown as IncomingMessage;
 }
 
@@ -71,7 +67,7 @@ function recorder(): {
 
 describe('the HTTPS service of the relay', () => {
   let store: Store;
-  let context: RouteContext;
+  let context: RouteContext & {legs: Legs};
   let reported: unknown[];
 
   beforeEach(() => {
@@ -79,11 +75,20 @@ describe('the HTTPS service of the relay', () => {
     reported = [];
     context = {
       store,
-      config: CONFIG,
-      authenticate: () => Promise.resolve({id: 7, login: 'owner'}),
+      config: TEST_CONFIG,
+      authenticate: () =>
+        Promise.resolve({kind: 'account', id: 7, login: 'owner'}),
+      tokens: new Tokens(Buffer.alloc(32, 1), () => 0),
       report: error => {
         reported.push(error);
       },
+      legs: new Legs(
+        () => Promise.resolve({kind: 'account', id: 7, login: 'owner'}),
+        error => {
+          reported.push(error);
+        },
+        10,
+      ),
     };
   });
 
@@ -104,6 +109,42 @@ describe('the HTTPS service of the relay', () => {
     deepStrictEqual(
       [answer.status, store.tunnelById('one')?.name],
       [200, 'web'],
+    );
+  });
+
+  it('hands the routes the address of the request’s socket, and an empty one when the socket has none', async () => {
+    const addresses: string[] = [];
+    const spying: RouteContext = {
+      ...context,
+      authenticate: (...given) => {
+        addresses.push(given[1]);
+        return Promise.resolve({kind: 'account', id: 1, login: 'octo'});
+      },
+    };
+    for (const remoteAddress of ['203.0.113.9', null]) {
+      await answerRequest(
+        incoming(
+          'GET',
+          `/tunnels?api-version=${API_VERSION}`,
+          '',
+          {},
+          remoteAddress,
+        ),
+        spying,
+      );
+    }
+    deepStrictEqual(addresses, ['203.0.113.9', '']);
+  });
+
+  it('writes the headers an answer carries, besides the request id', () => {
+    const {response, written} = recorder();
+    write(response, {
+      ...problem(429, 'Slow down.'),
+      headers: {'Retry-After': '30'},
+    });
+    deepStrictEqual(
+      [written.status, written.headers['Retry-After']],
+      [429, '30'],
     );
   });
 
@@ -265,5 +306,42 @@ describe('the HTTPS service of the relay', () => {
         },
       ],
     );
+  });
+
+  it('hands each upgrade to the legs, one with no address as an upgrade of /', async () => {
+    const server = relayServer(context, '', '');
+    const written = new Promise<string>(resolve => {
+      server.emit(
+        'upgrade',
+        incoming('GET', undefined),
+        {
+          on: () => undefined,
+          end(text: string) {
+            resolve(text);
+          },
+        },
+        Buffer.alloc(0),
+      );
+    });
+    deepStrictEqual((await written).split('\r\n')[0], 'HTTP/1.1 404 Refused');
+  });
+
+  it('reports an upgrade the legs fail on and destroys its socket, so the relay goes on', async () => {
+    const failing = new Error('the legs broke');
+    context.legs.upgrade = () => Promise.reject(failing);
+    const server = relayServer(context, '', '');
+    const destroyed = new Promise<boolean>(resolve => {
+      server.emit(
+        'upgrade',
+        incoming('GET', '/relay/host/one'),
+        {
+          destroy() {
+            resolve(true);
+          },
+        },
+        Buffer.alloc(0),
+      );
+    });
+    deepStrictEqual([await destroyed, reported], [true, [failing]]);
   });
 });

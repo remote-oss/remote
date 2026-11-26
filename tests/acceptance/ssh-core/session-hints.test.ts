@@ -1,7 +1,7 @@
 /**
  * @fileoverview The session record every resolve keeps (card connect-135, F-2605 BR-9): its environment hints, its
  * error hints with their numbers, its log hint, and the two records kept. Read through the README's documented key,
- * `remote.ssh.hints` in the extension's global state.
+ * the files of the extension's global storage folder `connection-hints`.
  */
 
 import {deepStrictEqual} from 'node:assert';
@@ -319,17 +319,12 @@ describe('the session record of every resolve (card connect-135)', function () {
           ),
         60_000,
       );
-      await waitFor(
-        'the record in the state database',
-        async () => 'remote.ssh.hints' in (await extensionState()),
-        60_000,
-      );
       const before = await extensionState();
       const indicator = (await statusItem('c135-d1', 'status.host')).text;
       const mark = recordLines().length;
       const logMark = connectionLog().length;
       await inWindow('c135-d1', CLEAR);
-      // The clear writes an empty store that says when it was cleared: the record list is empty, as the accessor reads it.
+      // The clear writes a clearing event into the window's own file: the record list is empty, as the accessor reads it.
       await waitFor(
         'the records to be gone',
         () => hintRecords().length === 0,
@@ -346,7 +341,7 @@ describe('the session record of every resolve (card connect-135)', function () {
           changedKeys(before, await extensionState()),
           (await statusItem('c135-d1', 'status.host')).text === indicator,
         ],
-        [0, [], [], true, ['remote.ssh.hints'], true],
+        [0, [], [], true, [], true],
       );
     } finally {
       await closeWindow('c135-d1').catch(() => undefined);

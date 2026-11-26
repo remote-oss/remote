@@ -38,7 +38,6 @@ import {
   prepareRunTemplates,
 } from './acceptance-templates.ts';
 import {spawn} from 'node:child_process';
-import {createHash} from 'node:crypto';
 import {
   appendFileSync,
   existsSync,
@@ -61,6 +60,7 @@ import {
   CLI_ARCHIVES,
   CLI_ARCHIVES_REPOSITORY,
   EARLIER_SERVER_ARCHIVE,
+  pinnedFileOf,
   type RunDownloads,
   startRunDownloads,
   UPDATE_SERVICE_NAME,
@@ -2367,9 +2367,10 @@ async function vscodeExecutable(version: string): Promise<string> {
   );
 }
 
-/** What the VSCodium download needs from outside: the network and the unpacking. */
+/** What the VSCodium download needs from outside: the network, the archive's write and the unpacking. */
 export interface VscodiumTransfer {
   download: (url: string) => Promise<Uint8Array>;
+  writeFile: (file: string, bytes: Uint8Array) => void;
   unpack: (archive: Uint8Array, folder: string) => void;
 }
 
@@ -2399,8 +2400,10 @@ export function vscodiumCliOf(
 
 /**
  * The VSCodium executable of the pinned release under `<root>/.vscode-test`, in a folder of the release and the
- * client's platform, so a build of another architecture is never taken for it. A missing build is downloaded, checked
- * against the release's sha256 and unpacked; one already there is used as it is.
+ * client's platform, so a build of another architecture is never taken for it. A missing build is unpacked from its
+ * release asset in the run's download cache, `<root>/.vscode-test/downloads`, which CI restores by the pins: an asset
+ * there with the release's sha256 is taken as it is, any other is downloaded, checked and written there first. A build
+ * already unpacked is used as it is.
  */
 export async function vscodiumExecutableOf(
   root: string,
@@ -2427,11 +2430,14 @@ export async function vscodiumExecutableOf(
   if (expected === undefined) {
     throw new Error(`no VSCodium build is pinned for ${key}`);
   }
-  const archive = await transfer.download(releaseAssetUrlOf(build.asset));
-  if (createHash('sha256').update(archive).digest('hex') !== expected) {
-    throw new Error('the VSCodium download does not match its checksum');
-  }
-  transfer.unpack(archive, folder);
+  const archive = await pinnedFileOf(
+    path.join(root, '.vscode-test', 'downloads', build.asset),
+    releaseAssetUrlOf(build.asset),
+    expected,
+    transfer,
+    'the VSCodium download does not match its checksum',
+  );
+  transfer.unpack(readFileSync(archive), folder);
   return executable;
 }
 
@@ -2473,11 +2479,10 @@ export async function runWithRetry(
 
 /**
  * The pauses, in milliseconds, before each retry of a download that failed: four tries in all, the pauses growing, so
- * that a burst of the release network's errors (504s that last a minute) passes before the last try.
+ * that a burst of the release network's errors (504s that last a minute) passes before the third try, and the last
+ * waits three minutes, as long as github.com has been seen refusing a runner (connect timeouts, 403s: #3197).
  */
-export const DOWNLOAD_PAUSES_MILLISECONDS: readonly number[] = [
-  5000, 15_000, 45_000,
-];
+const DOWNLOAD_PAUSES_MILLISECONDS: readonly number[] = [5000, 15_000, 180_000];
 
 /**
  * The text of a failure for the harness's line: an Error's message; when that is empty, its cause's text; when it
@@ -2988,12 +2993,14 @@ export function retriedGhcrLayer(
     );
 }
 
-/** Downloads `url` into memory through `fetcher`, with retries. */
+/** Downloads `url` into memory through `fetcher`, with retries, and reports the download on its first try. */
 export async function downloadWithRetry(
   url: string,
   fetcher: typeof fetch = fetch,
   pause: Sleeper = delay,
+  report: (line: string) => void = console.log.bind(console),
 ): Promise<Uint8Array> {
+  report(`acceptance: downloading ${url}`);
   return withRetries(
     async () => {
       const response = await answerOf(fetcher, url);
@@ -3003,7 +3010,7 @@ export async function downloadWithRetry(
       return new Uint8Array(await response.arrayBuffer());
     },
     pause,
-    console.log.bind(console),
+    report,
   );
 }
 
@@ -3113,7 +3120,11 @@ if (isMainModule(import.meta.url)) {
           REPOSITORY_ROOT,
           process.platform,
           process.arch,
-          {download: downloadWithRetry, unpack: unpackArchive},
+          {
+            download: downloadWithRetry,
+            writeFile: writeFileSync,
+            unpack: unpackArchive,
+          },
         ),
         cliEditor: cliSourceEditorOf.bind(undefined, runCommand),
         runTests: runTestCli,

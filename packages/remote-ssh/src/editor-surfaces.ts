@@ -50,10 +50,8 @@ import type {PromptEditor} from './surfaces/prompt-surface.ts';
 import type {TextInputPort} from './surfaces/text-input.ts';
 import type {Translate} from './surfaces/strings.ts';
 import type {SettingHost} from 'lib-identifiers';
-import {
-  hintRecorderOf,
-  type HintRecorderState,
-} from './diagnostics/hint-recorder.ts';
+import {hintRecorderOf} from './diagnostics/hint-recorder.ts';
+import type {HintEvents} from './diagnostics/hint-store.ts';
 import {
   troubleshootingOf,
   type TroubleshootingPorts,
@@ -112,8 +110,8 @@ export interface SurfaceContext {
   confirmationCopies: ConfirmationCopies;
   /** The profile's record of the notices the user asked not to see again. */
   noticeState: AcceptanceState;
-  /** The extension's global state, where the hints of a connect are kept. */
-  hintState: HintRecorderState;
+  /** The window's hint events, where the hints of a connect are kept. */
+  hintEvents: HintEvents;
   /** The editor side of the check at a resolve step's end. */
   troubleshooting: TroubleshootingPorts;
   /** The address of the documentation a hint points to. */
@@ -205,15 +203,13 @@ export function editorSurfacesOf(
     notice: adapters.notice,
     noticeState: context.noticeState,
     parseUri: context.parseUri,
-    hints: hintRecorderOf(context.hintState, {
+    hints: hintRecorderOf(context.hintEvents, {
       translate,
       documentation: context.documentation,
       now: () => new Date(),
       environmentHints: context.environmentHints,
       logMark: context.logMark,
       logText: context.logText,
-      delay: timerDelay,
-      logger: context.logger,
     }),
     troubleshooting: troubleshootingOf(context.troubleshooting),
     licenceModal: licenceModalOf(

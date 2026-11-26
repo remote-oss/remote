@@ -9,7 +9,6 @@ import {
   MAX_LABELS,
 } from '../../src/names.ts';
 import {problem, success} from '../../src/problem.ts';
-import {refuseAll} from '../../src/refuse-all.ts';
 
 /** The message `work` throws with. */
 function messageOf(work: () => unknown): string {
@@ -28,6 +27,8 @@ const SETTINGS = {
   TLS_KEY: '/run/key.pem',
   RELAY_STORE: '/run/relay.db',
   RELAY_CLUSTER: 'usw2',
+  RELAY_ALLOWLIST: '/run/allowlist',
+  RELAY_TOKEN_KEY: '/run/token.key',
 };
 
 describe('the contract rules of the relay', () => {
@@ -90,7 +91,7 @@ describe('the answers of the relay', () => {
   it('a problem carries the title of its status and its detail', () => {
     deepStrictEqual(
       [
-        [400, 401, 403, 404, 409, 500].map(
+        [400, 401, 403, 404, 409, 429, 500].map(
           status => (problem(status, 'why').body as {title: string}).title,
         ),
         problem(404, 'There is no such tunnel.'),
@@ -102,6 +103,7 @@ describe('the answers of the relay', () => {
           'Forbidden',
           'Not Found',
           'Conflict',
+          'Too Many Requests',
           'Error',
         ],
         {
@@ -118,13 +120,6 @@ describe('the answers of the relay', () => {
       [{status: 200, body: {answer: 1}}, {status: 200}],
     );
   });
-
-  it('the relay without sign-in refuses every request as unsigned', async () => {
-    deepStrictEqual(await refuseAll(), {
-      status: 401,
-      body: {title: 'Unauthorized', detail: 'Sign in with a GitHub account.'},
-    });
-  });
 });
 
 describe('the settings of the relay', () => {
@@ -136,7 +131,39 @@ describe('the settings of the relay', () => {
       keyFile: '/run/key.pem',
       storeFile: '/run/relay.db',
       clusterId: 'usw2',
+      githubApi: 'https://api.github.com',
+      allowlistFile: '/run/allowlist',
+      tokenKeyFile: '/run/token.key',
+      limits: {tunnels: 10, ports: 10, clients: 10},
     });
+  });
+
+  it('takes each limit from its setting, ten when it is unset', () => {
+    deepStrictEqual(
+      configOf({
+        ...SETTINGS,
+        RELAY_LIMIT_TUNNELS: '25',
+        RELAY_LIMIT_CLIENTS: '1',
+      }).limits,
+      {tunnels: 25, ports: 10, clients: 1},
+    );
+  });
+
+  it('refuses a limit that is not a positive whole number', () => {
+    deepStrictEqual(
+      ['0', '-3', '2.5', 'many', ''].map(value =>
+        messageOf(() => configOf({...SETTINGS, RELAY_LIMIT_PORTS: value})),
+      ),
+      Array(5).fill('RELAY_LIMIT_PORTS is not a positive whole number'),
+    );
+  });
+
+  it('asks the GitHub API the settings name instead of the public one', () => {
+    deepStrictEqual(
+      configOf({...SETTINGS, RELAY_GITHUB_API: 'https://github.test'})
+        .githubApi,
+      'https://github.test',
+    );
   });
 
   it('names a setting that is missing or empty', () => {
