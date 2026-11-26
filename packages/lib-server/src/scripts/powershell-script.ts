@@ -319,6 +319,24 @@ const KILL_BODY: readonly string[] = [
   "Complete-Step 'Ok'",
 ];
 
+/**
+ * Whether the server the data folder's commit recorded still runs, and the port its log last named, for a window that
+ * takes up a running server; it starts nothing, takes no lock and changes nothing.
+ */
+const HELD_SERVER_BODY: readonly string[] = [
+  ...SERVER_LINE_PATTERNS,
+  "if ($null -eq (Get-RecordedServer ($BOOT_PREFIX + '.pid'))) {",
+  "  Add-Fact 'server.alive' 'no'",
+  "  Complete-Step 'Ok'",
+  '}',
+  "Add-Fact 'server.alive' 'yes'",
+  "$HeldReady = Select-String -LiteralPath ($BOOT_PREFIX + '.log') -Pattern $ReadyPattern -ErrorAction SilentlyContinue | Select-Object -Last 1",
+  'if ($null -ne $HeldReady) {',
+  "  Add-Fact 'server.port' $HeldReady.Matches[0].Groups[1].Value",
+  '}',
+  "Complete-Step 'Ok'",
+];
+
 /** Uninstall: the servers ended, in the install root's data folder and the home's, and the data folder removed. */
 const UNINSTALL_BODY: readonly string[] = [
   ...DATA_FOLDER_GUARD,
@@ -545,6 +563,8 @@ function bodyOf(
       return UNINSTALL_BODY;
     case 'cleanup':
       return CLEANUP_BODY;
+    case 'heldServer':
+      return HELD_SERVER_BODY;
     case 'installCli':
       return INSTALL_CLI_BODY;
     case 'startCli':
@@ -566,6 +586,7 @@ export const POWERSHELL_STEPS: ReadonlySet<BootstrapRequest['step']> = new Set([
   'kill',
   'uninstall',
   'cleanup',
+  'heldServer',
   'installCli',
   'startCli',
   'stopCli',

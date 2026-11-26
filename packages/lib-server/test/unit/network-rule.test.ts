@@ -55,10 +55,16 @@ export function breaksNetworkRule(text: string): boolean {
   return PROXY_NAMES.test(text) || IMPORT_FORMS.some(form => form.test(text));
 }
 
-/** The `.ts` files under `packages/<package>/src`, for every package. */
+/**
+ * The services the rule leaves out: it binds code that runs in the extension host (contracts §5), and a service runs
+ * on its own and serves HTTP (layout.md, the service kind).
+ */
+const SERVICES = new Set(['tunnel-relay']);
+
+/** The `.ts` files under `packages/<package>/src`, for every package but the services. */
 function packageSources(): string[] {
   return readdirSync(PACKAGES, {withFileTypes: true})
-    .filter(entry => entry.isDirectory())
+    .filter(entry => entry.isDirectory() && !SERVICES.has(entry.name))
     .map(entry => path.join(PACKAGES, entry.name, 'src'))
     .flatMap(folder => {
       try {

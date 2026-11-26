@@ -63,6 +63,7 @@ export {
   type MaintenanceOutcome,
   uninstall,
 } from './lifecycle/maintenance.ts';
+export {heldServer, type HeldServerOutcome} from './lifecycle/held-server.ts';
 export {
   plan,
   type ExistingLayout,
@@ -206,4 +207,8 @@ export {
   type WatchedExecServer,
   watchedExecServer,
 } from './cli-control/exec-server.ts';
-export {type S045Event, s045EventOf} from './cli-control/progress.ts';
+export {
+  cliServerFolderOf,
+  type S045Event,
+  s045EventOf,
+} from './cli-control/progress.ts';
