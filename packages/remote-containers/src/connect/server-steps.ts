@@ -41,6 +41,7 @@ import {
   type ScriptParameters,
   startOrReuse,
   templatePlatformOf,
+  type ProbedHost,
   transfer,
   type TransferFailure,
 } from 'lib-server';
@@ -165,11 +166,16 @@ export interface StartedContainerServer {
   afterReady?: (lifetime: AbortSignal) => Promise<void>;
 }
 
-/** How the steps ended. */
-export type ServerResult =
-  StartedContainerServer | {kind: 'failed'; failure: Failed};
+/** The steps that ended in a failure. */
+interface FailedResult {
+  kind: 'failed';
+  failure: Failed;
+}
 
-function failedWith(failure: Failed): ServerResult {
+/** How the steps ended. */
+export type ServerResult = StartedContainerServer | FailedResult;
+
+function failedWith(failure: Failed): FailedResult {
   return {kind: 'failed', failure};
 }
 
@@ -241,7 +247,7 @@ function archiveNameOf(
 /** The parameters of every script of one connect; the tree is the same in all of them but the discovery probe. */
 function parametersOf(
   dependencies: ServerStepDependencies,
-  request: ServerRequest,
+  request: Pick<ServerRequest, 'remoteUser'>,
   installTree: string,
   archiveUrl: string,
 ): ScriptParameters {
@@ -442,78 +448,48 @@ function logDownloadSettings(dependencies: ServerStepDependencies): void {
   }
 }
 
-/** Runs the steps of one connect. */
-export async function runServerSteps(
+/** What the install of the server's files asks of a connect: the host's channel, the user, the phases and the signal. */
+type InstallRequest = Pick<
+  ServerRequest,
+  'channel' | 'remoteUser' | 'cancellation' | 'onPhase' | 'onDownloadPercent'
+>;
+
+/** What the probes found of the host, which the install of the server's files starts from. */
+interface FoundHost {
+  platform: ReturnType<typeof templatePlatformOf>;
+  host: ProbedHost;
+  /** The tree the server installs into and links to; empty for an install in the data folder. */
+  installTree: string;
+  dataFolder: string;
+}
+
+/** The server's files in place on the host. */
+interface InstalledServerFiles {
+  kind: 'installed';
+  /** The flag the start gives the server for the licence the user accepted. */
+  acceptanceFlag: boolean;
+  /** The folder of the server's own `node`. */
+  nodeFolder: string;
+  /** The archive's place in the client's cache; none for a server that was reused. */
+  archivePath: string | undefined;
+  /** The home's entry of the server. */
+  homeEntry: string;
+  /** Whether this connect fetched the archive now, and did not find it in the cache. */
+  freshlyDownloaded: boolean;
+}
+
+/**
+ * Plans where the server's files come from, has the licence accepted, and installs them with no start: a server already
+ * on the host is found and nothing is transferred.
+ */
+async function installServerFiles(
   dependencies: ServerStepDependencies,
-  request: ServerRequest,
-): Promise<ServerResult> {
+  request: InstallRequest,
+  found: FoundHost,
+): Promise<InstalledServerFiles | FailedResult> {
   const {profile, logger} = dependencies;
-  logDownloadSettings(dependencies);
   const {channel, cancellation} = request;
-  const discovered = await probe(
-    channel,
-    parametersOf(dependencies, request, '', ''),
-    cancellation,
-  );
-  if (discovered.kind === 'failed') {
-    return failedWith(probeFailure(discovered, logger));
-  }
-  const platform = templatePlatformOf(discovered.host);
-  const previewNote = previewNoteOf(platform);
-  if (
-    (request.created || request.previewNoteAlways === true) &&
-    previewNote !== undefined
-  ) {
-    logger.info(
-      filled(dependencies.translate, PREVIEW_TEMPLATES.previewNote, [
-        previewNote,
-      ]),
-    );
-  }
-  const platformName = `${platform.operatingSystem}-${platform.architecture}`;
-  const installTree =
-    cacheFolders(profile, profile.commit, platformName, request.volumeMounted)
-      .serverTree ?? '';
-  let host = discovered.host;
-  if (installTree !== '') {
-    await prepareVolumeFolders(
-      request.rootChannel,
-      profile,
-      platformName,
-      logger,
-      cancellation,
-    );
-    const withTree = await probe(
-      channel,
-      parametersOf(dependencies, request, installTree, ''),
-      cancellation,
-    );
-    if (withTree.kind === 'failed') {
-      return failedWith(probeFailure(withTree, logger));
-    }
-    host = withTree.host;
-  }
-  const dataFolder = `${host.home}/${serverDataFolderNameOrDefault(profile)}`;
-  const firstForUser =
-    request.extensionsOncePerUser !== true ||
-    !(await folderExistsOver(channel, dataFolder, cancellation));
-  const wantedExtensions = firstForUser ? request.defaultExtensions : [];
-  const installed = await installRelayScript(channel, dataFolder, cancellation);
-  if (installed.kind === 'failed') {
-    logger.info(`the relay script was not installed: ${installed.detail}`);
-    return failedWith(serverFailed());
-  }
-  const settingsWrite = await writeMachineSettings(
-    channel,
-    dataFolder,
-    request.machineSettings,
-    cancellation,
-  );
-  if (settingsWrite.kind === 'failed') {
-    logger.info(
-      `the machine settings were not written: ${settingsWrite.detail}`,
-    );
-  }
+  const {platform, host, installTree, dataFolder} = found;
   const policy = containersOverridePolicy();
   const resolution = resolveServerArchive(
     profile,
@@ -656,6 +632,98 @@ export async function runServerSteps(
     }
     freshlyDownloaded = transferred.fromCache !== true;
   }
+  return {
+    kind: 'installed',
+    acceptanceFlag: licence.acceptanceFlag,
+    nodeFolder,
+    archivePath,
+    homeEntry,
+    freshlyDownloaded,
+  };
+}
+
+/** Runs the steps of one connect. */
+export async function runServerSteps(
+  dependencies: ServerStepDependencies,
+  request: ServerRequest,
+): Promise<ServerResult> {
+  const {profile, logger} = dependencies;
+  logDownloadSettings(dependencies);
+  const {channel, cancellation} = request;
+  const discovered = await probe(
+    channel,
+    parametersOf(dependencies, request, '', ''),
+    cancellation,
+  );
+  if (discovered.kind === 'failed') {
+    return failedWith(probeFailure(discovered, logger));
+  }
+  const platform = templatePlatformOf(discovered.host);
+  const previewNote = previewNoteOf(platform);
+  if (
+    (request.created || request.previewNoteAlways === true) &&
+    previewNote !== undefined
+  ) {
+    logger.info(
+      filled(dependencies.translate, PREVIEW_TEMPLATES.previewNote, [
+        previewNote,
+      ]),
+    );
+  }
+  const platformName = `${platform.operatingSystem}-${platform.architecture}`;
+  const installTree =
+    cacheFolders(profile, profile.commit, platformName, request.volumeMounted)
+      .serverTree ?? '';
+  let host = discovered.host;
+  if (installTree !== '') {
+    await prepareVolumeFolders(
+      request.rootChannel,
+      profile,
+      platformName,
+      logger,
+      cancellation,
+    );
+    const withTree = await probe(
+      channel,
+      parametersOf(dependencies, request, installTree, ''),
+      cancellation,
+    );
+    if (withTree.kind === 'failed') {
+      return failedWith(probeFailure(withTree, logger));
+    }
+    host = withTree.host;
+  }
+  const dataFolder = `${host.home}/${serverDataFolderNameOrDefault(profile)}`;
+  const firstForUser =
+    request.extensionsOncePerUser !== true ||
+    !(await folderExistsOver(channel, dataFolder, cancellation));
+  const wantedExtensions = firstForUser ? request.defaultExtensions : [];
+  const installed = await installRelayScript(channel, dataFolder, cancellation);
+  if (installed.kind === 'failed') {
+    logger.info(`the relay script was not installed: ${installed.detail}`);
+    return failedWith(serverFailed());
+  }
+  const settingsWrite = await writeMachineSettings(
+    channel,
+    dataFolder,
+    request.machineSettings,
+    cancellation,
+  );
+  if (settingsWrite.kind === 'failed') {
+    logger.info(
+      `the machine settings were not written: ${settingsWrite.detail}`,
+    );
+  }
+  const files = await installServerFiles(dependencies, request, {
+    platform,
+    host,
+    installTree,
+    dataFolder,
+  });
+  if (files.kind === 'failed') {
+    return files;
+  }
+  const {nodeFolder, archivePath, homeEntry, freshlyDownloaded} = files;
   const serviceUrl = profile.gallery?.serviceUrl;
   const cachePorts = {
     queryGallery: dependencies.queryGallery,
@@ -697,7 +765,7 @@ export async function runServerSteps(
     {
       bindHost: '127.0.0.1',
       portRange: request.devPort,
-      licenceAccepted: licence.acceptanceFlag,
+      licenceAccepted: files.acceptanceFlag,
       graceSeconds: 0,
       defaultExtensions,
       fileWatcherPollingMilliseconds: 0,
