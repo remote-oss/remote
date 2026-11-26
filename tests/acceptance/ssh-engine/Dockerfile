@@ -25,6 +25,7 @@ RUN apk add --no-cache --upgrade openssh-client-default openssh-server shadow li
        'PasswordAuthentication no' \
        'KbdInteractiveAuthentication no' \
        'PubkeyAuthentication yes' \
+       'AllowTcpForwarding yes' \
        'AuthorizedKeysFile /etc/ssh/keys/%u' \
        'Match User engine-pw,engine-pw2' \
        '  PasswordAuthentication yes' \
