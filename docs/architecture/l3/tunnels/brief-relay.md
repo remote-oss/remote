@@ -125,6 +125,11 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
     port 31545 (`[cli] constants.rs:14-15`) are the host agent's and the client's business, not the relay's.
 - **Keep-alive:** each side pings after 60 s of silence and ends the leg if no pong comes within 10 s (`ws.rs:147-187`);
   the relay answers pings and runs the same machine on its side.
+- **A leg's lifetime:** its token is checked when the leg opens, and the token's owner (`own`) must still be on the
+  allowlist then. An open leg lives until it closes, its tunnel is deleted, or its owner loses access. When the relay
+  re-reads the allowlist, it closes every leg of a tunnel whose owner is no longer listed. There's no timer at the
+  token's `exp`, since the protocol's clients renew a token only when a connect gets 401
+  (`ts/src/connections/tunnelConnectionSession.ts:400-405`) (`ruling-3227-leg-lifetime`).
 - **Not offered in release 1:** the TypeScript SDK's `-v2-dev` subprotocols (`ts/src/connections/tunnelRelayTunnelHost.ts:63`,
   `tunnelRelayTunnelClient.ts:42`). A client that asks only for them is refused at the upgrade.
 
