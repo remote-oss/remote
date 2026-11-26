@@ -1428,6 +1428,15 @@ export function launchesOf(root: string): Launch[] {
       namedOnly: true,
       windowsClient: true,
     },
+    // Dev Containers on a Windows client with Docker Desktop's WSL 2 engine; the platform workflow's Windows job only,
+    // by name.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-desktop',
+      suite: 'containers-desktop',
+      namedOnly: true,
+      windowsClient: true,
+    },
     {
       ...RENDERER_LAUNCH,
       label: 'wsl-linux-standdown',

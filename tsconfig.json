@@ -206,6 +206,9 @@
       "path": "tests/acceptance/containers-wsl"
     },
     {
+      "path": "tests/acceptance/containers-desktop"
+    },
+    {
       "path": "tests/acceptance/explorer-alone"
     },
     {
