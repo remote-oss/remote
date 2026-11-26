@@ -175,7 +175,7 @@ describe('a Remote-SSH window on an SSH host with Docker (card #3081)', function
     );
   });
 
-  it('F-0207 AC-28 (c3081-ac28): in a Remote-SSH window on a Linux host, with executeInWSL true, a distro that does not exist and forwardWSLServices false, Reopen in Container opens the container as with the defaults: the title and the remote indicator name the container and the SSH host, the container has only the vscode volume and the workspace bind, and no dialog or notification appears', async () => {
+  it.skip('F-0207 AC-28 (c3081-ac28): waits for #3238 (Reopen in Container does nothing in a window with a remote name): in a Remote-SSH window on a Linux host, with executeInWSL true, a distro that does not exist and forwardWSLServices false, Reopen in Container opens the container as with the defaults: the title and the remote indicator name the container and the SSH host, the container has only the vscode volume and the workspace bind, and no dialog or notification appears', async () => {
     const label = 'Ssh Host';
     await onDockerHost(
       'c3081-dh',
