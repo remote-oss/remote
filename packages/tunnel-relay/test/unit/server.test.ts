@@ -275,6 +275,7 @@ describe('the HTTPS service of the relay', () => {
         'upgrade',
         incoming('GET', undefined),
         {
+          on: () => undefined,
           end(text: string) {
             resolve(text);
           },
@@ -283,5 +284,24 @@ describe('the HTTPS service of the relay', () => {
       );
     });
     deepStrictEqual((await written).split('\r\n')[0], 'HTTP/1.1 404 Refused');
+  });
+
+  it('reports an upgrade the legs fail on and destroys its socket, so the relay goes on', async () => {
+    const failing = new Error('the legs broke');
+    context.legs.upgrade = () => Promise.reject(failing);
+    const server = relayServer(context, '', '');
+    const destroyed = new Promise<boolean>(resolve => {
+      server.emit(
+        'upgrade',
+        incoming('GET', '/relay/host/one'),
+        {
+          destroy() {
+            resolve(true);
+          },
+        },
+        Buffer.alloc(0),
+      );
+    });
+    deepStrictEqual([await destroyed, reported], [true, [failing]]);
   });
 });

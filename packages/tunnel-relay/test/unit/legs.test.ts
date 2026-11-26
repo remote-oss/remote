@@ -1,12 +1,13 @@
 import {deepStrictEqual} from 'node:assert';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {createServer, type Server} from 'node:http';
-import type {AddressInfo} from 'node:net';
+import {createServer, type IncomingMessage, type Server} from 'node:http';
+import {connect, type AddressInfo, type Socket} from 'node:net';
 import devTunnelsSsh from '@microsoft/dev-tunnels-ssh';
+import {PassThrough} from 'node:stream';
 import {WebSocket, type ClientOptions} from 'ws';
 import {sendCopies} from '../../src/legs/copies.ts';
-import {Legs, type Timers} from '../../src/legs/legs.ts';
+import {LARGEST_MESSAGE, Legs, type Timers} from '../../src/legs/legs.ts';
 import type {Authenticate} from '../../src/routes.ts';
 
 const {
@@ -105,6 +106,7 @@ describe("the relay's WebSocket legs", () => {
   let address: string;
   const opened: WebSocket[] = [];
   const sessions: HostSide[] = [];
+  const sockets: Socket[] = [];
   let reported: unknown[];
 
   /** Hears a failure the legs report. */
@@ -132,6 +134,9 @@ describe("the relay's WebSocket legs", () => {
     }
     for (const websocket of opened.splice(0)) {
       websocket.terminate();
+    }
+    for (const socket of sockets.splice(0)) {
+      socket.destroy();
     }
     server.closeAllConnections();
     await new Promise(resolve => server.close(resolve));
@@ -562,6 +567,129 @@ describe("the relay's WebSocket legs", () => {
       await closed(websocket);
       await until(() => timers.delays().length === 0);
       deepStrictEqual([afterMessage, afterPing], [[60_000], [60_000]]);
+    });
+  });
+
+  describe('a leg that misbehaves, or a socket that fails', () => {
+    /** A client leg of tunnel `one` upgraded by hand, whose socket can then write what a well-behaved client never would. */
+    async function rawClient(): Promise<Socket> {
+      const socket = connect(Number(new URL(address).port), '127.0.0.1');
+      sockets.push(socket);
+      socket.write(
+        [
+          'GET /relay/client/one HTTP/1.1',
+          'Host: relay.test',
+          'Connection: Upgrade',
+          'Upgrade: websocket',
+          'Sec-WebSocket-Version: 13',
+          `Sec-WebSocket-Key: ${Buffer.alloc(16, 1).toString('base64')}`,
+          `Sec-WebSocket-Protocol: ${CLIENT}`,
+          'Authorization: tunnel one connect',
+          '',
+          '',
+        ].join('\r\n'),
+      );
+      await new Promise(resolve => socket.once('data', resolve));
+      return socket;
+    }
+
+    /** Whether the relay still pipes a new client of tunnel `one` through to its echoing host. */
+    async function stillServes(): Promise<string> {
+      const next = await client('one', [Buffer.from('again')]);
+      return String(await bytesOf(next.received, 5));
+    }
+
+    it("refuses an upgrade whose target isn't a URL with 400, and goes on serving", async () => {
+      await host('one');
+      deepStrictEqual(
+        [await refusal('//', [HOST], 'tunnel one host'), await stillServes()],
+        [[400, "The leg's address is not valid."], 'again'],
+      );
+    });
+
+    it('ends a leg that sends a frame with its reserved bits set, reports why, and goes on serving', async () => {
+      await host('one');
+      const broken = await rawClient();
+      const ended = new Promise(resolve => broken.once('close', resolve));
+      broken.write(Buffer.from([0xb2, 0x80, 0, 0, 0, 0]));
+      await ended;
+      deepStrictEqual(
+        [reported.map(String), await stillServes()],
+        [
+          ['RangeError: Invalid WebSocket frame: RSV2 and RSV3 must be clear'],
+          'again',
+        ],
+      );
+    });
+
+    it('ends a leg that sends a message larger than the largest it takes, and goes on serving', async () => {
+      await host('one');
+      const large = await client('one');
+      const ended = closed(large.websocket);
+      large.websocket.send(Buffer.alloc(LARGEST_MESSAGE + 1));
+      deepStrictEqual(
+        [await ended, reported.map(String), await stillServes()],
+        [1009, ['RangeError: Max payload size exceeded'], 'again'],
+      );
+    });
+
+    it('destroys an upgrade socket that fails while its sign-in is asked', async () => {
+      const socket = new PassThrough();
+      const request = {
+        url: '/relay/host/one',
+        headers: {'sec-websocket-protocol': HOST, authorization: 'refused'},
+      };
+      const upgrading = legs.upgrade(
+        request as unknown as IncomingMessage,
+        socket,
+        Buffer.alloc(0),
+      );
+      socket.emit('error', new Error('reset by the peer'));
+      await upgrading;
+      deepStrictEqual(socket.destroyed, true);
+    });
+  });
+
+  describe('the pace of a client leg', () => {
+    const FLOOD = 32 * 1024 * 1024;
+    const CHUNK = 64 * 1024;
+
+    it("lets the host send no faster than a client that doesn't read takes the bytes, and delivers all of them once it does", async () => {
+      let sent = 0;
+      await host('one', event => {
+        const {channel} = event;
+        channel.onDataReceived(data => {
+          channel.adjustWindow(data.length);
+          void (async () => {
+            while (sent < FLOOD) {
+              await channel.send(Buffer.alloc(CHUNK));
+              sent += CHUNK;
+            }
+          })();
+        });
+      });
+      const slow = await client('one');
+      slow.websocket.pause();
+      slow.websocket.send(Buffer.from('go'));
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const whilePaused = sent;
+      slow.websocket.resume();
+      deepStrictEqual(
+        [whilePaused < FLOOD / 2, (await bytesOf(slow.received, FLOOD)).length],
+        [true, FLOOD],
+      );
+    });
+
+    it("stops reading a client whose bytes wait for a host that doesn't read", async () => {
+      await host('one', event => {
+        event.channel.onDataReceived(ignore);
+      });
+      const fast = await client('one');
+      for (let offset = 0; offset < FLOOD; offset += CHUNK) {
+        fast.websocket.send(Buffer.alloc(CHUNK));
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
+      deepStrictEqual(fast.websocket.bufferedAmount > FLOOD / 2, true);
     });
   });
 });

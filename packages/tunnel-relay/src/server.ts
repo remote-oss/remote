@@ -28,7 +28,12 @@ export function relayServer(
   server.on(
     'upgrade',
     (request: IncomingMessage, socket: Duplex, head: Buffer) => {
-      void context.legs.upgrade(request, socket, head);
+      void context.legs
+        .upgrade(request, socket, head)
+        .catch((error: unknown) => {
+          context.report(error);
+          socket.destroy();
+        });
     },
   );
   return server;

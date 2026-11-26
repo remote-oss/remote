@@ -3,7 +3,9 @@
  * server the relay is, with key exchange, host key and cipher all `none` (`[dev-tunnels] rs/src/connections/
  * relay_tunnel_host.rs:367-383,951-956`). Each client leg is piped, unread, through a `client-ssh-session-stream`
  * channel the relay opens on its tunnel's host session (`:82-106,958-969`). A leg that sends nothing for a minute is
- * pinged, and ended when no pong comes within ten seconds (`ws.rs:147-187`).
+ * pinged, and ended when no pong comes within ten seconds (`ws.rs:147-187`). Each direction of a client's pipe waits
+ * for the side it writes to: the host's window opens again only once the client's socket has taken the bytes, and the
+ * client's socket is not read while its bytes wait for the host's window.
  */
 
 import type {IncomingMessage} from 'node:http';
@@ -19,6 +21,7 @@ const {
   SshSessionConfiguration,
   WebSocketStream,
   SshDisconnectReason,
+  CancellationTokenSource,
 } = devTunnelsSsh;
 
 type HostSession = InstanceType<typeof SshServerSession>;
@@ -32,6 +35,9 @@ const PING_AFTER = 60 * 1000;
 
 /** How long the relay waits for the pong, in milliseconds. */
 const PONG_WITHIN = 10 * 1000;
+
+/** The largest message a leg takes, in bytes: twice the largest SSH packet the SSH library reads, 1 MiB. */
+export const LARGEST_MESSAGE = 2 * 1024 * 1024;
 
 /** The timers the keep-alive runs on. */
 export interface Timers {
@@ -78,10 +84,15 @@ export class Legs implements TunnelLegs {
     socket: Duplex,
     head: Buffer,
   ): Promise<void> {
-    const [, relay, side, tunnelId, ...rest] = new URL(
-      request.url ?? '/',
-      'https://relay.invalid',
-    ).pathname.split('/');
+    socket.on('error', () => {
+      socket.destroy();
+    });
+    const parts = pathParts(request.url);
+    if (parts === undefined) {
+      refuse(socket, problem(400, "The leg's address is not valid."));
+      return;
+    }
+    const [, relay, side, tunnelId, ...rest] = parts;
     if (
       relay !== 'relay' ||
       (side !== 'host' && side !== 'client') ||
@@ -127,7 +138,7 @@ export class Legs implements TunnelLegs {
     }
     if (side === 'host') {
       this.sockets.host.handleUpgrade(request, socket, head, websocket => {
-        this.keepAlive(websocket);
+        this.watch(websocket);
         void this.hostLeg(websocket, tunnelId);
       });
       return;
@@ -138,7 +149,7 @@ export class Legs implements TunnelLegs {
       return;
     }
     this.sockets.client.handleUpgrade(request, socket, head, websocket => {
-      this.keepAlive(websocket);
+      this.watch(websocket);
       void clientLeg(websocket, host);
     });
   }
@@ -175,8 +186,12 @@ export class Legs implements TunnelLegs {
     );
   }
 
-  /** Pings `websocket` once it has sent nothing for a minute, and ends it when no pong follows within ten seconds. */
-  private keepAlive(websocket: WebSocket): void {
+  /**
+   * Reports an error of `websocket`, which `ws` ends; pings it once it has sent nothing for a minute, and ends it when
+   * no pong follows within ten seconds.
+   */
+  private watch(websocket: WebSocket): void {
+    websocket.on('error', this.report);
     const timers = this.timers;
     let pinged = false;
     let handle = timers.start(lapse, PING_AFTER);
@@ -205,7 +220,20 @@ export class Legs implements TunnelLegs {
 
 /** The upgrades of one side of the relay, which answer with its subprotocol. */
 function socketsSpeaking(protocol: string): WebSocketServer {
-  return new WebSocketServer({noServer: true, handleProtocols: () => protocol});
+  return new WebSocketServer({
+    noServer: true,
+    maxPayload: LARGEST_MESSAGE,
+    handleProtocols: () => protocol,
+  });
+}
+
+/** The parts of the path of upgrade target `target`, or none when it is not a URL. */
+function pathParts(target: string | undefined): string[] | undefined {
+  try {
+    return new URL(target ?? '/', 'https://relay.invalid').pathname.split('/');
+  } catch {
+    return undefined;
+  }
 }
 
 /** Pipes a client leg through a new channel of `host`, holding what the client sends before the channel is open. */
@@ -214,12 +242,22 @@ async function clientLeg(
   host: HostSession,
 ): Promise<void> {
   const opening = host.openChannel(CLIENT_CHANNEL);
+  const ending = new CancellationTokenSource();
   let sending: Promise<unknown> = opening;
+  let waiting = 0;
   websocket.on('message', (data: Buffer) => {
     const copy = Buffer.from(data);
+    waiting += 1;
+    websocket.pause();
     sending = sending
-      .then(async () => (await opening).send(copy))
-      .catch(() => undefined);
+      .then(async () => (await opening).send(copy, ending.token))
+      .catch(() => undefined)
+      .finally(() => {
+        waiting -= 1;
+        if (waiting === 0) {
+          websocket.resume();
+        }
+      });
   });
   let channel: Awaited<typeof opening>;
   try {
@@ -229,13 +267,20 @@ async function clientLeg(
     return;
   }
   channel.onDataReceived(data => {
-    websocket.send(Buffer.from(data));
-    channel.adjustWindow(data.length);
+    websocket.send(Buffer.from(data), () => {
+      channel.adjustWindow(data.length);
+    });
   });
   channel.onClosed(() => {
+    if (waiting > 0) {
+      // A paused socket would never read the client's answer to a close, and its bytes have nowhere to go.
+      websocket.terminate();
+      return;
+    }
     websocket.close();
   });
   websocket.on('close', () => {
+    ending.cancel();
     void channel.close().catch(() => undefined);
   });
 }
