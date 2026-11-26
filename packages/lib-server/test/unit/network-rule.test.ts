@@ -59,7 +59,7 @@ export function breaksNetworkRule(text: string): boolean {
  * The services the rule leaves out: it binds code that runs in the extension host (contracts §5), and a service runs
  * on its own and serves HTTP (layout.md, the service kind).
  */
-const SERVICES = new Set(['tunnel-relay']);
+const SERVICES = new Set(['tunnel-agent', 'tunnel-relay']);
 
 /** The `.ts` files under `packages/<package>/src`, for every package but the services. */
 function packageSources(): string[] {

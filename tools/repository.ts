@@ -34,7 +34,7 @@ export function isLibraryFolder(folder: string): boolean {
 }
 
 /** The services: workspace packages that run on their own, outside the editor (layout.md). */
-const SERVICE_FOLDERS: readonly string[] = ['tunnel-relay'];
+const SERVICE_FOLDERS: readonly string[] = ['tunnel-agent', 'tunnel-relay'];
 
 /** Whether `folder` under packages/ is a service. */
 export function isServiceFolder(folder: string): boolean {
