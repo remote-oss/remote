@@ -1,6 +1,7 @@
 {
   "exclude": {
-    "src/main.ts": "starts the agent"
+    "src/main.ts": "starts the agent",
+    "src/sdk.ts": "the relay's service and the host leg over the dev tunnels SDK: the conformance job runs it against a relay"
   },
   "ratchet": {
     "lines": 100,

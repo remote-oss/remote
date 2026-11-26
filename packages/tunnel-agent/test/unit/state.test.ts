@@ -12,6 +12,7 @@ import path from 'node:path';
 import {
   readStateFile,
   readTunnelRecord,
+  removeStateFile,
   stateFolderOf,
   writeStateFile,
   writeTunnelRecord,
@@ -95,5 +96,12 @@ describe("the agent's state folder", () => {
       seen.push(readTunnelRecord(folder));
     }
     deepStrictEqual(seen, Array<undefined>(7).fill(undefined));
+  });
+
+  it('removes a state file, and a file that is not there is already removed', () => {
+    writeStateFile(folder, 'credential', 'token');
+    removeStateFile(folder, 'credential');
+    removeStateFile(folder, 'credential');
+    deepStrictEqual(readStateFile(folder, 'credential'), undefined);
   });
 });

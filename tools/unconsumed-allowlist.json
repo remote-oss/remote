@@ -247,20 +247,6 @@
       "card": "#2396",
       "slice": "remote-wsl",
       "decision": "core sets it on a Windows desktop, and only D9b (the outer-context module, tgt-4 #2396) may set it in the extension (ruling-2348-shared-context-key); D9b isn't built, so nothing in the package sets it yet"
-    },
-    {
-      "package": "tunnel-agent",
-      "kind": "module",
-      "key": "src/state.ts",
-      "card": "#3161",
-      "slice": "tunnels release 1"
-    },
-    {
-      "package": "tunnel-agent",
-      "kind": "module",
-      "key": "src/config.ts",
-      "card": "#3160",
-      "slice": "tunnels release 1"
     }
   ]
 }
