@@ -14,7 +14,8 @@ lacks another window's write drops it.
 - **The handoffs** (`handoffStoreOf`): what a window leaves for the next one to take once, across a reload or a restart,
   one file for each handoff in a folder of its kind, named by a hash of its key. The taker claims the file by renaming it
   to a name of its own, which only one of several windows that activate at once can do, then reads it and deletes it. A
-  handoff older than its lifetime, dated in the future or not a value its taker accepts is deleted and taken by none.
+  handoff older than its lifetime, dated in the future or not a value its taker accepts is deleted and taken by none. A
+  handoff can also be peeked, which reads it as the taker would and leaves it where it is.
 - **The file port** (`EventFiles`, `NODE_EVENT_FILES`): the operations both stores use, which a row replaces;
   `lib-state/testing/memory-files` is the port in memory.
 

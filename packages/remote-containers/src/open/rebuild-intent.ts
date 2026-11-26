@@ -1,16 +1,16 @@
 /**
  * @fileoverview The rebuild intent: what a window leaves for the resolve that follows its reload, so that the next
- * connect removes and builds the container again. It lives in the extension's own `globalState`, never synced, and
- * expires after five minutes.
+ * connect removes and builds the container again. It is one file of the extension's own storage for each payload,
+ * taken once by the window that gets to it first, and expires after five minutes.
  */
 
 import {
-  type IntentMemento,
-  storeTimedEntry,
-  takeTimedEntry,
-} from '../state/timed-store.ts';
+  type HandoffKind,
+  leaveHandoff,
+  takeHandoff,
+} from '../state/handoffs.ts';
 
-/** The extension's own key in `globalState`; never synced. */
+/** The key under which an earlier version kept the intents in the global state. */
 export const REBUILD_INTENTS_KEY =
   'remote-oss.remote-containers.rebuildIntents';
 
@@ -26,10 +26,14 @@ export interface RebuildIntent {
   buildNoCache: boolean;
 }
 
+/** What a stored intent holds. */
+export interface RebuildIntentValue {
+  removeExistingContainer: true;
+  buildNoCache: boolean;
+}
+
 /** The shape a stored intent has. */
-function isIntentValue(
-  value: unknown,
-): value is {removeExistingContainer: true; buildNoCache: boolean} {
+export function isIntentValue(value: unknown): value is RebuildIntentValue {
   const record = value as Record<string, unknown> | null;
   return (
     typeof record === 'object' &&
@@ -39,38 +43,27 @@ function isIntentValue(
   );
 }
 
+/** The handoffs of rebuild intents. */
+export type RebuildHandoffs = HandoffKind<RebuildIntentValue>;
+
 /** Leaves an intent for `payload`, the authority's payload of the window that will reload. */
 export function storeRebuildIntent(
-  memento: IntentMemento,
+  handoffs: RebuildHandoffs,
   payload: string,
   options: RebuildOptions,
-  now: number,
 ): Promise<void> {
-  return storeTimedEntry(
-    memento,
-    REBUILD_INTENTS_KEY,
-    payload,
-    {
-      removeExistingContainer: true,
-      buildNoCache: options.buildNoCache,
-    },
-    now,
-  );
+  return leaveHandoff(handoffs, payload, {
+    removeExistingContainer: true,
+    buildNoCache: options.buildNoCache,
+  });
 }
 
 /** Takes the intent for `payload` once; none when there was none or it expired. */
-export async function takeRebuildIntent(
-  memento: IntentMemento,
+export function takeRebuildIntent(
+  handoffs: RebuildHandoffs,
   payload: string,
-  now: number,
-): Promise<RebuildIntent | undefined> {
-  const entry = await takeTimedEntry(
-    memento,
-    REBUILD_INTENTS_KEY,
-    payload,
-    now,
-    isIntentValue,
-  );
+): RebuildIntent | undefined {
+  const entry = takeHandoff(handoffs, payload);
   return entry === undefined
     ? undefined
     : {storedAt: entry.storedAt, ...entry.value};

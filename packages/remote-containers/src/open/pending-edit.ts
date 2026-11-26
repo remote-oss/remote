@@ -1,16 +1,16 @@
 /**
  * @fileoverview The configuration file that Edit Locally wants open in the window it switches to: kept in
- * `globalState` under the local folder, with the time, and taken once when the extension activates there.
+ * one file of the extension's own storage for the local folder, taken once when the extension activates there.
  */
 
 import type {Logger} from 'lib-log';
 import {
-  type IntentMemento,
-  storeTimedEntry,
-  takeTimedEntry,
-} from '../state/timed-store.ts';
+  type HandoffKind,
+  leaveHandoff,
+  takeHandoff,
+} from '../state/handoffs.ts';
 
-/** The extension's own key in `globalState`; it is not synced. */
+/** The key under which an earlier version kept the pending edits in the global state. */
 export const PENDING_EDITS_KEY = 'remote-oss.remote-containers.pendingEdits';
 
 /** The files to open: the configuration's path on this machine, and the failed attempt's log when one was written. */
@@ -19,7 +19,8 @@ export interface PendingEdit {
   logFile?: string;
 }
 
-function isPendingEdit(value: unknown): value is PendingEdit {
+/** Whether `value` is what a pending edit holds. */
+export function isPendingEdit(value: unknown): value is PendingEdit {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -30,46 +31,37 @@ function isPendingEdit(value: unknown): value is PendingEdit {
   );
 }
 
+/** The handoffs of pending edits. */
+export type PendingEditHandoffs = HandoffKind<PendingEdit>;
+
 /** Keeps `configFile`, and the attempt's `logFile` when there is one, to be opened in the window that opens `folder` next. */
 export function storePendingEdit(
-  memento: IntentMemento,
+  handoffs: PendingEditHandoffs,
   folder: string,
   configFile: string,
-  now: number,
   logFile?: string,
 ): Promise<void> {
-  return storeTimedEntry(
-    memento,
-    PENDING_EDITS_KEY,
+  return leaveHandoff(
+    handoffs,
     folder,
     logFile === undefined ? {configFile} : {configFile, logFile},
-    now,
   );
 }
 
 /** The file to open for `folder`, once; undefined when none was kept or it expired. */
-export async function takePendingEdit(
-  memento: IntentMemento,
+export function takePendingEdit(
+  handoffs: PendingEditHandoffs,
   folder: string,
-  now: number,
-): Promise<PendingEdit | undefined> {
-  const taken = await takeTimedEntry(
-    memento,
-    PENDING_EDITS_KEY,
-    folder,
-    now,
-    isPendingEdit,
-  );
-  return taken?.value;
+): PendingEdit | undefined {
+  return takeHandoff(handoffs, folder)?.value;
 }
 
 /** What the activation reads of the window and opens. */
 export interface PendingEditPorts {
-  memento: IntentMemento;
+  handoffs: PendingEditHandoffs;
   /** The name of the remote the window is on; none for a local window. */
   remoteName(): string | undefined;
   folders(): ReadonlyArray<{scheme: string; fsPath: string}>;
-  now(): number;
   /** Opens a file of this machine in the window. */
   open(file: string): PromiseLike<unknown>;
   /** Opens the failed attempt's log in a second, unfocused group beside the configuration. */
@@ -92,7 +84,7 @@ export async function openPendingEdit(ports: PendingEditPorts): Promise<void> {
   }
   let edit: PendingEdit | undefined;
   try {
-    edit = await takePendingEdit(ports.memento, only.fsPath, ports.now());
+    edit = takePendingEdit(ports.handoffs, only.fsPath);
   } catch (caught) {
     ports.logger.warn(
       `the pending edit could not be read: ${caught instanceof Error ? caught.message : String(caught)}`,
