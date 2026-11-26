@@ -37,9 +37,9 @@ import {closeAllButLocal, serverMainProcesses} from '../windows/maintenance.ts';
 import {paletteItems} from '../windows/palette.ts';
 import {
   allQuickPickRows,
-  groupedQuickPickRows,
   pressControlAlt,
   pressEscape,
+  quickPickOf,
   statusBarText,
 } from '../windows/renderer.ts';
 import {PLATFORMS} from '../windows/tunnel-support.ts';
@@ -257,6 +257,38 @@ async function stillHeld(): Promise<boolean> {
     throw new Error(`the held check's pgrep exited ${String(status)}`);
   }
   return status === 0;
+}
+
+/**
+ * The indicator menu's item labels in window `window`, settled: the item list is stable across two reads and holds
+ * at least one item. A settled read that is empty is the menu not read, a harness failure the read fails on rather
+ * than an absence read from an empty menu.
+ */
+async function settledMenuOf(window: string): Promise<string[]> {
+  let previous: string[] | undefined;
+  let settled: string[] = [];
+  await waitFor(
+    'the indicator menu to settle',
+    async () => {
+      const read = (await allQuickPickRows(window)).map(each => each.label);
+      const stable =
+        previous !== undefined &&
+        JSON.stringify(read) === JSON.stringify(previous);
+      previous = read;
+      if (!stable) {
+        return false;
+      }
+      if (read.length === 0) {
+        throw new Error(
+          `menu not read: the indicator menu of ${window} settled empty`,
+        );
+      }
+      settled = read;
+      return true;
+    },
+    30_000,
+  );
+  return settled;
 }
 
 describe('Connect Current Window to Host', function () {
@@ -740,19 +772,24 @@ describe('Connect Current Window to Host', function () {
         'Connect Current Window',
       );
       await pressEscape('c3017-inflight');
+      // pressEscape only dispatches the key: the menu's read must not land on the palette's rows.
+      await waitFor(
+        'the palette closed',
+        async () => (await quickPickOf('c3017-inflight')) === undefined,
+        10_000,
+      );
       void inWindow('c3017-inflight', 'workbench.action.remote.showMenu').catch(
         () => undefined,
       );
+      // The menu's own placeholder, so the read is the menu's.
       await waitFor(
         'the indicator menu',
         async () =>
-          (await groupedQuickPickRows('c3017-inflight').catch(() => []))
-            .length > 0,
+          (await quickPickOf('c3017-inflight'))?.placeholder ===
+          'Select an option to open a Remote Window',
         30_000,
       );
-      const menu = (await allQuickPickRows('c3017-inflight')).map(
-        each => each.label,
-      );
+      const menu = await settledMenuOf('c3017-inflight');
       await pressEscape('c3017-inflight');
       const leftover = emptyWindows();
       next = await nextEmptyWindow(() =>
@@ -767,15 +804,39 @@ describe('Connect Current Window to Host', function () {
         () => true,
         () => false,
       );
+      const remoteAuthority = (await windowState(next)).remoteAuthority;
+      const lastEvent = windowEvents('c3017-inflight').at(-1)?.event;
+      // The control: the same menu offers the entry once the connect has ended, so the read reads the menu it claims.
+      void inWindow('c3017-inflight', 'workbench.action.remote.showMenu').catch(
+        () => undefined,
+      );
+      await waitFor(
+        'the indicator menu again',
+        async () =>
+          (await quickPickOf('c3017-inflight'))?.placeholder ===
+          'Select an option to open a Remote Window',
+        30_000,
+      );
+      const menuEnded = await settledMenuOf('c3017-inflight');
+      await pressEscape('c3017-inflight');
+      process.stdout.write(
+        `the indicator menu while connecting: ${JSON.stringify(
+          menu,
+        )}; after the connect ended: ${JSON.stringify(
+          menuEnded,
+        )}; the held connect ended: ${String(held)}\n`,
+      );
       deepStrictEqual(
         [
           palette.filter(each =>
             each.includes('Connect Current Window to Host'),
           ),
           menu.filter(each => each.includes('Connect Current Window to Host')),
-          menu.includes('Close Remote Connection'),
-          (await windowState(next)).remoteAuthority,
-          windowEvents('c3017-inflight').at(-1)?.event,
+          menuEnded.some(each =>
+            each.includes('Connect Current Window to Host'),
+          ),
+          remoteAuthority,
+          lastEvent,
           emptyWindows().filter(each => !leftover.includes(each)),
           held,
         ],
