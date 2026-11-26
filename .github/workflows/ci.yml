@@ -513,6 +513,18 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # the pinned VSCodium archives, the editor's and the servers', in the run's download cache, cached under a digest of
+      # their pins (tools/vscodium-pins-key.ts): a pin change misses, every other run finds them there and checks their
+      # sha256 as it would a download's. Only these two names: the CLI archives in the same folder are a private
+      # repository's, and a fork's pull request can restore a cache (tools/check-workflow-tokens.ts)
+      - id: vscodium-pins
+        run: node tools/vscodium-pins-key.ts >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: |
+            .vscode-test/downloads/VSCodium-*
+            .vscode-test/downloads/vscodium-reh-*
+          key: vscodium-archives-${{ runner.os }}-${{ runner.arch }}-${{ steps.vscodium-pins.outputs.key }}
       # the containerd image store, the one Docker 29 uses by default and the image-build rows are written against, and a
       # registry mirror for Docker Hub's images
       - run: tools/docker-containerd-store
@@ -596,6 +608,18 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # the pinned VSCodium archives, the editor's and the servers', in the run's download cache, cached under a digest of
+      # their pins (tools/vscodium-pins-key.ts): a pin change misses, every other run finds them there and checks their
+      # sha256 as it would a download's. Only these two names: the CLI archives in the same folder are a private
+      # repository's, and a fork's pull request can restore a cache (tools/check-workflow-tokens.ts)
+      - id: vscodium-pins
+        run: node tools/vscodium-pins-key.ts >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: |
+            .vscode-test/downloads/VSCodium-*
+            .vscode-test/downloads/vscodium-reh-*
+          key: vscodium-archives-${{ runner.os }}-${{ runner.arch }}-${{ steps.vscodium-pins.outputs.key }}
       # the containerd image store, the one Docker 29 uses by default and the image-build rows are written against, and a
       # registry mirror for Docker Hub's images
       - run: tools/docker-containerd-store
