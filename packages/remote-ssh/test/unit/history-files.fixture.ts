@@ -12,7 +12,7 @@ import {
 import type {MemoryFiles} from './event-files.fixture.ts';
 
 /** The folder of the rows' history files. */
-const HISTORY_FOLDER =
+export const HISTORY_FOLDER =
   '/profile/globalStorage/remote-oss.remote-ssh/folder-history';
 
 /** The earlier version's global state, holding `value` as its history. */

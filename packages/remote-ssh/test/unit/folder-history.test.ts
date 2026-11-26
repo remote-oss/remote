@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {legacyOf, windowOn} from './history-files.fixture.ts';
+import {HISTORY_FOLDER, legacyOf, windowOn} from './history-files.fixture.ts';
 import {MemoryFiles} from './event-files.fixture.ts';
 
 /** The history entry of a folder. */
@@ -260,5 +260,33 @@ describe('the history an earlier version kept in the global state (card #3095)',
       ],
       [[], [], [], [{hostKey: 'host-a', entries: [folder('/good')]}]],
     );
+  });
+});
+
+describe('the files of other windows that hold no history', () => {
+  it('a file whose events are no object, or have no host, no kind, no time or no entry that fits, adds nothing, and the good event stays', () => {
+    const files = new MemoryFiles();
+    const good = {
+      host: 'host-a',
+      entry: folder('/good'),
+      kind: 'opened',
+      time: 5,
+    };
+    files.files.set(`${HISTORY_FOLDER}/aaaa.json`, {
+      text: JSON.stringify({
+        events: [
+          good,
+          'text',
+          {...good, kind: 'moved'},
+          {...good, host: 7},
+          {...good, time: 'later'},
+          {...good, entry: {path: '/x', kind: 'file'}},
+        ],
+      }),
+      modified: files.clock,
+    });
+    deepStrictEqual(windowOn(files, 'bbbb').stored(), [
+      {hostKey: 'host-a', entries: [folder('/good')]},
+    ]);
   });
 });

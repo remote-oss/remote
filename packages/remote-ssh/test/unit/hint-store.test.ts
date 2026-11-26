@@ -280,6 +280,8 @@ describe('the files of other windows that are not hint events', () => {
         JSON.stringify({
           events: [
             good,
+            'text',
+            {kind: 'record', record: first},
             {kind: 'record', record: {hints: []}, time: 6},
             {kind: 'clear', clearedAt: 7, time: 7},
             {kind: 'unknown', time: 8},
