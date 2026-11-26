@@ -9,6 +9,9 @@ import {
   type RouteContext,
 } from '../../src/routes.ts';
 import {Store} from '../../src/store.ts';
+import {Allowlist} from '../../src/auth/allowlist.ts';
+import {authenticateWith} from '../../src/auth/authenticate.ts';
+import {GithubIdentity} from '../../src/auth/github.ts';
 import {Tokens} from '../../src/auth/tokens.ts';
 import {TEST_CONFIG} from './settings.ts';
 
@@ -684,10 +687,15 @@ describe('the management routes of the relay', () => {
           ).map(([scope, token]) => [scope, TOKENS.check(token)]),
         );
       }
+      const minted = {
+        tunnelId: 'one',
+        owner: 7,
+        generation: store.tunnelById('one')?.generation,
+      };
       const expected = {
-        host: {tunnelId: 'one', scope: 'host'},
-        connect: {tunnelId: 'one', scope: 'connect'},
-        'manage:ports': {tunnelId: 'one', scope: 'manage:ports'},
+        host: {...minted, scope: 'host'},
+        connect: {...minted, scope: 'connect'},
+        'manage:ports': {...minted, scope: 'manage:ports'},
       };
       deepStrictEqual(
         [
@@ -701,6 +709,61 @@ describe('the management routes of the relay', () => {
           'accessTokens' in (plain.body as object),
         ],
         [expected, expected, expected, expected, false],
+      );
+    });
+  });
+
+  describe('a tunnel token after its tunnel is deleted and its id created again', () => {
+    /** The connect token tunnel one's create or update gives the caller. */
+    async function connectToken(): Promise<string> {
+      const answer = await send('PUT', '/tunnels/one', {
+        body: {name: 'web'},
+        query: {tokenScopes: 'connect'},
+      });
+      return (answer.body as {accessTokens: {connect: string}}).accessTokens
+        .connect;
+    }
+
+    /** Who `token` is from, checked against the routes' store. */
+    function holderOf(token: string): Promise<unknown> {
+      return authenticateWith({
+        github: new GithubIdentity(
+          'https://github.test',
+          () => Promise.reject(new Error('GitHub is not asked')),
+          () => 0,
+        ),
+        allowlist: new Allowlist({modified: () => 1, text: () => ''}),
+        tokens: TOKENS,
+        tunnels: store,
+      })({authorization: `tunnel ${token}`});
+    }
+
+    const notValid = {
+      status: 401,
+      body: {title: 'Unauthorized', detail: 'The tunnel token is not valid.'},
+    };
+
+    it("refuses the first owner's token once another account has created the id", async () => {
+      const token = await connectToken();
+      await send('DELETE', '/tunnels/one');
+      caller = OTHER;
+      await send('PUT', '/tunnels/one', {body: {}});
+      deepStrictEqual(await holderOf(token), notValid);
+    });
+
+    it("refuses the owner's own token once the owner has created the id again", async () => {
+      const token = await connectToken();
+      await send('DELETE', '/tunnels/one');
+      await send('PUT', '/tunnels/one', {body: {}});
+      deepStrictEqual(await holderOf(token), notValid);
+    });
+
+    it('keeps a token valid across an update that renames the tunnel', async () => {
+      const token = await connectToken();
+      await send('PUT', '/tunnels/one', {body: {name: 'api'}});
+      deepStrictEqual(
+        [await holderOf(token), store.tunnelById('one')?.name],
+        [{kind: 'tunnel', tunnelId: 'one', scope: 'connect'}, 'api'],
       );
     });
   });

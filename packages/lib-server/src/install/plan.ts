@@ -1,3 +1,4 @@
+import {ABSOLUTE_HOST_PATH} from 'lib-host';
 import type {RedirectRule, TemplateProblem} from 'lib-product';
 import {
   type CliModeInput,
@@ -118,9 +119,7 @@ export function plan(input: PlanInput): {plan: Plan} | {failure: PlanFailure} {
       return {failure: {kind: 'invalidInstallPath', reason: 'containsNewline'}};
     }
     const absolute =
-      trimmed.startsWith('/') ||
-      trimmed.startsWith('~') ||
-      /^[A-Za-z]:/.test(trimmed);
+      trimmed.startsWith('~') || ABSOLUTE_HOST_PATH.test(trimmed);
     if (!absolute) {
       return {failure: {kind: 'invalidInstallPath', reason: 'relative'}};
     }
