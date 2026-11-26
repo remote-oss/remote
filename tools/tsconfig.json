@@ -33,7 +33,8 @@
     "../tests/acceptance/windows/page-list.ts",
     "../tests/acceptance/windows/quick-pick-reads.ts",
     "../tests/acceptance/windows/reconnection-state.ts",
-    "../tests/acceptance/windows/stored-history.ts"
+    "../tests/acceptance/windows/stored-history.ts",
+    "../tests/acceptance/extensionpack/obsolete-folders.ts"
   ],
   "exclude": ["**/fixtures"]
 }
