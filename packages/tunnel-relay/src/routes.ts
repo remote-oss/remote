@@ -35,6 +35,7 @@ export type Caller = AccountCaller | TunnelCaller;
 /** Who a request is from: its caller, or the answer that refuses it. */
 export type Authenticate = (
   headers: Readonly<Record<string, string | undefined>>,
+  address: string,
 ) => Promise<Caller | Answer>;
 
 /** A request as the routes take it, its body read. */
@@ -43,6 +44,8 @@ interface Request {
   path: string;
   query: URLSearchParams;
   headers: Readonly<Record<string, string | undefined>>;
+  /** The address the request came from, as its socket gives it. */
+  address: string;
   body: unknown;
 }
 
@@ -123,7 +126,7 @@ export async function route(
   if ((parts[0] !== 'tunnels' || parts.length > 4) && !clustersAsked) {
     return problem(404, 'There is no such route.');
   }
-  const caller = await context.authenticate(incoming.headers);
+  const caller = await context.authenticate(incoming.headers, incoming.address);
   if ('status' in caller) {
     return caller;
   }
