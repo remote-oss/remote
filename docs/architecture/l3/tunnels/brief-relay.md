@@ -123,8 +123,8 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
     checks against `hostPublicKeys` (`:112-121,137-149,369-395`).
   - So port forwarding (`tcpip-forward`, `direct-tcpip`; `relay_tunnel_host.rs:708-763`) and the control protocol on
     port 31545 (`[cli] constants.rs:14-15`) are the host agent's and the client's business, not the relay's.
-- **Keep-alive:** each side pings after 60 s idle and closes if no pong comes in 10 s (`ws.rs:147-187`). The relay
-  answers pings, and closes a leg idle for 120 s.
+- **Keep-alive:** each side pings after 60 s of silence and ends the leg if no pong comes within 10 s (`ws.rs:147-187`);
+  the relay answers pings and runs the same machine on its side.
 - **Not offered in release 1:** the TypeScript SDK's `-v2-dev` subprotocols (`ts/src/connections/tunnelRelayTunnelHost.ts:63`,
   `tunnelRelayTunnelClient.ts:42`). A client that asks only for them is refused at the upgrade.
 

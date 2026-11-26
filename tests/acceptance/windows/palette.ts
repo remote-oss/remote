@@ -1,3 +1,4 @@
+import {activeWindowName} from './display.ts';
 import {startInWindow, terminalFacts, windowEvents} from './harness.ts';
 import {
   chooseQuickPickRow,
@@ -70,8 +71,12 @@ async function showedPalette(name: string): Promise<void> {
       );
     // A window that does not answer must not replace the palette's own error.
     const terminals = await terminalFacts(name).catch(() => undefined);
+    // The taker of the focus is a window the pages' states cannot see: the display's active window says who it is.
+    const displayWindowName = await activeWindowName().catch(
+      (reading: unknown) => String(reading),
+    );
     throw new Error(
-      `${String(caught)}; pages ${JSON.stringify(pages)}; the quick input and focus in the first seconds (ms from the command) ${JSON.stringify(trail)}; terminals ${JSON.stringify(terminals?.terminals ?? '(unreadable)')}, active ${JSON.stringify(terminals?.active ?? '(unreadable)')}; the agent's events, with the terminals it saw open or become active (ms from the command, which was sent at 0) ${JSON.stringify(events)}`,
+      `${String(caught)}; pages ${JSON.stringify(pages)}, the display's active window ${JSON.stringify(displayWindowName)}; the quick input and focus in the first seconds (ms from the command) ${JSON.stringify(trail)}; terminals ${JSON.stringify(terminals?.terminals ?? '(unreadable)')}, active ${JSON.stringify(terminals?.active ?? '(unreadable)')}; the agent's events, with the terminals it saw open or become active (ms from the command, which was sent at 0) ${JSON.stringify(events)}`,
       {cause: caught},
     );
   }

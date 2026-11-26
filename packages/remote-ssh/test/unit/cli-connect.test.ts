@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import type {Failed} from 'lib-authority';
-import type {CliScript} from 'lib-server/testing/fake-cli';
+import type {CliScript, Request} from 'lib-server/testing/fake-cli';
 import type {CliBridgeLoss} from '../../src/cli/cli-bridge.ts';
 import {TOKEN_NOT_REQUIRED} from '../../src/cli/cli-connect.ts';
 import {
@@ -221,11 +221,11 @@ describe("the connect's CLI path: the window resolves", () => {
     );
   });
 
-  it('F-2103 5.0 step 5: the connect resolves before any serve', async () => {
+  it('F-2103 5.0 (ruling-3028-exec-download): a first resolve waits for the first serve, after the bridge opens', async () => {
     const {recording} = await resolved();
     deepStrictEqual(
-      recording.program?.requests.some(request => request.method === 'serve'),
-      false,
+      recording.calls.filter(call => /Bridge|firstServe/.test(call)),
+      ['openBridge', 'firstServe'],
     );
   });
 
@@ -234,11 +234,11 @@ describe("the connect's CLI path: the window resolves", () => {
     deepStrictEqual(connection.connected.trusted, false);
   });
 
-  it('F-2408 BR-6, BR-9 (card #2844): a connect over the CLI holds the client lock until its bridge is open', async () => {
+  it('F-2408 BR-6, BR-9 (card #2844): a connect over the CLI holds the client lock until its first serve has installed the server', async () => {
     const {recording} = await connectOverCli();
     deepStrictEqual(recording.clientLock, [
       'held after locateClient',
-      'released after openBridge',
+      'released after firstServe',
     ]);
   });
 
@@ -304,6 +304,13 @@ describe("the connect's CLI path: the window resolves", () => {
     recording.program?.end();
     recording.program?.end();
     deepStrictEqual(bridged.controlEndings, 1);
+  });
+});
+
+describe("the connect's CLI path: what it leaves for later windows", () => {
+  it('ruling-2995-held-server: a connect over the CLI stores no shared record, so no later window takes up a server the CLI holds', async () => {
+    const {result, recording} = await connectOverCli();
+    deepStrictEqual(['connected' in result, recording.records], [true, []]);
   });
 });
 
@@ -637,6 +644,7 @@ describe("the connect's CLI path: after the window resolved", () => {
           Promise.resolve({
             address: BRIDGE_ADDRESS,
             onLost: () => undefined,
+            firstServe: () => Promise.resolve({kind: 'serving'} as const),
             close: () => {
               order.push('bridge');
             },
@@ -686,5 +694,179 @@ describe("the connect's CLI path: after the window resolved", () => {
     connection.release();
     await settled();
     deepStrictEqual(stops, 1);
+  });
+});
+
+/** A CLI that answers `fs_stat` with `answer`, and every other request as the fixture's CLI does. */
+function statting(answer: (request: Request) => unknown): CliScript {
+  const base = requiringToken(CONTROL_TOKEN);
+  return request =>
+    request.method === 'fs_stat' ? [answer(request)] : base(request);
+}
+
+/** A missing server folder, as the CLI's `fs_stat` answers it. */
+const MISSING = statting(request => ({
+  id: request.id,
+  result: {exists: false},
+}));
+
+/** A bridge whose first `serve` logs `lines`, then ends as `outcome`. */
+function firstServing(
+  lines: readonly string[],
+  outcome: {kind: 'serving'} | CliBridgeLoss = {kind: 'serving'},
+): Changes {
+  return recording => ({
+    openBridge: (control, serveParams, events) => {
+      recording.calls.push('openBridge');
+      return Promise.resolve({
+        address: BRIDGE_ADDRESS,
+        onLost: () => undefined,
+        firstServe: () => {
+          recording.calls.push('firstServe');
+          for (const text of lines) {
+            events.onServeLog({text, level: 2});
+          }
+          return Promise.resolve(outcome);
+        },
+        close: () => {
+          recording.calls.push('closeBridge');
+        },
+      });
+    },
+  });
+}
+
+/** The stages of the server's setup the window saw, in order. */
+function setupStages(phases: ReadonlyArray<{kind: string}>): string[] {
+  return phases
+    .map(phase => phase.kind)
+    .filter(kind =>
+      ['downloading', 'installing', 'settingUpTunnel'].includes(kind),
+    );
+}
+
+describe("the connect's CLI path: a first resolve shows the server's setup while it lasts (ruling-3028-exec-download)", () => {
+  it('F-2103 AC-22: a host with no server folder for the commit shows Downloading, then Installing at the first install line, then the tunnel once the first serve answered', async () => {
+    const {recording} = await connectOverCli(
+      MISSING,
+      firstServing([
+        'server download progress: 10/20 (50%)',
+        'server inflate progress: 5/10 (50%)',
+        'Starting server...',
+      ]),
+    );
+    deepStrictEqual(setupStages(recording.phases), [
+      'downloading',
+      'installing',
+      'settingUpTunnel',
+    ]);
+  });
+
+  it("F-2103 AC-22: the folder checked is the CLI's own for the editor's quality and commit", async () => {
+    const {recording} = await connectOverCli(MISSING);
+    deepStrictEqual(
+      recording.program?.requests
+        .filter(request => request.method === 'fs_stat')
+        .map(request => request.params),
+      [{path: '/home/dev/.server/servers/Insiders-c1'}],
+    );
+  });
+
+  it('a host whose server folder exists shows no Downloading, and still resolves after the first serve', async () => {
+    const {recording, result} = await connectOverCli(
+      statting(request => ({
+        id: request.id,
+        result: {exists: true, size: 0, type: 'dir'},
+      })),
+    );
+    deepStrictEqual(
+      [
+        setupStages(recording.phases),
+        recording.calls.includes('firstServe'),
+        kindOf(result),
+      ],
+      [['settingUpTunnel'], true, 'connected'],
+    );
+  });
+
+  it('an fs_stat the CLI refuses, or answers in a shape it has no stat for, shows no Downloading and logs the folder once', async () => {
+    const seen: unknown[] = [];
+    for (const answer of [
+      (request: Request) => ({
+        id: request.id,
+        error: {code: -1, message: 'denied'},
+      }),
+      (request: Request) => ({id: request.id, result: {exists: 'yes'}}),
+    ]) {
+      const {recording, messages} = await connectOverCli(statting(answer));
+      seen.push([
+        setupStages(recording.phases),
+        messages().filter(line => line.includes('could not be checked')),
+      ]);
+    }
+    deepStrictEqual(seen, [
+      [
+        ['settingUpTunnel'],
+        [
+          "the CLI's server folder /home/dev/.server/servers/Insiders-c1 could not be checked (callFailed): no download stage",
+        ],
+      ],
+      [
+        ['settingUpTunnel'],
+        [
+          "the CLI's server folder /home/dev/.server/servers/Insiders-c1 could not be checked (malformedReply): no download stage",
+        ],
+      ],
+    ]);
+  });
+
+  it('a first serve that fails fails the resolve as a late failure maps it, and gives the CLI back', async () => {
+    const {result, recording} = await connectOverCli(
+      MISSING,
+      firstServing([], {
+        kind: 'serveFailed',
+        error: {
+          kind: 'download',
+          url: 'https://example.invalid/s',
+          status: 404,
+        },
+        errorLine: 'error downloading server',
+      }),
+    );
+    deepStrictEqual(
+      [
+        kindOf(result),
+        recording.calls.includes('closeBridge'),
+        recording.calls.some(call => call.startsWith('stopCli')),
+      ],
+      ['serverDownload', false, true],
+    );
+  });
+
+  it('a first serve that outlasts its bound or loses the control fails the resolve as a server start', async () => {
+    const {result} = await connectOverCli(
+      MISSING,
+      firstServing([], {kind: 'controlClosed'}),
+    );
+    deepStrictEqual(kindOf(result), 'serverStart');
+  });
+
+  it('F-2505: a reconnection takes no first serve and checks no folder', async () => {
+    const {recording, options} = setup();
+    await connect(
+      {...CLI_INPUT, attempt: 2, isReconnection: true},
+      cliSteps(recording, {controlEndings: 0}, MISSING, firstServing([])),
+      options,
+    );
+    deepStrictEqual(
+      [
+        recording.calls.includes('firstServe'),
+        recording.program?.requests.some(
+          request => request.method === 'fs_stat',
+        ),
+        setupStages(recording.phases),
+      ],
+      [false, false, []],
+    );
   });
 });

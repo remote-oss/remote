@@ -13,6 +13,7 @@ import {
 } from 'lib-host/testing/recording-channel';
 import {
   cleanup,
+  heldServer,
   kill,
   type MaintenanceOutcome,
   probe,
@@ -796,6 +797,34 @@ describe('the lifecycle over a real shell', () => {
     }
     await maintained(cleanup);
     deepStrictEqual(left().installs, ['02', '03', '04', '05', 'ab']);
+  });
+});
+
+describe('the held server check', () => {
+  it('ruling-2995-held-server: a live server with a port is alive on it, and anything else is not alive, with the reason', async () => {
+    async function outcomeOf(channel: RecordingChannel): Promise<unknown> {
+      return heldServer(channel, parametersFor(), NEVER_CANCELLED);
+    }
+    deepStrictEqual(
+      [
+        await outcomeOf(
+          recording(block('Ok', 'server.alive=yes', 'server.port=4321')),
+        ),
+        await outcomeOf(recording(block('Ok', 'server.alive=yes'))),
+        await outcomeOf(recording(block('Ok', 'server.alive=no'))),
+        await outcomeOf(recording(block('ServerFailedToStart'))),
+        await outcomeOf(recording([])),
+        await outcomeOf(failing('channelClosed')),
+      ],
+      [
+        {kind: 'alive', port: 4321},
+        {kind: 'notAlive', reason: 'the server runs but names no port'},
+        {kind: 'notAlive', reason: 'no server of this commit runs there'},
+        {kind: 'notAlive', reason: 'the check ended with ServerFailedToStart'},
+        {kind: 'notAlive', reason: 'the check gave no result'},
+        {kind: 'notAlive', reason: 'the check could not run: channelClosed'},
+      ],
+    );
   });
 });
 

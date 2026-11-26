@@ -103,6 +103,28 @@ describe('install planner (card server-04 table)', () => {
     });
   });
 
+  it("installPathSetting 'C:foo' and 'C:' (a drive's current folder, no root) -> failure invalidInstallPath, reason relative", () => {
+    deepStrictEqual(
+      ['C:foo', 'C:'].map(setting =>
+        plan(input({installPathSetting: setting})),
+      ),
+      [
+        {failure: {kind: 'invalidInstallPath', reason: 'relative'}},
+        {failure: {kind: 'invalidInstallPath', reason: 'relative'}},
+      ],
+    );
+  });
+
+  it("installPathSetting 'C:\\vs' and 'C:/vs' -> a plan, as an absolute path of a Windows drive", () => {
+    deepStrictEqual(
+      ['C:\\vs', 'C:/vs'].map(
+        setting =>
+          'plan' in plan(input({installPathSetting: setting, source: SOURCE})),
+      ),
+      [true, true],
+    );
+  });
+
   it("installPathSetting '/a\\nb' -> failure invalidInstallPath, reason containsNewline", () => {
     deepStrictEqual(plan(input({installPathSetting: '/a\nb'})), {
       failure: {kind: 'invalidInstallPath', reason: 'containsNewline'},

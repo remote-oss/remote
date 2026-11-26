@@ -6,9 +6,11 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import {createServer as createHttpServer} from 'node:http';
 import {createServer} from 'node:net';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import type {HttpGet} from 'lib-server';
 import {
   clientSearchOf,
   drawLinkNumber,
@@ -16,6 +18,7 @@ import {
   type MachinePlaces,
   newTemporaryToken,
   nodeMachineOf,
+  serverStatusOver,
 } from '../../src/node-machine.ts';
 import {PROFILE} from './server-steps.fixture.ts';
 
@@ -49,6 +52,111 @@ function bindable(port: number): Promise<boolean> {
     });
   });
 }
+
+/** The editor's `fetch` as the machine's `httpGet`: here, Node's own. */
+function editorFetch(...request: Parameters<HttpGet>): ReturnType<HttpGet> {
+  return fetch(...request);
+}
+
+describe('the status a server on this machine answers (card #2995, ruling-2995-shared-reuse)', () => {
+  /** A loopback HTTP server that answers every request with `status`, recording the paths it was asked for. */
+  async function answering(status: number) {
+    const paths: string[] = [];
+    const server = createHttpServer((request, reply) => {
+      paths.push(request.url ?? '');
+      reply.writeHead(status);
+      reply.end();
+    });
+    await new Promise<void>(resolve => {
+      server.listen(0, '127.0.0.1', resolve);
+    });
+    const {port} = server.address() as {port: number};
+    return {server, port, paths};
+  }
+
+  it("F-2407 6.4 step 2: the request carries the token in its query, and the status is the server's", async () => {
+    const statuses: Array<number | undefined> = [];
+    const asked: string[] = [];
+    for (const status of [404, 403]) {
+      const {server, port, paths} = await answering(status);
+      try {
+        statuses.push(
+          await serverStatusOver(editorFetch)(
+            {host: '127.0.0.1', port},
+            'a b/c',
+            new AbortController().signal,
+          ),
+        );
+        asked.push(...paths);
+      } finally {
+        server.close();
+      }
+    }
+    deepStrictEqual(
+      [statuses, asked],
+      [
+        [404, 403],
+        ['/?tkn=a%20b%2Fc', '/?tkn=a%20b%2Fc'],
+      ],
+    );
+  });
+
+  it('F-2407 6.4 step 3: nothing listening is no status', async () => {
+    const {server, port} = await answering(200);
+    server.close();
+    await new Promise(resolve => setImmediate(resolve));
+    deepStrictEqual(
+      await serverStatusOver(editorFetch)(
+        {host: '127.0.0.1', port},
+        'token',
+        new AbortController().signal,
+      ),
+      undefined,
+    );
+  });
+
+  /** A loopback port that takes connections and never answers. */
+  async function silent() {
+    const sockets = createServer(() => undefined);
+    await new Promise<void>(resolve => {
+      sockets.listen(0, '127.0.0.1', resolve);
+    });
+    const {port} = sockets.address() as {port: number};
+    return {sockets, port};
+  }
+
+  it('F-2407 6.4 step 3, ruling-2995-shared-reuse: a server that does not answer within the bound is no status', async () => {
+    const {sockets, port} = await silent();
+    try {
+      deepStrictEqual(
+        await serverStatusOver(editorFetch, 50)(
+          {host: '127.0.0.1', port},
+          'token',
+          new AbortController().signal,
+        ),
+        undefined,
+      );
+    } finally {
+      sockets.close();
+    }
+  });
+
+  it('F-2407 6.4 step 3: a check the connect cancels is no status', async () => {
+    const {sockets, port} = await silent();
+    const cancellation = new AbortController();
+    try {
+      const pending = serverStatusOver(editorFetch)(
+        {host: '127.0.0.1', port},
+        'token',
+        cancellation.signal,
+      );
+      cancellation.abort();
+      deepStrictEqual(await pending, undefined);
+    } finally {
+      sockets.close();
+    }
+  });
+});
 
 describe('the machine a connect runs on', () => {
   it('F-2101: the client search reads PATH and ProgramFiles', () => {
