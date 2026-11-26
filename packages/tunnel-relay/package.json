@@ -8,5 +8,12 @@
       "types": "./.tsc/src/routes.d.ts",
       "default": "./src/routes.ts"
     }
+  },
+  "dependencies": {
+    "@microsoft/dev-tunnels-ssh": "3.12.29",
+    "ws": "8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.1"
   }
 }

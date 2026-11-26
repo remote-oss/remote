@@ -3,7 +3,8 @@
  * claims `exp`, `scp`, `tid`, `own`, `gen` and `cid` (the relay brief's section 4): `own` and `gen` are the tunnel's
  * owner and generation when it was minted, so the token reaches no later tunnel given the same id. The TypeScript SDK
  * reads only `exp`
- * (`[dev-tunnels] ts/src/management/tunnelAccessTokenProperties.ts:11-12,70-72`); the relay reads them all back.
+ * (`[dev-tunnels] ts/src/management/tunnelAccessTokenProperties.ts:11-12,70-72`); the relay reads back all but `cid`,
+ * which names its one cluster.
  */
 
 import {createHmac, timingSafeEqual} from 'node:crypto';
