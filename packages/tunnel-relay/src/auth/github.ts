@@ -1,6 +1,7 @@
 /**
  * @fileoverview Who a GitHub token belongs to: `GET <base>/user` with the token, answered by the account's numeric id
- * and login. Answers are kept five minutes, keyed by a hash of the token, which is never kept itself.
+ * and login. Answers are kept five minutes, keyed by a hash of the token, which is never kept itself, and at most a
+ * thousand at once: past that, the oldest goes, which is also the first to run out.
  */
 
 import {createHash} from 'node:crypto';
@@ -22,6 +23,9 @@ export type Fetch = (address: string, init: RequestInit) => Promise<Response>;
 
 /** How long an answer is kept, in milliseconds. */
 const KEPT_FOR = 5 * 60 * 1000;
+
+/** The most answers kept at once. */
+export const KEPT_MOST = 1000;
 
 /** Asks GitHub who tokens belong to, keeping each account answer for five minutes. */
 export class GithubIdentity {
@@ -73,8 +77,21 @@ export class GithubIdentity {
     if (account === undefined) {
       return {kind: 'failed', reason: 'GitHub answered with no account'};
     }
-    this.kept.set(key, {account, until: this.now() + KEPT_FOR});
+    this.keep(key, account);
     return {kind: 'account', account};
+  }
+
+  /** Keeps `account` under `key`, dropping the oldest answer first when the most are kept. */
+  private keep(key: string, account: GithubAccount): void {
+    this.kept.delete(key);
+    if (this.kept.size >= KEPT_MOST) {
+      // The first key is the oldest answer, since every answer is set anew when kept.
+      for (const oldest of this.kept.keys()) {
+        this.kept.delete(oldest);
+        break;
+      }
+    }
+    this.kept.set(key, {account, until: this.now() + KEPT_FOR});
   }
 }
 

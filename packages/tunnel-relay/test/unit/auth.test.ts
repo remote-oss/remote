@@ -2,7 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {createHmac} from 'node:crypto';
 import {Allowlist} from '../../src/auth/allowlist.ts';
 import {authenticateWith} from '../../src/auth/authenticate.ts';
-import {GithubIdentity, type Fetch} from '../../src/auth/github.ts';
+import {type Fetch, GithubIdentity, KEPT_MOST} from '../../src/auth/github.ts';
 import {Tokens} from '../../src/auth/tokens.ts';
 import type {TunnelRecord} from '../../src/store.ts';
 
@@ -220,6 +220,37 @@ describe('who a GitHub token belongs to', () => {
   });
 });
 
+describe('the answers GitHub gave, kept', () => {
+  /** A lookup that answers every token with its own account, and how many times it asked. */
+  function counted(now: () => number) {
+    let asked = 0;
+    const identity = new GithubIdentity(
+      'https://github.test',
+      () => {
+        asked += 1;
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({id: asked, login: `user${String(asked)}`}),
+          ),
+        );
+      },
+      now,
+    );
+    return {identity, asked: () => asked};
+  }
+
+  it('keeps at most a thousand, dropping the oldest when full, so the first token is asked again', async () => {
+    const {identity, asked} = counted(() => 0);
+    for (let index = 0; index <= KEPT_MOST; index++) {
+      await identity.accountOf(`token-${String(index)}`);
+    }
+    await identity.accountOf(`token-${String(KEPT_MOST)}`);
+    const beforeFirst = asked();
+    await identity.accountOf('token-0');
+    deepStrictEqual([beforeFirst, asked()], [KEPT_MOST + 1, KEPT_MOST + 2]);
+  });
+});
+
 describe('the allowlist', () => {
   it('admits the numeric ids of its file, skips comments and other lines, and reads the file again when it changes', () => {
     let modified = 1;
@@ -248,6 +279,13 @@ describe('the allowlist', () => {
 });
 
 describe('who a request is from', () => {
+  /** What the authorities reported, in order. */
+  let reported: string[] = [];
+
+  beforeEach(() => {
+    reported = [];
+  });
+
   /** The caller or refusal for `authorization`, with GitHub answering `answer` and account 42 admitted. */
   async function callerFor(
     authorization: string | undefined,
@@ -266,9 +304,20 @@ describe('who a request is from', () => {
       tunnels: {
         tunnelById: tunnelId => (tunnelId === stored.id ? stored : undefined),
       },
+      report: reason => {
+        reported.push(reason);
+      },
     });
     return authenticate({authorization});
   }
+
+  it('tells the caller of a lookup that failed one fixed line, and reports why to the relay alone', async () => {
+    const answer = await callerFor('github secret', 503);
+    deepStrictEqual(
+      [JSON.stringify(answer).includes('503'), reported],
+      [false, ['GitHub could not be asked: GitHub answered 503']],
+    );
+  });
 
   it('takes an admitted account from either GitHub form', async () => {
     const account = {kind: 'account', id: 42, login: 'octo'};
@@ -350,6 +399,7 @@ describe('who a request is from', () => {
       allowlist: new Allowlist({modified: () => 1, text: () => '42\n'}),
       tokens: new Tokens(SIGNING_KEY, () => 0),
       tunnels: {tunnelById: () => undefined},
+      report: () => undefined,
     });
     deepStrictEqual(
       [
@@ -374,7 +424,7 @@ describe('who a request is from', () => {
           status: 502,
           body: {
             title: 'Error',
-            detail: 'GitHub could not be asked: GitHub answered 503',
+            detail: 'GitHub could not be asked.',
           },
         },
         {

@@ -6,23 +6,37 @@
 import {randomBytes} from 'node:crypto';
 import {createServer, type Server} from 'node:https';
 import type {IncomingMessage, ServerResponse} from 'node:http';
+import type {Duplex} from 'node:stream';
+import type {Legs} from './legs/legs.ts';
 import {problem, Refused, type Answer} from './problem.ts';
 import {route, type RouteContext} from './routes.ts';
 
 /** The most a request body may hold, in bytes: a tunnel with its ports and endpoints is far smaller. */
 const BODY_LIMIT_BYTES = 1024 * 1024;
 
-/** The HTTPS server of `context`, with the certificate and key given, not yet listening. */
+/** The HTTPS server of `context` and its legs, with the certificate and key given, not yet listening. */
 export function relayServer(
-  context: RouteContext,
+  context: RouteContext & {legs: Legs},
   certificate: string | Buffer,
   key: string | Buffer,
 ): Server {
-  return createServer({cert: certificate, key}, (request, response) => {
+  const server = createServer({cert: certificate, key}, (request, response) => {
     void answerRequest(request, context).then(answer => {
       write(response, answer);
     });
   });
+  server.on(
+    'upgrade',
+    (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+      void context.legs
+        .upgrade(request, socket, head)
+        .catch((error: unknown) => {
+          context.report(error);
+          socket.destroy();
+        });
+    },
+  );
+  return server;
 }
 
 /**

@@ -8,8 +8,14 @@ import {authenticateWith} from './auth/authenticate.ts';
 import {GithubIdentity} from './auth/github.ts';
 import {Tokens} from './auth/tokens.ts';
 import {configOf} from './config.ts';
+import {Legs} from './legs/legs.ts';
 import {relayServer} from './server.ts';
 import {Store} from './store.ts';
+
+/** Writes a failure the relay's answers don't carry to its standard error. */
+function reportFailure(failure: unknown): void {
+  process.stderr.write(`the relay failed: ${String(failure)}\n`);
+}
 
 const config = configOf(process.env);
 const store = new Store(config.storeFile);
@@ -22,6 +28,7 @@ const authenticate = authenticateWith({
   }),
   tokens,
   tunnels: store,
+  report: reportFailure,
 });
 const server = relayServer(
   {
@@ -29,9 +36,8 @@ const server = relayServer(
     config,
     authenticate,
     tokens,
-    report: error => {
-      process.stderr.write(`the relay failed: ${String(error)}\n`);
-    },
+    legs: new Legs(authenticate, reportFailure),
+    report: reportFailure,
   },
   readFileSync(config.certificateFile),
   readFileSync(config.keyFile),
@@ -42,6 +48,7 @@ server.listen(config.port, () => {
   );
 });
 process.once('SIGTERM', () => {
+  server.closeAllConnections();
   server.close(() => {
     store.close();
   });

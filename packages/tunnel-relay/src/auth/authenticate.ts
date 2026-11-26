@@ -21,6 +21,8 @@ export interface Authorities {
   tokens: Tokens;
   /** The stored tunnels a tunnel token is checked against. */
   tunnels: Pick<Store, 'tunnelById'>;
+  /** Hears why GitHub could not be asked, which the caller's answer doesn't carry. */
+  report: (reason: string) => void;
 }
 
 /** The relay's `authenticate`: a caller for a request, or the answer that refuses it. */
@@ -31,7 +33,7 @@ export function authenticateWith(authorities: Authorities): Authenticate {
 /** The caller of `header`, or the answer that refuses it. */
 async function callerOf(
   header: string | undefined,
-  {github, allowlist, tokens, tunnels}: Authorities,
+  {github, allowlist, tokens, tunnels, report}: Authorities,
 ): Promise<Caller | Answer> {
   const [scheme, ...words] = (header ?? '').trim().split(/\s+/);
   const token = words.at(-1);
@@ -56,7 +58,8 @@ async function callerOf(
     return problem(401, 'GitHub refused the token.');
   }
   if (answer.kind === 'failed') {
-    return problem(502, `GitHub could not be asked: ${answer.reason}`);
+    report(`GitHub could not be asked: ${answer.reason}`);
+    return problem(502, 'GitHub could not be asked.');
   }
   const {account} = answer;
   if (!allowlist.admits(account.id)) {
