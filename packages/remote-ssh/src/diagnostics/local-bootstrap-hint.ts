@@ -19,10 +19,10 @@ export function localBootstrapHint(
   detail: string,
   translate: Translate,
 ): FailureHint {
-  const message = ownText({id: 'S087', values: []}, translate);
   return {
     status: 'LocalBootstrapFailed',
-    message: `${message} (${detail})`,
+    message: ownText({id: 'S087', values: []}, translate),
+    details: {text: detail},
     mitigations: [
       {
         id: 'S016',

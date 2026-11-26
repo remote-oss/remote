@@ -18,7 +18,10 @@ import {
   nodeLockFiles,
 } from 'lib-server';
 import {clientPlatformOf, nodeLocalFiles, nodeProcessSpawner} from 'lib-ssh';
-import {HELPER_CLIENT_WAITS} from './pipeline/bounds.ts';
+import {
+  HELD_SERVER_CHECK_MILLISECONDS,
+  HELPER_CLIENT_WAITS,
+} from './pipeline/bounds.ts';
 import type {ConnectMachine} from './connect-ports.ts';
 import {HeldClientLocks} from './pipeline/client-lock-step.ts';
 import {nodePreconnectFiles} from './preconnect/node-files.ts';
@@ -83,6 +86,33 @@ export function drawLinkNumber(): number {
   return randomInt(1, 1_000_000_000);
 }
 
+/**
+ * The status the server on this machine's `address` answers a plain request carrying `connectionToken` with, over the
+ * editor's own `httpGet`; none when nothing answers within `boundMilliseconds`, or the connect is cancelled.
+ */
+export function serverStatusOver(
+  httpGet: HttpGet,
+  boundMilliseconds = HELD_SERVER_CHECK_MILLISECONDS,
+): ConnectMachine['serverStatus'] {
+  return async (address, connectionToken, cancellation) => {
+    try {
+      const reply = await httpGet(
+        `http://${address.host}:${String(address.port)}/?tkn=${encodeURIComponent(connectionToken)}`,
+        {
+          redirect: 'manual',
+          signal: AbortSignal.any([
+            cancellation,
+            AbortSignal.timeout(boundMilliseconds),
+          ]),
+        },
+      );
+      return reply.status;
+    } catch {
+      return undefined;
+    }
+  };
+}
+
 /** The machine over Node, from the extension's `places` and Node's `facts`. */
 export function nodeMachineOf(
   places: MachinePlaces,
@@ -142,5 +172,6 @@ export function nodeMachineOf(
     prober: nodePortProber(),
     newTemporaryToken,
     drawLinkNumber,
+    serverStatus: serverStatusOver(places.httpGet),
   };
 }

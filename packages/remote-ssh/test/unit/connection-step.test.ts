@@ -353,6 +353,22 @@ describe('the connection step', () => {
     );
   });
 
+  it('F-2407 6.4 step 2 (card #2995): the lease says whether this window started the connection server, which checked the install folder at its start, or joined one', async () => {
+    const claim = fixture('acquired', undefined, 'info', false, true);
+    const join = fixture('acquired', undefined, 'info', false, false);
+    join.lease.connectReplies = [{type: 'refused', reason: 'alreadyConnected'}];
+    const claimPending = claim.connecting();
+    await settled();
+    claim.lease.emit({type: 'connected', socksPort: 41000});
+    const outcomes = [await claimPending, await join.connecting()];
+    deepStrictEqual(
+      outcomes.map(outcome =>
+        outcome.kind === 'done' ? outcome.value.startedHelper : undefined,
+      ),
+      [true, false],
+    );
+  });
+
   it('F-2102 §9: the starter logs no line when the helper holds no local connection server, even with an ssh pid', async () => {
     const claim = fixture('acquired', undefined, 'info', false, true);
     const claimPending = claim.connecting();

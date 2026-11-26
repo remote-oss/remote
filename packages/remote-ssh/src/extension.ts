@@ -61,6 +61,11 @@ import {
   serveSliceEndpoints,
 } from './companion/slice-endpoints.ts';
 import {pushActiveFolders} from './companion/active-folders.ts';
+import {
+  historyStoreOf,
+  newSession,
+  NODE_HISTORY_FILES,
+} from './companion/folder-history.ts';
 import {serveHistoryEndpoints} from './companion/history-endpoints.ts';
 import {signalHostsChanged} from './companion/hosts-changed.ts';
 import {
@@ -343,14 +348,21 @@ export async function activate(
   hostsSignal.send = () => {
     signalHostsChanged(companion);
   };
-  const history = serveHistoryEndpoints(companion, context.globalState);
+  const historyStore = historyStoreOf({
+    folder: path.join(context.globalStorageUri.fsPath, 'folder-history'),
+    session: newSession(),
+    files: NODE_HISTORY_FILES,
+    legacy: context.globalState,
+    now: Date.now,
+  });
+  const history = serveHistoryEndpoints(companion, historyStore);
   const firstResolve = {
     onFirstResolveSettled: (listener: () => void) => {
       connect.onFirstResolveSettled(listener);
     },
     lastResolve: () => connect.activeConnection()?.lastResolve ?? 'none',
   } as const;
-  recordOnFirstResolve(firstResolve, workspaceOf(vscode), context.globalState);
+  recordOnFirstResolve(firstResolve, workspaceOf(vscode), historyStore);
   pushActiveFolders({
     hasWorkspace: () =>
       vscode.workspace.workspaceFile !== undefined ||
