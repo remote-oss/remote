@@ -148,8 +148,9 @@ validation, and no new mechanism.
         "Please select a file." (7.E8) is core's.
    3. **Read and validate** the picked file's folder list (BR-3, BR-4, 7.E1–E6), **before** core is asked to open
       anything, so an invalid file leaves the window's title unchanged (6.2 step 1).
-      - **One validator,** in C4, is shared with Reopen in Container's workspace route. It runs there after trust
-        (6.6, the order F-0401 has), and here before it. It returns the **first** failing entry only (VS-13, BR-11):
+      - **The validator already on main** (`open/workspace-folders.ts`, `workspaceProblemOf`) is reused, not
+        written again. It's shared with Reopen in Container's workspace route, where it runs after trust (6.6, the
+        order F-0401 has); here it runs before trust. It returns the **first** failing entry only (VS-13, BR-11):
         - a path outside the shared root: S185;
         - neither `path` nor `uri`: S406;
         - an absolute path: S407;
@@ -159,7 +160,8 @@ validation, and no new mechanism.
       - **The dialog:** STR:S363 wrapping that message, with "Cancel" and "Continue" (primary).
         - "Cancel" leaves the window as it was.
         - "Continue" goes on with the shared root as the one mount (§2 decision 3). Failed entries stay core's to
-          show or drop (6.2 step 3); we add no message.
+          show or drop (6.2 step 3); we add no message. Non-local entries that share one remote authority get core's
+          trust dialog once for that authority, never once per entry (AC-19, VS-15). That's core's too.
    4. **Open:** the window reloads into §2 decision 1's payload, `hostPath` being the picked file's folder and the
       window opening the workspace file inside the mount. The configuration is §2 decision 2's workspace-level one.
       - **None found:** the hand-off to F-0801, with decision 2's location rules (6.5).
@@ -169,6 +171,10 @@ validation, and no new mechanism.
    - **An already-open workspace** (6.3): the only difference is the starting folder.
    - **An untitled calling window** (6.9): the browser opens as usual, and core's save prompt after the pick is
      core's. There's no S415 through this command (AC-14).
+   - **For the other commands,** an untitled workspace with **one** on-disk root has a single folder to save into,
+     so it gets no S415: Reopen in Container takes the folder route on that root. That's
+     `ruling-3255-single-root-untitled`, recorded on card #3255
+     (https://github.com/remote-oss/remote/issues/3255#issuecomment-7193362664) and in the family register.
 4. **S415 and S408 belong to the other commands, from one helper each:**
    - **S415** ("You need to first save your workspace in a folder containing all its workspace folders.", OK) is shown
      by Reopen in Container (§2 decision 2), Add Dev Container Configuration Files (F-0801) and Open Container
@@ -178,7 +184,11 @@ validation, and no new mechanism.
 5. **6.4 is core's:** File > Open Workspace from inside a container window needs nothing of ours.
 
 **Components:**
-- **C4:** the folder-list validator, and the two helpers of point 4.
+- **C4:** the folder-list validator is **on main already** (`open/workspace-folders.ts`) and is reused as it is.
+  C4's new work is point 4's two helpers (#3255):
+  - the S415 helper, `untitledWorkspaceRefusal`;
+  - the window-level check for a virtual first folder (S408), called by Reopen in Container and by F-0801's
+    saved-workspace route before its location pick.
 - **C6:** the command and its step order. It reuses the engine gate, decision 1's payload and decision 2's
   discovery.
 
