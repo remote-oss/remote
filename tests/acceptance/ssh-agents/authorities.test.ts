@@ -18,7 +18,6 @@ import {
   userSettings,
   variable,
 } from '../windows/harness.ts';
-import {harnessHostFingerprint} from '../windows/config-keywords-support.ts';
 import {labelsWithin} from '../windows/labels-wait.ts';
 import {authorityHex} from './authority-hex.ts';
 import {scanStored} from './stored-scan.ts';
@@ -172,14 +171,14 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
         variable('HARNESS_USER_DATA'),
         'User/globalStorage/remote-oss.remote-ssh',
       );
-      // A trust store is a store of host keys (the criterion's trust store), so the scan looks for the host's key and its
-      // fingerprint, not for its name: a hint that names its host is no trust store.
+      // A trust store is a store of host keys (the criterion's trust store), so the scan looks for the host's key, not for its
+      // name or its fingerprint: a hint that names its host, or quotes ssh's prompt with the fingerprint, is no trust store.
       const hostKey = (
         await onHostAs('harness', 'cat', '/etc/ssh/ssh_host_ed25519_key.pub')
       )
         .trim()
         .split(/\s+/)[1];
-      const keyTexts = [hostKey ?? '', (await harnessHostFingerprint()) ?? ''];
+      const keyTexts = [hostKey ?? ''];
       const scan = scanStored(storage, keyTexts);
       console.log(
         `f2008-hex-address: the trust-store scan of the storage folder read ${JSON.stringify(scan.read)}`,
@@ -191,7 +190,10 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
       );
       writeFileSync(
         path.join(scratch, 'hint.json'),
-        JSON.stringify({host: block.hostName}),
+        JSON.stringify({
+          host: block.hostName,
+          prompt: 'ED25519 key fingerprint is SHA256:abcdef',
+        }),
       );
       const control = scanStored(scratch, keyTexts).holding;
       rmSync(scratch, {recursive: true, force: true});
