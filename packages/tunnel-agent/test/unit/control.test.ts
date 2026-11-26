@@ -1,7 +1,13 @@
 import {deepStrictEqual} from 'node:assert';
 import {duplexPair, type Duplex} from 'node:stream';
 import {encode} from '@msgpack/msgpack';
-import {encodeFrame, framesOf, type Frame} from '../../src/control/codec.ts';
+import {
+  encodeFrame,
+  framesOf,
+  LARGEST_BODY,
+  LARGEST_FRAME,
+  type Frame,
+} from '../../src/control/codec.ts';
 import type {ServeRequest} from '../../src/control/ports.ts';
 import {
   INVALID_PARAMETERS,
@@ -65,6 +71,37 @@ describe("the control protocol's frames", () => {
       [
         {id: 7, method: 'serve', params: {socket_id: 1}},
         {id: 8, method: 'ping'},
+      ],
+    );
+  });
+
+  it('throws at a frame that declares more than the codec takes, and at one that stays incomplete past its bound', async () => {
+    const declared = Buffer.concat([
+      Buffer.from([0x81, 0xa4]),
+      Buffer.from('body'),
+      Buffer.from([0xc6, 0x80, 0x00, 0x00, 0x00]),
+    ]);
+    const incomplete: Uint8Array[] = [Buffer.from([0xde, 0x00, 0x40])];
+    for (const key of ['a', 'b', 'c']) {
+      incomplete.push(
+        Buffer.from([0xa1, key.charCodeAt(0), 0xc6, 0x00, 0x10, 0x00, 0x00]),
+      );
+      for (let part = 0; part < 16; part += 1) {
+        incomplete.push(Buffer.alloc(64 * 1024));
+      }
+    }
+    deepStrictEqual(
+      [
+        (await rejection(() => allFrames([declared]))).includes('maxBinLength'),
+        await rejection(() => allFrames(incomplete)),
+        await rejection(() =>
+          allFrames([encodeFrame({body: new Uint8Array(LARGEST_BODY)})]),
+        ),
+      ],
+      [
+        true,
+        `A frame of the control protocol is larger than ${String(LARGEST_FRAME)} bytes.`,
+        'no error',
       ],
     );
   });
@@ -363,7 +400,7 @@ describe('a control session', () => {
       );
     });
 
-    it('keeps two connections apart, and a second serve with the same socket replaces the first without losing it to its close', async () => {
+    it('keeps two connections apart, and a second serve with the same socket closes the first with no serverclose', async () => {
       await next();
       await answerTo(1, 'serve', {socket_id: 1, quality: 'stable'});
       await answerTo(2, 'serve', {socket_id: 2, quality: 'stable'});
@@ -371,13 +408,48 @@ describe('a control session', () => {
       const toSecond = nextData(serverAt(1));
       send({method: 'servermsg', params: {i: 2, body: new Uint8Array([2])}});
       const secondBytes = await toSecond;
-      serverAt(0).end();
-      const firstClosed = await next();
+      const firstDestroyed = editors.agentSides[0]?.destroyed;
+      const afterReplacing = await answerTo(4, 'ping');
       const toReplacing = nextData(serverAt(2));
       send({method: 'servermsg', params: {i: 1, body: new Uint8Array([3])}});
+      const replacingBytes = await toReplacing;
+      serverAt(2).end();
       deepStrictEqual(
-        [[...secondBytes], firstClosed, [...(await toReplacing)]],
-        [[2], {method: 'serverclose', params: {i: 1}}, [3]],
+        [
+          [...secondBytes],
+          firstDestroyed,
+          afterReplacing,
+          [...replacingBytes],
+          await next(),
+        ],
+        [
+          [2],
+          true,
+          {id: 4, result: {}},
+          [3],
+          {method: 'serverclose', params: {i: 1}},
+        ],
+      );
+    });
+
+    it('reads a server connection no faster than the client takes its bytes, and goes on once it does', async () => {
+      await next();
+      await answerTo(1, 'serve', {socket_id: 1, quality: 'stable'});
+      const server = serverAt(0);
+      const chunk = Buffer.alloc(64 * 1024);
+      for (let count = 0; count < 32; count += 1) {
+        server.write(chunk);
+      }
+      await new Promise(resolve => setImmediate(resolve));
+      const pausedWhileUnread = editors.agentSides[0]?.isPaused();
+      let carried = 0;
+      while (carried < 32 * chunk.length) {
+        const frame = await next();
+        carried += (frame.params as {body: Uint8Array}).body.length;
+      }
+      deepStrictEqual(
+        [pausedWhileUnread, carried, editors.agentSides[0]?.isPaused()],
+        [true, 32 * chunk.length, false],
       );
     });
 

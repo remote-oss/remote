@@ -2,7 +2,8 @@
  * @fileoverview One control session on the tunnel's port 31545: `[cli]`'s control protocol (`tunnels/control_server.rs`,
  * `protocol.rs`) limited to what the project's client calls. The agent sends `version` first, answers `ping`, `version`,
  * `serve` with the bridge of its server connection, `servermsg`, `forward` and `unforward`, and answers every other
- * method with an error while the session goes on. A frame that isn't a message ends this session only.
+ * method with an error while the session goes on. A frame that isn't a message, or that is larger than the codec takes,
+ * ends this session only. A server connection is read only as fast as the client takes its bytes.
  */
 
 import type {Duplex} from 'node:stream';
@@ -31,6 +32,14 @@ export interface ControlPorts {
   logLine: (line: string) => void;
 }
 
+/** Where a session's frames go: each sent at once, and a listener that hears when the client has taken them. */
+interface Outlet {
+  /** Sends `frame`; false when the client hasn't taken what was sent before. */
+  send(frame: Frame): boolean;
+  /** Runs `listener` once the client has taken what was sent. */
+  onDrain(listener: () => void): void;
+}
+
 /** A request's answer: its result, or an error with its code. */
 type Outcome =
   | {result: Readonly<Record<string, unknown>>}
@@ -42,12 +51,14 @@ export async function serveControl(
   ports: ControlPorts,
 ): Promise<void> {
   const connections = new Map<number, Duplex>();
-  function send(frame: Frame): void {
-    if (!stream.destroyed) {
-      stream.write(encodeFrame(frame));
-    }
-  }
-  send({
+  const outlet: Outlet = {
+    send: frame => stream.destroyed || stream.write(encodeFrame(frame)),
+    onDrain: listener => {
+      stream.once('drain', listener);
+    },
+  };
+  stream.on('error', ignoreFailure);
+  outlet.send({
     method: 'version',
     params: {version: ports.version, protocol_version: PROTOCOL_VERSION},
   });
@@ -58,9 +69,9 @@ export async function serveControl(
         throw new Error('A frame of the control protocol is not a message.');
       }
       if (request !== 'answer') {
-        void answered(request, ports, connections, send).then(outcome => {
+        void answered(request, ports, connections, outlet).then(outcome => {
           if (request.id !== undefined) {
-            send({id: request.id, ...outcome});
+            outlet.send({id: request.id, ...outcome});
           }
         });
       }
@@ -101,7 +112,7 @@ async function answered(
   request: Request,
   ports: ControlPorts,
   connections: Map<number, Duplex>,
-  send: (frame: Frame) => void,
+  outlet: Outlet,
 ): Promise<Outcome> {
   const {method, params} = request;
   switch (method) {
@@ -112,7 +123,7 @@ async function answered(
         result: {version: ports.version, protocol_version: PROTOCOL_VERSION},
       };
     case 'serve':
-      return served(params, ports, connections, send);
+      return served(params, ports, connections, outlet);
     case 'servermsg':
       return relayed(params, ports, connections);
     case 'forward':
@@ -132,7 +143,7 @@ async function served(
   params: Readonly<Record<string, unknown>>,
   ports: ControlPorts,
   connections: Map<number, Duplex>,
-  send: (frame: Frame) => void,
+  outlet: Outlet,
 ): Promise<Outcome> {
   const request = serveRequestOf(params);
   if (request === undefined) {
@@ -148,14 +159,22 @@ async function served(
   let connection: Duplex;
   try {
     connection = await ports.editors.serve(request, (line, level) => {
-      send({method: 'serverlog', params: {line, level}});
+      outlet.send({method: 'serverlog', params: {line, level}});
     });
   } catch (refusal) {
     return failure(REFUSED, (refusal as Error).message);
   }
+  const earlier = connections.get(socketId);
   connections.set(socketId, connection);
+  earlier?.destroy();
   connection.on('data', (body: Uint8Array) => {
-    send({method: 'servermsg', params: {i: socketId, body}});
+    if (
+      !outlet.send({method: 'servermsg', params: {i: socketId, body}}) &&
+      !connection.isPaused()
+    ) {
+      connection.pause();
+      outlet.onDrain(() => connection.resume());
+    }
   });
   let ended = false;
   function end(): void {
@@ -163,11 +182,12 @@ async function served(
       return;
     }
     ended = true;
-    if (connections.get(socketId) === connection) {
-      connections.delete(socketId);
-    }
     connection.destroy();
-    send({method: 'serverclose', params: {i: socketId}});
+    if (connections.get(socketId) !== connection) {
+      return;
+    }
+    connections.delete(socketId);
+    outlet.send({method: 'serverclose', params: {i: socketId}});
   }
   connection.once('end', end);
   connection.once('close', end);
@@ -260,6 +280,11 @@ function serveRequestOf(
       ? params.server_source
       : undefined,
   };
+}
+
+/** Takes a failure of the control stream, which the reading of its frames reports when it ends the session. */
+function ignoreFailure(): void {
+  // The loop over the stream's frames reports it.
 }
 
 /** An error outcome with `code` and `message`. */
