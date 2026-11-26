@@ -127,6 +127,13 @@ describe('public-surface', () => {
     deepStrictEqual(checkPublicSurface(workspace.root), []);
   });
 
+  it('leaves a service alone, which ships to no user', () => {
+    workspace.write('packages/tunnel-relay/package.json', {
+      dependencies: {'@microsoft/dev-tunnels-ssh': '3.12.29'},
+    });
+    deepStrictEqual(checkPublicSurface(workspace.root), []);
+  });
+
   it('leaves files that do not ship alone', () => {
     workspace.write('packages/remote-x/identifiers.json', {source: 'the card'});
     workspace.write('packages/remote-x/coverage.json', {note: 'the card'});

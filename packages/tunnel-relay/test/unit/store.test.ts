@@ -2,6 +2,7 @@ import {deepStrictEqual, throws} from 'node:assert';
 import {mkdtempSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
 import {Store} from '../../src/store.ts';
 
 describe('the store of the relay', () => {
@@ -235,9 +236,7 @@ describe('the store of the relay', () => {
   });
 
   it('keeps its tunnels in its file across a reopening', () => {
-    const folder = mkdtempSync(path.join(tmpdir(), 'relay-store-'));
-    try {
-      const file = path.join(folder, 'relay.db');
+    inFolder(file => {
       const first = new Store(file);
       first.putTunnel({
         id: 'one',
@@ -256,8 +255,53 @@ describe('the store of the relay', () => {
         fields: {alpha: 1},
       });
       second.close();
-    } finally {
-      rmSync(folder, {recursive: true, force: true});
-    }
+    });
+  });
+
+  it('refuses at start a file made before tunnels had generations, naming it, and leaves its tunnels as they were', () => {
+    inFolder(file => {
+      const earlier = new DatabaseSync(file);
+      earlier.exec(`
+        CREATE TABLE tunnels (
+          id TEXT PRIMARY KEY,
+          owner INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          fields TEXT NOT NULL
+        );
+        INSERT INTO tunnels VALUES ('one', 7, 'web', '{}');
+      `);
+      earlier.close();
+      const refusal = messageOf(() => new Store(file));
+      const after = new DatabaseSync(file);
+      const kept = after.prepare('SELECT id FROM tunnels').all();
+      after.close();
+      deepStrictEqual(
+        [refusal, kept.map(tunnel => tunnel.id)],
+        [
+          `The relay store ${file} was made before tunnels had generations: delete it, and the relay makes a new one.`,
+          ['one'],
+        ],
+      );
+    });
   });
 });
+
+/** Runs `work` on a store file in a new folder, which is removed after. */
+function inFolder(work: (file: string) => void): void {
+  const folder = mkdtempSync(path.join(tmpdir(), 'relay-store-'));
+  try {
+    work(path.join(folder, 'relay.db'));
+  } finally {
+    rmSync(folder, {recursive: true, force: true});
+  }
+}
+
+/** The message `work` throws with, or `no error`. */
+function messageOf(work: () => unknown): string {
+  try {
+    work();
+    return 'no error';
+  } catch (error) {
+    return (error as Error).message;
+  }
+}

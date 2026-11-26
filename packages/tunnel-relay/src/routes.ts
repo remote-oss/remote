@@ -26,6 +26,8 @@ interface AccountCaller {
 interface TunnelCaller {
   kind: 'tunnel';
   tunnelId: string;
+  /** The numeric GitHub id of the tunnel's owner. */
+  owner: number;
   scope: TokenScope;
 }
 
@@ -35,6 +37,7 @@ export type Caller = AccountCaller | TunnelCaller;
 /** Who a request is from: its caller, or the answer that refuses it. */
 export type Authenticate = (
   headers: Readonly<Record<string, string | undefined>>,
+  address: string,
 ) => Promise<Caller | Answer>;
 
 /** A request as the routes take it, its body read. */
@@ -43,6 +46,8 @@ interface Request {
   path: string;
   query: URLSearchParams;
   headers: Readonly<Record<string, string | undefined>>;
+  /** The address the request came from, as its socket gives it. */
+  address: string;
   body: unknown;
 }
 
@@ -60,6 +65,15 @@ export interface RouteContext {
   tokens: Tokens;
   /** Hears an error a route threw, which the caller's answer doesn't carry. */
   report(error: unknown): void;
+  legs: TunnelLegs;
+}
+
+/** The legs of the relay, as the routes reach them. */
+export interface TunnelLegs {
+  /** Closes the legs of tunnel `tunnelId`. */
+  closeTunnel(tunnelId: string): void;
+  /** How many clients tunnel `tunnelId` has connected. */
+  clientCount(tunnelId: string): number;
 }
 
 /** Whether `value` is a TCP port number: an integer from 1 to 65535. */
@@ -100,6 +114,44 @@ const CHECK_NAME = ':checkNameAvailability';
 
 const NOT_GRANTED = 'This token does not grant that.';
 
+/** The name of the tunnels limit, which `[cli]` finds in a refused create's detail (`dev_tunnels.rs:37,657-679`). */
+const TUNNELS_LIMIT = 'TunnelsPerUserPerLocation';
+
+/** The answer that refuses a port past the limit of `ports`. */
+function tooManyPorts(ports: number): Answer {
+  return problem(429, `This tunnel already has ${String(ports)} ports.`);
+}
+
+/**
+ * The caller's limits as `NamedRateStatus` (`[dev-tunnels] ts/src/contracts/namedRateStatus.ts`, `rateStatus.ts`,
+ * `resourceStatus.ts`): each limit by name, with the caller's use, the most of any of its tunnels for the two per
+ * tunnel.
+ */
+function userLimits(caller: AccountCaller, context: RouteContext): unknown[] {
+  const {store, legs, config} = context;
+  const tunnels = store.tunnelsOf(caller.id);
+  function most(count: (tunnelId: string) => number): number {
+    return Math.max(0, ...tunnels.map(tunnel => count(tunnel.id)));
+  }
+  return [
+    {
+      name: TUNNELS_LIMIT,
+      current: tunnels.length,
+      limit: config.limits.tunnels,
+    },
+    {
+      name: 'PortsPerTunnel',
+      current: most(tunnelId => store.portsOf(tunnelId).length),
+      limit: config.limits.ports,
+    },
+    {
+      name: 'ClientsPerTunnel',
+      current: most(tunnelId => legs.clientCount(tunnelId)),
+      limit: config.limits.clients,
+    },
+  ];
+}
+
 /** Answers `request`. */
 export async function route(
   incoming: IncomingRequest,
@@ -113,10 +165,15 @@ export async function route(
     return problem(400, 'The path is not valid.');
   }
   const clustersAsked = parts.length === 1 && parts[0] === 'clusters';
-  if ((parts[0] !== 'tunnels' || parts.length > 4) && !clustersAsked) {
+  const limitsAsked = parts.length === 1 && parts[0] === 'userlimits';
+  if (
+    (parts[0] !== 'tunnels' || parts.length > 4) &&
+    !clustersAsked &&
+    !limitsAsked
+  ) {
     return problem(404, 'There is no such route.');
   }
-  const caller = await context.authenticate(incoming.headers);
+  const caller = await context.authenticate(incoming.headers, incoming.address);
   if ('status' in caller) {
     return caller;
   }
@@ -134,6 +191,11 @@ export async function route(
     return request.method === 'GET'
       ? success([clusterOf(context.config)])
       : problem(404, 'There is no such route.');
+  }
+  if (limitsAsked) {
+    return caller.kind === 'account' && request.method === 'GET'
+      ? success(userLimits(caller, context))
+      : problem(403, NOT_GRANTED);
   }
   const [, tunnelPart, section, item] = parts;
   if (tunnelPart === undefined || tunnelPart.endsWith(CHECK_NAME)) {
@@ -287,6 +349,7 @@ function tunnelRoute(
   }
   if (request.method === 'DELETE') {
     context.store.deleteTunnel(tunnel.id);
+    context.legs.closeTunnel(tunnel.id);
     return success();
   }
   return problem(404, 'There is no such route.');
@@ -318,6 +381,29 @@ function putTunnel(
   if (existing !== undefined && request.headers['if-none-match'] === '*') {
     return problem(409, 'The tunnel exists.');
   }
+  const {limits} = context.config;
+  if (
+    existing === undefined &&
+    store.tunnelsOf(caller.id).length >= limits.tunnels
+  ) {
+    return problem(
+      429,
+      `The account already has ${String(limits.tunnels)} tunnels (${TUNNELS_LIMIT}).`,
+    );
+  }
+  const bodyPorts = ((body.ports as unknown[] | undefined) ?? [])
+    .map(objectOf)
+    .filter(
+      (fields): fields is Record<string, unknown> & {portNumber: number} =>
+        isPortNumber(fields?.portNumber),
+    );
+  const portNumbers = new Set([
+    ...store.portsOf(tunnelId).map(port => port.portNumber),
+    ...bodyPorts.map(port => port.portNumber),
+  ]);
+  if (portNumbers.size > limits.ports) {
+    return tooManyPorts(limits.ports);
+  }
   const name =
     typeof body.name === 'string'
       ? body.name.toLowerCase()
@@ -339,14 +425,11 @@ function putTunnel(
       fields: {...existing?.fields, ...writable(body)},
     };
     store.putTunnel(record);
-    for (const port of (body.ports as unknown[] | undefined) ?? []) {
-      const fields = objectOf(port);
-      if (fields !== undefined && isPortNumber(fields.portNumber)) {
-        store.putPort(tunnelId, fields.portNumber, {
-          ...store.port(tunnelId, fields.portNumber),
-          ...fields,
-        });
-      }
+    for (const fields of bodyPorts) {
+      store.putPort(tunnelId, fields.portNumber, {
+        ...store.port(tunnelId, fields.portNumber),
+        ...fields,
+      });
     }
     return success(tunnelView(record, request.query, context, true));
   });
@@ -473,6 +556,10 @@ function portRoute(
       existing.protocol !== body.protocol
     ) {
       return problem(400, 'The tunnel port protocol cannot be changed.');
+    }
+    const {ports} = context.config.limits;
+    if (existing === undefined && store.portsOf(tunnel.id).length >= ports) {
+      return tooManyPorts(ports);
     }
     const fields = {...existing, ...body, portNumber: number};
     store.putPort(tunnel.id, number, fields);

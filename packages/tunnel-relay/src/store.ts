@@ -26,7 +26,7 @@ type Row = Record<string, unknown>;
 export class Store {
   private readonly database: DatabaseSync;
 
-  /** Opens the store in `file`, creating its tables when they are missing. */
+  /** Opens the store in `file`, creating its tables when they are missing; a file without generations is refused. */
   constructor(file: string) {
     this.database = new DatabaseSync(file);
     this.database.exec(`
@@ -52,6 +52,16 @@ export class Store {
         PRIMARY KEY (tunnel, endpoint)
       );
     `);
+    const columns = this.database
+      .prepare('SELECT name FROM pragma_table_info(?)')
+      .all('tunnels')
+      .map(column => column.name);
+    if (!columns.includes('generation')) {
+      this.database.close();
+      throw new Error(
+        `The relay store ${file} was made before tunnels had generations: delete it, and the relay makes a new one.`,
+      );
+    }
   }
 
   /** Runs `work` in one transaction, rolled back when it throws. */

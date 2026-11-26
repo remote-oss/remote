@@ -91,7 +91,7 @@ describe('the answers of the relay', () => {
   it('a problem carries the title of its status and its detail', () => {
     deepStrictEqual(
       [
-        [400, 401, 403, 404, 409, 500].map(
+        [400, 401, 403, 404, 409, 429, 500].map(
           status => (problem(status, 'why').body as {title: string}).title,
         ),
         problem(404, 'There is no such tunnel.'),
@@ -103,6 +103,7 @@ describe('the answers of the relay', () => {
           'Forbidden',
           'Not Found',
           'Conflict',
+          'Too Many Requests',
           'Error',
         ],
         {
@@ -133,7 +134,28 @@ describe('the settings of the relay', () => {
       githubApi: 'https://api.github.com',
       allowlistFile: '/run/allowlist',
       tokenKeyFile: '/run/token.key',
+      limits: {tunnels: 10, ports: 10, clients: 10},
     });
+  });
+
+  it('takes each limit from its setting, ten when it is unset', () => {
+    deepStrictEqual(
+      configOf({
+        ...SETTINGS,
+        RELAY_LIMIT_TUNNELS: '25',
+        RELAY_LIMIT_CLIENTS: '1',
+      }).limits,
+      {tunnels: 25, ports: 10, clients: 1},
+    );
+  });
+
+  it('refuses a limit that is not a positive whole number', () => {
+    deepStrictEqual(
+      ['0', '-3', '2.5', 'many', ''].map(value =>
+        messageOf(() => configOf({...SETTINGS, RELAY_LIMIT_PORTS: value})),
+      ),
+      Array(5).fill('RELAY_LIMIT_PORTS is not a positive whole number'),
+    );
   });
 
   it('asks the GitHub API the settings name instead of the public one', () => {
