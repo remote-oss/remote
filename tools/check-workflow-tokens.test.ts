@@ -9,6 +9,7 @@ import {
   workflowTokenProblems,
 } from './check-workflow-tokens.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
+import {TemporaryWorkspace} from './temporary-workspace.ts';
 
 const GUARD =
   'github.event.pull_request.head.repo.full_name == github.repository';
@@ -283,6 +284,7 @@ describe('check-workflow-tokens: no cache holds the CLI archives (card #3197)', 
       '${{ github.workspace }}/.vscode-test',
       '.',
       '.vscode-test/downloads/cli-linux-x?4.tar.gz',
+      '${{ github.workspace }}',
     ];
     deepStrictEqual(
       paths.map(
@@ -292,8 +294,141 @@ describe('check-workflow-tokens: no cache holds the CLI archives (card #3197)', 
             cacheWorkflow('actions/cache@v6', [each]),
           ).length,
       ),
-      [4, 4, 4, 4, 4, 4, 1],
+      [4, 4, 4, 4, 4, 4, 1, 4],
     );
+  });
+
+  it('a ** path reaches the archives across folders: **/cli-*.tar.gz, .vscode-test/**/cli-* and **/cli-linux-x64.tar.gz fail, and **/VSCodium-* passes', () => {
+    deepStrictEqual(
+      [
+        '**/cli-*.tar.gz',
+        '.vscode-test/**/cli-*',
+        '**/cli-linux-x64.tar.gz',
+        '**/VSCodium-*',
+      ].map(
+        each =>
+          cliArchivesCacheProblems(
+            'w.yml',
+            cacheWorkflow('actions/cache@v6', [each]),
+          ).length,
+      ),
+      [4, 4, 1, 0],
+    );
+  });
+
+  it('an absolute path into the workspace fails: the check cannot place it in the checkout', () => {
+    deepStrictEqual(
+      cliArchivesCacheProblems(
+        'w.yml',
+        cacheWorkflow('actions/cache@v6', [
+          '/home/runner/work/remote/remote/.vscode-test',
+        ]),
+      ),
+      [
+        "w.yml: jobs.run.steps.0.with.path caches /home/runner/work/remote/remote/.vscode-test, which is outside the checkout and not one of the outside cache paths the check knows; a fork's pull request can restore a cache saved on main",
+      ],
+    );
+  });
+
+  it('a home path off the list, a path with a .. folder and any other expression fail, a workspace one included', () => {
+    deepStrictEqual(
+      [
+        '~/elsewhere',
+        '~/.cache',
+        '../remote/.vscode-test',
+        '.vscode-test/../../x',
+        '${{ matrix.folder }}',
+        '${{ github.workspace }}/${{ matrix.folder }}',
+        '${{ steps.store.outputs.path }}/x',
+      ].map(
+        each =>
+          cliArchivesCacheProblems(
+            'w.yml',
+            cacheWorkflow('actions/cache@v6', [each]),
+          ).length,
+      ),
+      [1, 1, 1, 1, 1, 1, 1],
+    );
+  });
+
+  it('each outside path on the list passes: the OpenSSH build and the pnpm store', () => {
+    deepStrictEqual(
+      cliArchivesCacheProblems(
+        'w.yml',
+        cacheWorkflow('actions/cache@v6', [
+          '~/.cache/remote-oss',
+          '${{ steps.store.outputs.path }}',
+        ]),
+      ),
+      [],
+    );
+  });
+
+  it('a ! path is not read, so a home, an absolute or an expression one passes, and a cache path beside it is still read', () => {
+    deepStrictEqual(
+      [
+        [
+          '!~/elsewhere',
+          '!/home/runner/work/remote/remote/.vscode-test',
+          '!${{ matrix.folder }}',
+        ],
+        ['!.vscode-test/downloads/VSCodium-*', '.vscode-test/downloads'],
+      ].map(
+        paths =>
+          cliArchivesCacheProblems(
+            'w.yml',
+            cacheWorkflow('actions/cache@v6', paths),
+          ).length,
+      ),
+      [0, 4],
+    );
+  });
+
+  it('a cache step of a composite action that holds the CLI archives fails, named by its runs.steps index', () => {
+    deepStrictEqual(
+      cliArchivesCacheProblems(
+        'action.yml',
+        'runs:\n  using: composite\n  steps:\n    - run: true\n      shell: bash\n    - uses: actions/cache@v6\n      with:\n        path: .vscode-test/downloads/cli-alpine-x64.tar.gz\n        key: k\n',
+      ),
+      [
+        "action.yml: runs.steps.1.with.path caches .vscode-test/downloads/cli-alpine-x64.tar.gz, which holds the CLI archive .vscode-test/downloads/cli-alpine-x64.tar.gz; a fork's pull request can restore a cache saved on main",
+      ],
+    );
+  });
+
+  it('the composite actions under .github/actions are read with the workflows: action.yml or action.yaml, each folder', () => {
+    const workspace = new TemporaryWorkspace('workflow-tokens');
+    try {
+      workspace.write(
+        '.github/workflows/w.yml',
+        'on: push\npermissions: {contents: read}\njobs: {}\n',
+      );
+      const actions: Array<[string, string]> = [
+        ['.github/actions/one/action.yml', '~/elsewhere'],
+        [
+          '.github/actions/two/action.yaml',
+          '.vscode-test/downloads/cli-linux-x64.tar.gz',
+        ],
+        ['.github/actions/three/action.yml', '~/.cache/remote-oss'],
+      ];
+      for (const [file, cachePath] of actions) {
+        workspace.write(
+          file,
+          `runs:\n  using: composite\n  steps:\n    - uses: actions/cache@v6\n      with:\n        path: ${cachePath}\n        key: k\n`,
+        );
+      }
+      deepStrictEqual(
+        workflowsTokenProblems(workspace.root).map(
+          problem => problem.split(' caches ')[0],
+        ),
+        [
+          '.github/actions/one/action.yml: runs.steps.0.with.path',
+          '.github/actions/two/action.yaml: runs.steps.0.with.path',
+        ],
+      );
+    } finally {
+      workspace.remove();
+    }
   });
 
   it('the restore and save actions are read too, and a problem names the step, the path and the archive', () => {
@@ -313,7 +448,7 @@ describe('check-workflow-tokens: no cache holds the CLI archives (card #3197)', 
     );
   });
 
-  it('the VSCodium archives, a path outside the checkout, a ! path, another action and a step with no path pass', () => {
+  it('the VSCodium archives, a listed path outside the checkout, a ! path, another action and a step with no path pass', () => {
     deepStrictEqual(
       [
         cacheWorkflow('actions/cache@v6', [
