@@ -1,7 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
 import {createHmac} from 'node:crypto';
-import {Allowlist} from '../../src/auth/allowlist.ts';
-import {authenticateWith} from '../../src/auth/authenticate.ts';
+import {Allowlist, type AllowlistFile} from '../../src/auth/allowlist.ts';
+import {
+  authenticateWith,
+  NO_LONGER_ADMITTED,
+} from '../../src/auth/authenticate.ts';
 import {type Fetch, GithubIdentity, KEPT_MOST} from '../../src/auth/github.ts';
 import {LookupLimit} from '../../src/auth/lookups.ts';
 import {Tokens} from '../../src/auth/tokens.ts';
@@ -358,9 +361,9 @@ describe('the refusals and the order of the answers kept', () => {
 });
 
 describe('the allowlist', () => {
-  it('admits the numeric ids of its file, skips comments and other lines, and reads the file again when it changes', () => {
+  it('admits the numeric ids of its file, skips comments and blank lines, and reads the file again when it changes', () => {
     let modified = 1;
-    let text = '42\n# the operator\n  7  # a comment\nnot-an-id\n';
+    let text = '42\n# the operator\n\n  7  # a comment\n';
     let reads = 0;
     const allowlist = new Allowlist({
       modified: () => modified,
@@ -381,6 +384,163 @@ describe('the allowlist', () => {
       [before, unchanged, allowlist.admits(42), allowlist.admits(8), reads],
       [[true, true, false], true, false, true, 2],
     );
+  });
+
+  it('announces each reading of its file, whether a check or a refresh asks for it, and only when the file changed', () => {
+    let modified = 1;
+    let readings = 0;
+    const allowlist = new Allowlist(
+      {modified: () => modified, text: () => '42\n'},
+      {
+        onRead: () => {
+          readings += 1;
+        },
+      },
+    );
+    allowlist.refresh();
+    allowlist.admits(42);
+    allowlist.refresh();
+    const unchanged = readings;
+    modified = 2;
+    allowlist.admits(42);
+    modified = 3;
+    allowlist.refresh();
+    deepStrictEqual([unchanged, readings], [1, 3]);
+  });
+
+  it("keeps the last list when its file can't be read, reports each failed reading, and reads it again once it can", () => {
+    let state: 'listed' | 'removed' | 'unreadable' | 'changed' = 'listed';
+    const removed = new Error('ENOENT: the file is gone');
+    const unreadable = new Error('EACCES: the file cannot be read');
+    const reported: unknown[] = [];
+    let readings = 0;
+    const allowlist = new Allowlist(
+      {
+        modified: () => {
+          if (state === 'removed') {
+            throw removed;
+          }
+          return state === 'listed' ? 1 : 2;
+        },
+        text: () => {
+          if (state === 'unreadable') {
+            throw unreadable;
+          }
+          return state === 'listed' ? '42\n' : '7\n';
+        },
+      },
+      {
+        onRead: () => {
+          readings += 1;
+        },
+        report: failure => {
+          reported.push(failure);
+        },
+      },
+    );
+    const before = [allowlist.admits(42), allowlist.admits(7)];
+    state = 'removed';
+    allowlist.refresh();
+    const whileRemoved = [allowlist.admits(42), allowlist.admits(7)];
+    state = 'unreadable';
+    const whileUnreadable = [allowlist.admits(42), allowlist.admits(7)];
+    state = 'changed';
+    deepStrictEqual(
+      [
+        before,
+        whileRemoved,
+        whileUnreadable,
+        [allowlist.admits(42), allowlist.admits(7)],
+        reported,
+        readings,
+      ],
+      [
+        [true, false],
+        [true, false],
+        [true, false],
+        [false, true],
+        [removed, removed, removed, unreadable, unreadable],
+        2,
+      ],
+    );
+  });
+
+  it("throws at its first reading when the file can't be read or holds a line that is not an id, naming the line", () => {
+    function firstReading(file: AllowlistFile): string {
+      return messageOf(() => {
+        new Allowlist(file).load();
+      });
+    }
+    deepStrictEqual(
+      [
+        firstReading({
+          modified: () => {
+            throw new Error('ENOENT: the file is gone');
+          },
+          text: () => '42\n',
+        }),
+        firstReading({modified: () => 1, text: () => '42\n# ok\nbob\n'}),
+        firstReading({modified: () => 1, text: () => '42\n7 8\n'}),
+        firstReading({modified: () => 1, text: () => '42\n# ok\n'}),
+      ],
+      [
+        'ENOENT: the file is gone',
+        'Line 3 of the allowlist is not an account id: bob',
+        'Line 2 of the allowlist is not an account id: 7 8',
+        'no error',
+      ],
+    );
+  });
+
+  it('keeps the last list when a later reading finds a line that is not an id, reports it, and reads the fixed file', () => {
+    let modified = 1;
+    let text = '42\n7\n';
+    const reported: unknown[] = [];
+    const allowlist = new Allowlist(
+      {modified: () => modified, text: () => text},
+      {
+        report: failure => {
+          reported.push(failure);
+        },
+      },
+    );
+    allowlist.load();
+    modified = 2;
+    text = '42\n7x\n';
+    const withTypo = [allowlist.admits(42), allowlist.admits(7)];
+    modified = 3;
+    text = '42\n';
+    deepStrictEqual(
+      [
+        withTypo,
+        reported.map(String),
+        [allowlist.admits(42), allowlist.admits(7)],
+      ],
+      [
+        [true, true],
+        [
+          'Error: Line 2 of the allowlist is not an account id: 7x',
+          'Error: Line 2 of the allowlist is not an account id: 7x',
+        ],
+        [true, false],
+      ],
+    );
+  });
+
+  it('reads on without telling anyone when it was given no hooks and its file fails', () => {
+    let fails = false;
+    const allowlist = new Allowlist({
+      modified: () => {
+        if (fails) {
+          throw new Error('gone');
+        }
+        return 1;
+      },
+      text: () => '42\n',
+    });
+    const before = allowlist.admits(42);
+    fails = true;
+    deepStrictEqual([before, allowlist.admits(42)], [true, true]);
   });
 });
 
@@ -542,7 +702,7 @@ describe('who a request is from', () => {
         await callerFor('tunnel one two', 200, tokens),
       ],
       [
-        {kind: 'tunnel', tunnelId: 'one', scope: 'host'},
+        {kind: 'tunnel', tunnelId: 'one', owner: 42, scope: 'host'},
         {
           status: 401,
           body: {
@@ -558,6 +718,23 @@ describe('who a request is from', () => {
           },
         },
       ],
+    );
+  });
+
+  it('refuses with 403 a valid tunnel token whose owner the allowlist no longer lists', async () => {
+    const tokens = new Tokens(SIGNING_KEY, () => 0);
+    const unlisted = {...TUNNEL_ONE, owner: 9};
+    deepStrictEqual(
+      await callerFor(
+        `tunnel ${tokens.issue(unlisted, 'usw2', 'host')}`,
+        200,
+        tokens,
+        unlisted,
+      ),
+      {
+        status: 403,
+        body: {title: 'Forbidden', detail: NO_LONGER_ADMITTED},
+      },
     );
   });
 
@@ -579,7 +756,7 @@ describe('who a request is from', () => {
         refused,
         refused,
         refused,
-        {kind: 'tunnel', tunnelId: 'one', scope: 'connect'},
+        {kind: 'tunnel', tunnelId: 'one', owner: 42, scope: 'connect'},
       ],
     );
   });

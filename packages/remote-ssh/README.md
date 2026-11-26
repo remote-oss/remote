@@ -99,6 +99,43 @@ The status numbers only grow: a new status takes the next unused number, and no 
 | `NoDownloaderAvailable` | 8 |
 | `InvalidProxyUrl` | 9 |
 
+## Folder history
+
+Remote Explorer lists, under each host, the folders and workspaces the user opened on it, most recent first. The history lives in
+files of the extension's global storage folder (`remote-oss.remote-ssh`), in the folder `folder-history`. Nothing in
+it leaves the machine, and "Remove from Recent List" on a row records a `removed` event. This section is the
+documented accessor: a test reads the files through this layout and these field names.
+
+Each window writes its own file, `<session>.json`, where `<session>` is a random UUID the window picks when it starts, so
+no window's write can drop another's. A window writes its file whole, under a temporary name that it renames over the
+file. The folder is created with mode 0700 and each file with mode 0600.
+
+A file holds `{"events": [...]}`, one event for each change to an entry, and an event has:
+
+| Field | Meaning |
+|---|---|
+| `host` | The key of the host the entry belongs to. |
+| `entry` | The entry as the endpoint returns it: `{"path": ..., "kind": ...}`, where `kind` is `folder` or `workspace`. |
+| `kind` | `opened` when the entry was opened, `removed` when it was removed from the list. |
+| `time` | When the change happened, in milliseconds since the epoch. |
+
+A window holds one event for each entry, the newest it knows. To read the history, take every window's file and, for each
+host and path, the newest event over all of them: it decides, and an entry whose newest event is `removed` is not listed.
+Two events at the same time are decided by the later session, comparing the session names as text. The entries of a host
+are listed by time, the most recent first, and the later session first at the same time. The hosts are ordered as the earlier
+version's value ordered them, then, for the others, the host whose oldest entry is oldest first.
+
+Two kinds of name in the folder are not a window's file:
+
+| Name | Meaning |
+|---|---|
+| `<session>.claim-<hex>` | A file of a window that has not changed for a day, renamed by another window while it folds the file's events into its own. It is read as the file of `<session>` until the folding window has written its own file and deleted it. |
+| `<session>.json.tmp-<hex>` | A write that is not yet renamed into place. It is never read, and the next window to write removes it once it is a day old. |
+
+A file that has not changed for a day is folded this way by the next window that writes, so the files of windows that ended
+do not pile up. An earlier version kept the whole history in one value of the extension's global state, under
+`folder.history.v1`. That value is read as the oldest layer, every entry at time 0 in its order, and is never written.
+
 ## For maintainers
 
 | | |

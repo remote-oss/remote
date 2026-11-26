@@ -6,6 +6,7 @@ import {connect, type AddressInfo, type Socket} from 'node:net';
 import devTunnelsSsh from '@microsoft/dev-tunnels-ssh';
 import {PassThrough} from 'node:stream';
 import {WebSocket, type ClientOptions} from 'ws';
+import {Allowlist} from '../../src/auth/allowlist.ts';
 import {sendCopies} from '../../src/legs/copies.ts';
 import {LARGEST_MESSAGE, Legs, type Timers} from '../../src/legs/legs.ts';
 import type {Authenticate} from '../../src/routes.ts';
@@ -29,15 +30,15 @@ const CLIENT = 'tunnel-relay-client';
 const addresses: string[] = [];
 
 /**
- * Takes `tunnel <id> <scope>` as that tunnel's token, `github <login>` as an account, `refused` as a refusal, and
- * `broken` as a failure to ask, and `limited` as an address that has asked too often.
+ * Takes `tunnel <id> <scope> [<owner>]` as that tunnel's token, of owner 7 unless one is named, `github <login>` as an
+ * account, `refused` as a refusal, `broken` as a failure to ask, and `limited` as an address that has asked too often.
  */
 function authenticate(
   headers: Parameters<Authenticate>[0],
   address: string,
 ): ReturnType<Authenticate> {
   addresses.push(address);
-  const [scheme = '', first = '', second = ''] = (
+  const [scheme = '', first = '', second = '', owner = '7'] = (
     headers.authorization ?? ''
   ).split(' ');
   if (scheme === 'broken') {
@@ -51,7 +52,12 @@ function authenticate(
     });
   }
   if (scheme === 'tunnel' && (second === 'host' || second === 'connect')) {
-    return Promise.resolve({kind: 'tunnel', tunnelId: first, scope: second});
+    return Promise.resolve({
+      kind: 'tunnel',
+      tunnelId: first,
+      owner: Number(owner),
+      scope: second,
+    });
   }
   if (scheme === 'github') {
     return Promise.resolve({kind: 'account', id: 7, login: first});
@@ -130,7 +136,7 @@ describe("the relay's WebSocket legs", () => {
   beforeEach(async () => {
     reported = [];
     timers = new FakeTimers();
-    legs = new Legs(authenticate, reportOf, timers);
+    legs = new Legs(authenticate, reportOf, 2, timers);
     server = createServer();
     server.on('upgrade', (request, socket, head: Buffer) => {
       void legs.upgrade(request, socket, head);
@@ -228,6 +234,7 @@ describe("the relay's WebSocket legs", () => {
     onOpening: (event: Opening) => void = event => {
       echo(event.channel);
     },
+    owner = 7,
   ): Promise<HostSide> {
     const session = new SshClientSession(new SshSessionConfiguration(false));
     sessions.push(session);
@@ -236,7 +243,7 @@ describe("the relay's WebSocket legs", () => {
     await opening(
       `/relay/host/${tunnelId}`,
       [HOST],
-      `tunnel ${tunnelId} host`,
+      `tunnel ${tunnelId} host ${String(owner)}`,
       {},
       websocket => {
         websocket.binaryType = 'arraybuffer';
@@ -382,6 +389,30 @@ describe("the relay's WebSocket legs", () => {
           [500, 'The relay failed.'],
           ['Error: down'],
         ],
+      );
+    });
+
+    it('refuses a client past the limit with 403, counting clients as they connect and leave', async () => {
+      await host('one');
+      const first = await client('one');
+      await client('one');
+      const counted = legs.clientCount('one');
+      const refused = await refusal(
+        '/relay/client/one',
+        [CLIENT],
+        'tunnel one connect',
+      );
+      first.websocket.close();
+      await until(() => legs.clientCount('one') === 1);
+      deepStrictEqual(
+        [
+          counted,
+          refused,
+          await refusal('/relay/client/one', [CLIENT], 'tunnel one connect'),
+          legs.clientCount('one'),
+          legs.clientCount('other'),
+        ],
+        [2, [403, 'The tunnel already has 2 connected clients.'], 'open', 2, 0],
       );
     });
 
@@ -543,7 +574,7 @@ describe("the relay's WebSocket legs", () => {
 
   describe('the keep-alive', () => {
     it("runs on the node's timers unless it is given others", async () => {
-      legs = new Legs(authenticate, reportOf);
+      legs = new Legs(authenticate, reportOf, 2);
       const websocket = await opening(
         '/relay/host/one',
         [HOST],
@@ -587,6 +618,33 @@ describe("the relay's WebSocket legs", () => {
       await pinged;
       timers.fire();
       deepStrictEqual(await closed(websocket), 1006);
+    });
+
+    it('pings again a minute after a pong, and ends the leg when that second ping goes unanswered', async () => {
+      const websocket = await opening(
+        '/relay/host/one',
+        [HOST],
+        'tunnel one host',
+        {autoPong: false},
+      );
+      const firstPing = new Promise(resolve => {
+        websocket.once('ping', resolve);
+      });
+      timers.fire();
+      await firstPing;
+      websocket.pong();
+      await until(() => timers.delays()[0] === 60_000);
+      const secondPing = new Promise(resolve => {
+        websocket.once('ping', resolve);
+      });
+      timers.fire();
+      await secondPing;
+      const openAfterSecondPing = websocket.readyState === WebSocket.OPEN;
+      timers.fire();
+      deepStrictEqual(
+        [openAfterSecondPing, await closed(websocket)],
+        [true, 1006],
+      );
     });
 
     it('starts the minute again whenever the leg sends anything, and stops when it closes', async () => {
@@ -701,6 +759,45 @@ describe("the relay's WebSocket legs", () => {
         Buffer.alloc(0),
       );
       deepStrictEqual(addresses, ['']);
+    });
+  });
+
+  describe('an owner taken off the allowlist', () => {
+    it("loses every leg on the allowlist's next reading, host and clients, while other owners keep theirs", async () => {
+      let listed = '7\n8\n';
+      let modified = 1;
+      const allowlist = new Allowlist(
+        {modified: () => modified, text: () => listed},
+        {
+          onRead: () => {
+            legs.closeUnadmitted(owner => allowlist.admits(owner));
+          },
+        },
+      );
+      allowlist.refresh();
+      await host('one');
+      const removed = await host('two', undefined, 8);
+      const hostClosed = new Promise(resolve => {
+        removed.onClosed(resolve);
+      });
+      const kept = await client('one', [Buffer.from('a')]);
+      const dropped = await client('two', [Buffer.from('b')]);
+      await bytesOf(kept.received, 1);
+      await bytesOf(dropped.received, 1);
+      listed = '7\n';
+      modified = 2;
+      allowlist.refresh();
+      const droppedCode = await closed(dropped.websocket);
+      await hostClosed;
+      kept.websocket.send(Buffer.from('still'));
+      deepStrictEqual(
+        [
+          droppedCode,
+          hostCount('two'),
+          String(await bytesOf(kept.received, 6)),
+        ],
+        [1005, false, 'astill'],
+      );
     });
   });
 
