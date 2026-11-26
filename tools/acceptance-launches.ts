@@ -1378,7 +1378,7 @@ export function launchesOf(root: string): Launch[] {
       ...RENDERER_LAUNCH,
       label: 'wsl-linux',
       suite: 'wsl',
-      files: ['activation.test.ts'],
+      files: ['activation.test.ts', 'identity.test.ts'],
       withExtensions: ['remote-oss.remote-wsl'],
       settings: {...RENDERER_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
     },

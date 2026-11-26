@@ -12,6 +12,8 @@ interface Gated {
 interface Manifest {
   readonly publisher: string;
   readonly name: string;
+  readonly displayName: string;
+  readonly categories: readonly string[];
   readonly extensionKind: readonly string[];
   readonly engines: {readonly vscode: string};
   readonly activationEvents: readonly string[];
@@ -85,6 +87,17 @@ describe('the WSL manifest (wsl.package)', () => {
           'onCommand:remote-wsl.newWindowForDistro',
         ],
       },
+    );
+  });
+
+  it('F-6005 AC-12, AC-14: names itself WSL through its display name, and has the one category Other', () => {
+    deepStrictEqual(
+      [
+        MANIFEST.displayName,
+        english(MANIFEST.displayName),
+        MANIFEST.categories,
+      ],
+      ['%displayName%', 'WSL', ['Other']],
     );
   });
 
