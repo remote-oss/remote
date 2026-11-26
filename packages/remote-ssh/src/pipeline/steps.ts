@@ -10,6 +10,7 @@ import type {
   CliInstallOutcome,
   CliServeParams,
   GateOutcome,
+  HeldServerOutcome,
   MaintenanceOutcome,
   Plan,
   PlanFailure,
@@ -104,6 +105,11 @@ export interface ConnectionLease {
   startedLogin: boolean;
   /** What an earlier window of the connection left for reuse; none when nothing was stored. */
   storedRecord: SharedRecord | undefined;
+  /**
+   * Whether this connect started the connection server, so that its start checked the install folder; a connect that
+   * joined one another window started did not. The terminal mode's own session counts as started.
+   */
+  startedHelper: boolean;
   /** Leaves what a later window needs to reuse the server; true when the connection took it. */
   storeSharedRecord(record: SharedRecord): Promise<boolean>;
   /**
@@ -317,18 +323,45 @@ export interface ConnectSteps {
     action: 'kill' | 'uninstall' | 'cleanup',
     cancellation: AbortSignal,
     host?: ProbedHost,
+    dataFolder?: string,
   ): Promise<MaintenanceOutcome>;
+  /**
+   * Whether this connect's plan for `host` is certainly the direct install, read from the plan's own inputs: the setting
+   * off, a socket-mode start, a manual bootstrap, or no usable CLI source. False wherever it might be the CLI.
+   */
+  certainlyDirect(input: ConnectInput, host: ProbedHost): boolean;
+  /**
+   * Whether the server a shared record holds still runs in `dataFolder`, the record's, read on the host over the lease's
+   * session; it starts nothing and takes no lock.
+   */
+  heldServer(
+    input: ConnectInput,
+    lease: ConnectionLease,
+    host: ProbedHost,
+    dataFolder: string,
+    cancellation: AbortSignal,
+  ): Promise<HeldServerOutcome>;
   /** Installs the default extensions on a server that was already running; a failure never fails the connect. */
   installExtensions(
     input: ConnectInput,
     lease: ConnectionLease,
     cancellation: AbortSignal,
+    dataFolder?: string,
   ): Promise<void>;
   /**
    * The path the window's tunnel takes, read once for the connect. The pipeline bounds the tunnel step itself only
    * on the SOCKS path: a second `ssh` has its own bounds, and a login to wait for.
    */
   tunnelPath(): TunnelPath;
+  /**
+   * Whether the server at `address` answers with `connectionToken` as its own: any reply of the server but its refusal
+   * of the token, within a bound of a few seconds. A server that is gone, hangs or refuses the token does not.
+   */
+  serverAnswers(
+    address: {host: string; port: number},
+    connectionToken: string,
+    cancellation: AbortSignal,
+  ): Promise<boolean>;
   /** Opens the window's port to the server through the connection; `onWaiting` fires if the port is slow to answer. */
   openTunnel(
     input: ConnectInput,

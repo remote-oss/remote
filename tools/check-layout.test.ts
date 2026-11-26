@@ -64,8 +64,14 @@ describe('check-layout', () => {
     writePackage('helpers');
     writeSolution([...EXTENSION_FOLDERS, 'helpers']);
     deepStrictEqual(checkLayout(workspace.root), [
-      'packages/helpers is neither an extension nor a lib-<name> folder',
+      'packages/helpers is neither an extension, a lib-<name> folder nor a service',
     ]);
+  });
+
+  it('accepts a service folder by its name', () => {
+    writePackage('tunnel-relay');
+    writeSolution([...EXTENSION_FOLDERS, 'tunnel-relay']);
+    deepStrictEqual(checkLayout(workspace.root), []);
   });
 
   it('reports the missing files of a package folder', () => {

@@ -472,3 +472,61 @@ describe("the CLI path's local bridge", () => {
     deepStrictEqual(bridge.address, {host: '127.0.0.1', port: PORT});
   });
 });
+
+describe("the CLI path's local bridge: the first serve the connect asks for (ruling-3028-exec-download)", () => {
+  it('runs serve on socket 0 and gives serving', async () => {
+    const {peer, bridge} = await bridgeOver();
+    const served = await bridge.firstServe();
+    deepStrictEqual(
+      [served, serveSocketIds(peer.requests)],
+      [{kind: 'serving'}, [0]],
+    );
+  });
+
+  it('runs one serve however often it is asked', async () => {
+    const {peer, bridge} = await bridgeOver();
+    await Promise.all([bridge.firstServe(), bridge.firstServe()]);
+    deepStrictEqual(serveSocketIds(peer.requests), [0]);
+  });
+
+  it("gives the first connection that serve's socket, with no second serve, and relays its bytes on socket 0", async () => {
+    const {peer, local, bridge} = await bridgeOver();
+    await bridge.firstServe();
+    const editor = local.accept(PORT);
+    await settled();
+    editor?.receive(new TextEncoder().encode('first'));
+    deepStrictEqual(
+      [serveSocketIds(peer.requests), relayedText(peer.requests, 0)],
+      [[0], 'first'],
+    );
+  });
+
+  it('gives the second connection a serve of its own, on socket 1', async () => {
+    const {peer, local, bridge} = await bridgeOver();
+    await bridge.firstServe();
+    local.accept(PORT);
+    await settled();
+    local.accept(PORT);
+    await settled();
+    deepStrictEqual(serveSocketIds(peer.requests), [0, 1]);
+  });
+
+  it('gives a serve the CLI fails as that failure, with its error line', async () => {
+    const {bridge} = await bridgeOver({answer: 'templateError'});
+    const served = await bridge.firstServe();
+    deepStrictEqual(
+      served.kind === 'serveFailed'
+        ? [served.kind, served.error.kind, served.errorLine]
+        : served,
+      ['serveFailed', 'template', 'Error installing server: cannot expand'],
+    );
+  });
+
+  it('gives a serve that outlasts its bound as a control loss', async () => {
+    const {bridge, clock} = await bridgeOver({answer: 'held'});
+    const served = bridge.firstServe();
+    await settled();
+    clock.advance(60_000);
+    deepStrictEqual(await served, {kind: 'controlClosed'});
+  });
+});

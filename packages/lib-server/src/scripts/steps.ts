@@ -20,7 +20,8 @@ export type ScriptStep =
   | 'stopCli'
   | 'kill'
   | 'uninstall'
-  | 'cleanup';
+  | 'cleanup'
+  | 'heldServer';
 
 /** The extra actions of a stepwise install, in the order they run. */
 export type StepwiseAction = 'prepare' | 'unpack' | 'activate';
@@ -284,6 +285,7 @@ export const STEP_OUTCOMES: Readonly<
     statuses: ['Ok', 'LockBusy', 'CreateInstallDirFailed'],
     facts: [...LOCK_FACTS],
   },
+  heldServer: {statuses: ['Ok'], facts: ['server.alive', 'server.port']},
 };
 
 /** The statuses or fact keys of `outcomes` that the interpreter's script may report. */
@@ -353,6 +355,7 @@ const STEP_ROLES: Readonly<
   kill: ['common', 'process', 'serverTree', 'stop'],
   uninstall: ['common', 'process', 'serverTree', 'stop'],
   cleanup: ['common', 'lock', 'folderKind'],
+  heldServer: ['common', 'process'],
 };
 
 /** The roles of one request's script: its step's, and the tree's when an install or a start uses a server tree. */
