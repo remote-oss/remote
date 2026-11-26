@@ -1,8 +1,9 @@
 /**
  * @fileoverview The accounts the relay admits: a file of numeric GitHub ids, one per line, with `#` comments, kept by the
  * relay's operator. It is read again whenever its modification time changes, and each new reading is announced, so the
- * relay can close the legs of owners it no longer lists. A file that can't be read keeps the last list: the failure is
- * reported, and no account is admitted or refused because of it.
+ * relay can close the legs of owners it no longer lists. Its first reading, at start, throws when the file can't be read
+ * or holds a line that is neither an id nor a comment, since there is no list to keep. A later reading that fails the
+ * same way keeps the last list: the failure is reported, and no account is admitted or refused because of it.
  */
 
 /** What the allowlist reads of its file. */
@@ -38,33 +39,40 @@ export class Allowlist {
     return this.admitted.has(accountId);
   }
 
-  /** Reads the file again when its modification time changed since the last reading; one it can't read keeps the list. */
-  refresh(): void {
-    let modified: number;
-    let text: string;
-    try {
-      modified = this.file.modified();
-      if (modified === this.readAt) {
-        return;
-      }
-      text = this.file.text();
-    } catch (failure) {
-      this.hooks.report?.(failure);
-      return;
-    }
-    this.admitted = idsIn(text);
+  /** Reads the file, throwing when it can't be read or isn't a list of ids: the first reading, with no list to keep. */
+  load(): void {
+    const modified = this.file.modified();
+    this.admitted = idsIn(this.file.text());
     this.readAt = modified;
     this.hooks.onRead?.();
   }
+
+  /** Reads the file again when its modification time changed; one it can't read, or that isn't a list, keeps the list. */
+  refresh(): void {
+    try {
+      if (this.file.modified() !== this.readAt) {
+        this.load();
+      }
+    } catch (failure) {
+      this.hooks.report?.(failure);
+    }
+  }
 }
 
-/** The numeric ids of `text`, one per line, after `#` comments are dropped. */
+/** The numeric ids of `text`, one per line, after `#` comments and blank lines are dropped; throws at any other line. */
 function idsIn(text: string): Set<number> {
-  return new Set(
-    text
-      .split('\n')
-      .map(line => line.replace(/#.*$/, '').trim())
-      .filter(line => /^\d+$/.test(line))
-      .map(Number),
-  );
+  const accounts = new Set<number>();
+  for (const [index, line] of text.split('\n').entries()) {
+    const entry = line.replace(/#.*$/, '').trim();
+    if (entry === '') {
+      continue;
+    }
+    if (!/^\d+$/.test(entry)) {
+      throw new Error(
+        `Line ${String(index + 1)} of the allowlist is not an account id: ${entry}`,
+      );
+    }
+    accounts.add(Number(entry));
+  }
+  return accounts;
 }

@@ -45,6 +45,14 @@ const authenticate = authenticateWith({
   report: reportFailure,
 });
 const legs = new Legs(authenticate, reportFailure, config.limits.clients);
+try {
+  allowlist.load();
+} catch (failure) {
+  process.stderr.write(
+    `the relay cannot start: the allowlist ${config.allowlistFile}: ${String(failure)}\n`,
+  );
+  process.exit(1);
+}
 const server = relayServer(
   {
     store,

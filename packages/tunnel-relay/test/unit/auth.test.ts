@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {createHmac} from 'node:crypto';
-import {Allowlist} from '../../src/auth/allowlist.ts';
+import {Allowlist, type AllowlistFile} from '../../src/auth/allowlist.ts';
 import {
   authenticateWith,
   NO_LONGER_ADMITTED,
@@ -361,9 +361,9 @@ describe('the refusals and the order of the answers kept', () => {
 });
 
 describe('the allowlist', () => {
-  it('admits the numeric ids of its file, skips comments and other lines, and reads the file again when it changes', () => {
+  it('admits the numeric ids of its file, skips comments and blank lines, and reads the file again when it changes', () => {
     let modified = 1;
-    let text = '42\n# the operator\n  7  # a comment\nnot-an-id\n';
+    let text = '42\n# the operator\n\n  7  # a comment\n';
     let reads = 0;
     const allowlist = new Allowlist({
       modified: () => modified,
@@ -461,6 +461,68 @@ describe('the allowlist', () => {
         [false, true],
         [removed, removed, removed, unreadable, unreadable],
         2,
+      ],
+    );
+  });
+
+  it("throws at its first reading when the file can't be read or holds a line that is not an id, naming the line", () => {
+    function firstReading(file: AllowlistFile): string {
+      return messageOf(() => {
+        new Allowlist(file).load();
+      });
+    }
+    deepStrictEqual(
+      [
+        firstReading({
+          modified: () => {
+            throw new Error('ENOENT: the file is gone');
+          },
+          text: () => '42\n',
+        }),
+        firstReading({modified: () => 1, text: () => '42\n# ok\nbob\n'}),
+        firstReading({modified: () => 1, text: () => '42\n7 8\n'}),
+        firstReading({modified: () => 1, text: () => '42\n# ok\n'}),
+      ],
+      [
+        'ENOENT: the file is gone',
+        'Line 3 of the allowlist is not an account id: bob',
+        'Line 2 of the allowlist is not an account id: 7 8',
+        'no error',
+      ],
+    );
+  });
+
+  it('keeps the last list when a later reading finds a line that is not an id, reports it, and reads the fixed file', () => {
+    let modified = 1;
+    let text = '42\n7\n';
+    const reported: unknown[] = [];
+    const allowlist = new Allowlist(
+      {modified: () => modified, text: () => text},
+      {
+        report: failure => {
+          reported.push(failure);
+        },
+      },
+    );
+    allowlist.load();
+    modified = 2;
+    text = '42\n7x\n';
+    const withTypo = [allowlist.admits(42), allowlist.admits(7)];
+    modified = 3;
+    text = '42\n';
+    deepStrictEqual(
+      [
+        withTypo,
+        reported.map(String),
+        [allowlist.admits(42), allowlist.admits(7)],
+      ],
+      [
+        [true, true],
+        [
+          'Error: Line 2 of the allowlist is not an account id: 7x',
+          'Error: Line 2 of the allowlist is not an account id: 7x',
+        ],
+        [true, false],
       ],
     );
   });
