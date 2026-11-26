@@ -14,6 +14,7 @@ import {
   recordLines,
   reloadWindow,
   signal,
+  userSettingsFile,
   waitFor,
   type RecordLine,
 } from './harness.ts';
@@ -31,9 +32,9 @@ import {
   serversGoneWithin,
   setting,
   settingsText,
-  storedPlatform,
   typeHost,
 } from './maintenance.ts';
+import {storedPlatformOf} from './stored-platform.ts';
 
 /** The question of the platform pick of the host `harness`. */
 const PLATFORM_QUESTION = 'Select the platform of the remote host "harness"';
@@ -147,13 +148,15 @@ describe('the remote platform pick in non-local mode (card coverage-94)', functi
             !['platformPick', 'progress', 'progressEnd'].includes(line.surface),
         )
         .map(line => line.surface),
-      stored: storedPlatform(),
+      stored: storedPlatformOf(userSettingsFile()),
     };
     signal('c94-p4-answer');
     await connectedWithin('p4', INSTALL_MILLISECONDS);
     await waitFor(
       'the platform to be stored',
-      () => JSON.stringify(storedPlatform()) === '{"harness":"linux"}',
+      () =>
+        JSON.stringify(storedPlatformOf(userSettingsFile())) ===
+        '{"harness":"linux"}',
       30_000,
     );
     const notice = linesOf('p4', 'notice');
@@ -164,7 +167,7 @@ describe('the remote platform pick in non-local mode (card coverage-94)', functi
         waiting,
         notice.map(line => [line.question, line.buttons]),
         within,
-        storedPlatform(),
+        storedPlatformOf(userSettingsFile()),
       ],
       [
         {
@@ -185,11 +188,13 @@ describe('the remote platform pick in non-local mode (card coverage-94)', functi
     await connectedWithin('p7', INSTALL_MILLISECONDS);
     await waitFor(
       'the platform to be stored',
-      () => JSON.stringify(storedPlatform()) === '{"harness":"linux"}',
+      () =>
+        JSON.stringify(storedPlatformOf(userSettingsFile())) ===
+        '{"harness":"linux"}',
       30_000,
     );
     deepStrictEqual(
-      [asked('p7').notices, storedPlatform()],
+      [asked('p7').notices, storedPlatformOf(userSettingsFile())],
       [[[storedNotice('linux'), ["Don't Show Again"]]], {harness: 'linux'}],
     );
   });
@@ -224,7 +229,12 @@ describe('the remote platform pick in non-local mode (card coverage-94)', functi
     );
     const lines = asked('p9');
     deepStrictEqual(
-      [lines.picks, lines.dialogs, lines.notices, storedPlatform()],
+      [
+        lines.picks,
+        lines.dialogs,
+        lines.notices,
+        storedPlatformOf(userSettingsFile()),
+      ],
       [
         [
           [PLATFORM_QUESTION, ['Linux', 'Windows', 'macOS']],
@@ -279,12 +289,16 @@ describe('the remote platform pick in non-local mode (card coverage-94)', functi
     await waitFor(
       'the exact entry to be stored',
       () =>
-        JSON.stringify(storedPlatform()) ===
+        JSON.stringify(storedPlatformOf(userSettingsFile())) ===
         '{"harn*":"linux","harness":"linux"}',
       30_000,
     );
     deepStrictEqual(
-      [asked('p13').picks, asked('p13').notices, storedPlatform()],
+      [
+        asked('p13').picks,
+        asked('p13').notices,
+        storedPlatformOf(userSettingsFile()),
+      ],
       [
         [],
         [[storedNotice('linux'), ["Don't Show Again"]]],
@@ -299,11 +313,17 @@ describe('the remote platform pick in non-local mode (card coverage-94)', functi
     await connectedWithin('p14', INSTALL_MILLISECONDS);
     await waitFor(
       'the entry to become linux',
-      () => JSON.stringify(storedPlatform()) === '{"harness":"linux"}',
+      () =>
+        JSON.stringify(storedPlatformOf(userSettingsFile())) ===
+        '{"harness":"linux"}',
       30_000,
     );
     deepStrictEqual(
-      [asked('p14').picks, asked('p14').notices, storedPlatform()],
+      [
+        asked('p14').picks,
+        asked('p14').notices,
+        storedPlatformOf(userSettingsFile()),
+      ],
       [[], [[storedNotice('linux'), ["Don't Show Again"]]], {harness: 'linux'}],
     );
   });
@@ -347,7 +367,10 @@ describe('the remote platform pick of the commands and the reconnections (card c
       pickHost('harness'),
       pickFor('local', 'dismiss'),
     ]);
-    const escaped = [surfacesSince(escape, 'local'), storedPlatform()];
+    const escaped = [
+      surfacesSince(escape, 'local'),
+      storedPlatformOf(userSettingsFile()),
+    ];
     const linux = await runWith('local', 'opensshremotes.cleanRemoteServer', [
       pickHost('harness'),
       pickFor('local', 'linux'),
@@ -356,7 +379,7 @@ describe('the remote platform pick of the commands and the reconnections (card c
       linesSince(linux, 'local').map(line => line.surface),
       linesSince(linux, 'local').find(line => line.surface === 'notice')
         ?.question,
-      storedPlatform(),
+      storedPlatformOf(userSettingsFile()),
     ];
     await setting('remote.SSH.useLocalServer', undefined);
     const plain = await runWith('local', 'opensshremotes.cleanRemoteServer', [
@@ -388,7 +411,7 @@ describe('the remote platform pick of the commands and the reconnections (card c
       surfacesSince(escape, 'k26'),
       await connected('k26'),
       (await serverProcesses()).length === servers.length,
-      storedPlatform(),
+      storedPlatformOf(userSettingsFile()),
     ];
     const linux = await runWith(
       'k26',
@@ -455,7 +478,12 @@ describe('the remote platform pick of the commands and the reconnections (card c
       120_000,
     );
     deepStrictEqual(
-      [name, asked(name).picks, asked(name).dialogs, storedPlatform()],
+      [
+        name,
+        asked(name).picks,
+        asked(name).dialogs,
+        storedPlatformOf(userSettingsFile()),
+      ],
       [
         next,
         [[PLATFORM_QUESTION, ['Linux', 'Windows', 'macOS']]],
@@ -500,7 +528,9 @@ describe('the remote platform pick of a typed host and a cut network (card cover
     );
     await waitFor(
       'the platform to be stored',
-      () => JSON.stringify(storedPlatform()) === '{"harness":"linux"}',
+      () =>
+        JSON.stringify(storedPlatformOf(userSettingsFile())) ===
+        '{"harness":"linux"}',
       INSTALL_MILLISECONDS,
     );
     await waitFor(
@@ -509,7 +539,11 @@ describe('the remote platform pick of a typed host and a cut network (card cover
       30_000,
     );
     deepStrictEqual(
-      [asked(next).picks, asked(next).notices, storedPlatform()],
+      [
+        asked(next).picks,
+        asked(next).notices,
+        storedPlatformOf(userSettingsFile()),
+      ],
       [
         [[PLATFORM_QUESTION, ['Linux', 'Windows', 'macOS']]],
         [[storedNotice('linux'), ["Don't Show Again"]]],
@@ -542,7 +576,9 @@ describe('the remote platform pick of a typed host and a cut network (card cover
     cutHostNetwork();
     await waitFor(
       'the platform to be stored',
-      () => JSON.stringify(storedPlatform()) === '{"harness":"linux"}',
+      () =>
+        JSON.stringify(storedPlatformOf(userSettingsFile())) ===
+        '{"harness":"linux"}',
       60_000,
     );
     await waitFor(
@@ -551,7 +587,7 @@ describe('the remote platform pick of a typed host and a cut network (card cover
       60_000,
     );
     deepStrictEqual(
-      [asked('c35').notices, storedPlatform()],
+      [asked('c35').notices, storedPlatformOf(userSettingsFile())],
       [[[storedNotice('linux'), ["Don't Show Again"]]], {harness: 'linux'}],
     );
   });

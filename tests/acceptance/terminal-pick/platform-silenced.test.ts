@@ -7,14 +7,15 @@ import {
   recordLines,
   relaunch,
   scriptEntries,
+  userSettingsFile,
   waitFor,
 } from '../windows/harness.ts';
 import {
   addHarnessCopy,
   INSTALL_MILLISECONDS,
   restoreConfig,
-  storedPlatform,
 } from '../windows/maintenance.ts';
+import {storedPlatformOf} from '../windows/stored-platform.ts';
 
 /** The answers of window `name` for a connect with no stored platform: Linux at the pick, and `button` at the notice. */
 function answersOf(name: string, button?: string): AppendedEntry[] {
@@ -40,7 +41,7 @@ function noticesOf(name: string): string[] {
 
 /** Whether the stored platform has an entry for `host`. */
 function hasEntry(host: string): boolean {
-  const stored = storedPlatform();
+  const stored = storedPlatformOf(userSettingsFile());
   return (
     typeof stored === 'object' &&
     stored !== null &&

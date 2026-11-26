@@ -10,14 +10,12 @@ import {
   restoreUserSettings,
   signal,
   userSettings,
+  userSettingsFile,
   waitFor,
   type RecordLine,
 } from './harness.ts';
-import {
-  freshHost,
-  INSTALL_MILLISECONDS,
-  storedPlatform,
-} from './maintenance.ts';
+import {freshHost, INSTALL_MILLISECONDS} from './maintenance.ts';
+import {storedPlatformOf} from './stored-platform.ts';
 
 /** The question of the platform pick of the host `harness`. */
 const PLATFORM_QUESTION = 'Select the platform of the remote host "harness"';
@@ -123,14 +121,20 @@ describe('the platform pick in socket mode (card coverage-81)', function () {
     ]);
     await waitFor(
       'the platform to be stored',
-      () => JSON.stringify(storedPlatform()) === '{"harness":"linux"}',
+      () =>
+        JSON.stringify(storedPlatformOf(userSettingsFile())) ===
+        '{"harness":"linux"}',
       30_000,
     );
     await closeWindow('s6');
     await openWindow('harness', 's7');
     await connectedWithin('s7', INSTALL_MILLISECONDS);
     deepStrictEqual(
-      [notice, storedPlatform(), linesOf('s7', 'platformPick')],
+      [
+        notice,
+        storedPlatformOf(userSettingsFile()),
+        linesOf('s7', 'platformPick'),
+      ],
       [
         [
           [
@@ -164,7 +168,7 @@ describe('the platform pick in socket mode (card coverage-81)', function () {
     );
     const [dialog] = linesOf('s16', 'failureDialog');
     deepStrictEqual(
-      [dialog?.question, dialog?.buttons, storedPlatform()],
+      [dialog?.question, dialog?.buttons, storedPlatformOf(userSettingsFile())],
       [
         'Could not establish connection to "harness": Connecting was canceled.',
         ['Close Remote', 'Retry', 'More Actions...'],
@@ -192,7 +196,7 @@ describe('the platform pick in socket mode (card coverage-81)', function () {
     );
     const [dialog] = linesOf('s22', 'failureDialog');
     deepStrictEqual(
-      [dialog?.question, dialog?.buttons, storedPlatform()],
+      [dialog?.question, dialog?.buttons, storedPlatformOf(userSettingsFile())],
       [
         'Could not establish connection to "harness".',
         ['Close Remote', 'Retry', 'More Actions...'],

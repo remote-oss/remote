@@ -7,13 +7,11 @@ import {
   openWindow,
   recordLines,
   signal,
+  userSettingsFile,
   waitFor,
 } from '../windows/harness.ts';
-import {
-  INSTALL_MILLISECONDS,
-  setting,
-  storedPlatform,
-} from '../windows/maintenance.ts';
+import {INSTALL_MILLISECONDS, setting} from '../windows/maintenance.ts';
+import {storedPlatformOf} from '../windows/stored-platform.ts';
 import {
   answerDialog,
   notifications,
@@ -146,7 +144,9 @@ describe('the trust launch with core’s defaults (card tooling-33)', function (
             'Could not establish connection to "harness-dash": Got bad result from install script.',
           ].includes(dialog?.question ?? ''),
           (await untrustedToasts(window)).length > 0,
-          Object.keys(storedPlatform() as object).includes('harness-dash'),
+          Object.keys(storedPlatformOf(userSettingsFile()) as object).includes(
+            'harness-dash',
+          ),
         ],
         [
           'Do you trust the authors of the files in this folder?',

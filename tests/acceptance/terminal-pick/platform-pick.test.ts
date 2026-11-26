@@ -1,13 +1,15 @@
 import {deepStrictEqual} from 'node:assert';
-import {existsSync, readFileSync, writeFileSync} from 'node:fs';
-import path from 'node:path';
+import {writeFileSync} from 'node:fs';
 import {
   connectionLog,
   openWindow,
+  readUserSettings,
   recordLines,
+  userSettingsFile,
   waitFor,
   windowState,
 } from '../windows/harness.ts';
+import {PlatformNotYet, storedPlatformOf} from '../windows/stored-platform.ts';
 
 /** How long the connect may take to resolve after the window opens, in milliseconds. */
 const CONNECT_WAIT_MILLISECONDS = 120_000;
@@ -15,37 +17,28 @@ const CONNECT_WAIT_MILLISECONDS = 120_000;
 /** How long the user settings file may take to gain the platform after the connect resolves, in milliseconds. */
 const SETTINGS_WAIT_MILLISECONDS = 10_000;
 
-/** The `remote.SSH.remotePlatform` entry of the launch's user settings, or nothing while it is not written. */
-function storedPlatform(): unknown {
-  const file = path.join(
-    process.env.HARNESS_USER_DATA ?? '',
-    'User',
-    'settings.json',
-  );
-  return existsSync(file)
-    ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)[
-        'remote.SSH.remotePlatform'
-      ]
-    : undefined;
-}
-
 /** The text of the launch's user settings file, or a word for its absence. */
 function settingsText(): string {
-  const file = path.join(
-    process.env.HARNESS_USER_DATA ?? '',
-    'User',
-    'settings.json',
-  );
-  return existsSync(file) ? readFileSync(file, 'utf8') : '(no settings file)';
+  const text = readUserSettings();
+  return text ?? '(no settings file)';
 }
 
-/** Polls until the platform is stored, or the wait is over, and gives what is stored. */
+/** The `remote.SSH.remotePlatform` entry once stored, waited up to `milliseconds`, or the wait's timeout. */
 async function storedWithin(milliseconds: number): Promise<unknown> {
-  const deadline = Date.now() + milliseconds;
-  while (storedPlatform() === undefined && Date.now() < deadline) {
-    await new Promise(resolve => setTimeout(resolve, 200));
-  }
-  return storedPlatform();
+  const found: unknown[] = [];
+  await waitFor(
+    'the platform to be stored',
+    () => {
+      const value = storedPlatformOf(userSettingsFile());
+      if (value === undefined) {
+        throw new PlatformNotYet('the platform is not stored yet');
+      }
+      found.push(value);
+      return true;
+    },
+    milliseconds,
+  );
+  return found.at(-1);
 }
 
 describe('a terminal-mode connect that picks the platform', function () {

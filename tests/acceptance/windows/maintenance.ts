@@ -28,7 +28,6 @@ import {
   onHost,
   onHostAs,
   openWindow,
-  readUserSettings,
   recordLines,
   type RecordLine,
   variable,
@@ -68,16 +67,6 @@ export function platformAnswer(
   answer: 'linux' | 'windows' | 'macOS' | 'dismiss',
 ): AppendedEntry {
   return {surface: 'platformPick', match: 'platform', answer};
-}
-
-/** What `remote.SSH.remotePlatform` holds in the user settings file, or nothing. */
-export function storedPlatform(): unknown {
-  const text = readUserSettings();
-  return text === undefined
-    ? undefined
-    : (JSON.parse(text) as Record<string, unknown>)[
-        'remote.SSH.remotePlatform'
-      ];
 }
 
 /** The answer that types `text` into the host pick. */

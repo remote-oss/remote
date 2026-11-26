@@ -8,11 +8,13 @@ import {
   recordLines,
   restoreUserSettings,
   userSettings,
+  userSettingsFile,
   waitFor,
   type RecordLine,
 } from './harness.ts';
 import {freshHost, INSTALL_MILLISECONDS} from './maintenance.ts';
 import {listeningSockets} from './socket-files.ts';
+import {storedPlatformOf} from './stored-platform.ts';
 
 /** The buttons of a failure dialog, in the order the record has them. */
 const THREE_BUTTONS = ['Close Remote', 'Retry', 'More Actions...'];
@@ -25,16 +27,6 @@ function closedDialog(alias: string): string {
 /** The lines of window `name`'s record of `surface`. */
 function linesOf(name: string, surface: string): RecordLine[] {
   return recordLines(surface, name);
-}
-
-/** What `remote.SSH.remotePlatform` holds in the user settings file, or nothing. */
-function storedPlatform(): unknown {
-  const text = readUserSettings();
-  return text === undefined
-    ? undefined
-    : (JSON.parse(text) as Record<string, unknown>)[
-        'remote.SSH.remotePlatform'
-      ];
 }
 
 /** The entries that dismiss the failure dialog and the pick of actions of window `name`. */
@@ -177,7 +169,7 @@ describe('a host that refuses forwarding on the first connect (card coverage-81,
         ]),
         actions: linesOf('r13', 'mitigationPick').map(line => line.question),
         sockets: (await listeningSockets('harness-nosock')).length,
-        stored: storedPlatform(),
+        stored: storedPlatformOf(userSettingsFile()),
       },
       {
         picks: 3,
