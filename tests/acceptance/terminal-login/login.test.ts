@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {setUserSetting} from '../windows/folder-windows.ts';
 import {
   connectionLog,
+  closeContained,
   closeWindow,
   isOpen,
   hostPassword,
@@ -138,10 +139,14 @@ async function untilPrompt(name: string, prompt: string) {
   return facts;
 }
 
-/** Closes window `name` when it is still open, and says nothing of a close that fails: a row's own close has usually done it. */
+/**
+ * Closes window `name` when it is still open, so that one that will not close cannot fail the rows after it: a close that
+ * times out is tried again after Escape, and a second timeout ends the window's extension host. It says nothing of a
+ * close that fails: a row's own close has usually done it.
+ */
 async function closeIfOpen(name: string): Promise<void> {
   if (isOpen(name)) {
-    await closeWindow(name).catch(() => undefined);
+    await closeContained(name, pressEscape).catch(() => undefined);
   }
 }
 
