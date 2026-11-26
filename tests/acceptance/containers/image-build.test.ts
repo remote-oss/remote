@@ -111,9 +111,33 @@ function argumentsOf(
   return Object.fromEntries([['args', values]]);
 }
 
+/** The title of the connect's progress notice (S087), and of the one while the configuration is read (S283). */
+const CONNECTING = 'Connecting to Dev Container (show log)';
+const READING = 'Reading Dev Container Configuration (show log)';
+
+/** The stages the editor shows after the connecting title and a colon. */
+const STAGES = ['Cloning Repository', 'Installing server', 'Starting server'];
+
+/** The first sentence of the reopen prompt of a folder that holds a configuration (S186). */
+const REOPEN_PROMPT = 'Folder contains a Dev Container configuration file.';
+
+/**
+ * Whether `text` is a notice that the connect, or the folder's reopen prompt, shows of itself and that no row about a
+ * cache is about: a title of the connect's progress in full, with or without one of its stages, or the reopen prompt. A
+ * text that only begins with a title, such as one that names a cache after it, is not one.
+ */
+function isConnectNotice(text: string): boolean {
+  return (
+    text === CONNECTING ||
+    text === READING ||
+    STAGES.some(stage => text === `${CONNECTING}: ${stage}`) ||
+    text.startsWith(REOPEN_PROMPT)
+  );
+}
+
 /**
  * Samples the notifications and the dialog of window `name` while `connect` goes on, and gives what they showed besides the
- * connecting toast of the connect itself.
+ * connect's own notices (`isConnectNotice`).
  */
 async function shownDuring(
   name: string,
@@ -125,10 +149,7 @@ async function shownDuring(
     while (!gate.done) {
       try {
         for (const text of await notifications(name)) {
-          if (
-            !text.startsWith('Connecting to Dev Container') &&
-            !text.startsWith('Folder contains')
-          ) {
+          if (!isConnectNotice(text)) {
             shown.add(text);
           }
         }
@@ -479,8 +500,23 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
           lines.some(line =>
             line.endsWith('importing cache manifest from c52-never-pushed:1'),
           ),
+          [
+            READING,
+            `${CONNECTING}: Installing server`,
+            `${CONNECTING}: importing cache manifest from c52-never-pushed:1 failed`,
+            `${READING}: could not import the cache`,
+            'importing cache manifest from c52-never-pushed:1 failed',
+            'Error: could not import the cache',
+          ].map(isConnectNotice),
         ],
-        ['built', undefined, [], [], true],
+        [
+          'built',
+          undefined,
+          [],
+          [],
+          true,
+          [true, true, false, false, false, false],
+        ],
       );
       await closeWindow(name);
     } finally {

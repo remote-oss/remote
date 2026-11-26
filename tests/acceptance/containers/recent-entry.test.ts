@@ -98,7 +98,10 @@ describe('The Open Recent entry and the label of a connected window (cards conta
   this.timeout(600_000);
 
   it('F-0502 AC-23 (ruling-1053-folder): picking a stored dev-container entry whose host folder was deleted makes no connection and creates nothing, shows the remembered title and indicator, the setup error with its buttons and Retry primary, More Actions... with its four items, the same error again after Retry and after Reload Window, and, once the dialog is dismissed, the Disconnected status with the container named', async () => {
-    const folder = devContainerFolder('c43-recent', {name: 'C43 Recent'});
+    const folder = devContainerFolder('c43-recent', {
+      name: 'C43 Recent',
+      shutdownAction: 'none',
+    });
     const starter = await openFolderWindow(
       devContainerFolder('c43-recent-starter'),
     );

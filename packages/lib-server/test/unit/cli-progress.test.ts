@@ -1,5 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
-import {s045EventOf} from '../../src/cli-control/progress.ts';
+import {
+  cliServerFolderOf,
+  s045EventOf,
+} from '../../src/cli-control/progress.ts';
 
 describe('the install progress from the CLI serverlog lines', () => {
   it('F-2103 5.0 step 6: the download line shows the progress', () => {
@@ -106,6 +109,23 @@ describe('the install progress from the CLI serverlog lines', () => {
     deepStrictEqual(
       s045EventOf({text: 'Downloading VSCodium server', level: 2}),
       undefined,
+    );
+  });
+});
+
+describe("the CLI's server folder", () => {
+  it('is servers/<Quality>-<commit> in its data folder, every quality but stable and exploration naming the insiders one, as the CLI reads a serve', () => {
+    deepStrictEqual(
+      ['stable', 'exploration', 'insider', 'insiders', 'nightly'].map(quality =>
+        cliServerFolderOf('/home/u/.vscodium-server/cli', quality, 'c1'),
+      ),
+      [
+        '/home/u/.vscodium-server/cli/servers/Stable-c1',
+        '/home/u/.vscodium-server/cli/servers/Exploration-c1',
+        '/home/u/.vscodium-server/cli/servers/Insiders-c1',
+        '/home/u/.vscodium-server/cli/servers/Insiders-c1',
+        '/home/u/.vscodium-server/cli/servers/Insiders-c1',
+      ],
     );
   });
 });

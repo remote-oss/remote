@@ -73,6 +73,7 @@ export interface Connected {
 /** The hosts whose platform the rows store, so that terminal mode asks no pick. */
 const LINUX_ALIASES = [
   'harness',
+  'held',
   'password',
   'password-retry',
   'noforward',

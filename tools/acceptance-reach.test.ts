@@ -30,6 +30,8 @@ import {
   labelsOfTableSince,
   CI_WORKFLOW,
   IMAGE_FOLDERS,
+  KNOWN_REDS_FILE,
+  knownRedsEditReach,
   LAUNCH_MARKER,
   MAIN_ONLY_LAUNCH_JOBS,
   measuredPaths,
@@ -470,6 +472,12 @@ describe('acceptance-reach: what a change to a package reaches (card tooling-169
       CONTAINERS,
       CONTAINERS,
     ]);
+  });
+
+  it('a service reaches no launch of its own, while a folder of no known kind reaches every launch', () => {
+    manifest('tunnel-relay');
+    manifest('helpers');
+    deepStrictEqual(reachOf('tunnel-relay', 'helpers'), [[], undefined]);
   });
 
   it('tooling-169: a library an extension no launch carries by its id depends on (remote-ssh, in every launch) reaches every launch, and so does that extension', () => {
@@ -1162,6 +1170,79 @@ describe('acceptance-reach: a source deleted or moved since the base (card tooli
         ],
         ['tests/acceptance/windows/clones.ts'],
       ],
+    );
+  });
+});
+
+describe('acceptance-reach: what a change of the known-red list reaches (card #3148)', () => {
+  const LAUNCHES: Launch[] = [
+    {label: 'alpha-one', kind: 'plain', suite: 'alpha'},
+    {label: 'beta-one', kind: 'plain', suite: 'beta'},
+  ];
+  /** A known-red entry of launch `launch` for the row titled `title`, with `owner`. */
+  function entry(launch: string, title: string, owner = 'dike'): object {
+    return {
+      launch,
+      file: `${launch}/rows.test.ts`,
+      title,
+      card: 1,
+      owner,
+      evidence: 2,
+      added: '2026-11-24',
+    };
+  }
+  /** The list's text holding `entries`. */
+  function listOf(...entries: object[]): string {
+    return `${JSON.stringify(entries, undefined, 2)}\n`;
+  }
+
+  it('#3148: an entry that is only added reaches no launch; an entry removed or changed reaches its own launch', () => {
+    const before = listOf(entry('alpha-one', 'a1'), entry('beta-one', 'b1'));
+    deepStrictEqual(
+      [
+        knownRedsEditReach(
+          before,
+          listOf(
+            entry('alpha-one', 'a1'),
+            entry('beta-one', 'b1'),
+            entry('beta-one', 'b2'),
+          ),
+          LAUNCHES,
+        ),
+        knownRedsEditReach(before, listOf(entry('beta-one', 'b1')), LAUNCHES),
+        knownRedsEditReach(
+          before,
+          listOf(entry('alpha-one', 'a1'), entry('beta-one', 'b1', 'triton')),
+          LAUNCHES,
+        ),
+        knownRedsEditReach(before, listOf(), LAUNCHES),
+      ],
+      [[], ['alpha-one'], ['beta-one'], ['alpha-one', 'beta-one']],
+    );
+  });
+
+  it('#3148: a side that is not a list of entries, or a removed entry of a launch the table has not, reaches every launch', () => {
+    const before = listOf(entry('alpha-one', 'a1'));
+    deepStrictEqual(
+      [
+        knownRedsEditReach(before, '{"entries": []}', LAUNCHES),
+        knownRedsEditReach('not json', before, LAUNCHES),
+        knownRedsEditReach(before, listOf({file: 'x', title: 'y'}), LAUNCHES),
+        knownRedsEditReach(listOf(entry('gone-one', 'g1')), listOf(), LAUNCHES),
+      ],
+      [undefined, undefined, undefined, undefined],
+    );
+  });
+
+  it("#3148: the repository's own list, measured against itself at HEAD, is measured and reaches no launch", () => {
+    deepStrictEqual(
+      measuredPaths(
+        [KNOWN_REDS_FILE],
+        'HEAD',
+        launchesOf(REPOSITORY_ROOT),
+        REPOSITORY_ROOT,
+      ).get(KNOWN_REDS_FILE),
+      [],
     );
   });
 });

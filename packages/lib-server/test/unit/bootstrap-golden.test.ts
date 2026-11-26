@@ -30,6 +30,7 @@ const SINGLE_SCRIPT_STEPS = [
   'kill',
   'uninstall',
   'cleanup',
+  'heldServer',
 ] as const;
 
 const STEPWISE_ACTIONS = ['prepare', 'unpack', 'activate'] as const;
