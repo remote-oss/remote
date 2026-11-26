@@ -281,6 +281,8 @@ importers:
 
   packages/lib-standdown: {}
 
+  packages/lib-state: {}
+
   packages/lib-wsl:
     dependencies:
       lib-host:
@@ -389,6 +391,9 @@ importers:
       lib-standdown:
         specifier: workspace:*
         version: link:../lib-standdown
+      lib-state:
+        specifier: workspace:*
+        version: link:../lib-state
     devDependencies:
       esbuild:
         specifier: ^0.28.2

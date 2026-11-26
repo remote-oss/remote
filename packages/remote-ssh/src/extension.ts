@@ -63,7 +63,7 @@ import {
 import {pushActiveFolders} from './companion/active-folders.ts';
 import {historyStoreOf} from './companion/folder-history.ts';
 import {type HintEvents, hintEventsOf} from './diagnostics/hint-store.ts';
-import {newSession, NODE_EVENT_FILES} from './state/event-files.ts';
+import {newSession, NODE_EVENT_FILES} from 'lib-state';
 import {serveHistoryEndpoints} from './companion/history-endpoints.ts';
 import {signalHostsChanged} from './companion/hosts-changed.ts';
 import {
