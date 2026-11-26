@@ -94,18 +94,18 @@ describe('the scan of the files an extension stores (card #3109)', () => {
     });
   });
 
-  it('#3257: a file that names only the host is not found by the host key texts, and a file that holds the key is', () => {
+  it('#3257: a file that names only the host, or only its fingerprint, is not found by the host key, and a file that holds the key is', () => {
     inScratch(folder => {
       writeFileSync(path.join(folder, 'hint.json'), '{"host":"127.0.0.1"}');
+      writeFileSync(
+        path.join(folder, 'prompt'),
+        'key fingerprint is SHA256:abcdef',
+      );
       writeFileSync(
         path.join(folder, 'known'),
         '[127.0.0.1]:22 ssh-ed25519 AAAAkey',
       );
-      writeFileSync(path.join(folder, 'fingerprints'), 'SHA256:abcdef');
-      deepStrictEqual(
-        scanStored(folder, ['AAAAkey', 'SHA256:abcdef']).holding.toSorted(),
-        ['fingerprints', 'known'],
-      );
+      deepStrictEqual(scanStored(folder, ['AAAAkey']).holding, ['known']);
     });
   });
 });
