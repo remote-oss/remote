@@ -418,6 +418,12 @@ importers:
         specifier: workspace:*
         version: link:../lib-wsl
 
+  packages/tunnel-agent:
+    dependencies:
+      lib-identifiers:
+        specifier: workspace:*
+        version: link:../lib-identifiers
+
   packages/tunnel-relay:
     dependencies:
       '@microsoft/dev-tunnels-ssh':

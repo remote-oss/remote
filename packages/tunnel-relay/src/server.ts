@@ -59,6 +59,7 @@ export async function answerRequest(
         method: request.method ?? 'GET',
         path: url.pathname,
         query: url.searchParams,
+        address: request.socket.remoteAddress ?? '',
         headers: headersOf(request),
         readBody: () => bodyOf(request),
       },
@@ -104,6 +105,9 @@ function headersOf(
 export function write(response: ServerResponse, answer: Answer): void {
   response.statusCode = answer.status;
   response.setHeader('VsSaaS-Request-Id', randomBytes(8).toString('hex'));
+  for (const [name, value] of Object.entries(answer.headers ?? {})) {
+    response.setHeader(name, value);
+  }
   if (answer.body === undefined) {
     response.end();
     return;

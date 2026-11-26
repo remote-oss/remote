@@ -1,13 +1,13 @@
 /**
  * @fileoverview Who a GitHub token belongs to: `GET <base>/user` with the token, answered by the account's numeric id
- * and login. Answers are kept five minutes, keyed by a hash of the token, which is never kept itself, and at most a
- * thousand at once: past that, the oldest goes, which is also the first to run out.
+ * and login. An account is kept five minutes and a refusal one, keyed by a hash of the token, which is never kept
+ * itself, and at most a thousand answers at once: past that, the one read least recently goes.
  */
 
 import {createHash} from 'node:crypto';
 
 /** A GitHub account. */
-export interface GithubAccount {
+interface GithubAccount {
   id: number;
   login: string;
 }
@@ -21,20 +21,26 @@ export type GithubAnswer =
 /** The `fetch` the lookup uses. */
 export type Fetch = (address: string, init: RequestInit) => Promise<Response>;
 
-/** How long an answer is kept, in milliseconds. */
+/** How long an account is kept, in milliseconds. */
 const KEPT_FOR = 5 * 60 * 1000;
+
+/** How long a refusal is kept, in milliseconds. */
+const REFUSED_FOR = 60 * 1000;
+
+/** What is kept of an answer: an account, or a refusal; a failure to ask is never kept. */
+type KeptAnswer = Extract<GithubAnswer, {kind: 'account' | 'refused'}>;
 
 /** The most answers kept at once. */
 export const KEPT_MOST = 1000;
 
-/** Asks GitHub who tokens belong to, keeping each account answer for five minutes. */
+/** Asks GitHub who tokens belong to, keeping each account answer for five minutes and each refusal for one. */
 export class GithubIdentity {
   private readonly base: string;
   private readonly fetch: Fetch;
   private readonly now: () => number;
   private readonly kept = new Map<
     string,
-    {account: GithubAccount; until: number}
+    {answer: KeptAnswer; until: number}
   >();
 
   /** Asks the API at `base` with `fetch`, at the times `now` gives in milliseconds. */
@@ -44,13 +50,27 @@ export class GithubIdentity {
     this.now = now;
   }
 
-  /** The account `token` belongs to, or why there is none. */
-  async accountOf(token: string): Promise<GithubAnswer> {
-    const key = createHash('sha256').update(token).digest('hex');
+  /**
+   * The answer kept for `token`, which reading makes the most recent, or none: a kept answer that has run out is
+   * dropped here.
+   */
+  cached(token: string): GithubAnswer | undefined {
+    const key = keyOf(token);
     const known = this.kept.get(key);
-    if (known !== undefined && known.until > this.now()) {
-      return {kind: 'account', account: known.account};
+    if (known === undefined) {
+      return undefined;
     }
+    this.kept.delete(key);
+    if (known.until <= this.now()) {
+      return undefined;
+    }
+    this.kept.set(key, known);
+    return known.answer;
+  }
+
+  /** Asks GitHub who `token` belongs to, keeping an account or a refusal, and gives the account or why there is none. */
+  async lookup(token: string): Promise<GithubAnswer> {
+    const key = keyOf(token);
     let response: Response;
     try {
       response = await this.fetch(`${this.base}/user`, {
@@ -64,6 +84,7 @@ export class GithubIdentity {
       return {kind: 'failed', reason: String(error)};
     }
     if (response.status === 401) {
+      this.keep(key, {kind: 'refused'}, REFUSED_FOR);
       return {kind: 'refused'};
     }
     if (!response.ok) {
@@ -77,22 +98,27 @@ export class GithubIdentity {
     if (account === undefined) {
       return {kind: 'failed', reason: 'GitHub answered with no account'};
     }
-    this.keep(key, account);
+    this.keep(key, {kind: 'account', account}, KEPT_FOR);
     return {kind: 'account', account};
   }
 
-  /** Keeps `account` under `key`, dropping the oldest answer first when the most are kept. */
-  private keep(key: string, account: GithubAccount): void {
+  /** Keeps `answer` under `key` for `lifetime` milliseconds, dropping the one read least recently first when the most are kept. */
+  private keep(key: string, answer: KeptAnswer, lifetime: number): void {
     this.kept.delete(key);
     if (this.kept.size >= KEPT_MOST) {
-      // The first key is the oldest answer, since every answer is set anew when kept.
+      // The first key is the one read least recently, since every answer is set anew when kept or read.
       for (const oldest of this.kept.keys()) {
         this.kept.delete(oldest);
         break;
       }
     }
-    this.kept.set(key, {account, until: this.now() + KEPT_FOR});
+    this.kept.set(key, {answer, until: this.now() + lifetime});
   }
+}
+
+/** The key an answer is kept under: a hash of the token. */
+function keyOf(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 /** The account in GitHub's answer, or none when it has no numeric id and login. */

@@ -55,6 +55,7 @@ remote-server         ->  lib-identifiers, lib-standdown, lib-authority, lib-pro
 remote-ssh            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-ssh, lib-server, lib-forwarding, lib-companion, lib-log
 remote-wsl            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-helper, lib-log
 remote-containers     ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-helper, lib-log  (+ lib-ssh if F-1302 lands the hop here)
+tunnel-agent          ->  lib-identifiers, lib-server, lib-host, lib-log   (a service, ADR-0016; outside the editor)
 
 lib-ssh -> lib-host, lib-helper, lib-identifiers, lib-log        lib-server -> lib-host, lib-product, lib-log
 lib-authority -> lib-identifiers, lib-standdown, lib-log       lib-companion -> lib-identifiers, lib-log
