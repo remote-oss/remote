@@ -357,12 +357,16 @@ export function paletteCommandWhen(classOfActive: string): string | undefined {
 
 /**
  * Puts the keyboard of window `name` where a palette command reaches it: a page whose active element is the
- * terminal's textarea gets the editor group focused, and a page a read cannot say is left as it is.
+ * terminal's textarea gets the editor group focused, with the move told on stderr and the element that held the
+ * keyboard named; a page a read cannot say is left as it is.
  */
 export async function focusForPalette(name: string): Promise<void> {
   const classOfActive = await activeElementClassOf(name).catch(() => '');
   const command = paletteCommandWhen(classOfActive);
   if (command !== undefined) {
+    process.stderr.write(
+      `window ${name}, before a palette command: the keyboard stood in ${classOfActive}, and the editor group takes it\n`,
+    );
     await inWindow(name, command);
   }
 }
