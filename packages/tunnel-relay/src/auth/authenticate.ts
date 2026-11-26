@@ -1,7 +1,8 @@
 /**
  * @fileoverview Who a request is from, by its `Authorization` header (the relay brief's sections 3 and 4): a GitHub
  * account on the allowlist, by `github <token>` or `github client_id=<id> <token>`, or a tunnel token's grant, by
- * `tunnel <token>`, while the tunnel it was minted for is stored with the same owner and generation. Other schemes, `aad` and `bearer` among them, are refused
+ * `tunnel <token>`, while the tunnel it was minted for is stored with the same owner and generation and that owner is
+ * still on the allowlist. Other schemes, `aad` and `bearer` among them, are refused
  * (`[dev-tunnels] rs/src/management/authorization.rs:10-32`; `[cli] auth.rs:491-503`).
  */
 
@@ -14,6 +15,9 @@ import type {Tokens} from './tokens.ts';
 import type {Store} from '../store.ts';
 
 const SIGN_IN = 'Sign in with a GitHub account.';
+
+/** Why a valid tunnel token of an owner taken off the allowlist is refused, and why that owner's legs are closed. */
+export const NO_LONGER_ADMITTED = "The tunnel's owner is no longer admitted.";
 
 /** What deciding who a request is from needs. */
 export interface Authorities {
@@ -49,11 +53,22 @@ async function callerOf(
     const grant = tokens.check(token);
     const tunnel =
       grant === undefined ? undefined : tunnels.tunnelById(grant.tunnelId);
-    return grant === undefined ||
+    if (
+      grant === undefined ||
       tunnel?.owner !== grant.owner ||
       tunnel.generation !== grant.generation
-      ? problem(401, 'The tunnel token is not valid.')
-      : {kind: 'tunnel', tunnelId: grant.tunnelId, scope: grant.scope};
+    ) {
+      return problem(401, 'The tunnel token is not valid.');
+    }
+    if (!allowlist.admits(grant.owner)) {
+      return problem(403, NO_LONGER_ADMITTED);
+    }
+    return {
+      kind: 'tunnel',
+      tunnelId: grant.tunnelId,
+      owner: grant.owner,
+      scope: grant.scope,
+    };
   }
   if (scheme !== 'github') {
     return problem(401, SIGN_IN);

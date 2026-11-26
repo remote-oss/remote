@@ -22,7 +22,25 @@ export interface RelayConfig {
   allowlistFile: string;
   /** The file of the key the relay signs its tokens with. */
   tokenKeyFile: string;
+  /** How many tunnels an account may have, ports a tunnel may have, and clients a tunnel may have connected. */
+  limits: RelayLimits;
 }
+
+/** The relay's limits, each raisable by its operator. */
+interface RelayLimits {
+  tunnels: number;
+  ports: number;
+  clients: number;
+}
+
+/** Each limit's setting, and its value when unset. */
+const LIMIT_SETTINGS: ReadonlyArray<[keyof RelayLimits, string]> = [
+  ['tunnels', 'RELAY_LIMIT_TUNNELS'],
+  ['ports', 'RELAY_LIMIT_PORTS'],
+  ['clients', 'RELAY_LIMIT_CLIENTS'],
+];
+
+const DEFAULT_LIMIT = 10;
 
 /** Reads the settings from `environment`, or throws naming the first that is missing or invalid. */
 export function configOf(
@@ -43,6 +61,14 @@ export function configOf(
   if (!isClusterId(clusterId)) {
     throw new Error("RELAY_CLUSTER does not match the contract's cluster id");
   }
+  const limits = {tunnels: 0, ports: 0, clients: 0};
+  for (const [limit, name] of LIMIT_SETTINGS) {
+    const value = Number(environment[name] ?? DEFAULT_LIMIT);
+    if (!Number.isInteger(value) || value < 1) {
+      throw new Error(`${name} is not a positive whole number`);
+    }
+    limits[limit] = value;
+  }
   return {
     domain: valueOf('RELAY_DOMAIN'),
     port,
@@ -53,5 +79,6 @@ export function configOf(
     githubApi: environment.RELAY_GITHUB_API ?? 'https://api.github.com',
     allowlistFile: valueOf('RELAY_ALLOWLIST'),
     tokenKeyFile: valueOf('RELAY_TOKEN_KEY'),
+    limits,
   };
 }
