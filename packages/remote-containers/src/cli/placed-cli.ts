@@ -41,12 +41,12 @@ const PREPARE_SCRIPT = [
 
 /**
  * Marks the copy whole and gives it the name of the version. A folder of that name already there, from a window that
- * ran at the same time, stays and the copy goes: the rename of one folder over another puts it inside.
+ * ran at the same time, stays: the rename then puts the copy inside it, and the last line removes it from there.
  */
 const PUBLISH_SCRIPT = [
   'set -e',
   `: > "$PART_FOLDER/${WHOLE_MARKER}"`,
-  'if [ ! -e "$VERSION_FOLDER" ]; then mv -- "$PART_FOLDER" "$VERSION_FOLDER" 2>/dev/null || true; fi',
+  'mv -- "$PART_FOLDER" "$VERSION_FOLDER" 2>/dev/null || true',
   'rm -rf -- "$PART_FOLDER" "$VERSION_FOLDER/$(basename "$PART_FOLDER")"',
   `[ -f "$VERSION_FOLDER/${WHOLE_MARKER}" ]`,
   '',
