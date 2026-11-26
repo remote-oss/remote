@@ -7,6 +7,7 @@
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   writeFileSync,
@@ -14,6 +15,15 @@ import {
 import path from 'node:path';
 import {pressEscape} from './renderer.ts';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
+import {
+  closeWindowOnDisplay,
+  drive,
+  mayCloseOnDisplay,
+  nameHoldsName,
+  topLevelWindows,
+  windowPidOf,
+  type DisplayStep,
+} from './display.ts';
 import {
   appendScript,
   closeContained,
@@ -349,18 +359,156 @@ export async function openLocalWindow(
  * Closes every window of the launch but `local` whose agent is still active, whichever row opened it: a window that a
  * failed row left, and a window a row opened and never closed. A window that will not close must not fail the hook, and
  * with it every row after: `closeContained` dismisses its dialog and, failing that, ends its extension host. A window
- * whose agent has ended is not listed here, whatever its page does.
+ * whose agent has ended is not listed here, whatever its page does. The windows the named loop leaves behind, the
+ * editor top-levels no agent reports, are closed on the display.
  */
-export async function closeLeftoverWindows(): Promise<void> {
+export async function closeLeftoverWindows(
+  step: DisplayStep = launchDisplayStep(),
+): Promise<void> {
   for (const name of windowNames()) {
     if (name !== 'local' && isOpen(name)) {
       await closeContained(name, pressEscape);
     }
   }
+  await closeUnownedDisplayWindows(step);
   const left = await leftoverPagesNote();
   if (left !== undefined) {
     process.stderr.write(`after closing the leftover windows: ${left}\n`);
   }
+}
+
+/** The display step the launch's close runs on: the harness display itself, with the ownership the launch reads from its own record. */
+function launchDisplayStep(): DisplayStep {
+  return {
+    windows: () => topLevelWindows(),
+    pidOf: windowId => windowPidOf(drive, windowId),
+    editorPid: () => editorMainProcess(),
+    mayClose: windowId => mayCloseOnDisplay(windowId),
+    close: windowId => closeWindowOnDisplay(windowId),
+  };
+}
+
+/** The window ids of the display the launch's last clean settle held, so a close pass closes what a row left after it, and never what the launch found. */
+let settledWindows: Set<string> | undefined;
+
+/** The windows the display pass told of, once each, so a window that will not close is not re-told at every settle. */
+const toldWindows = new Set<string>();
+
+/** Whether the launch's inert pass has told once, so a launch that cannot own the display says so once and not at every row. */
+let inertTold = false;
+
+/**
+ * The launch's editor main process: the launch starts the editor detached, and every window process the agents record
+ * in their pid files shares the editor's process group, whose id is the group leader's pid, the editor's own. A launch
+ * whose recorded window processes are all ended, or whose display says no process, cannot say which process it is.
+ */
+function editorMainProcess(): Promise<string | undefined> {
+  const folder = variable('REMOTE_OSS_ACCEPTANCE_WINDOWS');
+  let files: string[];
+  try {
+    files = readdirSync(folder);
+  } catch {
+    return Promise.resolve(undefined);
+  }
+  const pids = files
+    .filter(file => /^\d+$/.test(file))
+    .map(file => Number(file))
+    .sort((first, second) => first - second);
+  for (const procId of pids) {
+    try {
+      const stat = readFileSync(
+        path.join('/proc', String(procId), 'stat'),
+        'utf8',
+      );
+      // The fields run state, ppid, pgrp, ... after the command in parentheses, which may hold spaces.
+      const pgrp = stat
+        .slice(stat.lastIndexOf(')') + 1)
+        .trim()
+        .split(/\s+/)[2];
+      if (pgrp !== undefined && pgrp !== '') {
+        return Promise.resolve(pgrp);
+      }
+    } catch {
+      // A process that ended between the look and the read names no group: its file stays until the launch ends.
+    }
+  }
+  return Promise.resolve(undefined);
+}
+
+/**
+ * Closes, on the display, the editor top-levels the launch's rows left: a visible top-level the launch's editor opened
+ * (its _NET_WM_PID is the editor's main process) that the launch's last clean settle did not hold, that no window's
+ * agent reports, and that asks its window manager for a close. A top-level that will not close, or that does not accept
+ * one, is told once and held in the record, as a named window that will not close is not failed.
+ */
+async function closeUnownedDisplayWindows(step: DisplayStep): Promise<void> {
+  const editor = await step.editorPid();
+  if (editor === undefined) {
+    if (!inertTold) {
+      inertTold = true;
+      process.stderr.write(
+        'acceptance: the display leftover close is inert: no window of the launch names its editor\n',
+      );
+    }
+    return;
+  }
+  const names = windowNames();
+  const windows = await step.windows();
+  for (const window of windows) {
+    if (!window.managed) {
+      continue;
+    }
+    // The launch's folder-less windows own the title its window.title setting gives them, and among them the suite's own window,
+    // the one whose agent never closes: neither is a row's to close.
+    if (window.name === '[]') {
+      continue;
+    }
+    if (settledWindows?.has(window.id) === true) {
+      continue;
+    }
+    if (names.some(name => nameHoldsName(window.name, name))) {
+      continue;
+    }
+    if ((await step.pidOf(window.id)) !== editor) {
+      continue;
+    }
+    if (!(await step.mayClose(window.id))) {
+      displayLeftoverNote(window, 'does not accept a close');
+      continue;
+    }
+    const said = `${window.id} (${window.name === '' ? 'no name' : window.name})`;
+    try {
+      await step.close(window.id);
+    } catch {
+      // A close the display refuses is the window staying; the settle says so.
+    }
+    // The settle asks the window for its pid, one read at a time: a window the display dropped has no pid to give.
+    const gone = await waitFor(
+      `the display to drop window ${said}`,
+      async () => (await step.pidOf(window.id)) === undefined,
+      30_000,
+    )
+      .then(() => true)
+      .catch(() => false);
+    process.stderr.write(
+      `acceptance: display ${gone ? 'close' : 'leftover'}: ${said} by closeLeftoverWindows\n`,
+    );
+  }
+  settledWindows = new Set((await step.windows()).map(each => each.id));
+}
+
+/** Tells once of the window `window` the display pass will not close, naming it and the step that saw it. */
+function displayLeftoverNote(
+  window: {id: string; name: string},
+  reason: string,
+): void {
+  if (toldWindows.has(window.id)) {
+    return;
+  }
+  toldWindows.add(window.id);
+  process.stderr.write(
+    `acceptance: display leftover: ${window.id} (${window.name === '' ? 'no name' : window.name}) ${reason}, told once by closeLeftoverWindows\n`,
+  );
 }
 
 /**
