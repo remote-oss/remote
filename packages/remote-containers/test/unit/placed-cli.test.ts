@@ -241,6 +241,25 @@ describe('the dev container CLI placed on the SSH host (card #3244)', () => {
     );
   });
 
+  it('known limitation: the probe is told no install root, so a host with a server in a folder of the SSH setting gets its own under the default data folder', async () => {
+    const seen = seenOf();
+    const channel = channelOf();
+    const result = await placeCli(
+      dependenciesOf(seen),
+      PORTS,
+      requestOf(channel, seen),
+    );
+    const [probed] = channel.calls;
+    deepStrictEqual(
+      [
+        probed?.operation === 'runScript' &&
+          probed.request.script.includes("INSTALL_ROOT=''"),
+        result.kind === 'placed' ? result.placed.node : result.kind,
+      ],
+      [true, '/home/dev/.fixture-server/bin/abc123/node'],
+    );
+  });
+
   it('F-1302 AC-25: a second run with the same version finds its folder and copies nothing, writes nothing', async () => {
     const seen = seenOf();
     const channel = channelOf({present: true});
