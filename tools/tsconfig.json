@@ -17,6 +17,7 @@
     "../tests/acceptance/containers-ports/mismatch-report.ts",
     "../tests/acceptance/ssh-agents/stored-scan.ts",
     "../tests/acceptance/windows/agent-events.ts",
+    "../tests/acceptance/windows/settled-answer.ts",
     "../tests/acceptance/windows/agent-standing.ts",
     "../tests/acceptance/windows/change-timeline.ts",
     "../tests/acceptance/windows/connect-failure.ts",
