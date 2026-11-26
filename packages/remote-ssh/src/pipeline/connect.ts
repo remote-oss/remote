@@ -795,6 +795,7 @@ async function runSteps(
       serve: options.serve,
       useExecServer: options.useExecServer,
       failedOf: detail => failedWith(detail, contextOf(input, options, detail)),
+      onServerPhase: options.onPhase,
       cancellation,
     });
     if (overCli.kind === 'connected') {

@@ -2,7 +2,9 @@ import {deepStrictEqual} from 'node:assert';
 import {setUserSetting} from '../windows/folder-windows.ts';
 import {
   connectionLog,
+  closeContained,
   closeWindow,
+  isOpen,
   hostPassword,
   inWindow,
   onHostAs,
@@ -135,6 +137,35 @@ async function untilPrompt(name: string, prompt: string) {
     );
   }
   return facts;
+}
+
+/**
+ * Closes window `name` when it is still open, so that one that will not close cannot fail the rows after it: a close that
+ * times out is tried again after Escape, and a second timeout ends the window's extension host. It says nothing of a
+ * close that fails: a row's own close has usually done it.
+ */
+async function closeIfOpen(name: string): Promise<void> {
+  if (isOpen(name)) {
+    await closeContained(name, pressEscape).catch(() => undefined);
+  }
+}
+
+/** How many lines of the connection log a failed uninstall row prints. */
+const LOG_LINES_AFTER_FAILURE = 40;
+
+/** Runs `work`, and when it fails says what the connection log held since `mark`, its last lines, which no agent call has to answer. */
+async function withConnectionLog<Result>(
+  mark: number,
+  work: () => Promise<Result>,
+): Promise<Result> {
+  try {
+    return await work();
+  } catch (caught) {
+    throw new Error(
+      `${String(caught)}\nthe connection log since the row began, its last ${String(LOG_LINES_AFTER_FAILURE)} lines:\n${connectionLog().slice(mark).slice(-LOG_LINES_AFTER_FAILURE).join('\n')}`,
+      {cause: caught},
+    );
+  }
 }
 
 /** The name of the terminal that a failed attempt with an error hint leaves (F-2605). */
@@ -403,18 +434,30 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
 
   it('F-2308 AC-15 (c82-kill): killing the install terminal of a connected window drops the connection at once and a reconnection makes a new install terminal with the password prompt', async () => {
     await setUserSetting(SHOW_TERMINAL, true);
-    const name = await openPasswordWindow('c82-kill');
-    await untilPrompt(name, PASSWORD_PROMPT);
-    await typeInTerminal(name, `${hostPassword()}\n`);
-    await waitFor(
-      'the window to connect',
-      async () => (await windowState(name)).remoteName === 'ssh-remote',
-      120_000,
-    );
-    await paletteRun(name, 'Terminal: Kill the Active Terminal');
-    const facts = await untilPrompt(name, PASSWORD_PROMPT);
-    deepStrictEqual(facts?.terminals, ['install']);
-    await closeWindow(name);
+    const name = 'c82-kill';
+    try {
+      await openPasswordWindow(name);
+      await untilPrompt(name, PASSWORD_PROMPT);
+      await typeInTerminal(name, `${hostPassword()}\n`);
+      await waitFor(
+        'the window to connect',
+        async () => (await windowState(name)).remoteName === 'ssh-remote',
+        120_000,
+      );
+      const before = await terminalNames(name);
+      await paletteRun(name, 'Terminal: Kill the Active Terminal');
+      const facts = await untilPrompt(name, PASSWORD_PROMPT).catch(
+        (caught: unknown) => {
+          throw new Error(
+            `${String(caught)}; the terminals before the kill: ${JSON.stringify(before)}`,
+            {cause: caught},
+          );
+        },
+      );
+      deepStrictEqual(facts?.terminals, ['install']);
+    } finally {
+      await closeIfOpen(name);
+    }
   });
 
   it('F-2308 AC-18 (c82-switch): switching the setting on during a hidden attempt changes nothing, and the next attempt reveals its terminal', async () => {
@@ -462,22 +505,28 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
   /** A window on the password host, connected by the password typed in its terminal; the setting is on. */
   async function connectedByTerminal(label: string): Promise<string> {
     await setUserSetting(SHOW_TERMINAL, true);
-    const name = await openPasswordWindow(label);
-    await untilPrompt(name, PASSWORD_PROMPT);
-    const resolvedBefore = resolvedConnects();
-    await typeInTerminal(name, `${hostPassword()}\n`);
-    // The window carries the remote's name from the start, so the connect is over once the log says it resolved.
-    await waitFor(
-      'the connect to resolve',
-      () => resolvedConnects() > resolvedBefore,
-      120_000,
-    );
-    await waitFor(
-      'the window to connect',
-      async () => (await windowState(name)).remoteName === 'ssh-remote',
-      120_000,
-    );
-    return name;
+    const name = label;
+    try {
+      await openPasswordWindow(label);
+      await untilPrompt(name, PASSWORD_PROMPT);
+      const resolvedBefore = resolvedConnects();
+      await typeInTerminal(name, `${hostPassword()}\n`);
+      // The window carries the remote's name from the start, so the connect is over once the log says it resolved.
+      await waitFor(
+        'the connect to resolve',
+        () => resolvedConnects() > resolvedBefore,
+        120_000,
+      );
+      await waitFor(
+        'the window to connect',
+        async () => (await windowState(name)).remoteName === 'ssh-remote',
+        120_000,
+      );
+      return name;
+    } catch (caught) {
+      await closeIfOpen(name);
+      throw caught;
+    }
   }
 
   /** How many connects the extension's log says resolved. */
@@ -535,78 +584,99 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
 
   it('F-2308 AC-19 (c82-uninstall-shown): with the setting on the Uninstall VS Code Server terminal is revealed with ssh’s prompt and closes by itself when done', async () => {
     const name = await connectedByTerminal('c82-uninstall-shown');
-    await killHost(name, 'password');
-    await untilKillTab(name, true);
-    await screenWith(name, PASSWORD_PROMPT);
-    const shown = {
-      panel: await panelShown(name),
-      focused: await terminalFocused(name),
-    };
-    await typeInTerminal(name, `${hostPassword()}\n`);
-    await untilKillTab(name, false);
-    const found = {shown, left: await tabNames(name)};
+    const mark = connectionLog().length;
     try {
-      deepStrictEqual(found, {
-        shown: {panel: true, focused: true},
-        left: ['install'],
+      await withConnectionLog(mark, async () => {
+        await killHost(name, 'password');
+        await untilKillTab(name, true);
+        await screenWith(name, PASSWORD_PROMPT);
+        const shown = {
+          panel: await panelShown(name),
+          focused: await terminalFocused(name),
+        };
+        await typeInTerminal(name, `${hostPassword()}\n`);
+        await untilKillTab(name, false);
+        const found = {shown, left: await tabNames(name)};
+        try {
+          deepStrictEqual(found, {
+            shown: {panel: true, focused: true},
+            left: ['install'],
+          });
+        } catch (caught) {
+          throw new Error(
+            `${String(caught)}; the terminals of ${name}: ${JSON.stringify(await terminalNames(name))}`,
+            {cause: caught},
+          );
+        }
+        await closeAfterKill(name);
       });
-    } catch (caught) {
-      throw new Error(
-        `${String(caught)}; the terminals of ${name}: ${JSON.stringify(await terminalNames(name))}`,
-        {cause: caught},
-      );
+    } finally {
+      await closeIfOpen(name);
     }
-    await closeAfterKill(name);
   });
 
   it('F-2308 AC-28 (c82-uninstall-other): in a connected window the kill on another password host reveals an Uninstall VS Code Server terminal beside install, takes the password there, closes itself, and install and the panel stay', async () => {
     const name = await connectedByTerminal('c82-uninstall-other');
-    await killHost(name, 'password-retry');
-    await untilKillTab(name, true);
-    const beside = await tabNames(name);
-    await screenWith(name, PASSWORD_ONLY_PROMPT);
-    await typeInTerminal(name, `${hostPassword()}\n`);
-    await untilKillTab(name, false);
-    deepStrictEqual(
-      {beside, left: await tabNames(name), panel: await panelShown(name)},
-      {
-        beside: ['install', 'Uninstall VS Code Server'],
-        left: ['install'],
-        panel: true,
-      },
-    );
-    await closeAfterKill(name);
+    const mark = connectionLog().length;
+    try {
+      await withConnectionLog(mark, async () => {
+        await killHost(name, 'password-retry');
+        await untilKillTab(name, true);
+        const beside = await tabNames(name);
+        await screenWith(name, PASSWORD_ONLY_PROMPT);
+        await typeInTerminal(name, `${hostPassword()}\n`);
+        await untilKillTab(name, false);
+        deepStrictEqual(
+          {beside, left: await tabNames(name), panel: await panelShown(name)},
+          {
+            beside: ['install', 'Uninstall VS Code Server'],
+            left: ['install'],
+            panel: true,
+          },
+        );
+        await closeAfterKill(name);
+      });
+    } finally {
+      await closeIfOpen(name);
+    }
   });
 
   it('F-2308 AC-19 (c82-uninstall-hidden): with the setting off the Uninstall VS Code Server terminal stays hidden and the password comes as a quick input', async () => {
     const name = await connectedByTerminal('c82-uninstall-hidden');
-    await setUserSetting(SHOW_TERMINAL, false);
-    await killHost(name, 'password');
+    const mark = connectionLog().length;
     try {
-      await waitFor(
-        'the password quick input',
-        async () =>
-          (await quickPickOf(name))?.placeholder.startsWith(
-            'Enter password',
-          ) === true,
-        60_000,
-      );
-    } catch (caught) {
-      throw new Error(
-        `${String(caught)}; the quick input: ${JSON.stringify((await quickPickOf(name))?.placeholder)}, the terminals: ${JSON.stringify(await terminalNames(name))}, the indicator: ${JSON.stringify(await statusBarText(name, 'status.host'))}`,
-        {cause: caught},
-      );
+      await withConnectionLog(mark, async () => {
+        await setUserSetting(SHOW_TERMINAL, false);
+        await killHost(name, 'password');
+        try {
+          await waitFor(
+            'the password quick input',
+            async () =>
+              (await quickPickOf(name))?.placeholder.startsWith(
+                'Enter password',
+              ) === true,
+            60_000,
+          );
+        } catch (caught) {
+          throw new Error(
+            `${String(caught)}; the quick input: ${JSON.stringify((await quickPickOf(name))?.placeholder)}, the terminals: ${JSON.stringify(await terminalNames(name))}, the indicator: ${JSON.stringify(await statusBarText(name, 'status.host'))}`,
+            {cause: caught},
+          );
+        }
+        const hidden = {
+          tabs: await tabNames(name),
+          quick: (await quickPickOf(name))?.placeholder,
+        };
+        await answerInputBox(name, hostPassword());
+        deepStrictEqual(hidden, {
+          tabs: ['install'],
+          quick: 'Enter password for harness-pw@127.0.0.1',
+        });
+        await closeAfterKill(name);
+      });
+    } finally {
+      await closeIfOpen(name);
     }
-    const hidden = {
-      tabs: await tabNames(name),
-      quick: (await quickPickOf(name))?.placeholder,
-    };
-    await answerInputBox(name, hostPassword());
-    deepStrictEqual(hidden, {
-      tabs: ['install'],
-      quick: 'Enter password for harness-pw@127.0.0.1',
-    });
-    await closeAfterKill(name);
   });
 
   /** The text on the screen of the terminal window `name` shows, read in the page. */

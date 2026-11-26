@@ -4,7 +4,7 @@
  * write makes to the text of the file.
  */
 
-import {deepStrictEqual} from 'node:assert';
+import {deepStrictEqual, throws} from 'node:assert';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {closeWindow, inWindow, variable, waitFor} from '../windows/harness.ts';
@@ -110,6 +110,36 @@ function featureValue(folder: string, name: string): string {
   return JSON.stringify(parsed.features?.[keyOf(name)]);
 }
 
+/** A read of the configuration that met the product's writer mid-write: the wait's "not yet", which names the text it read. */
+class ConfigurationNotYet extends Error {
+  readonly notYet = true;
+}
+
+/** Runs `read` on the configuration `text`, whose parse failure is the wait's "not yet" naming `text`. */
+function readOrNotYet<Result>(
+  text: string,
+  read: (text: string) => Result,
+): Result {
+  try {
+    return read(text);
+  } catch {
+    throw new ConfigurationNotYet(`the configuration does not parse: ${text}`);
+  }
+}
+
+/** The number of Features of the configuration `text`, a wait's "not yet" when it does not parse. */
+function featureCount(text: string): number {
+  return readOrNotYet(text, each => keysOf(each).length);
+}
+
+/** The entry of the Feature `name` in the configuration `text`, a wait's "not yet" when it does not parse. */
+function featureEntry(text: string, name: string): string {
+  const parsed = readOrNotYet(text, JSON.parse) as {
+    features?: Record<string, unknown>;
+  };
+  return JSON.stringify(parsed.features?.[keyOf(name)]);
+}
+
 /** The id of the Feature `name` without its version. */
 function idOf(name: string): string {
   return keyOf(name).split(':').slice(0, -1).join(':');
@@ -128,7 +158,7 @@ async function containing(folder: string, text: string): Promise<void> {
 async function featuresWritten(folder: string, count: number): Promise<void> {
   await waitFor(
     `${String(count)} Features in the configuration`,
-    () => keysOf(configurationText(folder)).length === count,
+    () => featureCount(configurationText(folder)) === count,
     60_000,
   );
 }
@@ -327,7 +357,7 @@ describe('Configure Container Features: the pick and the write (card containers-
       await pressQuickPickTitleButton(window, 'Finish');
       await waitFor(
         'the value to become {}',
-        () => featureValue(folder, GIT_LABEL) === '{}',
+        () => featureEntry(configurationText(folder), GIT_LABEL) === '{}',
         60_000,
       );
       overwritten = featureValue(folder, GIT_LABEL);
@@ -339,7 +369,7 @@ describe('Configure Container Features: the pick and the write (card containers-
       await pressQuickPickTitleButton(window, 'Finish');
       await waitFor(
         'the key to go',
-        () => keysOf(configurationText(folder)).length === 0,
+        () => featureCount(configurationText(folder)) === 0,
         60_000,
       );
       removed = JSON.parse(configurationText(folder));
@@ -569,5 +599,46 @@ describe('Configure Container Features: the pick and the write (card containers-
         [{}],
       );
     });
+  });
+});
+
+describe('the number of the Features of a configuration text (card #3150)', () => {
+  it('a text that does not parse is the wait\'s "not yet", naming the text', () => {
+    throws(() => featureCount('{"features": {"lab'), {
+      notYet: true,
+      message: 'the configuration does not parse: {"features": {"lab',
+    });
+  });
+
+  it('a complete text counts the entries of its features', () => {
+    deepStrictEqual(
+      [
+        featureCount('{"image": "x"}'),
+        featureCount('{"features": {"lab/plain:1": {}}}'),
+        featureCount('{}'),
+      ],
+      [0, 1, 0],
+    );
+  });
+});
+
+describe('the entry of a Feature in a configuration text (card #3179)', () => {
+  it('a text that does not parse is the wait\'s "not yet" naming it, and a parsed one gives the entry of its Feature as its JSON text, so the value-to-become-{} wait is pinned on both', () => {
+    KEYS[LAB_PLAIN] = 'lab/plain:1';
+    /** The entry of the Feature `name` in `text`, as the wait reads it, or the wait's "not yet" message for a text that does not parse. */
+    function entryOrNotYet(text: string, name: string): string {
+      try {
+        return featureEntry(text, name);
+      } catch (error) {
+        return error instanceof Error ? error.message : '';
+      }
+    }
+    deepStrictEqual(
+      [
+        entryOrNotYet('{"features": {"lab', LAB_PLAIN),
+        entryOrNotYet('{"features": {"lab/plain:1": {}}}', LAB_PLAIN),
+      ],
+      ['the configuration does not parse: {"features": {"lab', '{}'],
+    );
   });
 });

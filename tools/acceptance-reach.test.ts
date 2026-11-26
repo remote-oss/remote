@@ -474,6 +474,12 @@ describe('acceptance-reach: what a change to a package reaches (card tooling-169
     ]);
   });
 
+  it('a service reaches no launch of its own, while a folder of no known kind reaches every launch', () => {
+    manifest('tunnel-relay');
+    manifest('helpers');
+    deepStrictEqual(reachOf('tunnel-relay', 'helpers'), [[], undefined]);
+  });
+
   it('tooling-169: a library an extension no launch carries by its id depends on (remote-ssh, in every launch) reaches every launch, and so does that extension', () => {
     deepStrictEqual(reachOf('lib-ssh-side', 'remote-ssh'), [
       undefined,

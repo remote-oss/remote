@@ -27,7 +27,6 @@ import {
   bundleSuite,
   FRESH_RESOLVE_WAIT_MILLISECONDS,
   type Sleeper,
-  DOWNLOAD_PAUSES_MILLISECONDS,
   downloadWithRetry,
   privateAssetDownload,
   retriedGhcrLayer,
@@ -3433,7 +3432,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('tooling-179: after three failures the fourth try returns, each retry after its pause of 5, 15 and 45 s, each failure reported', async () => {
+    it('tooling-179, #3197: after three failures the fourth try returns, each retry after its pause of 5, 15 and 180 s, each failure reported', async () => {
       const recorder = new RetryRecorder();
       const {step, called} = scriptedStep([
         new Error('504'),
@@ -3447,11 +3446,11 @@ describe('acceptance', () => {
         [
           'ok',
           4,
-          [...DOWNLOAD_PAUSES_MILLISECONDS],
+          [5000, 15_000, 180_000],
           [
             'acceptance: 504; try 2 in 5 s',
             'acceptance: 504; try 3 in 15 s',
-            'acceptance: busy; try 4 in 45 s',
+            'acceptance: busy; try 4 in 180 s',
           ],
         ],
       );
@@ -4580,6 +4579,7 @@ describe('acceptance', () => {
       await rejects(
         vscodiumExecutableOf(workspace.root, 'linux', 'x64', {
           download: () => Promise.resolve(new Uint8Array([1, 2, 3])),
+          writeFile: writeFileSync,
           unpack: () => undefined,
         }),
         {message: 'the VSCodium download does not match its checksum'},
@@ -4599,6 +4599,7 @@ describe('acceptance', () => {
         'x64',
         {
           download: () => Promise.resolve(archive),
+          writeFile: writeFileSync,
           unpack: (bytes, folder) => {
             unpacked.push(folder);
           },
@@ -4638,9 +4639,91 @@ describe('acceptance', () => {
           downloads += 1;
           return Promise.resolve(new Uint8Array());
         },
+        writeFile: writeFileSync,
         unpack: () => undefined,
       });
       strictEqual(downloads, 0);
+    });
+
+    /** The pinned linux-x64 asset's path in the run's download cache. */
+    function cachedAsset(): string {
+      return path.join(
+        workspace.root,
+        '.vscode-test',
+        'downloads',
+        VSCODIUM_PLATFORMS['linux-x64']?.asset ?? '',
+      );
+    }
+
+    /**
+     * The linux-x64 build from a download cache holding `cached`, with the pinned sha256 that of [1, 2, 3]: the
+     * addresses downloaded, the bytes unpacked and the cache's asset after.
+     */
+    async function fromCache(cached: Uint8Array): Promise<unknown[]> {
+      mkdirSync(path.dirname(cachedAsset()), {recursive: true});
+      writeFileSync(cachedAsset(), cached);
+      const pinned = new Uint8Array([1, 2, 3]);
+      const downloaded: string[] = [];
+      const unpacked: number[][] = [];
+      await vscodiumExecutableOf(
+        workspace.root,
+        'linux',
+        'x64',
+        {
+          download: url => {
+            downloaded.push(url);
+            return Promise.resolve(pinned);
+          },
+          writeFile: writeFileSync,
+          unpack: bytes => {
+            unpacked.push([...bytes]);
+          },
+        },
+        {'linux-x64': createHash('sha256').update(pinned).digest('hex')},
+      );
+      return [downloaded, unpacked, [...readFileSync(cachedAsset())]];
+    }
+
+    it('#3197: a release asset in the download cache with the pinned sha256 is unpacked with no download', async () => {
+      deepStrictEqual(await fromCache(new Uint8Array([1, 2, 3])), [
+        [],
+        [[1, 2, 3]],
+        [1, 2, 3],
+      ]);
+    });
+
+    it('#3197: an asset in the download cache with other bytes is downloaded again, replaced, and the download unpacked', async () => {
+      deepStrictEqual(await fromCache(new Uint8Array([9])), [
+        [releaseAssetUrlOf(VSCODIUM_PLATFORMS['linux-x64']?.asset ?? '')],
+        [[1, 2, 3]],
+        [1, 2, 3],
+      ]);
+    });
+
+    it('#3197: a checked download is kept in the download cache under its asset name, where CI caches it', async () => {
+      await fetchedForLinuxX64();
+      deepStrictEqual([...readFileSync(cachedAsset())], [1, 2, 3]);
+    });
+
+    it('#3197: a download that does not match leaves nothing in the download cache', async () => {
+      const failure = await vscodiumExecutableOf(
+        workspace.root,
+        'linux',
+        'x64',
+        {
+          download: () => Promise.resolve(new Uint8Array([4])),
+          writeFile: writeFileSync,
+          unpack: () => undefined,
+        },
+      ).then(
+        () => 'resolved',
+        (caught: unknown) =>
+          caught instanceof Error ? caught.message : String(caught),
+      );
+      deepStrictEqual(
+        [failure, existsSync(cachedAsset())],
+        ['the VSCodium download does not match its checksum', false],
+      );
     });
 
     it('#657: a build of another architecture is not taken for this one', async () => {
@@ -4686,6 +4769,7 @@ describe('acceptance', () => {
       await rejects(
         vscodiumExecutableOf(workspace.root, 'win32', 'arm64', {
           download: () => Promise.resolve(new Uint8Array()),
+          writeFile: writeFileSync,
           unpack: () => undefined,
         }),
         {message: 'no VSCodium build is pinned for win32-arm64'},
@@ -4709,6 +4793,7 @@ describe('acceptance', () => {
               url = target;
               return Promise.resolve(archive);
             },
+            writeFile: writeFileSync,
             unpack: () => {
               unpacks += 1;
             },
@@ -4819,15 +4904,43 @@ describe('acceptance', () => {
       );
     });
 
-    it('#253 Q14: a download returns the bytes the server sent', async () => {
-      deepStrictEqual(
-        await downloadWithRetry(
-          'https://example.invalid/a',
-          () => Promise.resolve(new Response(new Uint8Array([7, 8]))),
-          () => Promise.resolve(),
-        ),
-        new Uint8Array([7, 8]),
+    it('#253 Q14, #3197: a download returns the bytes the server sent, and reports its address once, before its first try', async () => {
+      const lines: string[] = [];
+      const bytes = await downloadWithRetry(
+        'https://example.invalid/a',
+        () => Promise.resolve(new Response(new Uint8Array([7, 8]))),
+        () => Promise.resolve(),
+        line => lines.push(line),
       );
+      deepStrictEqual(
+        [bytes, lines],
+        [
+          new Uint8Array([7, 8]),
+          ['acceptance: downloading https://example.invalid/a'],
+        ],
+      );
+    });
+
+    it('#3197: a download that fails once reports its address, then the retry, through the same report', async () => {
+      const lines: string[] = [];
+      let calls = 0;
+      await downloadWithRetry(
+        'https://example.invalid/a',
+        () => {
+          calls += 1;
+          return Promise.resolve(
+            calls === 1
+              ? new Response('', {status: 403})
+              : new Response(new Uint8Array([7])),
+          );
+        },
+        () => Promise.resolve(),
+        line => lines.push(line),
+      );
+      deepStrictEqual(lines, [
+        'acceptance: downloading https://example.invalid/a',
+        'acceptance: https://example.invalid/a: 403; try 2 in 5 s',
+      ]);
     });
 
     /** How a private asset download with `token` over `fetcher` ends: its failure's message, or `resolved`. */
