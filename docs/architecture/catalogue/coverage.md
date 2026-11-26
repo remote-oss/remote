@@ -1,6 +1,6 @@
 # The coverage files: tags, and how a line is set to `open`
 
-Each `coverage-*.tsv` has one line per acceptance criterion: `ac`, `tag`, `reason`. `node tools/check-coverage.ts`
+Each `coverage-*.tsv` has one line per acceptance criterion, the reference-only criteria of the section at the end excepted: `ac`, `tag`, `reason`. `node tools/check-coverage.ts`
 checks the files against the rows (`pnpm check-coverage`), and `pnpm coverage-table` prints every criterion with the
 tag it counts as (never committed).
 
@@ -28,6 +28,17 @@ the PR shows what changed.
 A row whose case label ends in `-half` or `-part` proves part of a criterion, and never counts towards an `open`
 line. A row that cites an `open` criterion with another partial word in its label (`half`, `part`, `clause`, `only`)
 fails the check: end the label in `-half` or `-part`. A line may not name a partial row.
+
+## The reference-only criteria
+
+The catalogue entry of a feature (a `<repo>-<number>.json` file in this folder) lists the ids of its wholly
+reference-only criteria in a `referenceOnly` field. Such a criterion records the reference's behaviour, or a process
+of the family its own spec keeps out of the catalogue (F-9002.AC-16, remote-extensionpack#6), and is never required
+of the reimplementation, so the coverage file has no line for it: the line is deleted, and none is ever added.
+`node tools/seed-coverage.ts` reads the field and leaves those ids out of what it seeds and of what its `--check`
+expects, and it stops the run, naming the id, when the field lists an id the feature's issue does not list as a
+criterion. A feature's `acCount` counts the lines of the file, so it is below the issue's criterion count by the
+number of its reference-only ids.
 
 ## Setting a line to `open`
 
