@@ -267,11 +267,11 @@
       "commandPalette": [
         {
           "command": "remote-containers.reopenInContainer",
-          "when": "!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
+          "when": "!hideConnectCommands && workspaceFolderCount != 0 && remoteName =~ /^(ssh-remote|tunnel)?$/ && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.openFolder",
-          "when": "!hideConnectCommands && remoteName =~ /^(dev-container)?$/ && !remote-containers:standingDown"
+          "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.switchContainer",
@@ -279,7 +279,7 @@
         },
         {
           "command": "remote-containers.createDevContainerFile",
-          "when": "remoteName =~ /^(dev-container)?$/ && !virtualWorkspace && !remote-containers:standingDown"
+          "when": "remoteName =~ /^(dev-container|ssh-remote|tunnel)?$/ && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.configureContainerFeatures",
@@ -299,11 +299,11 @@
         },
         {
           "command": "remote-containers.rebuildAndReopenInContainer",
-          "when": "!hideRebuildCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
+          "when": "!hideRebuildCommands && workspaceFolderCount != 0 && remoteName =~ /^(ssh-remote|tunnel)?$/ && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.rebuildNoCacheAndReopenInContainer",
-          "when": "!hideRebuildCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
+          "when": "!hideRebuildCommands && workspaceFolderCount != 0 && remoteName =~ /^(ssh-remote|tunnel)?$/ && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.reopenLocally",
@@ -534,7 +534,7 @@
         {
           "command": "remote-containers.reopenInContainer",
           "group": "remote_30_dev-container_2_actions@8",
-          "when": "!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
+          "when": "!hideConnectCommands && workspaceFolderCount != 0 && remoteName =~ /^(ssh-remote|tunnel)?$/ && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.openFolder",
@@ -564,7 +564,7 @@
         {
           "command": "remote-containers.createDevContainerFile",
           "group": "remote_30_dev-container_2_actions@4",
-          "when": "workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
+          "when": "workspaceFolderCount != 0 && remoteName =~ /^(ssh-remote|tunnel)?$/ && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.configureContainerFeatures",

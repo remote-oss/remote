@@ -1,4 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
 import {
   admitsWindow,
   type WindowManifest,
@@ -6,7 +8,15 @@ import {
 
 /** A manifest whose one command, `command`, has the palette clause `when`. */
 function manifestOf(when: string | undefined): WindowManifest {
-  return {contributes: {menus: {commandPalette: [{command: 'command', when}]}}};
+  return {
+    contributes: {
+      menus: {
+        commandPalette: [
+          {command: 'command', ...(when === undefined ? {} : {when})},
+        ],
+      },
+    },
+  };
 }
 
 /** Whether a window with each remote name is offered the command whose clause is `when`. */
@@ -111,6 +121,56 @@ describe('which windows a command is offered in', () => {
         [true, true, true, true, true, true],
         [true, true, true, true, true, true],
         [true, true, true, true, true, true],
+        [true, true, true, true, true, true],
+      ],
+    );
+  });
+});
+
+describe('the windows the shipped manifest offers each command in', () => {
+  const shipped = JSON.parse(
+    readFileSync(
+      path.join(import.meta.dirname, '..', '..', 'package.json'),
+      'utf8',
+    ),
+  ) as WindowManifest;
+
+  /** Where each command is offered, by the windows tried: local, SSH, tunnel, WSL, dev container, attached container. */
+  function offeredIn(commandId: string): boolean[] {
+    return WINDOWS.map(name => admitsWindow(shipped, commandId, name));
+  }
+
+  it('offers the commands that start a dev container in a local window, an SSH window and a tunnel window, and no other of the windows tried', () => {
+    deepStrictEqual(
+      [
+        'remote-containers.reopenInContainer',
+        'remote-containers.rebuildAndReopenInContainer',
+        'remote-containers.rebuildNoCacheAndReopenInContainer',
+      ].map(offeredIn),
+      [
+        [true, true, true, false, false, false],
+        [true, true, true, false, false, false],
+        [true, true, true, false, false, false],
+      ],
+    );
+  });
+
+  it('offers the other commands of the family where the reference does: the file wizard and the features in a dev container window too, Open Folder in any window that holds a container, the rebuilds only in a dev container window', () => {
+    deepStrictEqual(
+      [
+        'remote-containers.createDevContainerFile',
+        'remote-containers.configureContainerFeatures',
+        'remote-containers.openFolder',
+        'remote-containers.rebuildContainer',
+        'remote-containers.rebuildContainerNoCache',
+        'remote-containers.openRepositoryInUniqueVolume',
+      ].map(offeredIn),
+      [
+        [true, true, true, false, true, false],
+        [true, true, true, true, true, false],
+        [true, true, true, false, true, true],
+        [false, false, false, false, true, false],
+        [false, false, false, false, true, false],
         [true, true, true, true, true, true],
       ],
     );

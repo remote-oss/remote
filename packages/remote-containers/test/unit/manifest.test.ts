@@ -53,21 +53,21 @@ const REBUILD_COMMANDS = [
 const REBUILD_WHEN =
   '!hideRebuildCommands && remoteName =~ /^dev-container$/ && !remote-containers:standingDown';
 
-/** The `when` clause of Open Folder in Container in the palette: a local window or a dev container window. */
+/** The `when` clause of Open Folder in Container in the palette: a local window, or any window that can hold a container. */
 const OPEN_FOLDER_WHEN =
-  '!hideConnectCommands && remoteName =~ /^(dev-container)?$/ && !remote-containers:standingDown';
+  '!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|ssh-remote|tunnel)?$/ && !remote-containers:standingDown';
 
 /** The `when` clause of its remote indicator item: only a local window with no folder. */
 const OPEN_FOLDER_INDICATOR_WHEN =
   '!hideConnectCommands && workspaceFolderCount == 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown';
 
-/** The `when` clause of the rebuild commands of a local window. */
+/** The `when` clause of the rebuild commands of a local window, or an SSH or tunnel window, with a folder. */
 const REBUILD_REOPEN_WHEN =
-  '!hideRebuildCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown';
+  '!hideRebuildCommands && workspaceFolderCount != 0 && remoteName =~ /^(ssh-remote|tunnel)?$/ && !virtualWorkspace && !remote-containers:standingDown';
 
 /** The `when` clause of the command's palette entry and menu entry. */
 const REOPEN_WHEN =
-  '!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown';
+  '!hideConnectCommands && workspaceFolderCount != 0 && remoteName =~ /^(ssh-remote|tunnel)?$/ && !virtualWorkspace && !remote-containers:standingDown';
 
 const STANDING_DOWN = '!remote-containers:standingDown';
 
@@ -180,10 +180,10 @@ const DETAILS_REBUILD_WHEN =
   '!hideRebuildCommands && view == detailsContainers && remoteName == dev-container && !remote-containers:standingDown';
 
 const CREATE_FILE_WHEN =
-  'remoteName =~ /^(dev-container)?$/ && !virtualWorkspace && !remote-containers:standingDown';
+  'remoteName =~ /^(dev-container|ssh-remote|tunnel)?$/ && !virtualWorkspace && !remote-containers:standingDown';
 
 const CREATE_FILE_INDICATOR_WHEN =
-  'workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown';
+  'workspaceFolderCount != 0 && remoteName =~ /^(ssh-remote|tunnel)?$/ && !virtualWorkspace && !remote-containers:standingDown';
 
 const ENGLISH = {
   description:
@@ -1273,7 +1273,7 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-0403 3.1: Open Folder in Container has its title, the palette clause of release 1’s windows, and the indicator item only in an empty local window', () => {
+  it('F-0403 3.1: Open Folder in Container has its title, the palette clause of the windows that can hold a container, and the indicator item only in an empty local window', () => {
     deepStrictEqual(
       [
         menusOf(['remote-containers.openFolder']),
@@ -1302,7 +1302,7 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-0801 AC-1: Add Dev Container Configuration Files has its title, the palette clause of a local window and of a dev container window, and the indicator item only in a local window with a folder (the reference’s dev container menu has none, F-0101 AC-21)', () => {
+  it('F-0801 AC-1: Add Dev Container Configuration Files has its title, the palette clause of a local, SSH, tunnel and dev container window, and the indicator item only in a local, SSH or tunnel window with a folder (the reference’s dev container menu has none, F-0101 AC-21)', () => {
     deepStrictEqual(
       [
         menusOf(['remote-containers.createDevContainerFile']),
@@ -1331,7 +1331,7 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-0405 3.1: the and-reopen rebuild commands are in the palette for a local window with a folder, and in no other menu', () => {
+  it('F-0405 3.1: the and-reopen rebuild commands are in the palette for a local, SSH or tunnel window with a folder, and in no other menu', () => {
     deepStrictEqual(
       menusOf([
         'remote-containers.rebuildAndReopenInContainer',
