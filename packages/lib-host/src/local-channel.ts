@@ -11,7 +11,6 @@ import {access, constants as fileConstants, stat} from 'node:fs/promises';
 import {constants as osConstants} from 'node:os';
 import {pipeline} from 'node:stream/promises';
 import {
-  type ChannelFailureKind,
   type CopyOutcome,
   type CopyRequest,
   failFrom,
@@ -29,6 +28,8 @@ export interface LocalChannelOptions {
   platform: NodeJS.Platform;
   /** The POSIX shell that runs the scripts; `/bin/sh` when absent. */
   shell?: string;
+  /** Ends the process group `leader` with SIGKILL; throws when the group is gone. The signal to the group when absent. */
+  endGroup?: (leader: number) => void;
 }
 
 /** The text a PowerShell script is refused with: this machine's agent runs POSIX scripts only. */
@@ -43,11 +44,6 @@ const HINTS: Readonly<Partial<Record<NodeJS.Platform, PlatformHint>>> = {
   darwin: 'macOS',
 };
 
-/** The failure of a script the shell could not start, or of a copy that could not read or write. */
-function failure(kind: ChannelFailureKind, detail: string) {
-  return failFrom(kind, detail);
-}
-
 /** Whether `error` is the abort of a cancelled operation. */
 function isAbort(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
@@ -55,7 +51,7 @@ function isAbort(error: unknown): boolean {
 
 /** The exit status of a shell that ended: its own, or 128 plus the number of the signal that ended it. */
 function statusOf(code: number | null, signal: NodeJS.Signals | null): number {
-  return code ?? 128 + (signal === null ? 0 : osConstants.signals[signal]);
+  return signal === null ? Number(code) : 128 + osConstants.signals[signal];
 }
 
 /** Delivers the lines of an output stream, in chunks that may split a line anywhere, to `onLine`. */
@@ -66,9 +62,10 @@ function lineReader(onLine: (line: string) => void): {
   let pending = '';
   return {
     write(chunk) {
-      const lines = (pending + chunk).split('\n');
-      pending = lines.pop() ?? '';
-      for (const line of lines) {
+      const text = pending + chunk;
+      const end = text.lastIndexOf('\n') + 1;
+      pending = text.slice(end);
+      for (const line of text.slice(0, end).split('\n').slice(0, -1)) {
         onLine(line.endsWith('\r') ? line.slice(0, -1) : line);
       }
     },
@@ -83,31 +80,28 @@ function lineReader(onLine: (line: string) => void): {
 /** The channel of this machine. */
 export function localChannel(options: LocalChannelOptions): HostChannel {
   const shell = options.shell ?? '/bin/sh';
+  const endGroup =
+    options.endGroup ?? ((leader: number) => process.kill(-leader, 'SIGKILL'));
   return {
     runScript: async (request, onLine): Promise<ScriptOutcome> => {
       if (request.interpreter !== 'posixShell') {
-        return failure('spawnFailed', POSIX_ONLY);
+        return failFrom('spawnFailed', POSIX_ONLY);
       }
       if (request.cancellation.aborted) {
-        return failure('cancelled', 'the script was cancelled before it ran');
+        return failFrom('cancelled', 'the script was cancelled before it ran');
       }
       if (request.input.kind === 'file') {
         try {
           await stat(request.input.localFile);
         } catch (caught) {
-          return failure(
-            'spawnFailed',
-            `the input file ${request.input.localFile} cannot be read: ${
-              caught instanceof Error ? caught.message : String(caught)
-            }`,
-          );
+          return failFrom('spawnFailed', caught);
         }
       }
-      return runShell(shell, request, onLine);
+      return runShell(shell, endGroup, request, onLine);
     },
     copyToHost: async (request: CopyRequest): Promise<CopyOutcome> => {
       if (request.cancellation.aborted) {
-        return failure('cancelled', 'the copy was cancelled before it ran');
+        return failFrom('cancelled', 'the copy was cancelled before it ran');
       }
       try {
         await pipeline(
@@ -118,7 +112,7 @@ export function localChannel(options: LocalChannelOptions): HostChannel {
         return {kind: 'copied'};
       } catch (caught) {
         return isAbort(caught)
-          ? failure('cancelled', 'the copy was cancelled')
+          ? failFrom('cancelled', 'the copy was cancelled')
           : failFrom('copyFailed', caught);
       }
     },
@@ -138,6 +132,7 @@ export function localChannel(options: LocalChannelOptions): HostChannel {
 /** Runs the script of `request` under `shell`, and gives how it ended. */
 function runShell(
   shell: string,
+  endGroup: (leader: number) => void,
   request: ScriptRequest,
   onLine: (line: string) => void,
 ): Promise<ScriptOutcome> {
@@ -161,7 +156,7 @@ function runShell(
       cancelled = true;
       if (child.pid !== undefined) {
         try {
-          process.kill(-child.pid, 'SIGKILL');
+          endGroup(child.pid);
         } catch {
           // The group has ended already, and its close settles the run.
         }
@@ -186,7 +181,7 @@ function runShell(
       reader.end();
       settle(
         cancelled
-          ? failure('cancelled', 'the script was cancelled')
+          ? failFrom('cancelled', 'the script was cancelled')
           : {kind: 'exited', status: statusOf(code, signal)},
       );
     });

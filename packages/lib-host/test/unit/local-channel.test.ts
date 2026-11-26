@@ -200,6 +200,41 @@ describe('the channel of the local machine (card #3158)', () => {
     );
   });
 
+  it('settles a cancelled script as cancelled when its group is gone already', async () => {
+    const controller = new AbortController();
+    const running = ranWith(
+      localChannel({
+        ...LINUX,
+        endGroup: () => {
+          throw new Error('no such process');
+        },
+      }),
+      requestOf('sleep 1', {cancellation: controller.signal}),
+    );
+    setTimeout(() => {
+      controller.abort();
+    }, 50);
+    const {outcome} = await running;
+    deepStrictEqual(
+      outcome.kind === 'failed' && outcome.failure.kind,
+      'cancelled',
+    );
+  });
+
+  it('fails a script cancelled in the moment its shell could not start as a failure to spawn', async () => {
+    const controller = new AbortController();
+    const running = ranWith(
+      localChannel({...LINUX, shell: path.join(folder, 'no-such-shell')}),
+      requestOf('exit 0', {cancellation: controller.signal}),
+    );
+    controller.abort();
+    const {outcome} = await running;
+    deepStrictEqual(
+      outcome.kind === 'failed' && outcome.failure.kind,
+      'spawnFailed',
+    );
+  });
+
   it('copies nothing from a file that is not there, and says why', async () => {
     const outcome = await localChannel(LINUX).copyToHost({
       localFile: path.join(folder, 'missing.tar.gz'),
