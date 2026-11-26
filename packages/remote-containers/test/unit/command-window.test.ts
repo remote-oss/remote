@@ -6,7 +6,15 @@ import {
 
 /** A manifest whose one command, `command`, has the palette clause `when`. */
 function manifestOf(when: string | undefined): WindowManifest {
-  return {contributes: {menus: {commandPalette: [{command: 'command', when}]}}};
+  return {
+    contributes: {
+      menus: {
+        commandPalette: [
+          {command: 'command', ...(when === undefined ? {} : {when})},
+        ],
+      },
+    },
+  };
 }
 
 /** Whether a window with each remote name is offered the command whose clause is `when`. */
