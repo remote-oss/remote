@@ -1,10 +1,9 @@
 import {deepStrictEqual} from 'node:assert';
-import {readFileSync} from 'node:fs';
-import path from 'node:path';
 import {
   admitsWindow,
   type WindowManifest,
 } from '../../src/open/command-window.ts';
+import {SHIPPED_MANIFEST} from './shipped-manifest.ts';
 
 /** A manifest whose one command, `command`, has the palette clause `when`. */
 function manifestOf(when: string | undefined): WindowManifest {
@@ -128,16 +127,9 @@ describe('which windows a command is offered in', () => {
 });
 
 describe('the windows the shipped manifest offers each command in', () => {
-  const shipped = JSON.parse(
-    readFileSync(
-      path.join(import.meta.dirname, '..', '..', 'package.json'),
-      'utf8',
-    ),
-  ) as WindowManifest;
-
   /** Where each command is offered, by the windows tried: local, SSH, tunnel, WSL, dev container, attached container. */
   function offeredIn(commandId: string): boolean[] {
-    return WINDOWS.map(name => admitsWindow(shipped, commandId, name));
+    return WINDOWS.map(name => admitsWindow(SHIPPED_MANIFEST, commandId, name));
   }
 
   it('offers the commands that start a dev container in a local window, an SSH window and a tunnel window, and no other of the windows tried', () => {

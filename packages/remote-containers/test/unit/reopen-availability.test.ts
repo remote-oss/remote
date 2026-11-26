@@ -26,8 +26,8 @@ function clauseOf(menu: string): string | undefined {
 }
 
 /**
- * Whether `clause` holds in `context`: the terms are joined by ` && `; a term is `!name` or `name != number`. Any other
- * term throws.
+ * Whether `clause` holds in `context`: the terms are joined by ` && `; a term is `!name`, `name != number` or
+ * `name =~ /pattern/`. Any other term throws.
  */
 function holds(
   clause: string,
@@ -42,6 +42,17 @@ function holds(
         value === 0 ||
         value === ''
       )) {
+        return false;
+      }
+      continue;
+    }
+    const matching = /^(\S+) =~ \/(.*)\/$/.exec(term);
+    if (matching !== null) {
+      if (
+        !new RegExp(matching[2] ?? '').test(
+          String(context[matching[1] ?? ''] ?? ''),
+        )
+      ) {
         return false;
       }
       continue;
@@ -90,6 +101,19 @@ describe('F-0401 availability of Reopen in Container (card containers-40)', () =
       false,
       false,
     ]);
+  });
+
+  it('F-1302 AC-6 (a2s): an SSH window and a tunnel window with a folder list the command in the palette and the indicator, and a WSL window does not', () => {
+    deepStrictEqual(
+      ['ssh-remote', 'tunnel', 'wsl'].map(remoteName =>
+        listings({...BASE, remoteName}),
+      ),
+      [
+        [true, true],
+        [true, true],
+        [false, false],
+      ],
+    );
   });
 
   it('F-0401 AC-6 (a3): a dev container window that is not a recovery container does not list the command', () => {

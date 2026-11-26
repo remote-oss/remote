@@ -400,7 +400,10 @@ describe('Reopen in Container', () => {
         state.remoteName = 'dev-container';
       },
       state => {
-        state.remoteName = 'ssh-remote';
+        state.remoteName = 'wsl';
+      },
+      state => {
+        state.remoteName = 'attached-container';
       },
       state => {
         state.folders = [];
