@@ -55,6 +55,7 @@ import {
   resolveCliPathFromVSCodeExecutablePath,
 } from '@vscode/test-electron';
 import {build} from 'esbuild';
+import {HARNESS_SUITE_VARIABLE} from './acceptance-display-reporter.ts';
 import {
   downloadHostArguments,
   CLI_ARCHIVES,
@@ -2185,6 +2186,8 @@ export function vscodiumConfiguration(
   launch: RunnerLaunch,
 ) {
   const runFolder = environment.HARNESS_RUN_FOLDER ?? '';
+  // The display readout stands in the window's mocha for this launch alone, so its log holds its files' readouts (#3210).
+  const measuresDisplay = launch.label === 'ssh-core';
   const files = launchFiles(runFolder, launch.label);
   const acceptance = path.join(root, 'tests', 'acceptance');
   const runner = path.join(acceptance, launch.runner);
@@ -2207,6 +2210,8 @@ export function vscodiumConfiguration(
       'pids',
     ),
     HARNESS_USER_DATA: userDataFolderOf(runFolder),
+    // This launch's window says the display's windows after each of its files (#3210).
+    ...(measuresDisplay ? {[HARNESS_SUITE_VARIABLE]: launch.suite} : {}),
     ...hostBaseVariables(launch, environment, runFolder),
     ...(launch.ownScript === true
       ? {
@@ -2247,7 +2252,11 @@ export function vscodiumConfiguration(
       ...editorArguments(runFolder, launch.proposedApi !== false),
     ],
     env,
-    mocha: {ui: 'bdd' as const, timeout: 120_000},
+    mocha: {
+      ui: 'bdd' as const,
+      timeout: 120_000,
+      ...(measuresDisplay ? {reporter: displayReporterOf(root)} : {}),
+    },
   };
 }
 
@@ -2293,6 +2302,7 @@ export async function bundleSuite(root: string): Promise<void> {
   for (const suite of suitesOfRun(root)) {
     await bundleFolder(root, suite, bundleFolderOf(suite));
   }
+  await bundleDisplayReporter(root);
   for (const extension of extensionsOf(launchesOf(root))) {
     await build({
       entryPoints: [
@@ -2344,6 +2354,42 @@ async function bundleFolder(
     format: 'cjs',
     outExtension: {'.js': '.cjs'},
     external: ['vscode'],
+    logLevel: 'warning',
+  });
+}
+
+/** The bundle the display reporter stands in: beside the shared suite's bundles, where every run builds it. */
+function displayReporterOf(root: string): string {
+  return path.join(
+    root,
+    'tests',
+    'acceptance',
+    bundleFolderOf('suite'),
+    'display-reporter.cjs',
+  );
+}
+
+/** Bundles the display reporter beside the shared suite's bundles, so a launch's window reads it. */
+async function bundleDisplayReporter(root: string): Promise<void> {
+  // Mocha reads the bundle by path and takes its value for the reporter, so the bundle's value is the reporter itself;
+  // mocha stays the checkout's own, since the window reads the bundle from the checkout.
+  await build({
+    entryPoints: [
+      {
+        // eslint-disable-next-line id-length -- esbuild's entry point fields
+        in: path.join(root, 'tools', 'acceptance-display-reporter.ts'),
+        // eslint-disable-next-line id-length -- esbuild's entry point fields
+        out: 'display-reporter',
+      },
+    ],
+    outdir: path.join(root, 'tests', 'acceptance', bundleFolderOf('suite')),
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    outExtension: {'.js': '.cjs'},
+    external: ['mocha'],
+    // eslint-disable-next-line id-length -- esbuild's footer field
+    footer: {js: 'module.exports = DisplayReporter;'},
     logLevel: 'warning',
   });
 }

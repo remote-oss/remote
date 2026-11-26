@@ -1,23 +1,69 @@
 /**
  * @fileoverview The windows of the harness display through `xdotool` and `xprop`, the key driver the display step
  * installs: the window of a name, its activation through the window manager, the window the display's active window
- * is, and the display's visible windows at an instant, with their names and managedness. A page read over the
- * protocol cannot say what the window manager gave its active window to, so the display says it. The activation asks
+ * is, and the display's visible windows at an instant, with their names, their WM_CLASS and their managedness. A
+ * page read over the protocol cannot say what the window manager gave its active window to, so the display says it.
+ * The activation asks
  * for the window the manager manages: `xdotool search` returns the children of a name as well, and a child window
  * takes no activation.
  */
 
-import {execFile} from 'node:child_process';
+import {execFile, execFileSync} from 'node:child_process';
 import {promisify} from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
+/** The environment of a display read: the process's, with the harness display as the default. */
+function displayEnv(): NodeJS.ProcessEnv {
+  return {...process.env, DISPLAY: process.env.DISPLAY ?? ':99'};
+}
+
 /** Runs `xdotool` with `words` on the harness display and gives its output. */
 export async function drive(...words: string[]): Promise<string> {
   const {stdout} = await execFileAsync('xdotool', words, {
-    env: {...process.env, DISPLAY: process.env.DISPLAY ?? ':99'},
+    env: displayEnv(),
   });
   return stdout.trim();
+}
+
+/** Runs `xdotool` with `words` on the harness display and waits for its output, so a readout can say the display's windows at once. */
+function driveSync(...words: string[]): string {
+  return execFileSync('xdotool', words, {
+    env: displayEnv(),
+    encoding: 'utf8',
+  }).trim();
+}
+
+/** A key driver over the harness display that waits for each answer, so a readout can say the display's windows at once. */
+export type KeyDriverSync = typeof driveSync;
+
+/** The X window `id`'s `property` through `xprop`, giving its output. */
+function xpropRead(windowId: string, property: string): string {
+  return execFileSync('xprop', ['-id', windowId, property], {
+    env: displayEnv(),
+    encoding: 'utf8',
+  });
+}
+
+/** Whether a window holds a WM_STATE, read at once: a window or display that is gone by the read says no. */
+function hasWmStateSync(windowId: string): boolean {
+  try {
+    return xpropRead(windowId, 'WM_STATE').includes('WM_STATE(');
+  } catch {
+    return false;
+  }
+}
+
+/** The X window `id`'s WM_CLASS, as `xprop` prints it after the `=`, none while the display gives it none. */
+function windowClassOf(windowId: string): string {
+  try {
+    const printed = xpropRead(windowId, 'WM_CLASS');
+    const equals = printed.indexOf('=');
+    const value = equals < 0 ? '' : printed.slice(equals + 1).trim();
+    return value === '' ? 'none' : value;
+  } catch {
+    return 'none';
+  }
 }
 
 /** A key driver over the harness display: the harness installs `xdotool`, and a test stands a stand-in in its place. */
@@ -27,7 +73,7 @@ export type KeyDriver = typeof drive;
 async function hasWmState(windowId: string): Promise<boolean> {
   try {
     await execFileAsync('xprop', ['-id', windowId, 'WM_STATE'], {
-      env: {...process.env, DISPLAY: process.env.DISPLAY ?? ':99'},
+      env: displayEnv(),
     });
     return true;
   } catch (caught) {
@@ -300,4 +346,60 @@ export function windowsOf(windows: readonly TopLevelWindow[]): string {
         })`,
     )
     .join(', ');
+}
+
+/** A visible window on the display at a readout, with its name, its WM_CLASS and whether the window manager manages it. */
+export interface ListedWindow {
+  /** The X window id. */
+  id: string;
+  /** The window's name, or none while the display gives it none. */
+  name: string;
+  /** The window's WM_CLASS, as xprop prints it, or none while the display gives it none. */
+  windowClass: string;
+  /** Whether the window holds a WM_STATE, which only a managed top-level does. */
+  managed: boolean;
+}
+
+/** The display's visible windows through `driver`, `wmReader` and `classReader`, with name, WM_CLASS and managedness. */
+export function listedWindowsOf(
+  driver: KeyDriverSync,
+  wmReader: (windowId: string) => boolean,
+  classReader: (windowId: string) => string,
+): ListedWindow[] {
+  let found: string;
+  try {
+    found = driver('search', '--onlyvisible', '--name', '.*');
+  } catch (caught) {
+    // `xdotool search` exits with 1 when no window matches, and a display that cannot be reached fails the same
+    // way, saying so on its error: the empty answer without the error is the no-windows one.
+    const error = caught as {status?: number; stderr?: string};
+    if (error.status === 1 && (error.stderr ?? '').trim() === '') {
+      return [];
+    }
+    throw caught;
+  }
+  const windows: ListedWindow[] = [];
+  for (const windowId of found.split('\n')) {
+    if (windowId !== '') {
+      let name: string;
+      try {
+        name = driver('getwindowname', windowId);
+      } catch {
+        // A name the display does not give is none at the readout.
+        name = '';
+      }
+      windows.push({
+        id: windowId,
+        name,
+        windowClass: classReader(windowId),
+        managed: wmReader(windowId),
+      });
+    }
+  }
+  return windows;
+}
+
+/** The display's visible windows on the harness display, each with its name, its WM_CLASS and whether the manager manages it. */
+export function listedWindows(): ListedWindow[] {
+  return listedWindowsOf(driveSync, hasWmStateSync, windowClassOf);
 }
