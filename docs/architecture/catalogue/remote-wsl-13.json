@@ -1,0 +1,83 @@
+[
+ {
+  "id": "F-6002",
+  "issue": 13,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "The WSL log and debug logging",
+  "epic": "E60",
+  "acCount": 31,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.showLog"
+   ],
+   "settings": [
+    "remote.WSL.debug",
+    "terminal.integrated.allowInUntrustedWorkspace"
+   ],
+   "views": [],
+   "menus": [
+    "commandPalette#8",
+    "statusBar/remoteIndicator#5"
+   ],
+   "contextKeys": [],
+   "authorities": [
+    "wsl"
+   ],
+   "other": [
+    "extension-owned pseudo terminal named WSL",
+    "buffer replay until first terminal",
+    "daemon log file wsl-daemon-<timestamp>.log in debug",
+    "auto reveal on failed start or debug window start"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createTerminal",
+    "Pseudoterminal",
+    "Terminal.show",
+    "window.onDidCloseTerminal",
+    "workspace.getConfiguration",
+    "ExtensionContext.logUri",
+    "l10n.t"
+   ],
+   "proposedApi": [
+    "resolvers (progress link caller)"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "wsl-daemon-<yyyymmddThhmmss>.log in extension-host log folder"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6301",
+   "remote-wsl#F-6303",
+   "remote-wsl#F-6304",
+   "remote-wsl#F-6401",
+   "remote-wsl#F-6701",
+   "remote-wsl#F-6003",
+   "remote-wsl#F-7901",
+   "remote-wsl#F-6204",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.log-terminal",
+  "candidateLibrary": "lib-log",
+  "area": "D",
+  "reuse": [],
+  "errorPaths": 4,
+  "notes": "Log terminal with replay buffer, reveal rules and debug daemon file. Reference leaks connection token and environment into the log; spec recommends masking. Strong candidate for a family-wide log library.",
+  "questions": [
+   "Mask token and environment values in the log (option b)? Confirm as family rule for lib-log.",
+   "Does the terminal name follow display language (pseudo-locale check pending)?",
+   "Can the log terminal and replay buffer be shared by all rooms through lib-log?"
+  ]
+ }
+]

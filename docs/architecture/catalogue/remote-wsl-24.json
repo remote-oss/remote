@@ -1,0 +1,68 @@
+[
+ {
+  "id": "F-6205",
+  "issue": 24,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Window title, remote indicator and resource labels",
+  "epic": "E62",
+  "acCount": 21,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "window.title",
+    "window.titleSeparator"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "wsl+*",
+    "wsl+<distro>"
+   ],
+   "other": [
+    "static resourceLabelFormatter wsl+*",
+    "runtime formatter per installed distro with priority",
+    "workspaceSuffix 'WSL: {0}'",
+    "workspaceTooltip 'Running in {0} (WSL {1})'"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "l10n.t"
+   ],
+   "proposedApi": [
+    "resolvers (registerResourceLabelFormatter)",
+    "contribLabelFormatterWorkspaceTooltip (not needed)"
+   ],
+   "processes": [
+    "wsl.exe --list --verbose"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6204",
+   "remote-wsl#F-6206",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-7901",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": true,
+  "candidateComponent": "wsl.label-formatters",
+  "candidateLibrary": "lib-authority",
+  "area": "D",
+  "reuse": [],
+  "errorPaths": 3,
+  "notes": "Label formatter data keyed by authority; every distro gets one at connect time. Indicator, title and Explorer text are core. Pattern repeats in every family room (authority to label), so a shared helper is plausible.",
+  "questions": [
+   "What does the tooltip show when WSL reports no distro version (Q2)?",
+   "Should label formatters be a generic lib-authority facility with per-room strings?",
+   "Is the hover text on screen verified (Q1)?"
+  ]
+ }
+]
