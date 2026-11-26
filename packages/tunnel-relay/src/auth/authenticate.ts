@@ -1,7 +1,7 @@
 /**
  * @fileoverview Who a request is from, by its `Authorization` header (the relay brief's sections 3 and 4): a GitHub
  * account on the allowlist, by `github <token>` or `github client_id=<id> <token>`, or a tunnel token's grant, by
- * `tunnel <token>`. Other schemes, `aad` and `bearer` among them, are refused
+ * `tunnel <token>`, while the tunnel it was minted for is stored with the same owner and generation. Other schemes, `aad` and `bearer` among them, are refused
  * (`[dev-tunnels] rs/src/management/authorization.rs:10-32`; `[cli] auth.rs:491-503`).
  */
 
@@ -10,6 +10,7 @@ import type {Authenticate, Caller} from '../routes.ts';
 import type {Allowlist} from './allowlist.ts';
 import type {GithubIdentity} from './github.ts';
 import type {Tokens} from './tokens.ts';
+import type {Store} from '../store.ts';
 
 const SIGN_IN = 'Sign in with a GitHub account.';
 
@@ -18,6 +19,8 @@ export interface Authorities {
   github: GithubIdentity;
   allowlist: Allowlist;
   tokens: Tokens;
+  /** The stored tunnels a tunnel token is checked against. */
+  tunnels: Pick<Store, 'tunnelById'>;
 }
 
 /** The relay's `authenticate`: a caller for a request, or the answer that refuses it. */
@@ -28,7 +31,7 @@ export function authenticateWith(authorities: Authorities): Authenticate {
 /** The caller of `header`, or the answer that refuses it. */
 async function callerOf(
   header: string | undefined,
-  {github, allowlist, tokens}: Authorities,
+  {github, allowlist, tokens, tunnels}: Authorities,
 ): Promise<Caller | Answer> {
   const [scheme, ...words] = (header ?? '').trim().split(/\s+/);
   const token = words.at(-1);
@@ -37,7 +40,11 @@ async function callerOf(
   }
   if (scheme === 'tunnel' && words.length === 1) {
     const grant = tokens.check(token);
-    return grant === undefined
+    const tunnel =
+      grant === undefined ? undefined : tunnels.tunnelById(grant.tunnelId);
+    return grant === undefined ||
+      tunnel?.owner !== grant.owner ||
+      tunnel.generation !== grant.generation
       ? problem(401, 'The tunnel token is not valid.')
       : {kind: 'tunnel', tunnelId: grant.tunnelId, scope: grant.scope};
   }
