@@ -23,6 +23,9 @@ import {
 } from '../windows/harness.ts';
 import {dialogOf} from '../windows/renderer.ts';
 import {buildFailedText} from './build-failure.ts';
+
+/** The error of a build that ended in a dialog before its window connected. */
+class BuildFailedError extends Error {}
 import {
   brokerUrlOf,
   secondBuildText,
@@ -63,7 +66,7 @@ async function connectedUnlessBuildFailed(
     } catch (caught) {
       const dialog = await dialogOf(window).catch(() => undefined);
       if (dialog !== undefined) {
-        throw new Error(
+        throw new BuildFailedError(
           buildFailedText(window, dialog, containersLogSince(mark)),
           {cause: caught},
         );
@@ -146,9 +149,14 @@ export function featureBuilds(): {
 } {
   const opened: string[] = [];
   const folders: string[] = [];
+  // Behind the window of a build that ended in a dialog there is a build that has ended and an agent that takes no
+  // command, so a close would only time out (120 s): the window is left to the end of the run, as a corrupt archive's is.
+  const abandoned = new Set<string>();
   afterEach(async () => {
     for (const window of opened.splice(0)) {
-      await closeWindow(window);
+      if (!abandoned.has(window)) {
+        await closeWindow(window);
+      }
     }
     for (const folder of folders.splice(0)) {
       await removeContainers(folder);
@@ -168,7 +176,14 @@ export function featureBuilds(): {
     opened.push(window);
     await reopenStarted(window);
     reloaded?.();
-    await connectedUnlessBuildFailed(window, BUILD_MILLISECONDS);
+    try {
+      await connectedUnlessBuildFailed(window, BUILD_MILLISECONDS);
+    } catch (caught) {
+      if (caught instanceof BuildFailedError) {
+        abandoned.add(window);
+      }
+      throw caught;
+    }
     const [containerId = ''] = await devContainersOf(folder);
     return {window, folder, containerId};
   }
