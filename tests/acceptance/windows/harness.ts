@@ -28,6 +28,7 @@ import {
 import {runCommand} from '../../../tools/command-runner.ts';
 import {oneTimeCode} from '../../../tools/one-time-code.ts';
 import {filesHolding} from '../../../tools/secret-search.ts';
+import {windowFileKey} from '../../../tools/window-file-key.ts';
 import {processIdsOf} from '../../../tools/process-ids.ts';
 import {runWithinWait} from './state-database.ts';
 import {
@@ -267,7 +268,7 @@ function agentFolder(): string {
 
 /** A file of a window's agent in the launch's folder: its `events` or its `commands`. */
 function agentFile(name: string, kind: 'events' | 'commands'): string {
-  return path.join(agentFolder(), `${name}.${kind}.jsonl`);
+  return path.join(agentFolder(), `${windowFileKey(name)}.${kind}.jsonl`);
 }
 
 /** The names of the windows whose agent has reported anything, in no particular order. */
@@ -275,7 +276,11 @@ export function windowNames(): string[] {
   const folder = agentFolder();
   return (existsSync(folder) ? readdirSync(folder) : [])
     .filter(file => file.endsWith('.events.jsonl'))
-    .map(file => file.slice(0, -'.events.jsonl'.length));
+    .map(file => {
+      const key = file.slice(0, -'.events.jsonl'.length);
+      const named = path.join(folder, `${key}.name`);
+      return existsSync(named) ? readFileSync(named, 'utf8') : key;
+    });
 }
 
 /** The events the agent of window `name` has reported, in order. */

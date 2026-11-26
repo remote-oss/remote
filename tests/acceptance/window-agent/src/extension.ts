@@ -1,4 +1,10 @@
-import {appendFileSync, existsSync, mkdirSync, readFileSync} from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import {MEMORY_SCHEME, MemoryFileSystem} from './memory-file-system.ts';
@@ -11,6 +17,7 @@ import {
   windowNameOf,
 } from './window-name.ts';
 import {readSelection} from './terminal-selection.ts';
+import {windowFileKey} from '../../../../tools/window-file-key.ts';
 
 /** How often the agent looks for a new command, in milliseconds. */
 const POLL_MILLISECONDS = 200;
@@ -95,7 +102,7 @@ function agentFile(
   kind: 'events' | 'commands',
 ): string {
   mkdirSync(agentFolder, {recursive: true});
-  return path.join(agentFolder, `${name}.${kind}.jsonl`);
+  return path.join(agentFolder, `${windowFileKey(name)}.${kind}.jsonl`);
 }
 
 /** Appends one event as a single write, so that two windows never split a line. */
@@ -241,6 +248,11 @@ export function activate(context: vscode.ExtensionContext): void {
   );
   const name = activationName(agentFolder);
   windowName = name;
+  // A window whose name does not fit a file name keeps the full one beside its files, so the harness reads it back.
+  const key = windowFileKey(name);
+  if (key !== name) {
+    writeFileSync(path.join(agentFolder, `${key}.name`), name);
+  }
   report(agentFolder, name, {
     event: 'activated',
     logFolder: context.logUri.fsPath,

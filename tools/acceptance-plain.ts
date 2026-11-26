@@ -27,6 +27,7 @@ import {
 import {productFileOf} from './acceptance-cli-editor.ts';
 import {resolveBinary} from './repository.ts';
 import {windowNameOf} from '../tests/acceptance/window-agent/src/window-name.ts';
+import {windowFileKey} from './window-file-key.ts';
 
 /** The extensions under test that use proposed API, enabled for them on the command line. */
 const PROPOSED_API_EXTENSIONS: readonly string[] = [
@@ -699,7 +700,7 @@ function staleRequestIds(folder: string): string[] {
 
 /** How many times the agent of window `name` reported `activated`, from its events file in `agentFolder`. */
 export function activationsIn(agentFolder: string, name: string): number {
-  const file = path.join(agentFolder, `${name}.events.jsonl`);
+  const file = path.join(agentFolder, `${windowFileKey(name)}.events.jsonl`);
   return existsSync(file)
     ? readFileSync(file, 'utf8')
         .split('\n')
