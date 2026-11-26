@@ -326,6 +326,47 @@ export async function pageFocusFacts(): Promise<string[]> {
   return lines;
 }
 
+/** The class of the element that holds the keyboard in the page of window `name`, read the way the focus facts read it; an empty one while the page has no active element. */
+async function activeElementClassOf(name: string): Promise<string> {
+  const address = await pageOf(name);
+  return evaluateAt<string>(
+    address,
+    `page ${name}`,
+    `(() => {
+      const element = document.activeElement;
+      return element === null ? '' : String(element.className);
+    })()`,
+  );
+}
+
+/** The class of the element that holds a terminal's keyboard: the helper textarea of the window's terminal widget. */
+const TERMINAL_TEXTAREA_CLASS = 'xterm-helper-textarea';
+
+/**
+ * The command that puts the keyboard where a palette command reaches it, given the class of the page's active
+ * element: while the keyboard is in the terminal's textarea, the editor group's focus, the way a user clicking the
+ * editor would. A revealed login terminal holds the keyboard for the life of the connection (F-2308), and a quick
+ * input does not take it from there, so a palette command sent to such a window reaches the terminal, not the
+ * workbench (#2424).
+ */
+export function paletteCommandWhen(classOfActive: string): string | undefined {
+  return classOfActive === TERMINAL_TEXTAREA_CLASS
+    ? 'workbench.action.focusActiveEditorGroup'
+    : undefined;
+}
+
+/**
+ * Puts the keyboard of window `name` where a palette command reaches it: a page whose active element is the
+ * terminal's textarea gets the editor group focused, and a page a read cannot say is left as it is.
+ */
+export async function focusForPalette(name: string): Promise<void> {
+  const classOfActive = await activeElementClassOf(name).catch(() => '');
+  const command = paletteCommandWhen(classOfActive);
+  if (command !== undefined) {
+    await inWindow(name, command);
+  }
+}
+
 /** The number of renderer pages, one per open window: a window that reloads in place keeps its page count. */
 export async function pageCount(): Promise<number> {
   return (await pages()).length;
