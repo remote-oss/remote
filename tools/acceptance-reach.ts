@@ -826,9 +826,12 @@ export const MAIN_ONLY_LAUNCH_JOBS: ReadonlySet<string> = new Set([
   'acceptance-genuine',
 ]);
 
-/** What in a job's definition makes or plans launches: the VSCodium run, the plan's tools, a local workflow or action. */
+/**
+ * What in a job's definition makes or plans launches: the VSCodium run, the plan's tools, a local workflow. A local
+ * action only sets a job up (pnpm and Node), and a change to its own file reaches every launch by its path.
+ */
 export const LAUNCH_MARKER =
-  /test:acceptance:vscodium|acceptance-select|acceptance-parts|"uses":"\.\//;
+  /test:acceptance:vscodium|acceptance-select|acceptance-parts|"uses":"\.\/\.github\/workflows\//;
 
 /** A workflow as the reach compares it: its jobs by name, and the text of everything else. */
 interface Workflow {
