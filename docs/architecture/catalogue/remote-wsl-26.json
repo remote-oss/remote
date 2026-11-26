@@ -1,0 +1,12 @@
+[
+ {
+  "id": "F-6207",
+  "issue": 26,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Reveal in File Explorer",
+  "epic": "E62",
+  "acCount": 26
+ }
+]

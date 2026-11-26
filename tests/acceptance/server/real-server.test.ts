@@ -429,7 +429,7 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
       host.stop();
     });
 
-    it('F-6301.BR-4: the kept archive is used without a download on the client', () => {
+    it('F-6301 AC-26 (real-server-cache): the kept archive is used without a download on the client (BR-4)', () => {
       deepStrictEqual(
         [
           installation.transferred.kind,
@@ -439,7 +439,7 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
       );
     });
 
-    it('F-6301.BR-4: the kept archive is still in the cache afterwards', async () => {
+    it('F-6301 AC-26 (real-server-cache): the kept archive is still in the cache afterwards (BR-4)', async () => {
       strictEqual(
         await nodeClientFiles.exists(cachedArchive(installation.host)),
         true,
