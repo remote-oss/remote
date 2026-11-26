@@ -19,7 +19,10 @@ import {
   containersLogSince,
   reopenStarted,
   variable,
+  withLogTail,
 } from '../windows/harness.ts';
+import {dialogOf} from '../windows/renderer.ts';
+import {buildFailedText} from './build-failure.ts';
 import {
   brokerUrlOf,
   secondBuildText,
@@ -35,6 +38,48 @@ const execFileAsync = promisify(execFile);
 
 /** How long a build with Features may take, in milliseconds. */
 const BUILD_MILLISECONDS = 600_000;
+
+/** How often a build's wait looks for the dialog of a failed build, in milliseconds. */
+const DIALOG_LOOK_MILLISECONDS = 10_000;
+
+/**
+ * Waits for `window` to connect to its container, for up to `milliseconds`, and fails at once, with the dialog's text and
+ * the build's last error lines, when the build ends in a dialog first: a failed build otherwise leaves the row waiting
+ * out the whole connect timeout, its cause only in the log's tail (card #3267).
+ */
+async function connectedUnlessBuildFailed(
+  window: string,
+  milliseconds: number,
+): Promise<void> {
+  const mark = containersLog().length;
+  const deadline = Date.now() + milliseconds;
+  for (;;) {
+    try {
+      await connectedToContainer(
+        window,
+        Math.min(DIALOG_LOOK_MILLISECONDS, Math.max(deadline - Date.now(), 1)),
+      );
+      return;
+    } catch (caught) {
+      const dialog = await dialogOf(window).catch(() => undefined);
+      if (dialog !== undefined) {
+        throw new Error(
+          buildFailedText(window, dialog, containersLogSince(mark)),
+          {cause: caught},
+        );
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          withLogTail(
+            `window ${window} did not connect to its container within ${String(milliseconds)} ms`,
+            containersLogSince(mark),
+          ),
+          {cause: caught},
+        );
+      }
+    }
+  }
+}
 
 /** The id of one of the run's own Features, as the registry the CLI pulls from names it. */
 export function runFeature(feature: string): string {
@@ -123,7 +168,7 @@ export function featureBuilds(): {
     opened.push(window);
     await reopenStarted(window);
     reloaded?.();
-    await connectedToContainer(window, BUILD_MILLISECONDS);
+    await connectedUnlessBuildFailed(window, BUILD_MILLISECONDS);
     const [containerId = ''] = await devContainersOf(folder);
     return {window, folder, containerId};
   }

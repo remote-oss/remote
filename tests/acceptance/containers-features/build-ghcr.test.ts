@@ -40,20 +40,46 @@ function idsOf(entries: ReadonlyArray<Record<string, unknown>>): unknown[] {
  */
 const MAVEN_ASKED_FILE = '/usr/local/share/mvn-asked';
 
-/** The row's own image: the run's glibc one with that `mvn`, and the configuration that builds it. */
-const MAVEN_STUB = {
-  configuration: {image: undefined, build: {dockerfile: 'Dockerfile'}},
-  prepare: (folder: string): void => {
-    writeFileSync(
-      path.join(folder, '.devcontainer', 'Dockerfile'),
-      [
-        `FROM ${GLIBC_IMAGE}`,
-        `RUN printf '#!/bin/sh\\necho "$@" >> ${MAVEN_ASKED_FILE}\\nexit 0\\n' > /usr/local/bin/mvn && chmod 755 /usr/local/bin/mvn`,
-        '',
-      ].join('\n'),
-    );
-  },
-};
+/**
+ * A row's own image, for a row whose Feature would otherwise reach a third-party host that is not what the row asks of
+ * it: the run's glibc image with the shell `steps` run in it, the configuration that builds it, and the `prepare` that
+ * writes its Dockerfile.
+ */
+function stubbedImage(...steps: string[]): {
+  configuration: Readonly<Record<string, unknown>>;
+  prepare: (folder: string) => void;
+} {
+  return {
+    configuration: {image: undefined, build: {dockerfile: 'Dockerfile'}},
+    prepare: (folder: string): void => {
+      writeFileSync(
+        path.join(folder, '.devcontainer', 'Dockerfile'),
+        [`FROM ${GLIBC_IMAGE}`, ...steps.map(step => `RUN ${step}`), ''].join(
+          '\n',
+        ),
+      );
+    },
+  };
+}
+
+/** The legacy-maven row's image: the run's glibc one with that `mvn`. */
+const MAVEN_STUB = stubbedImage(
+  `printf '#!/bin/sh\\necho "$@" >> ${MAVEN_ASKED_FILE}\\nexit 0\\n' > /usr/local/bin/mvn && chmod 755 /usr/local/bin/mvn`,
+);
+
+/**
+ * The node-first row's image (card #3267): the run's glibc one with the folder the node Feature finds nvm installed in,
+ * so that it fetches nvm from no host. The Feature then needs its three options at `none` (NODE_OFFLINE), which stop
+ * its `git ls-remote` of nvm's tags, its `nvm install` and its pnpm and yarn steps. The stub depends on the Feature's
+ * install script (`:1` floats to the newest 1.x): a release that changes it fails the row at its build, with the cause
+ * named (connectedUnlessBuildFailed), and does not pass it.
+ */
+const NVM_STUB = stubbedImage(
+  `mkdir -p /usr/local/share/nvm && printf 'nvm() { :; }\\n' > /usr/local/share/nvm/nvm.sh`,
+);
+
+/** The node Feature's options that keep it from installing node, and so from reaching github.com, nodejs.org and npm. */
+const NODE_OFFLINE = {version: 'none', nvmVersion: 'none', pnpmVersion: 'none'};
 
 // The rows of this file pull their Features from ghcr.io, so they are the only rows of the suite that need the network
 // at row time. The Features install with apt, so the image is the run's glibc one.
@@ -63,7 +89,7 @@ describe('the legacy words and the Features of ghcr.io (card containers-93)', fu
 
   /**
    * Builds a folder whose only Feature is the legacy `word`, and gives what the log, the metadata and the lockfile say.
-   * With `config`, the folder is built from its own Dockerfile and its `prepare` (see mavenStub).
+   * With `config`, the folder is built from its own Dockerfile and its `prepare` (see stubbedImage).
    */
   async function legacyJava(
     word: string,
@@ -157,12 +183,13 @@ describe('the legacy words and the Features of ghcr.io (card containers-93)', fu
     const built = await build(
       'c93-ac41',
       {
-        image: GLIBC_IMAGE,
-        // Node 26, the Feature's default, needs libatomic, which this image lacks.
-        features: {'./local': {}, [NODE]: {version: '20'}},
+        ...NVM_STUB.configuration,
+        // The row asks for the order of the Features, not for node: NODE_OFFLINE keeps the Feature from fetching it.
+        features: {'./local': {}, [NODE]: NODE_OFFLINE},
         overrideFeatureInstallOrder: [NODE],
       },
       folder => {
+        NVM_STUB.prepare(folder);
         writeLocalFeature(folder, 'local');
       },
     );
