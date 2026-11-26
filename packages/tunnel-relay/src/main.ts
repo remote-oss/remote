@@ -2,7 +2,7 @@
  * @fileoverview Starts the relay: its settings from the environment, its store, and its HTTPS service.
  */
 
-import {readFileSync, statSync} from 'node:fs';
+import {readFileSync, statSync, watchFile} from 'node:fs';
 import {Allowlist} from './auth/allowlist.ts';
 import {authenticateWith} from './auth/authenticate.ts';
 import {GithubIdentity} from './auth/github.ts';
@@ -17,30 +17,47 @@ function reportFailure(failure: unknown): void {
   process.stderr.write(`the relay failed: ${String(failure)}\n`);
 }
 
+/** How often the relay looks at the allowlist file for a change, in milliseconds. */
+const ALLOWLIST_CHECK_MILLISECONDS = 5000;
+
 const config = configOf(process.env);
 const store = new Store(config.storeFile);
 const tokens = new Tokens(readFileSync(config.tokenKeyFile), Date.now);
-const authenticate = authenticateWith({
-  github: new GithubIdentity(config.githubApi, fetch, Date.now),
-  allowlist: new Allowlist({
+const allowlist = new Allowlist(
+  {
     modified: () => statSync(config.allowlistFile).mtimeMs,
     text: () => readFileSync(config.allowlistFile, 'utf8'),
-  }),
+  },
+  () => {
+    legs.closeUnadmitted(owner => allowlist.admits(owner));
+  },
+);
+const authenticate = authenticateWith({
+  github: new GithubIdentity(config.githubApi, fetch, Date.now),
+  allowlist,
   tokens,
   tunnels: store,
   report: reportFailure,
 });
+const legs = new Legs(authenticate, reportFailure, config.limits.clients);
 const server = relayServer(
   {
     store,
     config,
     authenticate,
     tokens,
-    legs: new Legs(authenticate, reportFailure, config.limits.clients),
+    legs,
     report: reportFailure,
   },
   readFileSync(config.certificateFile),
   readFileSync(config.keyFile),
+);
+watchFile(
+  config.allowlistFile,
+  {interval: ALLOWLIST_CHECK_MILLISECONDS, persistent: false},
+  () => {
+    allowlist.refresh();
+  },
 );
 server.listen(config.port, () => {
   process.stdout.write(

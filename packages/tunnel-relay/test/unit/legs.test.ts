@@ -6,6 +6,7 @@ import {connect, type AddressInfo, type Socket} from 'node:net';
 import devTunnelsSsh from '@microsoft/dev-tunnels-ssh';
 import {PassThrough} from 'node:stream';
 import {WebSocket, type ClientOptions} from 'ws';
+import {Allowlist} from '../../src/auth/allowlist.ts';
 import {sendCopies} from '../../src/legs/copies.ts';
 import {LARGEST_MESSAGE, Legs, type Timers} from '../../src/legs/legs.ts';
 import type {Authenticate} from '../../src/routes.ts';
@@ -26,20 +27,25 @@ const HOST = 'tunnel-relay-host';
 const CLIENT = 'tunnel-relay-client';
 
 /**
- * Takes `tunnel <id> <scope>` as that tunnel's token, `github <login>` as an account, `refused` as a refusal, and
- * `broken` as a failure to ask.
+ * Takes `tunnel <id> <scope> [<owner>]` as that tunnel's token, of owner 7 unless one is named, `github <login>` as an
+ * account, `refused` as a refusal, and `broken` as a failure to ask.
  */
 function authenticate(
   headers: Parameters<Authenticate>[0],
 ): ReturnType<Authenticate> {
-  const [scheme = '', first = '', second = ''] = (
+  const [scheme = '', first = '', second = '', owner = '7'] = (
     headers.authorization ?? ''
   ).split(' ');
   if (scheme === 'broken') {
     return Promise.reject(new Error('down'));
   }
   if (scheme === 'tunnel' && (second === 'host' || second === 'connect')) {
-    return Promise.resolve({kind: 'tunnel', tunnelId: first, scope: second});
+    return Promise.resolve({
+      kind: 'tunnel',
+      tunnelId: first,
+      owner: Number(owner),
+      scope: second,
+    });
   }
   if (scheme === 'github') {
     return Promise.resolve({kind: 'account', id: 7, login: first});
@@ -211,6 +217,7 @@ describe("the relay's WebSocket legs", () => {
     onOpening: (event: Opening) => void = event => {
       echo(event.channel);
     },
+    owner = 7,
   ): Promise<HostSide> {
     const session = new SshClientSession(new SshSessionConfiguration(false));
     sessions.push(session);
@@ -219,7 +226,7 @@ describe("the relay's WebSocket legs", () => {
     await opening(
       `/relay/host/${tunnelId}`,
       [HOST],
-      `tunnel ${tunnelId} host`,
+      `tunnel ${tunnelId} host ${String(owner)}`,
       {},
       websocket => {
         websocket.binaryType = 'arraybuffer';
@@ -698,6 +705,43 @@ describe("the relay's WebSocket legs", () => {
       socket.emit('error', new Error('reset by the peer'));
       await upgrading;
       deepStrictEqual(socket.destroyed, true);
+    });
+  });
+
+  describe('an owner taken off the allowlist', () => {
+    it("loses every leg on the allowlist's next reading, host and clients, while other owners keep theirs", async () => {
+      let listed = '7\n8\n';
+      let modified = 1;
+      const allowlist = new Allowlist(
+        {modified: () => modified, text: () => listed},
+        () => {
+          legs.closeUnadmitted(owner => allowlist.admits(owner));
+        },
+      );
+      allowlist.refresh();
+      await host('one');
+      const removed = await host('two', undefined, 8);
+      const hostClosed = new Promise(resolve => {
+        removed.onClosed(resolve);
+      });
+      const kept = await client('one', [Buffer.from('a')]);
+      const dropped = await client('two', [Buffer.from('b')]);
+      await bytesOf(kept.received, 1);
+      await bytesOf(dropped.received, 1);
+      listed = '7\n';
+      modified = 2;
+      allowlist.refresh();
+      const droppedCode = await closed(dropped.websocket);
+      await hostClosed;
+      kept.websocket.send(Buffer.from('still'));
+      deepStrictEqual(
+        [
+          droppedCode,
+          hostCount('two'),
+          String(await bytesOf(kept.received, 6)),
+        ],
+        [1005, false, 'astill'],
+      );
     });
   });
 

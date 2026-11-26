@@ -629,7 +629,7 @@ describe('the management routes of the relay', () => {
       scope: 'host' | 'connect' | 'manage:ports',
       requests: ReadonlyArray<[string, string, unknown?]>,
     ): Promise<number[]> {
-      caller = {kind: 'tunnel', tunnelId: 'one', scope};
+      caller = {kind: 'tunnel', tunnelId: 'one', owner: 7, scope};
       const statuses: number[] = [];
       for (const [method, path, body] of requests) {
         const answer = await send(method, path, {
@@ -670,7 +670,7 @@ describe('the management routes of the relay', () => {
     });
 
     it('is refused with the detail that says what it lacks', async () => {
-      caller = {kind: 'tunnel', tunnelId: 'one', scope: 'connect'};
+      caller = {kind: 'tunnel', tunnelId: 'one', owner: 7, scope: 'connect'};
       deepStrictEqual(detailOf(await send('DELETE', '/tunnels/one/ports/80')), [
         403,
         'This token does not grant that.',
@@ -678,7 +678,7 @@ describe('the management routes of the relay', () => {
     });
 
     it('reads its tunnel with no access tokens, whatever scopes it asks for', async () => {
-      caller = {kind: 'tunnel', tunnelId: 'one', scope: 'host'};
+      caller = {kind: 'tunnel', tunnelId: 'one', owner: 7, scope: 'host'};
       const answer = await send('GET', '/tunnels/one', {
         query: {tokenScopes: 'host,connect'},
       });
@@ -752,7 +752,7 @@ describe('the management routes of the relay', () => {
           () => Promise.reject(new Error('GitHub is not asked')),
           () => 0,
         ),
-        allowlist: new Allowlist({modified: () => 1, text: () => ''}),
+        allowlist: new Allowlist({modified: () => 1, text: () => '7\n'}),
         tokens: TOKENS,
         tunnels: store,
         report: () => undefined,
@@ -784,7 +784,7 @@ describe('the management routes of the relay', () => {
       await send('PUT', '/tunnels/one', {body: {name: 'api'}});
       deepStrictEqual(
         [await holderOf(token), store.tunnelById('one')?.name],
-        [{kind: 'tunnel', tunnelId: 'one', scope: 'connect'}, 'api'],
+        [{kind: 'tunnel', tunnelId: 'one', owner: 7, scope: 'connect'}, 'api'],
       );
     });
   });
@@ -1060,7 +1060,7 @@ describe('the management routes of the relay', () => {
         detailOf(await send('POST', '/userlimits')),
         detailOf(await send('GET', '/userlimits/more')),
       ];
-      caller = {kind: 'tunnel', tunnelId: 'one', scope: 'host'};
+      caller = {kind: 'tunnel', tunnelId: 'one', owner: 7, scope: 'host'};
       deepStrictEqual(
         [...asOwner, detailOf(await send('GET', '/userlimits'))],
         [

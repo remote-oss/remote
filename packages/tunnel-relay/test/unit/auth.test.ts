@@ -1,7 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
 import {createHmac} from 'node:crypto';
 import {Allowlist} from '../../src/auth/allowlist.ts';
-import {authenticateWith} from '../../src/auth/authenticate.ts';
+import {
+  authenticateWith,
+  NO_LONGER_ADMITTED,
+} from '../../src/auth/authenticate.ts';
 import {type Fetch, GithubIdentity, KEPT_MOST} from '../../src/auth/github.ts';
 import {Tokens} from '../../src/auth/tokens.ts';
 import type {TunnelRecord} from '../../src/store.ts';
@@ -276,6 +279,26 @@ describe('the allowlist', () => {
       [[true, true, false], true, false, true, 2],
     );
   });
+
+  it('announces each reading of its file, whether a check or a refresh asks for it, and only when the file changed', () => {
+    let modified = 1;
+    let readings = 0;
+    const allowlist = new Allowlist(
+      {modified: () => modified, text: () => '42\n'},
+      () => {
+        readings += 1;
+      },
+    );
+    allowlist.refresh();
+    allowlist.admits(42);
+    allowlist.refresh();
+    const unchanged = readings;
+    modified = 2;
+    allowlist.admits(42);
+    modified = 3;
+    allowlist.refresh();
+    deepStrictEqual([unchanged, readings], [1, 3]);
+  });
 });
 
 describe('who a request is from', () => {
@@ -343,7 +366,7 @@ describe('who a request is from', () => {
         await callerFor('tunnel one two', 200, tokens),
       ],
       [
-        {kind: 'tunnel', tunnelId: 'one', scope: 'host'},
+        {kind: 'tunnel', tunnelId: 'one', owner: 42, scope: 'host'},
         {
           status: 401,
           body: {
@@ -359,6 +382,23 @@ describe('who a request is from', () => {
           },
         },
       ],
+    );
+  });
+
+  it('refuses with 403 a valid tunnel token whose owner the allowlist no longer lists', async () => {
+    const tokens = new Tokens(SIGNING_KEY, () => 0);
+    const unlisted = {...TUNNEL_ONE, owner: 9};
+    deepStrictEqual(
+      await callerFor(
+        `tunnel ${tokens.issue(unlisted, 'usw2', 'host')}`,
+        200,
+        tokens,
+        unlisted,
+      ),
+      {
+        status: 403,
+        body: {title: 'Forbidden', detail: NO_LONGER_ADMITTED},
+      },
     );
   });
 
@@ -380,7 +420,7 @@ describe('who a request is from', () => {
         refused,
         refused,
         refused,
-        {kind: 'tunnel', tunnelId: 'one', scope: 'connect'},
+        {kind: 'tunnel', tunnelId: 'one', owner: 42, scope: 'connect'},
       ],
     );
   });

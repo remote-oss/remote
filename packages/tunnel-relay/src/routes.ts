@@ -26,6 +26,8 @@ interface AccountCaller {
 interface TunnelCaller {
   kind: 'tunnel';
   tunnelId: string;
+  /** The numeric GitHub id of the tunnel's owner. */
+  owner: number;
   scope: TokenScope;
 }
 
