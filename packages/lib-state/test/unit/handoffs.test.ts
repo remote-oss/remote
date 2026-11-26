@@ -61,6 +61,30 @@ describe('the handoffs of one kind in one folder', () => {
     );
   });
 
+  it('a handoff that is peeked is left where it is for the one who takes it, and a stale, missing or corrupt one is none', async () => {
+    const files = new MemoryFiles();
+    const store = notesOn(files);
+    await store.leave('a', {text: 'one'});
+    const peeked = [store.peek('a'), store.peek('a'), store.peek('b')];
+    files.clock += FIVE_MINUTES + 1;
+    const stale = store.peek('a');
+    files.files.set(onlyFileOf(files), {text: '{broken', modified: 0});
+    files.clock = 1000;
+    deepStrictEqual(
+      [peeked, stale, store.peek('a'), store.take('a')],
+      [
+        [
+          {storedAt: 1000, value: {text: 'one'}},
+          {storedAt: 1000, value: {text: 'one'}},
+          undefined,
+        ],
+        undefined,
+        undefined,
+        undefined,
+      ],
+    );
+  });
+
   it('a handoff is written whole under a temporary name renamed over its file, and taken by a claim renamed from it', async () => {
     const files = new MemoryFiles();
     const store = notesOn(files);

@@ -22,6 +22,8 @@ export interface HandoffStore<Value> {
   leave(key: string, value: Value): Promise<void>;
   /** Takes the handoff for `key` once; none when there is none, another window took it, or it is stale or unreadable. */
   take(key: string): TakenHandoff<Value> | undefined;
+  /** The handoff for `key` as `take` would give it, left where it is; none when `take` would give none. */
+  peek(key: string): TakenHandoff<Value> | undefined;
 }
 
 /** How long a claim, or a write not yet renamed, stays before a later write removes it, in milliseconds. */
@@ -105,6 +107,7 @@ export function handoffStoreOf<Value>(options: {
         files.write(temporary, JSON.stringify({storedAt: now(), value}));
         files.rename(temporary, file);
       }),
+    peek: key => handoffIn(files.read(fileOf(key))),
     take: key => {
       const file = fileOf(key);
       const claim = `${file.slice(0, -'.json'.length)}.claim-${files.random()}`;
