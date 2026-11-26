@@ -1,0 +1,12 @@
+[
+ {
+  "id": "F-6501",
+  "issue": 34,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:pending",
+  "title": "WSL Targets view",
+  "epic": "E65",
+  "acCount": 0
+ }
+]

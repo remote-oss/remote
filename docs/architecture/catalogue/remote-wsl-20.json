@@ -1,0 +1,98 @@
+[
+ {
+  "id": "F-6201",
+  "issue": 20,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "The wsl authority, resolver and connection lifecycle",
+  "epic": "E62",
+  "acCount": 29,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.showLog"
+   ],
+   "settings": [
+    "remote.WSL.debug",
+    "remote.WSL.downloadInBackground",
+    "remote.WSL.experimental.scriptLessStartup",
+    "remote.WSL.useShellEnvironment",
+    "remote.WSL1.connectionMethod (deprecated, no effect)",
+    "remote.WSL2.connectionMethod (deprecated, no effect)"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "wsl+<distro>",
+    "wsl+ (default distro)",
+    "nested wsl+x@outer"
+   ],
+   "other": [
+    "activation onResolveRemoteAuthority:wsl",
+    "static label formatter wsl+*",
+    "Windows-side local proxy per distro on 127.0.0.1",
+    "progress notification Starting VS Code in WSL",
+    "global state keys wsl.downloadInProgress, extensionUsed, wsl.lastUpdateCheck, wsl.usageTime.<platform>"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress",
+    "ProgressLocation.Notification",
+    "RemoteAuthorityResolverError (resolvers)"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "wsl.exe --list --verbose",
+    "wsl.exe -d <distro> (probe, start, relay per connection)",
+    "VS Code Server in distro"
+   ],
+   "network": [
+    "127.0.0.1:<random proxy port>",
+    "127.0.0.1:<random server port> in distro",
+    "/version endpoint on proxy"
+   ],
+   "remoteFiles": [
+    "~/.vscode-server/bin/<commit>",
+    "~/.vscode-server/server-env-setup",
+    "/etc/wsl.conf"
+   ],
+   "localFiles": [
+    "%USERPROFILE%\\vscode-remote-wsl\\<quality>\\<commit> cache"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-6301",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6206",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-6701",
+   "remote-wsl#F-7901",
+   "remote-containers#F-1403",
+   "remote-wsl#F-6203",
+   "remote-wsl#F-6204",
+   "remote-containers#F-0109"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.resolver",
+  "candidateLibrary": "lib-authority",
+  "area": "A",
+  "reuse": [
+   "wsl.exe",
+   "openssh (nested route only)"
+  ],
+  "errorPaths": 9,
+  "notes": "P0 core: resolver, per-distro proxy reusing one wsl.exe relay per connection, stage progress, reload and reconnect re-resolve. Server install and start delegated to F-6301/F-6304. Ties to lib-server for lifecycle and lib-authority for parsing.",
+  "questions": [
+   "Should wsl+ with empty name keep meaning default distro (Q2)?",
+   "On re-resolve after distro termination, restart the server (option b) or reproduce reference?",
+   "What are non-distro WSL targets and the minimum WSL version for S051?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
+  ]
+ }
+]

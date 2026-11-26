@@ -20,6 +20,8 @@ import {
   SSH_EDIT_RELEASE_ONE_SCOPE,
   SSH_RELEASE_TWO_FEATURES,
   SSH_RELEASE_TWO_SCOPE,
+  WSL_RELEASE_ONE_FEATURES,
+  WSL_RELEASE_ONE_SCOPE,
 } from './spec-acceptance-criteria.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 
@@ -174,7 +176,7 @@ describe('acceptanceCriteriaOf, the forms of Remote - Containers', () => {
 });
 
 describe('the coverage files', () => {
-  it('coverage-25a, seed-01: the four release 1 files and the four release 2 files, each with its features and repository', () => {
+  it('coverage-25a, seed-01: the five release 1 files and the four release 2 files, each with its features and repository', () => {
     deepStrictEqual(
       COVERAGE_SCOPES.map(scope => [
         scope.file,
@@ -205,6 +207,11 @@ describe('the coverage files', () => {
         ],
         [EXPLORER_RELEASE_TWO_SCOPE.file, 4, 'remote-explorer'],
         [EXTENSIONPACK_RELEASE_TWO_SCOPE.file, 2, 'remote-extensionpack'],
+        [
+          WSL_RELEASE_ONE_SCOPE.file,
+          WSL_RELEASE_ONE_FEATURES.length,
+          'remote-wsl',
+        ],
         [
           SSH_RELEASE_TWO_SCOPE.file,
           SSH_RELEASE_TWO_FEATURES.length,

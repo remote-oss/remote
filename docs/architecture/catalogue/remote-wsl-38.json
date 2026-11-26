@@ -1,0 +1,12 @@
+[
+ {
+  "id": "F-6602",
+  "issue": 38,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "VS Code core behaviour in a WSL window",
+  "epic": "E66",
+  "acCount": 27
+ }
+]

@@ -1,0 +1,94 @@
+[
+ {
+  "id": "F-6503",
+  "issue": 36,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Recent folders in the WSL Targets view",
+  "epic": "E65",
+  "acCount": 27,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.explorer.connectInCurrentWindow",
+    "remote-wsl.explorer.connectInNewWindow",
+    "remote-wsl.explorer.removeFolder"
+   ],
+   "settings": [
+    "window.openFoldersInNewWindow",
+    "workbench.view.alwaysShowHeaderActions",
+    "security.allowedUNCHosts"
+   ],
+   "views": [
+    "targetsWsl"
+   ],
+   "menus": [
+    "commandPalette#13",
+    "commandPalette#14",
+    "commandPalette#15",
+    "view/item/context#0",
+    "view/item/context#1",
+    "view/item/context#2",
+    "view/item/context#3",
+    "view/item/context#4",
+    "view/item/context#5"
+   ],
+   "contextKeys": [
+    "viewItem == folder"
+   ],
+   "authorities": [
+    "wsl+<distro>"
+   ],
+   "other": [
+    "tree item contextValue folder",
+    "codicons folder, folder-active, arrow-right, empty-window, close",
+    "hover STR:S004",
+    "view Refresh title action reuse"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createTreeView",
+    "TreeDataProvider",
+    "TreeItem",
+    "ThemeIcon",
+    "workspace.workspaceFolders",
+    "env.remoteName",
+    "commands.executeCommand"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "VS Code shared storage history.recentlyOpenedPathsList (via core commands)"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-6501",
+   "remote-wsl#F-6502",
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-7901",
+   "remote-wsl#F-6301",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": true,
+  "candidateComponent": "wsl.explorer-recent-folders",
+  "candidateLibrary": "none",
+  "area": "B",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Filtered view over core recently-opened list; uses internal _workbench.getRecentlyOpened, vscode.removeFromRecentlyOpened and vscode.openFolder. No own storage. Active row marking per window, case-insensitive distro match, stale until Refresh.",
+  "questions": [
+   "Is relying on the internal command _workbench.getRecentlyOpened acceptable, or is a fallback needed if it disappears?",
+   "Should out-of-context invocation stay silent or show the R-46 information notification?",
+   "Do recent folders under SSH-nested WSL targets belong to this feature or to F-6501?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
+  ]
+ }
+]

@@ -77,6 +77,12 @@
       "path": "packages/lib-log/tsconfig.test.json"
     },
     {
+      "path": "packages/tunnel-agent"
+    },
+    {
+      "path": "packages/tunnel-agent/tsconfig.test.json"
+    },
+    {
       "path": "packages/tunnel-relay"
     },
     {

@@ -1,0 +1,85 @@
+[
+ {
+  "id": "F-6203",
+  "issue": 22,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Open Folder in WSL",
+  "epic": "E62",
+  "acCount": 24,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.openFolder"
+   ],
+   "settings": [
+    "security.allowedUNCHosts",
+    "window.openFoldersInNewWindow",
+    "files.simpleDialog.enable",
+    "window.dialogStyle"
+   ],
+   "views": [],
+   "menus": [
+    "commandPalette#5"
+   ],
+   "contextKeys": [
+    "isWindows",
+    "isWeb"
+   ],
+   "authorities": [
+    "wsl+<distro>"
+   ],
+   "other": [
+    "folder dialog starting at default distro share",
+    "walkthrough step link"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showOpenDialog",
+    "commands.executeCommand vscode.openFolder",
+    "commands.executeCommand workbench.action.files.openFolder"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "wsl.exe --list --verbose"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "UNC share of default distro (read via dialog)",
+    "\\\\wsl.localhost\\<distro>\\ share",
+    "\\\\wsl$\\<distro>\\ share"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-6101",
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6102",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6204",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6206",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-6004",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-7901",
+   "remote-wsl#F-6701",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.open-folder",
+  "candidateLibrary": "none",
+  "area": "D",
+  "reuse": [
+   "editor-cli (core openFolder)"
+  ],
+  "errorPaths": 7,
+  "notes": "Thin command: dialog on default distro share, map UNC path to wsl+ URI, hand to core. Silent no-ops on cancel or non-distro path. Depends on core UNC allow-list setting.",
+  "questions": [
+   "Should the clean side reuse the Windows folder dialog or a distro-aware picker?",
+   "Behaviour when a Remote-SSH window on a Windows client runs this command (Q4)?",
+   "S046 trigger on very old WSL is unobserved; implement or omit?"
+  ]
+ }
+]

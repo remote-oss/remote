@@ -40,12 +40,28 @@ The extension needs the editor's proposed APIs enabled for it. Add the extension
 
 ## Session hints
 
-Every resolve keeps a record of what it knew and what went wrong, for troubleshooting. The records live in the extension's
-global state, under the sub-key `remote.ssh.hints` of its state entry (`remote-oss.remote-ssh`). Nothing in them leaves
-the machine, and the clear command, "Remote-SSH: Clear previous session metadata (used for enhanced error reporting)",
-removes them all. This section is the documented accessor: a test reads the store through this key and these field names.
+Every resolve keeps a record of what it knew and what went wrong, for troubleshooting. The records live in files of the
+extension's global storage folder, `connection-hints` (under the profile's `User/globalStorage/remote-oss.remote-ssh`),
+one file `<session>.json` for each window, which the window writes whole under a temporary name and renames over the old
+file, so that no window's write drops another's. Nothing in them leaves the machine, and the clear command,
+"Remote-SSH: Clear previous session metadata (used for enhanced error reporting)", removes them all. This section is the
+documented accessor: a test reads the records through these files and these field names.
 
-The value under the key is `{"records": [...]}`, the two newest records, oldest first. A record has:
+A file holds `{"events": [...]}`; an event has a `time` (milliseconds since the epoch) and a `kind`:
+
+- `record`, with a `record` that is the whole record of one resolve as it was when the event was written;
+- `clear`, with `clearedAt`, the ISO 8601 time of the clear.
+
+The records are read from the files of every window (a file named `<session>.json`, or `<session>.claim-<id>` while
+another window folds it into its own; a name ending in `.tmp-<id>` is a write not yet renamed and is not read), as
+follows. The newest event of each record, told by its `started`, decides: a record that a window writes again with more
+hints replaces its earlier state, and of two events of one time the one of the greater session name decides (a window's session is its file's name before `.json`, or before `.claim-` for a claim). The newest
+`clearedAt` hides every record that started before it, whichever window wrote it and whenever. The two newest
+of the records that are left, by `started`, are the records of the store, oldest first. A window keeps in its file only its
+two newest records and its newest clear. The value an earlier version kept in the extension's global state under
+`remote.ssh.hints` is read by the extension as the oldest layer and is never written; a test needs only the files.
+
+A record has:
 
 | Field | Meaning |
 |---|---|
@@ -82,6 +98,43 @@ The status numbers only grow: a new status takes the next unused number, and no 
 | `ServerDownloadFailed` | 7 |
 | `NoDownloaderAvailable` | 8 |
 | `InvalidProxyUrl` | 9 |
+
+## Folder history
+
+Remote Explorer lists, under each host, the folders and workspaces the user opened on it, most recent first. The history lives in
+files of the extension's global storage folder (`remote-oss.remote-ssh`), in the folder `folder-history`. Nothing in
+it leaves the machine, and "Remove from Recent List" on a row records a `removed` event. This section is the
+documented accessor: a test reads the files through this layout and these field names.
+
+Each window writes its own file, `<session>.json`, where `<session>` is a random UUID the window picks when it starts, so
+no window's write can drop another's. A window writes its file whole, under a temporary name that it renames over the
+file. The folder is created with mode 0700 and each file with mode 0600.
+
+A file holds `{"events": [...]}`, one event for each change to an entry, and an event has:
+
+| Field | Meaning |
+|---|---|
+| `host` | The key of the host the entry belongs to. |
+| `entry` | The entry as the endpoint returns it: `{"path": ..., "kind": ...}`, where `kind` is `folder` or `workspace`. |
+| `kind` | `opened` when the entry was opened, `removed` when it was removed from the list. |
+| `time` | When the change happened, in milliseconds since the epoch. |
+
+A window holds one event for each entry, the newest it knows. To read the history, take every window's file and, for each
+host and path, the newest event over all of them: it decides, and an entry whose newest event is `removed` is not listed.
+Two events at the same time are decided by the later session, comparing the session names as text. The entries of a host
+are listed by time, the most recent first, and the later session first at the same time. The hosts are ordered as the earlier
+version's value ordered them, then, for the others, the host whose oldest entry is oldest first.
+
+Two kinds of name in the folder are not a window's file:
+
+| Name | Meaning |
+|---|---|
+| `<session>.claim-<hex>` | A file of a window that has not changed for a day, renamed by another window while it folds the file's events into its own. It is read as the file of `<session>` until the folding window has written its own file and deleted it. |
+| `<session>.json.tmp-<hex>` | A write that is not yet renamed into place. It is never read, and the next window to write removes it once it is a day old. |
+
+A file that has not changed for a day is folded this way by the next window that writes, so the files of windows that ended
+do not pile up. An earlier version kept the whole history in one value of the extension's global state, under
+`folder.history.v1`. That value is read as the oldest layer, every entry at time 0 in its order, and is never written.
 
 ## For maintainers
 

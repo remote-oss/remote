@@ -1,18 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
-import {mkdtempSync, rmSync} from 'node:fs';
-import {tmpdir} from 'node:os';
-import path from 'node:path';
-import {
-  newSession,
-  NODE_HISTORY_FILES,
-} from '../../src/companion/folder-history.ts';
-import {
-  HISTORY_FOLDER as FOLDER,
-  legacyOf,
-  MemoryFiles,
-  windowOn,
-} from './history-files.fixture.ts';
-const ONE_DAY = 24 * 60 * 60 * 1000;
+import {HISTORY_FOLDER, legacyOf, windowOn} from './history-files.fixture.ts';
+import {MemoryFiles} from './event-files.fixture.ts';
 
 /** The history entry of a folder. */
 function folder(entryPath: string): {path: string; kind: 'folder'} {
@@ -32,25 +20,14 @@ async function inTurn(
   }
 }
 
-/**
- * A file `name` left in the folder holding one opened event of `entryPath`, what window `bbbb` read beside it, and the
- * folder after that window recorded `/new` a day later.
- */
-async function afterLeftover(name: string, entryPath: string) {
-  const files = new MemoryFiles();
-  files.files.set(`${FOLDER}/${name}`, {
-    text: JSON.stringify({
-      events: [
-        {host: 'host-a', entry: folder(entryPath), kind: 'opened', time: 900},
-      ],
-    }),
-    modified: files.clock,
-  });
-  const reader = windowOn(files, 'bbbb');
-  const seen = reader.stored();
-  files.clock += ONE_DAY + 1;
-  await reader.recordOpened('host-a', folder('/new'));
-  return {seen, names: files.names(FOLDER).sort(), reader};
+/** Records `/a` and `/c` on host-a and `/b` on host-b in `store`, `/a`, `/b` and `/c` in turn. */
+async function openedOnTwoHosts(
+  files: MemoryFiles,
+  store: ReturnType<typeof windowOn>,
+): Promise<void> {
+  await inTurn(files, store, 'host-a', folder('/a'));
+  await inTurn(files, store, 'host-b', folder('/b'));
+  await inTurn(files, store, 'host-a', folder('/c'));
 }
 
 describe('the folder history store (card ssh-provider-02, card #3095)', () => {
@@ -88,17 +65,24 @@ describe('the folder history store (card ssh-provider-02, card #3095)', () => {
     ]);
   });
 
-  it('F-2503 BR-4, AC-8, AC-29: each host keeps only its own entries, the hosts in the order they were first opened', async () => {
+  it('F-2503 BR-4, AC-8, AC-29: each host keeps only its own entries, the hosts in the order of their oldest entry still listed', async () => {
     const files = new MemoryFiles();
     const store = windowOn(files, 'aaaa');
-    await store.recordOpened('host-a', folder('/a'));
-    files.clock += 1;
-    await store.recordOpened('host-b', folder('/b'));
-    files.clock += 1;
-    await store.recordOpened('host-a', folder('/c'));
+    await openedOnTwoHosts(files, store);
     deepStrictEqual(store.stored(), [
       {hostKey: 'host-a', entries: [folder('/c'), folder('/a')]},
       {hostKey: 'host-b', entries: [folder('/b')]},
+    ]);
+  });
+
+  it('F-2503 BR-4: a host whose oldest entry was removed takes its place by the oldest entry that is left', async () => {
+    const files = new MemoryFiles();
+    const store = windowOn(files, 'aaaa');
+    await openedOnTwoHosts(files, store);
+    await store.removeOpened('host-a', '/a');
+    deepStrictEqual(store.stored(), [
+      {hostKey: 'host-b', entries: [folder('/b')]},
+      {hostKey: 'host-a', entries: [folder('/c')]},
     ]);
   });
 
@@ -136,16 +120,6 @@ describe('the folder history store (card ssh-provider-02, card #3095)', () => {
     const written = files.operations.length;
     const changed = await store.removeOpened('host-a', '/missing');
     deepStrictEqual([changed, files.operations.length], [false, written]);
-  });
-
-  it('a window writes only its own file, whole, under a temporary name renamed over it', async () => {
-    const files = new MemoryFiles();
-    const store = windowOn(files, 'aaaa');
-    await store.recordOpened('host-a', folder('/a'));
-    deepStrictEqual(files.operations, [
-      'write aaaa.json.tmp-0001',
-      'rename aaaa.json.tmp-0001 aaaa.json',
-    ]);
   });
 
   it('a write that fails is a rejection of the record or the removal, not a throw', async () => {
@@ -224,139 +198,6 @@ describe('the folder history store, written by two windows at once (card #3095)'
   });
 });
 
-describe('the folding of other windows’ files (card #3095)', () => {
-  it('a file untouched for a day is claimed by a rename, taken into the writer’s own, and the claim removed', async () => {
-    const files = new MemoryFiles();
-    await windowOn(files, 'aaaa').recordOpened('host-a', folder('/old'));
-    files.clock += ONE_DAY + 1;
-    files.operations.length = 0;
-    const writer = windowOn(files, 'bbbb');
-    await writer.recordOpened('host-a', folder('/new'));
-    deepStrictEqual(
-      [files.names(FOLDER).sort(), files.operations, writer.stored()],
-      [
-        ['bbbb.json'],
-        [
-          'rename aaaa.json aaaa.claim-0002',
-          'write bbbb.json.tmp-0003',
-          'rename bbbb.json.tmp-0003 bbbb.json',
-          'remove aaaa.claim-0002',
-        ],
-        [{hostKey: 'host-a', entries: [folder('/new'), folder('/old')]}],
-      ],
-    );
-  });
-
-  it('a fold never replaces this window’s newer event of an entry with the older one of the file it claims', async () => {
-    const files = new MemoryFiles();
-    files.files.set(`${FOLDER}/bbbb.json`, {
-      text: JSON.stringify({
-        events: [
-          {host: 'host-a', entry: folder('/a'), kind: 'opened', time: 2},
-          {host: 'host-a', entry: folder('/b'), kind: 'opened', time: 2},
-        ],
-      }),
-      modified: 0,
-    });
-    files.clock = 5;
-    const writer = windowOn(files, 'aaaa');
-    await writer.recordOpened('host-a', folder('/a'));
-    files.clock = ONE_DAY + 10;
-    await writer.recordOpened('host-a', folder('/c'));
-    const own = JSON.parse(files.read(`${FOLDER}/aaaa.json`) ?? '{}') as {
-      events: Array<{entry: {path: string}; time: number}>;
-    };
-    deepStrictEqual(
-      own.events.map(event => [event.entry.path, event.time]).sort(),
-      [
-        ['/a', 5],
-        ['/b', 2],
-        ['/c', ONE_DAY + 10],
-      ],
-    );
-  });
-
-  it('a window never claims its own file, however old it is', async () => {
-    const files = new MemoryFiles();
-    const owner = windowOn(files, 'aaaa');
-    await owner.recordOpened('host-a', folder('/one'));
-    files.clock += ONE_DAY + 1;
-    files.operations.length = 0;
-    await owner.recordOpened('host-a', folder('/two'));
-    deepStrictEqual(
-      files.operations.filter(operation => operation.includes('claim')),
-      [],
-    );
-  });
-
-  it('a file younger than a day is left alone', async () => {
-    const files = new MemoryFiles();
-    await windowOn(files, 'aaaa').recordOpened('host-a', folder('/old'));
-    files.clock += ONE_DAY - 1;
-    await windowOn(files, 'bbbb').recordOpened('host-a', folder('/new'));
-    deepStrictEqual(files.names(FOLDER).sort(), ['aaaa.json', 'bbbb.json']);
-  });
-
-  it('a fold that races the owner of the file it claims keeps every event', async () => {
-    const files = new MemoryFiles();
-    const owner = windowOn(files, 'aaaa');
-    await owner.recordOpened('host-a', folder('/one'));
-    files.clock += ONE_DAY + 1;
-    await windowOn(files, 'bbbb').recordOpened('host-a', folder('/two'));
-    files.clock += 1;
-    await owner.recordOpened('host-a', folder('/three'));
-    deepStrictEqual(windowOn(files, 'cccc').stored(), [
-      {
-        hostKey: 'host-a',
-        entries: [folder('/three'), folder('/two'), folder('/one')],
-      },
-    ]);
-  });
-
-  it('a file another window claimed first is skipped', async () => {
-    const files = new MemoryFiles();
-    await windowOn(files, 'aaaa').recordOpened('host-a', folder('/old'));
-    files.clock += ONE_DAY + 1;
-    const rename = files.rename.bind(files);
-    files.rename = (source, target) => {
-      if (path.basename(source) === 'aaaa.json') {
-        throw new Error('ENOENT: claimed by another window');
-      }
-      rename(source, target);
-    };
-    await windowOn(files, 'bbbb').recordOpened('host-a', folder('/new'));
-    deepStrictEqual(files.names(FOLDER).sort(), ['aaaa.json', 'bbbb.json']);
-  });
-
-  it('a claim a fold left behind is still read, and folded again once it is a day old', async () => {
-    const {seen, names, reader} = await afterLeftover(
-      'aaaa.claim-0f0f',
-      '/left',
-    );
-    deepStrictEqual(
-      [seen, names, reader.stored()],
-      [
-        [{hostKey: 'host-a', entries: [folder('/left')]}],
-        ['bbbb.json'],
-        [{hostKey: 'host-a', entries: [folder('/new'), folder('/left')]}],
-      ],
-    );
-  });
-
-  it('a write never renamed into place is never read, and is removed once a day old', async () => {
-    const {seen, names} = await afterLeftover('aaaa.json.tmp-0f0f', '/half');
-    deepStrictEqual([seen, names], [[], ['bbbb.json']]);
-  });
-
-  it('a day-old file of another name is left alone', async () => {
-    const files = new MemoryFiles();
-    files.files.set(`${FOLDER}/notes.txt`, {text: 'x', modified: files.clock});
-    files.clock += ONE_DAY + 1;
-    await windowOn(files, 'bbbb').recordOpened('host-a', folder('/new'));
-    deepStrictEqual(files.names(FOLDER).sort(), ['bbbb.json', 'notes.txt']);
-  });
-});
-
 describe('the history an earlier version kept in the global state (card #3095)', () => {
   const EARLIER = {
     hosts: [
@@ -422,8 +263,8 @@ describe('the history an earlier version kept in the global state (card #3095)',
   });
 });
 
-describe('the files of other windows that are not history', () => {
-  it('a file that is no JSON, no events list or a malformed event adds nothing, and the good events stay', () => {
+describe('the files of other windows that hold no history', () => {
+  it('a file whose events are no object, or have no host, no kind, no time or no entry that fits, adds nothing, and the good event stays', () => {
     const files = new MemoryFiles();
     const good = {
       host: 'host-a',
@@ -431,94 +272,21 @@ describe('the files of other windows that are not history', () => {
       kind: 'opened',
       time: 5,
     };
-    const written: ReadonlyArray<readonly [string, string]> = [
-      ['aaaa.json', '{not json'],
-      ['bbbb.json', JSON.stringify({events: 'x'})],
-      ['cccc.json', JSON.stringify([good])],
-      [
-        'dddd.json',
-        JSON.stringify({
-          events: [
-            good,
-            'text',
-            {...good, kind: 'moved'},
-            {...good, host: 7},
-            {...good, time: 'later'},
-            {...good, entry: {path: '/x', kind: 'file'}},
-          ],
-        }),
-      ],
-    ];
-    for (const [name, text] of written) {
-      files.files.set(`${FOLDER}/${name}`, {text, modified: files.clock});
-    }
-    deepStrictEqual(windowOn(files, 'eeee').stored(), [
+    files.files.set(`${HISTORY_FOLDER}/aaaa.json`, {
+      text: JSON.stringify({
+        events: [
+          good,
+          'text',
+          {...good, kind: 'moved'},
+          {...good, host: 7},
+          {...good, time: 'later'},
+          {...good, entry: {path: '/x', kind: 'file'}},
+        ],
+      }),
+      modified: files.clock,
+    });
+    deepStrictEqual(windowOn(files, 'bbbb').stored(), [
       {hostKey: 'host-a', entries: [folder('/good')]},
     ]);
-  });
-});
-
-describe('a file that goes between its listing and its reading', () => {
-  it('adds nothing, as a window that ended and was folded leaves it', async () => {
-    const files = new MemoryFiles();
-    await windowOn(files, 'aaaa').recordOpened('host-a', folder('/gone'));
-    files.read = () => undefined;
-    deepStrictEqual(windowOn(files, 'bbbb').stored(), []);
-  });
-});
-
-describe('the history files on this machine', () => {
-  let root: string;
-
-  beforeEach(() => {
-    root = mkdtempSync(path.join(tmpdir(), 'folder-history-'));
-  });
-
-  afterEach(() => {
-    rmSync(root, {recursive: true, force: true});
-  });
-
-  it('writes, renames, lists, reads, dates and removes files, and reads nothing where there is none', () => {
-    const inside = path.join(root, 'folder-history');
-    const files = NODE_HISTORY_FILES;
-    const before = [
-      files.names(inside),
-      files.read(path.join(inside, 'x.json')),
-      files.modified(path.join(inside, 'x.json')),
-    ];
-    files.makeFolder(inside);
-    files.write(path.join(inside, 'x.json.tmp-1'), 'text');
-    files.rename(
-      path.join(inside, 'x.json.tmp-1'),
-      path.join(inside, 'x.json'),
-    );
-    const after = [
-      files.names(inside),
-      files.read(path.join(inside, 'x.json')),
-      typeof files.modified(path.join(inside, 'x.json')),
-    ];
-    files.remove(path.join(inside, 'x.json'));
-    deepStrictEqual(
-      [
-        before,
-        after,
-        files.names(inside),
-        /^[0-9a-f]{12}$/.test(files.random()),
-      ],
-      [[[], undefined, undefined], [['x.json'], 'text', 'number'], [], true],
-    );
-  });
-
-  it('a new session is a UUID, and two never match', () => {
-    const [first, second] = [newSession(), newSession()];
-    deepStrictEqual(
-      [
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
-          first,
-        ),
-        first === second,
-      ],
-      [true, false],
-    );
   });
 });
