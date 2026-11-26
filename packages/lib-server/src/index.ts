@@ -208,6 +208,15 @@ export {
   watchedExecServer,
 } from './cli-control/exec-server.ts';
 export {
+  GROUP_SCRIPT,
+  type HostProcess,
+  type HostSpawn,
+  type HostSpawnRequest,
+  REPORTING_SCRIPT,
+  signalGroupOnHost,
+  spawnOnHost,
+} from './cli-control/host-process.ts';
+export {
   cliServerFolderOf,
   type S045Event,
   s045EventOf,
