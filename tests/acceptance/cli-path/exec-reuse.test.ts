@@ -112,7 +112,7 @@ describe('the exec-server mode across windows and modes (card #3028, F-2103)', f
     });
   });
 
-  it('F-2103 AC-11 (c3028-reuse): a window that connects over a new ssh to a host whose server already runs reuses that server process and shows no download', async () => {
+  it('F-2103 AC-11 (c3028-reuse): the first window on a fresh host shows the download; a window that connects over a new ssh to the host whose server already runs reuses that server process and shows no download', async () => {
     await keepingSettings(async () => {
       const rowName = 'c3028-reuse';
       await stamped(rowName, 'the host is made fresh', 120_000, freshExecHost);
@@ -121,11 +121,13 @@ describe('the exec-server mode across windows and modes (card #3028, F-2103)', f
         openWindow('harness', 'c3028-reuse-first'),
       );
       let servers: number[];
+      let firstStages: string[];
       try {
         await stamped(rowName, 'the first connect', 130_000, () =>
           connectedWithin('c3028-reuse-first', 120_000),
         );
         servers = await execServerPids();
+        firstStages = stagesOf('c3028-reuse-first');
       } finally {
         await closeWindow('c3028-reuse-first').catch(() => undefined);
       }
@@ -141,19 +143,21 @@ describe('the exec-server mode across windows and modes (card #3028, F-2103)', f
         await sameOrTell(
           {
             first: servers.length,
+            firstDownloads: firstStages.includes(DOWNLOADING),
             same: await execServerPids(),
             downloads: stagesOf('c3028-reuse-second').includes(DOWNLOADING),
-            notified: stagesOf('c3028-reuse-second').includes(
-              'Setting up SSH Host harness',
+            tunnel: stagesOf('c3028-reuse-second').includes(
+              'Setting up SSH tunnel',
             ),
           },
           {
             first: 1,
+            firstDownloads: true,
             same: servers,
             downloads: false,
-            notified: true,
+            tunnel: true,
           },
-          `the second window's stages: ${JSON.stringify(stagesOf('c3028-reuse-second'))}`,
+          `the first window's stages: ${JSON.stringify(firstStages)}; the second window's: ${JSON.stringify(stagesOf('c3028-reuse-second'))}`,
         );
       } finally {
         await closeWindow('c3028-reuse-second').catch(() => undefined);
