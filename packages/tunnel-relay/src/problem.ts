@@ -8,6 +8,8 @@
 export interface Answer {
   status: number;
   body?: unknown;
+  /** Headers the answer carries besides the ones every answer has, such as `Retry-After`. */
+  headers?: Readonly<Record<string, string>>;
 }
 
 /** A problem answer: its status and its detail, with the title of its status. */

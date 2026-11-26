@@ -10,6 +10,7 @@ import {problem, type Answer} from '../problem.ts';
 import type {Authenticate, Caller} from '../routes.ts';
 import type {Allowlist} from './allowlist.ts';
 import type {GithubIdentity} from './github.ts';
+import type {LookupLimit} from './lookups.ts';
 import type {Tokens} from './tokens.ts';
 import type {Store} from '../store.ts';
 
@@ -21,6 +22,8 @@ export const NO_LONGER_ADMITTED = "The tunnel's owner is no longer admitted.";
 /** What deciding who a request is from needs. */
 export interface Authorities {
   github: GithubIdentity;
+  /** How often one address may ask GitHub about tokens that are in no cache. */
+  lookups: LookupLimit;
   allowlist: Allowlist;
   tokens: Tokens;
   /** The stored tunnels a tunnel token is checked against. */
@@ -31,13 +34,15 @@ export interface Authorities {
 
 /** The relay's `authenticate`: a caller for a request, or the answer that refuses it. */
 export function authenticateWith(authorities: Authorities): Authenticate {
-  return headers => callerOf(headers.authorization, authorities);
+  return (headers, address) =>
+    callerOf(headers.authorization, address, authorities);
 }
 
 /** The caller of `header`, or the answer that refuses it. */
 async function callerOf(
   header: string | undefined,
-  {github, allowlist, tokens, tunnels, report}: Authorities,
+  address: string,
+  {github, lookups, allowlist, tokens, tunnels, report}: Authorities,
 ): Promise<Caller | Answer> {
   const [scheme, ...words] = (header ?? '').trim().split(/\s+/);
   const token = words.at(-1);
@@ -68,7 +73,21 @@ async function callerOf(
   if (scheme !== 'github') {
     return problem(401, SIGN_IN);
   }
-  const answer = await github.accountOf(token);
+  let answer = github.cached(token);
+  if (answer === undefined) {
+    const taken = lookups.take(address);
+    if (taken.kind === 'refused') {
+      const wait = String(taken.retryAfterSeconds);
+      return {
+        ...problem(
+          429,
+          `This address has asked GitHub about too many tokens; try again in ${wait} seconds.`,
+        ),
+        headers: {'Retry-After': wait},
+      };
+    }
+    answer = await github.lookup(token);
+  }
   if (answer.kind === 'refused') {
     return problem(401, 'GitHub refused the token.');
   }

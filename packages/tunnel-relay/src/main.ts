@@ -5,6 +5,7 @@
 import {readFileSync, statSync, watchFile} from 'node:fs';
 import {Allowlist} from './auth/allowlist.ts';
 import {authenticateWith} from './auth/authenticate.ts';
+import {LookupLimit} from './auth/lookups.ts';
 import {GithubIdentity} from './auth/github.ts';
 import {Tokens} from './auth/tokens.ts';
 import {configOf} from './config.ts';
@@ -34,6 +35,7 @@ const allowlist = new Allowlist(
 );
 const authenticate = authenticateWith({
   github: new GithubIdentity(config.githubApi, fetch, Date.now),
+  lookups: new LookupLimit(Date.now),
   allowlist,
   tokens,
   tunnels: store,

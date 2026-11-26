@@ -6,6 +6,7 @@ import {
   NO_LONGER_ADMITTED,
 } from '../../src/auth/authenticate.ts';
 import {type Fetch, GithubIdentity, KEPT_MOST} from '../../src/auth/github.ts';
+import {LookupLimit} from '../../src/auth/lookups.ts';
 import {Tokens} from '../../src/auth/tokens.ts';
 import type {TunnelRecord} from '../../src/store.ts';
 
@@ -28,6 +29,26 @@ function messageOf(work: () => unknown): string {
   } catch (error) {
     return (error as Error).message;
   }
+}
+
+/** The authorities over `github`, with the account 42 admitted, no tunnel stored and a fresh limit on lookups. */
+function authoritiesOver(github: GithubIdentity) {
+  return {
+    github,
+    lookups: new LookupLimit(() => 0),
+    allowlist: new Allowlist({modified: () => 1, text: () => '42\n'}),
+    tokens: new Tokens(SIGNING_KEY, () => 0),
+    tunnels: {tunnelById: () => undefined},
+    report: () => undefined,
+  };
+}
+
+/** What a caller of the relay gets for `token`: the answer kept for it, else GitHub's. */
+async function answered(
+  github: GithubIdentity,
+  token: string,
+): Promise<unknown> {
+  return github.cached(token) ?? (await github.lookup(token));
 }
 
 /** A `fetch` that answers every request with `status` and `body`, and records the requests. */
@@ -168,12 +189,12 @@ describe('who a GitHub token belongs to', () => {
       fetch,
       () => clock,
     );
-    const first = await github.accountOf('secret');
+    const first = await answered(github, 'secret');
     clock = 5 * 60 * 1000 - 1;
-    const kept = await github.accountOf('secret');
-    const other = await github.accountOf('another');
+    const kept = await answered(github, 'secret');
+    const other = await answered(github, 'another');
     clock = 5 * 60 * 1000;
-    await github.accountOf('secret');
+    await answered(github, 'secret');
     deepStrictEqual(
       [
         first,
@@ -196,11 +217,10 @@ describe('who a GitHub token belongs to', () => {
 
   it('says a token GitHub refuses is refused, and any other failure is a failure', async () => {
     async function answerOf(fetch: Fetch): Promise<unknown> {
-      return new GithubIdentity(
-        'https://github.test',
-        fetch,
-        () => 0,
-      ).accountOf('secret');
+      return answered(
+        new GithubIdentity('https://github.test', fetch, () => 0),
+        'secret',
+      );
     }
     deepStrictEqual(
       [
@@ -245,12 +265,98 @@ describe('the answers GitHub gave, kept', () => {
   it('keeps at most a thousand, dropping the oldest when full, so the first token is asked again', async () => {
     const {identity, asked} = counted(() => 0);
     for (let index = 0; index <= KEPT_MOST; index++) {
-      await identity.accountOf(`token-${String(index)}`);
+      await answered(identity, `token-${String(index)}`);
     }
-    await identity.accountOf(`token-${String(KEPT_MOST)}`);
+    await answered(identity, `token-${String(KEPT_MOST)}`);
     const beforeFirst = asked();
-    await identity.accountOf('token-0');
+    await answered(identity, 'token-0');
     deepStrictEqual([beforeFirst, asked()], [KEPT_MOST + 1, KEPT_MOST + 2]);
+  });
+});
+
+describe('the refusals and the order of the answers kept', () => {
+  /** A lookup that answers with `statuses` in turn, then 500, and how many times it asked. */
+  function answeringInTurn(statuses: number[], now: () => number) {
+    let asked = 0;
+    const identity = new GithubIdentity(
+      'https://github.test',
+      () => {
+        const status = statuses[asked] ?? 500;
+        asked += 1;
+        return Promise.resolve(
+          new Response(JSON.stringify({id: asked, login: 'octo'}), {status}),
+        );
+      },
+      now,
+    );
+    return {identity, asked: () => asked};
+  }
+
+  it('keeps a refused token as refused for a minute, answers it from the kept answer without asking, and asks again after', async () => {
+    let clock = 0;
+    const {identity, asked} = answeringInTurn([401, 401], () => clock);
+    const first = await answered(identity, 'bad');
+    clock = 60 * 1000 - 1;
+    const kept = await answered(identity, 'bad');
+    const keptAsked = asked();
+    clock = 60 * 1000;
+    const again = await answered(identity, 'bad');
+    deepStrictEqual(
+      [first, kept, keptAsked, again, asked()],
+      [{kind: 'refused'}, {kind: 'refused'}, 1, {kind: 'refused'}, 2],
+    );
+  });
+
+  it('keeps no failure to ask, so the next call asks again', async () => {
+    const {identity, asked} = answeringInTurn([500, 500], () => 0);
+    await answered(identity, 'token');
+    await answered(identity, 'token');
+    deepStrictEqual(asked(), 2);
+  });
+
+  it('keeps an account five minutes and a refusal one, each from its own start', async () => {
+    let clock = 0;
+    const {identity, asked} = answeringInTurn(
+      [200, 401, 200, 401],
+      () => clock,
+    );
+    await answered(identity, 'good');
+    await answered(identity, 'bad');
+    clock = 60 * 1000;
+    await answered(identity, 'good');
+    await answered(identity, 'bad');
+    deepStrictEqual(asked(), 3);
+  });
+
+  it('makes an answer the most recent when it is read, so the one read least recently goes first at the bound', async () => {
+    const {identity, asked} = answeringInTurn(
+      Array.from({length: KEPT_MOST + 3}, () => 200),
+      () => 0,
+    );
+    for (let index = 0; index < KEPT_MOST; index += 1) {
+      await answered(identity, `token-${String(index)}`);
+    }
+    // Reading token-0 makes it the most recent; the next keep drops token-1, not token-0.
+    await answered(identity, 'token-0');
+    await answered(identity, 'fresh');
+    const before = asked();
+    await answered(identity, 'token-0');
+    const zeroKept = asked() === before;
+    await answered(identity, 'token-1');
+    deepStrictEqual([zeroKept, asked()], [true, before + 1]);
+  });
+
+  it('counts the refusals toward the thousand, so random bad tokens cannot grow the kept answers', async () => {
+    const {identity, asked} = answeringInTurn(
+      Array.from({length: KEPT_MOST + 2}, () => 401),
+      () => 0,
+    );
+    for (let index = 0; index <= KEPT_MOST; index += 1) {
+      await answered(identity, `bad-${String(index)}`);
+    }
+    const before = asked();
+    await answered(identity, 'bad-0');
+    deepStrictEqual(asked(), before + 1);
   });
 });
 
@@ -322,6 +428,7 @@ describe('who a request is from', () => {
         fetchAnswering(githubStatus, {id: 42, login: 'octo'}).fetch,
         () => 0,
       ),
+      lookups: new LookupLimit(() => 0),
       allowlist: new Allowlist({modified: () => 1, text: () => '42\n'}),
       tokens,
       tunnels: {
@@ -331,7 +438,7 @@ describe('who a request is from', () => {
         reported.push(reason);
       },
     });
-    return authenticate({authorization});
+    return authenticate({authorization}, '10.0.0.1');
   }
 
   it('tells the caller of a lookup that failed one fixed line, and reports why to the relay alone', async () => {
@@ -339,6 +446,98 @@ describe('who a request is from', () => {
     deepStrictEqual(
       [JSON.stringify(answer).includes('503'), reported],
       [false, ['GitHub could not be asked: GitHub answered 503']],
+    );
+  });
+
+  /** An authenticate over GitHub answering `status`, at most ten lookups an address a minute, and how many times GitHub was asked. */
+  function limited(status: number) {
+    let asked = 0;
+    const authenticate = authenticateWith(
+      authoritiesOver(
+        new GithubIdentity(
+          'https://github.test',
+          () => {
+            asked += 1;
+            return Promise.resolve(
+              new Response(JSON.stringify({id: 42, login: 'octo'}), {status}),
+            );
+          },
+          () => 0,
+        ),
+      ),
+    );
+    return {authenticate, asked: () => asked};
+  }
+
+  it('answers the eleventh uncached lookup of an address in a minute with 429 and Retry-After, asks GitHub no more, and still serves another address', async () => {
+    const {authenticate, asked} = limited(200);
+    const given: unknown[] = [];
+    for (let index = 0; index < 11; index += 1) {
+      given.push(
+        await authenticate(
+          {authorization: `github token-${String(index)}`},
+          '10.0.0.1',
+        ),
+      );
+    }
+    const other = await authenticate(
+      {authorization: 'github another'},
+      '10.0.0.2',
+    );
+    deepStrictEqual(
+      [
+        given
+          .slice(0, 10)
+          .every(each => (each as {kind?: string}).kind === 'account'),
+        given[10],
+        other,
+        asked(),
+      ],
+      [
+        true,
+        {
+          status: 429,
+          body: {
+            title: 'Too Many Requests',
+            detail:
+              'This address has asked GitHub about too many tokens; try again in 60 seconds.',
+          },
+          headers: {'Retry-After': '60'},
+        },
+        {kind: 'account', id: 42, login: 'octo'},
+        11,
+      ],
+    );
+  });
+
+  it('answers a cached account and a cached refusal from an address that is at its limit, taking nothing from it', async () => {
+    const good = limited(200);
+    const refusing = limited(401);
+    for (const {authenticate} of [good, refusing]) {
+      await authenticate({authorization: 'github kept'}, '10.0.0.1');
+      for (let index = 0; index < 9; index += 1) {
+        await authenticate(
+          {authorization: `github fill-${String(index)}`},
+          '10.0.0.1',
+        );
+      }
+    }
+    deepStrictEqual(
+      [
+        await good.authenticate({authorization: 'github kept'}, '10.0.0.1'),
+        await refusing.authenticate({authorization: 'github kept'}, '10.0.0.1'),
+        good.asked(),
+        refusing.asked(),
+      ],
+      [
+        {kind: 'account', id: 42, login: 'octo'},
+        {
+          status: 401,
+          body: {title: 'Unauthorized', detail: 'GitHub refused the token.'},
+        },
+        10,
+        10,
+      ],
     );
   });
 
@@ -430,17 +629,15 @@ describe('who a request is from', () => {
       status: 401,
       body: {title: 'Unauthorized', detail: 'Sign in with a GitHub account.'},
     };
-    const notAdmitted = authenticateWith({
-      github: new GithubIdentity(
-        'https://github.test',
-        fetchAnswering(200, {id: 9, login: 'stranger'}).fetch,
-        () => 0,
+    const notAdmitted = authenticateWith(
+      authoritiesOver(
+        new GithubIdentity(
+          'https://github.test',
+          fetchAnswering(200, {id: 9, login: 'stranger'}).fetch,
+          () => 0,
+        ),
       ),
-      allowlist: new Allowlist({modified: () => 1, text: () => '42\n'}),
-      tokens: new Tokens(SIGNING_KEY, () => 0),
-      tunnels: {tunnelById: () => undefined},
-      report: () => undefined,
-    });
+    );
     deepStrictEqual(
       [
         await callerFor(undefined),
@@ -449,7 +646,7 @@ describe('who a request is from', () => {
         await callerFor('bearer token'),
         await callerFor('github secret', 401),
         await callerFor('github secret', 503),
-        await notAdmitted({authorization: 'github secret'}),
+        await notAdmitted({authorization: 'github secret'}, '10.0.0.1'),
       ],
       [
         signIn,

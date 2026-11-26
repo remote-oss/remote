@@ -12,6 +12,7 @@ import {Store} from '../../src/store.ts';
 import {Allowlist} from '../../src/auth/allowlist.ts';
 import {authenticateWith} from '../../src/auth/authenticate.ts';
 import {GithubIdentity} from '../../src/auth/github.ts';
+import {LookupLimit} from '../../src/auth/lookups.ts';
 import {Tokens} from '../../src/auth/tokens.ts';
 import {TEST_CONFIG} from './settings.ts';
 
@@ -76,6 +77,7 @@ describe('the management routes of the relay', () => {
         method,
         path,
         query,
+        address: '10.0.0.1',
         headers: options.headers ?? {},
         readBody: () => Promise.resolve(options.body),
       },
@@ -106,6 +108,7 @@ describe('the management routes of the relay', () => {
             method: 'PUT',
             path: '/tunnels/one',
             query: new URLSearchParams({'api-version': API_VERSION}),
+            address: '10.0.0.1',
             headers: {},
             readBody: () => Promise.reject(new Error('the stream broke')),
           },
@@ -752,11 +755,12 @@ describe('the management routes of the relay', () => {
           () => Promise.reject(new Error('GitHub is not asked')),
           () => 0,
         ),
+        lookups: new LookupLimit(() => 0),
         allowlist: new Allowlist({modified: () => 1, text: () => '7\n'}),
         tokens: TOKENS,
         tunnels: store,
         report: () => undefined,
-      })({authorization: `tunnel ${token}`});
+      })({authorization: `tunnel ${token}`}, '10.0.0.1');
     }
 
     const notValid = {
