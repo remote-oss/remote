@@ -1,8 +1,8 @@
 /**
- * @fileoverview acceptance-display-reporter: mocha's default reporter that a launch's window runs with, printing
- * after the end of each of its files, and at the end of the run, the display's visible windows, each with its name,
- * its WM_CLASS and whether the window manager manages it (#3210), so a launch's log says which of its files left
- * which windows on the display, and what the run left there.
+ * @fileoverview acceptance-display-reporter: the file-times reporter that the ssh-core launch's mocha runs with,
+ * printing after the end of each of its files, and at the end of the run, the display's visible windows, each with its
+ * name, its WM_CLASS and whether the window manager manages it (#3210), so the launch's log says which of its files
+ * left which windows on the display, and what the run left there.
  *
  *     acceptance: display <suite>/<file> <windows>
  *
@@ -16,6 +16,7 @@ import {
   type ListedWindow,
   listedWindows,
 } from '../tests/acceptance/windows/display.ts';
+import {'module.exports' as FileTimes} from './acceptance-file-times.ts';
 
 const {
   constants: {EVENT_RUN_END, EVENT_SUITE_END},
@@ -75,8 +76,8 @@ export function displayReadoutOf(
     : listedWindows;
 }
 
-/** Mocha's default report of a launch's run, and the display's windows after the end of each of the run's files. */
-class DisplayReporter extends Mocha.reporters.Spec {
+/** The file-times report of a launch's run, and the display's windows after the end of each of the run's files. */
+class DisplayReporter extends FileTimes {
   /** Reports the run as the default reporter does, and says the display's windows at each file's end and at the run's end. */
   constructor(runner: Mocha.Runner, options?: Mocha.MochaOptions) {
     super(runner, options);

@@ -5541,21 +5541,6 @@ describe('acceptance', () => {
           'utf8',
         ),
       );
-      // The reporter's entry and the readout it imports, as the run's build would keep them beside the suite's bundles.
-      workspace.write(
-        'tools/acceptance-display-reporter.ts',
-        readFileSync(
-          path.join(REPOSITORY_ROOT, 'tools', 'acceptance-display-reporter.ts'),
-          'utf8',
-        ),
-      );
-      workspace.write(
-        'tests/acceptance/windows/display.ts',
-        readFileSync(
-          path.join(REPOSITORY_ROOT, 'tests/acceptance/windows/display.ts'),
-          'utf8',
-        ),
-      );
       workspace.write('tests/acceptance/suite-local/window.test.ts', '');
       workspace.write('tests/acceptance/suite-remote/window.test.ts', '');
       workspace.write('tests/acceptance/suite-reconnect/window.test.ts', '');
