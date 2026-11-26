@@ -1,10 +1,13 @@
 /**
  * @fileoverview The management routes of the relay brief's section 2, over the store: tunnels, their names, ports and
- * hosts' endpoints, for the caller's own tunnels only. A request reaches the routes parsed; the server reads and writes
- * the wire. Sources: `[dev-tunnels] rs/src/management/http_client.rs:38-42,61-307` and `[cli] tunnels/dev_tunnels.rs`.
+ * hosts' endpoints. An account reaches its own tunnels only; a tunnel token reaches its own tunnel only, as far as its
+ * scope grants (section 4). A request reaches the routes parsed; the server reads and writes the wire. Sources:
+ * `[dev-tunnels] rs/src/management/http_client.rs:38-42,61-307` and `[cli] tunnels/dev_tunnels.rs`.
  */
 
+import {randomBytes} from 'node:crypto';
 import {problem, Refused, success, type Answer} from './problem.ts';
+import {isTokenScope, type TokenScope, type Tokens} from './auth/tokens.ts';
 import type {RelayConfig} from './config.ts';
 import {areLabels, isTunnelId, isTunnelName, MAX_DESCRIPTION} from './names.ts';
 import type {Store, TunnelRecord} from './store.ts';
@@ -12,15 +15,27 @@ import type {Store, TunnelRecord} from './store.ts';
 /** The only API version the relay serves (`http_client.rs:44,684-685`). */
 export const API_VERSION = '2023-09-27-preview';
 
-/** The account a request acts for: a GitHub account, by its numeric id. */
-export interface Caller {
+/** A request of a GitHub account on the allowlist, by its numeric id. */
+interface AccountCaller {
+  kind: 'account';
   id: number;
   login: string;
 }
 
+/** A request with a tunnel token: one tunnel, and what the token's scope grants on it. */
+interface TunnelCaller {
+  kind: 'tunnel';
+  tunnelId: string;
+  scope: TokenScope;
+}
+
+/** Who a request acts for. */
+export type Caller = AccountCaller | TunnelCaller;
+
 /** Who a request is from: its caller, or the answer that refuses it. */
 export type Authenticate = (
   headers: Readonly<Record<string, string | undefined>>,
+  address: string,
 ) => Promise<Caller | Answer>;
 
 /** A request as the routes take it, its body read. */
@@ -29,6 +44,8 @@ interface Request {
   path: string;
   query: URLSearchParams;
   headers: Readonly<Record<string, string | undefined>>;
+  /** The address the request came from, as its socket gives it. */
+  address: string;
   body: unknown;
 }
 
@@ -43,8 +60,16 @@ export interface RouteContext {
   store: Store;
   config: RelayConfig;
   authenticate: Authenticate;
+  tokens: Tokens;
   /** Hears an error a route threw, which the caller's answer doesn't carry. */
   report(error: unknown): void;
+  legs: TunnelLegs;
+}
+
+/** The legs of the relay, as a tunnel's deletion closes them. */
+export interface TunnelLegs {
+  /** Closes the legs of tunnel `tunnelId`. */
+  closeTunnel(tunnelId: string): void;
 }
 
 /** Whether `value` is a TCP port number: an integer from 1 to 65535. */
@@ -83,6 +108,8 @@ const READ_ONLY = new Set([
 
 const CHECK_NAME = ':checkNameAvailability';
 
+const NOT_GRANTED = 'This token does not grant that.';
+
 /** Answers `request`. */
 export async function route(
   incoming: IncomingRequest,
@@ -99,8 +126,8 @@ export async function route(
   if ((parts[0] !== 'tunnels' || parts.length > 4) && !clustersAsked) {
     return problem(404, 'There is no such route.');
   }
-  const caller = await context.authenticate(incoming.headers);
-  if (!('id' in caller)) {
+  const caller = await context.authenticate(incoming.headers, incoming.address);
+  if ('status' in caller) {
     return caller;
   }
   let body: unknown;
@@ -119,28 +146,20 @@ export async function route(
       : problem(404, 'There is no such route.');
   }
   const [, tunnelPart, section, item] = parts;
-  if (tunnelPart === undefined) {
-    return request.method === 'GET'
-      ? listTunnels(request.query, caller, context)
-      : problem(404, 'There is no such route.');
-  }
-  if (tunnelPart.endsWith(CHECK_NAME) && section === undefined) {
-    return request.method === 'GET'
-      ? success(
-          nameAvailable(
-            tunnelPart.slice(0, -CHECK_NAME.length),
-            caller,
-            context,
-          ),
-        )
-      : problem(404, 'There is no such route.');
+  if (tunnelPart === undefined || tunnelPart.endsWith(CHECK_NAME)) {
+    return caller.kind === 'account'
+      ? accountRoute(request, tunnelPart, section, caller, context)
+      : problem(403, NOT_GRANTED);
   }
   if (section === undefined) {
     return tunnelRoute(request, tunnelPart.toLowerCase(), caller, context);
   }
-  const tunnel = ownTunnel(tunnelPart.toLowerCase(), caller, context);
+  const tunnel = callersTunnel(tunnelPart.toLowerCase(), caller, context);
   if (tunnel === undefined) {
     return problem(404, 'There is no such tunnel.');
+  }
+  if (!granted(caller, section, request.method)) {
+    return problem(403, NOT_GRANTED);
   }
   if (section === 'endpoints' && item !== undefined) {
     return endpointRoute(request, tunnel, item, context);
@@ -151,10 +170,53 @@ export async function route(
   return problem(404, 'There is no such route.');
 }
 
+/** The routes only an account reaches: its list of tunnels and the name check. */
+function accountRoute(
+  request: Request,
+  tunnelPart: string | undefined,
+  section: string | undefined,
+  caller: AccountCaller,
+  context: RouteContext,
+): Answer {
+  if (request.method !== 'GET' || section !== undefined) {
+    return problem(404, 'There is no such route.');
+  }
+  return tunnelPart === undefined
+    ? listTunnels(request.query, caller, context)
+    : success(
+        nameAvailable(tunnelPart.slice(0, -CHECK_NAME.length), caller, context),
+      );
+}
+
+/** Whether a tunnel token's scope grants `method` on `section`; an account's own tunnel grants everything. */
+function granted(caller: Caller, section: string, method: string): boolean {
+  if (caller.kind === 'account') {
+    return true;
+  }
+  if (section === 'endpoints') {
+    return caller.scope === 'host';
+  }
+  return method === 'GET' || caller.scope !== 'connect';
+}
+
+/** The tunnel `idOrName` the caller may reach: an account's own, or a tunnel token's own by id. */
+function callersTunnel(
+  idOrName: string,
+  caller: Caller,
+  context: RouteContext,
+): TunnelRecord | undefined {
+  if (caller.kind === 'account') {
+    return ownTunnel(idOrName, caller, context);
+  }
+  return idOrName === caller.tunnelId
+    ? context.store.tunnelById(idOrName)
+    : undefined;
+}
+
 /** The caller's tunnel with id or name `idOrName`, or none: another account's tunnel is not found. */
 function ownTunnel(
   idOrName: string,
-  caller: Caller,
+  caller: AccountCaller,
   {store}: RouteContext,
 ): TunnelRecord | undefined {
   const byId = store.tunnelById(idOrName);
@@ -166,7 +228,7 @@ function ownTunnel(
 
 function nameAvailable(
   name: string,
-  caller: Caller,
+  caller: AccountCaller,
   {store}: RouteContext,
 ): boolean {
   const lower = name.toLowerCase();
@@ -180,7 +242,7 @@ function nameAvailable(
 /** The caller's tunnels in the by-region shape (`contracts/tunnel_list_by_region_response.rs:11-18`). */
 function listTunnels(
   query: URLSearchParams,
-  caller: Caller,
+  caller: AccountCaller,
   context: RouteContext,
 ): Answer {
   const wanted = (query.get('labels') ?? '')
@@ -200,7 +262,7 @@ function listTunnels(
         : wanted.some(label => labels.includes(label));
     })
     .slice(0, Number.isInteger(limit) && limit >= 0 ? limit : undefined)
-    .map(tunnel => tunnelView(tunnel, query, context));
+    .map(tunnel => tunnelView(tunnel, query, context, true));
   return success({
     value: [
       {
@@ -218,18 +280,24 @@ function tunnelRoute(
   caller: Caller,
   context: RouteContext,
 ): Answer {
-  if (request.method === 'PUT') {
+  if (caller.kind === 'tunnel' && request.method !== 'GET') {
+    return problem(403, NOT_GRANTED);
+  }
+  if (request.method === 'PUT' && caller.kind === 'account') {
     return putTunnel(request, idOrName, caller, context);
   }
-  const tunnel = ownTunnel(idOrName, caller, context);
+  const tunnel = callersTunnel(idOrName, caller, context);
   if (tunnel === undefined) {
     return problem(404, 'There is no such tunnel.');
   }
   if (request.method === 'GET') {
-    return success(tunnelView(tunnel, request.query, context));
+    return success(
+      tunnelView(tunnel, request.query, context, caller.kind === 'account'),
+    );
   }
   if (request.method === 'DELETE') {
     context.store.deleteTunnel(tunnel.id);
+    context.legs.closeTunnel(tunnel.id);
     return success();
   }
   return problem(404, 'There is no such route.');
@@ -239,7 +307,7 @@ function tunnelRoute(
 function putTunnel(
   request: Request,
   tunnelId: string,
-  caller: Caller,
+  caller: AccountCaller,
   context: RouteContext,
 ): Answer {
   if (!isTunnelId(tunnelId)) {
@@ -278,6 +346,7 @@ function putTunnel(
       id: tunnelId,
       owner: caller.id,
       name,
+      generation: existing?.generation ?? randomBytes(16).toString('base64url'),
       fields: {...existing?.fields, ...writable(body)},
     };
     store.putTunnel(record);
@@ -290,7 +359,7 @@ function putTunnel(
         });
       }
     }
-    return success(tunnelView(record, request.query, context));
+    return success(tunnelView(record, request.query, context, true));
   });
 }
 
@@ -324,7 +393,25 @@ function fieldProblem(body: Record<string, unknown>): Answer | undefined {
   ) {
     return problem(400, 'The tunnel description is not valid.');
   }
-  return undefined;
+  return accessProblem(body);
+}
+
+/**
+ * The answer that refuses public access, or none: an `Anonymous` entry that allows (section 4). `[cli]`'s private
+ * ports send an `Anonymous` deny entry (`dev_tunnels.rs:1288-1317`), which is kept; other entries are kept and grant
+ * nothing in release 1.
+ */
+function accessProblem(body: Record<string, unknown>): Answer | undefined {
+  const entries = objectOf(body.accessControl)?.entries;
+  const allowsAnyone =
+    Array.isArray(entries) &&
+    entries.some(entry => {
+      const fields = objectOf(entry);
+      return fields?.type === 'Anonymous' && fields.isDeny !== true;
+    });
+  return allowsAnyone
+    ? problem(400, "Public access isn't offered.")
+    : undefined;
 }
 
 function writable(body: Record<string, unknown>): Record<string, unknown> {
@@ -387,6 +474,10 @@ function portRoute(
     if (body === undefined) {
       return problem(400, 'The body must be a port.');
     }
+    const refused = accessProblem(body);
+    if (refused !== undefined) {
+      return refused;
+    }
     if (
       existing?.protocol !== undefined &&
       body.protocol !== undefined &&
@@ -411,12 +502,19 @@ function portRoute(
   return problem(404, 'There is no such route.');
 }
 
-/** A tunnel as the clients read it: `clusterId` and `tunnelId` always, ports when asked for, every endpoint. */
+/**
+ * A tunnel as the clients read it: `clusterId` and `tunnelId` always, ports when asked for, every endpoint, and for
+ * its owner a token per scope asked for in `tokenScopes` that the relay issues.
+ */
 function tunnelView(
   tunnel: TunnelRecord,
   query: URLSearchParams,
-  {store, config}: RouteContext,
+  {store, config, tokens}: RouteContext,
+  owner: boolean,
 ): Record<string, unknown> {
+  const scopes = owner
+    ? (query.get('tokenScopes') ?? '').split(',').filter(isTokenScope)
+    : [];
   return {
     ...tunnel.fields,
     tunnelId: tunnel.id,
@@ -432,6 +530,16 @@ function tunnelView(
     endpoints: store
       .endpointsOf(tunnel.id)
       .map(endpoint => endpointView(tunnel.id, endpoint, config)),
+    ...(scopes.length === 0
+      ? {}
+      : {
+          accessTokens: Object.fromEntries(
+            scopes.map(scope => [
+              scope,
+              tokens.issue(tunnel, config.clusterId, scope),
+            ]),
+          ),
+        }),
   };
 }
 

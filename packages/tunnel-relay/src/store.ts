@@ -1,7 +1,9 @@
 /**
  * @fileoverview The relay's store: one SQLite file (`node:sqlite`) holding the tunnels, each owned by a GitHub account's
  * numeric id, with their ports and their hosts' endpoints. A name is unique per owner and held in lower case; a rename
- * keeps the id. Fields the routes do not interpret are kept as the client sent them, as JSON.
+ * keeps the id. A tunnel's generation is set when it is created and kept by every update, so a token minted for it
+ * names it and no later tunnel with the same id. Fields the routes do not interpret are kept as the client sent them,
+ * as JSON.
  */
 
 import {DatabaseSync} from 'node:sqlite';
@@ -12,6 +14,8 @@ export interface TunnelRecord {
   owner: number;
   /** The name in lower case, or the empty string for none. */
   name: string;
+  /** Random, new on every create and kept by every update. */
+  generation: string;
   fields: Record<string, unknown>;
 }
 
@@ -22,7 +26,7 @@ type Row = Record<string, unknown>;
 export class Store {
   private readonly database: DatabaseSync;
 
-  /** Opens the store in `file`, creating its tables when they are missing. */
+  /** Opens the store in `file`, creating its tables when they are missing; a file without generations is refused. */
   constructor(file: string) {
     this.database = new DatabaseSync(file);
     this.database.exec(`
@@ -31,6 +35,7 @@ export class Store {
         id TEXT PRIMARY KEY,
         owner INTEGER NOT NULL,
         name TEXT NOT NULL,
+        generation TEXT NOT NULL,
         fields TEXT NOT NULL
       );
       CREATE UNIQUE INDEX IF NOT EXISTS named ON tunnels (owner, name) WHERE name <> '';
@@ -47,6 +52,16 @@ export class Store {
         PRIMARY KEY (tunnel, endpoint)
       );
     `);
+    const columns = this.database
+      .prepare('SELECT name FROM pragma_table_info(?)')
+      .all('tunnels')
+      .map(column => column.name);
+    if (!columns.includes('generation')) {
+      this.database.close();
+      throw new Error(
+        `The relay store ${file} was made before tunnels had generations: delete it, and the relay makes a new one.`,
+      );
+    }
   }
 
   /** Runs `work` in one transaction, rolled back when it throws. */
@@ -66,10 +81,16 @@ export class Store {
   putTunnel(record: TunnelRecord): void {
     this.database
       .prepare(
-        `INSERT INTO tunnels (id, owner, name, fields) VALUES (?, ?, ?, ?)
+        `INSERT INTO tunnels (id, owner, name, generation, fields) VALUES (?, ?, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET name = excluded.name, fields = excluded.fields`,
       )
-      .run(record.id, record.owner, record.name, JSON.stringify(record.fields));
+      .run(
+        record.id,
+        record.owner,
+        record.name,
+        record.generation,
+        JSON.stringify(record.fields),
+      );
   }
 
   /** The tunnel with id `tunnelId`, or none. */
@@ -199,6 +220,7 @@ function tunnelOf(stored: Row): TunnelRecord {
     id: String(stored.id),
     owner: Number(stored.owner),
     name: String(stored.name),
+    generation: String(stored.generation),
     fields: fieldsOf(stored),
   };
 }

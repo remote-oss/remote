@@ -16,6 +16,12 @@ export interface RelayConfig {
   storeFile: string;
   /** The one cluster of release 1. */
   clusterId: string;
+  /** The base address of the GitHub API that tells who a token belongs to. */
+  githubApi: string;
+  /** The file of admitted GitHub account ids. */
+  allowlistFile: string;
+  /** The file of the key the relay signs its tokens with. */
+  tokenKeyFile: string;
 }
 
 /** Reads the settings from `environment`, or throws naming the first that is missing or invalid. */
@@ -44,5 +50,8 @@ export function configOf(
     keyFile: valueOf('TLS_KEY'),
     storeFile: valueOf('RELAY_STORE'),
     clusterId,
+    githubApi: environment.RELAY_GITHUB_API ?? 'https://api.github.com',
+    allowlistFile: valueOf('RELAY_ALLOWLIST'),
+    tokenKeyFile: valueOf('RELAY_TOKEN_KEY'),
   };
 }

@@ -1,6 +1,7 @@
 /**
  * @fileoverview What the editor command-line program's `serverlog` lines mean for the install progress: the line
- * that starts it, the percentage, and the lines after which it stays at 100 %.
+ * that starts it, the percentage, and the lines after which it stays at 100 %. And where the program keeps a server,
+ * which tells before a `serve` whether it has one to fetch.
  */
 
 /** What a `serverlog` line changes in the install progress. */
@@ -32,4 +33,22 @@ export function s045EventOf(line: {
   return HOLD_LINES.some(pattern => pattern.test(text))
     ? {kind: 'hold'}
     : undefined;
+}
+
+/** The folder name of each quality the program reads from a `serve` by name; it reads any other as insiders. */
+const QUALITY_FOLDERS: Readonly<Record<string, string>> = {
+  stable: 'Stable',
+  exploration: 'Exploration',
+};
+
+/**
+ * The folder in which the program, with its data folder `cliDataFolder`, keeps the server of `commit` that a `serve`
+ * naming `quality` uses: `servers/<Quality>-<commit>`.
+ */
+export function cliServerFolderOf(
+  cliDataFolder: string,
+  quality: string,
+  commit: string,
+): string {
+  return `${cliDataFolder}/servers/${QUALITY_FOLDERS[quality] ?? 'Insiders'}-${commit}`;
 }
