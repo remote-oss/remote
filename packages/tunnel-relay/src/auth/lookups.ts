@@ -34,7 +34,7 @@ function groupsOf(address: string): number[] {
         ).toString(
           16,
         )}:${((Number(dotted[3]) << 8) | Number(dotted[4])).toString(16)}`;
-  const [head = '', tail] = text.split('::');
+  const [head, tail] = text.split('::') as [string, string | undefined];
   const front = head === '' ? [] : head.split(':');
   const back = tail === undefined || tail === '' ? [] : tail.split(':');
   const zeros = tail === undefined ? 0 : 8 - front.length - back.length;
@@ -50,7 +50,7 @@ function sourceOf(address: string): string {
   }
   const groups = groupsOf(address);
   if (groups.slice(0, 5).every(group => group === 0) && groups[5] === 0xffff) {
-    const [high = 0, rest = 0] = groups.slice(6);
+    const [high, rest] = groups.slice(6) as [number, number];
     return `${String(high >> 8)}.${String(high & 0xff)}.${String(rest >> 8)}.${String(rest & 0xff)}`;
   }
   return groups
@@ -86,7 +86,10 @@ export class LookupLimit {
     const window = this.windows.get(source);
     if (window === undefined) {
       if (this.windows.size >= SOURCES_MOST) {
-        this.windows.delete(this.oldest()?.[0] ?? '');
+        for (const oldest of this.windows.keys()) {
+          this.windows.delete(oldest);
+          break;
+        }
       }
       this.windows.set(source, {start: now, count: 1});
       return {kind: 'allowed'};
