@@ -34,7 +34,7 @@ import {
   dockerLines,
   removeClone,
 } from './volume-clones.ts';
-import {ALPINE_3_20} from './hub-images.ts';
+import {hubImage} from '../../../tools/hub-images.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -263,7 +263,9 @@ describe('The recovery container (card containers-160, part A)', function () {
     const [container] = await recoveryContainers(volume);
     await execFileAsync('docker', ['stop', String(container)]);
     const before = await inspected(String(container), '{{.Image}}');
-    await userSettings({'dev.containers.bootstrapImage': ALPINE_3_20});
+    await userSettings({
+      'dev.containers.bootstrapImage': hubImage('alpine:3.20'),
+    });
     await reachRecovery(repository.url, FIRST);
     deepStrictEqual(
       {
@@ -275,7 +277,7 @@ describe('The recovery container (card containers-160, part A)', function () {
           '-a',
           '-q',
           '--filter',
-          `ancestor=${ALPINE_3_20}`,
+          `ancestor=${hubImage('alpine:3.20')}`,
           '--filter',
           `label=vsch.local.volume=${volume}`,
         ),
@@ -301,7 +303,7 @@ describe('The recovery container (card containers-160, part A)', function () {
       `vsch.local.volume=${volume}`,
       '--label',
       'devcontainer.config_file=/other-root/vsch-other/recovery-volume/0/x/.devcontainer.json',
-      ALPINE_3_20,
+      hubImage('alpine:3.20'),
       'sleep',
       '1d',
     ]);

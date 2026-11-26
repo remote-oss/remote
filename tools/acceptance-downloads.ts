@@ -36,6 +36,7 @@ import {
   STAND_IN_CLI_SCRIPT,
 } from './acceptance-cli-editor.ts';
 import {type CommandRunner, checked} from './command-runner.ts';
+import {pinnedImage} from './hub-images.ts';
 
 /**
  * The VSCodium servers the download host serves: the release the client is pinned to, by platform, `alpine-<arch>`
@@ -1061,8 +1062,7 @@ export interface ClientReach {
 }
 
 /** The harness host's own base image, by its digest, where the name lima gives the client is resolved. */
-const LIMA_LOOKUP_IMAGE =
-  'alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8';
+const LIMA_LOOKUP_IMAGE = pinnedImage('alpine:3.22');
 
 /** An IPv4 address, as a lookup or a route prints it. */
 const IPV4_ADDRESS = /^\d{1,3}(?:\.\d{1,3}){3}$/u;

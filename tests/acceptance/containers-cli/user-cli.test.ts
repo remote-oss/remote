@@ -15,14 +15,9 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import {refreshCliBin} from '../../../packages/remote-containers/src/cli-bin/cli-bin.ts';
 import {nodeCliBinFs} from '../../../packages/remote-containers/src/cli-bin/node-cli-bin-fs.ts';
+import {hubImage} from '../../../tools/hub-images.ts';
 
-/**
- * Alpine 3.22 through Google's mirror of Docker Hub, which hosted runners are not limited on (an anonymous read of Docker
- * Hub itself answers 429 from a shared runner address), by the digest of its index that the run's tools already pin for
- * the same tag.
- */
-const ALPINE_3_22 =
-  'mirror.gcr.io/library/alpine@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8';
+const ALPINE_3_22 = hubImage('alpine:3.22');
 
 const execFileAsync = promisify(execFile);
 const PACKAGE = path.join(

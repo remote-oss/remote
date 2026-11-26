@@ -18,14 +18,9 @@ import {cliPathsOf} from '../../../packages/remote-containers/src/cli/cli-paths.
 import type {CliTarget} from '../../../packages/remote-containers/src/cli/cli-arguments.ts';
 import {nodeCliHost} from '../../../packages/remote-containers/src/cli/node-cli-host.ts';
 import {systemCliPorts} from '../../../packages/remote-containers/src/cli/node-cli-ports.ts';
+import {hubImage} from '../../../tools/hub-images.ts';
 
-/**
- * Alpine 3.22 through Google's mirror of Docker Hub, which hosted runners are not limited on (an anonymous read of Docker
- * Hub itself answers 429 from a shared runner address), by the digest of its index that the run's tools already pin for
- * the same tag.
- */
-const ALPINE_3_22 =
-  'mirror.gcr.io/library/alpine@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8';
+const ALPINE_3_22 = hubImage('alpine:3.22');
 
 const REPOSITORY_ROOT = path.join(import.meta.dirname, '..', '..', '..');
 const PACKAGE = path.join(REPOSITORY_ROOT, 'packages', 'remote-containers');
