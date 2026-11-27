@@ -2,7 +2,13 @@ import {deepStrictEqual} from 'node:assert';
 import {execChannelOver} from '../../src/exec/exec-channel.ts';
 import {k8sDialer, k8sExecCommands} from '../../src/attach/k8s-exec.ts';
 import type {K8sTarget} from '../../src/attach/k8s-payload.ts';
-import {endsWith, fakeEngine, scriptRequest as request} from './fake-engine.ts';
+import {JOINED_ERRORS, REPORT_PROCESS_ID} from 'lib-host';
+import {
+  endsWith,
+  fakeEngine,
+  SHELL_PROCESS_ID,
+  scriptRequest as request,
+} from './fake-engine.ts';
 
 const TARGET: K8sTarget = {
   context: 'kind-lab',
@@ -34,6 +40,46 @@ describe('the exec channel of a pod window (card containers-191)', () => {
           'sh',
         ],
         undefined,
+      ],
+    );
+  });
+
+  it('ruling-3269: a cancel ends the tree of the shell with the tree-kill script through a second kubectl exec, and the shell’s program starts with the joined streams and its id', async () => {
+    const engine = fakeEngine(process => {
+      process.print('ready\n');
+    });
+    const controller = new AbortController();
+    engine.answer = {kind: 'ran', status: 0, stdout: '', stderr: ''};
+    await execChannelOver(engine, k8sExecCommands(TARGET)).runScript(
+      request({cancellation: controller.signal}),
+      () => {
+        controller.abort();
+      },
+    );
+    deepStrictEqual(
+      [
+        engine.processes[0]?.argv
+          .at(-1)
+          ?.startsWith(JOINED_ERRORS + REPORT_PROCESS_ID),
+        engine.runs[0]?.slice(0, 7),
+        engine.runs[0]?.slice(7, 9),
+        engine.runs[0]?.at(-2),
+        engine.runs[0]?.at(-1),
+      ],
+      [
+        true,
+        [
+          'exec',
+          '-i',
+          '--context=kind-lab',
+          '--namespace=default',
+          'web-1',
+          '--container=app',
+          '--',
+        ],
+        ['sh', '-c'],
+        'tree-kill',
+        String(SHELL_PROCESS_ID),
       ],
     );
   });

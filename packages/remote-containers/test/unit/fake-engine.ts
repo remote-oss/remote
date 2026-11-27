@@ -4,7 +4,7 @@
  */
 
 import {PassThrough, Writable} from 'node:stream';
-import type {ScriptRequest} from 'lib-host';
+import {JOINED_ERRORS, REPORT_PROCESS_ID, type ScriptRequest} from 'lib-host';
 import type {
   EngineHost,
   EngineOptions,
@@ -12,6 +12,9 @@ import type {
   EngineRunOutcome,
   EngineSpawn,
 } from '../../src/engine/engine-host.ts';
+
+/** The process id the fake shell of a script tells. */
+export const SHELL_PROCESS_ID = 4242;
 
 /** What a test sees of one spawned process. */
 export interface FakeProcess {
@@ -21,6 +24,8 @@ export interface FakeProcess {
   stdin(): Buffer;
   /** Settles when stdin has ended. */
   stdinEnded: Promise<void>;
+  /** The size of each write to stdin, in the order made. */
+  writeSizes: number[];
   /** The number of writes that said false, and the number of drains told. */
   pressure: {fulls: number; drains: number};
   killed: boolean;
@@ -55,6 +60,7 @@ function fakeProcess(
   options: EngineOptions,
 ): {handle: FakeProcess; process: EngineProcess} {
   const chunks: Buffer[] = [];
+  const writeSizes: number[] = [];
   const pressure = {fulls: 0, drains: 0};
   const stdout = new PassThrough();
   const stderr = new PassThrough();
@@ -67,6 +73,7 @@ function fakeProcess(
     highWaterMark: 1,
     write: (chunk: Buffer, encoding, done) => {
       chunks.push(chunk);
+      writeSizes.push(chunk.length);
       if (!stalled) {
         setImmediate(done);
       }
@@ -103,6 +110,7 @@ function fakeProcess(
     environment: options.environment,
     stdin: () => Buffer.concat(chunks),
     stdinEnded,
+    writeSizes,
     pressure,
     killed: false,
     print: text => {
@@ -145,6 +153,14 @@ export function fakeEngine(...plans: SpawnPlan[]): FakeEngine {
     }
     const {handle, process} = fakeProcess(argv, options);
     processes.push(handle);
+    // A shell that runs a script tells its process id before it reads anything.
+    const silent = (plan as {silent?: boolean} | undefined)?.silent === true;
+    if (
+      !silent &&
+      argv.some(word => word.startsWith(JOINED_ERRORS + REPORT_PROCESS_ID))
+    ) {
+      handle.print(`${String(SHELL_PROCESS_ID)}\n`);
+    }
     void plan?.(handle);
     return Promise.resolve({kind: 'spawned', process});
   }
@@ -162,6 +178,13 @@ export function fakeEngine(...plans: SpawnPlan[]): FakeEngine {
     spawn,
   };
   return engine;
+}
+
+/** The script `script`, run by a shell that never tells its process id. */
+export function withoutShellId(script: ProcessScript): ProcessScript {
+  return Object.assign((process: FakeProcess) => script(process), {
+    silent: true,
+  });
 }
 
 /** A script that ends when stdin does, with `status`, after printing `error` on stderr when there is one. */

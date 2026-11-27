@@ -5,7 +5,7 @@
  */
 
 import type {Dialer} from 'lib-forwarding';
-import {preludeCommand} from 'lib-host';
+import {preludeCommand, TREE_KILL_SCRIPT} from 'lib-host';
 import type {EngineHost} from '../engine/engine-host.ts';
 import type {ExecCommands} from '../exec/exec-channel.ts';
 import {execDialerOver} from '../exec/exec-dialer.ts';
@@ -32,8 +32,16 @@ export function kubectlExecArguments(
 export function k8sExecCommands(target: K8sTarget): ExecCommands {
   return {
     identity: `${target.namespace}/${target.podname}/${target.name}`,
-    script: (names, count) =>
-      kubectlExecArguments(target, ['sh', '-c', preludeCommand(count)]),
+    script: (names, count, front) =>
+      kubectlExecArguments(target, ['sh', '-c', front + preludeCommand(count)]),
+    treeKill: processId =>
+      kubectlExecArguments(target, [
+        'sh',
+        '-c',
+        TREE_KILL_SCRIPT,
+        'tree-kill',
+        String(processId),
+      ]),
     copy: directory =>
       kubectlExecArguments(target, ['tar', '-x', '-f', '-', '-C', directory]),
     environment: 'script',

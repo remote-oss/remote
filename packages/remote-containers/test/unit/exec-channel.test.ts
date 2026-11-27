@@ -6,8 +6,16 @@ import {hostPathOf} from 'lib-host';
 import type {EngineRunOutcome} from '../../src/engine/engine-host.ts';
 import {VOLUME_FOLDERS_SCRIPT} from '../../src/connect/volume-folders.ts';
 import {execChannelOf} from '../../src/exec/exec-channel.ts';
+import {treeKillArguments} from '../../src/exec/exec-arguments.ts';
 import {ustarHeader, ustarTrailer} from '../../src/exec/tar-stream.ts';
-import {endsWith, fakeEngine, scriptRequest as request} from './fake-engine.ts';
+import {
+  endsWith,
+  fakeEngine,
+  type FakeProcess,
+  SHELL_PROCESS_ID,
+  scriptRequest as request,
+  withoutShellId,
+} from './fake-engine.ts';
 
 const NEVER = new AbortController().signal;
 
@@ -145,7 +153,127 @@ describe('the exec channel (card containers-02)', () => {
     );
   });
 
-  it('contracts §1: a script of 7 UTF-8 bytes is given exactly, with nothing added, then the input, and its byte count is in the arguments', async () => {
+  /** How a run of the default script over `engine` ended when it was cancelled at its first line. */
+  async function cancelledAtFirstLine(
+    engine: ReturnType<typeof fakeEngine>,
+  ): Promise<string | false> {
+    const controller = new AbortController();
+    const outcome = await execChannelOf(engine, 'c1', 'node').runScript(
+      request({cancellation: controller.signal}),
+      () => {
+        controller.abort();
+      },
+    );
+    return outcome.kind === 'failed' && outcome.failure.kind;
+  }
+
+  /** A script that prints `ready` and stays up until the client is ended. */
+  function readyAndWaiting(process: FakeProcess): void {
+    process.print('ready\n');
+  }
+
+  it('ruling-3269 rule 1: a cancel runs lib-host’s tree-kill script for the shell that told its id, through a second exec, and ends the first client only after it', async () => {
+    const engine = fakeEngine(readyAndWaiting);
+    engine.answer = {kind: 'ran', status: 0, stdout: '', stderr: ''};
+    const killedAtTreeKill: boolean[] = [];
+    const original = engine.run.bind(engine);
+    // eslint-disable-next-line id-length -- the port's method is named run
+    engine.run = (argv, input, options) => {
+      killedAtTreeKill.push(engine.processes[0]?.killed ?? true);
+      return original(argv, input, options);
+    };
+    const outcome = await cancelledAtFirstLine(engine);
+    deepStrictEqual(
+      [outcome, engine.runs, killedAtTreeKill, engine.processes[0]?.killed],
+      [
+        'cancelled',
+        [treeKillArguments('c1', 'node', SHELL_PROCESS_ID)],
+        [false],
+        true,
+      ],
+    );
+  });
+
+  it('ruling-3269 rule 1: a signal shared by several runs, aborted after they have finished, runs no second exec for any of them', async () => {
+    const shared = new AbortController();
+    const engine = fakeEngine(endsWith(0), endsWith(0), endsWith(0));
+    engine.answer = {kind: 'ran', status: 0, stdout: '', stderr: ''};
+    const channel = execChannelOf(engine, 'c1', 'node');
+    for (let count = 0; count < 3; count += 1) {
+      await channel.runScript(
+        request({cancellation: shared.signal}),
+        () => undefined,
+      );
+    }
+    shared.abort();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    deepStrictEqual(engine.runs, []);
+  });
+
+  it('ruling-3269 rule 1: a cancel that arrives before the shell has told its id ends the client alone, with no second exec', async () => {
+    const engine = fakeEngine();
+    const controller = new AbortController();
+    const running = execChannelOf(engine, 'c1', 'node').runScript(
+      request({cancellation: controller.signal}),
+      () => undefined,
+    );
+    controller.abort();
+    const outcome = await running;
+    deepStrictEqual(
+      [
+        outcome.kind === 'failed' && outcome.failure.kind,
+        engine.runs,
+        engine.processes[0]?.killed,
+      ],
+      ['cancelled', [], true],
+    );
+  });
+
+  it('ruling-3269 rule 1: a second exec that fails leaves the tree, and the run still reports its cancel after ending the client', async () => {
+    const engine = fakeEngine(readyAndWaiting);
+    const outcome = await cancelledAtFirstLine(engine);
+    deepStrictEqual(
+      [outcome, engine.processes[0]?.killed],
+      ['cancelled', true],
+    );
+  });
+
+  it('ruling-3269: the shell’s id is not a line of the script, a later line that looks like one is, and a character split across two chunks is whole', async () => {
+    const engine = fakeEngine(async process => {
+      process.print('777\n');
+      process.print(Buffer.from([0xc3]));
+      process.print(Buffer.from([0xa9, 0x0a]));
+      await process.stdinEnded;
+      process.exit(0);
+    });
+    const lines: string[] = [];
+    await execChannelOf(engine, 'c1', 'node').runScript(request(), line => {
+      lines.push(line);
+    });
+    deepStrictEqual(lines, ['777', 'é']);
+  });
+
+  it('ruling-3269: a shell that tells no id is given neither its program nor its input, and its input is closed when it ends', async () => {
+    const written: number[] = [];
+    const engine = fakeEngine(
+      withoutShellId(async process => {
+        process.print('x\n');
+        await new Promise(resolve => setTimeout(resolve, 50));
+        written.push(process.stdin().length);
+        process.exit(0);
+      }),
+    );
+    const lines: string[] = [];
+    await execChannelOf(engine, 'c1', 'node').runScript(
+      request({script: 'echo hi', input: {kind: 'text', text: 'input'}}),
+      line => {
+        lines.push(line);
+      },
+    );
+    deepStrictEqual([lines, written], [['x'], [0]]);
+  });
+
+  it('contracts §1: a script of 7 UTF-8 bytes is given exactly, with nothing added, then the input, and its byte count is in the arguments after the front that joins the streams and tells the shell’s id', async () => {
     const engine = fakeEngine(endsWith(0));
     await execChannelOf(engine, 'c1', 'node').runScript(
       request({script: 'echo é', input: {kind: 'text', text: 'x'}}),
@@ -154,7 +282,10 @@ describe('the exec channel (card containers-02)', () => {
     const [spawned] = engine.processes;
     deepStrictEqual(
       [spawned?.argv.at(-1), spawned?.stdin().toString()],
-      ['eval "$(dd bs=1 count=7 2>/dev/null)"', 'echo éx'],
+      [
+        'exec 2>&1; printf "%s\\n" "$$"; eval "$(dd bs=1 count=7 2>/dev/null)"',
+        'echo éx',
+      ],
     );
   });
 

@@ -7,11 +7,16 @@ import {once} from 'node:events';
 import {access, stat} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
 import path from 'node:path';
+import {StringDecoder} from 'node:string_decoder';
 import {
+  BoundedLines,
   type CopyOutcome,
   type CopyRequest,
   failFrom,
   type HostChannel,
+  JOINED_ERRORS,
+  PROCESS_ID,
+  REPORT_PROCESS_ID,
   type ScriptOutcome,
   type ScriptRequest,
 } from 'lib-host';
@@ -20,6 +25,7 @@ import {
   copyArguments,
   isEnvironmentName,
   scriptArguments,
+  treeKillArguments,
 } from './exec-arguments.ts';
 import {exitOutcome} from './exec-failures.ts';
 import {lineSplitter} from '../line-splitter.ts';
@@ -27,6 +33,12 @@ import {ustarHeader, ustarTrailer} from './tar-stream.ts';
 
 /** How much of a file goes into one write. */
 const PIECE = 64 * 1024;
+
+/** The front of the container shell's program: its standard error joined to its output, then its own process id on a line. */
+const SHELL_FRONT = JOINED_ERRORS + REPORT_PROCESS_ID;
+
+/** How long the exec that ends a cancelled script's tree may take, in milliseconds: longer than the tree-kill script's own 5 s. */
+const TREE_KILL_MILLISECONDS = 15_000;
 
 /** How many of stderr's last lines a failure keeps. */
 const STDERR_LINES = 20;
@@ -133,11 +145,14 @@ async function stoppedDuring(
 export interface ExecCommands {
   /** The identity the channel reports: the container's id, or the pod's address. */
   identity: string;
-  /** The arguments that run the prelude, which evaluates the first `scriptByteCount` bytes of standard input. */
+  /** The arguments that run `front` and then the prelude, which evaluates the first `scriptByteCount` bytes of standard input. */
   script(
     environmentNames: readonly string[],
     scriptByteCount: number,
+    front: string,
   ): string[];
+  /** The arguments that end the process tree of the shell `processId` in the target. */
+  treeKill(processId: number): string[];
   /** The arguments that unpack a tar archive from standard input into `directory`. */
   copy(directory: string): string[];
   /**
@@ -161,7 +176,9 @@ function dockerExecCommands(
 ): ExecCommands {
   return {
     identity: containerId,
-    script: (names, count) => scriptArguments(containerId, user, names, count),
+    script: (names, count, front) =>
+      scriptArguments(containerId, user, names, count, front),
+    treeKill: processId => treeKillArguments(containerId, user, processId),
     copy: directory => copyArguments(containerId, user, directory),
     environment: 'process',
     stopped: (status, stderr, cancellation) =>
@@ -190,6 +207,30 @@ function exportLines(environment: Readonly<Record<string, string>>): string {
       ([name, value]) => `export ${name}='${value.replaceAll("'", "'\\''")}'\n`,
     )
     .join('');
+}
+
+/**
+ * Ends the process tree of the shell `shellId` in the target, through a second exec that runs lib-host's tree-kill
+ * script, and waits for it within a bound; a shell that has told no id has run nothing, and a failing exec leaves the
+ * tree, which the cancel still reports.
+ */
+async function endTree(
+  engine: EngineHost,
+  commands: ExecCommands,
+  shellId: number | undefined,
+): Promise<void> {
+  if (shellId === undefined) {
+    return;
+  }
+  await engine
+    .run(
+      commands.treeKill(shellId),
+      {kind: 'none'},
+      {
+        cancellation: AbortSignal.timeout(TREE_KILL_MILLISECONDS),
+      },
+    )
+    .catch(() => undefined);
 }
 
 /** The host channel over `commands`, run through `engine`. */
@@ -234,42 +275,78 @@ export function execChannelOver(
         : request.script,
       'utf8',
     );
+    const own = new AbortController();
     const spawned = await engine.spawn(
-      commands.script(names, scriptBytes.length),
+      commands.script(names, scriptBytes.length, SHELL_FRONT),
       {
         ...(commands.environment === 'process'
           ? {environment: request.environment}
           : {}),
-        cancellation: request.cancellation,
+        cancellation: own.signal,
       },
     );
     if (spawned.kind === 'failed') {
       return failedWith('spawnFailed', spawned.detail);
     }
     const {process} = spawned;
-    const splitter = lineSplitter(line => {
-      if (!isAborted(request.cancellation)) {
+    let shellId: number | undefined;
+    const report: {tell: (processId: number | undefined) => void} = {
+      tell: () => undefined,
+    };
+    const reported = new Promise<number | undefined>(resolve => {
+      report.tell = resolve;
+    });
+    const decoder = new StringDecoder('utf8');
+    const lines = new BoundedLines(line => {
+      if (shellId === undefined && PROCESS_ID.test(line)) {
+        shellId = Number(line);
+        report.tell(shellId);
+      } else if (!isAborted(request.cancellation)) {
         onLine(line);
       }
     });
     process.stdout.on('data', (chunk: Buffer) => {
-      splitter.push(chunk);
+      lines.push(decoder.write(chunk));
     });
     const stderr = stderrTail(process);
     process.stdin.on('error', () => undefined);
-    const feeding = (async (): Promise<void> => {
-      await write(process, scriptBytes);
-      if (request.input.kind === 'text') {
-        await write(process, request.input.text);
-      } else {
-        await writeFile(process, request.input.localFile);
-      }
-      process.stdin.end();
-    })().catch(() => undefined);
-    const status = await process.exited;
-    await feeding;
-    splitter.flush();
+    // The shell gets its program only once it has told its process id, so a cancel always has a tree to end.
+    const feeding = reported
+      .then(async known => {
+        if (known === undefined || isAborted(request.cancellation)) {
+          process.stdin.end();
+          return;
+        }
+        await write(process, scriptBytes);
+        if (request.input.kind === 'text') {
+          await write(process, request.input.text);
+        } else {
+          await writeFile(process, request.input.localFile);
+        }
+        process.stdin.end();
+      })
+      .catch(() => undefined);
+    let ending: Promise<void> | undefined;
+    function endScript(): void {
+      ending = endTree(engine, commands, shellId).then(() => {
+        own.abort();
+      });
+    }
     if (isAborted(request.cancellation)) {
+      // The request was cancelled while the shell was starting, before it could tell its id.
+      endScript();
+    } else {
+      request.cancellation.addEventListener('abort', endScript, {once: true});
+    }
+    const status = await process.exited;
+    // A signal shared by many runs must not end the tree of a shell that has ended.
+    request.cancellation.removeEventListener('abort', endScript);
+    report.tell(undefined);
+    await feeding;
+    lines.push(decoder.end());
+    lines.flush();
+    if (isAborted(request.cancellation)) {
+      await ending;
       return failedWith('cancelled', 'cancelled while the script ran');
     }
     const tail = stderr();

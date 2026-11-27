@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import type {ChannelFailureKind} from 'lib-host';
@@ -7,14 +7,19 @@ import {
   channelContractCases,
   type ChannelHarness,
   type ContractScenario,
+  LARGE_COPY_LENGTH,
+  LONG_LINE_LENGTH,
+  type StagedChannel,
 } from 'lib-host/testing/channel-contract';
-import {execChannelOf} from '../../src/exec/exec-channel.ts';
+import {localProcesses} from 'lib-host/testing/local-processes';
+import {execChannelOf, execChannelOver} from '../../src/exec/exec-channel.ts';
 import {
   fakeEngine,
   type FakeProcess,
   type ProcessScript,
   type SpawnPlan,
 } from './fake-engine.ts';
+import {localCommandsOver, localEngine} from './local-engine.ts';
 
 /** The script every staged run is given; the process reads it back before the input. */
 const STAGED_SCRIPT = 'scenario';
@@ -102,8 +107,40 @@ const PLANS: {
   detachesThenWaits: () => [],
   printsBothStreams: () => [],
   printsLongLine: () => [],
-  copiesLarge: () => [],
+  copiesLarge: () => [consumes()],
 };
+
+/**
+ * The sh text that starts a long `sleep` from a subshell that ends at once, so that the `sleep` is re-parented and leaves
+ * the shell's tree, and prints its pid once that has happened.
+ */
+function detachedSleep(pidFile: string): string {
+  return [
+    `rm -f '${pidFile}'`,
+    `( sleep 600 >/dev/null 2>&1 & echo $! > '${pidFile}' )`,
+    `cat '${pidFile}'`,
+    'sleep 600',
+  ].join('\n');
+}
+
+/** The script a scenario that runs on real processes gives the shell, or none for a scenario that runs on the fake. */
+function realScriptOf(scenario: ContractScenario): string | undefined {
+  switch (scenario.kind) {
+    case 'backgroundsThenWaits':
+      return 'sleep 600 &\nprintf "%s\\n" "$!"\nwait';
+    case 'detachesThenWaits':
+      return detachedSleep(path.join(folder, 'detached.pid'));
+    case 'printsBothStreams':
+      return "printf 'out one\\n'\nprintf 'err one\\n' >&2\nprintf 'out two\\n'";
+    case 'printsLongLine':
+      return `head -c ${String(LONG_LINE_LENGTH)} /dev/zero | tr '\\0' x`;
+    default:
+      return undefined;
+  }
+}
+
+/** The engine the last fake-backed stage used, whose writes the bounded-copy case measures. */
+let lastEngine: ReturnType<typeof fakeEngine> | undefined;
 
 function scenarioScripts(scenario: ContractScenario): SpawnPlan[] {
   return (PLANS[scenario.kind] as (each: ContractScenario) => SpawnPlan[])(
@@ -119,44 +156,75 @@ function fileWith(content: Uint8Array): string {
   return file;
 }
 
-const harness: ChannelHarness = {
-  pendingOn: '#3283',
-  scriptFailures: ['channelClosed', 'spawnFailed'],
-  copyFailures: ['copyToolMissing', 'copyFailed', 'channelClosed'],
-  reachesClientFiles: false,
-  stage: scenario => {
-    const engine = fakeEngine(...scenarioScripts(scenario));
-    const channel = execChannelOf(engine, 'c1', 'node');
-    const content =
-      scenario.kind === 'digestsInput' && scenario.input.kind === 'file'
-        ? scenario.input.content
-        : new Uint8Array(4096);
-    const localFile =
-      scenario.kind === 'missingInputFile'
-        ? path.join(folder, 'missing')
-        : fileWith(content);
-    const input =
-      scenario.kind === 'digestsInput' && scenario.input.kind === 'text'
-        ? scenario.input
-        : [
-              'digestsInput',
-              'missingInputFile',
-              'streamsUntilCancelled',
-            ].includes(scenario.kind)
-          ? {kind: 'file' as const, localFile}
-          : {kind: 'text' as const, text: ''};
-    return Promise.resolve({
-      channel,
-      script: {
-        script: STAGED_SCRIPT,
-        interpreter: 'posixShell',
-        environment: {},
-        input,
-      },
-      copy: {localFile, remotePath: '/dest/archive.tar.gz'},
-    });
-  },
-};
+/** The shells the real-process cases run under: the system's `sh` and, where there is one, `dash`. */
+const SHELLS = ['/bin/sh', '/usr/bin/dash'].filter(shell => existsSync(shell));
+
+/** The harness whose real-process cases run under `shell`. */
+function harnessFor(shell: string): ChannelHarness {
+  return {
+    processes: localProcesses,
+    boundedCopy: {
+      kind: 'measured',
+      largestWrite: () =>
+        Math.max(
+          0,
+          ...(lastEngine?.processes ?? []).flatMap(each => each.writeSizes),
+        ),
+    },
+    scriptFailures: ['channelClosed', 'spawnFailed'],
+    copyFailures: ['copyToolMissing', 'copyFailed', 'channelClosed'],
+    reachesClientFiles: false,
+    stage: scenario => {
+      const real = realScriptOf(scenario);
+      if (real !== undefined) {
+        const staged: StagedChannel = {
+          channel: execChannelOver(localEngine(), localCommandsOver(shell)),
+          script: {
+            script: real,
+            interpreter: 'posixShell',
+            environment: {},
+            input: {kind: 'text', text: ''},
+          },
+          copy: {localFile: fileWith(new Uint8Array(1)), remotePath: '/dest/x'},
+        };
+        return Promise.resolve(staged);
+      }
+      const engine = fakeEngine(...scenarioScripts(scenario));
+      lastEngine = engine;
+      const channel = execChannelOf(engine, 'c1', 'node');
+      const content =
+        scenario.kind === 'digestsInput' && scenario.input.kind === 'file'
+          ? scenario.input.content
+          : new Uint8Array(
+              scenario.kind === 'copiesLarge' ? LARGE_COPY_LENGTH : 4096,
+            );
+      const localFile =
+        scenario.kind === 'missingInputFile'
+          ? path.join(folder, 'missing')
+          : fileWith(content);
+      const input =
+        scenario.kind === 'digestsInput' && scenario.input.kind === 'text'
+          ? scenario.input
+          : [
+                'digestsInput',
+                'missingInputFile',
+                'streamsUntilCancelled',
+              ].includes(scenario.kind)
+            ? {kind: 'file' as const, localFile}
+            : {kind: 'text' as const, text: ''};
+      return Promise.resolve({
+        channel,
+        script: {
+          script: STAGED_SCRIPT,
+          interpreter: 'posixShell',
+          environment: {},
+          input,
+        },
+        copy: {localFile, remotePath: '/dest/archive.tar.gz'},
+      });
+    },
+  };
+}
 
 describe('the exec channel against the channel contract (card containers-02)', () => {
   before(() => {
@@ -167,10 +235,14 @@ describe('the exec channel against the channel contract (card containers-02)', (
     rmSync(folder, {recursive: true, force: true});
   });
 
-  for (const contractCase of channelContractCases(harness)) {
-    it(
-      `contracts §1: ${contractCase.name}`,
-      contractCase.pending === true ? undefined : contractCase.check,
-    );
+  for (const shell of SHELLS) {
+    describe(`under ${shell}`, () => {
+      for (const contractCase of channelContractCases(harnessFor(shell))) {
+        it(
+          `contracts §1: ${contractCase.name}`,
+          contractCase.pending === true ? undefined : contractCase.check,
+        );
+      }
+    });
   }
 });

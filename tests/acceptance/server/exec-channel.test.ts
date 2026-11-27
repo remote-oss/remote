@@ -9,6 +9,8 @@ import {
   channelContractCases,
   type ChannelHarness,
   type ContractScenario,
+  LARGE_COPY_LENGTH,
+  LONG_LINE_LENGTH,
 } from 'lib-host/testing/channel-contract';
 import type {EngineHost} from '../../../packages/remote-containers/src/engine/engine-host.ts';
 import {nodeEngineHost} from '../../../packages/remote-containers/src/engine/node-engine-host.ts';
@@ -95,6 +97,18 @@ describe('the exec channel over a real container (card containers-02)', function
         return printing(scenario.lines, 'sleep 30');
       case 'digestsInput':
         return DIGEST_SCRIPT;
+      case 'backgroundsThenWaits':
+        return 'sleep 600 &\nprintf "%s\\n" "$!"\nwait';
+      case 'detachesThenWaits':
+        return [
+          "( sleep 600 >/dev/null 2>&1 & echo $! > '/tmp/exec-copy/detached.pid' )",
+          "cat '/tmp/exec-copy/detached.pid'",
+          'sleep 600',
+        ].join('\n');
+      case 'printsBothStreams':
+        return "printf 'out one\\n'\nprintf 'err one\\n' >&2\nprintf 'out two\\n'";
+      case 'printsLongLine':
+        return `head -c ${String(LONG_LINE_LENGTH)} /dev/zero | tr '\\0' x`;
       default:
         return 'exit 0';
     }
@@ -117,12 +131,37 @@ describe('the exec channel over a real container (card containers-02)', function
   }
 
   const harness: ChannelHarness = {
-    pendingOn: '#3283',
+    processes: {
+      alive: processId => {
+        // /proc says it, whatever `ps` the host has: a process that ended and waits to be reaped counts as gone.
+        const state = host
+          .onHost(
+            'sh',
+            '-c',
+            `sed -n 's/^State:[[:space:]]*\\(.\\).*/\\1/p' /proc/${String(processId)}/status 2>/dev/null; true`,
+          )
+          .trim();
+        return Promise.resolve(state !== '' && state !== 'Z');
+      },
+      end: processId => {
+        host.onHost('kill', '-KILL', String(processId));
+        return Promise.resolve();
+      },
+    },
+    boundedCopy: {
+      kind: 'notApplicable',
+      reason:
+        'the writes go to the standard input of a real docker client, whose pipe this suite cannot observe; the channel writes 64 KiB pieces and waits for drain, which the unit rows over the fake engine measure',
+    },
     scriptFailures: ['channelClosed', 'spawnFailed'] as ChannelFailureKind[],
     copyFailures: ['copyFailed', 'channelClosed'] as ChannelFailureKind[],
     reachesClientFiles: false,
     stage: scenario => {
-      const file = localFile(new Uint8Array(1024));
+      const file = localFile(
+        new Uint8Array(
+          scenario.kind === 'copiesLarge' ? LARGE_COPY_LENGTH : 1024,
+        ),
+      );
       const missingDirectory =
         scenario.kind === 'copyFails' && scenario.failure === 'copyFailed';
       return Promise.resolve({
