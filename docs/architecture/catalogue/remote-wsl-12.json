@@ -1,0 +1,114 @@
+[
+ {
+  "id": "F-6001",
+  "issue": 12,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Activation, platforms, the web and workspace trust",
+  "epic": "E60",
+  "acCount": 47,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.showLog (availability only)",
+    "remote-wsl.connect",
+    "remote-wsl.reopenInWSL",
+    "remote-wsl.openFolder",
+    "remote-wsl.connectInNewWindow",
+    "remote-wsl.connectUsingDistro",
+    "remote-wsl.connectUsingDistroInNewWindow",
+    "remote-wsl.getHelp",
+    "remote-wsl.provideFeedback",
+    "remote-wsl.reportIssue",
+    "remote-wsl.reopenInWindows"
+   ],
+   "settings": [
+    "security.workspace.trust.enabled",
+    "extensions.supportUntrustedWorkspaces",
+    "extensions.supportVirtualWorkspaces",
+    "extensions.webWorker",
+    "remote.extensionKind",
+    "terminal.integrated.allowInUntrustedWorkspace"
+   ],
+   "views": [
+    "targetsWsl"
+   ],
+   "menus": [
+    "commandPalette",
+    "statusBar/remoteIndicator"
+   ],
+   "contextKeys": [
+    "wslFeatureInstalled",
+    "wsl.noWSLPath",
+    "wsl.openInNewWindow",
+    "wsl.noWSLDistrosInstalled",
+    "isWindows",
+    "isWeb",
+    "virtualWorkspace",
+    "remoteName",
+    "workspaceFolderCount"
+   ],
+   "authorities": [
+    "wsl"
+   ],
+   "other": [
+    "manifest: extensionKind ui",
+    "activation onStartupFinished",
+    "capabilities untrusted/virtual",
+    "node and browser entries"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand",
+    "commands.executeCommand setContext"
+   ],
+   "proposedApi": [
+    "resolvers",
+    "contribRemoteHelp",
+    "contribViewsRemote"
+   ],
+   "processes": [
+    "wsl.exe (presence check, owned elsewhere)"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "argv.json (proposed-API enablement)"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-7901",
+   "remote-wsl#F-6002",
+   "remote-wsl#F-6003",
+   "remote-wsl#F-6004",
+   "remote-wsl#F-6101",
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6204",
+   "remote-wsl#F-6301",
+   "remote-wsl#F-6401",
+   "remote-wsl#F-6501",
+   "remote-wsl#F-6701",
+   "remote-wsl#F-6203",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6207",
+   "remote-wsl#F-6005",
+   "remote-containers#F-1403",
+   "remote-containers#F-0109"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.activation-gate",
+  "candidateLibrary": "lib-standdown",
+  "area": "D",
+  "reuse": [],
+  "errorPaths": 7,
+  "notes": "Pure manifest and context-key feature: where the extension runs, when it activates, what is hidden off Windows, in virtual workspaces and on web. Commands must stay registered everywhere but inert. Candidate shared pattern for platform stand-down across rooms. telemetry appears in the manifest inventory only; not needed (R-28).",
+  "questions": [
+   "Does the reimplementation ship the browser build at all (decision pending for S061)?",
+   "Should the S041 dev-build guard be implemented or omitted?",
+   "Is the inert-outside-Windows contract (R-46) one shared helper for all remote families?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
+  ]
+ }
+]

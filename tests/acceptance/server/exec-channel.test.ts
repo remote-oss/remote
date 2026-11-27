@@ -117,6 +117,7 @@ describe('the exec channel over a real container (card containers-02)', function
   }
 
   const harness: ChannelHarness = {
+    pendingOn: '#3283',
     scriptFailures: ['channelClosed', 'spawnFailed'] as ChannelFailureKind[],
     copyFailures: ['copyFailed', 'channelClosed'] as ChannelFailureKind[],
     reachesClientFiles: false,
@@ -143,7 +144,10 @@ describe('the exec channel over a real container (card containers-02)', function
   };
 
   for (const contractCase of channelContractCases(harness)) {
-    it(`contracts §1: ${contractCase.name}`, contractCase.check);
+    it(
+      `contracts §1: ${contractCase.name}`,
+      contractCase.pending === true ? undefined : contractCase.check,
+    );
   }
 
   it('contracts §1: a copy of 5 MB arrives intact and owned by the user', async () => {

@@ -1,0 +1,12 @@
+[
+ {
+  "id": "F-6302",
+  "issue": 29,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Server prerequisites and supported distros",
+  "epic": "E63",
+  "acCount": 19
+ }
+]

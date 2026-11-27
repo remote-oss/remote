@@ -40,6 +40,7 @@ export function recordingSetupPorts(
       setDismissed: () => Promise.resolve(),
       attemptPending: () => false,
       setAttemptPending: () => Promise.resolve(),
+      claimAttemptPending: () => Promise.resolve(true),
     },
     window: {
       claim: extensionId => {

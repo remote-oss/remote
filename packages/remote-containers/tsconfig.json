@@ -30,6 +30,9 @@
       "path": "../lib-standdown"
     },
     {
+      "path": "../lib-state"
+    },
+    {
       "path": "../lib-wsl"
     }
   ]

@@ -96,7 +96,11 @@ function surfacesWith(
       hosts: [{name: 'dev', file: '/h/.ssh/config'}],
     }),
     translate: template => template,
-    hintState: {get: () => undefined, update: () => Promise.resolve()},
+    hintEvents: {
+      read: () => ({records: []}),
+      record: () => Promise.resolve(),
+      clear: () => Promise.resolve(),
+    },
     documentation: () => 'https://docs.example/ssh',
     troubleshooting: {
       enabled: () => true,

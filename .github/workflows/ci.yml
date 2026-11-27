@@ -145,11 +145,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 2 # the pushed commit's parent, for main-push-skip
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       # skip=true only for a release train's merge whose gate passed every part on this tree; the reason goes to the
       # job's summary either way
@@ -202,11 +198,7 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6 # the version comes from packageManager in package.json
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm identifiers # the git-ignored tables every later step reads
       - run: pnpm check-layout
@@ -253,11 +245,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       # the pinned pwsh and PSScriptAnalyzer, first on the PATH, for the unit rows of the PowerShell host scripts
       - run: tools/install-pwsh && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
@@ -286,11 +274,7 @@ jobs:
     timeout-minutes: 10 # the slowest shard took 6 minutes with each unit's tests in parallel (2026-10-31, #1383)
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm identifiers
       - run: tools/install-pwsh && echo "$HOME/.local/bin" >> "$GITHUB_PATH" # as the unit job
@@ -317,11 +301,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       # A machine that keeps its Docker state between jobs gets what an earlier attempt of this run left removed, by
       # the run's own label; a fresh runner has nothing to remove. The same step, with `if: always()`, closes the job.
@@ -362,11 +342,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm acceptance:clean
       - run: pnpm test:acceptance:server
@@ -386,11 +362,7 @@ jobs:
     timeout-minutes: 20 # 10 cut the job on the pool with its variants still passing (2026-11-04)
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm acceptance:clean
       - run: pnpm build
@@ -413,11 +385,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm acceptance:clean
       - run: pnpm test:acceptance:real-server
@@ -440,11 +408,7 @@ jobs:
     timeout-minutes: 15 # the suite takes seconds once built; a fresh runner also builds and pulls one image
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       # the suite skips its container rows when Docker does not answer, so the job stops here instead
       - run: docker version --format 'Docker {{.Server.Version}}'
@@ -507,11 +471,7 @@ jobs:
     timeout-minutes: ${{ matrix.part.minutes }}
     steps: &vscodium-steps
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       # the pinned VSCodium archives, the editor's and the servers', in the run's download cache, cached under a digest of
       # their pins (tools/vscodium-pins-key.ts): a pin change misses, every other run finds them there and checks their
@@ -602,11 +562,7 @@ jobs:
     timeout-minutes: ${{ matrix.part.minutes }}
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       # the pinned VSCodium archives, the editor's and the servers', in the run's download cache, cached under a digest of
       # their pins (tools/vscodium-pins-key.ts): a pin change misses, every other run finds them there and checks their
@@ -700,11 +656,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       # the containerd image store, the one Docker 29 uses by default and the image-build rows are written against, and a
       # registry mirror for Docker Hub's images

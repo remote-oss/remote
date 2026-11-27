@@ -1,0 +1,12 @@
+[
+ {
+  "id": "F-6102",
+  "issue": 18,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Adding a distro",
+  "epic": "E61",
+  "acCount": 24
+ }
+]

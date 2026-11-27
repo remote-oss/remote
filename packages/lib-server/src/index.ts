@@ -208,6 +208,7 @@ export {
   type WatchedExecServer,
   watchedExecServer,
 } from './cli-control/exec-server.ts';
+export {execServerChannel} from './cli-control/exec-host-channel.ts';
 export {
   cliServerFolderOf,
   type S045Event,

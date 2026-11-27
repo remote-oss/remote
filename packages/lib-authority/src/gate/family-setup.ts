@@ -61,7 +61,7 @@ export function familySetupPortsOf(
   context: Pick<
     vscode.ExtensionContext,
     'globalState' | 'subscriptions' | 'extension'
-  >,
+  > & {globalStorageUri: Pick<vscode.Uri, 'fsPath'>},
   options: FamilySetupOptions,
 ): SetupPorts {
   return setupPortsOf(
