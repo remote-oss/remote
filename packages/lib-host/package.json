@@ -16,6 +16,10 @@
       "types": "./.tsc/src/testing/channel-contract.d.ts",
       "default": "./src/testing/channel-contract.ts"
     },
+    "./testing/local-processes": {
+      "types": "./.tsc/src/testing/local-processes.d.ts",
+      "default": "./src/testing/local-processes.ts"
+    },
     "./testing/noise": {
       "types": "./.tsc/src/testing/noise.d.ts",
       "default": "./src/testing/noise.ts"

@@ -14,6 +14,7 @@ import {
   type ContractScenario,
   type StagedChannel,
 } from 'lib-host/testing/channel-contract';
+import {localProcesses} from 'lib-host/testing/local-processes';
 import {execServerChannel} from '../../src/cli-control/exec-host-channel.ts';
 import {
   type ExecReadStream,
@@ -136,16 +137,6 @@ function failingFiles(
   };
 }
 
-/** Whether the local process `processId` is running. */
-function isRunning(processId: number): boolean {
-  try {
-    process.kill(processId, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** The commands that print `lines`, one each. */
 function printing(lines: readonly string[]): string[] {
   return lines.map(line => `printf '%s\\n' '${line}'`);
@@ -194,13 +185,7 @@ describe('host channel over an exec server: the lib-host contract', function () 
     scriptFailures: ['channelClosed', 'spawnFailed'],
     copyFailures: ['copyFailed', 'channelClosed'],
     reachesClientFiles: false,
-    processes: {
-      alive: processId => Promise.resolve(isRunning(processId)),
-      end: processId => {
-        process.kill(processId, 'SIGKILL');
-        return Promise.resolve();
-      },
-    },
+    processes: localProcesses,
     boundedCopy: {
       kind: 'notApplicable',
       reason: "the exec server's write stream gives no drain signal",
