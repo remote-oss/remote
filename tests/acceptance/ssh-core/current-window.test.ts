@@ -19,7 +19,9 @@ import {
   nextEmptyWindow,
   openWindow,
   recordLines,
+  readUserSettings,
   RESOLVING_INDICATOR,
+  restoreUserSettings,
   sshdLog,
   userSettings,
   variable,
@@ -755,6 +757,7 @@ describe('Connect Current Window to Host', function () {
     const restore = await bindKeys([
       {key: 'ctrl+alt+h', command: SWITCH, argument: {host: 'harness'}},
     ]);
+    const savedSettings = readUserSettings();
     let next = '';
     try {
       await closeAllButLocal();
@@ -850,13 +853,10 @@ describe('Connect Current Window to Host', function () {
       );
     } finally {
       restore();
+      restoreUserSettings(savedSettings);
+      await userSettings({});
       await closeWindow('c3017-inflight').catch(() => undefined);
       await closeWindow(next).catch(() => undefined);
-      await userSettings({
-        ...PLATFORMS,
-        'remote.SSH.connectTimeout': undefined,
-        'window.title': undefined,
-      });
     }
   });
 });
