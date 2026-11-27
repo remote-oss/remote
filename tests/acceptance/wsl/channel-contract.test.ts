@@ -62,11 +62,27 @@ describe('the host channel over real WSL meets the shared contract (card #3312)'
     return {status: result.status, text: result.stdout.trim()};
   }
 
+  /** A line of the run's readout: the time, and what the distro's init and uptime were. */
+  function readout(what: string): void {
+    const init = inDistro(
+      'sh',
+      '-c',
+      'stat -c %Y /proc/1; cut -d" " -f1 /proc/uptime',
+    ).text.replaceAll('\n', ' uptime ');
+    process.stdout.write(
+      `readout ${new Date().toISOString()} ${what}: init started ${init}\n`,
+    );
+  }
+
   const harness: ChannelHarness = {
     processes: {
-      alive: processId =>
-        Promise.resolve(inDistro('kill', '-0', String(processId)).status === 0),
+      alive: processId => {
+        const alive = inDistro('kill', '-0', String(processId)).status === 0;
+        readout(`process ${String(processId)} alive ${String(alive)}`);
+        return Promise.resolve(alive);
+      },
       end: processId => {
+        readout(`process ${String(processId)} ended by the case`);
         inDistro('kill', '-9', String(processId));
         return Promise.resolve();
       },
@@ -76,6 +92,7 @@ describe('the host channel over real WSL meets the shared contract (card #3312)'
     copyFailures: [],
     reachesClientFiles: false,
     stage: (scenario: ContractScenario): Promise<StagedChannel> => {
+      readout(`staging ${scenario.kind}`);
       largestWriteSeen = 0;
       const localFile = path.join(folder, `local-${String(Date.now())}`);
       writeFileSync(
