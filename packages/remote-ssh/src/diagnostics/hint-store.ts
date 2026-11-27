@@ -8,7 +8,7 @@
  */
 
 import type {TextRange} from '../surfaces/strings.ts';
-import {type EventFiles, eventStoreOf, isRecord} from '../state/event-files.ts';
+import {type EventFiles, eventStoreOf, isRecord} from 'lib-state';
 
 /** The key in the extension's global state where an earlier version kept the hints. */
 const EARLIER_KEY = 'remote.ssh.hints';

@@ -3,7 +3,7 @@
  */
 
 import path from 'node:path';
-import type {EventFiles} from '../../src/state/event-files.ts';
+import type {EventFiles} from '../event-files.ts';
 
 /** A file system in memory, shared by the windows of one row, whose files carry the time they were last written. */
 export class MemoryFiles implements EventFiles {

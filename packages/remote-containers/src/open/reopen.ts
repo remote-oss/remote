@@ -173,11 +173,7 @@ export function reopenHandlersOf(
         ...(rebuild === undefined
           ? {}
           : {
-              rebuild: {
-                options: rebuild,
-                intents: ports.intents,
-                now: () => ports.now(),
-              },
+              rebuild: {options: rebuild, intents: ports.intents},
             }),
       });
     } finally {

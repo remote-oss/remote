@@ -9,7 +9,7 @@ import {
   type HistoryStore,
   historyStoreOf,
 } from '../../src/companion/folder-history.ts';
-import type {MemoryFiles} from './event-files.fixture.ts';
+import type {MemoryFiles} from 'lib-state/testing/memory-files';
 
 /** The folder of the rows' history files. */
 export const HISTORY_FOLDER =

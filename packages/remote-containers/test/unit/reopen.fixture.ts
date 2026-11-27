@@ -16,6 +16,8 @@ import {admitsWindow} from '../../src/open/command-window.ts';
 import type {ReopenPorts} from '../../src/open/reopen-ports.ts';
 import type {WorkspaceRead} from '../../src/open/workspace-folders.ts';
 import type {TrustOutcome} from '../../src/trust/trust-gate.ts';
+import {MemoryFiles} from 'lib-state/testing/memory-files';
+import {rebuildHandoffsOn} from './handoff-kinds.fixture.ts';
 import {SHIPPED_MANIFEST} from './shipped-manifest.ts';
 
 /** The folder the rows open. */
@@ -169,6 +171,7 @@ export const WRITTEN_IN_FOLDER: WizardOutcome = {
 
 /** The ports over a setup; each call that reaches a port is recorded in `calls`. */
 export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
+  const held = rebuildHandoffsOn(new MemoryFiles());
   const sink = new MemorySink();
   const ports: ReopenPorts = {
     requirements: {
@@ -236,17 +239,20 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
       return state.trust;
     },
     intents: {
-      get: () => undefined,
-      update: (key, value) => {
-        state.calls.push('storeIntent');
-        state.order.push('store');
-        if (state.intentFailure !== undefined) {
-          // The row on a rejection that is not an error needs exactly that.
-          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
-          return Promise.reject(state.intentFailure);
-        }
-        state.updates.push([key, value]);
-        return Promise.resolve();
+      ...held,
+      store: {
+        ...held.store,
+        leave: (key, value) => {
+          state.calls.push('storeIntent');
+          state.order.push('store');
+          if (state.intentFailure !== undefined) {
+            // The row on a rejection that is not an error needs exactly that.
+            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+            return Promise.reject(state.intentFailure);
+          }
+          state.updates.push([key, value]);
+          return Promise.resolve();
+        },
       },
     },
     now: () => 1000,
