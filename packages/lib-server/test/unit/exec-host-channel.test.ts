@@ -656,6 +656,52 @@ describe('host channel over an exec server', () => {
     );
   });
 
+  it('ends a run cancelled as its shell reported its process id, given no program', async () => {
+    const marker = path.join(folder, 'late-report');
+    const controller = new AbortController();
+    const server = localExecServer();
+    const lateReport: ChannelServer = {
+      ...server,
+      spawn: (...spawnArguments) =>
+        server.spawn(...spawnArguments).then(command => {
+          let heldBack = true;
+          return {
+            ...command,
+            stdout: {
+              ...command.stdout,
+              onDidReceiveMessage: listener => {
+                const inner = command.stdout.onDidReceiveMessage(data => {
+                  if (heldBack) {
+                    heldBack = false;
+                    setTimeout(() => {
+                      listener(data);
+                      controller.abort();
+                    }, 100);
+                    return;
+                  }
+                  listener(data);
+                });
+                return {
+                  dispose: () => {
+                    inner.dispose();
+                  },
+                };
+              },
+            },
+          };
+        }),
+    };
+    const outcome = await runWith(
+      lateReport,
+      {script: `touch '${marker}'`, cancellation: controller.signal},
+      () => undefined,
+    );
+    deepStrictEqual(
+      [outcome, await markerAfterCancel(marker)],
+      [CANCELLED, 'absent'],
+    );
+  });
+
   it('ends a run cancelled the moment its spawn returned, before the script runs', async () => {
     const marker = path.join(folder, 'after-spawn');
     const server = localExecServer();

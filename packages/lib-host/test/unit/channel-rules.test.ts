@@ -1,5 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
-import {type ChildProcess, execFile, spawn} from 'node:child_process';
+import {
+  type ChildProcess,
+  type ChildProcessWithoutNullStreams,
+  execFile,
+  spawn,
+} from 'node:child_process';
 import {promisify} from 'node:util';
 import {
   BoundedLines,
@@ -52,6 +57,15 @@ function alive(processId: number): boolean {
   } catch {
     return false;
   }
+}
+
+/** The process id the `shell`'s first line of standard output prints. */
+function reportedIdOf(shell: ChildProcessWithoutNullStreams): Promise<number> {
+  return new Promise<number>(resolve => {
+    shell.stdout.once('data', (data: Buffer) => {
+      resolve(Number(String(data).trim()));
+    });
+  });
 }
 
 /** Runs the tree-kill script under `sh` for `processId`, resolving when it ends. */
@@ -109,11 +123,7 @@ describe('the tree-kill script', function () {
       '-c',
       'sleep 40 & printf "%s\\n" "$!"; (sleep 40 >/dev/null 2>&1 &); sleep 40',
     ]);
-    const childId = await new Promise<number>(resolve => {
-      shell.stdout.once('data', (data: Buffer) => {
-        resolve(Number(String(data).trim()));
-      });
-    });
+    const childId = await reportedIdOf(shell);
     await new Promise(resolve => setTimeout(resolve, 200));
     const shellId = shell.pid ?? 0;
     const {stdout: table} = await runFile('ps', [
@@ -149,11 +159,7 @@ describe('the tree-kill script', function () {
       '-c',
       'sh -c \'sleep 40 & printf "%s\\n" "$!"; wait\' & wait',
     ]);
-    const grandchildId = await new Promise<number>(resolve => {
-      shell.stdout.once('data', (data: Buffer) => {
-        resolve(Number(String(data).trim()));
-      });
-    });
+    const grandchildId = await reportedIdOf(shell);
     await treeKill(shell.pid ?? 0);
     deepStrictEqual(
       [await endedWithin(shell), await goneWithin(grandchildId)],
@@ -175,6 +181,16 @@ describe('the tree-kill script', function () {
       [await endedWithin(stubborn), Date.now() - started >= 4500],
       [true, true],
     );
+  });
+
+  it('ends a TERM-ignoring process that is not a child of the run, once the KILL has been waited for', async () => {
+    const shell = spawn('sh', [
+      '-c',
+      `sh -c 'trap "" TERM; sleep 40' & printf "%s\\n" "$!"; wait`,
+    ]);
+    const stubbornId = await reportedIdOf(shell);
+    await treeKill(shell.pid ?? 0);
+    deepStrictEqual(alive(stubbornId), false);
   });
 
   it('ends a process with no children, and does nothing for one that is gone', async () => {
