@@ -20,7 +20,11 @@ import {
   pressEscape,
   typeInInputBox,
 } from './renderer.ts';
-import {answerSettled, describedBox} from './settled-answer.ts';
+import {
+  type AnswerOutcome,
+  answerSettled,
+  describedBox,
+} from './settled-answer.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -166,12 +170,13 @@ const FORWARD_MILLISECONDS = 20_000;
 /**
  * Forwards `port` of the window by hand, as a user does with Forward a Port: the answer waits until the box has taken
  * the port and finished validating it, and a command that has not finished by `FORWARD_MILLISECONDS` fails with what the
- * window shows: the input box and the window the display holds active.
+ * window shows: the input box and the window the display holds active. When core had forwarded the port already, the
+ * command is not exercised: that says so on one line, and the answer says `alreadyForwarded`.
  */
 export async function forwardByHand(
   window: string,
   port: number,
-): Promise<void> {
+): Promise<AnswerOutcome> {
   const forwarding = inWindow(window, 'remote.tunnel.forwardCommandPalette');
   const answer = await answerSettled(
     {
@@ -205,4 +210,10 @@ export async function forwardByHand(
       `window ${window}: Forward a Port was ${answer === 'answered' ? 'answered' : 'closed'} with ${String(port)} and had not finished ${String(FORWARD_MILLISECONDS / 1000)} s later; the input box: ${typeof inputBox === 'string' ? inputBox : describedBox(inputBox)}; the display's active window: ${active}`,
     );
   }
+  if (answer === 'alreadyForwarded') {
+    console.log(
+      `forwardByHand: window ${window}, port ${String(port)}: core had forwarded it already, so Forward a Port was not exercised`,
+    );
+  }
+  return answer;
 }
