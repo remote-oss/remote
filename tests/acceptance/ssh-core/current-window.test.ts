@@ -807,18 +807,19 @@ describe('Connect Current Window to Host', function () {
       const remoteAuthority = (await windowState(next)).remoteAuthority;
       const lastEvent = windowEvents('c3017-inflight').at(-1)?.event;
       // The control: the same menu offers the entry once the connect has ended, so the read reads the menu it claims.
-      void inWindow('c3017-inflight', 'workbench.action.remote.showMenu').catch(
+      // The reloaded window's host re-registered under the name the switch gave it, so the read keys to that name.
+      void inWindow(next, 'workbench.action.remote.showMenu').catch(
         () => undefined,
       );
       await waitFor(
         'the indicator menu again',
         async () =>
-          (await quickPickOf('c3017-inflight'))?.placeholder ===
+          (await quickPickOf(next))?.placeholder ===
           'Select an option to open a Remote Window',
         30_000,
       );
-      const menuEnded = await settledMenuOf('c3017-inflight');
-      await pressEscape('c3017-inflight');
+      const menuEnded = await settledMenuOf(next);
+      await pressEscape(next);
       process.stdout.write(
         `the indicator menu while connecting: ${JSON.stringify(
           menu,
