@@ -10,10 +10,14 @@ import {
   type CopyRequest,
   failFrom,
   type HostChannel,
+  JOINED_ERRORS,
+  PROCESS_ID,
   preludeCommand,
   type PlatformHint,
+  REPORT_PROCESS_ID,
   type ScriptOutcome,
   type ScriptRequest,
+  TREE_KILL_SCRIPT,
 } from 'lib-host';
 import type {
   ExecInput,
@@ -49,7 +53,14 @@ export interface WslHostChannelPorts {
   mapper: PathMapper;
   /** The registered spelling of the distro's name: the channel's identity. */
   distro: string;
+  /** Where the channel says what it could not do, as a line of text. */
+  logLine: (message: string) => void;
+  /** How long a cancel waits for the shell's process id and for the tree to end, in milliseconds; 15 s when not given. */
+  treeKillBoundMs?: number;
 }
+
+/** The longest a cancel waits for the shell's process id, and for the tree to end, by the contract's second-run bound. */
+const TREE_KILL_BOUND_MS = 15_000;
 
 /** A path on a drive of Windows, as `X:\\` or `X:/` begins it. */
 const DRIVE_PATH = /^[A-Za-z]:[\\/]/;
@@ -62,7 +73,7 @@ function scriptInput(request: ScriptRequest): {
   const prelude = `${request.script}\n`;
   const count = Buffer.byteLength(prelude, 'utf8');
   return {
-    program: ['-c', preludeCommand(count)],
+    program: ['-c', JOINED_ERRORS + REPORT_PROCESS_ID + preludeCommand(count)],
     input:
       request.input.kind === 'text'
         ? {kind: 'text', text: prelude + request.input.text}
@@ -70,9 +81,61 @@ function scriptInput(request: ScriptRequest): {
   };
 }
 
+/** What `promise` gives, or `fallback` once `bound` milliseconds have passed. */
+async function within<T>(
+  promise: Promise<T>,
+  bound: number,
+  fallback: T,
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<T>(resolve => {
+    timer = setTimeout(() => {
+      resolve(fallback);
+    }, bound);
+  });
+  try {
+    return await Promise.race([promise, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Ends the process tree of the shell `processId` in the distro with lib-host's shared script: TERM first, KILL after 5 s.
+ * The second `wsl.exe` that runs it is ended at `bound`; the answer is whether the script confirmed with status 0.
+ */
+async function endTree(
+  runner: WslRunner,
+  distro: string,
+  processId: number,
+  bound: number,
+): Promise<boolean> {
+  const limit = new AbortController();
+  const timer = setTimeout(() => {
+    limit.abort();
+  }, bound);
+  try {
+    const outcome = await runner.exec(
+      {
+        distro,
+        folder: '~',
+        program: 'sh',
+        programArguments: ['-c', TREE_KILL_SCRIPT, 'sh', String(processId)],
+        environment: {},
+        input: {kind: 'none'},
+        cancellation: limit.signal,
+      },
+      () => undefined,
+    );
+    return outcome.kind === 'exited' && outcome.status === 0;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** The channel over WSL. */
 export function createWslHostChannel(ports: WslHostChannelPorts): HostChannel {
-  const {runner, mapper, distro} = ports;
+  const {runner, mapper, distro, logLine} = ports;
   return {
     runScript: async (request, onLine): Promise<ScriptOutcome> => {
       if (request.interpreter !== 'posixShell') {
@@ -81,7 +144,44 @@ export function createWslHostChannel(ports: WslHostChannelPorts): HostChannel {
           'a distro runs a script for the POSIX shell only',
         );
       }
+      if (request.cancellation.aborted) {
+        return failFrom('cancelled', 'cancelled before the run');
+      }
       const planned = scriptInput(request);
+      // A cancel ends the script's whole tree in the distro before it ends `wsl.exe`: the shell reports its process id as
+      // its first line, and the shared script walks the tree from it. A cancel before the id is known waits for it.
+      const inner = new AbortController();
+      const bound = ports.treeKillBoundMs ?? TREE_KILL_BOUND_MS;
+      const waiting: Array<(processId: number | undefined) => void> = [];
+      const reported = new Promise<number | undefined>(resolve => {
+        waiting.push(resolve);
+      });
+      function reportProcessId(processId: number | undefined): void {
+        for (const resolve of waiting) {
+          resolve(processId);
+        }
+      }
+      const progress: {stopping: Promise<void> | undefined} = {
+        stopping: undefined,
+      };
+      async function endScript(): Promise<void> {
+        const target = await within(reported, bound, undefined);
+        if (target === undefined) {
+          logLine(
+            `cancelled before the shell reported its process id in ${distro}: only wsl.exe is ended`,
+          );
+        } else if (!(await endTree(runner, distro, target, bound))) {
+          logLine(
+            `the tree of process ${String(target)} in ${distro} was not confirmed ended within ${String(bound)} ms: wsl.exe is ended anyway`,
+          );
+        }
+        inner.abort();
+      }
+      function onAbort(): void {
+        progress.stopping = endScript().catch(() => undefined);
+      }
+      request.cancellation.addEventListener('abort', onAbort, {once: true});
+      let seen = false;
       const outcome = await runner.exec(
         {
           distro,
@@ -90,10 +190,23 @@ export function createWslHostChannel(ports: WslHostChannelPorts): HostChannel {
           programArguments: planned.program,
           environment: request.environment,
           input: planned.input,
-          cancellation: request.cancellation,
+          cancellation: inner.signal,
         },
-        onLine,
+        line => {
+          if (!seen && PROCESS_ID.test(line)) {
+            seen = true;
+            reportProcessId(Number(line));
+          } else {
+            onLine(line);
+          }
+        },
       );
+      request.cancellation.removeEventListener('abort', onAbort);
+      reportProcessId(undefined);
+      if (progress.stopping !== undefined) {
+        await progress.stopping;
+        return failFrom('cancelled', 'cancelled while the script ran');
+      }
       return outcome.kind === 'failed'
         ? channelFailure(outcome)
         : {kind: 'exited', status: outcome.status};
