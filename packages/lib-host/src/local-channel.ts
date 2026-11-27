@@ -4,7 +4,7 @@
  * arrive in the order they were written. The script runs in a process group of its own: a cancel signals the group with
  * TERM, and with KILL when the shell outlives the grace period, and once the shell has ended with KILL for what is
  * left of the group, so a process the script detached into a session of its own is not touched. A line is handed on
- * at 64 KiB when it has not ended by then, and the input waits for the shell to take each chunk. The channel logs
+ * at the shared bound when it has not ended by then, and the input waits for the shell to take each chunk. The channel logs
  * nothing, so it has no secret to mask: the values of `secretVariables` reach the script's environment and nowhere else.
  */
 
@@ -24,6 +24,7 @@ import {
   type ScriptOutcome,
   type ScriptRequest,
 } from './host-channel.ts';
+import {BoundedLines, JOINED_ERRORS} from './channel-rules.ts';
 
 /** What the channel is made of. */
 export interface LocalChannelOptions {
@@ -42,9 +43,6 @@ export interface LocalChannelOptions {
 /** The text a PowerShell script is refused with: this machine's agent runs POSIX scripts only. */
 const POSIX_ONLY = 'this host runs POSIX scripts only';
 
-/** The shell's own redirection of standard error into standard output, ahead of the script. */
-const JOIN_ERROR_INTO_OUTPUT = 'exec 2>&1\n';
-
 /** The platform hint of each operating system the channel knows. */
 const HINTS: Readonly<Partial<Record<NodeJS.Platform, PlatformHint>>> = {
   linux: 'linux',
@@ -61,62 +59,8 @@ function statusOf(code: number | null, signal: NodeJS.Signals | null): number {
   return signal === null ? Number(code) : 128 + osConstants.signals[signal];
 }
 
-/** The most a line holds when it is handed on without having ended, in bytes. */
-const LINE_LIMIT = 64 * 1024;
-
 /** The size of each chunk of a text the script reads, in characters. */
 const INPUT_CHUNK = 64 * 1024;
-
-/** How many UTF-16 units of `text` make the longest prefix of whole characters whose UTF-8 form is at most `LINE_LIMIT` bytes. */
-function prefixWithin(text: string): number {
-  let bytes = 0;
-  let length = 0;
-  for (const character of text) {
-    const size = Buffer.byteLength(character);
-    if (bytes + size > LINE_LIMIT) {
-      break;
-    }
-    bytes += size;
-    length += character.length;
-  }
-  return length;
-}
-
-/**
- * Delivers the lines of an output stream, in chunks that may split a line anywhere, to `onLine`. A line that has
- * not ended by 64 KiB is delivered as it is, and the rest of it as the next.
- */
-function lineReader(onLine: (line: string) => void): {
-  write(chunk: string): void;
-  end(): void;
-} {
-  let pending = '';
-  return {
-    write(chunk) {
-      let text = pending + chunk;
-      for (;;) {
-        const newline = text.indexOf('\n');
-        const candidate = newline < 0 ? text : text.slice(0, newline);
-        if (Buffer.byteLength(candidate) > LINE_LIMIT) {
-          const length = prefixWithin(candidate);
-          onLine(candidate.slice(0, length));
-          text = text.slice(length);
-        } else if (newline < 0) {
-          break;
-        } else {
-          onLine(candidate.endsWith('\r') ? candidate.slice(0, -1) : candidate);
-          text = text.slice(newline + 1);
-        }
-      }
-      pending = text;
-    },
-    end() {
-      if (pending !== '') {
-        onLine(pending);
-      }
-    },
-  };
-}
 
 /** The chunks of `text` that the script's input is written in. */
 function chunksOf(text: string): string[] {
@@ -206,18 +150,14 @@ function runShell(
   onLine: (line: string) => void,
 ): Promise<ScriptOutcome> {
   return new Promise<ScriptOutcome>(settle => {
-    const child = spawn(
-      shell,
-      ['-c', JOIN_ERROR_INTO_OUTPUT + request.script],
-      {
-        env: {...process.env, ...request.environment},
-        detached: true,
-        stdio: ['pipe', 'pipe', 'ignore'],
-      },
-    );
+    const child = spawn(shell, ['-c', JOINED_ERRORS + request.script], {
+      env: {...process.env, ...request.environment},
+      detached: true,
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
     let cancelled = false;
     let killTimer: NodeJS.Timeout | undefined;
-    const reader = lineReader(line => {
+    const reader = new BoundedLines(line => {
       if (!cancelled) {
         onLine(line);
       }
@@ -243,7 +183,7 @@ function runShell(
     });
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => {
-      reader.write(chunk);
+      reader.push(chunk);
     });
     feed(child.stdin, request.input);
     request.cancellation.addEventListener('abort', cancel, {once: true});
@@ -256,7 +196,7 @@ function runShell(
     });
     child.once('close', (code, exitSignal) => {
       request.cancellation.removeEventListener('abort', cancel);
-      reader.end();
+      reader.flush();
       settle(
         cancelled
           ? failFrom('cancelled', 'the script was cancelled')

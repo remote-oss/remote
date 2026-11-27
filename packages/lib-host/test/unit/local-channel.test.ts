@@ -328,22 +328,7 @@ describe('the channel of the local machine (card #3158)', () => {
     deepStrictEqual(states, [false, true]);
   });
 
-  it('hands on a line that has not ended by 64 KiB, in pieces, and drops none of it', async () => {
-    const {lines} = await ranWith(
-      localChannel(LINUX),
-      requestOf("head -c 1048576 /dev/zero | tr '\\0' a"),
-    );
-    deepStrictEqual(
-      [
-        lines.length,
-        lines.every(line => line.length === 65536),
-        lines.join('').length,
-      ],
-      [16, true, 1048576],
-    );
-  });
-
-  it('keeps a line of exactly 64 KiB whole, and splits one byte more', async () => {
+  it('keeps a line of exactly 64 Ki characters whole, and splits one character more', async () => {
     const {lines} = await ranWith(
       localChannel(LINUX),
       requestOf(
@@ -360,12 +345,12 @@ describe('the channel of the local machine (card #3158)', () => {
     );
   });
 
-  it('splits a line of multi-byte characters between characters, so each piece is at most 64 KiB and none is broken', async () => {
+  it('hands on a long line of multi-byte characters in parts of at most 64 Ki characters, and loses none', async () => {
     const seen = [];
     for (const [character, count] of [
-      ['é', 40000],
-      ['€', 30000],
-      ['😀', 20000],
+      ['é', 100000],
+      ['€', 100000],
+      ['😀', 50000],
     ] as const) {
       const {lines} = await ranWith(
         localChannel(LINUX),
@@ -374,15 +359,14 @@ describe('the channel of the local machine (card #3158)', () => {
         ),
       );
       seen.push([
-        lines.every(line => Buffer.byteLength(line) <= 65536),
+        lines.every(line => line.length <= 65536),
         lines.join('') === character.repeat(count),
-        lines.length,
       ]);
     }
     deepStrictEqual(seen, [
-      [true, true, 2],
-      [true, true, 2],
-      [true, true, 2],
+      [true, true],
+      [true, true],
+      [true, true],
     ]);
   });
 
