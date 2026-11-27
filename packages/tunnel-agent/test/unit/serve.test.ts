@@ -52,6 +52,27 @@ describe('serving the tunnel', () => {
     ]);
   });
 
+  it('ends with status 0 at once, holding nothing, when the user stopped the agent before the leg started', async () => {
+    const stopped = new AbortController();
+    stopped.abort();
+    const held: number[] = [];
+    const said: string[] = [];
+    const status = await serveTunnel(
+      {
+        hold: () => {
+          held.push(1);
+          return Promise.resolve({kind: 'stopped'});
+        },
+      },
+      TUNNEL,
+      stopped.signal,
+      line => {
+        said.push(line);
+      },
+    );
+    deepStrictEqual([status, held, said], [0, [], []]);
+  });
+
   it('ends with status 1 and says the leg’s reason when it ended for good, so that the service manager starts the agent again', async () => {
     deepStrictEqual(
       await servedWith({

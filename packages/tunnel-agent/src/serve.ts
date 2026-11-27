@@ -19,13 +19,19 @@ export interface HostLeg {
   hold(tunnel: RelayTunnel, stop: AbortSignal): Promise<HostEnd>;
 }
 
-/** Serves `tunnel` through `leg` until it ends; the exit status of the run, after the user was told why it ended. */
+/**
+ * Serves `tunnel` through `leg` until it ends, and not at all when the user already stopped the agent; the exit status
+ * of the run, after the user was told why it ended.
+ */
 export async function serveTunnel(
   hostLeg: HostLeg,
   tunnel: RelayTunnel,
   stop: AbortSignal,
   report: (line: string) => void,
 ): Promise<number> {
+  if (stop.aborted) {
+    return 0;
+  }
   const end = await hostLeg.hold(tunnel, stop);
   if (end.kind === 'stopped') {
     return 0;

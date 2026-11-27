@@ -185,6 +185,18 @@ function legOf(
 ): HostLeg {
   return {
     hold: async (tunnel, stop) => {
+      if (stop.aborted) {
+        return {kind: 'stopped'};
+      }
+      let hostKey: KeyPair;
+      try {
+        hostKey = await hostKeyOf(folder);
+      } catch (caught) {
+        return {
+          kind: 'ended',
+          reason: `the host key could not be read: ${caught instanceof Error ? caught.message : String(caught)}`,
+        };
+      }
       const host = new TunnelRelayTunnelHost(client as TunnelManagementClient);
       // Nothing binds a port of this machine: the control port's connections go to the control server, any other closes.
       host.forwardConnectionsToLocalPorts = false;
@@ -195,7 +207,7 @@ function legOf(
           forwarded.stream.destroy();
         }
       });
-      host.hostPrivateKeyPromise = hostKeyOf(folder);
+      host.hostPrivateKeyPromise = Promise.resolve(hostKey);
       const ended = new Promise<HostEnd>(resolve => {
         host.connectionStatusChanged(change => {
           if (change.status === ConnectionStatus.Disconnected) {
@@ -205,17 +217,27 @@ function legOf(
         stop.addEventListener('abort', () => {
           resolve({kind: 'stopped'});
         });
+        if (stop.aborted) {
+          resolve({kind: 'stopped'});
+        }
       });
-      const hosted = await relayed(() =>
-        client.getTunnel(
-          {tunnelId: tunnel.tunnelId, clusterId: tunnel.clusterId},
-          {includePorts: true, tokenScopes: [TunnelAccessScopes.Host]},
-        ),
-      );
-      if (hosted === null) {
-        return {kind: 'ended', reason: 'the relay no longer has the tunnel'};
+      try {
+        const hosted = await relayed(() =>
+          client.getTunnel(
+            {tunnelId: tunnel.tunnelId, clusterId: tunnel.clusterId},
+            {includePorts: true, tokenScopes: [TunnelAccessScopes.Host]},
+          ),
+        );
+        if (hosted === null) {
+          return {kind: 'ended', reason: 'the relay no longer has the tunnel'};
+        }
+        await host.connect(hosted);
+      } catch (caught) {
+        return {
+          kind: 'ended',
+          reason: caught instanceof Error ? caught.message : String(caught),
+        };
       }
-      await host.connect(hosted);
       const end = await ended;
       await host.dispose();
       return end;

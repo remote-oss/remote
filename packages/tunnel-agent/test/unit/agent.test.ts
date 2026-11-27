@@ -14,11 +14,15 @@ import {
 import {MemoryRelay} from './tunnel.fixture.ts';
 
 /** A run of the agent over a relay in memory, in a home folder of its own. */
-function runOf(end: HostEnd = {kind: 'stopped'}) {
+function runOf(
+  end: HostEnd = {kind: 'stopped'},
+  stop: AbortSignal = new AbortController().signal,
+) {
   const home = mkdtempSync(path.join(tmpdir(), 'agent-run-'));
   const relay = new MemoryRelay();
   const said: string[] = [];
   const connected: string[] = [];
+  const held: number[] = [];
   const shipped = {read: (): string => 'relay.example'};
   const agentRun: AgentRun = {
     folder: stateFolderOf(home),
@@ -26,9 +30,17 @@ function runOf(end: HostEnd = {kind: 'stopped'}) {
     domain: () => shipped.read(),
     connect: (relayDomain, token) => {
       connected.push(`${relayDomain} ${token}`);
-      return {service: relay, hostLeg: {hold: () => Promise.resolve(end)}};
+      return {
+        service: relay,
+        hostLeg: {
+          hold: () => {
+            held.push(1);
+            return Promise.resolve(end);
+          },
+        },
+      };
     },
-    stop: new AbortController().signal,
+    stop,
     report: line => {
       said.push(line);
     },
@@ -38,6 +50,7 @@ function runOf(end: HostEnd = {kind: 'stopped'}) {
     relay,
     said,
     connected,
+    held,
     handlers: agentHandlers(agentRun),
     signIn: (token: string) => {
       writeStateFile(agentRun.folder, 'credential', token);
@@ -120,6 +133,32 @@ describe('the agent’s tunnel commands', () => {
       [await world.handlers.start?.(undefined), world.said],
       [1, ['The tunnel name is taken.']],
     );
+  });
+
+  it('a stop before the leg starts, whether it came before the start or while the tunnel was being registered, ends the run with status 0 and never holds the leg', async () => {
+    const before = new AbortController();
+    before.abort();
+    const early = runOf({kind: 'ended', reason: 'gone'}, before.signal);
+    early.signIn('the-token');
+    const during = new AbortController();
+    const late = runOf({kind: 'ended', reason: 'gone'}, during.signal);
+    late.signIn('the-token');
+    const create = late.relay.create.bind(late.relay);
+    late.relay.create = name => {
+      during.abort();
+      return create(name);
+    };
+    deepStrictEqual(
+      [
+        await early.handlers.start?.(undefined),
+        early.held,
+        await late.handlers.start?.(undefined),
+        late.held,
+      ],
+      [0, [], 0, []],
+    );
+    early.end();
+    late.end();
   });
 
   it('a start whose leg ended for good ends with status 1', async () => {
