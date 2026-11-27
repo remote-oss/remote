@@ -792,6 +792,11 @@ describe('Connect Current Window to Host', function () {
       const menu = await settledMenuOf('c3017-inflight');
       await pressEscape('c3017-inflight');
       const leftover = emptyWindows();
+      // The remote name in the title is what tells the reloaded window's page from the other empty ones when the control reads it.
+      await userSettings({
+        ...PLATFORMS,
+        'window.title': '[${rootName}]${remoteName}',
+      });
       next = await nextEmptyWindow(() =>
         pressControlAlt('c3017-inflight', 'h'),
       );
@@ -850,6 +855,7 @@ describe('Connect Current Window to Host', function () {
       await userSettings({
         ...PLATFORMS,
         'remote.SSH.connectTimeout': undefined,
+        'window.title': undefined,
       });
     }
   });
