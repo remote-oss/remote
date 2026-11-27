@@ -269,9 +269,7 @@ const SSH_HARNESS: ChannelHarness = {
 describe('host channel over SSH: a PowerShell host', () => {
   // Pending: the Windows host job has to show that a cancelled PowerShell run that started a child leaves no descendant
   // once its client is killed; if it does, the run reports $PID first and the cancel runs `taskkill /T /F /PID`.
-  it(
-    'ends a cancelled PowerShell run’s whole tree (pending the measurement on the Windows host job)',
-  );
+  it('ends a cancelled PowerShell run’s whole tree (pending #3308)');
 });
 
 describe('host channel over SSH: the lib-host contract', function () {
