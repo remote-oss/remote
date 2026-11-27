@@ -115,6 +115,7 @@ function fileWith(content: Uint8Array): string {
 }
 
 const harness: ChannelHarness = {
+  pendingOn: '#3283',
   scriptFailures: ['channelClosed', 'spawnFailed'],
   copyFailures: ['copyToolMissing', 'copyFailed', 'channelClosed'],
   reachesClientFiles: false,
@@ -162,6 +163,9 @@ describe('the exec channel against the channel contract (card containers-02)', (
   });
 
   for (const contractCase of channelContractCases(harness)) {
-    it(`contracts §1: ${contractCase.name}`, contractCase.check);
+    it(
+      `contracts §1: ${contractCase.name}`,
+      contractCase.pending === true ? undefined : contractCase.check,
+    );
   }
 });

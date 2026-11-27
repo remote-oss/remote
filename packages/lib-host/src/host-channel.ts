@@ -100,7 +100,16 @@ export type CopyOutcome = FileCopied | OperationFailed;
 
 /**
  * The narrow interface between the server lifecycle and a transport. A channel never interprets a script's
- * output and never retries an operation by itself.
+ * output and never retries an operation by itself. Every channel keeps three rules, which `testing/channel-contract.ts`
+ * checks:
+ * - A cancel ends the script's whole process tree: the shell and each descendant still parented under it, TERM first
+ *   and KILL after 5 s, before the run reports `cancelled`. A process that left the tree by being re-parented, such as
+ *   a server started on purpose to outlive its script, is untouched. A remote channel runs `TREE_KILL_SCRIPT` for the
+ *   shell's pid; a local one may signal the script's own process group.
+ * - The script's lines are its standard output and standard error as one stream, in order: `JOINED_ERRORS` leads the
+ *   shell's program.
+ * - A line with no line end yet holds at most `LONGEST_PENDING_LINE` characters before it is told as a line
+ *   (`BoundedLines`), and writes wait for the transport to drain where it has a drain signal.
  */
 export interface HostChannel {
   /**

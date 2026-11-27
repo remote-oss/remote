@@ -7,6 +7,8 @@ import path from 'node:path';
 import {finished} from 'node:stream/promises';
 import {
   channelContractCases,
+  LARGE_COPY_LENGTH,
+  LONG_LINE_LENGTH,
   stagedInputOf,
   type ChannelHarness,
   type ContractScenario,
@@ -20,7 +22,7 @@ import {
 } from '../../src/cli-control/exec-server.ts';
 
 /** The members of an exec server the channel uses. */
-type ChannelServer = Pick<ExecServer, 'spawn' | 'kill' | 'fs'>;
+type ChannelServer = Pick<ExecServer, 'spawn' | 'fs'>;
 
 /** A read stream over the `data` and `end` of a local process's output. */
 function readStreamOf(output: NodeJS.ReadableStream): ExecReadStream {
@@ -63,10 +65,6 @@ function localExecServer(): ChannelServer {
           });
         }),
       });
-    },
-    kill: processId => {
-      process.kill(processId, 'SIGKILL');
-      return Promise.resolve();
     },
     // eslint-disable-next-line id-length -- the exec server's member
     fs: {
@@ -138,6 +136,16 @@ function failingFiles(
   };
 }
 
+/** Whether the local process `processId` is running. */
+function isRunning(processId: number): boolean {
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The commands that print `lines`, one each. */
 function printing(lines: readonly string[]): string[] {
   return lines.map(line => `printf '%s\\n' '${line}'`);
@@ -156,6 +164,14 @@ function scriptOf(scenario: ContractScenario): string {
       return [...printing(scenario.lines), 'sleep 30'].join('; ');
     case 'digestsInput':
       return "sha256sum | cut -d ' ' -f 1";
+    case 'backgroundsThenWaits':
+      return `sleep 40 & printf '%s\\n' "$!"; wait`;
+    case 'detachesThenWaits':
+      return `(sleep 40 >/dev/null 2>&1 & printf '%s\\n' "$!"); sleep 30`;
+    case 'printsBothStreams':
+      return "printf 'out one\\n'; printf 'err one\\n' >&2; printf 'out two\\n'";
+    case 'printsLongLine':
+      return `head -c ${String(LONG_LINE_LENGTH)} /dev/zero | tr '\\0' x`;
     default:
       return 'true';
   }
@@ -178,12 +194,25 @@ describe('host channel over an exec server: the lib-host contract', function () 
     scriptFailures: ['channelClosed', 'spawnFailed'],
     copyFailures: ['copyFailed', 'channelClosed'],
     reachesClientFiles: false,
+    processes: {
+      alive: processId => Promise.resolve(isRunning(processId)),
+      end: processId => {
+        process.kill(processId, 'SIGKILL');
+        return Promise.resolve();
+      },
+    },
+    boundedCopy: {
+      kind: 'notApplicable',
+      reason: "the exec server's write stream gives no drain signal",
+    },
     stage: async (scenario): Promise<StagedChannel> => {
       localFile = path.join(folder, `input-${String(Math.random())}`);
       const content =
         scenario.kind === 'digestsInput' && scenario.input.kind === 'file'
           ? scenario.input.content
-          : new Uint8Array(4096);
+          : new Uint8Array(
+              scenario.kind === 'copiesLarge' ? LARGE_COPY_LENGTH : 4096,
+            );
       if (scenario.kind !== 'missingInputFile') {
         await writeFile(localFile, content);
       }
@@ -218,7 +247,10 @@ describe('host channel over an exec server: the lib-host contract', function () 
   };
 
   for (const contractCase of channelContractCases(harness)) {
-    it(contractCase.name, contractCase.check);
+    it(
+      contractCase.name,
+      contractCase.pending === true ? undefined : contractCase.check,
+    );
   }
 });
 
@@ -431,39 +463,183 @@ describe('host channel over an exec server', () => {
     );
   });
 
-  it('cancels a run before its shell reported its process id, killing nothing', async () => {
-    const server = localExecServer();
-    const killed: number[] = [];
-    const unreporting: ChannelServer = {
-      ...server,
-      spawn: () => server.spawn('sh', ['-c', 'sleep 2'], {}),
-      kill: processId => {
-        killed.push(processId);
-        return Promise.resolve();
-      },
-    };
-    const controller = new AbortController();
-    const running = execServerChannel(unreporting, 'host', 'linux').runScript(
+  /** A run of `script` with no input, cancelled by `controller`, its lines told to `onLine`. */
+  function runWith(
+    server: ChannelServer,
+    request: Partial<
+      Parameters<ReturnType<typeof execServerChannel>['runScript']>[0]
+    >,
+    onLine: (line: string) => void,
+  ): ReturnType<ReturnType<typeof execServerChannel>['runScript']> {
+    return execServerChannel(server, 'host', 'linux').runScript(
       {
         script: 'true',
         interpreter: 'posixShell',
         environment: {},
         input: {kind: 'text', text: ''},
-        cancellation: controller.signal,
+        cancellation: new AbortController().signal,
+        ...request,
       },
+      onLine,
+    );
+  }
+
+  /** A server whose one spawn sends `pieces` on its output, reporting its exit with `status` first. */
+  function scriptedServer(pieces: string[], status: number): ChannelServer {
+    return {
+      ...localExecServer(),
+      spawn: () => {
+        const listeners: Array<(data: Uint8Array) => void> = [];
+        const ended = new Promise<void>(resolve => {
+          setTimeout(() => {
+            for (const piece of pieces) {
+              for (const listener of listeners) {
+                listener(Buffer.from(piece));
+              }
+            }
+            resolve();
+          }, 30);
+        });
+        const quiet: ExecReadStream = {
+          onDidReceiveMessage: () => ({dispose: () => undefined}),
+          onEnd: Promise.resolve(),
+        };
+        return Promise.resolve({
+          stdin: {write: () => undefined, end: () => undefined},
+          stdout: {
+            onDidReceiveMessage: listener => {
+              listeners.push(listener);
+              return {dispose: () => undefined};
+            },
+            onEnd: ended,
+          },
+          stderr: quiet,
+          onExit: Promise.resolve({status}),
+        });
+      },
+    };
+  }
+
+  it('cancels a run before its shell reported its process id, ending no tree', async () => {
+    const server = localExecServer();
+    const spawned: string[][] = [];
+    const unreporting: ChannelServer = {
+      ...server,
+      spawn: (command, argumentList, options) => {
+        spawned.push(argumentList);
+        return server.spawn('sh', ['-c', 'sleep 2'], options);
+      },
+    };
+    const controller = new AbortController();
+    const running = runWith(
+      unreporting,
+      {cancellation: controller.signal},
       () => undefined,
     );
     await new Promise(resolve => setTimeout(resolve, 50));
     controller.abort();
     deepStrictEqual(
-      [await running, killed],
+      [await running, spawned.length],
       [
         {
           kind: 'failed',
           failure: {kind: 'cancelled', detail: 'the run was cancelled'},
         },
-        [],
+        1,
       ],
+    );
+  });
+
+  it('keeps the output that comes after the exec server reported the exit', async () => {
+    const lines: string[] = [];
+    const outcome = await runWith(
+      scriptedServer(['123\n', 'late line\n'], 0),
+      {},
+      line => lines.push(line),
+    );
+    deepStrictEqual(
+      [outcome, lines],
+      [{kind: 'exited', status: 0}, ['late line']],
+    );
+  });
+
+  it('tells no line after the cancel, even one in the same piece of output', async () => {
+    const controller = new AbortController();
+    const lines: string[] = [];
+    const server = scriptedServer(['123\nbefore\nafter\n'], 0);
+    await runWith(server, {cancellation: controller.signal}, line => {
+      lines.push(line);
+      controller.abort();
+    });
+    deepStrictEqual(lines, ['before']);
+  });
+
+  it("still reports a cancel when the tree-kill script can't be started", async () => {
+    const server = localExecServer();
+    let spawns = 0;
+    const refusing: ChannelServer = {
+      ...server,
+      spawn: (...spawnArguments) => {
+        spawns += 1;
+        return spawns === 1
+          ? server.spawn(...spawnArguments)
+          : Promise.reject(closed());
+      },
+    };
+    const controller = new AbortController();
+    const outcome = await runWith(
+      refusing,
+      {
+        script: "printf 'started\\n'; sleep 30",
+        cancellation: controller.signal,
+      },
+      () => {
+        controller.abort();
+      },
+    );
+    deepStrictEqual(
+      [outcome, spawns],
+      [
+        {
+          kind: 'failed',
+          failure: {kind: 'cancelled', detail: 'the run was cancelled'},
+        },
+        2,
+      ],
+    );
+  });
+
+  it('reports the status the exec server gives a shell a signal ended', async () => {
+    deepStrictEqual(
+      await runWith(localExecServer(), {script: 'kill -9 $$'}, () => undefined),
+      {
+        kind: 'exited',
+        status: -1,
+      },
+    );
+  });
+
+  it("fails a run whose input can't be read once it starts, ending the shell before the script reads part of it", async () => {
+    const marker = path.join(folder, 'read-part');
+    const outcome = await runWith(
+      localExecServer(),
+      {
+        script: `cat >/dev/null; touch '${marker}'`,
+        input: {kind: 'file', localFile: folder},
+      },
+      () => undefined,
+    );
+    await new Promise(resolve => setTimeout(resolve, 300));
+    deepStrictEqual(
+      [
+        outcome.kind === 'failed' ? outcome.failure.kind : outcome.kind,
+        outcome.kind === 'failed' && outcome.failure.detail.includes('EISDIR'),
+        await readFile(marker).then(
+          () => 'written',
+          () => 'absent',
+        ),
+      ],
+      ['spawnFailed', true, 'absent'],
     );
   });
 });
