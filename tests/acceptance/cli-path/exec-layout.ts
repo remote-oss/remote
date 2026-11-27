@@ -22,7 +22,7 @@ import {
 import {DATA_FOLDER, freshHost} from '../windows/maintenance.ts';
 import {dialogOf, notifications} from '../windows/renderer.ts';
 import {PLATFORMS} from '../windows/tunnel-support.ts';
-import {stamped} from './stamped-steps.ts';
+import {failedWithReadout, stamped} from './stamped-steps.ts';
 
 /** What the host holds and runs after a connect, as the rows compare it. */
 export interface ExecFacts {
@@ -134,6 +134,9 @@ export async function freshExecHost(): Promise<void> {
   );
 }
 
+/** How long the readout of a connect that did not finish may take, in milliseconds. */
+const READOUT_MILLISECONDS = 60_000;
+
 /** How long the stalled connect's two samples of the CLI's folder are apart, in milliseconds. */
 const SAMPLE_GAP_MILLISECONDS = 5000;
 
@@ -203,9 +206,12 @@ export async function execConnect(
     await stamped(rowName, 'the connect', 130_000, () =>
       connectedWithin(name, 120_000),
     ).catch(async (failure: unknown) => {
-      throw new Error(`${String(failure)}\n${await stalledConnectText(name)}`, {
-        cause: failure,
-      });
+      throw await failedWithReadout(
+        rowName,
+        failure,
+        () => stalledConnectText(name),
+        READOUT_MILLISECONDS,
+      );
     });
     await new Promise(resolve => setTimeout(resolve, 3000));
     return {
