@@ -58,6 +58,11 @@ function failureKind(reason: string): ChannelFailureKind {
   return reason === 'timeout' ? 'timeout' : 'channelClosed';
 }
 
+/** Whether `signal` has been aborted by now, read afresh where an earlier check no longer holds. */
+function isAborted(signal: AbortSignal): boolean {
+  return signal.aborted;
+}
+
 /** The host channel over the shared `ssh` session. */
 export class SharedSessionChannel implements HostChannel {
   private readonly options: SharedSessionChannelOptions;
@@ -111,6 +116,10 @@ export class SharedSessionChannel implements HostChannel {
     const input = await this.inputOf(request.input);
     if ('failed' in input) {
       return input.failed;
+    }
+    // The input was read while the caller could cancel: a cancel that came meanwhile has no run to end.
+    if (isAborted(request.cancellation)) {
+      return failFrom('cancelled', 'cancelled before the run');
     }
     let delivering = true;
     const ending = await this.untilCancelled(

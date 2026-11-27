@@ -13,7 +13,7 @@ import {
   bootstrapEventOf,
 } from '../connection-server/session-bootstrap.ts';
 import {ShellRuns} from '../connection-server/shell-runs.ts';
-import {LineSplitter} from '../process/line-splitter.ts';
+import {BoundedLines} from 'lib-host';
 import type {LoginTerminalSession} from './login-terminal.ts';
 
 /** What a terminal runner is made of. */
@@ -53,7 +53,7 @@ export class TerminalSessionRunner implements SessionRunner {
     });
     terminal.send(options.prelude);
     let ready = false;
-    const output = new LineSplitter(line => {
+    const output = new BoundedLines(line => {
       const event = ready ? undefined : bootstrapEventOf(line);
       if (event === undefined) {
         this.runs.hear(line);

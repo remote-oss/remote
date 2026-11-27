@@ -7,7 +7,7 @@
 
 import {type Invocation, TUNNEL_SUCCESS_LINE} from '../arguments/invocation.ts';
 import {setupMarkerOf} from '../diagnostics/setup-report.ts';
-import {LineSplitter} from '../process/line-splitter.ts';
+import {BoundedLines} from 'lib-host';
 import type {LoginTerminals, TerminalEnd} from './login-terminal.ts';
 
 /** The general line `ssh` prints when a forward could not be set up. */
@@ -69,7 +69,7 @@ export function openTunnelSession(
   }
   let failure: string | undefined;
   let inputSent = input === undefined;
-  const splitter = new LineSplitter(line => {
+  const splitter = new BoundedLines(line => {
     // The tunnel's input waits for ssh to report it is authenticated: nothing on the host that reads its standard input
     // before the login can take it.
     if (

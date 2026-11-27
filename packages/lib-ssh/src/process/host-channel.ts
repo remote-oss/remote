@@ -5,6 +5,7 @@
  */
 
 import {
+  BoundedLines,
   type ChannelFailureKind,
   type CopyOutcome,
   type CopyRequest,
@@ -19,14 +20,23 @@ import type {Scheduler} from 'lib-helper';
 import {buildInvocation, type SshRequest} from '../arguments/invocation.ts';
 import {isDebugLine} from '../diagnostics/classify.ts';
 import type {Copier} from '../terminal/terminal-copy.ts';
-import {LineSplitter} from './line-splitter.ts';
 import type {LocalFiles} from './node-files.ts';
 import type {ProcessSpawner} from './ports.ts';
-import {planScript, type PlannedInput} from './remote-program.ts';
+import {
+  planScript,
+  type PlannedInput,
+  treeKillProgram,
+} from './remote-program.ts';
 import {type SshSession, spawnSession} from './session.ts';
 
 /** The exit status with which `ssh` and `scp` report that the connection itself failed. */
 const CONNECTION_FAILED_STATUS = 255;
+
+/** A process id as the shell prints it. */
+const PROCESS_ID = /^[1-9][0-9]*$/;
+
+/** How long the run that ends a cancelled script's tree may take, in milliseconds: the script's own TERM, 5 s and KILL, and the connection. */
+const TREE_KILL_MILLISECONDS = 15_000;
 
 /** How many lines are kept for a failure's detail while collecting, oldest dropped first. */
 const ERROR_LINES_KEPT = 50;
@@ -130,7 +140,16 @@ export class SshHostChannel implements HostChannel {
     }
     const {session} = spawned;
     let delivering = true;
-    const lines = new LineSplitter(line => {
+    let processId: number | undefined;
+    let first = plan.reportsProcessId;
+    const lines = new BoundedLines(line => {
+      if (first) {
+        first = false;
+        if (PROCESS_ID.test(line)) {
+          processId = Number(line);
+          return;
+        }
+      }
       if (delivering && !cancellation.aborted) {
         onLine(line);
       }
@@ -144,6 +163,10 @@ export class SshHostChannel implements HostChannel {
     const ending = await this.supervise(session, cancellation);
     if (ending.kind !== 'exit') {
       delivering = false;
+      if (processId !== undefined) {
+        await this.endTree(processId);
+      }
+      session.kill();
       return this.interrupted(ending);
     }
     lines.flush();
@@ -156,6 +179,40 @@ export class SshHostChannel implements HostChannel {
           `ssh could not keep the connection${errorText()}`,
         )
       : {kind: 'exited', status: ending.status};
+  }
+
+  /**
+   * Ends the process tree of the script's shell `processId` on the host with lib-host's script, through one more `ssh`
+   * run of the same connection, and waits for it; a run that cannot start, or that does not end in time, leaves the
+   * tree, and the cancel is still reported.
+   */
+  private async endTree(processId: number): Promise<void> {
+    const invocation = buildInvocation({
+      ...this.options.base,
+      purpose: 'oneShot',
+      remoteProgram: treeKillProgram(processId),
+    });
+    const spawned = await spawnSession(
+      this.options.spawner,
+      invocation,
+      this.options.askpassEnvironment,
+      this.options.editorEnvironment,
+    );
+    if (spawned.kind === 'failed') {
+      return;
+    }
+    const {session} = spawned;
+    session.endInput();
+    let cancelTimer: (() => void) | undefined;
+    const outOfTime = new Promise<void>(resolve => {
+      cancelTimer = this.options.scheduler.setTimer(
+        TREE_KILL_MILLISECONDS,
+        resolve,
+      );
+    });
+    await Promise.race([session.exit(), outOfTime]);
+    cancelTimer?.();
+    session.kill();
   }
 
   /** Copies a local file to the host with `scp`. */
@@ -188,6 +245,7 @@ export class SshHostChannel implements HostChannel {
     session.endInput();
     const ending = await this.supervise(session, cancellation);
     if (ending.kind !== 'exit') {
+      session.kill();
       return this.interrupted(ending);
     }
     if (ending.status === 0) {
@@ -215,7 +273,7 @@ export class SshHostChannel implements HostChannel {
   /** Keeps the error lines of the client's standard error, its debug lines left out; the returned function gives them as the end of a message. */
   private collectError(session: SshSession): () => string {
     const kept: string[] = [];
-    const lines = new LineSplitter(line => {
+    const lines = new BoundedLines(line => {
       if (line.trim() !== '' && !isDebugLine(line)) {
         kept.push(line);
         if (kept.length > ERROR_LINES_KEPT) {
@@ -252,7 +310,7 @@ export class SshHostChannel implements HostChannel {
     session.endInput();
   }
 
-  /** Waits for the run to end, to be cancelled or to run out of time; the latter two kill the client. */
+  /** Waits for the run to end, to be cancelled or to run out of time; the caller ends the client after the latter two. */
   private supervise(
     session: SshSession,
     cancellation: AbortSignal,
@@ -267,9 +325,6 @@ export class SshHostChannel implements HostChannel {
         settled = true;
         cancelTimer?.();
         cancellation.removeEventListener('abort', onAbort);
-        if (ending.kind !== 'exit') {
-          session.kill();
-        }
         resolve(ending);
       }
       function onAbort(): void {

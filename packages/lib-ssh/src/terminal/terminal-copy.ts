@@ -13,7 +13,7 @@ import {
   type ConnectWaitSettings,
   connectWaitMilliseconds,
 } from '../process/connect-wait.ts';
-import {LineSplitter} from '../process/line-splitter.ts';
+import {BoundedLines} from 'lib-host';
 import type {
   LoginTerminals,
   TerminalEnd,
@@ -147,7 +147,7 @@ export function terminalCopierOf(options: TerminalCopierOptions): Copier {
           },
         },
       });
-      const splitter = new LineSplitter(line => {
+      const splitter = new BoundedLines(line => {
         if (line.trim() !== '' && !isDebugLine(line)) {
           lines.push(line);
           if (lines.length > TOLD_LINES) {

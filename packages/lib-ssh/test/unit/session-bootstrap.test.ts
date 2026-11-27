@@ -233,7 +233,10 @@ describe('the session start (card ssh-34, #443)', () => {
     });
     deepStrictEqual(
       plan.kind === 'planned' ? plan.remoteProgram : plan.reason,
-      preludeProgram(Buffer.byteLength("NAME='x'\nexport NAME\ncat\n", 'utf8')),
+      preludeProgram(
+        Buffer.byteLength("NAME='x'\nexport NAME\ncat\n", 'utf8'),
+        'exec 2>&1; printf "%s\\n" "$$"; ',
+      ),
     );
   });
 

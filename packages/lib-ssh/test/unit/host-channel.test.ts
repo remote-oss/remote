@@ -11,7 +11,6 @@ import {
   type ScriptRequest,
 } from 'lib-host';
 import {
-  LineSplitter,
   nodeLocalFiles,
   planScript,
   type ProcessSpecification,
@@ -20,6 +19,7 @@ import {
 import {
   environmentPrefix,
   scriptText,
+  treeKillProgram,
 } from '../../src/process/remote-program.ts';
 import {
   type ClientScript,
@@ -51,6 +51,9 @@ function prints(output: string, status: number): ClientScript {
     process.exit(status);
   };
 }
+
+/** What a script's own shell runs first: its standard error joins its output, and its process id is printed. */
+const FRONT = 'exec 2>&1; printf "%s\\n" "$$"; ';
 
 describe('SSH host channel', () => {
   describe('identity', () => {
@@ -97,7 +100,8 @@ describe('SSH host channel', () => {
       deepStrictEqual(planScript(request({script: 'echo hi'})), {
         kind: 'planned',
         remoteProgram: 'sh -s',
-        input: {kind: 'text', text: 'echo hi'},
+        reportsProcessId: true,
+        input: {kind: 'text', text: `${FRONT}echo hi`},
       });
     });
 
@@ -109,9 +113,10 @@ describe('SSH host channel', () => {
         {
           kind: 'planned',
           remoteProgram: 'sh -s',
+          reportsProcessId: true,
           input: {
             kind: 'text',
-            text: "GREETING='it'\\''s'\nexport GREETING\necho $GREETING",
+            text: `${FRONT}GREETING='it'\\''s'\nexport GREETING\necho $GREETING`,
           },
         },
       );
@@ -129,7 +134,8 @@ describe('SSH host channel', () => {
         ),
         {
           kind: 'planned',
-          remoteProgram: `sh -c 'eval "$(dd bs=1 count=${String(Buffer.byteLength(prelude))} 2>/dev/null)"'`,
+          remoteProgram: `sh -c '${FRONT}eval "$(dd bs=1 count=${String(Buffer.byteLength(prelude))} 2>/dev/null)"'`,
+          reportsProcessId: true,
           input: {kind: 'text', text: `${prelude}data`},
         },
       );
@@ -146,7 +152,8 @@ describe('SSH host channel', () => {
         ),
         {
           kind: 'planned',
-          remoteProgram: `sh -c 'eval "$(dd bs=1 count=27 2>/dev/null)"'`,
+          remoteProgram: `sh -c '${FRONT}eval "$(dd bs=1 count=27 2>/dev/null)"'`,
+          reportsProcessId: true,
           input: {
             kind: 'prefixedFile',
             prefix: "FIRST='x'\nexport FIRST\ncat\n",
@@ -180,7 +187,8 @@ describe('SSH host channel', () => {
         ),
         {
           kind: 'planned',
-          remoteProgram: `sh -c 'eval "$(dd bs=1 count=4 2>/dev/null)"'`,
+          remoteProgram: `sh -c '${FRONT}eval "$(dd bs=1 count=4 2>/dev/null)"'`,
+          reportsProcessId: true,
           input: {kind: 'text', text: 'cat\ndata'},
         },
       );
@@ -193,7 +201,8 @@ describe('SSH host channel', () => {
         ),
         {
           kind: 'planned',
-          remoteProgram: `sh -c 'eval "$(dd bs=1 count=4 2>/dev/null)"'`,
+          remoteProgram: `sh -c '${FRONT}eval "$(dd bs=1 count=4 2>/dev/null)"'`,
+          reportsProcessId: true,
           input: {kind: 'prefixedFile', prefix: 'cat\n', localFile: '/a'},
         },
       );
@@ -205,7 +214,7 @@ describe('SSH host channel', () => {
       );
       strictEqual(
         plan.kind === 'planned' ? plan.remoteProgram : plan.reason,
-        `sh -c 'eval "$(dd bs=1 count=4 2>/dev/null)"'`,
+        `sh -c '${FRONT}eval "$(dd bs=1 count=4 2>/dev/null)"'`,
       );
     });
 
@@ -289,7 +298,7 @@ describe('SSH host channel', () => {
           started?.inputText(),
           started?.inputEnded,
         ],
-        [1, '/usr/bin/ssh', 'sh -s', 'echo hi', true],
+        [1, '/usr/bin/ssh', 'sh -s', `${FRONT}echo hi`, true],
       );
     });
 
@@ -514,6 +523,154 @@ describe('SSH host channel', () => {
           spawner.started[0]?.killed,
         ],
         [{kind: 'timeout', detail: 'no end within 5000 ms'}, true],
+      );
+    });
+
+    /** A scheduler on which a timer set for `milliseconds` fires at once, and every other never does. */
+    function firingAt(milliseconds: number) {
+      return {
+        setTimer: (given: number, callback: () => void) => {
+          const handle =
+            given === milliseconds ? setImmediate(callback) : undefined;
+          return () => {
+            if (handle !== undefined) {
+              clearImmediate(handle);
+            }
+          };
+        },
+      };
+    }
+
+    it('keeps the line with the shell’s process id off the script’s lines, and tells a first line that is no process id', async () => {
+      const reported = new ScriptedSpawner(prints('4242\nhello\n', 0));
+      const banner = new ScriptedSpawner(prints('welcome\n4242\nhello\n', 0));
+      const lines: string[][] = [[], []];
+      await new SshHostChannel({
+        ...channelBase(),
+        spawner: reported.spawn,
+      }).runScript(request(), line => lines[0]?.push(line));
+      await new SshHostChannel({
+        ...channelBase(),
+        spawner: banner.spawn,
+      }).runScript(request(), line => lines[1]?.push(line));
+      deepStrictEqual(lines, [['hello'], ['welcome', '4242', 'hello']]);
+    });
+
+    it('a PowerShell script reports no process id, so its first line is the script’s', async () => {
+      const spawner = new ScriptedSpawner(prints('4242\n', 0));
+      const lines: string[] = [];
+      await new SshHostChannel({
+        ...channelBase(),
+        spawner: spawner.spawn,
+      }).runScript(
+        request({interpreter: 'powershell', script: 'Write-Output 4242'}),
+        line => lines.push(line),
+      );
+      deepStrictEqual(lines, ['4242']);
+    });
+
+    it('a cancel ends the script’s tree on the host with one more ssh run of the same connection, waits for it, then ends the client and reports the cancel', async () => {
+      const spawner = new ScriptedSpawner(
+        process => {
+          process.output('4242\nfirst\n');
+        },
+        prints('', 0),
+      );
+      const controller = new AbortController();
+      const lines: string[] = [];
+      const running = new SshHostChannel({
+        ...channelBase(),
+        spawner: spawner.spawn,
+      }).runScript(request({cancellation: controller.signal}), line =>
+        lines.push(line),
+      );
+      await new Promise(resolve => setImmediate(resolve));
+      await new Promise(resolve => setImmediate(resolve));
+      controller.abort();
+      const outcome = await running;
+      deepStrictEqual(
+        [
+          outcome.kind === 'failed' ? outcome.failure.kind : outcome.kind,
+          lines,
+          spawner.started.length,
+          spawner.started[1]?.specification.programArguments.at(-1),
+          spawner.started[1]?.inputEnded,
+          spawner.started[0]?.killed,
+        ],
+        ['cancelled', ['first'], 2, treeKillProgram(4242), true, true],
+      );
+    });
+
+    it('a cancel before the shell reported its process id only ends the client', async () => {
+      const spawner = new ScriptedSpawner(() => undefined);
+      const controller = new AbortController();
+      const running = new SshHostChannel({
+        ...channelBase(),
+        spawner: spawner.spawn,
+      }).runScript(request({cancellation: controller.signal}), () => undefined);
+      await new Promise(resolve => setImmediate(resolve));
+      controller.abort();
+      const outcome = await running;
+      deepStrictEqual(
+        [
+          outcome.kind === 'failed' ? outcome.failure.kind : outcome.kind,
+          spawner.started.length,
+          spawner.started[0]?.killed,
+        ],
+        ['cancelled', 1, true],
+      );
+    });
+
+    it('a run that ends the tree and cannot start, or that does not end in time, leaves the tree, ends the client and still reports the cancel', async () => {
+      const outcomes = [];
+      for (const second of [startError('EMFILE'), () => undefined]) {
+        const spawner = new ScriptedSpawner(process => {
+          process.output('4242\n');
+        }, second);
+        const controller = new AbortController();
+        const running = new SshHostChannel({
+          ...channelBase(),
+          spawner: spawner.spawn,
+          scheduler: firingAt(15_000),
+        }).runScript(
+          request({cancellation: controller.signal}),
+          () => undefined,
+        );
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
+        controller.abort();
+        const outcome = await running;
+        outcomes.push([
+          outcome.kind === 'failed' ? outcome.failure.kind : outcome.kind,
+          spawner.started[0]?.killed,
+          spawner.started[1]?.killed,
+        ]);
+      }
+      deepStrictEqual(outcomes, [
+        ['cancelled', true, false],
+        ['cancelled', true, true],
+      ]);
+    });
+
+    it('a run that runs out of time ends the script’s tree on the host too', async () => {
+      const spawner = new ScriptedSpawner(
+        process => {
+          process.output('4242\n');
+        },
+        prints('', 0),
+      );
+      const outcome = await new SshHostChannel({
+        ...channelBase(),
+        spawner: spawner.spawn,
+        timeoutMilliseconds: 5000,
+        scheduler: firingAt(5000),
+      }).runScript(request(), () => undefined);
+      deepStrictEqual(
+        [
+          outcome.kind === 'failed' ? outcome.failure.kind : outcome.kind,
+          spawner.started[1]?.specification.programArguments.at(-1),
+        ],
+        ['timeout', treeKillProgram(4242)],
       );
     });
 
@@ -875,25 +1032,6 @@ describe('SSH host channel', () => {
         );
       });
     });
-  });
-});
-
-describe('LineSplitter', () => {
-  it('joins a line that arrives in pieces and delivers whole lines in order', () => {
-    const lines: string[] = [];
-    const splitter = new LineSplitter(line => lines.push(line));
-    splitter.push('ab');
-    splitter.push('c\nde');
-    splitter.push('f\n\ng');
-    deepStrictEqual(lines, ['abc', 'def', '']);
-  });
-
-  it('keeps nothing back when the stream ended on a line end', () => {
-    const lines: string[] = [];
-    const splitter = new LineSplitter(line => lines.push(line));
-    splitter.push('a\n');
-    splitter.flush();
-    deepStrictEqual(lines, ['a']);
   });
 });
 

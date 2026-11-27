@@ -5,7 +5,7 @@
 
 import type {Scheduler} from 'lib-helper';
 import {setupMarkerOf} from '../diagnostics/setup-report.ts';
-import {LineSplitter} from '../process/line-splitter.ts';
+import {BoundedLines} from 'lib-host';
 import {CONTINUE_QUESTION, PASSPHRASE_QUESTION} from '../prompts/classify.ts';
 
 /** How many output lines stand behind the candidate text. */
@@ -41,7 +41,7 @@ export class PromptReader {
   private readonly scheduler: Scheduler;
   private readonly timeoutMilliseconds: number;
   private readonly window: string[] = [];
-  private readonly splitter = new LineSplitter(line => {
+  private readonly splitter = new BoundedLines(line => {
     this.completeLine(line);
   });
   private partial = '';

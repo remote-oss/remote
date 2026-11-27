@@ -16,12 +16,12 @@ import {
   type ConnectionMode,
   type EffectiveOptions,
   judge,
-  LineSplitter,
   parseEffectiveOptions,
   type ProcessSpawner,
   scpProgram,
   VERSION_ARGUMENTS,
 } from 'lib-ssh';
+import {BoundedLines} from 'lib-host';
 import type {Logger} from 'lib-log';
 import {
   bannerLine,
@@ -222,7 +222,7 @@ async function lookUp(
     return {failure: {kind: 'unknown'}};
   }
   const errorLines: string[] = [];
-  const splitter = new LineSplitter(line => {
+  const splitter = new BoundedLines(line => {
     if (line !== '') {
       errorLines.push(line);
     }

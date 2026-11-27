@@ -7,9 +7,12 @@
  */
 
 import {
+  JOINED_ERRORS,
   posixQuote,
   powershellQuote,
   preludeCommand,
+  REPORT_PROCESS_ID,
+  TREE_KILL_SCRIPT,
   type ScriptInput,
   type ScriptRequest,
 } from 'lib-host';
@@ -28,6 +31,8 @@ export type ScriptPlan =
       remoteProgram: string;
       /** What goes to the command's standard input. */
       input: PlannedInput;
+      /** Whether the command's first output line is the shell's process id, which the run keeps off the script's lines. */
+      reportsProcessId: boolean;
     }
   | {kind: 'refused'; reason: string};
 
@@ -35,8 +40,16 @@ export type ScriptPlan =
  * The remote command that evaluates the first `byteCount` bytes of its standard input and leaves the rest of the
  * input to what they start. Only a number is on the command line; every login shell passes it to `sh` unchanged.
  */
-export function preludeProgram(byteCount: number): string {
-  return `sh -c ${posixQuote(preludeCommand(byteCount))}`;
+export function preludeProgram(byteCount: number, front = ''): string {
+  return `sh -c ${posixQuote(front + preludeCommand(byteCount))}`;
+}
+
+/** What a script's own shell runs first: the script's standard error joins its standard output, and the shell's id is printed. */
+const SCRIPT_FRONT = JOINED_ERRORS + REPORT_PROCESS_ID;
+
+/** The remote command that ends the process tree of the process `processId` with lib-host's script. */
+export function treeKillProgram(processId: number): string {
+  return `sh -c ${posixQuote(TREE_KILL_SCRIPT)} tree-kill ${String(processId)}`;
 }
 
 /** The first name in the environment that cannot be a variable's, if any. */
@@ -174,6 +187,7 @@ export function powershellPlan(
   return {
     kind: 'planned',
     remoteProgram,
+    reportsProcessId: false,
     input:
       request.input.kind === 'text'
         ? {kind: 'text', text: prelude + request.input.text}
@@ -205,13 +219,21 @@ export function planScript(
     return {
       kind: 'planned',
       remoteProgram: 'sh -s',
-      input: {kind: 'text', text: [...lines, script.text].join('\n')},
+      reportsProcessId: true,
+      input: {
+        kind: 'text',
+        text: SCRIPT_FRONT + [...lines, script.text].join('\n'),
+      },
     };
   }
   const prelude = `${[...lines, script.text].join('\n')}\n`;
   return {
     kind: 'planned',
-    remoteProgram: preludeProgram(Buffer.byteLength(prelude, 'utf8')),
+    remoteProgram: preludeProgram(
+      Buffer.byteLength(prelude, 'utf8'),
+      SCRIPT_FRONT,
+    ),
+    reportsProcessId: true,
     input:
       request.input.kind === 'text'
         ? {kind: 'text', text: prelude + request.input.text}

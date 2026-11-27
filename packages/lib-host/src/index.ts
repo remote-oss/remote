@@ -8,6 +8,7 @@ export {
   BoundedLines,
   JOINED_ERRORS,
   LONGEST_PENDING_LINE,
+  REPORT_PROCESS_ID,
   TREE_KILL_SCRIPT,
 } from './channel-rules.ts';
 export {

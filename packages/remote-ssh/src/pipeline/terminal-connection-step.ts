@@ -5,7 +5,7 @@
  */
 
 import type {Logger} from 'lib-log';
-import type {HostChannel} from 'lib-host';
+import {type HostChannel, BoundedLines} from 'lib-host';
 import type {Scheduler} from 'lib-helper';
 import {
   buildInvocation,
@@ -16,7 +16,6 @@ import {
   bootstrapLogLine,
   type BootstrapEvent,
   type ConnectionNotice,
-  LineSplitter,
   type LoginTerminalName,
   type LoginTerminals,
   followLoginOutput,
@@ -294,7 +293,7 @@ export function openTerminalConnectionStep(
         });
       }
 
-      const splitter = new LineSplitter(line => {
+      const splitter = new BoundedLines(line => {
         lines.push(line);
         // With our dynamic forward on this run, ssh's refusal of forwarding is the end of the window's tunnel.
         const refusal =
@@ -317,7 +316,7 @@ export function openTerminalConnectionStep(
       // ssh's own lines are logged up to its authentication; after it the terminal also holds the bootstrap's echo and
       // the remote shell, so only ssh's lines for a channel or a forward go on being logged.
       let sshPhase = true;
-      const sshOutput = new LineSplitter(line => {
+      const sshOutput = new BoundedLines(line => {
         if (sshPhase || isForwardingLine(line)) {
           logSshLines(dependencies.logger, [withoutAnswer(line)], undefined);
         }

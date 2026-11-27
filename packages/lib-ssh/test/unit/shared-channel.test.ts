@@ -345,6 +345,36 @@ describe('the host channel over the shared session', () => {
     );
   });
 
+  it('a cancel that comes while the input file is read ends the run as cancelled, and the script is never sent', async () => {
+    const controller = new AbortController();
+    let released: (() => void) | undefined;
+    files = {
+      exists: () => Promise.resolve(true),
+      read: async function* reading() {
+        await new Promise<void>(resolve => {
+          released = resolve;
+        });
+        yield Uint8Array.from([1]);
+      },
+    };
+    const running = channel().runScript(
+      {
+        ...REQUEST,
+        input: {kind: 'file', localFile: '/local/input'},
+        cancellation: controller.signal,
+      },
+      () => undefined,
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    controller.abort();
+    released?.();
+    const outcome = await running;
+    deepStrictEqual(
+      [outcome.kind === 'failed' ? outcome.failure.kind : outcome.kind, runs],
+      ['cancelled', []],
+    );
+  });
+
   it('copies through the channel it was given, with a login of its own', async () => {
     const request: CopyRequest = {
       localFile: '/local/archive',

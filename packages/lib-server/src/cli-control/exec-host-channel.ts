@@ -22,6 +22,7 @@ import {
   failFrom,
   type HostChannel,
   JOINED_ERRORS,
+  REPORT_PROCESS_ID,
   LONGEST_PENDING_LINE,
   type PlatformHint,
   preludeCommand,
@@ -36,9 +37,6 @@ const ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /** A process id as the shell prints it. */
 const PROCESS_ID = /^[1-9][0-9]*$/;
-
-/** The command before the prelude: the shell's own process id, on a line of its own. */
-const REPORT_PROCESS_ID = 'printf "%s\\n" "$$"; ';
 
 /** The channel over `server`, whose host is `identity` on `platform`. */
 export function execServerChannel(

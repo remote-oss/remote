@@ -1,12 +1,19 @@
+import {spawn, spawnSync} from 'node:child_process';
 import {type ChannelFailureKind} from 'lib-host';
 import {
   channelContractCases,
+  LONG_LINE_LENGTH,
   stagedInputOf,
   type ChannelHarness,
   type ContractScenario,
   type StagedChannel,
 } from 'lib-host/testing/channel-contract';
-import {SshHostChannel, type LocalFiles} from '../../src/index.ts';
+import {
+  SshHostChannel,
+  type LocalFiles,
+  type ProcessHandle,
+  type ProcessSpecification,
+} from '../../src/index.ts';
 import {
   type ClientScript,
   type FakeClientProcess,
@@ -72,6 +79,84 @@ function copyFailure(kind: ChannelFailureKind): ClientScript | Error {
     default:
       return silent;
   }
+}
+
+/** The scenarios that play out on a real shell standing in for the host: the cancel, the error stream and the bounds. */
+const REAL_SCENARIOS: ReadonlyArray<ContractScenario['kind']> = [
+  'backgroundsThenWaits',
+  'detachesThenWaits',
+  'printsBothStreams',
+  'printsLongLine',
+];
+
+/** The script that plays a real scenario out on the shell. */
+function realScriptOf(scenario: ContractScenario): string {
+  switch (scenario.kind) {
+    case 'backgroundsThenWaits':
+      return `sleep 40 & printf '%s\\n' "$!"; wait`;
+    case 'detachesThenWaits':
+      return `(sleep 40 >/dev/null 2>&1 & printf '%s\\n' "$!"); sleep 30`;
+    case 'printsBothStreams':
+      return "printf 'out one\\n'; printf 'err one\\n' >&2; printf 'out two\\n'";
+    default:
+      return `head -c ${String(LONG_LINE_LENGTH)} /dev/zero | tr '\\0' x`;
+  }
+}
+
+/**
+ * A spawner whose `ssh` runs the remote command it is given on this machine, in a session of its own as a host's sshd
+ * would: ending the client drops the connection and leaves whatever the command started running, which only a run that
+ * ends the tree on the host can end.
+ */
+function localHostSpawner(
+  specification: ProcessSpecification,
+): Promise<ProcessHandle> {
+  const remoteCommand = specification.programArguments.at(-1) ?? '';
+  const child = spawn('sh', ['-c', remoteCommand], {
+    env: {PATH: process.env.PATH ?? '/usr/bin:/bin'},
+    stdio: ['pipe', 'pipe', 'pipe'],
+    detached: true,
+  });
+  child.stdin.on('error', () => undefined);
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  const handle: ProcessHandle = {
+    onOutput: listener => child.stdout.on('data', listener),
+    onError: listener => child.stderr.on('data', listener),
+    onExit: listener => {
+      child.once('close', (status: number | null) => {
+        listener(status ?? undefined);
+      });
+    },
+    write: data =>
+      new Promise<void>(resolve => {
+        child.stdin.write(data, () => {
+          resolve();
+        });
+      }),
+    endInput: () => {
+      child.stdin.end();
+    },
+    kill: () => {
+      child.stdin.destroy();
+      child.stdout.destroy();
+      child.stderr.destroy();
+    },
+  };
+  return new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('spawn', () => {
+      resolve(handle);
+    });
+  });
+}
+
+/** Whether the process `processId` of this machine runs: one that has ended and is not yet reaped is gone. */
+function runs(processId: number): boolean {
+  const state = spawnSync('ps', ['-o', 'stat=', '-p', String(processId)], {
+    encoding: 'utf8',
+  }).stdout.trim();
+  return state !== '' && !state.startsWith('Z');
 }
 
 function scenarioScripts(
@@ -144,22 +229,33 @@ function schedulerFor(scenario: ContractScenario): {
 }
 
 const SSH_HARNESS: ChannelHarness = {
-  pendingOn: '#3281',
+  processes: {
+    alive: processId => Promise.resolve(runs(processId)),
+    end: processId => {
+      process.kill(processId, 'SIGKILL');
+      return Promise.resolve();
+    },
+  },
+  boundedCopy: {
+    kind: 'notApplicable',
+    reason: 'scp reads the file itself, so the channel writes none of it',
+  },
   scriptFailures: ['channelClosed', 'spawnFailed', 'timeout'],
   copyFailures: ['copyToolMissing', 'copyFailed', 'channelClosed', 'timeout'],
   reachesClientFiles: false,
   stage: (scenario: ContractScenario): Promise<StagedChannel> => {
+    const real = REAL_SCENARIOS.includes(scenario.kind);
     const spawner = new ScriptedSpawner(...scenarioScripts(scenario));
     return Promise.resolve({
       channel: new SshHostChannel({
         ...channelBase(),
-        spawner: spawner.spawn,
+        spawner: real ? localHostSpawner : spawner.spawn,
         files: filesFor(scenario),
         scheduler: schedulerFor(scenario),
         timeoutMilliseconds: 1000,
       }),
       script: {
-        script: STAGED_SCRIPT,
+        script: real ? realScriptOf(scenario) : STAGED_SCRIPT,
         interpreter: 'posixShell',
         environment: {},
         input: stagedInputOf(scenario, LOCAL_FILE),

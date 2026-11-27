@@ -7,6 +7,9 @@
 /** The front of a POSIX shell's program that joins the script's standard error to its standard output, in order. */
 export const JOINED_ERRORS = 'exec 2>&1; ';
 
+/** The front of a POSIX shell's program, after `JOINED_ERRORS`, that prints the shell's own process id on a line of its own. */
+export const REPORT_PROCESS_ID = 'printf "%s\\n" "$$"; ';
+
 /** The most characters a channel holds of a line with no line end yet, before it hands them on as a line. */
 export const LONGEST_PENDING_LINE = 64 * 1024;
 

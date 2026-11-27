@@ -16,7 +16,7 @@ import {
   type TunnelSettings,
   type WaitLimits,
 } from 'lib-forwarding';
-import {type HostChannel, linesOfScript} from 'lib-host';
+import {type HostChannel, linesOfScript, BoundedLines} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {StartedServer} from 'lib-server';
 import {
@@ -28,7 +28,6 @@ import {
   FORWARDING_PROHIBITED_HINT,
   type Forward,
   type Invocation,
-  LineSplitter,
   type LoginTerminals,
   openTunnelSession,
   PromptReader,
@@ -305,7 +304,7 @@ async function openTerminalTunnel(
     refuse = resolve;
   });
   // The tunnel's terminal holds nothing but ssh, so all of its lines are ssh's own.
-  const sshOutput = new LineSplitter(line => {
+  const sshOutput = new BoundedLines(line => {
     logSshLines(dependencies.logger, [withoutAnswer(line)], undefined);
     const refusal = clientRefusal(line);
     if (refusal !== undefined) {

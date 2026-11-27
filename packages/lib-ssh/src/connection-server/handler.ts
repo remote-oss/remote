@@ -25,7 +25,7 @@ import {
   type ConnectWaitSettings,
 } from '../process/connect-wait.ts';
 import {LocalCommandLog} from './local-command-log.ts';
-import {LineSplitter} from '../process/line-splitter.ts';
+import {BoundedLines} from 'lib-host';
 import type {ProcessSpawner} from '../process/ports.ts';
 import {spawnSession, type SshSession} from '../process/session.ts';
 import {SshLineFeed} from './ssh-line-feed.ts';
@@ -378,7 +378,7 @@ export class ConnectionHandler implements MessageHandler {
     let early: Exclude<BootstrapEvent, {kind: 'ready'}> | undefined;
     const commandLog = new LocalCommandLog();
     let bootstrapped = false;
-    const output = new LineSplitter(line => {
+    const output = new BoundedLines(line => {
       if (opened.hear(line)) {
         return;
       }
@@ -419,7 +419,7 @@ export class ConnectionHandler implements MessageHandler {
     // The session's input waits for ssh to report it is authenticated, so that nothing on the host that reads its
     // standard input before the login can take it; a session that ends first is written nothing.
     let preludeWritten = false;
-    const lines = new LineSplitter(line => {
+    const lines = new BoundedLines(line => {
       if (!preludeWritten && setupMarkerOf(line) === 'authenticated') {
         preludeWritten = true;
         opened.authenticated();

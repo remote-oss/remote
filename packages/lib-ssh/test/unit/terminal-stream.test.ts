@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {TerminalStream} from '../../src/terminal/terminal-stream.ts';
-import {LineSplitter} from '../../src/process/line-splitter.ts';
+import {BoundedLines} from 'lib-host';
 import type {TerminalEnd} from '../../src/index.ts';
 
 /** The output a stream delivers for the pieces written, and what it was told at the end when `ends` is set. */
@@ -91,7 +91,7 @@ describe('the line ends of the terminal stream (card ssh-25 table)', () => {
       'Connected to SSH Host - Please do not close this terminal',
     ];
     const heard: string[] = [];
-    const splitter = new LineSplitter(line => heard.push(line));
+    const splitter = new BoundedLines(line => heard.push(line));
     const stream = new TerminalStream();
     stream.onOutput(text => {
       splitter.push(text);
