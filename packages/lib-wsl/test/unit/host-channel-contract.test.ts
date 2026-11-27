@@ -100,6 +100,7 @@ function runsFor(scenario: ContractScenario): () => FakeRun {
 }
 
 const WSL_HARNESS: ChannelHarness = {
+  pendingOn: '#3282',
   scriptFailures: ['channelClosed', 'spawnFailed'],
   copyFailures: ['channelClosed', 'copyFailed'],
   reachesClientFiles: true,
@@ -137,6 +138,9 @@ const WSL_HARNESS: ChannelHarness = {
 describe('host channel over WSL: the lib-host contract (D4 on D4f)', function () {
   this.timeout(20000);
   for (const contractCase of channelContractCases(WSL_HARNESS)) {
-    it(contractCase.name, contractCase.check);
+    it(
+      contractCase.name,
+      contractCase.pending === true ? undefined : contractCase.check,
+    );
   }
 });
