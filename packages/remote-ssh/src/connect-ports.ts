@@ -37,16 +37,17 @@ import {
   type ProductProfile,
 } from 'lib-product';
 import {
+  type AcceptanceStore,
+  CLIENT_DOWNLOAD_BOUNDS,
   type ClientFilePort,
   type Clock,
-  CLIENT_DOWNLOAD_BOUNDS,
-  DISCARD_DEADLINE_MILLISECONDS,
   type CredentialsPort,
+  DISCARD_DEADLINE_MILLISECONDS,
   type DownloadPort,
+  hostAlias,
   hostLockLoopOf,
   type LicenceModal,
   type LockFilePort,
-  type AcceptanceStore,
 } from 'lib-server';
 import {
   acquireConnection,
@@ -121,7 +122,6 @@ import type {LinkTerminals} from './pipeline/forwarding-step.ts';
 import {connectorOf, type SshConnector} from './pipeline/connector.ts';
 import {loggedChannel} from './pipeline/remote-log.ts';
 import type {PortChoice} from './pipeline/port-choice.ts';
-import {hostAlias} from './pipeline/host-settings.ts';
 import {
   type MaintenanceRun,
   maintenanceConnectionKey,

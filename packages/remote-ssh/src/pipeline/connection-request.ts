@@ -4,6 +4,7 @@
  * should have filled and did not is a defect, and throws.
  */
 
+import {hostAlias} from 'lib-server';
 import {DEFAULT_FIRST_MESSAGE_MILLISECONDS, type EndPolicy} from 'lib-helper';
 import {
   type ClientPlatform,
@@ -19,7 +20,7 @@ import {
   HELPER_GRACE_MILLISECONDS,
   HOST_ZERO_TIMEOUT_SECONDS,
 } from './bounds.ts';
-import {hostAlias, sshTargetOf} from './host-settings.ts';
+import {sshTargetOf} from './host-settings.ts';
 import type {ConnectState} from './locate-step.ts';
 import type {
   ConnectInput,

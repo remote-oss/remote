@@ -19,7 +19,7 @@ import type {Scheduler} from 'lib-helper';
 import type {HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {OverrideValue} from 'lib-product';
-import {type LocalDownloadMode, sshPolicyFor} from 'lib-server';
+import {hostAlias, type LocalDownloadMode, sshPolicyFor} from 'lib-server';
 import {
   buildInvocation,
   ConnectWait,
@@ -59,11 +59,7 @@ import {
   installRequestOf,
 } from './connection-request.ts';
 import {type LoginLease, openConnectionStep} from './connection-step.ts';
-import {
-  hostAlias,
-  hostServerSettings,
-  type RawServerSettings,
-} from './host-settings.ts';
+import {hostServerSettings, type RawServerSettings} from './host-settings.ts';
 import {
   type ConnectState,
   type LocateStepDependencies,

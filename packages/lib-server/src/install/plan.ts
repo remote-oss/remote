@@ -124,11 +124,11 @@ export function plan(input: PlanInput): {plan: Plan} | {failure: PlanFailure} {
       return {failure: {kind: 'invalidInstallPath', reason: 'relative'}};
     }
   }
-  const root =
-    setting === undefined
-      ? input.facts.homeFolder
-      : expandHome(setting, input.facts.homeFolder);
-  const dataFolder = `${root}/${input.serverDataFolderName}`;
+  const dataFolder = serverDataFolderOf(
+    setting ?? '',
+    input.facts.homeFolder,
+    input.serverDataFolderName,
+  );
   // The host lock lives in a folder, <dataFolder>/bin/<commit>, the same as the install folder;
   // the lock file's own name is composed by V1's script, not here.
   const lockPlace = `${dataFolder}/bin/${input.commit}`;
@@ -212,6 +212,20 @@ function notesOf(reason: DirectReason): readonly PlanNote[] {
   return reason === 'settingOff' || reason === 'manualBootstrap'
     ? []
     : [{kind: 'cliNotUsed', reason}];
+}
+
+/**
+ * The server's data folder under `installRoot`: the folder `remote.SSH.serverInstallPath` names, or the home folder
+ * when it is empty, joined with the data folder name by `/`.
+ */
+export function serverDataFolderOf(
+  installRoot: string,
+  homeFolder: string,
+  dataFolderName: string,
+): string {
+  const root =
+    installRoot === '' ? homeFolder : expandHome(installRoot, homeFolder);
+  return `${root}/${dataFolderName}`;
 }
 
 /** `~` and `~/x` expand against the home folder; everything else is used as written. */

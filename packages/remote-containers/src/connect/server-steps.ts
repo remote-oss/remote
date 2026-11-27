@@ -39,6 +39,7 @@ import {
   plan,
   probe,
   type ScriptParameters,
+  serverDataFolderOf,
   startOrReuse,
   templatePlatformOf,
   type ProbedHost,
@@ -247,13 +248,13 @@ function archiveNameOf(
 /** The parameters of every script of one connect; the tree is the same in all of them but the discovery probe. */
 function parametersOf(
   dependencies: ServerStepDependencies,
-  request: Pick<ServerRequest, 'remoteUser'>,
+  request: Pick<InstallRequest, 'remoteUser' | 'installRoot'>,
   installTree: string,
   archiveUrl: string,
 ): ScriptParameters {
   const {profile} = dependencies;
   return {
-    installRoot: '',
+    installRoot: request.installRoot ?? '',
     dataFolderName: serverDataFolderNameOrDefault(profile),
     launcher: `bin/${profile.serverApplicationName}`,
     commit: profile.commit,
@@ -448,11 +449,14 @@ function logDownloadSettings(dependencies: ServerStepDependencies): void {
   }
 }
 
-/** What the install of the server's files asks of a connect: the host's channel, the user, the phases and the signal. */
+/**
+ * What the install of the server's files asks of a connect: the host's channel, the user, the phases and the signal,
+ * and the folder the host's own server is installed under, empty or absent for the default.
+ */
 type InstallRequest = Pick<
   ServerRequest,
   'channel' | 'remoteUser' | 'cancellation' | 'onPhase' | 'onDownloadPercent'
->;
+> & {installRoot?: string};
 
 /** What the probes found of the host, which the install of the server's files starts from. */
 interface FoundHost {
@@ -519,7 +523,10 @@ async function installServerFiles(
     commit: profile.commit,
     serverDataFolderName: serverDataFolderNameOrDefault(profile),
     launcher: `bin/${profile.serverApplicationName}`,
-    installPathSetting: undefined,
+    installPathSetting:
+      request.installRoot === undefined || request.installRoot === ''
+        ? undefined
+        : request.installRoot,
     placement: CONTAINERS_POLICY.downloadPlacement,
     useExecServerSetting: false,
     installTree,
@@ -669,7 +676,11 @@ export async function installedServerOnHost(
     return failedWith(probeFailure(discovered, logger));
   }
   const {host} = discovered;
-  const dataFolder = `${host.home}/${serverDataFolderNameOrDefault(profile)}`;
+  const dataFolder = serverDataFolderOf(
+    request.installRoot ?? '',
+    host.home,
+    serverDataFolderNameOrDefault(profile),
+  );
   const files = await installServerFiles(dependencies, request, {
     platform: templatePlatformOf(host),
     host,

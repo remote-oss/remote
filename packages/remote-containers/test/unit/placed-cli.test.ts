@@ -17,6 +17,7 @@ import {
   type CopyAnswer,
   type ScriptAnswer,
 } from 'lib-host/testing/recording-channel';
+import {decodeAuthority} from 'lib-authority';
 import {CONTAINERS_CLI_FOLDER} from 'lib-identifiers';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
@@ -24,6 +25,7 @@ import {RESULT_BEGIN, RESULT_END} from 'lib-server';
 import {FakeClock} from 'lib-server/testing/fake-clock';
 import type {ServerStepDependencies} from '../../src/connect/server-steps.ts';
 import {
+  installRootOf,
   packagedHashesOf,
   placeCli,
   placeCliFiles,
@@ -255,6 +257,7 @@ function requestOf(channel: RecordingChannel, seen: Seen): PlaceRequest {
     channel,
     remoteUser: 'dev',
     version: '2.0.0',
+    installRoot: '',
     client: CLIENT,
     newToken: () => 'tok',
     onPhase: phase => seen.phases.push(phase),
@@ -370,22 +373,36 @@ describe('the dev container CLI placed on the SSH host (card #3244)', () => {
     ]);
   });
 
-  it('known limitation: the probe is told no install root, so a host with a server in a folder of the SSH setting gets its own under the default data folder', async () => {
-    const seen = seenOf();
-    const channel = channelOf();
-    const result = await placeCli(
-      dependenciesOf(seen),
-      requestOf(channel, seen),
-    );
-    const [probed] = channel.calls;
-    deepStrictEqual(
-      [
+  it('ruling-3268-install-root: the probe is told the install root of the SSH host, and the CLI goes under that server, a leading ~ the host user’s home', async () => {
+    const placements = [];
+    for (const installRoot of ['/opt/vs', '~/vs', '']) {
+      const seen = seenOf();
+      const channel = channelOf();
+      const result = await placeCli(dependenciesOf(seen), {
+        ...requestOf(channel, seen),
+        installRoot,
+      });
+      const [probed] = channel.calls;
+      placements.push([
         probed?.operation === 'runScript' &&
-          probed.request.script.includes("INSTALL_ROOT=''"),
-        result.kind === 'placed' ? result.placed.node : result.kind,
+          probed.request.script.includes(`INSTALL_ROOT='${installRoot}'`),
+        result.kind === 'placed' ? result.placed.entry : result.kind,
+      ]);
+    }
+    deepStrictEqual(placements, [
+      [
+        true,
+        `/opt/vs/.fixture-server/${CONTAINERS_CLI_FOLDER}/2.0.0/devcontainer.js`,
       ],
-      [true, '/home/dev/.fixture-server/bin/abc123/node'],
-    );
+      [
+        true,
+        `/home/dev/vs/.fixture-server/${CONTAINERS_CLI_FOLDER}/2.0.0/devcontainer.js`,
+      ],
+      [
+        true,
+        `/home/dev/.fixture-server/${CONTAINERS_CLI_FOLDER}/2.0.0/devcontainer.js`,
+      ],
+    ]);
   });
 
   it('the names of the folders and files, and the version, reach the scripts as variables, never in their text', async () => {
@@ -854,5 +871,66 @@ describe('the CLI folder on a host with a real shell (card #3244)', () => {
     utimesSync(path.join(host, '9.9.9.part-old'), longAgo, longAgo);
     await placedOn('1.0.0');
     deepStrictEqual(readdirSync(host).sort(), ['1.0.0', '9.9.9.part-new']);
+  });
+});
+
+/** The outer hop of the nested authority of a container over `outer`, as lib-authority decodes it. */
+function outerOf(outer: string) {
+  const payload = Buffer.from('{"hostPath":"/x"}').toString('hex');
+  const decoded = decodeAuthority(`dev-container+${payload}${outer}`);
+  return 'malformed' in decoded || !('payload' in decoded.target)
+    ? undefined
+    : decoded.target.outer;
+}
+
+/** The structured outer hop to `devbox` as `alex` on port 2222. */
+const STRUCTURED = `@ssh-remote+${Buffer.from('{"hostName":"devbox","user":"alex","port":2222}').toString('hex')}`;
+
+describe('the install root of the SSH host the CLI runs on (ruling-3268-install-root)', () => {
+  it('is the folder remote.SSH.serverInstallPath names for the outer hop’s alias, written plain or structured', () => {
+    const setting = {devbox: '/opt/vs'};
+    deepStrictEqual(
+      ['@ssh-remote+alex@devbox', '@ssh-remote+devbox:2222', STRUCTURED].map(
+        outer =>
+          installRootOf(
+            outerOf(outer),
+            setting,
+            createLogger(seenOf().sink, {minimumLevel: () => 'info'}),
+          ),
+      ),
+      ['/opt/vs', '/opt/vs', '/opt/vs'],
+    );
+  });
+
+  it('is the default with no entry for the alias, with no outer hop, and with a hop that is no SSH host', () => {
+    const setting = {other: '/opt/vs', mybox: '/opt/vs'};
+    deepStrictEqual(
+      ['@ssh-remote+devbox', '', '@tunnel+mybox'].map(outer =>
+        installRootOf(
+          outerOf(outer),
+          setting,
+          createLogger(seenOf().sink, {minimumLevel: () => 'info'}),
+        ),
+      ),
+      ['', '', ''],
+    );
+  });
+
+  it('is the default for a value the setting does not allow, and the log names the alias and the value', () => {
+    const seen = seenOf();
+    const root = installRootOf(
+      outerOf('@ssh-remote+devbox'),
+      {devbox: 'relative/vs'},
+      createLogger(seen.sink, {minimumLevel: () => 'info'}),
+    );
+    deepStrictEqual(
+      [root, loggedOf(seen)],
+      [
+        '',
+        [
+          'remote.SSH.serverInstallPath for devbox is no folder a server can be installed in (relative/vs): the CLI runs beside the server in the default folder',
+        ],
+      ],
+    );
   });
 });
