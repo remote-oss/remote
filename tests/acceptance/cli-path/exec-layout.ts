@@ -6,6 +6,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
+import {redact} from 'lib-log';
 import {applicationNameOf} from '../../../tools/acceptance-cli-editor.ts';
 import {
   closeWindow,
@@ -149,7 +150,8 @@ async function cliFolderSample(): Promise<string> {
 /**
  * What a reader of a connect that did not finish needs to tell a stall from a slow download: the stages the window
  * showed, the CLI's folder sampled twice a few seconds apart (a download in progress grows), the tail of the CLI's own
- * logs and its processes (card #3276: a window stopped at Downloading VS Code Server and the log said no more).
+ * logs and its processes (card #3276: a window stopped at Downloading VS Code Server and the log said no more), redacted
+ * the way the log is: the CI logs are public and the CLI's own log can hold the control token.
  */
 export async function stalledConnectText(name: string): Promise<string> {
   const stages = recordLines(undefined, name)
@@ -164,12 +166,15 @@ export async function stalledConnectText(name: string): Promise<string> {
     '-c',
     `for file in '${DATA_FOLDER}'/.cli.*.log; do echo "== $file"; tail -n 30 "$file"; done 2>&1; true`,
   );
-  return [
-    `the stages ${name} showed: ${JSON.stringify([...new Set(stages)])}`,
-    `the CLI's folder, then ${String(SAMPLE_GAP_MILLISECONDS)} ms later:\n${first}\n--\n${second}`,
-    `the tail of the CLI's logs:\n${logs}`,
-    `the CLI processes: ${JSON.stringify(await cliProcessLines())}`,
-  ].join('\n');
+  return redact(
+    [
+      `the stages ${name} showed: ${JSON.stringify([...new Set(stages)])}`,
+      `the CLI's folder, then ${String(SAMPLE_GAP_MILLISECONDS)} ms later:\n${first}\n--\n${second}`,
+      `the tail of the CLI's logs:\n${logs}`,
+      `the CLI processes: ${JSON.stringify(await cliProcessLines())}`,
+    ].join('\n'),
+    [],
+  );
 }
 
 /** What a window that connected shows of the extension's own messages: a dialog and the notifications. */
