@@ -89,11 +89,23 @@ const PRELOAD_NAME = 'cli-preload.js';
 /** A sha256 as hexadecimal text. */
 const SHA256 = /^[0-9a-f]{64}$/;
 
+/** A path segment that stays in its folder: not empty, not `.`, and not `..`. */
+function isSegment(part: string): boolean {
+  return part !== '' && part !== '..' && part !== '.';
+}
+
 /** A name a file may have under the version's folder: relative, with no `..` segment, no empty one and no line break. */
 function isPlacedName(name: string): boolean {
+  return !name.includes('\n') && name.split('/').every(isSegment);
+}
+
+/** A version's folder name: one path segment that stays in the CLI's folder. */
+function isVersionName(version: string): boolean {
   return (
-    !name.includes('\n') &&
-    name.split('/').every(part => part !== '' && part !== '..' && part !== '.')
+    !version.includes('/') &&
+    !version.includes('\\') &&
+    !version.includes('\n') &&
+    isSegment(version)
   );
 }
 
@@ -189,6 +201,15 @@ export async function placeCliFiles(
 ): Promise<Failed | undefined> {
   const {channel, cancellation} = request;
   const {cliFolder, versionFolder} = folders;
+  if (
+    path.posix.dirname(versionFolder) !== cliFolder ||
+    !isVersionName(path.posix.basename(versionFolder))
+  ) {
+    logger.info(
+      `the CLI's version folder ${versionFolder} is not a folder of its own under ${cliFolder}: nothing is placed`,
+    );
+    return cliNotPlaced();
+  }
   const files = filesOf(request.client);
 
   /** Runs the script `script`, and names why it did not exit 0, if it did not. */
