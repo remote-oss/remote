@@ -3,13 +3,13 @@ import {readFileSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
-  acceptedKeyLoginTimes,
   appendScript,
   closeWindow,
   connected,
   connectedWithin,
   hostAliases,
   hostAnswer,
+  hostLoginLines,
   inWindow,
   newKeyPair,
   nextEmptyWindow,
@@ -48,6 +48,7 @@ import {
   settingsText,
   typeHost,
 } from './maintenance.ts';
+import {hostLoginsOf, killLoginsOf, loginsText} from './host-logins.ts';
 
 /** The extension's log channel. */
 const LOG_CHANNEL = 'Remote - SSH';
@@ -726,31 +727,36 @@ describe('Kill VS Code Server (card coverage-39)', function () {
         .split('\n')
         .filter(line => line !== '').length;
     }
-    /** The logins that fall between the host pick and the kill's notice. */
+    /**
+     * The logins the kill took of its own, from the host pick to its notice, as a count and as the text of every login in
+     * that span: the kill's login is ended right after, and a login still up is the window that was killed
+     * reconnecting by itself, which may be accepted before the notice is recorded (card #3275). Read once the kill's
+     * session has ended.
+     */
     async function loginsOfKill(
       since: string,
       mark: number,
       window: string,
-    ): Promise<number> {
+    ): Promise<{count: number; said: string}> {
       const lines = linesSince(mark, window);
       const pick = lines.find(line => line.surface === 'hostPick')?.time ?? 0;
       const notice =
         lines.find(line => line.surface === 'notice')?.time ?? Infinity;
-      // The kill's own login is accepted before the kill runs, so before its
-      // notice; a later login is the window reconnecting by itself.
-      return (await acceptedKeyLoginTimes(since)).filter(
-        time => time >= pick - 1000 && time <= notice,
-      ).length;
+      const logins = hostLoginsOf(await hostLoginLines(since));
+      return {
+        count: killLoginsOf(logins, pick, notice).length,
+        said: `the logins since the pick, the kill's notice at ${String(notice - pick)} ms: ${loginsText(logins, pick)}`,
+      };
     }
     const baseline = await sessions();
     const sinceLocal = new Date().toISOString();
     const localMark = await killWith('local', [pickHost('harness')]);
-    const fromLocal = await loginsOfKill(sinceLocal, localMark, 'local');
     await waitFor(
       'the kill’s session to end',
       async () => (await sessions()) <= baseline,
       5000,
     );
+    const fromLocal = await loginsOfKill(sinceLocal, localMark, 'local');
     await closeAllButLocal();
     await perWindowMode(true);
     try {
@@ -758,13 +764,17 @@ describe('Kill VS Code Server (card coverage-39)', function () {
       const withWindow = await sessions();
       const sinceWindow = new Date().toISOString();
       const windowMark = await killWith('x2', [pickHost('harness')]);
-      const fromWindow = await loginsOfKill(sinceWindow, windowMark, 'x2');
       await waitFor(
         'the kill’s session to end',
         async () => (await sessions()) <= withWindow,
         10_000,
       );
-      deepStrictEqual([fromLocal, fromWindow], [1, 1]);
+      const fromWindow = await loginsOfKill(sinceWindow, windowMark, 'x2');
+      deepStrictEqual(
+        [fromLocal.count, fromWindow.count],
+        [1, 1],
+        `from the local window, ${fromLocal.said}; from x2, ${fromWindow.said}`,
+      );
     } finally {
       await closeAllButLocal();
       await perWindowMode(false);
