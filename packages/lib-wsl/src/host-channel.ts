@@ -161,7 +161,9 @@ export function createWslHostChannel(ports: WslHostChannelPorts): HostChannel {
           resolve(processId);
         }
       }
-      const flags = {cancelled: false};
+      const progress: {stopping: Promise<void> | undefined} = {
+        stopping: undefined,
+      };
       async function endScript(): Promise<void> {
         const target = await within(reported, bound, undefined);
         if (target === undefined) {
@@ -175,16 +177,10 @@ export function createWslHostChannel(ports: WslHostChannelPorts): HostChannel {
         }
         inner.abort();
       }
-      const stopped = new Promise<void>(resolve => {
-        request.cancellation.addEventListener(
-          'abort',
-          () => {
-            flags.cancelled = true;
-            endScript().then(resolve, resolve);
-          },
-          {once: true},
-        );
-      });
+      function onAbort(): void {
+        progress.stopping = endScript().catch(() => undefined);
+      }
+      request.cancellation.addEventListener('abort', onAbort, {once: true});
       let seen = false;
       const outcome = await runner.exec(
         {
@@ -205,9 +201,10 @@ export function createWslHostChannel(ports: WslHostChannelPorts): HostChannel {
           }
         },
       );
+      request.cancellation.removeEventListener('abort', onAbort);
       reportProcessId(undefined);
-      if (flags.cancelled) {
-        await stopped;
+      if (progress.stopping !== undefined) {
+        await progress.stopping;
         return failFrom('cancelled', 'cancelled while the script ran');
       }
       return outcome.kind === 'failed'
