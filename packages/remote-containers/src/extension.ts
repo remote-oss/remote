@@ -242,6 +242,7 @@ import {
 } from './shutdown/helper-request.ts';
 import {createWindowLease} from './shutdown/window-lease.ts';
 import {forwarderOf, type TunnelHost} from './ports/forwarder.ts';
+import {admitsWindow, type WindowManifest} from './open/command-window.ts';
 import {reopenHandlersOf} from './open/reopen.ts';
 import type {ReopenPorts} from './open/reopen-ports.ts';
 import {
@@ -303,10 +304,12 @@ const SETUP_TEXT_TEMPLATES = {
 };
 
 /** What the editor tells about the extension, as far as activation reads it. */
-interface Manifest {
+interface Manifest extends WindowManifest {
   displayName: string;
   version: string;
-  contributes?: {commands?: Array<{command: string; title: string}>};
+  contributes?: WindowManifest['contributes'] & {
+    commands?: Array<{command: string; title: string}>;
+  };
 }
 
 /** The folders the window has open, by scheme, path on this machine and path in the folder's own file system. */
@@ -1534,7 +1537,8 @@ export async function activate(
         return rebuildContainer(
           {
             window: {
-              remoteName: () => vscode.env.remoteName,
+              admits: commandId =>
+                admitsWindow(manifest, commandId, vscode.env.remoteName),
               remoteAuthority: () => vscode.env.remoteAuthority,
               reload: () =>
                 vscode.commands.executeCommand('workbench.action.reloadWindow'),
@@ -1646,6 +1650,8 @@ export async function activate(
         },
         window: {
           remoteName: () => vscode.env.remoteName,
+          admits: commandId =>
+            admitsWindow(manifest, commandId, vscode.env.remoteName),
           folders: windowFolders,
           workspaceFile: () => {
             const file = vscode.workspace.workspaceFile;
