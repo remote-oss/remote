@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {execFile} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
@@ -18,6 +19,9 @@ import {
   nextEmptyWindow,
   openWindow,
   recordLines,
+  readUserSettings,
+  RESOLVING_INDICATOR,
+  restoreUserSettings,
   sshdLog,
   userSettings,
   variable,
@@ -26,11 +30,20 @@ import {
   windowNames,
   windowState,
 } from '../windows/harness.ts';
+import {bindKeys} from '../windows/explorer-folders.ts';
 import {
   openFolderWindow,
   openWorkspaceWindow,
 } from '../windows/folder-windows.ts';
 import {closeAllButLocal, serverMainProcesses} from '../windows/maintenance.ts';
+import {paletteItems} from '../windows/palette.ts';
+import {
+  allQuickPickRows,
+  pressControlAlt,
+  pressEscape,
+  quickPickOf,
+  statusBarText,
+} from '../windows/renderer.ts';
 import {PLATFORMS} from '../windows/tunnel-support.ts';
 
 /** The command that reloads the window it runs in onto a picked host. */
@@ -227,6 +240,57 @@ async function rowClean(
       `helpers left: ${(await connectionHelpers()).join(', ')}\n${await sshListed(rowStart, rowPids)}`,
     );
   }
+}
+
+/** Whether the held window's ProxyCommand still runs on the runner: true while its `sleep 3600` runs, false when it is gone, and an error when pgrep says neither. */
+async function stillHeld(): Promise<boolean> {
+  const status = await new Promise<number>(resolve => {
+    execFile('pgrep', ['-f', '^sleep 3600$'], error => {
+      if (error === null) {
+        resolve(0);
+      } else if (typeof error.code === 'number') {
+        resolve(error.code);
+      } else {
+        resolve(-1);
+      }
+    });
+  });
+  if (status !== 0 && status !== 1) {
+    throw new Error(`the held check's pgrep exited ${String(status)}`);
+  }
+  return status === 0;
+}
+
+/**
+ * The indicator menu's item labels in window `window`, settled: the item list is stable across two reads and holds
+ * at least one item. A settled read that is empty is the menu not read, a harness failure the read fails on rather
+ * than an absence read from an empty menu.
+ */
+async function settledMenuOf(window: string): Promise<string[]> {
+  let previous: string[] | undefined;
+  let settled: string[] = [];
+  await waitFor(
+    'the indicator menu to settle',
+    async () => {
+      const read = (await allQuickPickRows(window)).map(each => each.label);
+      const stable =
+        previous !== undefined &&
+        JSON.stringify(read) === JSON.stringify(previous);
+      previous = read;
+      if (!stable) {
+        return false;
+      }
+      if (read.length === 0) {
+        throw new Error(
+          `menu not read: the indicator menu of ${window} settled empty`,
+        );
+      }
+      settled = read;
+      return true;
+    },
+    30_000,
+  );
+  return settled;
 }
 
 describe('Connect Current Window to Host', function () {
@@ -686,6 +750,113 @@ describe('Connect Current Window to Host', function () {
         ...PLATFORMS,
         'remote.SSH.useLocalServer': undefined,
       });
+    }
+  });
+
+  it('F-2302 AC-32 (c3017-inflight): while a window shows Opening Remote..., neither the palette nor the indicator menu offers Connect Current Window to Host..., and a key bound with a host abandons the connect and reloads the same window onto that host, connected', async () => {
+    const restore = await bindKeys([
+      {key: 'ctrl+alt+h', command: SWITCH, argument: {host: 'harness'}},
+    ]);
+    const savedSettings = readUserSettings();
+    let next = '';
+    try {
+      await closeAllButLocal();
+      await userSettings({...PLATFORMS, 'remote.SSH.connectTimeout': 300});
+      await openWindow('held', 'c3017-inflight');
+      await waitFor(
+        'Opening Remote...',
+        async () =>
+          (await statusBarText('c3017-inflight', 'status.host')) ===
+          RESOLVING_INDICATOR,
+        60_000,
+      );
+      const palette = await paletteItems(
+        'c3017-inflight',
+        'Connect Current Window',
+      );
+      await pressEscape('c3017-inflight');
+      // pressEscape only dispatches the key: the menu's read must not land on the palette's rows.
+      await waitFor(
+        'the palette closed',
+        async () => (await quickPickOf('c3017-inflight')) === undefined,
+        10_000,
+      );
+      void inWindow('c3017-inflight', 'workbench.action.remote.showMenu').catch(
+        () => undefined,
+      );
+      // The menu's own placeholder, so the read is the menu's.
+      await waitFor(
+        'the indicator menu',
+        async () =>
+          (await quickPickOf('c3017-inflight'))?.placeholder ===
+          'Select an option to open a Remote Window',
+        30_000,
+      );
+      const menu = await settledMenuOf('c3017-inflight');
+      await pressEscape('c3017-inflight');
+      const leftover = emptyWindows();
+      // The remote name in the title is what tells the reloaded window's page from the other empty ones when the control reads it.
+      await userSettings({
+        ...PLATFORMS,
+        'window.title': '[${rootName}]${remoteName}',
+      });
+      next = await nextEmptyWindow(() =>
+        pressControlAlt('c3017-inflight', 'h'),
+      );
+      await connectedEmpty(next, 'harness', 90_000);
+      const held = await waitFor(
+        'the held connect ended',
+        async () => !(await stillHeld()),
+        15_000,
+      ).then(
+        () => true,
+        () => false,
+      );
+      const remoteAuthority = (await windowState(next)).remoteAuthority;
+      const lastEvent = windowEvents('c3017-inflight').at(-1)?.event;
+      // The control: the same menu offers the entry once the connect has ended, so the read reads the menu it claims.
+      // The reloaded window's host re-registered under the name the switch gave it, so the read keys to that name.
+      void inWindow(next, 'workbench.action.remote.showMenu').catch(
+        () => undefined,
+      );
+      await waitFor(
+        'the indicator menu again',
+        async () =>
+          (await quickPickOf(next))?.placeholder ===
+          'Select an option to open a Remote Window',
+        30_000,
+      );
+      const menuEnded = await settledMenuOf(next);
+      await pressEscape(next);
+      process.stdout.write(
+        `the indicator menu while connecting: ${JSON.stringify(
+          menu,
+        )}; after the connect ended: ${JSON.stringify(
+          menuEnded,
+        )}; the held connect ended: ${String(held)}\n`,
+      );
+      deepStrictEqual(
+        [
+          palette.filter(each =>
+            each.includes('Connect Current Window to Host'),
+          ),
+          menu.filter(each => each.includes('Connect Current Window to Host')),
+          menuEnded.some(each =>
+            each.includes('Connect Current Window to Host'),
+          ),
+          remoteAuthority,
+          lastEvent,
+          emptyWindows().filter(each => !leftover.includes(each)),
+          held,
+        ],
+        [[], [], true, 'ssh-remote+harness', 'deactivated', [next], true],
+      );
+    } finally {
+      restore();
+      restoreUserSettings(savedSettings);
+      await userSettings({});
+      await closeWindow('c3017-inflight').catch(() => undefined);
+      await closeWindow(next).catch(() => undefined);
     }
   });
 });

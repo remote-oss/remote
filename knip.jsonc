@@ -169,6 +169,7 @@
   // System tools the tests and checks run, which no package provides.
   "ignoreBinaries": [
     "mkfifo",
+    "pgrep",
     "pwsh",
     "shellcheck",
     "ssh-add",
