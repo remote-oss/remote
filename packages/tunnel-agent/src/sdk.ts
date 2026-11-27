@@ -35,6 +35,7 @@ import {
   type RelayTunnel,
   type TunnelService,
 } from './relay.ts';
+import type {TunnelPorts} from './control/ports.ts';
 import type {HostEnd, HostLeg} from './serve.ts';
 import {readStateFile, writeStateFile} from './state.ts';
 
@@ -180,7 +181,7 @@ function endOf(error: Error | undefined): HostEnd {
 function legOf(
   client: TunnelManagementHttpClient,
   folder: string,
-  acceptControl: (stream: SshStream) => void,
+  acceptControl: (stream: SshStream, tunnel: RelayTunnel) => void,
 ): HostLeg {
   return {
     hold: async (tunnel, stop) => {
@@ -189,7 +190,7 @@ function legOf(
       host.forwardConnectionsToLocalPorts = false;
       host.forwardedPortConnecting(forwarded => {
         if (forwarded.port === CONTROL_PORT) {
-          acceptControl(forwarded.stream);
+          acceptControl(forwarded.stream, tunnel);
         } else {
           forwarded.stream.destroy();
         }
@@ -222,14 +223,6 @@ function legOf(
   };
 }
 
-/** The ports of one tunnel on the relay, as the control server adds and removes them. */
-interface TunnelPorts {
-  /** Adds `port` to the tunnel, as a private port; rejects with the relay's message when it refuses. */
-  addPrivate(port: number): Promise<void>;
-  /** Removes `port` from the tunnel. */
-  remove(port: number): Promise<void>;
-}
-
 /** What the agent has of the relay at `domain`, signed in with `token`, keeping its host key in `folder`. */
 export interface Relay {
   service: TunnelService;
@@ -240,13 +233,13 @@ export interface Relay {
 
 /**
  * The relay at `domain` for the account of `token`. The host leg hands each connection to the control port to
- * `acceptControl`, and closes the connections to every other port.
+ * `acceptControl` with the tunnel it serves, and closes the connections to every other port.
  */
 export function relayOf(
   domain: string,
   token: string,
   folder: string,
-  acceptControl: (stream: SshStream) => void,
+  acceptControl: (stream: SshStream, tunnel: RelayTunnel) => void,
 ): Relay {
   const client = clientOf(domain, token);
   const service = serviceOf(client);

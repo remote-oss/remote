@@ -40,12 +40,28 @@ The extension needs the editor's proposed APIs enabled for it. Add the extension
 
 ## Session hints
 
-Every resolve keeps a record of what it knew and what went wrong, for troubleshooting. The records live in the extension's
-global state, under the sub-key `remote.ssh.hints` of its state entry (`remote-oss.remote-ssh`). Nothing in them leaves
-the machine, and the clear command, "Remote-SSH: Clear previous session metadata (used for enhanced error reporting)",
-removes them all. This section is the documented accessor: a test reads the store through this key and these field names.
+Every resolve keeps a record of what it knew and what went wrong, for troubleshooting. The records live in files of the
+extension's global storage folder, `connection-hints` (under the profile's `User/globalStorage/remote-oss.remote-ssh`),
+one file `<session>.json` for each window, which the window writes whole under a temporary name and renames over the old
+file, so that no window's write drops another's. Nothing in them leaves the machine, and the clear command,
+"Remote-SSH: Clear previous session metadata (used for enhanced error reporting)", removes them all. This section is the
+documented accessor: a test reads the records through these files and these field names.
 
-The value under the key is `{"records": [...]}`, the two newest records, oldest first. A record has:
+A file holds `{"events": [...]}`; an event has a `time` (milliseconds since the epoch) and a `kind`:
+
+- `record`, with a `record` that is the whole record of one resolve as it was when the event was written;
+- `clear`, with `clearedAt`, the ISO 8601 time of the clear.
+
+The records are read from the files of every window (a file named `<session>.json`, or `<session>.claim-<id>` while
+another window folds it into its own; a name ending in `.tmp-<id>` is a write not yet renamed and is not read), as
+follows. The newest event of each record, told by its `started`, decides: a record that a window writes again with more
+hints replaces its earlier state, and of two events of one time the one of the greater session name decides (a window's session is its file's name before `.json`, or before `.claim-` for a claim). The newest
+`clearedAt` hides every record that started before it, whichever window wrote it and whenever. The two newest
+of the records that are left, by `started`, are the records of the store, oldest first. A window keeps in its file only its
+two newest records and its newest clear. The value an earlier version kept in the extension's global state under
+`remote.ssh.hints` is read by the extension as the oldest layer and is never written; a test needs only the files.
+
+A record has:
 
 | Field | Meaning |
 |---|---|

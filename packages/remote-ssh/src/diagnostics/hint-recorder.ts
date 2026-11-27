@@ -1,9 +1,10 @@
 /**
  * @fileoverview The recorder of the session hints: it keeps the hints of a connect in the record that connect started,
- * in the hint store of the extension's global state. A record is written when the connect begins, with its environment
- * hints, and again when hints are added to it; the hints added in one synchronous run, such as the errors of a resolve
- * step and the log hint that follows them, are written together. An error is stored when it is recognised, not when the
- * step ends, since the dialog that shows it must find it stored. Every write is read back (remote-oss/remote#2326).
+ * in the window's own hint events. A record is written when the connect begins, with its environment hints, and again
+ * when hints are added to it; the hints added in one synchronous run, such as the errors of a resolve step and the log
+ * hint that follows them, are written together. An error is stored when it is recognised, not when the step ends,
+ * since the dialog that shows it must find it stored. A record that was cleared stays hidden whatever is added to it:
+ * the read of the events hides it.
  */
 
 import type {FailureHint, FailureReason, FilledString} from 'lib-authority';
@@ -15,27 +16,11 @@ import {
 import {isFailureStringId, textOfId} from '../surfaces/failure-strings.ts';
 import {ownTextWithLinks} from '../surfaces/own-strings.ts';
 import type {TextRange, Translate} from '../surfaces/strings.ts';
-import type {ConfirmedUpdateEnvironment} from '../state/confirmed-update.ts';
-import {hintStoreKeyOf} from './hint-store-key.ts';
 import {LINUX_PREREQUISITES_PAGE} from './prerequisites-hint.ts';
-import {
-  addHint,
-  emptyHintStore,
-  HINT_STORE_KEY,
-  type HintStore,
-  isGone,
-  type SessionHint,
-  type SessionRecord,
-} from './hint-store.ts';
+import type {HintEvents, SessionHint, SessionRecord} from './hint-store.ts';
 
-/** The global-state port the recorder reads and writes through. */
-export interface HintRecorderState {
-  get(key: string): HintStore | undefined;
-  update(key: string, value: HintStore): PromiseLike<void>;
-}
-
-/** What the recorder needs besides the state. */
-export interface HintRecorderEnvironment extends ConfirmedUpdateEnvironment {
+/** What the recorder needs besides the window's hint events. */
+export interface HintRecorderEnvironment {
   translate: Translate;
   /** The address of the documentation the hints point to. */
   documentation: () => string;
@@ -123,7 +108,7 @@ function sameError(left: SessionHint, right: SessionHint): boolean {
 
 /** The recorder over `state`. */
 export function hintRecorderOf(
-  state: HintRecorderState,
+  events: Pick<HintEvents, 'record'>,
   environment: HintRecorderEnvironment,
 ): HintRecorder {
   let current: SessionRecord = {
@@ -135,34 +120,16 @@ export function hintRecorderOf(
   let open = false;
   /** The records whose write is queued for the end of the synchronous run that is going on. */
   const queued = new Set<SessionRecord>();
-  /** Whether the record has been written: one that was written and is gone on purpose does not come back. */
-  let persisted = false;
   let writing: PromiseLike<void> = Promise.resolve();
-  const storeKey = hintStoreKeyOf(state, environment);
-  /**
-   * Writes the record as it is now, once, after the writes before it. A record that was written and is no longer in
-   * the store was cleared or dropped as the oldest: it does not come back with the hints that follow it.
-   */
-  function write(starts: boolean, record: SessionRecord): void {
+  /** Writes the record as it is now, once, after the writes before it. */
+  function write(record: SessionRecord): void {
     const snapshot: SessionRecord = {
       started: record.started,
       hints: [...record.hints],
     };
+    // A write the files refuse does not end the writes after it, and is no unhandled rejection.
     writing = writing
-      .then(() => {
-        const store = state.get(HINT_STORE_KEY) ?? emptyHintStore();
-        // A record that was written and is gone on purpose (cleared, or dropped as the oldest) does not come back with
-        // the hints that follow it; one that an older copy of the store lost is written again.
-        if (persisted && !starts && isGone(store, snapshot.started)) {
-          return undefined;
-        }
-        return storeKey
-          .write(addHint(store, snapshot), snapshot.started)
-          .then(() => {
-            persisted = true;
-          });
-      })
-      // A write the state refuses does not end the writes after it, and is no unhandled rejection.
+      .then(() => events.record(snapshot))
       .then(undefined, () => undefined);
   }
   /** Writes the record once the synchronous run that added hints to it is over. */
@@ -172,7 +139,7 @@ export function hintRecorderOf(
       queued.add(target);
       queueMicrotask(() => {
         queued.delete(target);
-        write(false, target);
+        write(target);
       });
     }
   }
@@ -183,10 +150,9 @@ export function hintRecorderOf(
         hints: [...environment.environmentHints()],
       };
       open = true;
-      persisted = false;
       attemptErrors = [];
       logFrom = environment.logMark();
-      write(true, current);
+      write(current);
     },
     record: hint => {
       const statusNumber = statusNumberOf(hint.status);

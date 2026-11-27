@@ -3,9 +3,11 @@
  */
 
 import {hostname, homedir} from 'node:os';
+import manifest from '../package.json' with {type: 'json'};
 import {agentHandlers} from './agent.ts';
 import {runCommand} from './commands.ts';
 import {readConfig} from './config.ts';
+import {serveControl} from './control/session.ts';
 import {relayOf} from './sdk.ts';
 import {stateFolderOf} from './state.ts';
 
@@ -22,9 +24,22 @@ const handlers = agentHandlers({
   folder,
   hostName: hostname(),
   domain: () => readConfig(new URL('.', import.meta.url)).domain,
-  connect: (domain, token) =>
-    // The control server takes these streams when it is wired; until then a connection to it is closed.
-    relayOf(domain, token, folder, stream => stream.destroy()),
+  connect: (domain, token) => {
+    const relay = relayOf(domain, token, folder, (stream, tunnel) => {
+      void serveControl(stream, {
+        version: manifest.version,
+        editors: {
+          serve: () =>
+            Promise.reject(
+              new Error('The editor server is not built into this agent yet.'),
+            ),
+        },
+        tunnel: relay.portsOf(tunnel),
+        logLine: line => process.stderr.write(`${line}\n`),
+      });
+    });
+    return relay;
+  },
   stop: stopping.signal,
   report: line => process.stderr.write(`${line}\n`),
 });

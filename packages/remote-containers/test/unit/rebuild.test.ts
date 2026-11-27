@@ -1,8 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
+import {admitsWindow} from '../../src/open/command-window.ts';
 import {rebuildContainer} from '../../src/open/rebuild.ts';
 import {REBUILD_INTENTS_KEY} from '../../src/open/rebuild-intent.ts';
+import {SHIPPED_MANIFEST} from './shipped-manifest.ts';
 
 /** The window, the store and the log a row steers. */
 interface Setup {
@@ -14,6 +16,8 @@ interface Setup {
   holdReload: Promise<void>;
   /** How many times the window told the shutdown helper that it leaves its container. */
   left: number;
+  /** The commands the window was asked whether the manifest offers, in order. */
+  asked: string[];
 }
 
 function setup(): Setup {
@@ -25,6 +29,7 @@ function setup(): Setup {
     failure: undefined,
     holdReload: Promise.resolve(),
     left: 0,
+    asked: [],
   };
 }
 
@@ -38,7 +43,10 @@ async function reopened(
   const handler = rebuildContainer(
     {
       window: {
-        remoteName: () => state.remoteName,
+        admits: commandId => {
+          state.asked.push(commandId);
+          return admitsWindow(SHIPPED_MANIFEST, commandId, state.remoteName);
+        },
         remoteAuthority: () => state.authority,
         reload: async () => {
           state.reloads += 1;
@@ -92,6 +100,29 @@ describe('Rebuild Container', () => {
         ],
         1,
         ['info: rebuilding the dev container (no cache: false)'],
+      ],
+    );
+  });
+
+  it('F-1302 AC-6: each variant asks the manifest about its own command, and an SSH window, whose manifest clause does not offer the rebuilds, does nothing', async () => {
+    const asked: string[][] = [];
+    for (const buildNoCache of [false, true]) {
+      const state = setup();
+      await reopened(state, {buildNoCache});
+      asked.push(state.asked);
+    }
+    const sshWindow = setup();
+    sshWindow.remoteName = 'ssh-remote';
+    const lines = await reopened(sshWindow);
+    deepStrictEqual(
+      [asked, sshWindow.updates, lines],
+      [
+        [
+          ['remote-containers.rebuildContainer'],
+          ['remote-containers.rebuildContainerNoCache'],
+        ],
+        [],
+        ['info: Rebuild Container does nothing in this window'],
       ],
     );
   });

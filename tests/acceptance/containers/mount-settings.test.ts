@@ -74,6 +74,15 @@ async function requestedMountsOf(
   ).filter(mount => String(mount.Target).startsWith('/workspaces'));
 }
 
+/**
+ * The consistency the workspace mount's specification carries for the setting `value`: the dev container CLI adds it
+ * whenever the CLI itself runs on a platform other than Linux, so none on a Linux runner, where the CLI runs, and the
+ * configured value on a macOS or Windows one.
+ */
+function consistencyGiven(value: string): string | undefined {
+  return process.platform === 'linux' ? undefined : value;
+}
+
 /** The one id `devContainersOf` gives for `folder`; it fails when the number is not one. */
 async function containerOf(folder: string): Promise<string> {
   const containers = await devContainersOf(folder);
@@ -329,20 +338,28 @@ describe('F-0411 mount settings (card containers-28)', function () {
     }
   });
 
-  it('F-0411 AC-8 (m7): each consistency, rebuilt after each change, leaves no consistency on a native Linux engine’s workspace mount', async () => {
+  it('F-0411 AC-8, AC-22 (m7): each consistency, rebuilt after each change, leaves no consistency on the workspace mount where the CLI runs on Linux, and gives the configured value where it runs on macOS or Windows', async () => {
     const folder = devContainerFolder('c28-consistency');
+    const values = ['cached', 'consistent', 'delegated'];
     const seen: unknown[] = [];
     try {
       const {name} = await reopened(folder);
-      for (const value of ['cached', 'consistent', 'delegated']) {
+      for (const value of values) {
         await setUserSetting(CONSISTENCY_SETTING, value);
         await reloadingCommand(name, 'remote-containers.rebuildContainer');
         await connectedToContainer(name);
         const requested = await requestedMountsOf(await containerOf(folder));
-        seen.push(requested.map(mount => 'Consistency' in mount));
+        seen.push(
+          requested.map(mount =>
+            'Consistency' in mount ? mount.Consistency : undefined,
+          ),
+        );
       }
       await closeWindow(name);
-      deepStrictEqual(seen, [[false], [false], [false]]);
+      deepStrictEqual(
+        seen,
+        values.map(value => [consistencyGiven(value)]),
+      );
     } finally {
       await setUserSetting(CONSISTENCY_SETTING, undefined);
       await removeContainers(folder);
