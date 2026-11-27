@@ -10,10 +10,14 @@ import {
   type CopyRequest,
   failFrom,
   type HostChannel,
+  JOINED_ERRORS,
+  PROCESS_ID,
   preludeCommand,
   type PlatformHint,
+  REPORT_PROCESS_ID,
   type ScriptOutcome,
   type ScriptRequest,
+  TREE_KILL_SCRIPT,
 } from 'lib-host';
 import type {
   ExecInput,
@@ -62,12 +66,32 @@ function scriptInput(request: ScriptRequest): {
   const prelude = `${request.script}\n`;
   const count = Buffer.byteLength(prelude, 'utf8');
   return {
-    program: ['-c', preludeCommand(count)],
+    program: ['-c', JOINED_ERRORS + REPORT_PROCESS_ID + preludeCommand(count)],
     input:
       request.input.kind === 'text'
         ? {kind: 'text', text: prelude + request.input.text}
         : {kind: 'file', prefix: prelude, localFile: request.input.localFile},
   };
+}
+
+/** Ends the process tree of the shell `processId` in the distro with lib-host's shared script: TERM first, KILL after 5 s. */
+async function endTree(
+  runner: WslRunner,
+  distro: string,
+  processId: number,
+): Promise<void> {
+  await runner.exec(
+    {
+      distro,
+      folder: '~',
+      program: 'sh',
+      programArguments: ['-c', TREE_KILL_SCRIPT, 'sh', String(processId)],
+      environment: {},
+      input: {kind: 'none'},
+      cancellation: new AbortController().signal,
+    },
+    () => undefined,
+  );
 }
 
 /** The channel over WSL. */
@@ -81,7 +105,38 @@ export function createWslHostChannel(ports: WslHostChannelPorts): HostChannel {
           'a distro runs a script for the POSIX shell only',
         );
       }
+      if (request.cancellation.aborted) {
+        return failFrom('cancelled', 'cancelled before the run');
+      }
       const planned = scriptInput(request);
+      // A cancel ends the script's whole tree in the distro before it ends `wsl.exe`: the shell reports its process id as
+      // its first line, and the shared script walks the tree from it.
+      const inner = new AbortController();
+      let processId: number | undefined;
+      const flags = {cancelled: false};
+      const stopped = new Promise<void>(resolve => {
+        request.cancellation.addEventListener(
+          'abort',
+          () => {
+            flags.cancelled = true;
+            const target = processId;
+            (target === undefined
+              ? Promise.resolve()
+              : endTree(runner, distro, target)
+            ).then(
+              () => {
+                inner.abort();
+                resolve();
+              },
+              () => {
+                inner.abort();
+                resolve();
+              },
+            );
+          },
+          {once: true},
+        );
+      });
       const outcome = await runner.exec(
         {
           distro,
@@ -90,10 +145,20 @@ export function createWslHostChannel(ports: WslHostChannelPorts): HostChannel {
           programArguments: planned.program,
           environment: request.environment,
           input: planned.input,
-          cancellation: request.cancellation,
+          cancellation: inner.signal,
         },
-        onLine,
+        line => {
+          if (processId === undefined && PROCESS_ID.test(line)) {
+            processId = Number(line);
+          } else {
+            onLine(line);
+          }
+        },
       );
+      if (flags.cancelled) {
+        await stopped;
+        return failFrom('cancelled', 'cancelled while the script ran');
+      }
       return outcome.kind === 'failed'
         ? channelFailure(outcome)
         : {kind: 'exited', status: outcome.status};

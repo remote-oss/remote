@@ -1,12 +1,22 @@
+import {spawn} from 'node:child_process';
+import {mkdtemp} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
 import type {ChannelFailureKind} from 'lib-host';
 import {
   channelContractCases,
+  LARGE_COPY_LENGTH,
+  LONG_LINE_LENGTH,
   stagedInputOf,
   type ChannelHarness,
   type ContractScenario,
   type StagedChannel,
 } from 'lib-host/testing/channel-contract';
 import {createWslHostChannel} from '../../src/host-channel.ts';
+import type {
+  WslProcess,
+  WslProcessSpecification,
+} from '../../src/process-port.ts';
 import {createPathMapper} from '../../src/path-mapper.ts';
 import {createWslRunner} from '../../src/runner.ts';
 import {
@@ -99,39 +109,146 @@ function runsFor(scenario: ContractScenario): () => FakeRun {
   }
 }
 
+/** The scenarios a real shell plays out: the distro's side, on this machine's `sh`. */
+const REAL_SHELL_SCENARIOS = new Set<ContractScenario['kind']>([
+  'backgroundsThenWaits',
+  'detachesThenWaits',
+  'printsBothStreams',
+  'printsLongLine',
+  'copiesLarge',
+]);
+
+/** Whether the process `processId` runs on this machine. */
+function isRunning(processId: number): boolean {
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The script of a real-shell scenario. */
+function scriptOf(scenario: ContractScenario): string {
+  switch (scenario.kind) {
+    case 'backgroundsThenWaits':
+      return `sleep 40 & printf '%s\\n' "$!"; wait`;
+    case 'detachesThenWaits':
+      return `(sleep 40 >/dev/null 2>&1 & printf '%s\\n' "$!"); sleep 30`;
+    case 'printsBothStreams':
+      return "printf 'out one\\n'; printf 'err one\\n' >&2; printf 'out two\\n'";
+    case 'printsLongLine':
+      return `head -c ${String(LONG_LINE_LENGTH)} /dev/zero | tr '\\0' x`;
+    default:
+      return 'scenario';
+  }
+}
+
+/** The largest write any real-shell process of the current staging was handed. */
+let largestWriteSeen = 0;
+
+/**
+ * `wsl.exe` on this machine's shell: the program after `--exec` runs here, with the arguments the runner made, so that a
+ * script's processes, streams and lines are real. Its writes are measured.
+ */
+function localShellSpawner(
+  specification: WslProcessSpecification,
+): Promise<WslProcess> {
+  const shellWords = specification.programArguments;
+  const [program = 'sh', ...rest] = shellWords.slice(
+    shellWords.indexOf('--exec') + 1,
+  );
+  const child = spawn(program, rest, {env: process.env, shell: false});
+  return new Promise<WslProcess>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('spawn', () => {
+      child.stdin.on('error', () => undefined);
+      resolve({
+        onOutput: listener =>
+          child.stdout.on('data', (chunk: Buffer) => {
+            listener(new Uint8Array(chunk));
+          }),
+        onError: listener =>
+          child.stderr.on('data', (chunk: Buffer) => {
+            listener(new Uint8Array(chunk));
+          }),
+        onExit: listener => {
+          child.once('close', (status: number | null) => {
+            listener(status ?? undefined);
+          });
+        },
+        write: data => {
+          largestWriteSeen = Math.max(largestWriteSeen, data.length);
+          return new Promise<void>((written, failed) => {
+            child.stdin.write(data, caught => {
+              if (caught === undefined || caught === null) {
+                written();
+              } else {
+                failed(caught);
+              }
+            });
+          });
+        },
+        endInput: () => {
+          child.stdin.end();
+        },
+        kill: () => {
+          child.kill();
+        },
+      });
+    });
+  });
+}
+
 const WSL_HARNESS: ChannelHarness = {
-  pendingOn: '#3282',
+  processes: {
+    alive: processId => Promise.resolve(isRunning(processId)),
+    end: processId => {
+      process.kill(processId, 'SIGKILL');
+      return Promise.resolve();
+    },
+  },
+  boundedCopy: {kind: 'measured', largestWrite: () => largestWriteSeen},
   scriptFailures: ['channelClosed', 'spawnFailed'],
   copyFailures: ['channelClosed', 'copyFailed'],
   reachesClientFiles: true,
-  stage: (scenario: ContractScenario): Promise<StagedChannel> => {
+  stage: async (scenario: ContractScenario): Promise<StagedChannel> => {
     const next = runsFor(scenario);
     const fake = fakeWsl(() => next());
+    const real = REAL_SHELL_SCENARIOS.has(scenario.kind);
+    largestWriteSeen = 0;
+    const copied = real
+      ? path.join(await mkdtemp(path.join(tmpdir(), 'wsl-channel-')), 'copied')
+      : '/home/me/archive.tar.gz';
     if (scenario.kind !== 'missingInputFile') {
       const content =
         scenario.kind === 'digestsInput' && scenario.input.kind === 'file'
           ? scenario.input.content
-          : new Uint8Array(4096);
+          : new Uint8Array(
+              scenario.kind === 'copiesLarge' ? LARGE_COPY_LENGTH : 4096,
+            );
       fake.local.set(LOCAL_FILE, content);
     }
-    const runner = createWslRunner(fake);
-    return Promise.resolve({
+    const runner = createWslRunner(
+      real ? {...fake, spawner: localShellSpawner} : fake,
+    );
+    return {
       channel: createWslHostChannel({
         runner,
         mapper: createPathMapper(runner),
         distro: DISTRO,
       }),
       script: {
-        script: 'scenario',
+        script: scriptOf(scenario),
         interpreter: 'posixShell',
         environment: {},
         input: stagedInputOf(scenario, LOCAL_FILE),
       },
-      copy: {localFile: LOCAL_FILE, remotePath: '/home/me/archive.tar.gz'},
+      copy: {localFile: LOCAL_FILE, remotePath: copied},
       ...(scenario.kind === 'clientFile' && scenario.reachable
         ? {hostPath: MOUNTED_FILE}
         : {}),
-    });
+    };
   },
 };
 
