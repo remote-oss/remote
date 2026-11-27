@@ -235,4 +235,7 @@ describe('host channel over WSL: the lib-host contract (D4 on D4f)', function ()
       contractCase.pending === true ? undefined : contractCase.check,
     );
   }
+  it(
+    'the shared contract runs against real WSL on the Windows job (pending #3312)',
+  );
 });
