@@ -41,8 +41,10 @@ connections an *extension* opens, and the agent is no extension.
    kind's second member, `ruling-3062-service-kind`). It is built on:
    - the dev tunnels TypeScript SDK: `@microsoft/dev-tunnels-connections` (`TunnelRelayTunnelHost`),
      `-management` (the management client with our domain) and `-contracts`. These three are new to the lockfile, and
-     the agent skeleton card pins them at 1.3.82, the npm version the relay brief reads. They come with
-     `@microsoft/dev-tunnels-ssh`, at the version the relay's lockfile entry holds, and with
+     the agent skeleton card pins them at **1.3.50**, the newest whose peer range (`^3.12.29`) holds the relay's
+     `@microsoft/dev-tunnels-ssh` 3.12.29, so the agent and the relay share one ssh (#3159). 1.3.82 needs `^3.12.42`.
+     A later move to a newer SDK moves the relay's ssh pin with it, in one change. They come with that
+     `@microsoft/dev-tunnels-ssh`, and with
      `@microsoft/dev-tunnels-ssh-tcp`. The connections package peer-depends on that one
      (`[dev-tunnels]` `ts/src/connections/package.json:29-30`), and `TunnelRelayTunnelHost` uses it, so the skeleton
      card pins it beside `-ssh`;

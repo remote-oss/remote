@@ -441,7 +441,7 @@
       "code-cli.test.ts": 0.5,
       "code-files.test.ts": 0.6,
       "connection-logs.test.ts": 0.4,
-      "current-window.test.ts": 2.6,
+      "current-window.test.ts": 3.4,
       "debug-tasks.test.ts": 0.1,
       "download-hints.test.ts": 0.3,
       "download-stalls.test.ts": 1.5,
