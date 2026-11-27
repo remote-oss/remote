@@ -1,0 +1,12 @@
+[
+ {
+  "id": "F-6103",
+  "issue": 19,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Default distro on old WSL builds",
+  "epic": "E61",
+  "acCount": 11
+ }
+]
