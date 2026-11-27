@@ -1,0 +1,12 @@
+[
+ {
+  "id": "F-6601",
+  "issue": 37,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "File watching in WSL",
+  "epic": "E66",
+  "acCount": 17
+ }
+]

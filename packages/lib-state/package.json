@@ -1,0 +1,16 @@
+{
+  "name": "lib-state",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./.tsc/src/index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./testing/memory-files": {
+      "types": "./.tsc/src/testing/memory-files.d.ts",
+      "default": "./src/testing/memory-files.ts"
+    }
+  }
+}

@@ -226,7 +226,14 @@ import {cloneableRemoteOf} from './open/git-remote.ts';
 
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {createAttemptLog, writeAttemptLog} from './connect/attempt-log.ts';
-import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
+import {
+  isPendingEdit,
+  openPendingEdit,
+  PENDING_EDITS_KEY,
+  storePendingEdit,
+} from './open/pending-edit.ts';
+import {isIntentValue, REBUILD_INTENTS_KEY} from './open/rebuild-intent.ts';
+import {handoffKindOf} from './state/handoffs.ts';
 import {rebuildContainer} from './open/rebuild.ts';
 import {storePausedRetry} from './state/paused-retry.ts';
 import {
@@ -242,6 +249,7 @@ import {
 } from './shutdown/helper-request.ts';
 import {createWindowLease} from './shutdown/window-lease.ts';
 import {forwarderOf, type TunnelHost} from './ports/forwarder.ts';
+import {admitsWindow, type WindowManifest} from './open/command-window.ts';
 import {reopenHandlersOf} from './open/reopen.ts';
 import type {ReopenPorts} from './open/reopen-ports.ts';
 import {
@@ -303,10 +311,12 @@ const SETUP_TEXT_TEMPLATES = {
 };
 
 /** What the editor tells about the extension, as far as activation reads it. */
-interface Manifest {
+interface Manifest extends WindowManifest {
   displayName: string;
   version: string;
-  contributes?: {commands?: Array<{command: string; title: string}>};
+  contributes?: WindowManifest['contributes'] & {
+    commands?: Array<{command: string; title: string}>;
+  };
 }
 
 /** The folders the window has open, by scheme, path on this machine and path in the folder's own file system. */
@@ -846,6 +856,23 @@ export async function activate(
     vscode.FileType,
   );
   const collate = new Intl.Collator(undefined, {sensitivity: 'accent'}).compare;
+  /** What a window leaves for the one that follows its reload: files of the extension's own storage, taken once. */
+  const rebuildHandoffs = handoffKindOf({
+    storageFolder: context.globalStorageUri.fsPath,
+    name: 'rebuild-intent',
+    earlier: context.globalState,
+    earlierKey: REBUILD_INTENTS_KEY,
+    isValue: isIntentValue,
+    now: Date.now,
+  });
+  const pendingEditHandoffs = handoffKindOf({
+    storageFolder: context.globalStorageUri.fsPath,
+    name: 'pending-edit',
+    earlier: context.globalState,
+    earlierKey: PENDING_EDITS_KEY,
+    isValue: isPendingEdit,
+    now: Date.now,
+  });
   /** The extension's store of configurations outside the workspace, which the open commands and the wizard look in. */
   const userDataStore: StoreFiles = {
     folderNames: async folder =>
@@ -1534,13 +1561,13 @@ export async function activate(
         return rebuildContainer(
           {
             window: {
-              remoteName: () => vscode.env.remoteName,
+              admits: commandId =>
+                admitsWindow(manifest, commandId, vscode.env.remoteName),
               remoteAuthority: () => vscode.env.remoteAuthority,
               reload: () =>
                 vscode.commands.executeCommand('workbench.action.reloadWindow'),
             },
-            intents: context.globalState,
-            now: Date.now,
+            intents: rebuildHandoffs,
             shutdown: {leave: () => windowShutdown.leave()},
             logger: served.logger,
           },
@@ -1646,6 +1673,8 @@ export async function activate(
         },
         window: {
           remoteName: () => vscode.env.remoteName,
+          admits: commandId =>
+            admitsWindow(manifest, commandId, vscode.env.remoteName),
           folders: windowFolders,
           workspaceFile: () => {
             const file = vscode.workspace.workspaceFile;
@@ -1689,7 +1718,7 @@ export async function activate(
             setupAgain: () => served.setupAgain(),
             commandTitle,
           }),
-        intents: context.globalState,
+        intents: rebuildHandoffs,
         now: Date.now,
         config: {
           files: configFiles,
@@ -2257,10 +2286,9 @@ export async function activate(
     const {served} = result;
     const logger = served.logger;
     void openPendingEdit({
-      memento: context.globalState,
+      handoffs: pendingEditHandoffs,
       remoteName: () => vscode.env.remoteName,
       folders: windowFolders,
-      now: Date.now,
       open: file =>
         vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file)),
       openLog: file =>
@@ -2626,7 +2654,8 @@ export async function activate(
           request,
         ),
       editorEnvironment: process.env,
-      intents: context.globalState,
+      intents: rebuildHandoffs,
+      pausedRetries: context.globalState,
       trust: served.trust,
       trustNeeds: {
         translate,
@@ -2758,13 +2787,7 @@ export async function activate(
             () => false,
           ),
         keepEdit: (folder, configFile, logFile) =>
-          storePendingEdit(
-            context.globalState,
-            folder,
-            configFile,
-            Date.now(),
-            logFile,
-          ),
+          storePendingEdit(pendingEditHandoffs, folder, configFile, logFile),
         storePausedRetry: containerId =>
           storePausedRetry(context.globalState, containerId, Date.now()),
         rebuildContainer: () =>

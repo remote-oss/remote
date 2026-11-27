@@ -232,6 +232,9 @@ importers:
       lib-log:
         specifier: workspace:*
         version: link:../lib-log
+      lib-state:
+        specifier: workspace:*
+        version: link:../lib-state
 
   packages/lib-companion: {}
 
@@ -281,6 +284,8 @@ importers:
 
   packages/lib-standdown: {}
 
+  packages/lib-state: {}
+
   packages/lib-wsl:
     dependencies:
       lib-host:
@@ -322,6 +327,9 @@ importers:
       lib-standdown:
         specifier: workspace:*
         version: link:../lib-standdown
+      lib-state:
+        specifier: workspace:*
+        version: link:../lib-state
       lib-wsl:
         specifier: workspace:*
         version: link:../lib-wsl
@@ -389,6 +397,9 @@ importers:
       lib-standdown:
         specifier: workspace:*
         version: link:../lib-standdown
+      lib-state:
+        specifier: workspace:*
+        version: link:../lib-state
     devDependencies:
       esbuild:
         specifier: ^0.28.2
@@ -420,6 +431,9 @@ importers:
 
   packages/tunnel-agent:
     dependencies:
+      '@msgpack/msgpack':
+        specifier: 3.1.3
+        version: 3.1.3
       lib-identifiers:
         specifier: workspace:*
         version: link:../lib-identifiers

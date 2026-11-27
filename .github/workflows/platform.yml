@@ -8,6 +8,8 @@
 #   against that stand-in for Docker Desktop (reading-2511-desktop-stand-in); the other steps reach it at the distro's
 #   address. The hosts' and containers' published ports are reached over WSL2's localhost forwarding.
 #   VSCodium answers on its debugging port there.
+#   The `containers-wsl` group runs the Dev Containers rows with their engine in that distro
+#   (`dev.containers.executeInWSL`), as a job of its own.
 # - macos-15-intel: the macOS client, with colima's Docker for linux/x86_64 (about 10 minutes to start).
 #
 # Each job runs `node tools/acceptance.ts --editor vscodium` for its launch list and leaves the run's summary in the job
@@ -24,7 +26,7 @@ on:
       windows-launches:
         description: The launches of the Windows jobs, joined by commas, in groups separated by semicolons with one job per group; none skips them
         type: string
-        default: local,remote,wsl,windows-host;containers-a;containers-b;containers-trust
+        default: local,remote,wsl,windows-host;containers-a;containers-b;containers-trust;containers-wsl
       macos-launches:
         description: The launches of the macOS job, joined by commas; none skips the job
         type: string
@@ -44,7 +46,7 @@ jobs:
     steps:
       - id: groups
         env:
-          GROUPS_TEXT: ${{ inputs.windows-launches || 'local,remote,wsl,windows-host;containers-a;containers-b;containers-trust' }}
+          GROUPS_TEXT: ${{ inputs.windows-launches || 'local,remote,wsl,windows-host;containers-a;containers-b;containers-trust;containers-wsl' }}
         run: echo "groups=$(jq -cn --arg text "$GROUPS_TEXT" '$text | split(";") | map(gsub("\\s"; "")) | map(select(. != ""))')" >> "$GITHUB_OUTPUT"
 
   windows:
