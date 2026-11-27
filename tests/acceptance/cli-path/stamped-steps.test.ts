@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {stamped} from './stamped-steps.ts';
+import {failedWithReadout, stamped} from './stamped-steps.ts';
 
 /** A clock that each reading advances by `step` milliseconds, and the lines said. */
 function environmentOf(step: number) {
@@ -77,6 +77,53 @@ describe('the stamped and bounded steps of a row (card #3003)', () => {
         'Error: row: the step "second connect" had not finished after 0.02 s',
         ['row: second connect failed after 1.0 s'],
       ],
+    );
+  });
+
+  it('#3276: a failure carries the readout after it, as its message, with the failure as its cause', async () => {
+    const failure = new Error('the connect did not finish');
+    const error = await failedWithReadout(
+      'row',
+      failure,
+      () => Promise.resolve('the host held a CLI'),
+      1000,
+    );
+    deepStrictEqual(
+      [error.message, error.cause],
+      [`${String(failure)}\nthe host held a CLI`, failure],
+    );
+  });
+
+  it('#3276: a readout that fails leaves the failure first, with a line that says the readout did not finish', async () => {
+    const failure = new Error('the connect did not finish');
+    const error = await failedWithReadout(
+      'row',
+      failure,
+      () => Promise.reject(new Error('the container is gone')),
+      1000,
+    );
+    deepStrictEqual(
+      [error.message, error.cause],
+      [
+        `${String(failure)}\nthe readout did not finish: Error: the container is gone`,
+        failure,
+      ],
+    );
+  });
+
+  it('#3276: a readout that does not end is bounded, and the failure is still first', async () => {
+    const failure = new Error('the connect did not finish');
+    const error = await failedWithReadout(
+      'row',
+      failure,
+      () => new Promise<string>(() => undefined),
+      20,
+    );
+    deepStrictEqual(
+      error.message.startsWith(
+        `${String(failure)}\nthe readout did not finish: Error: row: the step "the readout of the step that failed" had not finished`,
+      ),
+      true,
     );
   });
 });

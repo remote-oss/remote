@@ -24,6 +24,7 @@
     "../tests/acceptance/windows/labels-wait.ts",
     "../tests/acceptance/windows/contribution-polling.ts",
     "../tests/acceptance/windows/corrupt-archive.ts",
+    "../tests/acceptance/windows/host-logins.ts",
     "../tests/acceptance/windows/page-protocol.ts",
     "../tests/acceptance/windows/command-text.ts",
     "../tests/acceptance/windows/editor-folder.ts",
@@ -36,7 +37,8 @@
     "../tests/acceptance/windows/quick-pick-reads.ts",
     "../tests/acceptance/windows/reconnection-state.ts",
     "../tests/acceptance/windows/stored-history.ts",
-    "../tests/acceptance/windows/stored-hints.ts"
+    "../tests/acceptance/windows/stored-hints.ts",
+    "../tests/acceptance/extensionpack/obsolete-folders.ts"
   ],
   "exclude": ["**/fixtures"]
 }

@@ -1,7 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import type {LastResolve} from 'lib-authority';
 import type {HistoryStore} from '../../src/companion/folder-history.ts';
-import {MemoryFiles} from './event-files.fixture.ts';
+import {MemoryFiles} from 'lib-state/testing/memory-files';
 import {windowOn} from './history-files.fixture.ts';
 import {
   entryOfWindow,

@@ -18,6 +18,8 @@ interface Scenario {
   unprobeable?: readonly ProposalName[];
   dismissed?: boolean;
   attemptPending?: boolean;
+  /** Another window takes the pending attempt before this one does. */
+  attemptTaken?: boolean;
   holder?: string;
   claimSucceeds?: boolean;
   argvEnabled?: readonly string[];
@@ -48,6 +50,13 @@ class FakePorts implements SetupPorts {
       this.attemptPending = value;
       this.events.push(`pending=${String(value)}`);
       return Promise.resolve();
+    },
+    claimAttemptPending: () => {
+      const claimed =
+        this.attemptPending && this.scenario.attemptTaken !== true;
+      this.events.push(claimed ? 'pending=false' : 'attempt taken by another');
+      this.attemptPending = false;
+      return Promise.resolve(claimed);
     },
   };
   readonly window = {
@@ -259,6 +268,18 @@ describe('the proposed-API setup (F-1403)', () => {
       dismissed: true,
     });
     deepStrictEqual(ports.notices, [{kind: 'failedAttempt'}]);
+  });
+
+  it('F-1403: when another window took the pending attempt first, this window tells nothing and does not claim the window', async () => {
+    const ports = await settled({
+      missing: ['tunnels'],
+      attemptPending: true,
+      attemptTaken: true,
+    });
+    deepStrictEqual(
+      [ports.notices, ports.events.includes('showSetup')],
+      [[], false],
+    );
   });
 
   it('F-1403: a flag that is not set is not written', async () => {
