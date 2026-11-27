@@ -212,6 +212,8 @@ const WSL_HARNESS: ChannelHarness = {
         runner,
         mapper: createPathMapper(runner),
         distro: DISTRO,
+        logLine: () => undefined,
+        ...(real ? {} : {treeKillBoundMs: 100}),
       }),
       script: {
         script: scriptOf(scenario),
