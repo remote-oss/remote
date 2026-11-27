@@ -34,7 +34,6 @@ function requestOf(cancellation: AbortSignal = NEVER) {
     command: ['docker', 'version'],
     environment: {DOCKER_HOST: 'tcp://host:2375', UNSET: undefined},
     cancellation,
-    endById: () => Promise.resolve(),
   };
 }
 
@@ -159,6 +158,16 @@ describe('a process on the exec server’s host', () => {
       [killed.inputEnded, early.inputEnded, ended],
       [true, true, [PROCESS_ID, PROCESS_ID]],
     );
+  });
+
+  it('a kill of a process started without an ending only ends its input', async () => {
+    const scene = sceneOf({ignoresInput: true});
+    const spawned = await spawnOnHost(scene.server, requestOf());
+    if (spawned.kind === 'spawned') {
+      spawned.process.kill();
+    }
+    await settled();
+    deepStrictEqual([scene.inputEnded, scene.killed], [true, []]);
   });
 
   it('an abort ends the process by its id through the ending it is given', async () => {

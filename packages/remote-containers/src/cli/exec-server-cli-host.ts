@@ -23,7 +23,6 @@ export function execServerCliHost(
         command: [program, ...programArguments],
         environment: options.env,
         cancellation: new AbortController().signal,
-        endById: processId => endTree(server, processId),
       });
       if (spawned.kind === 'failed') {
         return {kind: 'failed', message: spawned.detail};

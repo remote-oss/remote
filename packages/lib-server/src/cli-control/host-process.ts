@@ -44,8 +44,8 @@ export interface HostSpawnRequest {
   environment: Readonly<Record<string, string | undefined>> | undefined;
   /** Ends the process, and ends it as soon as its id is known when it is aborted before. */
   cancellation: AbortSignal;
-  /** Ends the process the host reported `processId` for. */
-  endById(processId: number): Promise<void>;
+  /** Ends the process the host reported `processId` for; a kill without it only ends the input. */
+  endById?: (processId: number) => Promise<void>;
 }
 
 /** `environment` without the variables that have no value. */
@@ -146,7 +146,7 @@ export async function spawnOnHost(
     stdin.end();
     void stdout.processId
       .then(processId =>
-        processId === undefined || ended
+        processId === undefined || ended || request.endById === undefined
           ? undefined
           : request.endById(processId),
       )
