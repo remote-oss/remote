@@ -361,6 +361,8 @@ export function steps(
         }),
       ),
     startCli: () => Promise.resolve(note('startCli', CLI_STARTED)),
+    stopCliScript: (input, lease, host, plan, processId) =>
+      `stop the CLI ${String(processId)}`,
     stopCli: (input, lease, host, plan, processId) => {
       note(`stopCli ${String(processId)}`, undefined);
       return Promise.resolve();
@@ -458,6 +460,7 @@ export function setup(level: Level = 'info'): {
       },
       maximumReconnectionAttempts: null,
       preconnectMilliseconds: 1000,
+      cliTakeUpMilliseconds: 50,
       logger: createLogger(logSink, {minimumLevel: () => level}),
       serve: {commit: 'c1', quality: 'insider'},
       useExecServer: true,

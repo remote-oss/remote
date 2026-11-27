@@ -2045,6 +2045,22 @@ describe("the composition's CLI path", () => {
     );
   });
 
+  it("ruling-3028-shared-cli: the stop script for the connection server comes from the host's own server steps", async () => {
+    const {steps, plan} = await cliPlanned();
+    deepStrictEqual(
+      steps
+        .stopCliScript(
+          inputFor('dev'),
+          leaseOn(channelAnswering([])),
+          HOST,
+          plan,
+          88,
+        )
+        .includes("CLI_STOP_PID='88'"),
+      true,
+    );
+  });
+
   /** The steps of a CLI plan and the stop of process 88 over a channel that holds the stop until it's cancelled. */
   async function heldStop() {
     const {seen, steps, plan} = await cliPlanned();

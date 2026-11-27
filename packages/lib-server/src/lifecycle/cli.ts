@@ -6,7 +6,7 @@
 import type {HostChannel} from 'lib-host';
 import type {RedirectRule} from 'lib-product';
 import type {Plan} from '../install/plan.ts';
-import type {ScriptParameters} from '../scripts/bootstrap.ts';
+import {scriptFor, type ScriptParameters} from '../scripts/bootstrap.ts';
 import {
   installPlaced,
   transfer,
@@ -14,7 +14,7 @@ import {
   type TransferFailure,
   type TransferInput,
 } from '../transfer/transfer.ts';
-import {runStep, type StepRun} from './run-step.ts';
+import {interpreterOf, runStep, type StepRun} from './run-step.ts';
 import {blockOfStart, scriptFailure, type StartOutcome} from './runtime.ts';
 
 /** The variable the CLI reads its connection token from. */
@@ -187,6 +187,33 @@ export type CliStopOutcome =
       failure: Extract<StartOutcome, {kind: 'failed'}>['failure'];
     };
 
+/** The parameters of the script that stops the CLI of `processId`. */
+function stopParameters(
+  base: ScriptParameters & {cli: NonNullable<ScriptParameters['cli']>},
+  processId: number,
+): ScriptParameters {
+  return {...base, [CLI_PARAMETERS]: {...base.cli, stopProcessId: processId}};
+}
+
+/** The step that stops the CLI. */
+const STOP_STEP = {installMode: 'singleScript', step: 'stopCli'} as const;
+
+/**
+ * The script that stops the CLI of `processId`, as `stopCli` runs it over `channel`, for a runner other than the
+ * channel: the connection server runs it when it ends. It holds a process id and no secret.
+ */
+export function stopCliScript(
+  channel: HostChannel,
+  base: ScriptParameters & {cli: NonNullable<ScriptParameters['cli']>},
+  processId: number,
+): string {
+  return scriptFor(
+    STOP_STEP,
+    interpreterOf(channel),
+    stopParameters(base, processId),
+  );
+}
+
 /**
  * Ends the CLI that `startCli` started, `processId`, only while that process is still the CLI. No host lock is taken:
  * stopping one process changes nothing another connect relies on.
@@ -199,8 +226,8 @@ export async function stopCli(
 ): Promise<CliStopOutcome> {
   const stepRun = await runStep(
     channel,
-    {installMode: 'singleScript', step: 'stopCli'},
-    {...base, [CLI_PARAMETERS]: {...base.cli, stopProcessId: processId}},
+    STOP_STEP,
+    stopParameters(base, processId),
     {cancellation},
   );
   const read = blockOfStart(stepRun);
