@@ -8,4 +8,5 @@
 !dist/helper-launcher.js
 !dist/shutdown-helper.js
 !dist/devcontainers-cli/**
+!dist/cli-hashes.json
 !resources/**

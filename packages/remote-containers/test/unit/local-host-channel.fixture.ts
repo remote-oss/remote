@@ -36,6 +36,7 @@ export function localHostChannel(
         child.once('error', error => {
           resolve(failFrom('spawnFailed', error));
         });
+        child.stdin.on('error', () => undefined);
         if (request.input.kind === 'text') {
           child.stdin.end(request.input.text);
         } else {

@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {createHash} from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -14,16 +15,18 @@ import path from 'node:path';
 import {
   RecordingChannel,
   type CopyAnswer,
+  type ScriptAnswer,
 } from 'lib-host/testing/recording-channel';
+import {CONTAINERS_CLI_FOLDER} from 'lib-identifiers';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import {RESULT_BEGIN, RESULT_END} from 'lib-server';
 import {FakeClock} from 'lib-server/testing/fake-clock';
 import type {ServerStepDependencies} from '../../src/connect/server-steps.ts';
 import {
+  packagedHashesOf,
   placeCli,
   placeCliFiles,
-  type PlacePorts,
   type PlaceRequest,
 } from '../../src/cli/placed-cli.ts';
 import {localHostChannel} from './local-host-channel.fixture.ts';
@@ -31,10 +34,10 @@ import {answer, PROFILE} from './server-profile.fixture.ts';
 
 const NEVER = new AbortController().signal;
 
-const CLIENT = {
-  cliFolder: '/client/dist/devcontainers-cli',
-  preload: '/client/dist/cli-preload.js',
-};
+/** The sha256 of `text` as hexadecimal. */
+function sha256Of(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
 
 const CLI_FILES = [
   'devcontainer.js',
@@ -42,10 +45,27 @@ const CLI_FILES = [
   'scripts/updateUID.Dockerfile',
 ];
 
-const PORTS: PlacePorts = {listFiles: () => Promise.resolve([...CLI_FILES])};
+/** What the client's files hold: the text each file has, which the packaged hashes are those of. */
+function contentOf(name: string): string {
+  return `content of ${name}`;
+}
+
+/** The hashes the extension was packaged with: each CLI file and the preload. */
+const HASHES: Readonly<Record<string, string>> = Object.fromEntries(
+  [...CLI_FILES, 'cli-preload.js'].map(name => [
+    name,
+    sha256Of(contentOf(name)),
+  ]),
+);
+
+const CLIENT = {
+  cliFolder: '/client/dist/devcontainers-cli',
+  preload: '/client/dist/cli-preload.js',
+  hashes: HASHES,
+};
 
 const SERVER = '/home/dev/.fixture-server/bin/abc123';
-const CLI_FOLDER = '/home/dev/.fixture-server/remote-oss-containers-cli';
+const CLI_FOLDER = `/home/dev/.fixture-server/${CONTAINERS_CLI_FOLDER}`;
 
 /** What a run saw of the client's side. */
 interface Seen {
@@ -113,19 +133,46 @@ function probeBlock(installed: boolean): string[] {
 
 const COPIED: CopyAnswer = {matches: () => true, ending: {kind: 'copied'}};
 
-/** The channel of a host whose server is installed, whose folder of this version is `whole` or missing. */
-function channelOf(
-  options: {
-    present?: boolean;
-    installed?: boolean;
-    failing?: 'check' | 'prepare' | 'publish' | 'copy' | 'probe';
-  } = {},
-): RecordingChannel {
-  const failing = options.failing;
-  const broken = {
-    kind: 'fail',
-    failure: {kind: 'channelClosed', detail: 'the connection closed'},
-  } as const;
+const BROKEN = {
+  kind: 'fail',
+  failure: {kind: 'channelClosed', detail: 'the connection closed'},
+} as const;
+
+/** What the host's hash script prints for each file when its copy is `form`: as packaged, another file, or none. */
+function hashLines(
+  form: 'good' | 'bad' | 'missing',
+  names: readonly string[] = Object.keys(HASHES),
+): string[] {
+  return names.map((name, index) => {
+    const hash = form === 'missing' && index === 0 ? '' : HASHES[name];
+    return `sum=${form === 'bad' && index === 0 ? sha256Of('tampered') : (hash ?? '')}\t${name}`;
+  });
+}
+
+/** How a run of the placement goes on the host: what each script answers, in the order the placement asks. */
+interface Scenario {
+  /** Whether the folder of the version is whole when the placement looks, at each look. */
+  looks?: Array<'whole' | 'missing'>;
+  /** What the host's copy hashes as, at each time the placement hashes. */
+  hashes?: Array<'good' | 'bad' | 'missing' | 'fail' | 'status'>;
+  installed?: boolean;
+  failing?: 'check' | 'prepare' | 'publish' | 'copy' | 'probe' | 'remove';
+}
+
+/** The channel of a host with its server installed, answering the scripts of the placement as `scenario` says. */
+function channelOf(scenario: Scenario = {}): RecordingChannel {
+  const {failing} = scenario;
+  const looks = scenario.looks ?? ['missing'];
+  const hashes = scenario.hashes ?? ['good'];
+  function sequence(
+    matches: (script: string) => boolean,
+    entries: readonly ScriptAnswer[],
+  ): ScriptAnswer[] {
+    return entries.map(entry => ({...entry, matches}));
+  }
+  function isHash(script: string): boolean {
+    return script.includes('sha256sum');
+  }
   return new RecordingChannel({
     identity: 'host',
     platformHint: 'linux',
@@ -135,43 +182,74 @@ function channelOf(
             interpreter: 'posixShell',
             matches: script => script.includes('fact host.os'),
             lines: [],
-            ending: broken,
+            ending: BROKEN,
           }
         : answer(
             script => script.includes('fact host.os'),
-            probeBlock(options.installed ?? true),
+            probeBlock(scenario.installed ?? true),
           ),
-      failing === 'check'
+      ...sequence(
+        script => script.includes('echo whole'),
+        failing === 'check'
+          ? [
+              {
+                interpreter: 'posixShell',
+                matches: () => true,
+                lines: [],
+                ending: BROKEN,
+              },
+            ]
+          : looks.map(look => answer(() => true, [look])),
+      ),
+      ...[1, 2].flatMap(() => [
+        answer(
+          script => script.includes('$PART_FOLDER/$directory'),
+          [],
+          failing === 'prepare' ? 3 : 0,
+        ),
+        failing === 'publish'
+          ? {
+              interpreter: 'posixShell' as const,
+              matches: (script: string) => script.includes('mv --'),
+              lines: [],
+              ending: BROKEN,
+            }
+          : answer(script => script.includes('mv --'), []),
+      ]),
+      ...sequence(
+        isHash,
+        hashes.map(form =>
+          form === 'fail'
+            ? {
+                interpreter: 'posixShell',
+                matches: () => true,
+                lines: [],
+                ending: BROKEN,
+              }
+            : answer(
+                () => true,
+                form === 'status' ? [] : hashLines(form),
+                form === 'status' ? 4 : 0,
+              ),
+        ),
+      ),
+      failing === 'remove'
         ? {
             interpreter: 'posixShell',
-            matches: script => script.includes('echo whole'),
+            matches: script => script.includes('rm -rf -- "$VERSION_FOLDER"'),
             lines: [],
-            ending: broken,
+            ending: BROKEN,
           }
-        : answer(
-            script => script.includes('echo whole'),
-            [options.present === true ? 'whole' : 'missing'],
-          ),
-      failing === 'prepare'
-        ? answer(script => script.includes('$PART_FOLDER/$directory'), [], 3)
-        : answer(script => script.includes('$PART_FOLDER/$directory'), []),
-      failing === 'publish'
-        ? {
-            interpreter: 'posixShell',
-            matches: script => script.includes('mv --'),
-            lines: [],
-            ending: broken,
-          }
-        : answer(script => script.includes('mv --'), []),
+        : answer(script => script.includes('rm -rf -- "$VERSION_FOLDER"'), []),
     ],
     copies:
       failing === 'copy'
-        ? [COPIED, {matches: () => true, ending: broken}]
-        : [COPIED, COPIED, COPIED, COPIED],
+        ? [COPIED, {matches: () => true, ending: BROKEN}]
+        : Array.from({length: 12}, () => COPIED),
   });
 }
 
-/** The request of a placement of version 1.2.3. */
+/** The request of a placement of version 2.0.0. */
 function requestOf(channel: RecordingChannel, seen: Seen): PlaceRequest {
   return {
     channel,
@@ -202,17 +280,25 @@ function callsOf(channel: RecordingChannel): string[] {
             ? 'prepare'
             : call.request.script.includes('mv --')
               ? 'publish'
-              : 'other',
+              : call.request.script.includes('sha256sum')
+                ? 'hash'
+                : call.request.script.includes('rm -rf')
+                  ? 'remove'
+                  : 'other',
   );
 }
 
+/** The lines the placement logged. */
+function loggedOf(seen: Seen): string[] {
+  return seen.sink.lines.map(line => line.message);
+}
+
 describe('the dev container CLI placed on the SSH host (card #3244)', () => {
-  it('F-1302 AC-25: with the server installed, the CLI files and the preload are copied into a folder of the version that a rename then names, and the paths are the host’s', async () => {
+  it('F-1302 AC-25: with the server installed, the packaged files and the preload are copied into a folder of the version that a rename then names, hashed on the host before the run, and the paths are the host’s', async () => {
     const seen = seenOf();
     const channel = channelOf();
     const result = await placeCli(
       dependenciesOf(seen),
-      PORTS,
       requestOf(channel, seen),
     );
     const part = `${CLI_FOLDER}/2.0.0.part-tok`;
@@ -232,13 +318,56 @@ describe('the dev container CLI placed on the SSH host (card #3244)', () => {
           'probe',
           'check',
           'prepare',
-          ...CLI_FILES.map(file => `copy ${part}/${file}`),
-          `copy ${part}/cli-preload.js`,
+          ...Object.keys(HASHES).map(file => `copy ${part}/${file}`),
           'publish',
+          'hash',
         ],
         [],
       ],
     );
+  });
+
+  it('F-1302 AC-25: a second run with the same version finds its folder and copies nothing, writes nothing, and hashes what is there', async () => {
+    const seen = seenOf();
+    const channel = channelOf({looks: ['whole']});
+    const result = await placeCli(
+      dependenciesOf(seen),
+      requestOf(channel, seen),
+    );
+    deepStrictEqual(
+      [result.kind, callsOf(channel)],
+      ['placed', ['probe', 'check', 'hash']],
+    );
+  });
+
+  it('the folder is the one constant of the identifiers under the data folder of the product’s server, so two products have two folders', async () => {
+    const entries = [];
+    for (const dataFolder of ['.fixture-server', '.other-server']) {
+      const seen = seenOf();
+      const channel = new RecordingChannel({
+        identity: 'host',
+        platformHint: 'linux',
+        scripts: [
+          answer(script => script.includes('fact host.os'), probeBlock(true)),
+          answer(script => script.includes('echo whole'), ['whole']),
+          answer(script => script.includes('sha256sum'), hashLines('good')),
+        ],
+      });
+      const result = await placeCli(
+        {
+          ...dependenciesOf(seen),
+          profile: {...PROFILE, serverDataFolderName: dataFolder},
+        },
+        requestOf(channel, seen),
+      );
+      entries.push(
+        result.kind === 'placed' ? result.placed.entry : result.kind,
+      );
+    }
+    deepStrictEqual(entries, [
+      `/home/dev/.fixture-server/${CONTAINERS_CLI_FOLDER}/2.0.0/devcontainer.js`,
+      `/home/dev/.other-server/${CONTAINERS_CLI_FOLDER}/2.0.0/devcontainer.js`,
+    ]);
   });
 
   it('known limitation: the probe is told no install root, so a host with a server in a folder of the SSH setting gets its own under the default data folder', async () => {
@@ -246,7 +375,6 @@ describe('the dev container CLI placed on the SSH host (card #3244)', () => {
     const channel = channelOf();
     const result = await placeCli(
       dependenciesOf(seen),
-      PORTS,
       requestOf(channel, seen),
     );
     const [probed] = channel.calls;
@@ -260,48 +388,29 @@ describe('the dev container CLI placed on the SSH host (card #3244)', () => {
     );
   });
 
-  it('F-1302 AC-25: a second run with the same version finds its folder and copies nothing, writes nothing', async () => {
-    const seen = seenOf();
-    const channel = channelOf({present: true});
-    const result = await placeCli(
-      dependenciesOf(seen),
-      PORTS,
-      requestOf(channel, seen),
-    );
-    deepStrictEqual(
-      [result.kind, callsOf(channel)],
-      ['placed', ['probe', 'check']],
-    );
-  });
-
   it('the names of the folders and files, and the version, reach the scripts as variables, never in their text', async () => {
     const seen = seenOf();
     const channel = channelOf();
-    await placeCli(dependenciesOf(seen), PORTS, requestOf(channel, seen));
+    await placeCli(dependenciesOf(seen), requestOf(channel, seen));
     const scripts = channel.calls.flatMap(call =>
       call.operation === 'runScript' && !call.request.script.includes('fact')
         ? [[call.request.script.includes('2.0.0'), call.request.environment]]
         : [],
     );
+    const folders = {CLI_FOLDER, VERSION_FOLDER: `${CLI_FOLDER}/2.0.0`};
+    const part = {PART_FOLDER: `${CLI_FOLDER}/2.0.0.part-tok`};
     deepStrictEqual(scripts, [
-      [false, {CLI_FOLDER, VERSION_FOLDER: `${CLI_FOLDER}/2.0.0`}],
+      [false, folders],
       [
         false,
         {
-          CLI_FOLDER,
-          VERSION_FOLDER: `${CLI_FOLDER}/2.0.0`,
-          PART_FOLDER: `${CLI_FOLDER}/2.0.0.part-tok`,
+          ...folders,
+          ...part,
           DIRECTORIES: '.\ndist/spec-node\nscripts',
         },
       ],
-      [
-        false,
-        {
-          CLI_FOLDER,
-          VERSION_FOLDER: `${CLI_FOLDER}/2.0.0`,
-          PART_FOLDER: `${CLI_FOLDER}/2.0.0.part-tok`,
-        },
-      ],
+      [false, {...folders, ...part}],
+      [false, {...folders, FILES: Object.keys(HASHES).join('\n')}],
     ]);
   });
 
@@ -310,8 +419,8 @@ describe('the dev container CLI placed on the SSH host (card #3244)', () => {
     const noServer = channelOf({installed: false});
     const unreadable = channelOf({failing: 'probe'});
     const results = [
-      await placeCli(dependenciesOf(seen), PORTS, requestOf(noServer, seen)),
-      await placeCli(dependenciesOf(seen), PORTS, requestOf(unreadable, seen)),
+      await placeCli(dependenciesOf(seen), requestOf(noServer, seen)),
+      await placeCli(dependenciesOf(seen), requestOf(unreadable, seen)),
     ];
     deepStrictEqual(
       [
@@ -332,7 +441,6 @@ describe('the dev container CLI placed on the SSH host (card #3244)', () => {
       const channel = channelOf({failing});
       const result = await placeCli(
         dependenciesOf(seen),
-        PORTS,
         requestOf(channel, seen),
       );
       outcomes.push([
@@ -340,7 +448,7 @@ describe('the dev container CLI placed on the SSH host (card #3244)', () => {
         callsOf(channel)
           .slice(2)
           .map(call => call.split('/').pop()),
-        seen.sink.lines.map(line => line.message),
+        loggedOf(seen),
       ]);
     }
     deepStrictEqual(outcomes, [
@@ -381,6 +489,148 @@ describe('the dev container CLI placed on the SSH host (card #3244)', () => {
   });
 });
 
+describe('the placed files against the packaged hashes (card #3244, #2156’s rules)', () => {
+  it('a file whose hash on the host is not the packaged one places the folder again, and the second look finds it as packaged', async () => {
+    const seen = seenOf();
+    const channel = channelOf({
+      looks: ['whole', 'missing'],
+      hashes: ['bad', 'good'],
+    });
+    const result = await placeCli(
+      dependenciesOf(seen),
+      requestOf(channel, seen),
+    );
+    deepStrictEqual(
+      [
+        result.kind,
+        callsOf(channel).filter(call => !call.startsWith('copy')),
+        loggedOf(seen),
+      ],
+      [
+        'placed',
+        [
+          'probe',
+          'check',
+          'hash',
+          'remove',
+          'check',
+          'prepare',
+          'publish',
+          'hash',
+        ],
+        [
+          'the CLI on the host differs from the packaged one: devcontainer.js is not the file the extension was packaged with',
+        ],
+      ],
+    );
+  });
+
+  it('a second difference fails the run with the CLI not placed, and the log names the file and why', async () => {
+    const seen = seenOf();
+    const channel = channelOf({
+      looks: ['whole', 'missing'],
+      hashes: ['bad', 'bad'],
+    });
+    const result = await placeCli(
+      dependenciesOf(seen),
+      requestOf(channel, seen),
+    );
+    deepStrictEqual(
+      [
+        result.kind === 'failed' ? result.failure.kind : result.kind,
+        loggedOf(seen),
+        callsOf(channel).filter(call => call === 'remove').length,
+      ],
+      [
+        'cliNotPlaced',
+        [
+          'the CLI on the host differs from the packaged one: devcontainer.js is not the file the extension was packaged with',
+          'the CLI on the host differs from the packaged one: devcontainer.js is not the file the extension was packaged with',
+        ],
+        1,
+      ],
+    );
+  });
+
+  it('a file that is not there, or that no tool of the host can hash, is a difference that says so', async () => {
+    const seen = seenOf();
+    const channel = channelOf({
+      looks: ['whole', 'missing'],
+      hashes: ['missing', 'good'],
+    });
+    await placeCli(dependenciesOf(seen), requestOf(channel, seen));
+    deepStrictEqual(loggedOf(seen), [
+      'the CLI on the host differs from the packaged one: devcontainer.js is missing on the host or cannot be hashed there',
+    ]);
+  });
+
+  it('a hash script the channel can’t run, or that ends with a status, fails the run, and a folder that can’t be removed fails it too', async () => {
+    const outcomes = [];
+    const scenarios: Scenario[] = [
+      {looks: ['missing', 'missing'], hashes: ['fail', 'fail']},
+      {looks: ['missing', 'missing'], hashes: ['status', 'status']},
+      {looks: ['whole'], hashes: ['bad'], failing: 'remove'},
+    ];
+    for (const scenario of scenarios) {
+      const seen = seenOf();
+      const result = await placeCli(
+        dependenciesOf(seen),
+        requestOf(channelOf(scenario), seen),
+      );
+      outcomes.push([
+        result.kind === 'failed' ? result.failure.kind : result.kind,
+        loggedOf(seen),
+      ]);
+    }
+    deepStrictEqual(outcomes, [
+      [
+        'cliNotPlaced',
+        [
+          'the CLI on the host differs from the packaged one: the files could not be hashed on the host: the connection closed',
+          'the CLI on the host differs from the packaged one: the files could not be hashed on the host: the connection closed',
+        ],
+      ],
+      [
+        'cliNotPlaced',
+        [
+          'the CLI on the host differs from the packaged one: the files could not be hashed on the host: the script on the host ended with status 4',
+          'the CLI on the host differs from the packaged one: the files could not be hashed on the host: the script on the host ended with status 4',
+        ],
+      ],
+      [
+        'cliNotPlaced',
+        [
+          'the CLI on the host differs from the packaged one: devcontainer.js is not the file the extension was packaged with',
+          "the CLI's folder on the host was not removed: the connection closed",
+        ],
+      ],
+    ]);
+  });
+});
+
+describe('the list of hashes the extension was packaged with (card #3244)', () => {
+  it('a list of names under the version’s folder and sha256 texts is read, and anything else is none', () => {
+    const good = JSON.stringify(HASHES);
+    const hash = sha256Of('x');
+    deepStrictEqual(
+      [
+        packagedHashesOf(good),
+        packagedHashesOf('{broken'),
+        packagedHashesOf('[]'),
+        packagedHashesOf('null'),
+        packagedHashesOf('{}'),
+        packagedHashesOf(JSON.stringify({'../escape': hash})),
+        packagedHashesOf(JSON.stringify({'/absolute': hash})),
+        packagedHashesOf(JSON.stringify({'a//b': hash})),
+        packagedHashesOf(JSON.stringify({'a\nb': hash})),
+        packagedHashesOf(JSON.stringify({'a.js': hash.toUpperCase()})),
+        packagedHashesOf(JSON.stringify({'a.js': 3})),
+      ],
+      [HASHES, ...Array.from({length: 10}, () => undefined)],
+    );
+  });
+});
+
 describe('the CLI folder on a host with a real shell (card #3244)', () => {
   let root = '';
   let client = '';
@@ -390,17 +640,27 @@ describe('the CLI folder on a host with a real shell (card #3244)', () => {
     client = path.join(root, 'client');
     for (const file of CLI_FILES) {
       mkdirSync(path.dirname(path.join(client, file)), {recursive: true});
-      writeFileSync(path.join(client, file), `content of ${file}`);
+      writeFileSync(path.join(client, file), contentOf(file));
     }
-    writeFileSync(path.join(root, 'cli-preload.js'), 'the preload');
+    writeFileSync(
+      path.join(root, 'cli-preload.js'),
+      contentOf('cli-preload.js'),
+    );
   });
 
   afterEach(() => {
     rmSync(root, {recursive: true, force: true});
   });
 
-  /** A run of the placement of `version` on this machine's shell, with the folder `host` standing for the host's. */
-  async function placedOn(version: string, token = 'tok') {
+  /**
+   * A run of the placement of `version` on this machine's shell, with the folder `host` standing for the host's, and
+   * `corrupt` as the copies the host makes of the files named in it.
+   */
+  async function placedOn(
+    version: string,
+    token = 'tok',
+    corrupt: readonly string[] = [],
+  ) {
     const seen = seenOf();
     const copies: string[] = [];
     const channel = localHostChannel({
@@ -408,14 +668,17 @@ describe('the CLI folder on a host with a real shell (card #3244)', () => {
     });
     const counting = {
       ...channel,
-      copyToHost: (request: Parameters<typeof channel.copyToHost>[0]) => {
+      copyToHost: async (request: Parameters<typeof channel.copyToHost>[0]) => {
         copies.push(path.relative(root, request.remotePath));
-        return channel.copyToHost(request);
+        const copied = await channel.copyToHost(request);
+        if (corrupt.includes(path.basename(request.remotePath))) {
+          writeFileSync(request.remotePath, 'changed on the host');
+        }
+        return copied;
       },
     };
     const failure = await placeCliFiles(
       createLogger(seen.sink, {minimumLevel: () => 'info'}),
-      {listFiles: () => Promise.resolve([...CLI_FILES])},
       {
         channel: counting,
         remoteUser: 'dev',
@@ -423,6 +686,7 @@ describe('the CLI folder on a host with a real shell (card #3244)', () => {
         client: {
           cliFolder: client,
           preload: path.join(root, 'cli-preload.js'),
+          hashes: HASHES,
         },
         newToken: () => token,
         onPhase: () => undefined,
@@ -434,7 +698,7 @@ describe('the CLI folder on a host with a real shell (card #3244)', () => {
         versionFolder: path.join(root, 'host', version),
       },
     );
-    return {failure, copies};
+    return {failure, copies, logged: loggedOf(seen)};
   }
 
   it('F-1302 AC-25: the first run makes a whole folder of the version, a second with it copies nothing, and a new version makes a folder of its own', async () => {
@@ -473,9 +737,59 @@ describe('the CLI folder on a host with a real shell (card #3244)', () => {
         undefined,
         4,
         ['1.0.0', '1.1.0'],
-        'content of dist/spec-node/devContainersSpecCLI.js',
-        'the preload',
+        contentOf('dist/spec-node/devContainersSpecCLI.js'),
+        contentOf('cli-preload.js'),
         true,
+      ],
+    );
+  });
+
+  it('a file of the host’s copy that is changed after it was placed is placed again by the next run, and the run after finds it as packaged', async () => {
+    await placedOn('1.0.0');
+    writeFileSync(
+      path.join(root, 'host', '1.0.0', 'devcontainer.js'),
+      'changed by anyone with the account',
+    );
+    const again = await placedOn('1.0.0', 'second');
+    const after = await placedOn('1.0.0', 'third');
+    deepStrictEqual(
+      [
+        again.failure,
+        again.copies.length,
+        again.logged,
+        readFileSync(
+          path.join(root, 'host', '1.0.0', 'devcontainer.js'),
+          'utf8',
+        ),
+        after.copies,
+      ],
+      [
+        undefined,
+        4,
+        [
+          'the CLI on the host differs from the packaged one: devcontainer.js is not the file the extension was packaged with',
+        ],
+        contentOf('devcontainer.js'),
+        [],
+      ],
+    );
+  });
+
+  it('a copy that comes out different a second time fails the run, naming the file, and a file that is gone is placed again', async () => {
+    const failing = await placedOn('1.0.0', 'tok', ['devcontainer.js']);
+    rmSync(path.join(root, 'host', '2.0.0'), {recursive: true, force: true});
+    await placedOn('2.0.0');
+    rmSync(path.join(root, 'host', '2.0.0', 'scripts', 'updateUID.Dockerfile'));
+    const gone = await placedOn('2.0.0', 'second');
+    deepStrictEqual(
+      [failing.failure?.kind, failing.logged.length, gone.failure, gone.logged],
+      [
+        'cliNotPlaced',
+        2,
+        undefined,
+        [
+          'the CLI on the host differs from the packaged one: scripts/updateUID.Dockerfile is missing on the host or cannot be hashed there',
+        ],
       ],
     );
   });
@@ -489,7 +803,12 @@ describe('the CLI folder on a host with a real shell (card #3244)', () => {
       ...channel,
       copyToHost: async (request: Parameters<typeof channel.copyToHost>[0]) => {
         const copied = await channel.copyToHost(request);
-        mkdirSync(path.join(host, '3.0.0'), {recursive: true});
+        for (const file of Object.keys(HASHES)) {
+          mkdirSync(path.dirname(path.join(host, '3.0.0', file)), {
+            recursive: true,
+          });
+          writeFileSync(path.join(host, '3.0.0', file), contentOf(file));
+        }
         writeFileSync(path.join(host, '3.0.0', '.whole'), '');
         return copied;
       },
@@ -497,12 +816,15 @@ describe('the CLI folder on a host with a real shell (card #3244)', () => {
     const seen = seenOf();
     const failure = await placeCliFiles(
       createLogger(seen.sink, {minimumLevel: () => 'info'}),
-      {listFiles: () => Promise.resolve([...CLI_FILES])},
       {
         channel: racing,
         remoteUser: 'dev',
         version: '3.0.0',
-        client: {cliFolder: client, preload: path.join(root, 'cli-preload.js')},
+        client: {
+          cliFolder: client,
+          preload: path.join(root, 'cli-preload.js'),
+          hashes: HASHES,
+        },
         newToken: () => 'tok',
         onPhase: () => undefined,
         onDownloadPercent: () => undefined,
@@ -511,8 +833,16 @@ describe('the CLI folder on a host with a real shell (card #3244)', () => {
       {cliFolder: host, versionFolder: path.join(host, '3.0.0')},
     );
     deepStrictEqual(
-      [failure, readdirSync(host), readdirSync(path.join(host, '3.0.0'))],
-      [undefined, ['3.0.0'], ['.whole']],
+      [
+        failure,
+        readdirSync(host),
+        readdirSync(path.join(host, '3.0.0')).sort(),
+      ],
+      [
+        undefined,
+        ['3.0.0'],
+        ['.whole', 'cli-preload.js', 'devcontainer.js', 'dist', 'scripts'],
+      ],
     );
   });
 
