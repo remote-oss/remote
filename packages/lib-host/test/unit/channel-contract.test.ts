@@ -329,7 +329,7 @@ describe('ruleScriptOf (card #3312)', () => {
     ].map(scenario => ruleScriptOf(scenario as ContractScenario));
     deepStrictEqual(
       scripts.map(script => script?.slice(0, 5)),
-      ['sleep', '(slee', 'print', 'head ', undefined],
+      ['sleep', '(sets', 'print', 'head ', undefined],
     );
   });
 });

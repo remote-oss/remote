@@ -39,7 +39,7 @@ export type ContractScenario =
   | {kind: 'clientFile'; reachable: boolean}
   // The script backgrounds a long `sleep`, prints its pid, then waits.
   | {kind: 'backgroundsThenWaits'}
-  // The script starts a long `sleep` that leaves its tree (re-parented), prints its pid, then waits.
+  // The script starts a long `sleep` in a session of its own that leaves its tree (re-parented), prints its pid, then waits.
   | {kind: 'detachesThenWaits'}
   // The script prints `out one` to standard output, `err one` to standard error, then `out two` to standard output.
   | {kind: 'printsBothStreams'}
@@ -411,7 +411,7 @@ export function ruleScriptOf(scenario: ContractScenario): string | undefined {
     case 'backgroundsThenWaits':
       return `sleep 40 & printf '%s\\n' "$!"; wait`;
     case 'detachesThenWaits':
-      return `(sleep 40 >/dev/null 2>&1 & printf '%s\\n' "$!"); sleep 30`;
+      return `(setsid sleep 40 >/dev/null 2>&1 & printf '%s\\n' "$!"); sleep 30`;
     case 'printsBothStreams':
       return "printf 'out one\\n'; printf 'err one\\n' >&2; printf 'out two\\n'";
     case 'printsLongLine':
