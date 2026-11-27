@@ -449,20 +449,23 @@ export function ruleCases(harness: ChannelHarness): ContractCase[] {
           await harness.stage({kind: 'startsDetached'}),
           new AbortController(),
         );
+        const processId = Number(started.lines[0]);
+        await pause(100);
+        const aliveAfterStart = await processesOf().alive(processId);
         const cancelled = await cancelledAtProcessId(
           await harness.stage({kind: 'backgroundsThenWaits'}),
         );
         await pause(100);
-        const processId = Number(started.lines[0]);
-        const alive = await processesOf().alive(processId);
+        const aliveAfterCancel = await processesOf().alive(processId);
         await processesOf().end(processId);
         deepStrictEqual(
           [
             failureKindOf(started.outcome),
+            aliveAfterStart,
             failureKindOf(cancelled.outcome),
-            alive,
+            aliveAfterCancel,
           ],
-          ['exited', 'failed:cancelled', true],
+          ['exited', true, 'failed:cancelled', true],
         );
       },
     },
