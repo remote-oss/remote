@@ -1,0 +1,12 @@
+[
+ {
+  "id": "F-6502",
+  "issue": 35,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:pending",
+  "title": "Distro actions in the WSL Targets view",
+  "epic": "E65",
+  "acCount": 0
+ }
+]

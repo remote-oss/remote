@@ -215,6 +215,9 @@
       "path": "tests/acceptance/windows-host"
     },
     {
+      "path": "tests/acceptance/containers-wsl"
+    },
+    {
       "path": "tests/acceptance/explorer-alone"
     },
     {

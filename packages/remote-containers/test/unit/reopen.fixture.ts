@@ -12,11 +12,13 @@ import type {
   DaemonFigures,
   HostRequirements,
 } from '../../src/engine/host-requirements.ts';
+import {admitsWindow} from '../../src/open/command-window.ts';
 import type {ReopenPorts} from '../../src/open/reopen-ports.ts';
 import type {WorkspaceRead} from '../../src/open/workspace-folders.ts';
 import type {TrustOutcome} from '../../src/trust/trust-gate.ts';
 import {MemoryFiles} from 'lib-state/testing/memory-files';
 import {rebuildHandoffsOn} from './handoff-kinds.fixture.ts';
+import {SHIPPED_MANIFEST} from './shipped-manifest.ts';
 
 /** The folder the rows open. */
 export const FOLDER = '/w/p';
@@ -208,6 +210,8 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
     },
     window: {
       remoteName: () => state.remoteName,
+      admits: commandId =>
+        admitsWindow(SHIPPED_MANIFEST, commandId, state.remoteName),
       folders: () => state.folders,
       workspaceFile: () => state.workspaceFile,
       serializedFile: file => ({

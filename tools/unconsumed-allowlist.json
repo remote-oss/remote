@@ -261,6 +261,30 @@
       "key": "src/config.ts",
       "card": "#3160",
       "slice": "tunnels release 1"
+    },
+    {
+      "package": "tunnel-agent",
+      "kind": "module",
+      "key": "src/control/codec.ts",
+      "card": "#3162",
+      "slice": "agent card 5",
+      "decision": "the control protocol's session, which the host leg (#3161) hands each port 31545 stream and serve (#3163) fills; the one of those that merges after #3162 consumes it and removes these entries"
+    },
+    {
+      "package": "tunnel-agent",
+      "kind": "module",
+      "key": "src/control/ports.ts",
+      "card": "#3162",
+      "slice": "agent card 5",
+      "decision": "the control protocol's session, which the host leg (#3161) hands each port 31545 stream and serve (#3163) fills; the one of those that merges after #3162 consumes it and removes these entries"
+    },
+    {
+      "package": "tunnel-agent",
+      "kind": "module",
+      "key": "src/control/session.ts",
+      "card": "#3162",
+      "slice": "agent card 5",
+      "decision": "the control protocol's session, which the host leg (#3161) hands each port 31545 stream and serve (#3163) fills; the one of those that merges after #3162 consumes it and removes these entries"
     }
   ]
 }

@@ -17,7 +17,8 @@ const AUTHORITY_PREFIX = 'dev-container+';
 /** What the commands read of the window and what they write. */
 export interface RebuildPorts {
   window: {
-    remoteName(): string | undefined;
+    /** Whether the manifest offers command `commandId` in this window. */
+    admits(commandId: string): boolean;
     remoteAuthority(): string | undefined;
     reload(): PromiseLike<unknown>;
   };
@@ -43,7 +44,11 @@ export function rebuildContainer(
   async function rebuild(): Promise<void> {
     const authority = window.remoteAuthority();
     if (
-      window.remoteName() !== 'dev-container' ||
+      !window.admits(
+        options.buildNoCache
+          ? 'remote-containers.rebuildContainerNoCache'
+          : 'remote-containers.rebuildContainer',
+      ) ||
       authority?.startsWith(AUTHORITY_PREFIX) !== true
     ) {
       logger.info('Rebuild Container does nothing in this window');
