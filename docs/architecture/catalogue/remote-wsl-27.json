@@ -1,0 +1,85 @@
+[
+ {
+  "id": "F-6208",
+  "issue": 27,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Connection failures and recovery",
+  "epic": "E62",
+  "acCount": 32,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.showLog"
+   ],
+   "settings": [
+    "remote.WSL.debug",
+    "remote.WSL.downloadInBackground",
+    "remote.WSL.experimental.scriptLessStartup",
+    "window.dialogStyle"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "modal failure dialog with Retry, Close WSL Window, Ignore",
+    "reveals WSL log terminal on failure",
+    "log lines S026 and S050",
+    "90 s silence watchdog",
+    "Ignore leaves window disconnected (NotAvailable handled)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showErrorMessage modal with isCloseAffordance",
+    "env.openExternal",
+    "commands workbench.action.reloadWindow",
+    "commands workbench.action.remote.close"
+   ],
+   "proposedApi": [
+    "resolvers (RemoteAuthorityResolverError.NotAvailable)"
+   ],
+   "processes": [
+    "wsl.exe start step in distro"
+   ],
+   "network": [
+    "127.0.0.1 proxy /version URL (log line)"
+   ],
+   "remoteFiles": [
+    "~/.vscode-server/server-env-setup"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6002",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6206",
+   "remote-wsl#F-6101",
+   "remote-wsl#F-6301",
+   "remote-wsl#F-6302",
+   "remote-wsl#F-6303",
+   "remote-wsl#F-6304",
+   "remote-wsl#F-6003",
+   "remote-wsl#F-7901",
+   "remote-containers#F-0109",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6701",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.failure-dialog",
+  "candidateLibrary": "lib-standdown",
+  "area": "A",
+  "reuse": [],
+  "errorPaths": 9,
+  "notes": "One dialog per failed start, message names the kind not the cause, cause only in log. Retry equals window reload. Failure-dialog and silence-watchdog behaviour looks reusable across families; cites raw lab notes (not for clean side).",
+  "questions": [
+   "Spec cites observations/F-6208/notes.md raw transcript; spec cites material not for the clean side. Please strip the reference.",
+   "Is the 90 s silence watchdog a family constant for lib-server?",
+   "Keep S036 'Ok' unused, or use it for a non-modal failure message?"
+  ]
+ }
+]

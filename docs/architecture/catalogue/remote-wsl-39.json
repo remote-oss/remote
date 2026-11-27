@@ -1,0 +1,12 @@
+[
+ {
+  "id": "F-6701",
+  "issue": 39,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Interop: WSL over SSH and dev containers from a WSL window",
+  "epic": "E67",
+  "acCount": 35
+ }
+]

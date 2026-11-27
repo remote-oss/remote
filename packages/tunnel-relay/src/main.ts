@@ -34,6 +34,9 @@ const allowlist = new Allowlist(
       legs.closeUnadmitted(owner => allowlist.admits(owner));
     },
     report: reportFailure,
+    onRecovered: () => {
+      process.stdout.write(`the allowlist ${config.allowlistFile} recovered\n`);
+    },
   },
 );
 const authenticate = authenticateWith({

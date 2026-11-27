@@ -1,0 +1,12 @@
+[
+ {
+  "id": "F-6202",
+  "issue": 21,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:pending",
+  "title": "Connect to WSL and the distro picker",
+  "epic": "E62",
+  "acCount": 0
+ }
+]

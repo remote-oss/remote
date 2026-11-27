@@ -1,0 +1,98 @@
+[
+ {
+  "id": "F-6204",
+  "issue": 23,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Reopen Folder in WSL and Reopen Folder in Windows",
+  "epic": "E62",
+  "acCount": 40,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.reopenInWSL",
+    "remote-wsl.reopenInWindows"
+   ],
+   "settings": [
+    "security.allowedUNCHosts",
+    "security.restrictUNCAccess",
+    "window.openFoldersInNewWindow"
+   ],
+   "views": [],
+   "menus": [
+    "commandPalette#6",
+    "commandPalette#7",
+    "statusBar/remoteIndicator#4"
+   ],
+   "contextKeys": [
+    "wsl.noWSLPath",
+    "workspaceFolderCount",
+    "virtualWorkspace",
+    "remoteName"
+   ],
+   "authorities": [
+    "wsl+<distro>"
+   ],
+   "other": [
+    "menu group remote_10_wsl_1_open@3",
+    "distro picker reused from F-6202",
+    "info notifications S003, S047, S048"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick",
+    "window.showInformationMessage",
+    "workspace.workspaceFile",
+    "workspace.workspaceFolders",
+    "env.remoteName",
+    "commands.executeCommand vscode.openFolder",
+    "commands.executeCommand remote-containers.reopenInWSL (F-0406 boundary)"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "wsl.exe -d <distro>",
+    "wslpath"
+   ],
+   "network": [
+    "\\\\wsl.localhost\\<distro>\\ share"
+   ],
+   "remoteFiles": [
+    "/etc/wsl.conf [automount] root"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6101",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6206",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-6102",
+   "remote-wsl#F-6701",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6203",
+   "remote-wsl#F-7901",
+   "remote-containers#F-0406",
+   "remote-containers#F-0109",
+   "remote-wsl#F-6301",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.reopen-translate",
+  "candidateLibrary": "none",
+  "area": "D",
+  "reuse": [
+   "wslpath"
+  ],
+  "errorPaths": 10,
+  "notes": "Path translation both ways through wslpath in the distro, reload current window. Untitled workspace leaves a blank window in reference. Overlaps conceptually with containers reopen commands.",
+  "questions": [
+   "Untitled workspace: reopen saved file, refuse, or first folder only (Q3)?",
+   "What does UNC allow-list refusal do after Reopen in Windows?",
+   "Shared reopen-in-X helper across WSL, SSH and containers rooms?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
+  ]
+ }
+]

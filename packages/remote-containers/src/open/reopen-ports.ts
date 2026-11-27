@@ -24,6 +24,8 @@ import type {WorkspaceFolderPorts} from './workspace-folders.ts';
 interface WindowPort {
   /** The name of the remote the window is on; none for a local window. */
   remoteName(): string | undefined;
+  /** Whether the manifest offers command `commandId` in this window. */
+  admits(commandId: string): boolean;
   folders(): ReadonlyArray<{scheme: string; fsPath: string}>;
   /** The workspace file the window shows: a `file` one for a saved workspace, an `untitled` one for an unsaved one; none for a folder. */
   workspaceFile(): {scheme: string; fsPath: string} | undefined;
