@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {getEventListeners} from 'node:events';
 import type {CopyRequest, ScriptRequest} from 'lib-host';
 import {
   EXEC_ARGUMENT_LIMIT_BYTES,
@@ -373,6 +374,18 @@ describe('the host channel over the shared session', () => {
       [outcome.kind === 'failed' ? outcome.failure.kind : outcome.kind, runs],
       ['cancelled', []],
     );
+  });
+
+  it('runs that have finished leave no listener on the caller’s signal', async () => {
+    const shared = new AbortController();
+    const finishing = channel();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await finishing.runScript(
+        {...REQUEST, cancellation: shared.signal},
+        () => undefined,
+      );
+    }
+    deepStrictEqual(getEventListeners(shared.signal, 'abort').length, 0);
   });
 
   it('copies through the channel it was given, with a login of its own', async () => {

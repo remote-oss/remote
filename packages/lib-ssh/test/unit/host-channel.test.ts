@@ -1,4 +1,5 @@
 import {deepStrictEqual, strictEqual, throws} from 'node:assert';
+import {getEventListeners} from 'node:events';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -650,6 +651,35 @@ describe('SSH host channel', () => {
         ['cancelled', true, false],
         ['cancelled', true, true],
       ]);
+    });
+
+    it('runs that have finished leave no listener on the caller’s signal: a later abort of it ends no tree and starts no run', async () => {
+      const spawner = new ScriptedSpawner(
+        prints('4242\nfirst\n', 0),
+        prints('4343\nsecond\n', 0),
+        prints('4444\nthird\n', 0),
+      );
+      const shared = new AbortController();
+      const channel = new SshHostChannel({
+        ...channelBase(),
+        spawner: spawner.spawn,
+      });
+      const outcomes = [];
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        outcomes.push(
+          await channel.runScript(
+            request({cancellation: shared.signal}),
+            () => undefined,
+          ),
+        );
+      }
+      const left = getEventListeners(shared.signal, 'abort').length;
+      shared.abort();
+      await new Promise(resolve => setImmediate(resolve));
+      deepStrictEqual(
+        [outcomes.map(each => each.kind), left, spawner.started.length],
+        [['exited', 'exited', 'exited'], 0, 3],
+      );
     });
 
     it('a run that runs out of time ends the script’s tree on the host too', async () => {
