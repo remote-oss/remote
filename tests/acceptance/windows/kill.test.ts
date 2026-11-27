@@ -746,12 +746,16 @@ describe('Kill VS Code Server (card coverage-39)', function () {
      * session has ended. Each login that stays up must be an ssh client the editor started since `before`, the
      * clients before the kill, so that a login of nothing the editor started does not pass for the reconnect: sshd's
      * lines name the client by a port the container's network rewrites, so the clients are matched by their number.
+     * At most `allowedUp` logins may stay up, so that a second login the kill opens and leaves up is not passed for the
+     * reconnect: none after a kill from the local window, where the window it kills reconnects only after core's 5 s
+     * wait (measured at 5.5 s after the pick), and one after a kill from x2, which reconnects at once.
      */
     async function loginsOfKill(
       since: string,
       mark: number,
       window: string,
       before: readonly number[],
+      allowedUp: number,
     ): Promise<{count: number; said: string}> {
       const lines = linesSince(mark, window);
       const pick = lines.find(line => line.surface === 'hostPick')?.time ?? 0;
@@ -762,20 +766,18 @@ describe('Kill VS Code Server (card coverage-39)', function () {
       await waitFor(
         'every login that stays up after the kill to be an ssh client the editor started',
         async () => {
-          const remaining = stillUpOf(
-            hostLoginsOf(await hostLoginLines(since)),
-            pick,
-          ).length;
+          const read = hostLoginsOf(await hostLoginLines(since));
+          const remaining = stillUpOf(read, pick).length;
           const started = (await clients()).filter(
             processId => !before.includes(processId),
           ).length;
-          unmatched = `${String(remaining)} logins stay up, ${String(started)} ssh clients are new`;
-          return remaining === started;
+          unmatched = `${String(remaining)} logins stay up, ${String(allowedUp)} allowed, ${String(started)} ssh clients are new; the logins at the last look: ${loginsText(read, pick)}`;
+          return remaining === started && remaining <= allowedUp;
         },
         10_000,
       ).catch((caught: unknown) => {
         throw new Error(
-          `${caught instanceof Error ? caught.message : String(caught)}: ${unmatched}; the logins since the pick: ${loginsText(logins, pick)}`,
+          `${caught instanceof Error ? caught.message : String(caught)}: ${unmatched}`,
           {cause: caught},
         );
       });
@@ -798,6 +800,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
       localMark,
       'local',
       clientsBeforeLocal,
+      0,
     );
     await closeAllButLocal();
     await perWindowMode(true);
@@ -817,6 +820,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
         windowMark,
         'x2',
         clientsBeforeWindow,
+        1,
       );
       deepStrictEqual(
         [fromLocal.count, fromWindow.count],
