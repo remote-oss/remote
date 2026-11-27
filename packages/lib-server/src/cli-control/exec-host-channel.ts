@@ -64,6 +64,15 @@ async function runOn(
   if (cancellation.aborted) {
     return failFrom('cancelled', 'cancelled before the run');
   }
+  const cancelled = new Promise<'cancelled'>(resolve => {
+    cancellation.addEventListener(
+      'abort',
+      () => {
+        resolve('cancelled');
+      },
+      {once: true},
+    );
+  });
   if (request.interpreter === 'powershell') {
     return failFrom(
       'spawnFailed',
@@ -84,15 +93,6 @@ async function runOn(
     return failFrom('spawnFailed', `no such local file: ${input.localFile}`);
   }
   const prelude = `${request.script}\n`;
-  const cancelled = new Promise<'cancelled'>(resolve => {
-    cancellation.addEventListener(
-      'abort',
-      () => {
-        resolve('cancelled');
-      },
-      {once: true},
-    );
-  });
   let command: Awaited<ReturnType<ExecServer['spawn']>>;
   try {
     command = await server.spawn(

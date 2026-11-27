@@ -605,6 +605,23 @@ describe('host channel over an exec server', () => {
     );
   });
 
+  it('ends a run with a file input cancelled straight after the call, while its file is being checked', async () => {
+    const localFile = path.join(folder, 'input');
+    await writeFile(localFile, 'input\n');
+    const controller = new AbortController();
+    const running = runWith(
+      localExecServer(),
+      {
+        script: 'cat >/dev/null',
+        input: {kind: 'file', localFile},
+        cancellation: controller.signal,
+      },
+      () => undefined,
+    );
+    controller.abort();
+    deepStrictEqual(await running, CANCELLED);
+  });
+
   it('lets the shell of a run cancelled during its spawn end, given no program', async () => {
     const server = localExecServer();
     let exited: Promise<unknown> = Promise.resolve();
