@@ -89,24 +89,17 @@ const PRELOAD_NAME = 'cli-preload.js';
 /** A sha256 as hexadecimal text. */
 const SHA256 = /^[0-9a-f]{64}$/;
 
-/** A path segment that stays in its folder: not empty, not `.`, and not `..`. */
-function isSegment(part: string): boolean {
-  return part !== '' && part !== '..' && part !== '.';
-}
+/** A path segment that stays in its folder: a letter or a digit first, then letters, digits or `._+-`. */
+const SEGMENT = /^[0-9A-Za-z][0-9A-Za-z._+-]*$/;
 
-/** A name a file may have under the version's folder: relative, with no `..` segment, no empty one and no line break. */
+/** A name a file may have under the version's folder: relative, with every segment one that stays in its folder. */
 function isPlacedName(name: string): boolean {
-  return !name.includes('\n') && name.split('/').every(isSegment);
+  return name.split('/').every(part => SEGMENT.test(part));
 }
 
-/** A version's folder name: one path segment that stays in the CLI's folder. */
+/** A version's folder name: a segment that stays in its folder, on the whole string. */
 function isVersionName(version: string): boolean {
-  return (
-    !version.includes('/') &&
-    !version.includes('\\') &&
-    !version.includes('\n') &&
-    isSegment(version)
-  );
+  return SEGMENT.test(version);
 }
 
 /**
@@ -201,10 +194,8 @@ export async function placeCliFiles(
 ): Promise<Failed | undefined> {
   const {channel, cancellation} = request;
   const {cliFolder, versionFolder} = folders;
-  if (
-    path.posix.dirname(versionFolder) !== cliFolder ||
-    !isVersionName(path.posix.basename(versionFolder))
-  ) {
+  const segment = path.posix.basename(versionFolder);
+  if (!isVersionName(segment) || versionFolder !== `${cliFolder}/${segment}`) {
     logger.info(
       `the CLI's version folder ${versionFolder} is not a folder of its own under ${cliFolder}: nothing is placed`,
     );

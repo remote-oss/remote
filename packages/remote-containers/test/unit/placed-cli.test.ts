@@ -866,6 +866,10 @@ describe('the version folder placeCliFiles works in (card #3316)', () => {
     `${cliFolder}/a/b`,
     `${cliFolder}/a\\b`,
     `${cliFolder}/a\nb`,
+    `${cliFolder}/1.0\0`,
+    `${cliFolder}/1.0/`,
+    `${cliFolder}/-1.0`,
+    `${cliFolder}/1.0 `,
     '/elsewhere/0.80.0',
   ];
 
