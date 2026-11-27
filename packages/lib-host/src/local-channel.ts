@@ -43,11 +43,19 @@ export interface LocalChannelOptions {
 /** The text a PowerShell script is refused with: this machine's agent runs POSIX scripts only. */
 const POSIX_ONLY = 'this host runs POSIX scripts only';
 
+/** Why a script cancelled before its shell started did not run. */
+const CANCELLED_BEFORE = 'the script was cancelled before it ran';
+
 /** The platform hint of each operating system the channel knows. */
 const HINTS: Readonly<Partial<Record<NodeJS.Platform, PlatformHint>>> = {
   linux: 'linux',
   darwin: 'macOS',
 };
+
+/** Whether `signal` has been aborted by now; read through a call because it changes while the operation waits. */
+function isAborted(signal: AbortSignal): boolean {
+  return signal.aborted;
+}
 
 /** Whether `error` is the abort of a cancelled operation. */
 function isAbort(error: unknown): boolean {
@@ -95,13 +103,17 @@ export function localChannel(options: LocalChannelOptions): HostChannel {
         return failFrom('spawnFailed', POSIX_ONLY);
       }
       if (request.cancellation.aborted) {
-        return failFrom('cancelled', 'the script was cancelled before it ran');
+        return failFrom('cancelled', CANCELLED_BEFORE);
       }
       if (request.input.kind === 'file') {
         try {
           await stat(request.input.localFile);
         } catch (caught) {
           return failFrom('spawnFailed', caught);
+        }
+        // A cancel that came while the input was looked at has no shell to end yet, and must still stop the run.
+        if (isAborted(request.cancellation)) {
+          return failFrom('cancelled', CANCELLED_BEFORE);
         }
       }
       return runShell({shell, signalGroup, grace}, request, onLine);

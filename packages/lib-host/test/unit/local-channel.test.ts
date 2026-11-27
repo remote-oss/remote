@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -381,6 +382,72 @@ describe('the channel of the local machine (card #3158)', () => {
         )
       ).lines.map(line => line.trim()),
       ['8388608'],
+    );
+  });
+
+  it('does not run a script cancelled while its input file is being looked at', async () => {
+    const marker = path.join(folder, 'ran.marker');
+    const input = path.join(folder, 'input.txt');
+    writeFileSync(input, 'input');
+    const controller = new AbortController();
+    const running = ranWith(
+      localChannel(LINUX),
+      requestOf(`touch '${marker}'`, {
+        input: {kind: 'file', localFile: input},
+        cancellation: controller.signal,
+      }),
+    );
+    controller.abort();
+    const {outcome} = await running;
+    await new Promise(resolve => setTimeout(resolve, 200));
+    deepStrictEqual(
+      [outcome.kind === 'failed' && outcome.failure.kind, existsSync(marker)],
+      ['cancelled', false],
+    );
+  });
+
+  it('sends no signal to the group after the shell has ended and the group has been swept, though the grace period passes', async () => {
+    const signals: string[] = [];
+    const controller = new AbortController();
+    await withLine(
+      localChannel({
+        ...LINUX,
+        graceMilliseconds: 150,
+        signalGroup: (leader, signal) => {
+          signals.push(signal);
+          process.kill(-leader, signal);
+        },
+      }),
+      requestOf('echo ready; sleep 30', {cancellation: controller.signal}),
+      controller,
+    );
+    await new Promise(resolve => setTimeout(resolve, 400));
+    deepStrictEqual(signals, ['SIGTERM', 'SIGKILL']);
+  });
+
+  it('tells no line a cancelled script writes after the cancel, though its shell is still on its way out', async () => {
+    const controller = new AbortController();
+    const {lines} = await withLine(
+      localChannel(LINUX),
+      requestOf(
+        "trap 'echo late; exit 0' TERM; echo ready; while :; do sleep 0.1; done",
+        {cancellation: controller.signal},
+      ),
+      controller,
+    );
+    deepStrictEqual(lines, ['ready']);
+  });
+
+  it('answers no host path for a file the user cannot read, as for one that is not there', async function () {
+    if (process.getuid?.() === 0) {
+      this.skip();
+    }
+    const unreadable = path.join(folder, 'unreadable.bin');
+    writeFileSync(unreadable, 'secret');
+    chmodSync(unreadable, 0o000);
+    deepStrictEqual(
+      await localChannel(LINUX).clientPathOnHost?.(unreadable),
+      undefined,
     );
   });
 
