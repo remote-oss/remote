@@ -85,7 +85,7 @@ describe('the PowerShell plan', () => {
   describe('the remote program', () => {
     it('F-2701 AC-5: is Windows PowerShell with the reader as its encoded command, the reader of the prelude in bytes', () => {
       const program = plannedOf(powershellPlan(request())).remoteProgram;
-      strictEqual(decodedOf(program), powershellReader(16));
+      strictEqual(decodedOf(program), powershellReader(21));
     });
 
     it('F-2701 AC-5: counts the prelude in UTF-8 bytes, not characters', () => {
@@ -94,7 +94,9 @@ describe('the PowerShell plan', () => {
       ).remoteProgram;
       strictEqual(
         decodedOf(program),
-        powershellReader(Buffer.byteLength("$env:NAME = 'é'\né\n", 'utf8')),
+        powershellReader(
+          Buffer.byteLength("$PID\n$env:NAME = 'é'\né\n", 'utf8'),
+        ),
       );
     });
 
@@ -138,7 +140,7 @@ describe('the PowerShell plan', () => {
         ).input,
         {
           kind: 'text',
-          text: "$env:FIRST = 'it''s'\n$env:SECOND = 'two'\nWrite-Output $env:FIRST\n",
+          text: "$PID\n$env:FIRST = 'it''s'\n$env:SECOND = 'two'\nWrite-Output $env:FIRST\n",
         },
       );
     });
@@ -150,7 +152,7 @@ describe('the PowerShell plan', () => {
         ).input,
         {
           kind: 'text',
-          text: "$env:NAME = 'a\u2019\u2019b\u2018\u2018'\nWrite-Output hi\n",
+          text: "$PID\n$env:NAME = 'a\u2019\u2019b\u2018\u2018'\nWrite-Output hi\n",
         },
       );
     });
@@ -158,7 +160,7 @@ describe('the PowerShell plan', () => {
     it('S10: is the script and a line end for an empty environment', () => {
       deepStrictEqual(plannedOf(powershellPlan(request())).input, {
         kind: 'text',
-        text: 'Write-Output hi\n',
+        text: '$PID\nWrite-Output hi\n',
       });
     });
 
@@ -176,7 +178,7 @@ describe('the PowerShell plan', () => {
         plannedOf(
           powershellPlan(request({input: {kind: 'text', text: 'data'}})),
         ).input,
-        {kind: 'text', text: 'Write-Output hi\ndata'},
+        {kind: 'text', text: '$PID\nWrite-Output hi\ndata'},
       );
     });
 
@@ -192,7 +194,7 @@ describe('the PowerShell plan', () => {
         ).input,
         {
           kind: 'prefixedFile',
-          prefix: "$env:NAME = 'x'\nWrite-Output hi\n",
+          prefix: "$PID\n$env:NAME = 'x'\nWrite-Output hi\n",
           localFile: '/a/file',
         },
       );

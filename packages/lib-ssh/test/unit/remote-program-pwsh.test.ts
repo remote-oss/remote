@@ -62,7 +62,14 @@ async function runPlanned(
   const status = await new Promise<number | null>(resolve => {
     child.once('close', resolve);
   });
-  return {output: Buffer.concat(chunks), status};
+  const printed = Buffer.concat(chunks);
+  // The first line is the host process's own id, which the channel keeps off the script's lines.
+  const lineEnd = printed.indexOf('\n');
+  const firstLine = printed.subarray(0, lineEnd).toString('utf8').trim();
+  if (!/^[1-9][0-9]*$/.test(firstLine)) {
+    throw new Error(`the first line is no process id: ${firstLine}`);
+  }
+  return {output: printed.subarray(lineEnd + 1), status};
 }
 
 describe('the PowerShell plan, run under pwsh', function () {

@@ -47,6 +47,11 @@ export function preludeProgram(byteCount: number, front = ''): string {
 /** What a script's own shell runs first: the script's standard error joins its standard output, and the shell's id is printed. */
 const SCRIPT_FRONT = JOINED_ERRORS + REPORT_PROCESS_ID;
 
+/** The remote command that ends the process tree of the Windows process `processId`, with no polite step: a console process has none. */
+export function windowsTreeKillProgram(processId: number): string {
+  return `taskkill /T /F /PID ${String(processId)}`;
+}
+
 /** The remote command that ends the process tree of the process `processId` with lib-host's script. */
 export function treeKillProgram(processId: number): string {
   return `sh -c ${posixQuote(TREE_KILL_SCRIPT)} tree-kill ${String(processId)}`;
@@ -119,13 +124,19 @@ function powershellEnvironmentLines(
 
 /**
  * What a PowerShell run reads first on its standard input: the environment as assignments, then the script, then a
- * line end. The environment's names must already be checked.
+ * line end. With `reportsProcessId`, the first line is `$PID`, so the host process's own id is the first line of the
+ * output. The environment's names must already be checked.
  */
 export function powershellPrelude(
   environment: Readonly<Record<string, string>>,
   script: string,
+  reportsProcessId = false,
 ): string {
-  return `${[...powershellEnvironmentLines(environment), script].join('\n')}\n`;
+  return `${[
+    ...(reportsProcessId ? ['$PID'] : []),
+    ...powershellEnvironmentLines(environment),
+    script,
+  ].join('\n')}\n`;
 }
 
 /**
@@ -162,6 +173,16 @@ export function powershellReader(
   ].join('\n');
 }
 
+/** The standard input of a run: `prelude`, then what the request supplies. */
+function inputAfter(
+  prelude: string,
+  supplied: ScriptRequest['input'],
+): PlannedInput {
+  return supplied.kind === 'text'
+    ? {kind: 'text', text: prelude + supplied.text}
+    : {kind: 'prefixedFile', prefix: prelude, localFile: supplied.localFile};
+}
+
 /**
  * Plans the run of a PowerShell script: the environment as assignments ahead of the script on standard input, and a
  * command of letters, digits and `+/=` that every DefaultShell parses alike. A command longer than `limit`
@@ -175,7 +196,7 @@ export function powershellPlan(
   if (script.kind === 'refused') {
     return script;
   }
-  const prelude = powershellPrelude(request.environment, script.text);
+  const prelude = powershellPrelude(request.environment, script.text, true);
   const reader = powershellReader(Buffer.byteLength(prelude, 'utf8'));
   const remoteProgram = `powershell -NoLogo -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(reader, 'utf16le').toString('base64')}`;
   if (remoteProgram.length > limit) {
@@ -187,15 +208,8 @@ export function powershellPlan(
   return {
     kind: 'planned',
     remoteProgram,
-    reportsProcessId: false,
-    input:
-      request.input.kind === 'text'
-        ? {kind: 'text', text: prelude + request.input.text}
-        : {
-            kind: 'prefixedFile',
-            prefix: prelude,
-            localFile: request.input.localFile,
-          },
+    reportsProcessId: true,
+    input: inputAfter(prelude, request.input),
   };
 }
 
@@ -234,13 +248,6 @@ export function planScript(
       SCRIPT_FRONT,
     ),
     reportsProcessId: true,
-    input:
-      request.input.kind === 'text'
-        ? {kind: 'text', text: prelude + request.input.text}
-        : {
-            kind: 'prefixedFile',
-            prefix: prelude,
-            localFile: request.input.localFile,
-          },
+    input: inputAfter(prelude, request.input),
   };
 }

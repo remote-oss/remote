@@ -21,6 +21,7 @@ import {
   environmentPrefix,
   scriptText,
   treeKillProgram,
+  windowsTreeKillProgram,
 } from '../../src/process/remote-program.ts';
 import {
   type ClientScript,
@@ -43,6 +44,13 @@ function request(overrides: Partial<ScriptRequest> = {}): ScriptRequest {
     cancellation: new AbortController().signal,
     ...overrides,
   };
+}
+
+/** Aborts `controller` once the run it cancels has started its ssh run and heard the process id. */
+async function abortOnceRunning(controller: AbortController): Promise<void> {
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  controller.abort();
 }
 
 /** A client that prints `output` and ends with `status`. */
@@ -338,7 +346,7 @@ describe('SSH host channel', () => {
         [
           1,
           planned.kind === 'planned' ? planned.remoteProgram : planned.reason,
-          'Write-Output hi\n',
+          '$PID\nWrite-Output hi\n',
           true,
         ],
       );
@@ -557,8 +565,8 @@ describe('SSH host channel', () => {
       deepStrictEqual(lines, [['hello'], ['welcome', '4242', 'hello']]);
     });
 
-    it('a PowerShell script reports no process id, so its first line is the script’s', async () => {
-      const spawner = new ScriptedSpawner(prints('4242\n', 0));
+    it('a PowerShell script reports its host process id first, which stays off the script’s lines', async () => {
+      const spawner = new ScriptedSpawner(prints('4242\r\n4242\r\n', 0));
       const lines: string[] = [];
       await new SshHostChannel({
         ...channelBase(),
@@ -568,6 +576,67 @@ describe('SSH host channel', () => {
         line => lines.push(line),
       );
       deepStrictEqual(lines, ['4242']);
+    });
+
+    it('a PowerShell cancel ends the tree with taskkill /T /F /PID through one more ssh run, with no polite step, and the log hears a tree the host did not confirm ended', async () => {
+      const heard: string[] = [];
+      const spawner = new ScriptedSpawner(
+        process => {
+          process.output('5150\r\n');
+        },
+        () => undefined,
+      );
+      const controller = new AbortController();
+      const running = new SshHostChannel({
+        ...channelBase(),
+        spawner: spawner.spawn,
+        scheduler: firingAt(15_000),
+        logLine: line => heard.push(line),
+      }).runScript(
+        request({
+          interpreter: 'powershell',
+          script: 'Start-Sleep 40',
+          cancellation: controller.signal,
+        }),
+        () => undefined,
+      );
+      await abortOnceRunning(controller);
+      const outcome = await running;
+      deepStrictEqual(
+        [
+          outcome.kind === 'failed' ? outcome.failure.kind : outcome.kind,
+          spawner.started[1]?.specification.programArguments.at(-1),
+          heard,
+        ],
+        [
+          'cancelled',
+          windowsTreeKillProgram(5150),
+          [
+            "the script's tree on the host was not confirmed ended within 15000 ms",
+          ],
+        ],
+      );
+    });
+
+    it('a tree-kill run that cannot start is logged with its reason', async () => {
+      const heard: string[] = [];
+      const spawner = new ScriptedSpawner(
+        process => {
+          process.output('4242\n');
+        },
+        startError('EMFILE', 'too many open files'),
+      );
+      const controller = new AbortController();
+      const running = new SshHostChannel({
+        ...channelBase(),
+        spawner: spawner.spawn,
+        logLine: line => heard.push(line),
+      }).runScript(request({cancellation: controller.signal}), () => undefined);
+      await abortOnceRunning(controller);
+      await running;
+      deepStrictEqual(heard, [
+        "the script's tree on the host was not confirmed ended: too many open files",
+      ]);
     });
 
     it('a cancel ends the script’s tree on the host with one more ssh run of the same connection, waits for it, then ends the client and reports the cancel', async () => {
@@ -585,9 +654,7 @@ describe('SSH host channel', () => {
       }).runScript(request({cancellation: controller.signal}), line =>
         lines.push(line),
       );
-      await new Promise(resolve => setImmediate(resolve));
-      await new Promise(resolve => setImmediate(resolve));
-      controller.abort();
+      await abortOnceRunning(controller);
       const outcome = await running;
       deepStrictEqual(
         [
@@ -637,9 +704,7 @@ describe('SSH host channel', () => {
           request({cancellation: controller.signal}),
           () => undefined,
         );
-        await new Promise(resolve => setImmediate(resolve));
-        await new Promise(resolve => setImmediate(resolve));
-        controller.abort();
+        await abortOnceRunning(controller);
         const outcome = await running;
         outcomes.push([
           outcome.kind === 'failed' ? outcome.failure.kind : outcome.kind,

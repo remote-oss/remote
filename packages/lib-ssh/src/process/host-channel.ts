@@ -26,6 +26,7 @@ import {
   planScript,
   type PlannedInput,
   treeKillProgram,
+  windowsTreeKillProgram,
 } from './remote-program.ts';
 import {type SshSession, spawnSession} from './session.ts';
 
@@ -66,6 +67,8 @@ export interface SshHostChannelOptions {
   timeoutMilliseconds?: number;
   /** Copies a file in a login terminal of the editor; absent, the copy is a process of its own. */
   copier?: Copier;
+  /** Hears a line the channel logs: a tree that the host did not confirm ended after a cancel. */
+  logLine?: (line: string) => void;
 }
 
 /** How a supervised run ended. */
@@ -164,7 +167,7 @@ export class SshHostChannel implements HostChannel {
     if (ending.kind !== 'exit') {
       delivering = false;
       if (processId !== undefined) {
-        await this.endTree(processId);
+        await this.endTree(processId, request.interpreter);
       }
       session.kill();
       return this.interrupted(ending);
@@ -186,11 +189,17 @@ export class SshHostChannel implements HostChannel {
    * run of the same connection, and waits for it; a run that cannot start, or that does not end in time, leaves the
    * tree, and the cancel is still reported.
    */
-  private async endTree(processId: number): Promise<void> {
+  private async endTree(
+    processId: number,
+    interpreter: ScriptRequest['interpreter'],
+  ): Promise<void> {
     const invocation = buildInvocation({
       ...this.options.base,
       purpose: 'oneShot',
-      remoteProgram: treeKillProgram(processId),
+      remoteProgram:
+        interpreter === 'powershell'
+          ? windowsTreeKillProgram(processId)
+          : treeKillProgram(processId),
     });
     const spawned = await spawnSession(
       this.options.spawner,
@@ -199,6 +208,9 @@ export class SshHostChannel implements HostChannel {
       this.options.editorEnvironment,
     );
     if (spawned.kind === 'failed') {
+      this.options.logLine?.(
+        `the script's tree on the host was not confirmed ended: ${spawned.detail}`,
+      );
       return;
     }
     const {session} = spawned;
@@ -210,9 +222,17 @@ export class SshHostChannel implements HostChannel {
         resolve,
       );
     });
-    await Promise.race([session.exit(), outOfTime]);
+    const ended = await Promise.race([
+      session.exit().then(() => true),
+      outOfTime.then(() => false),
+    ]);
     cancelTimer?.();
     session.kill();
+    if (!ended) {
+      this.options.logLine?.(
+        `the script's tree on the host was not confirmed ended within ${String(TREE_KILL_MILLISECONDS)} ms`,
+      );
+    }
   }
 
   /** Copies a local file to the host with `scp`. */
