@@ -527,7 +527,7 @@ describe('host channel over an exec server', () => {
       ...server,
       spawn: (command, argumentList, options) => {
         spawned.push(argumentList);
-        return server.spawn('sh', ['-c', 'sleep 2'], options);
+        return server.spawn('sh', ['-c', 'sleep 0.5'], options);
       },
     };
     const controller = new AbortController();
@@ -546,6 +546,109 @@ describe('host channel over an exec server', () => {
           failure: {kind: 'cancelled', detail: 'the run was cancelled'},
         },
         1,
+      ],
+    );
+  });
+
+  /** Whether `marker` was written by the time a cancelled script's next command would have run. */
+  async function markerAfterCancel(marker: string): Promise<string> {
+    await new Promise(resolve => setTimeout(resolve, 900));
+    return readFile(marker).then(
+      () => 'written',
+      () => 'absent',
+    );
+  }
+
+  it('ends a run cancelled while its spawn was still under way, before the script runs', async () => {
+    const marker = path.join(folder, 'during-spawn');
+    const server = localExecServer();
+    const slow: ChannelServer = {
+      ...server,
+      spawn: async (...spawnArguments) => {
+        await new Promise(resolve => setTimeout(resolve, 150));
+        return server.spawn(...spawnArguments);
+      },
+    };
+    const controller = new AbortController();
+    setTimeout(() => {
+      controller.abort();
+    }, 40);
+    const outcome = await runWith(
+      slow,
+      {script: `sleep 0.3; touch '${marker}'`, cancellation: controller.signal},
+      () => undefined,
+    );
+    deepStrictEqual(
+      [outcome, await markerAfterCancel(marker)],
+      [
+        {
+          kind: 'failed',
+          failure: {kind: 'cancelled', detail: 'the run was cancelled'},
+        },
+        'absent',
+      ],
+    );
+  });
+
+  it('lets the shell of a run cancelled during its spawn end, given no program', async () => {
+    const server = localExecServer();
+    let exited: Promise<unknown> = Promise.resolve();
+    const slow: ChannelServer = {
+      ...server,
+      spawn: async (...spawnArguments) => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const command = await server.spawn(...spawnArguments);
+        exited = command.onExit;
+        return command;
+      },
+    };
+    const controller = new AbortController();
+    setTimeout(() => {
+      controller.abort();
+    }, 20);
+    await runWith(
+      slow,
+      {script: 'sleep 30', cancellation: controller.signal},
+      () => undefined,
+    );
+    deepStrictEqual(
+      await Promise.race([
+        exited.then(() => 'ended'),
+        new Promise(resolve =>
+          setTimeout(() => {
+            resolve('still running');
+          }, 1000),
+        ),
+      ]),
+      'ended',
+    );
+  });
+
+  it('ends a run cancelled the moment its spawn returned, before the script runs', async () => {
+    const marker = path.join(folder, 'after-spawn');
+    const server = localExecServer();
+    const controller = new AbortController();
+    const cancelling: ChannelServer = {
+      ...server,
+      spawn: async (...spawnArguments) => {
+        const command = await server.spawn(...spawnArguments);
+        controller.abort();
+        return command;
+      },
+    };
+    const outcome = await runWith(
+      cancelling,
+      {script: `touch '${marker}'`, cancellation: controller.signal},
+      () => undefined,
+    );
+    deepStrictEqual(
+      [outcome, await markerAfterCancel(marker)],
+      [
+        {
+          kind: 'failed',
+          failure: {kind: 'cancelled', detail: 'the run was cancelled'},
+        },
+        'absent',
       ],
     );
   });

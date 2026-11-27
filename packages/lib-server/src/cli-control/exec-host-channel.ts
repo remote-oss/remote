@@ -84,6 +84,15 @@ async function runOn(
     return failFrom('spawnFailed', `no such local file: ${input.localFile}`);
   }
   const prelude = `${request.script}\n`;
+  const cancelled = new Promise<'cancelled'>(resolve => {
+    cancellation.addEventListener(
+      'abort',
+      () => {
+        resolve('cancelled');
+      },
+      {once: true},
+    );
+  });
   let command: Awaited<ReturnType<ExecServer['spawn']>>;
   try {
     command = await server.spawn(
@@ -121,20 +130,11 @@ async function runOn(
     () => undefined,
   );
   const unfed = reported.then(shellId =>
-    feed(command.stdin, prelude, input).then(
+    feedUnlessCancelled(command.stdin, prelude, input, cancellation).then(
       () => new Promise<never>(ignoreSettling),
       (failure: unknown) => ({kind: 'unfed' as const, failure, shellId}),
     ),
   );
-  const cancelled = new Promise<'cancelled'>(resolve => {
-    cancellation.addEventListener(
-      'abort',
-      () => {
-        resolve('cancelled');
-      },
-      {once: true},
-    );
-  });
   const ended = await Promise.race([
     command.onExit.then(
       exit => ({kind: 'exit' as const, status: exit.status}),
@@ -147,6 +147,7 @@ async function runOn(
     if (processId !== undefined) {
       await endTree(server, processId);
     }
+    command.stdin.end();
     return failFrom('cancelled', 'the run was cancelled');
   }
   if (ended.kind === 'unfed') {
@@ -161,6 +162,21 @@ async function runOn(
   lines.push(decoder.decode());
   lines.flush();
   return {kind: 'exited', status: ended.status};
+}
+
+/**
+ * Feeds the shell, or nothing when the run was cancelled first: a shell cancelled before it reported its process id gets
+ * no program, and the end of its input then ends it.
+ */
+async function feedUnlessCancelled(
+  stdin: {write(data: Uint8Array): void; end(): void},
+  prelude: string,
+  input: ScriptRequest['input'],
+  cancellation: AbortSignal,
+): Promise<void> {
+  if (!cancellation.aborted) {
+    await feed(stdin, prelude, input);
+  }
 }
 
 /** Ends the process tree of `processId` on the host, waiting for lib-host's tree-kill script; a failure leaves it. */

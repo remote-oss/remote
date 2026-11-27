@@ -78,7 +78,7 @@ describe('the lines of a channel', () => {
 });
 
 describe('the tree-kill script', function () {
-  this.timeout(10000);
+  this.timeout(15000);
 
   it('ends a shell and the child it backgrounded, and leaves a process that left the tree', async () => {
     const shell = spawn('sh', [
@@ -114,6 +114,39 @@ describe('the tree-kill script', function () {
       process.kill(processId);
     }
     deepStrictEqual(outcome, [false, false, true]);
+  });
+
+  it('ends a grandchild of the process, not only its children', async () => {
+    const shell = spawn('sh', [
+      '-c',
+      'sh -c \'sleep 40 & printf "%s\\n" "$!"; wait\' & wait',
+    ]);
+    const grandchildId = await new Promise<number>(resolve => {
+      shell.stdout.once('data', (data: Buffer) => {
+        resolve(Number(String(data).trim()));
+      });
+    });
+    await treeKill(shell.pid ?? 0);
+    deepStrictEqual(
+      [alive(shell.pid ?? 0), alive(grandchildId)],
+      [false, false],
+    );
+  });
+
+  it('kills a process that ignores TERM once the wait for it has passed', async () => {
+    const stubborn = spawn('sh', [
+      '-c',
+      'trap "" TERM; printf "ready\\n"; sleep 40',
+    ]);
+    await new Promise(resolve => {
+      stubborn.stdout.once('data', resolve);
+    });
+    const started = Date.now();
+    await treeKill(stubborn.pid ?? 0);
+    deepStrictEqual(
+      [alive(stubborn.pid ?? 0), Date.now() - started >= 4500],
+      [false, true],
+    );
   });
 
   it('ends a process with no children, and does nothing for one that is gone', async () => {
