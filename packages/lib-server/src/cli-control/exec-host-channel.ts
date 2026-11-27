@@ -13,7 +13,6 @@
 import {EventEmitter, once} from 'node:events';
 import {createReadStream} from 'node:fs';
 import {access} from 'node:fs/promises';
-import path from 'node:path';
 import {
   BoundedLines,
   type ChannelFailureKind,
@@ -250,7 +249,6 @@ async function copyOn(
     return failFrom('copyFailed', `no such local file: ${request.localFile}`);
   }
   try {
-    await server.fs.mkdirp(path.posix.dirname(request.remotePath));
     const written = await server.fs.write(request.remotePath);
     for await (const chunk of chunksOf(request.localFile)) {
       if (isAborted(cancellation)) {

@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {spawn} from 'node:child_process';
-import {createWriteStream} from 'node:fs';
+import {createWriteStream, existsSync} from 'node:fs';
 import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -114,7 +114,7 @@ function failingSpawns(
 /** `server` whose file system fails with `failure` at the step `step`. */
 function failingFiles(
   server: ChannelServer,
-  step: 'mkdirp' | 'write' | 'done',
+  step: 'write' | 'done',
   failure: Error,
 ): ChannelServer {
   return {
@@ -122,16 +122,15 @@ function failingFiles(
     // eslint-disable-next-line id-length -- the exec server's member
     fs: {
       ...server.fs,
-      mkdirp: folder =>
-        step === 'mkdirp' ? Promise.reject(failure) : server.fs.mkdirp(folder),
       write: async file => {
-        if (step === 'write') {
-          throw failure;
+        if (step === 'done') {
+          const written = await server.fs.write(file);
+          return {
+            ...written,
+            done: written.done.then(() => Promise.reject(failure)),
+          };
         }
-        const written = await server.fs.write(file);
-        return step === 'done'
-          ? {...written, done: written.done.then(() => Promise.reject(failure))}
-          : written;
+        throw failure;
       },
     },
   };
@@ -175,6 +174,8 @@ describe('host channel over an exec server: the lib-host contract', function () 
 
   before(async () => {
     folder = await mkdtemp(path.join(tmpdir(), 'exec-channel-'));
+    // The contract copies one folder in; the channel no longer makes that folder.
+    await mkdir(path.join(folder, 'copied'));
   });
 
   after(async () => {
@@ -215,7 +216,7 @@ describe('host channel over an exec server: the lib-host contract', function () 
       } else if (scenario.kind === 'copyFails') {
         server =
           scenario.failure === 'channelClosed'
-            ? failingFiles(server, 'mkdirp', closed())
+            ? failingFiles(server, 'write', closed())
             : failingFiles(server, 'write', new Error('EACCES'));
       }
       return {
@@ -356,9 +357,10 @@ describe('host channel over an exec server', () => {
     );
   });
 
-  it('copies a file into a folder it makes, and reports a file that is missing, a write that fails, and a cancelled copy', async () => {
+  it('copies a file into a folder that exists, refuses a folder that doesn’t without making it, and reports a file that is missing, a write that fails, and a cancelled copy', async () => {
     const localFile = path.join(folder, 'local');
     await writeFile(localFile, Buffer.alloc(200_000, 7));
+    await mkdir(path.join(folder, 'made', 'deeper'), {recursive: true});
     const remotePath = path.join(folder, 'made', 'deeper', 'remote');
     const channel = execServerChannel(localExecServer(), 'host', 'linux');
     const copied = await channel.copyToHost({
@@ -367,6 +369,12 @@ describe('host channel over an exec server', () => {
       cancellation: new AbortController().signal,
     });
     const content = await readFile(remotePath);
+    const absentPath = path.join(folder, 'absent', 'remote');
+    const absent = await channel.copyToHost({
+      localFile,
+      remotePath: absentPath,
+      cancellation: new AbortController().signal,
+    });
     const missing = await channel.copyToHost({
       localFile: path.join(folder, 'none'),
       remotePath,
@@ -389,10 +397,26 @@ describe('host channel over an exec server', () => {
     });
     controller.abort();
     deepStrictEqual(
-      [copied, content.length, missing, failedAtEnd, await copying],
+      [
+        copied,
+        content.length,
+        absent,
+        existsSync(path.join(folder, 'absent')),
+        missing,
+        failedAtEnd,
+        await copying,
+      ],
       [
         {kind: 'copied'},
         200_000,
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'copyFailed',
+            detail: `ENOENT: no such file or directory, open '${absentPath}'`,
+          },
+        },
+        false,
         {
           kind: 'failed',
           failure: {
